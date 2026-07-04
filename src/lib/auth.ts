@@ -4,6 +4,24 @@ import { nextCookies } from "better-auth/next-js";
 import { prisma } from "./prisma";
 
 /**
+ * Base URL resolution: explicit BETTER_AUTH_URL wins; on Vercel fall back to the
+ * platform-provided domains so sign-in works without extra configuration
+ * (otherwise better-auth rejects the browser's origin → "Invalid origin").
+ */
+const baseURL =
+  process.env.BETTER_AUTH_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : undefined) ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+
+// Preview deployments get a unique *.vercel.app URL per deploy — trust it too.
+const trustedOrigins = [
+  process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
+  process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
+].filter((o): o is string => Boolean(o));
+
+/**
  * Better Auth - email + password only, private app.
  * Public sign-up is DISABLED: Admin provisions accounts (seed script / admin tooling).
  * `role` lives on the user record (ADMIN | HEAD | USER) and is never user-editable.
@@ -11,7 +29,8 @@ import { prisma } from "./prisma";
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL,
+  trustedOrigins,
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,

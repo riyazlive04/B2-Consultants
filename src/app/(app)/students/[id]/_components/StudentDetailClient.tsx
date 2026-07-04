@@ -11,6 +11,7 @@ import { BadgeChip, JourneyRing, MomentumChip } from "@/components/ui/gamificati
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { SignalBadge } from "@/components/ui/SignalBadge";
+import { SprintTracker } from "./SprintTracker";
 import { signalForStudent } from "@/lib/signals";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import {
@@ -82,10 +83,12 @@ export function StudentDetailClient({
   student,
   isAdmin,
   canEditTracker,
+  todayKey,
 }: {
   student: StudentDetail;
   isAdmin: boolean;
   canEditTracker: boolean; // Admin or Head
+  todayKey: string; // IST today, YYYY-MM-DD - highlights the current sprint week
 }) {
   const [error, setError] = useState<string | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -301,6 +304,11 @@ export function StudentDetailClient({
                 </div>
               )}
             </form>
+          )}
+
+          {/* Sprint tracker (client notes): week-wise targets, Guided/Elite only */}
+          {e.totalDays !== null && (
+            <SprintTracker enrollment={e} todayKey={todayKey} canEdit={canEditTracker} />
           )}
 
           {/* Milestone progress log - append-only, CSV exportable (PRD2 §4.4) */}

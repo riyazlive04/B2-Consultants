@@ -18,6 +18,7 @@ import { istToday, toDateInputValue } from "@/lib/dates";
 import { formatInrMinor, formatPct } from "@/lib/format";
 import { requireSection } from "@/lib/rbac";
 import { getPipelineOverview } from "@/server/pipeline-metrics";
+import { getFirstCallSplit } from "@/server/assignment";
 import { LeadSection } from "./_components/LeadSection";
 import { OutcomeSection } from "./_components/OutcomeSection";
 import { StageChart } from "./_components/StageChart";
@@ -30,6 +31,7 @@ export default async function PipelinePage() {
   const isAdmin = session.role === "ADMIN";
   const { metrics, target, leads, outcomes, leadOptions, assignees, callFirst, riskDeals } =
     await getPipelineOverview(session.user.id, isAdmin);
+  const callSplit = isAdmin ? await getFirstCallSplit() : null;
   const today = toDateInputValue(istToday());
 
   const conv = metrics.conversionsByLevel;
@@ -296,6 +298,54 @@ export default async function PipelinePage() {
               icon={<Trophy size={18} />}
             />
           </div>
+
+          {/* First-call split - target vs actual per the assignment rules (client notes) */}
+          {callSplit && (
+            <div className="rounded-card border border-line bg-surface p-5 shadow-card">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                  <PhoneCall size={18} className="text-accent" /> First-call split - last {callSplit.lookbackDays} days
+                </h3>
+                {callSplit.isSaturday && callSplit.members.some((m) => m.offToday) && (
+                  <span className="rounded-full bg-watch-soft px-2 py-0.5 text-[11px] font-semibold text-watch">
+                    Saturday - {callSplit.members.filter((m) => m.offToday).map((m) => m.name).join(", ")} off today
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-xs text-muted">
+                New leads are auto-assigned toward each person&apos;s target share; reassign any lead below.
+                Configure shares on People → team profiles.
+              </p>
+              {callSplit.members.length === 0 ? (
+                <p className="mt-3 text-sm text-muted">
+                  No one is in the first-call rotation yet - set a &quot;First-call share %&quot; on a team profile.
+                </p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {callSplit.members.map((m) => (
+                    <div key={m.userId} className="flex items-center gap-3">
+                      <span className="w-24 flex-none truncate text-sm font-medium sm:w-32">{m.name}</span>
+                      <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-surface-2">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${Math.min(100, m.actualPct)}%`, background: "var(--accent)" }}
+                        />
+                        <span
+                          aria-hidden
+                          title={`Target ${m.sharePct}%`}
+                          className="absolute top-[-2px] h-4 w-0.5 rounded bg-ink/50"
+                          style={{ left: `${Math.min(100, m.sharePct)}%` }}
+                        />
+                      </div>
+                      <span className="w-40 flex-none text-right text-xs text-muted tnum">
+                        {Math.round(m.actualPct)}% actual · {m.sharePct}% target · {m.assigned30d} lead{m.assigned30d === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

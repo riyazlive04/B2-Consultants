@@ -83,6 +83,8 @@ export async function getPeopleOverview(monthStr?: string) {
     status: p.status,
     logVariant: p.logVariant,
     orderIndex: p.orderIndex,
+    firstCallSharePct: p.firstCallSharePct,
+    worksSaturdays: p.worksSaturdays,
     logsDaily: p.dashboardRole !== "ADMIN" && p.status === "ACTIVE",
     submittedToday: p.userId ? submittedUserIds.has(p.userId) : false,
     streak: streakFor(p.userId),

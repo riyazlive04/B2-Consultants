@@ -100,13 +100,34 @@ export const INTAKE_OPTIONS = {
   ],
 } as const satisfies Record<string, readonly IntakeOption[]>;
 
-/** Which answer values count as a "yes" for each BANT dimension. */
-const QUALIFIES = {
-  budget: new Set(["ready_now", "need_plan", "10_20l", "gt_20l"]),
-  authority: new Set(["mine", "family"]),
-  need: new Set(["actively", "applied_no_response", "fully", "serious"]),
-  timeline: new Set(["immediately", "3_months", "6_months"]),
-} as const;
+/**
+ * Weighted BANT (client notes): "for this answer, this score". Every qualifying answer
+ * carries a 0-5 score; a dimension's score is the BEST evidence available for it (e.g.
+ * high income still counts toward Budget when the invest answer is lukewarm). Retune by
+ * editing the numbers - the form, the score and the verdict all move together.
+ */
+export const BANT_ANSWER_SCORES: Record<string, Record<string, number>> = {
+  // ── Budget ──
+  readyToInvest: { ready_now: 5, need_plan: 3, unsure: 1.5, no: 0 },
+  currentIncome: { gt_20l: 5, "10_20l": 4, "5_10l": 2.5, lt_5l: 1 },
+  // ── Authority ──
+  decisionMaking: { mine: 5, family: 3, other: 1 },
+  // ── Need ──
+  alreadyApplied: { actively: 5, applied_no_response: 4, planning: 3, not_yet: 1.5 },
+  commitment: { fully: 5, serious: 3.5, curious: 1 },
+  // ── Timeline ──
+  whenStartGermany: { immediately: 5, "3_months": 4, "6_months": 3, "6_12_months": 2, exploring: 0.5 },
+};
+
+/** A dimension counts as "met" (the boolean the pipeline ranking consumes) at ≥3/5. */
+const DIMENSION_MET_AT = 3;
+
+/** Verdict thresholds on the 0-5 average: >3 confirm · 2-3 doubt · <2 cancel. */
+export function bantVerdictFor(avg: number): "CONFIRM" | "DOUBT" | "CANCEL" {
+  if (avg > 3) return "CONFIRM";
+  if (avg >= 2) return "DOUBT";
+  return "CANCEL";
+}
 
 export type BantInput = {
   readyToInvest?: string | null;
@@ -122,26 +143,37 @@ export type BantResult = {
   bantAuthority: boolean;
   bantNeed: boolean;
   bantTimeline: boolean;
-  bantScore: number; // 0-4
+  bantScore: number; // 0-4 count of dimensions met (pipeline-compatible)
+  bantAvg: number; // 0-5 mean of the four weighted dimension scores
+  bantVerdict: "CONFIRM" | "DOUBT" | "CANCEL";
 };
 
+const answerScore = (field: keyof typeof BANT_ANSWER_SCORES, value: string | null | undefined) =>
+  BANT_ANSWER_SCORES[field][value ?? ""] ?? 0;
+
 /**
- * BANT scoring. Budget = ready to invest OR high income; Authority = has a say in the
- * decision; Need = actively pursuing / committed; Timeline = starting within ~6 months.
- * Score is the count of dimensions met (0-4) - same shape the pipeline "Call these
- * first" ranking already consumes from DiscoveryOutcome.
+ * Weighted BANT scoring. Each dimension scores 0-5 from its best answer; bantAvg is the
+ * mean and bantVerdict applies Ameen's thresholds. The booleans + 0-4 bantScore keep the
+ * exact shape the pipeline "Call these first" ranking already consumes.
  */
 export function computeBant(input: BantInput): BantResult {
-  const budget =
-    QUALIFIES.budget.has(input.readyToInvest ?? "") ||
-    QUALIFIES.budget.has(input.currentIncome ?? "");
-  const authority = QUALIFIES.authority.has(input.decisionMaking ?? "");
-  const need =
-    QUALIFIES.need.has(input.alreadyApplied ?? "") ||
-    QUALIFIES.need.has(input.commitment ?? "");
-  const timeline = QUALIFIES.timeline.has(input.whenStartGermany ?? "");
-  const bantScore = [budget, authority, need, timeline].filter(Boolean).length;
-  return { bantBudget: budget, bantAuthority: authority, bantNeed: need, bantTimeline: timeline, bantScore };
+  const budget = Math.max(answerScore("readyToInvest", input.readyToInvest), answerScore("currentIncome", input.currentIncome));
+  const authority = answerScore("decisionMaking", input.decisionMaking);
+  const need = Math.max(answerScore("alreadyApplied", input.alreadyApplied), answerScore("commitment", input.commitment));
+  const timeline = answerScore("whenStartGermany", input.whenStartGermany);
+
+  const dims = [budget, authority, need, timeline];
+  const bantAvg = Math.round((dims.reduce((a, b) => a + b, 0) / dims.length) * 10) / 10;
+  const met = dims.map((d) => d >= DIMENSION_MET_AT);
+  return {
+    bantBudget: met[0],
+    bantAuthority: met[1],
+    bantNeed: met[2],
+    bantTimeline: met[3],
+    bantScore: met.filter(Boolean).length,
+    bantAvg,
+    bantVerdict: bantVerdictFor(bantAvg),
+  };
 }
 
 /** Map a stored value back to its human label for tables / the closer view. */

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { moveProfile, saveTeamProfile } from "@/server/people-actions";
 import type { MemberRow } from "@/server/people-metrics";
 import { toast } from "@/components/ui/feedback";
-import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate } from "@/lib/format";
 import { LOG_VARIANT_LABELS, optionsFrom, TEAM_STATUS_LABELS } from "@/lib/labels";
 
@@ -119,6 +119,12 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
             <Field label="Daily log form" hint="Which daily numbers this person logs">
               <Select name="logVariant" options={optionsFrom(LOG_VARIANT_LABELS)} defaultValue={editing?.logVariant ?? "APPOINTMENT_SETTER"} />
             </Field>
+            <Field label="First-call share %" hint="Target share of new leads (0 = not in rotation)">
+              <TextInput name="firstCallSharePct" inputMode="numeric" defaultValue={String(editing?.firstCallSharePct ?? 0)} />
+            </Field>
+            <div className="flex items-end pb-1">
+              <CheckboxField name="worksSaturdays" label="Works Saturdays" defaultChecked={editing?.worksSaturdays ?? true} />
+            </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <Field label="Key responsibilities" hint="Plain English - what this person owns every day">
                 <TextArea name="keyResponsibilities" defaultValue={editing?.keyResponsibilities ?? ""} />

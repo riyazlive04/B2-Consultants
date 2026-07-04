@@ -10,13 +10,15 @@ import type { LeadRow } from "@/server/pipeline-metrics";
 // Live stage distribution: where every lead sits right now (Section B stages).
 const STAGE_ORDER = [
   "NEW_LEAD", "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED",
-  "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT", "WON", "LOST", "NO_SHOW",
+  "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT",
+  "SENT_TO_WORKSHOP", "WORKSHOP_FOLLOWUP", "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP", "DEPOSIT_PAID",
+  "WON", "LOST", "NO_SHOW",
 ] as const;
 
 const stageColor = (s: string) =>
-  s === "WON" ? "var(--ok)"
+  s === "WON" || s === "DEPOSIT_PAID" ? "var(--ok)"
   : s === "LOST" || s === "NO_SHOW" ? "var(--risk)"
-  : s === "DISCO_NOT_BOOKED" ? "var(--watch)"
+  : s === "DISCO_NOT_BOOKED" || s === "OFFER_FOLLOWUP" || s === "DEPOSIT_FOLLOWUP" ? "var(--watch)"
   : "var(--accent)";
 
 export function StageChart({ leads }: { leads: LeadRow[] }) {

@@ -3,11 +3,17 @@
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { toast } from "@/components/ui/feedback";
 import { setBookingStatus } from "@/server/booking-actions";
-import { BOOKING_STATUS_LABELS } from "@/lib/labels";
+import { BANT_VERDICT_LABELS, BOOKING_STATUS_LABELS } from "@/lib/labels";
 import { formatDate } from "@/lib/format";
 import type { BookingRow } from "@/server/booking-metrics";
 
 const STATUS_OPTIONS = ["BOOKED", "COMPLETED", "NO_SHOW", "CANCELLED", "RESCHEDULED"] as const;
+
+const VERDICT_STYLE: Record<string, string> = {
+  CONFIRM: "bg-ok-soft text-ok",
+  DOUBT: "bg-watch-soft text-watch",
+  CANCEL: "bg-risk-soft text-risk",
+};
 
 function BantChips({ r }: { r: BookingRow }) {
   const dims: [string, boolean][] = [
@@ -16,11 +22,14 @@ function BantChips({ r }: { r: BookingRow }) {
   return (
     <span className="inline-flex items-center gap-1">
       <span
+        title={r.bantAvg !== null ? `Weighted average ${r.bantAvg.toFixed(1)}/5` : `${r.bantScore} of 4 dimensions met`}
         className={`tnum rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
-          r.bantScore >= 3 ? "bg-ok-soft text-ok" : r.bantScore >= 2 ? "bg-watch-soft text-watch" : "bg-risk-soft text-risk"
+          r.bantAvg !== null
+            ? r.bantAvg > 3 ? "bg-ok-soft text-ok" : r.bantAvg >= 2 ? "bg-watch-soft text-watch" : "bg-risk-soft text-risk"
+            : r.bantScore >= 3 ? "bg-ok-soft text-ok" : r.bantScore >= 2 ? "bg-watch-soft text-watch" : "bg-risk-soft text-risk"
         }`}
       >
-        {r.bantScore}/4
+        {r.bantAvg !== null ? `${r.bantAvg.toFixed(1)}/5` : `${r.bantScore}/4`}
       </span>
       <span className="hidden gap-0.5 sm:inline-flex">
         {dims.map(([k, on]) => (
@@ -71,7 +80,19 @@ export function BookingsTable({ rows }: { rows: BookingRow[] }) {
     { key: "role", header: "Role", cell: (r) => r.jobTitle || "-", value: (r) => r.jobTitle },
     { key: "when", header: "Wants to start", cell: (r) => r.whenStart, value: (r) => r.whenStart },
     { key: "invest", header: "Budget", cell: (r) => r.readyToInvest, value: (r) => r.readyToInvest },
-    { key: "bant", header: "BANT", cell: (r) => <BantChips r={r} />, value: (r) => r.bantScore },
+    { key: "bant", header: "BANT", cell: (r) => <BantChips r={r} />, value: (r) => r.bantAvg ?? r.bantScore },
+    {
+      key: "verdict", header: "Verdict",
+      cell: (r) =>
+        r.bantVerdict ? (
+          <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${VERDICT_STYLE[r.bantVerdict]}`}>
+            {BANT_VERDICT_LABELS[r.bantVerdict]}
+          </span>
+        ) : (
+          <span className="text-xs text-muted">-</span>
+        ),
+      value: (r) => (r.bantVerdict ? BANT_VERDICT_LABELS[r.bantVerdict] : ""),
+    },
     {
       key: "status", header: "Status", sortable: false,
       cell: (r) => (

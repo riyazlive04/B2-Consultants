@@ -53,6 +53,7 @@ model User {
   dailyLogs           DailyLog[]
   milestoneLogUpdates MilestoneLog[]     @relation("MilestoneUpdatedBy")
   signalChanges       SignalChangeLog[]  @relation("SignalChangedBy")
+  sprintWeeksEntered  SprintWeek[]       @relation("SprintEnteredBy")
 
   @@map("user")
 }
@@ -287,9 +288,22 @@ enum LeadStage {
   SSS_BOOKED
   SSS_COMPLETED
   PROPOSAL_SENT
+  // Synamate pipeline parity (client notes, bucket-1): the workshop branch and the
+  // post-offer money trail between "proposal" and "won".
+  SENT_TO_WORKSHOP
+  WORKSHOP_FOLLOWUP
+  OFFER_FOLLOWUP // offer made, didn't buy — follow-up running
+  DEPOSIT_FOLLOWUP // agreed, no deposit yet — follow-up running
+  DEPOSIT_PAID // confirmed signup with deposit
   WON
   LOST
   NO_SHOW
+}
+
+// How a won/deposit deal pays (Synamate "Split Pay / Full Pay").
+enum PaymentPlan {
+  SPLIT_PAY
+  FULL_PAY
 }
 
 model Lead {
@@ -303,6 +317,7 @@ model Lead {
   dateIn         DateTime     @db.Date
   stage          LeadStage    @default(NEW_LEAD)
   wonLevel       ProgramLevel? // set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
+  paymentPlan    PaymentPlan? // set from DEPOSIT_PAID onward — split pay vs full pay
   notes          String?
   source         Source       @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
   manualOverride Boolean      @default(false)
@@ -395,6 +410,13 @@ enum SlotStatus {
   BLOCKED
 }
 
+// Weighted-BANT recommendation (avg of the four 0–5 dimension scores).
+enum BantVerdict {
+  CONFIRM // avg > 3 — confirm the call
+  DOUBT   // avg 2–3 — go ahead, but doubt they'll convert
+  CANCEL  // avg < 2 — cancel / don't book the call
+}
+
 enum BookingStatus {
   BOOKED
   RESCHEDULED
@@ -457,12 +479,17 @@ model BookingRequest {
   commitment             String?
   howKnowUs              String?
 
-  // BANT — derived on submit; bantScore is 0–4 (count of the four dimensions met)
-  bantBudget    Boolean @default(false)
-  bantAuthority Boolean @default(false)
-  bantNeed      Boolean @default(false)
-  bantTimeline  Boolean @default(false)
-  bantScore     Int     @default(0)
+  // BANT — derived on submit; bantScore is 0–4 (count of the four dimensions met).
+  // Weighted layer (client notes): every answer carries a 0–5 score; bantAvg is the
+  // mean of the four dimension scores and bantVerdict applies Ameen's thresholds
+  // (>3 confirm · 2–3 doubt · <2 cancel). Recommendation only — no automated action.
+  bantBudget    Boolean      @default(false)
+  bantAuthority Boolean      @default(false)
+  bantNeed      Boolean      @default(false)
+  bantTimeline  Boolean      @default(false)
+  bantScore     Int          @default(0)
+  bantAvg       Float?
+  bantVerdict   BantVerdict?
 
   status      BookingStatus @default(BOOKED)
   source      Source        @default(BOOKING_FORM)
@@ -505,6 +532,11 @@ model TeamProfile {
   status              TeamStatus      @default(ACTIVE)
   logVariant          DailyLogVariant
   orderIndex          Int             @default(0) // org-chart card order (Admin can rearrange)
+  // First-call assignment rules (client notes): target share of incoming leads
+  // (Nilofer 80 / Asma 20) and Saturday availability (Asma doesn't work Saturdays).
+  // Drives the intake auto-assign suggestion; manual reassignment always overrides.
+  firstCallSharePct   Int             @default(0) // 0 = not in the first-call rotation
+  worksSaturdays      Boolean         @default(true)
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
@@ -660,11 +692,46 @@ model Enrollment {
   incomes       Income[]
   milestoneLogs MilestoneLog[]
   signalChanges SignalChangeLog[]
+  sprintWeeks   SprintWeek[]
 
   @@index([studentId])
   @@index([status, programLevel])
   @@index([signalColour])
   @@map("enrollment")
+}
+
+// ── Sprint tracker (client notes): week-wise targets after course completion ──
+// Guided = 90 days (13 weeks) · Elite = 120 days (17 weeks). Coach sets the target,
+// the weekend check-in records the actual; ACHIEVED = "no disturbance", MISSED feeds
+// the at-risk radar. The WhatsApp nudge on a miss is Wave-2 (gated) — here it's data.
+
+enum SprintStatus {
+  PENDING  // week not reviewed yet
+  ACHIEVED // target met — no disturbance
+  MISSED   // target missed — ask why / take action
+}
+
+model SprintWeek {
+  id            String       @id @default(cuid())
+  enrollmentId  String
+  enrollment    Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  weekIndex     Int // 1-based
+  weekStart     DateTime     @db.Date
+  weekEnd       DateTime     @db.Date // inclusive last day (the check-in weekend)
+  target        String? // e.g. "15 applications, 2 networking calls"
+  targetNumeric Decimal?     @db.Decimal(14, 2) // parsed when numeric → auto achieved/missed
+  actual        String? // what actually happened (student check-in or coach entry)
+  actualNumeric Decimal?     @db.Decimal(14, 2)
+  status        SprintStatus @default(PENDING)
+  note          String? // why missed / coach comment
+  enteredById   String?
+  enteredBy     User?        @relation("SprintEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([enrollmentId, weekIndex])
+  @@index([status, weekEnd])
+  @@map("sprint_week")
 }
 
 // APPEND-ONLY milestone history (PRD2 §4.4) — cannot be deleted by anyone, incl. Admin.

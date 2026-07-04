@@ -102,16 +102,27 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
         <MetricCard label="Booked this month" value={kpis.bookedThisMonth} icon={<CalendarCheck size={18} />} />
         <MetricCard
           label="Avg BANT score"
-          value={kpis.avgBant.toFixed(1)}
-          secondary="Out of 4 - this month"
-          signal={kpis.bookedThisMonth === 0 ? undefined : kpis.avgBant >= 3 ? "ok" : kpis.avgBant >= 2 ? "watch" : "risk"}
+          value={kpis.avgWeighted !== null ? kpis.avgWeighted.toFixed(1) : kpis.avgBant.toFixed(1)}
+          secondary={kpis.avgWeighted !== null ? "Weighted, out of 5 - this month" : "Out of 4 - this month"}
+          tooltip="Weighted average of the four BANT dimension scores. Above 3 = confirm the call, 2-3 = go but doubtful, below 2 = cancel recommended."
+          signal={
+            kpis.bookedThisMonth === 0
+              ? undefined
+              : kpis.avgWeighted !== null
+                ? kpis.avgWeighted > 3 ? "ok" : kpis.avgWeighted >= 2 ? "watch" : "risk"
+                : kpis.avgBant >= 3 ? "ok" : kpis.avgBant >= 2 ? "watch" : "risk"
+          }
           icon={<Target size={18} />}
         />
         <MetricCard
-          label="High-intent bookings"
-          value={kpis.highBant}
-          secondary="BANT 3+ this month"
-          signal={kpis.highBant > 0 ? "ok" : undefined}
+          label="BANT verdicts"
+          value={
+            <span className="text-2xl">
+              {kpis.verdicts.confirm} · {kpis.verdicts.doubt} · {kpis.verdicts.cancel}
+            </span>
+          }
+          secondary="Confirm · Doubtful · Cancel - this month"
+          signal={kpis.verdicts.cancel > kpis.verdicts.confirm ? "watch" : kpis.verdicts.confirm > 0 ? "ok" : undefined}
           icon={<Flame size={18} />}
         />
       </div>

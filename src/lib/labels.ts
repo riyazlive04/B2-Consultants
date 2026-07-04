@@ -96,9 +96,32 @@ export const LEAD_STAGE_LABELS: Record<string, string> = {
   SSS_BOOKED: "SSS Call booked",
   SSS_COMPLETED: "SSS Call completed",
   PROPOSAL_SENT: "Proposal sent",
+  SENT_TO_WORKSHOP: "Sent to Workshop",
+  WORKSHOP_FOLLOWUP: "Workshop follow-up",
+  OFFER_FOLLOWUP: "Offer made - didn't buy",
+  DEPOSIT_FOLLOWUP: "No deposit - follow-up",
+  DEPOSIT_PAID: "Confirmed signup (deposit)",
   WON: "Won",
   LOST: "Lost",
   NO_SHOW: "No show",
+};
+
+export const PAYMENT_PLAN_LABELS: Record<string, string> = {
+  SPLIT_PAY: "Split pay",
+  FULL_PAY: "Full pay",
+};
+
+// Weighted BANT recommendation (client thresholds: >3 confirm · 2-3 doubt · <2 cancel)
+export const BANT_VERDICT_LABELS: Record<string, string> = {
+  CONFIRM: "Confirm call",
+  DOUBT: "Go - conversion doubtful",
+  CANCEL: "Cancel recommended",
+};
+
+export const SPRINT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pending",
+  ACHIEVED: "Achieved",
+  MISSED: "Missed",
 };
 
 export const CALL_OUTCOME_LABELS: Record<string, string> = {

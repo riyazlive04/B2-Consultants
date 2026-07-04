@@ -9,7 +9,10 @@ import { aggInrMinor, sumAgg } from "@/lib/money";
  * current stage - a lead that later moved on still counts for the month it was booked.
  */
 
-const INTERESTED_STAGES = ["SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT"] as const;
+const INTERESTED_STAGES = [
+  "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT",
+  "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP", "DEPOSIT_PAID",
+] as const;
 
 async function distinctLeadsReaching(stage: string, start: Date, end: Date): Promise<number> {
   const rows = await prisma.leadStageHistory.findMany({
@@ -92,11 +95,14 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   // ── Lead priority scoring + deal-risk (report §3.A - rule-based, no AI) ──
   const OPEN_STAGES = [
     "NEW_LEAD", "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED",
-    "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT", "NO_SHOW",
+    "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT",
+    "SENT_TO_WORKSHOP", "WORKSHOP_FOLLOWUP", "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP", "DEPOSIT_PAID",
+    "NO_SHOW",
   ] as const;
   const STAGE_WEIGHT: Record<string, number> = {
-    SSS_COMPLETED: 30, PROPOSAL_SENT: 28, SSS_BOOKED: 25, DISCO_COMPLETED: 20,
-    DISCO_BOOKED: 15, NEW_LEAD: 10, DISCO_NOT_BOOKED: 8, NO_SHOW: 5,
+    DEPOSIT_PAID: 32, SSS_COMPLETED: 30, DEPOSIT_FOLLOWUP: 29, PROPOSAL_SENT: 28,
+    OFFER_FOLLOWUP: 26, SSS_BOOKED: 25, DISCO_COMPLETED: 20, DISCO_BOOKED: 15,
+    WORKSHOP_FOLLOWUP: 14, SENT_TO_WORKSHOP: 12, NEW_LEAD: 10, DISCO_NOT_BOOKED: 8, NO_SHOW: 5,
   };
 
   const [openLeads, lastChanges, openOutcomes] = await Promise.all([
@@ -128,6 +134,8 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
     let risk: string | null = null;
     if (l.stage === "NO_SHOW") risk = "No-show never rebooked";
     else if (l.stage === "PROPOSAL_SENT" && idleDays > 7) risk = `Proposal aging ${idleDays}d - no decision`;
+    else if (l.stage === "OFFER_FOLLOWUP" && idleDays > 7) risk = `Offer open ${idleDays}d - didn't buy`;
+    else if (l.stage === "DEPOSIT_FOLLOWUP" && idleDays > 5) risk = `Agreed but no deposit for ${idleDays}d`;
     else if (o?.outcome === "FOLLOW_UP_NEEDED" && idleDays > 5) risk = `Follow-up promised, silent ${idleDays}d`;
     else if (l.stage !== "NEW_LEAD" && idleDays > 10) risk = `Stalled - no movement in ${idleDays}d`;
 
@@ -186,6 +194,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
       dateIn: l.dateIn.toISOString(),
       stage: l.stage,
       wonLevel: l.wonLevel,
+      paymentPlan: l.paymentPlan,
       notes: l.notes,
       enteredBy: l.enteredBy?.name ?? "-",
       source: l.source,

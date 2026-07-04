@@ -24,6 +24,8 @@ import { PROGRAM_LEVEL_LABELS, PAYMENT_METHOD_LABELS, EXPENSE_CATEGORY_LABELS } 
 import { requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { getFinanceOverview } from "@/server/finance-metrics";
+import { getCommissionReport } from "@/server/commission-metrics";
+import { CommissionSection } from "./_components/CommissionSection";
 import { ExpenseSection } from "./_components/ExpenseSection";
 import { IncomeSection } from "./_components/IncomeSection";
 import { PendingSection } from "./_components/PendingSection";
@@ -45,7 +47,10 @@ const CAT_SHADES = [
 
 export default async function FinancePage() {
   await requireSection("finance");
-  const { metrics, incomes, expenses, pendings } = await getFinanceOverview();
+  const [{ metrics, incomes, expenses, pendings }, commission] = await Promise.all([
+    getFinanceOverview(),
+    getCommissionReport(),
+  ]);
   const today = toDateInputValue(istToday());
   const monthKey = today.slice(0, 7);
   const monthLabel = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(istToday());
@@ -281,6 +286,7 @@ export default async function FinancePage() {
             label: `Pending payments${pendings.some((p) => p.overdue) ? " ⚠" : ""}`,
             content: <PendingSection rows={pendings} />,
           },
+          { label: "Commission", content: <CommissionSection report={commission} /> },
         ]}
       />
     </div>

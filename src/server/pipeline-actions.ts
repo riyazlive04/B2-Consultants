@@ -16,8 +16,13 @@ import type { ActionResult } from "./finance-actions";
 
 const LEAD_STAGES = [
   "NEW_LEAD", "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED",
-  "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT", "WON", "LOST", "NO_SHOW",
+  "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT",
+  "SENT_TO_WORKSHOP", "WORKSHOP_FOLLOWUP", "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP", "DEPOSIT_PAID",
+  "WON", "LOST", "NO_SHOW",
 ] as const;
+
+// Stages where the split/full-pay plan applies (deposit collected onward).
+const PAYMENT_PLAN_STAGES = new Set(["DEPOSIT_PAID", "WON"]);
 
 const PROGRAM_LEVELS = [
   "SOLO", "GUIDED", "ELITE", "GN_A1", "GN_A2", "GN_B1", "GN_B2", "GN_BUNDLE", "OTHER",
@@ -33,6 +38,7 @@ const leadSchema = z.object({
   dateIn: z.string().min(10),
   stage: z.enum(LEAD_STAGES),
   wonLevel: z.enum(PROGRAM_LEVELS).optional().or(z.literal("")),
+  paymentPlan: z.enum(["SPLIT_PAY", "FULL_PAY"]).optional().or(z.literal("")),
   notes: z.string().trim().optional(),
 });
 
@@ -58,6 +64,7 @@ export async function createLead(form: FormData): Promise<ActionResult> {
         dateIn: parseDateInput(d.dateIn),
         stage: d.stage,
         wonLevel: d.stage === "WON" && d.wonLevel ? d.wonLevel : null,
+        paymentPlan: PAYMENT_PLAN_STAGES.has(d.stage) && d.paymentPlan ? d.paymentPlan : null,
         notes: d.notes || null,
         enteredById: session.user.id,
       },
@@ -95,6 +102,7 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
         dateIn: parseDateInput(d.dateIn),
         stage: d.stage,
         wonLevel: d.stage === "WON" ? (d.wonLevel as (typeof PROGRAM_LEVELS)[number]) : lead.wonLevel,
+        paymentPlan: PAYMENT_PLAN_STAGES.has(d.stage) ? d.paymentPlan || lead.paymentPlan : lead.paymentPlan,
         notes: d.notes || null,
         manualOverride: lead.source !== "MANUAL" ? true : lead.manualOverride,
       },

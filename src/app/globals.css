@@ -4,9 +4,9 @@
 
 /* ── B2 Consultants design tokens — soft lavender, glassmorphic (Dosage style) ── */
 :root {
-  --canvas: #eceefb;       /* soft periwinkle app wash so glass cards float */
+  --canvas: #f6f7fb;       /* near-white wash — flat design: cards sit ON the page, not above it */
   --surface: #ffffff;      /* cards */
-  --surface-2: #f2f2fb;    /* subtle raised fills — headers, chips, inputs, hover */
+  --surface-2: #f0f1f7;    /* subtle raised fills — headers, chips, inputs, hover */
   --sidebar: #ffffff;      /* light navigation rail */
   --sidebar-2: #f2f2fb;    /* icon chips / hover on the sidebar */
   --sidebar-tx: #14161b;   /* dark nav text */
@@ -109,12 +109,10 @@ body {
 .hero-violet {
   background: linear-gradient(150deg, var(--violet-1) 0%, var(--violet-2) 100%);
   color: #fff;
-  box-shadow: 0 24px 48px -18px rgba(91, 75, 214, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 .hero-pink {
   background: linear-gradient(150deg, var(--pink-1) 0%, var(--pink-2) 100%);
   color: #fff;
-  box-shadow: 0 24px 48px -18px rgba(238, 95, 142, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 /* faint decorative orb layered inside hero cards for depth */
 .hero-orb::before {
@@ -129,13 +127,11 @@ body {
   pointer-events: none;
 }
 
-/* frosted white card — the everyday surface, softly floating on lavender */
+/* everyday card surface — flat: solid white, hairline border, no shadow or blur */
 .glass-card {
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.86));
-  backdrop-filter: blur(10px) saturate(140%);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 1px 2px rgba(25, 26, 44, 0.04), 0 18px 40px -22px rgba(25, 26, 44, 0.22);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: none;
 }
 
 /* ── Floating violet navigation rail (signature left dock) ── */
@@ -256,7 +252,7 @@ button:disabled,
 /* clickable cards give a small press response */
 a.card-hover:active:not(:disabled),
 .card-hover[role="button"]:active {
-  transform: translateY(-1px) scale(0.997);
+  transform: scale(0.997);
 }
 
 /* cards enter with a gentle staggered rise */
@@ -275,14 +271,13 @@ a.card-hover:active:not(:disabled),
 .rise-in:nth-child(7) { animation-delay: 240ms; }
 .rise-in:nth-child(8) { animation-delay: 280ms; }
 
-/* soft card hover lift */
+/* flat card hover — quiet: accent hairline + faint tinted fill, no lift or shadow */
 .card-hover {
-  transition: box-shadow 200ms ease, border-color 200ms ease, transform 200ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease;
 }
 .card-hover:hover {
-  border-color: rgba(var(--accent-rgb), 0.35);
-  box-shadow: 0 2px 4px rgba(20, 22, 27, 0.04), 0 16px 38px -16px rgba(var(--accent-rgb), 0.28);
-  transform: translateY(-3px);
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background-color: rgba(var(--accent-rgb), 0.03);
 }
 
 /* table rows respond to the pointer */

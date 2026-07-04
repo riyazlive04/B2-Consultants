@@ -30,6 +30,9 @@ type SeedUser = {
   roleTitle: string;
   logVariant: "DISCOVERY_SPECIALIST" | "APPOINTMENT_SETTER" | "DELIVERY_COACH";
   orderIndex: number;
+  // First-call rotation (client rules): Nilofer 80% / Asma 20%; Asma is off Saturdays.
+  firstCallSharePct?: number;
+  worksSaturdays?: boolean;
 };
 
 function env(key: string, fallback: string): string {
@@ -63,6 +66,8 @@ const USERS: SeedUser[] = [
     roleTitle: "Discovery Call Specialist",
     logVariant: "DISCOVERY_SPECIALIST",
     orderIndex: 2,
+    firstCallSharePct: 20,
+    worksSaturdays: false,
   },
   {
     name: "Nilofer",
@@ -72,6 +77,7 @@ const USERS: SeedUser[] = [
     roleTitle: "Appointment Setter",
     logVariant: "APPOINTMENT_SETTER",
     orderIndex: 3,
+    firstCallSharePct: 80,
   },
 ];
 
@@ -98,7 +104,11 @@ async function main() {
 
     await prisma.teamProfile.upsert({
       where: { userId },
-      update: { dashboardRole: u.role },
+      update: {
+        dashboardRole: u.role,
+        firstCallSharePct: u.firstCallSharePct ?? 0,
+        worksSaturdays: u.worksSaturdays ?? true,
+      },
       create: {
         userId,
         fullName: u.name,
@@ -108,6 +118,8 @@ async function main() {
         logVariant: u.logVariant,
         orderIndex: u.orderIndex,
         status: "ACTIVE",
+        firstCallSharePct: u.firstCallSharePct ?? 0,
+        worksSaturdays: u.worksSaturdays ?? true,
       },
     });
   }

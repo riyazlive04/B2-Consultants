@@ -31,11 +31,13 @@ const config: Config = {
         serif: ["var(--font-serif)", "Georgia", "serif"],
       },
       borderRadius: {
-        card: "26px", // metric cards / panels — soft squircle
-        field: "16px", // inputs, buttons, table container
+        card: "16px", // metric cards / panels — flat, modest radius (was 26px squircle)
+        field: "12px", // inputs, buttons, table container
       },
       boxShadow: {
-        card: "0 1px 2px rgba(25, 26, 44, 0.04), 0 16px 38px -20px rgba(25, 26, 44, 0.20)",
+        // Flat design: page cards carry NO shadow — a hairline border separates them.
+        // pop/soft/hero stay for genuinely-floating chrome (modals, dropdowns, toasts).
+        card: "none",
         pop: "0 18px 48px -10px rgba(25, 26, 44, 0.24)",
         soft: "0 8px 28px -12px rgba(25, 26, 44, 0.14)",
         hero: "0 28px 60px -22px rgba(91, 75, 214, 0.5)",

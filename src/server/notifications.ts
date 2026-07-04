@@ -325,7 +325,12 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   const tenDaysAgo = new Date(Date.now() - 10 * 86400000);
   const stalledDeals = await prisma.lead.count({
     where: {
-      stage: { in: ["DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED", "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT"] },
+      stage: {
+        in: [
+          "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED", "SSS_BOOKED", "SSS_COMPLETED",
+          "PROPOSAL_SENT", "SENT_TO_WORKSHOP", "WORKSHOP_FOLLOWUP", "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP",
+        ],
+      },
       updatedAt: { lt: tenDaysAgo },
     },
   });

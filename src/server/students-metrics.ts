@@ -65,6 +65,7 @@ export async function getStudentsOverview() {
         student: { select: { id: true, fullName: true } },
         milestoneLogs: { select: { date: true, previousMilestone: true, newMilestone: true } },
         signalChanges: { select: { date: true, previousSignal: true, newSignal: true } },
+        sprintWeeks: { select: { weekIndex: true, weekEnd: true, status: true, target: true } },
       },
     }),
     prisma.satisfactionScore.findMany(),
@@ -159,6 +160,18 @@ export async function getStudentsOverview() {
           flags.push(`${daysLeft} days left, not yet at interviews`);
         }
       }
+      // sprint tracker (client notes): a missed weekly target = ask why / take action;
+      // a week whose weekend passed without a check-in is a silent miss in the making.
+      const recentMissed = e.sprintWeeks.filter(
+        (w) => w.status === "MISSED" && dayDiff(today, w.weekEnd) <= 14 && dayDiff(today, w.weekEnd) >= 0,
+      );
+      if (recentMissed.length) {
+        flags.push(`Missed week-${recentMissed.map((w) => w.weekIndex).join("/")} sprint target`);
+      }
+      const overdueCheckIn = e.sprintWeeks.find(
+        (w) => w.status === "PENDING" && !!w.target && dayDiff(today, w.weekEnd) > 2,
+      );
+      if (overdueCheckIn) flags.push(`Week ${overdueCheckIn.weekIndex} check-in not recorded`);
       return { ...t, flags, alreadyRed: t.signalColour === "RED" };
     })
     .filter((t) => t.flags.length > 0)
@@ -232,6 +245,7 @@ export async function getStudentDetail(id: string) {
         include: {
           milestoneLogs: { orderBy: { date: "desc" }, include: { updatedBy: { select: { name: true } } } },
           signalChanges: { orderBy: { date: "desc" }, include: { changedBy: { select: { name: true } } } },
+          sprintWeeks: { orderBy: { weekIndex: "asc" }, include: { enteredBy: { select: { name: true } } } },
         },
       },
       satisfactionScores: { orderBy: { date: "desc" } },
@@ -290,6 +304,17 @@ export async function getStudentDetail(id: string) {
         signalColour: e.signalColour,
         signalNotes: e.signalNotes,
         nextCheckInDate: e.nextCheckInDate?.toISOString() ?? null,
+        sprintWeeks: e.sprintWeeks.map((w) => ({
+          id: w.id,
+          weekIndex: w.weekIndex,
+          weekStart: w.weekStart.toISOString(),
+          weekEnd: w.weekEnd.toISOString(),
+          target: w.target,
+          actual: w.actual,
+          status: w.status,
+          note: w.note,
+          enteredBy: w.enteredBy?.name ?? null,
+        })),
         milestoneLogs: e.milestoneLogs.map((m) => ({
           id: m.id,
           date: m.date.toISOString(),

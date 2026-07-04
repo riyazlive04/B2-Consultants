@@ -26,6 +26,9 @@ const profileSchema = z.object({
   keyResponsibilities: z.string().trim().optional(),
   status: z.enum(["ACTIVE", "ON_LEAVE", "INACTIVE"]),
   logVariant: z.enum(["DISCOVERY_SPECIALIST", "APPOINTMENT_SETTER", "DELIVERY_COACH"]),
+  // First-call rotation (client notes: 80/20 split, Asma off Saturdays)
+  firstCallSharePct: z.string().trim().regex(/^\d{0,3}$/, "Share must be 0-100").optional(),
+  worksSaturdays: z.string().optional(), // checkbox
 });
 
 export async function saveTeamProfile(id: string | null, form: FormData): Promise<ActionResult> {
@@ -44,6 +47,8 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
     keyResponsibilities: d.keyResponsibilities || null,
     status: d.status,
     logVariant: d.logVariant,
+    firstCallSharePct: Math.min(100, d.firstCallSharePct?.trim() ? parseInt(d.firstCallSharePct, 10) : 0),
+    worksSaturdays: d.worksSaturdays === "on",
   };
 
   if (id) {

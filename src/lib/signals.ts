@@ -34,3 +34,14 @@ export function signalForRunway(months: number): SignalLevel {
 export function signalForStudent(colour: "GREEN" | "AMBER" | "RED"): SignalLevel {
   return colour === "GREEN" ? "ok" : colour === "AMBER" ? "watch" : "risk";
 }
+
+/**
+ * Speed-to-lead (Synamate "Speed Ratio", client notes): contacted within 5 minutes is
+ * green, 6-60 minutes amber, above an hour carries no colour (plain chip).
+ */
+export function signalForSpeedToLead(ms: number): SignalLevel | null {
+  const mins = ms / 60000;
+  if (mins <= 5) return "ok";
+  if (mins <= 60) return "watch";
+  return null;
+}

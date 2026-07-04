@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma, type LeadSource, type Source, type Lead } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
+import { pickFirstCaller } from "./assignment";
 
 /**
  * Single entry point for every non-manual lead that lands in the system - the two
@@ -61,7 +62,9 @@ export async function upsertIntakeLead(input: IntakeLead): Promise<IntakeResult>
   const byPhone = await prisma.lead.findFirst({ where: { phone: input.phone } });
   if (byPhone) return { lead: byPhone, created: false, deduped: "phone" };
 
-  // 3. brand-new lead
+  // 3. brand-new lead. Auto-assign the first caller per the configured rotation
+  // (80/20 split, Saturday rule) - a failure here must never block lead capture.
+  const assignedToId = await pickFirstCaller().catch(() => null);
   const lead = await prisma.$transaction(async (tx) => {
     const created = await tx.lead.create({
       data: {
@@ -77,6 +80,7 @@ export async function upsertIntakeLead(input: IntakeLead): Promise<IntakeResult>
         dateIn: istToday(),
         stage: "NEW_LEAD",
         notes: input.notes ?? null,
+        assignedToId,
       },
     });
     await tx.leadStageHistory.create({

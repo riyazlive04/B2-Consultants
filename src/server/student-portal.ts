@@ -43,6 +43,14 @@ export const getMyStudentPortal = cache(async (userId: string) => {
           },
           // loaded ONLY to feed journey momentum/badge math — never exposed below
           signalChanges: { select: { date: true, previousSignal: true, newSignal: true } },
+          // sprint plan: targets/actuals/status only — who entered it stays internal
+          sprintWeeks: {
+            orderBy: { weekIndex: "asc" },
+            select: {
+              id: true, weekIndex: true, weekStart: true, weekEnd: true,
+              target: true, actual: true, status: true, note: true,
+            },
+          },
         },
       },
     },
@@ -102,6 +110,19 @@ export const getMyStudentPortal = cache(async (userId: string) => {
         newMilestone: l.newMilestone,
       })),
       nextSteps: STUDENT_NEXT_STEPS[e.currentMilestone] ?? null,
+      // Week-wise sprint plan (client notes): the weekend check-in happens HERE.
+      sprintWeeks: e.sprintWeeks.map((w) => ({
+        id: w.id,
+        weekIndex: w.weekIndex,
+        weekStart: w.weekStart.toISOString(),
+        weekEnd: w.weekEnd.toISOString(),
+        target: w.target,
+        actual: w.actual,
+        status: w.status,
+        note: w.note,
+        isCurrent:
+          todayKey >= dateKeyOf(w.weekStart) && todayKey <= dateKeyOf(w.weekEnd),
+      })),
     };
   });
 

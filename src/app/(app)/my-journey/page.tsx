@@ -8,6 +8,7 @@ import { BadgeChip, JourneyRing, MomentumChip } from "@/components/ui/gamificati
 import { MILESTONE_ORDER } from "@/lib/gamification";
 import { formatDate } from "@/lib/format";
 import { MILESTONE_LABELS, PROGRAM_LEVEL_LABELS, STUDENT_STATUS_LABELS } from "@/lib/labels";
+import { SprintCheckIn } from "./_components/SprintCheckIn";
 
 export const dynamic = "force-dynamic";
 
@@ -192,6 +193,9 @@ function EnrollmentJourney({ e, lead }: { e: PortalEnrollment; lead: boolean }) 
           </ul>
         </div>
       )}
+
+      {/* weekly sprint check-in (client notes: weekend form, achieved/missed) */}
+      {e.status === "ACTIVE" && <SprintCheckIn weeks={e.sprintWeeks} />}
 
       {/* badge case */}
       <div className="mt-5 border-t border-line pt-4">

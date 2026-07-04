@@ -27,7 +27,7 @@ export async function getBookingsOverview() {
     }),
     prisma.bookingRequest.findMany({
       where: { createdAt: { gte: month.start, lt: month.end } },
-      select: { bantScore: true, status: true },
+      select: { bantScore: true, bantAvg: true, bantVerdict: true, status: true },
     }),
     prisma.bookingRequest.findMany({
       orderBy: { createdAt: "desc" },
@@ -43,9 +43,20 @@ export async function getBookingsOverview() {
       : 0;
   const highBant = monthBookings.filter((b) => b.bantScore >= 3).length;
   const noShows = monthBookings.filter((b) => b.status === "NO_SHOW").length;
+  // Weighted layer (client thresholds: >3 confirm · 2-3 doubt · <2 cancel).
+  // Legacy rows booked before the weighted scorer have no bantAvg - excluded from the mean.
+  const scored = monthBookings.filter((b) => b.bantAvg !== null);
+  const avgWeighted = scored.length
+    ? scored.reduce((a, b) => a + (b.bantAvg ?? 0), 0) / scored.length
+    : null;
+  const verdicts = {
+    confirm: monthBookings.filter((b) => b.bantVerdict === "CONFIRM").length,
+    doubt: monthBookings.filter((b) => b.bantVerdict === "DOUBT").length,
+    cancel: monthBookings.filter((b) => b.bantVerdict === "CANCEL").length,
+  };
 
   return {
-    kpis: { openSlots, bookedThisMonth, avgBant, highBant, noShows },
+    kpis: { openSlots, bookedThisMonth, avgBant, avgWeighted, highBant, noShows, verdicts },
     slots: upcomingSlots.map((s) => ({
       id: s.id,
       day: istDay.format(s.startsAt),
@@ -67,6 +78,8 @@ export async function getBookingsOverview() {
       slotTime: b.slot ? istTime.format(b.slot.startsAt) : "",
       slotCet: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Europe/Berlin") : "",
       bantScore: b.bantScore,
+      bantAvg: b.bantAvg,
+      bantVerdict: b.bantVerdict,
       bantBudget: b.bantBudget,
       bantAuthority: b.bantAuthority,
       bantNeed: b.bantNeed,

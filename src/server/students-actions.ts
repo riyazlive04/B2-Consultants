@@ -255,6 +255,78 @@ export async function updateTracker(enrollmentId: string, form: FormData): Promi
   return { ok: true };
 }
 
+// ── Sprint tracker (client notes): week-wise targets, Admin or Head ──
+// Guided = 13 weeks (90d), Elite = 18 weeks (120d), from the enrollment date.
+// The coach sets targets; the weekend check-in records the actual. ACHIEVED =
+// "no disturbance"; MISSED feeds the at-risk radar (WhatsApp nudge is Wave-2).
+
+const parseSprintNumber = (s: string | undefined | null): number | null => {
+  if (!s) return null;
+  const m = s.replace(/,/g, "").match(/-?\d+(\.\d+)?/);
+  return m ? parseFloat(m[0]) : null;
+};
+
+/** Create the empty week plan for a Guided/Elite enrollment (idempotent). */
+export async function generateSprintPlan(enrollmentId: string): Promise<ActionResult> {
+  await requireAdminOrHead();
+  const e = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { programLevel: true, enrollmentDate: true, sprintWeeks: { select: { id: true }, take: 1 } },
+  });
+  if (!e) return { ok: false, error: "Enrollment not found" };
+  if (e.programLevel !== "GUIDED" && e.programLevel !== "ELITE") {
+    return { ok: false, error: "Sprint plans apply to Guided (90d) and Elite (120d) only" };
+  }
+  if (e.sprintWeeks.length) return { ok: false, error: "This enrollment already has a sprint plan" };
+
+  const totalDays = e.programLevel === "GUIDED" ? 90 : 120;
+  const weeks = Math.ceil(totalDays / 7);
+  await prisma.sprintWeek.createMany({
+    data: Array.from({ length: weeks }, (_, i) => {
+      const weekStart = new Date(e.enrollmentDate);
+      weekStart.setUTCDate(weekStart.getUTCDate() + i * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+      return { enrollmentId, weekIndex: i + 1, weekStart, weekEnd };
+    }),
+  });
+  revalidatePath("/students");
+  return { ok: true };
+}
+
+const sprintWeekSchema = z.object({
+  target: z.string().trim().optional(),
+  actual: z.string().trim().optional(),
+  status: z.enum(["PENDING", "ACHIEVED", "MISSED"]),
+  note: z.string().trim().optional(),
+});
+
+/** Coach/Admin saves one sprint week: target, weekend actual, verdict, note. */
+export async function saveSprintWeek(weekId: string, form: FormData): Promise<ActionResult> {
+  const session = await requireAdminOrHead();
+  const parsed = sprintWeekSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const d = parsed.data;
+
+  const week = await prisma.sprintWeek.findUnique({ where: { id: weekId }, select: { id: true } });
+  if (!week) return { ok: false, error: "Sprint week not found" };
+
+  await prisma.sprintWeek.update({
+    where: { id: weekId },
+    data: {
+      target: d.target || null,
+      targetNumeric: parseSprintNumber(d.target),
+      actual: d.actual || null,
+      actualNumeric: parseSprintNumber(d.actual),
+      status: d.status,
+      note: d.note || null,
+      enteredById: session.user.id,
+    },
+  });
+  revalidatePath("/students");
+  return { ok: true };
+}
+
 // ── Satisfaction / NPS (Admin, manual - PRD2 §4.5) ─────────────
 
 const satisfactionSchema = z.object({

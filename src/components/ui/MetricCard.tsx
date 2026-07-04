@@ -38,16 +38,10 @@ export function MetricCard({
   const tint = signal ? SIGNAL_META[signal] : undefined;
   const barColor = tint ? tint.color : "var(--accent)";
   const className =
-    "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-white/80 glass-card p-5";
+    "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-line bg-surface p-5";
 
   const inner = (
     <>
-      {/* soft corner glow tinted by the signal (or brand accent) */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full opacity-60 blur-2xl transition-opacity group-hover:opacity-90"
-        style={{ background: tint ? tint.soft : "var(--accent-soft)" }}
-      />
       {tint && (
         <span aria-hidden className="absolute inset-x-0 top-0 h-1" style={{ background: tint.color }} />
       )}

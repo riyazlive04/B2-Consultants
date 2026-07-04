@@ -83,6 +83,11 @@ export const XP_RULES = {
     SSS_BOOKED: 15,
     SSS_COMPLETED: 15,
     PROPOSAL_SENT: 20,
+    SENT_TO_WORKSHOP: 8,
+    WORKSHOP_FOLLOWUP: 8,
+    OFFER_FOLLOWUP: 20,
+    DEPOSIT_FOLLOWUP: 20,
+    DEPOSIT_PAID: 60,
     WON: 100,
   } as Record<string, number>,
   OUTCOME_LOGGED: 5,
@@ -317,6 +322,11 @@ const STAGE_LABELS_SHORT: Record<string, string> = {
   SSS_BOOKED: "SSS call booked",
   SSS_COMPLETED: "SSS call completed",
   PROPOSAL_SENT: "Proposal sent",
+  SENT_TO_WORKSHOP: "Sent to workshop",
+  WORKSHOP_FOLLOWUP: "Workshop follow-up",
+  OFFER_FOLLOWUP: "Offer follow-up",
+  DEPOSIT_FOLLOWUP: "Deposit follow-up",
+  DEPOSIT_PAID: "Deposit collected",
   WON: "Deal won",
 };
 

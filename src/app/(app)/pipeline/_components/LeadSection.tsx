@@ -7,9 +7,20 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate, formatDuration } from "@/lib/format";
+import { signalForSpeedToLead } from "@/lib/signals";
 import {
-  LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, optionsFrom, PROGRAM_LEVEL_LABELS,
+  LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, optionsFrom, PAYMENT_PLAN_LABELS, PROGRAM_LEVEL_LABELS,
 } from "@/lib/labels";
+
+// Split/full pay applies once a deposit is in (client notes: "Split Pay / Full Pay").
+const PAYMENT_PLAN_STAGES = new Set(["DEPOSIT_PAID", "WON"]);
+
+// Speed-to-lead colour rule (client notes): green ≤5 min · amber 6-60 min · no colour above.
+const SPEED_PILL: Record<string, string> = {
+  ok: "bg-ok-soft text-ok",
+  watch: "bg-watch-soft text-watch",
+  none: "bg-surface-2 text-muted",
+};
 
 export function LeadSection({
   rows,
@@ -78,6 +89,7 @@ export function LeadSection({
         <span className={r.stage === "WON" ? "font-semibold text-ok" : r.stage === "LOST" ? "text-muted" : ""}>
           {LEAD_STAGE_LABELS[r.stage]}
           {r.wonLevel ? ` · ${PROGRAM_LEVEL_LABELS[r.wonLevel]}` : ""}
+          {r.paymentPlan ? ` · ${PAYMENT_PLAN_LABELS[r.paymentPlan]}` : ""}
         </span>
       ),
       value: (r) => LEAD_STAGE_LABELS[r.stage],
@@ -105,7 +117,10 @@ export function LeadSection({
       key: "speed", header: "Speed to lead",
       cell: (r) =>
         r.speedMs !== null ? (
-          <span className="tnum rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok">
+          <span
+            title="Green: contacted within 5 minutes · Amber: within an hour"
+            className={`tnum rounded-full px-2 py-0.5 text-xs font-medium ${SPEED_PILL[signalForSpeedToLead(r.speedMs) ?? "none"]}`}
+          >
             {formatDuration(r.speedMs)}
           </span>
         ) : (
@@ -177,6 +192,15 @@ export function LeadSection({
           {stage === "WON" && (
             <Field label="Program level (Won)" hint="Which program did they enrol in?">
               <Select name="wonLevel" options={optionsFrom(PROGRAM_LEVEL_LABELS)} defaultValue={editing?.wonLevel ?? "GUIDED"} />
+            </Field>
+          )}
+          {PAYMENT_PLAN_STAGES.has(stage) && (
+            <Field label="Payment plan" hint="Split pay or full pay?">
+              <Select
+                name="paymentPlan"
+                options={[{ value: "", label: "-" }, ...optionsFrom(PAYMENT_PLAN_LABELS)]}
+                defaultValue={editing?.paymentPlan ?? ""}
+              />
             </Field>
           )}
           <div className="sm:col-span-2">

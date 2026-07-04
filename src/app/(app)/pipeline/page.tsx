@@ -10,17 +10,16 @@ import {
   Trophy,
   Phone,
   AlertTriangle,
-  Workflow,
 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { istToday, toDateInputValue } from "@/lib/dates";
 import { formatInrMinor, formatPct } from "@/lib/format";
-import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { getPipelineOverview } from "@/server/pipeline-metrics";
 import { LeadSection } from "./_components/LeadSection";
 import { OutcomeSection } from "./_components/OutcomeSection";
+import { StageChart } from "./_components/StageChart";
 import { TargetBar } from "./_components/TargetBar";
 
 export const dynamic = "force-dynamic";
@@ -33,23 +32,6 @@ export default async function PipelinePage() {
   const today = toDateInputValue(istToday());
 
   const conv = metrics.conversionsByLevel;
-
-  // Live stage distribution: where every lead sits right now (Section B stages).
-  const STAGE_ORDER = [
-    "NEW_LEAD", "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED",
-    "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT", "WON", "LOST", "NO_SHOW",
-  ] as const;
-  const stageColor = (s: string) =>
-    s === "WON" ? "var(--ok)"
-    : s === "LOST" || s === "NO_SHOW" ? "var(--risk)"
-    : s === "DISCO_NOT_BOOKED" ? "var(--watch)"
-    : "var(--accent)";
-  const stageCounts = STAGE_ORDER.map((s) => ({
-    key: s,
-    label: LEAD_STAGE_LABELS[s] ?? s,
-    count: leads.filter((l) => l.stage === s).length,
-  }));
-  const maxStage = Math.max(1, ...stageCounts.map((s) => s.count));
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
@@ -136,32 +118,7 @@ export default async function PipelinePage() {
           </div>
 
           {/* Live pipeline funnel: where every lead sits, first contact to closed */}
-          <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-            <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
-              <Workflow size={18} className="text-accent" /> Pipeline by stage
-            </h3>
-            <p className="mt-0.5 text-xs text-muted">
-              Every lead by its current stage - spot where deals pile up or leak.
-            </p>
-            <div className="mt-4 space-y-2">
-              {stageCounts.map((s) => (
-                <div key={s.key} className="flex items-center gap-3">
-                  <span className="w-28 flex-none truncate text-xs font-medium text-muted sm:w-44 sm:text-sm">
-                    {s.label}
-                  </span>
-                  <div className="h-6 flex-1 overflow-hidden rounded-full bg-surface-2">
-                    <div
-                      className="flex h-full items-center justify-end rounded-full px-2 transition-all"
-                      style={{ width: `${Math.max(s.count ? 8 : 0, (s.count / maxStage) * 100)}%`, background: stageColor(s.key) }}
-                    >
-                      {s.count > 0 && <span className="text-[11px] font-bold text-white">{s.count}</span>}
-                    </div>
-                  </div>
-                  <span className="w-6 flex-none text-right text-sm font-semibold tnum">{s.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <StageChart leads={leads} />
         </>
       )}
 

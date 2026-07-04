@@ -23,6 +23,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   type LucideIcon,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
@@ -154,16 +155,13 @@ export function AppShell({
     return (
       <Link
         href={item.href}
+        prefetch
         title={compact ? item.label : undefined}
-        className={`group flex items-center gap-3 rounded-field text-sm transition-colors ${
+        className={`rail-item group flex items-center gap-3 rounded-field text-sm ${
           compact ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
-        } ${active ? "bg-accent font-medium text-white" : "text-sidebar-tx hover:bg-sidebar-2"}`}
+        } ${active ? "is-active" : ""}`}
       >
-        <Icon
-          size={18}
-          strokeWidth={2}
-          className={`flex-none ${active ? "text-white" : "text-sidebar-muted group-hover:text-ink"}`}
-        />
+        <Icon size={18} strokeWidth={2.1} className="flex-none" />
         {!compact && <span className="truncate">{item.label}</span>}
       </Link>
     );
@@ -172,15 +170,15 @@ export function AppShell({
   const Rail = ({ compact, inDrawer = false }: { compact: boolean; inDrawer?: boolean }) => (
     <nav className="flex h-full flex-col p-3">
       {/* brand + collapse toggle */}
-      <div className={`mb-4 flex items-center ${compact ? "justify-center" : "justify-between"} px-1`}>
-        <Link href="/" className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-accent text-sm font-bold text-white">
+      <div className={`mb-5 flex items-center ${compact ? "justify-center" : "justify-between"} px-1`}>
+        <Link href="/" prefetch className="flex items-center gap-2.5">
+          <span className="rail-brand grid h-10 w-10 flex-none place-items-center rounded-2xl text-sm font-bold backdrop-blur">
             B2
           </span>
           {!compact && (
             <span className="flex flex-col leading-tight">
-              <span className="text-sm font-semibold text-ink">B2 Consultants</span>
-              <span className="text-[11px] text-sidebar-muted">Founder Dashboard</span>
+              <span className="text-sm font-semibold text-white">B2 Consultants</span>
+              <span className="rail-eyebrow text-[11px]">Founder Dashboard</span>
             </span>
           )}
         </Link>
@@ -189,7 +187,7 @@ export function AppShell({
             type="button"
             onClick={toggleCollapse}
             aria-label="Collapse sidebar"
-            className="grid h-8 w-8 place-items-center rounded-field text-sidebar-muted hover:bg-sidebar-2 hover:text-ink"
+            className="rail-soft grid h-8 w-8 place-items-center rounded-field"
           >
             <PanelLeftClose size={17} />
           </button>
@@ -201,24 +199,24 @@ export function AppShell({
           type="button"
           onClick={toggleCollapse}
           aria-label="Expand sidebar"
-          className="mb-2 grid h-9 w-full place-items-center rounded-field text-sidebar-muted hover:bg-sidebar-2 hover:text-ink"
+          className="rail-soft mb-2 grid h-9 w-full place-items-center rounded-field"
         >
           <PanelLeftOpen size={17} />
         </button>
       )}
 
       {/* grouped nav */}
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto">
+      <div className="no-scrollbar flex flex-1 flex-col gap-3 overflow-y-auto">
         {groups.map((g) => (
           <div key={g.label}>
             {compact ? (
-              <div className="mx-2 mb-1 border-t border-line" />
+              <div className="rail-divider mx-2 mb-1 border-t" />
             ) : (
-              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sidebar-muted">
+              <p className="rail-eyebrow px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em]">
                 {g.label}
               </p>
             )}
-            <ul className="flex flex-col gap-0.5">
+            <ul className="flex flex-col gap-1">
               {g.items.map((it) => (
                 <li key={it.key}>
                   <NavRow item={it} compact={compact} />
@@ -231,9 +229,9 @@ export function AppShell({
         {/* Account */}
         <div>
           {compact ? (
-            <div className="mx-2 mb-1 border-t border-line" />
+            <div className="rail-divider mx-2 mb-1 border-t" />
           ) : (
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sidebar-muted">
+            <p className="rail-eyebrow px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em]">
               Account
             </p>
           )}
@@ -242,24 +240,25 @@ export function AppShell({
       </div>
 
       {/* user + logout */}
-      <div className="mt-3 border-t border-line pt-3">
+      <div className="rail-divider mt-3 border-t pt-3">
         <Link
           href="/profile"
+          prefetch
           title={compact ? user.name : undefined}
-          className={`flex items-center gap-3 rounded-field py-2 transition-colors hover:bg-sidebar-2 ${
+          className={`rail-soft flex items-center gap-3 rounded-field py-2 ${
             compact ? "justify-center px-2" : "px-2"
           }`}
         >
           <Avatar size={compact ? 30 : 36} />
           {!compact && (
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-white">
                 <span className="truncate">{user.name}</span>
-                <span className="flex-none rounded-full bg-accent-soft px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-accent">
+                <span className="rail-chip flex-none rounded-full px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide">
                   {roleLabel}
                 </span>
               </p>
-              <p className="truncate text-xs text-muted">{user.email}</p>
+              <p className="rail-eyebrow truncate text-xs">{user.email}</p>
             </div>
           )}
         </Link>
@@ -267,7 +266,7 @@ export function AppShell({
           type="button"
           onClick={logout}
           title={compact ? "Log out" : undefined}
-          className={`mt-1 flex w-full items-center gap-3 rounded-field py-2 text-sm text-muted transition-colors hover:bg-sidebar-2 hover:text-ink ${
+          className={`rail-soft mt-1 flex w-full items-center gap-3 rounded-field py-2 text-sm ${
             compact ? "justify-center px-2" : "px-2.5"
           }`}
         >
@@ -280,13 +279,15 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-canvas">
-      {/* desktop rail */}
+      {/* desktop rail — floating violet dock */}
       <aside
-        className={`sticky top-0 hidden h-screen flex-none overflow-hidden border-r border-line bg-sidebar transition-[width] duration-200 md:block ${
-          collapsed ? "w-[76px]" : "w-64"
+        className={`sticky top-0 hidden h-screen flex-none p-3 transition-[width] duration-200 md:block ${
+          collapsed ? "w-[92px]" : "w-[272px]"
         }`}
       >
-        <Rail compact={collapsed} />
+        <div className="rail-violet h-full overflow-hidden rounded-[28px]">
+          <Rail compact={collapsed} />
+        </div>
       </aside>
 
       {/* main column */}
@@ -302,11 +303,21 @@ export function AppShell({
             <Menu size={20} />
           </button>
           <Link href="/" className="flex items-center gap-2 md:hidden">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-xs font-bold text-white">B2</span>
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-accent text-xs font-bold text-white">B2</span>
           </Link>
 
+          {/* search pill — signature top-bar element */}
+          <label className="ml-1 hidden items-center gap-2 rounded-full border border-line bg-surface-2 px-3.5 py-2 text-sm text-muted transition-colors focus-within:border-accent md:flex md:w-72">
+            <Search size={16} className="flex-none" />
+            <input
+              type="search"
+              placeholder="Search dashboard…"
+              className="w-full bg-transparent text-ink placeholder:text-muted focus:outline-none"
+            />
+          </label>
+
           <div className="ml-auto flex items-center gap-2 md:gap-3">
-            <span className="hidden font-display text-sm font-semibold tracking-tight lg:inline">
+            <span className="hidden rounded-full bg-accent-soft px-3 py-1.5 font-display text-xs font-semibold tracking-tight text-accent lg:inline">
               {currentMonth}
             </span>
             {runwaySlot}
@@ -324,12 +335,12 @@ export function AppShell({
       {drawer && (
         <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
           <div className="overlay-in glass-scrim absolute inset-0" onClick={() => setDrawer(false)} />
-          <aside className="dialog-in glass-modal absolute left-0 top-0 h-full w-[82%] max-w-xs shadow-pop">
+          <aside className="dialog-in rail-violet absolute left-0 top-0 h-full w-[82%] max-w-xs rounded-r-[28px] shadow-pop">
             <button
               type="button"
               aria-label="Close menu"
               onClick={() => setDrawer(false)}
-              className="absolute right-3 top-4 z-10 grid h-9 w-9 place-items-center rounded-field text-ink hover:bg-sidebar-2"
+              className="rail-soft absolute right-3 top-4 z-10 grid h-9 w-9 place-items-center rounded-field"
             >
               <X size={20} />
             </button>

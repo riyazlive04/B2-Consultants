@@ -146,37 +146,37 @@ export function WorkTracker() {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      {/* Progress: weekly bar chart (spans 2 columns on desktop) */}
-      <div className="rise-in card-hover rounded-card border border-line bg-surface p-5 shadow-card lg:col-span-2">
-        <div className="flex items-start justify-between">
+      {/* Progress: weekly bar chart (spans 2 columns on desktop) — violet hero */}
+      <div className="hero-violet hero-orb rise-in relative overflow-hidden rounded-card p-6 lg:col-span-2">
+        <div className="relative flex items-start justify-between">
           <div>
-            <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
+            <p className="flex items-center gap-1.5 text-[13px] font-medium text-white/70">
               <TrendingUp size={14} /> Work time · this week
             </p>
-            <p className="mt-1 font-display text-3xl font-bold tracking-tight">
+            <p className="mt-1 font-display text-3xl font-bold tracking-tight sm:text-4xl">
               {(weekTotal / 3600).toFixed(1)}
-              <span className="ml-1 text-lg font-semibold text-muted">h</span>
+              <span className="ml-1 text-lg font-semibold text-white/70">h</span>
             </p>
           </div>
-          <span className="rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent">
+          <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur">
             Today {fmtShort(todaySec)}
           </span>
         </div>
 
-        <div className="mt-5 flex items-end justify-between gap-2" style={{ height: 96 }}>
+        <div className="relative mt-6 flex items-end justify-between gap-2" style={{ height: 112 }}>
           {weekSecs.map((sec, i) => {
             const isToday = week[i] === today;
-            const h = Math.max(6, Math.round((sec / maxSec) * 84));
+            const h = Math.max(6, Math.round((sec / maxSec) * 96));
             return (
               <div key={week[i]} className="flex flex-1 flex-col items-center gap-1.5">
                 <div className="flex w-full flex-1 items-end justify-center">
                   <div
                     className="w-full max-w-[26px] rounded-full transition-all"
-                    style={{ height: h, background: isToday ? "var(--accent)" : "var(--accent-soft)" }}
+                    style={{ height: h, background: isToday ? "#ffffff" : "rgba(255,255,255,0.32)" }}
                     title={`${dayLetters[i]} · ${fmtShort(sec)}`}
                   />
                 </div>
-                <span className={`text-[11px] ${isToday ? "font-bold text-accent" : "text-muted"}`}>
+                <span className={`text-[11px] ${isToday ? "font-bold text-white" : "text-white/60"}`}>
                   {dayLetters[i]}
                 </span>
               </div>
@@ -186,7 +186,7 @@ export function WorkTracker() {
       </div>
 
       {/* Time tracker: automatic, activity-based */}
-      <div className="rise-in card-hover flex flex-col rounded-card border border-line bg-surface p-5 shadow-card">
+      <div className="glass-card rise-in card-hover flex flex-col rounded-card border border-white/80 p-5">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
             <Timer size={14} /> Time tracker

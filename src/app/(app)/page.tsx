@@ -37,6 +37,7 @@ export default async function Home() {
 
   return (
     <div>
+      <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-accent">Primary</p>
       <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
         Welcome back, {session.user.name.split(" ")[0]}
       </h1>

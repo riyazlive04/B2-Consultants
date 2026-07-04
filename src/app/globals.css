@@ -2,21 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── B2 Consultants design tokens — light, soft, airy (Realty-Hub style) ── */
+/* ── B2 Consultants design tokens — soft lavender, glassmorphic (Dosage style) ── */
 :root {
-  --canvas: #f4f5f7;       /* soft light-gray app background so white cards lift */
+  --canvas: #eceefb;       /* soft periwinkle app wash so glass cards float */
   --surface: #ffffff;      /* cards */
-  --surface-2: #f1f2f5;    /* subtle raised fills — headers, chips, inputs, hover */
+  --surface-2: #f2f2fb;    /* subtle raised fills — headers, chips, inputs, hover */
   --sidebar: #ffffff;      /* light navigation rail */
-  --sidebar-2: #f1f2f5;    /* icon chips / hover on the sidebar */
+  --sidebar-2: #f2f2fb;    /* icon chips / hover on the sidebar */
   --sidebar-tx: #14161b;   /* dark nav text */
   --sidebar-muted: #8b909c;
-  --ink: #14161b;          /* primary text (also the active-pill fill) */
-  --muted: #667085;        /* secondary text */
-  --line: #e9eaee;         /* hairline borders */
-  --accent: #4f46e5;       /* indigo — brand accent (re-themed per role below) */
-  --accent-soft: #eef0fe;
-  --accent-rgb: 79, 70, 229; /* raw channels for rgba() glows/shadows */
+  --ink: #191a2c;          /* primary text (deep indigo-ink) */
+  --muted: #6b6f8a;        /* secondary text */
+  --line: #e7e7f4;         /* hairline borders */
+  --accent: #6d5efc;       /* violet — brand accent (re-themed per role below) */
+  --accent-soft: #ece9ff;
+  --accent-rgb: 109, 94, 252; /* raw channels for rgba() glows/shadows */
+
+  /* signature gradient duo — the Overview (violet) + accent (pink) hero cards */
+  --violet-1: #7b6ef2;
+  --violet-2: #5b4bd6;
+  --pink-1: #f78bab;
+  --pink-2: #ee5f8e;
 
   /* signal system — meaning, never decoration */
   --ok: #16a34a;
@@ -26,12 +32,12 @@
   --risk: #dc2626;
   --risk-soft: #fdeaea;
 
-  --brass: #4f46e5;        /* legacy alias → accent (kept so old refs stay coherent) */
+  --brass: #6d5efc;        /* legacy alias → accent (kept so old refs stay coherent) */
 
   /* chart palette — categorical series only, fixed assignment order.
      Validated (lightness band, chroma floor, CVD separation, 3:1 contrast on white).
      Semantic signals (--ok/--watch/--risk) stay reserved for meaning, never series. */
-  --chart-1: #4f46e5; /* indigo — brand anchor */
+  --chart-1: #6d5efc; /* violet — brand anchor */
   --chart-2: #0d9488; /* teal */
   --chart-3: #ea580c; /* orange */
   --chart-4: #0284c7; /* sky */
@@ -44,9 +50,9 @@
    ok-green (#16a34a) and watch-amber (#d97706) keep their meaning everywhere.
    ADMIN = indigo (brand default) · HEAD = teal · USER (member) = burnt orange. */
 [data-role="ADMIN"] {
-  --accent: #4f46e5;
-  --accent-soft: #eef0fe;
-  --accent-rgb: 79, 70, 229;
+  --accent: #6d5efc;
+  --accent-soft: #ece9ff;
+  --accent-rgb: 109, 94, 252;
 }
 [data-role="HEAD"] {
   --accent: #0f766e;
@@ -95,6 +101,84 @@ body {
 /* soft accent glow for the active nav pill / primary highlights */
 .glow-accent {
   box-shadow: 0 6px 18px -4px rgba(var(--accent-rgb), 0.4);
+}
+
+/* ── Signature gradient hero surfaces (Dosage style) ──
+   The violet "Overview" card and the pink accent card carry the whole look.
+   Both ship a soft coloured glow so they lift off the lavender canvas. */
+.hero-violet {
+  background: linear-gradient(150deg, var(--violet-1) 0%, var(--violet-2) 100%);
+  color: #fff;
+  box-shadow: 0 24px 48px -18px rgba(91, 75, 214, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.hero-pink {
+  background: linear-gradient(150deg, var(--pink-1) 0%, var(--pink-2) 100%);
+  color: #fff;
+  box-shadow: 0 24px 48px -18px rgba(238, 95, 142, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+/* faint decorative orb layered inside hero cards for depth */
+.hero-orb::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  right: -10%;
+  width: 60%;
+  height: 160%;
+  border-radius: 999px;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.22), transparent 70%);
+  pointer-events: none;
+}
+
+/* frosted white card — the everyday surface, softly floating on lavender */
+.glass-card {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.86));
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(25, 26, 44, 0.04), 0 18px 40px -22px rgba(25, 26, 44, 0.22);
+}
+
+/* ── Floating violet navigation rail (signature left dock) ── */
+.rail-violet {
+  background: linear-gradient(180deg, #6c5ff0 0%, #5a49d4 60%, #5140c9 100%);
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 20px 50px -24px rgba(70, 58, 180, 0.7);
+}
+.rail-violet .rail-brand {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+/* rail nav item — inactive translucent, active = bright white chip w/ violet ink */
+.rail-item {
+  color: rgba(255, 255, 255, 0.78);
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+.rail-item:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+.rail-item.is-active {
+  background: #fff;
+  color: var(--violet-2);
+  font-weight: 600;
+  box-shadow: 0 10px 22px -10px rgba(25, 26, 44, 0.45);
+}
+.rail-divider {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.rail-eyebrow {
+  color: rgba(255, 255, 255, 0.55);
+}
+.rail-soft {
+  color: rgba(255, 255, 255, 0.7);
+}
+.rail-soft:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+.rail-chip {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
 /* ── Glassmorphism: frosted overlay surfaces — reserved for floating chrome
@@ -258,7 +342,7 @@ tbody tr:hover {
   100% { background-position: 400px 0; }
 }
 .skeleton {
-  border-radius: 12px;
+  border-radius: 20px;
   background: linear-gradient(90deg, var(--surface-2) 25%, #e9ebf0 50%, var(--surface-2) 75%);
   background-size: 800px 100%;
   animation: shimmer 1.4s linear infinite;

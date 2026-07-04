@@ -18,6 +18,8 @@ const config: Config = {
         muted: "var(--muted)",
         line: "var(--line)",
         accent: { DEFAULT: "var(--accent)", soft: "var(--accent-soft)" },
+        violet: { 1: "var(--violet-1)", 2: "var(--violet-2)" },
+        pink: { 1: "var(--pink-1)", 2: "var(--pink-2)" },
         ok: { DEFAULT: "var(--ok)", soft: "var(--ok-soft)" },
         watch: { DEFAULT: "var(--watch)", soft: "var(--watch-soft)" },
         risk: { DEFAULT: "var(--risk)", soft: "var(--risk-soft)" },
@@ -29,13 +31,14 @@ const config: Config = {
         serif: ["var(--font-serif)", "Georgia", "serif"],
       },
       borderRadius: {
-        card: "22px", // metric cards / panels — soft squircle
-        field: "14px", // inputs, buttons, table container
+        card: "26px", // metric cards / panels — soft squircle
+        field: "16px", // inputs, buttons, table container
       },
       boxShadow: {
-        card: "0 1px 2px rgba(20, 22, 27, 0.04), 0 10px 30px -14px rgba(20, 22, 27, 0.12)",
-        pop: "0 12px 40px -8px rgba(20, 22, 27, 0.18)",
-        soft: "0 4px 20px -8px rgba(20, 22, 27, 0.10)",
+        card: "0 1px 2px rgba(25, 26, 44, 0.04), 0 16px 38px -20px rgba(25, 26, 44, 0.20)",
+        pop: "0 18px 48px -10px rgba(25, 26, 44, 0.24)",
+        soft: "0 8px 28px -12px rgba(25, 26, 44, 0.14)",
+        hero: "0 28px 60px -22px rgba(91, 75, 214, 0.5)",
       },
     },
   },

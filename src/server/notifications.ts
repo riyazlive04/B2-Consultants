@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { istMonthRange, istToday } from "@/lib/dates";
 import { formatDate, formatInrMinor } from "@/lib/format";
@@ -32,7 +33,14 @@ function istHourNow(): number {
   );
 }
 
-export async function computeNotifications(role: AppRole, userId: string): Promise<Notification[]> {
+/**
+ * Wrapped in React.cache so the layout, the home page and the notification bell
+ * that all run in one request share ONE computation instead of re-querying the
+ * (heavy) pending / runway / gamification joins 2–3× per navigation.
+ */
+export const computeNotifications = cache(_computeNotifications);
+
+async function _computeNotifications(role: AppRole, userId: string): Promise<Notification[]> {
   const items: Notification[] = [];
   const today = istToday();
 
@@ -317,7 +325,12 @@ export async function computeNotifications(role: AppRole, userId: string): Promi
   const tenDaysAgo = new Date(Date.now() - 10 * 86400000);
   const stalledDeals = await prisma.lead.count({
     where: {
-      stage: { in: ["DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED", "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT"] },
+      stage: {
+        in: [
+          "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED", "SSS_BOOKED", "SSS_COMPLETED",
+          "PROPOSAL_SENT", "SENT_TO_WORKSHOP", "WORKSHOP_FOLLOWUP", "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP",
+        ],
+      },
       updatedAt: { lt: tenDaysAgo },
     },
   });

@@ -14,7 +14,12 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime queries use DATABASE_URL (on Neon: the pooled -pooler endpoint).
+  // Migrations (`prisma migrate deploy`) use DIRECT_URL — Neon's direct, non-pooled
+  // endpoint — because migrate needs session-level advisory locks PgBouncer can't hold.
+  // Locally both point at the same Docker Postgres (see .env).
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ───────────────────────────── Auth (Better Auth) ─────────────────────────────

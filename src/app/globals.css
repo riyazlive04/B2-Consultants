@@ -27,6 +27,16 @@
   --risk-soft: #fdeaea;
 
   --brass: #4f46e5;        /* legacy alias → accent (kept so old refs stay coherent) */
+
+  /* chart palette — categorical series only, fixed assignment order.
+     Validated (lightness band, chroma floor, CVD separation, 3:1 contrast on white).
+     Semantic signals (--ok/--watch/--risk) stay reserved for meaning, never series. */
+  --chart-1: #4f46e5; /* indigo — brand anchor */
+  --chart-2: #0d9488; /* teal */
+  --chart-3: #ea580c; /* orange */
+  --chart-4: #0284c7; /* sky */
+  --chart-5: #be185d; /* magenta */
+  --chart-6: #65a30d; /* olive */
 }
 
 /* ── Role-based theming — the whole accent system re-keys per signed-in role ──

@@ -80,6 +80,31 @@ export async function getBookingsOverview() {
   };
 }
 
+const istDateKey = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Kolkata",
+});
+
+/** All slots inside [weekStartUtc, weekEndUtc) for the week-calendar view, keyed by IST day. */
+export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
+  const slots = await prisma.appointmentSlot.findMany({
+    where: { startsAt: { gte: weekStartUtc, lt: weekEndUtc } },
+    orderBy: { startsAt: "asc" },
+    include: { booking: { select: { name: true, bantScore: true, status: true } } },
+  });
+  return slots.map((s) => ({
+    id: s.id,
+    dayKey: istDateKey.format(s.startsAt),
+    time: istTime.format(s.startsAt),
+    durationMins: s.durationMins,
+    status: s.status,
+    booking: s.booking
+      ? { name: s.booking.name, bantScore: s.booking.bantScore, status: s.booking.status }
+      : null,
+  }));
+}
+
+export type WeekSlot = Awaited<ReturnType<typeof getWeekSlots>>[number];
+
 export type BookingsOverview = Awaited<ReturnType<typeof getBookingsOverview>>;
 export type BookingRow = BookingsOverview["bookings"][number];
 export type SlotRow = BookingsOverview["slots"][number];

@@ -2,32 +2,312 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── B2 Consultants design tokens — light, soft, airy (Realty-Hub style) ── */
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  --canvas: #f4f5f7;       /* soft light-gray app background so white cards lift */
+  --surface: #ffffff;      /* cards */
+  --surface-2: #f1f2f5;    /* subtle raised fills — headers, chips, inputs, hover */
+  --sidebar: #ffffff;      /* light navigation rail */
+  --sidebar-2: #f1f2f5;    /* icon chips / hover on the sidebar */
+  --sidebar-tx: #14161b;   /* dark nav text */
+  --sidebar-muted: #8b909c;
+  --ink: #14161b;          /* primary text (also the active-pill fill) */
+  --muted: #667085;        /* secondary text */
+  --line: #e9eaee;         /* hairline borders */
+  --accent: #4f46e5;       /* indigo — brand accent (re-themed per role below) */
+  --accent-soft: #eef0fe;
+  --accent-rgb: 79, 70, 229; /* raw channels for rgba() glows/shadows */
+
+  /* signal system — meaning, never decoration */
+  --ok: #16a34a;
+  --ok-soft: #e7f6ec;
+  --watch: #d97706;
+  --watch-soft: #fdf0dd;
+  --risk: #dc2626;
+  --risk-soft: #fdeaea;
+
+  --brass: #4f46e5;        /* legacy alias → accent (kept so old refs stay coherent) */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+/* ── Role-based theming — the whole accent system re-keys per signed-in role ──
+   Hues are chosen to stay clear of the semantic signal colours:
+   ok-green (#16a34a) and watch-amber (#d97706) keep their meaning everywhere.
+   ADMIN = indigo (brand default) · HEAD = teal · USER (member) = burnt orange. */
+[data-role="ADMIN"] {
+  --accent: #4f46e5;
+  --accent-soft: #eef0fe;
+  --accent-rgb: 79, 70, 229;
+}
+[data-role="HEAD"] {
+  --accent: #0f766e;
+  --accent-soft: #e0f2ef;
+  --accent-rgb: 15, 118, 110;
+}
+[data-role="USER"] {
+  --accent: #c2410c;
+  --accent-soft: #fdeadd;
+  --accent-rgb: 194, 65, 12;
+}
+[data-role="STUDENT"] {
+  --accent: #7c3aed; /* violet — the student portal's own identity */
+  --accent-soft: #f1eafe;
+  --accent-rgb: 124, 58, 237;
+}
+
+html {
+  background: var(--canvas);
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: var(--ink);
+  background: var(--canvas); /* pure white */
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+/* horizontally-scrollable pill row with no visible scrollbar */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* frosted-glass surface for floating chrome (top bar, bottom nav) */
+.glass {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+
+/* soft accent glow for the active nav pill / primary highlights */
+.glow-accent {
+  box-shadow: 0 6px 18px -4px rgba(var(--accent-rgb), 0.4);
+}
+
+/* ── Glassmorphism: frosted overlay surfaces — reserved for floating chrome
+   (dialogs, toasts, drawers) where page content actually shows through. ── */
+.glass-modal {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.68));
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow:
+    0 24px 64px -16px rgba(20, 22, 27, 0.28),
+    0 2px 8px rgba(20, 22, 27, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.glass-scrim {
+  background: rgba(20, 22, 27, 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* headings & big numbers: same modern sans, tight + tabular */
+.font-display {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.012em;
+}
+
+/* elegant serif for big page titles */
+.font-serif {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  letter-spacing: -0.01em;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* ── Micro-interactions: quiet, quick, modern ── */
+
+/* accessible focus — one consistent ring everywhere */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* buttons press down a hair */
+button:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+button {
+  transition: background-color 140ms ease, border-color 140ms ease, opacity 140ms ease,
+    box-shadow 140ms ease, transform 80ms ease;
+}
+
+/* every interactive control shows a pointer + never a text cursor */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+select:not(:disabled),
+label[for],
+summary,
+a[href] {
+  cursor: pointer;
+}
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* clickable cards give a small press response */
+a.card-hover:active:not(:disabled),
+.card-hover[role="button"]:active {
+  transform: translateY(-1px) scale(0.997);
+}
+
+/* cards enter with a gentle staggered rise */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise-in {
+  animation: rise-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rise-in:nth-child(2) { animation-delay: 40ms; }
+.rise-in:nth-child(3) { animation-delay: 80ms; }
+.rise-in:nth-child(4) { animation-delay: 120ms; }
+.rise-in:nth-child(5) { animation-delay: 160ms; }
+.rise-in:nth-child(6) { animation-delay: 200ms; }
+.rise-in:nth-child(7) { animation-delay: 240ms; }
+.rise-in:nth-child(8) { animation-delay: 280ms; }
+
+/* soft card hover lift */
+.card-hover {
+  transition: box-shadow 200ms ease, border-color 200ms ease, transform 200ms ease;
+}
+.card-hover:hover {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 2px 4px rgba(20, 22, 27, 0.04), 0 16px 38px -16px rgba(var(--accent-rgb), 0.28);
+  transform: translateY(-3px);
+}
+
+/* table rows respond to the pointer */
+tbody tr {
+  transition: background-color 120ms ease;
+}
+tbody tr:hover {
+  background: var(--surface-2);
+}
+
+/* toast + dialog entrances */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast-in { animation: toast-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.dialog-in { animation: dialog-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.overlay-in { animation: overlay-in 160ms ease both; }
+
+/* success checkmark draws itself inside toasts */
+@keyframes check-draw {
+  to { stroke-dashoffset: 0; }
+}
+.check-draw {
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+  animation: check-draw 420ms cubic-bezier(0.65, 0, 0.35, 1) 120ms forwards;
+}
+
+/* confetti burst — reserved for real wins (payment, enrollment, streak milestone) */
+@keyframes confetti-fall {
+  0% { opacity: 1; transform: translate3d(0, -12vh, 0) rotateZ(0deg) rotateX(0deg); }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(var(--drift, 0px), 108vh, 0) rotateZ(var(--spin, 540deg)) rotateX(660deg); }
+}
+.confetti-piece {
+  position: absolute;
+  top: 0;
+  border-radius: 2px;
+  animation: confetti-fall var(--dur, 1.6s) cubic-bezier(0.25, 0.4, 0.45, 1) var(--delay, 0s) forwards;
+  will-change: transform, opacity;
+}
+
+/* skeleton shimmer for route loading */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, #e9ebf0 50%, var(--surface-2) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* ── Arena / gamification ───────────────────────────────────────────── */
+
+/* XP bar fill — accent gradient with a slow glint sweeping across */
+@keyframes xp-glint {
+  0% { background-position: -120px 0; }
+  100% { background-position: 240px 0; }
+}
+.xp-fill {
+  background:
+    linear-gradient(90deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%),
+    linear-gradient(90deg, var(--accent), rgba(var(--accent-rgb), 0.75));
+  background-size: 240px 100%, 100% 100%;
+  background-repeat: no-repeat, no-repeat;
+  animation: xp-glint 2.8s ease-in-out infinite;
+  transition: width 500ms ease;
+}
+
+/* earned badge medallions catch the light on hover */
+.badge-shine {
+  position: relative;
+  overflow: hidden;
+  transition: transform 150ms ease;
+}
+.badge-shine:hover {
+  transform: scale(1.12) rotate(-4deg);
+}
+
+/* the champion's trophy bobs gently */
+@keyframes trophy-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.trophy-float { display: inline-block; animation: trophy-float 2.4s ease-in-out infinite; }
+
+/* rank-1 leaderboard row glow */
+.leader-row {
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.08), transparent 60%);
+}
+
+/* thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cfd3dc transparent;
+}
+*::-webkit-scrollbar { height: 8px; width: 8px; }
+*::-webkit-scrollbar-thumb { background: #cfd3dc; border-radius: 999px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise-in, .toast-in, .dialog-in, .overlay-in, .card-hover { animation: none; transition: none; }
+  .card-hover:hover { transform: none; }
+  button:active:not(:disabled) { transform: none; }
+  .check-draw { animation: none; stroke-dashoffset: 0; }
+  .confetti-piece { display: none; }
+  .xp-fill, .trophy-float { animation: none; }
+  .badge-shine:hover { transform: none; }
 }

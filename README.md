@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# B2 Consultants — Founder Dashboard
 
-## Getting Started
+Private internal dashboard (Next.js 14 + Postgres/Prisma + Better Auth). Specs live in the repo
+root: three PRDs + `CONTEXT_B2_DASHBOARD.md`. All three phases are live:
+**P1 Finance + Pipeline · P2 People + Students · P3 Funnel + Cash Health**, plus the booking
+page (`/book`), the student portal (`/my-journey`), the gamified Arena, CV-check, and in-app
+notifications.
 
-First, run the development server:
+## Run the production demo
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+docker compose up -d db        # Postgres on host port 5435
+npm install
+npm run db:deploy              # apply migrations
+npm run db:seed                # create the four team logins (SEED_* env vars)
+npm run db:demo                # ⟵ full production-style demo dataset (see below)
+npm run build && npm start     # production server on :3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`npm run db:demo` **wipes all business data** (auth users survive) and seeds ~5 months of
+coherent history anchored to today: income/expenses/pending payments, 68 leads with full stage
+history + BANT outcomes, 14 students with milestone journeys and signals, daily-log streaks,
+OKRs, weekly funnel snapshots, cash positions, payables and booking slots — so every page,
+metric, badge and notification renders like a live business. It also resets all demo passwords
+from `.env`. Re-run it any time the demo data gets messy; it refuses to run against a
+non-localhost `DATABASE_URL` unless you pass `--force`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Demo logins (passwords in `.env`, `SEED_*_PASSWORD`)
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+| Login | Role | Sees |
+|---|---|---|
+| ameen@b2consultants.in | Admin | everything, incl. Finance + Cash + runway badge |
+| karthick@b2consultants.in | Head | daily log, students, people |
+| asma@b2consultants.in / nilofer@b2consultants.in | User | daily log + own pipeline |
+| student.demo@b2consultants.in | Student | own journey portal only (Ravi Kumar) |
 
-## Learn More
+Always demo the **production build** (`npm run build && npm start`), never `next dev` —
+dev mode compiles routes on demand and feels 10× slower than the real app.
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy (VPS)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+docker compose up -d --build
+docker compose exec app npx prisma migrate deploy
+docker compose exec app npx tsx prisma/seed.ts
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+Set real values in the environment first: `BETTER_AUTH_SECRET` (generate: `openssl rand -hex 32`),
+`BETTER_AUTH_URL` (public https URL), `POSTGRES_PASSWORD`, and strong `SEED_*_PASSWORD`s.
+Do **not** run `db:demo` on the real deployment — it resets business data by design.
 
-## Deploy on Vercel
+## Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `prisma/schema.prisma` — FULL 3-phase data model (Phase 0 mandate; never refactor P1 tables later)
+- `prisma/demo-data.ts` — one-command production-style demo dataset (`npm run db:demo`)
+- `src/lib/rbac.ts` + `src/lib/sections.ts` — the one section/role access table; sidebar + page guards read from it
+- `src/lib/signals.ts` + `src/components/ui/SignalBadge.tsx` — the shared Green/Amber/Red system
+- `src/lib/gamification.ts` — pure XP/badges/quests engine, derived at read time from append-only history
+- `src/lib/fx.ts` — daily ECB rate (frankfurter.app) cached in `fx_rate`; each money row stamps its rate
+- `src/lib/format.ts` — INR `en-IN` / EUR `de-DE`, DD/MM/YYYY IST, minor-unit BigInt helpers
+- `src/components/ui/` — MetricCard, DataTable (sort/filter/CSV), MoneyText, DateText, Sparkline, Modal, feedback (toast/confirm/confetti)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+## Rules baked in
+
+- Manual entry is the guaranteed core; ingest (Synamate/Razorpay/Sheets) is optional, flag-gated
+  (`INGEST_ENABLED`), writes to the same tables with `source` + `manualOverride`.
+- Audit tables (daily logs, milestone log, signal changes, lead stage history) are append-only —
+  enforced by Postgres triggers, not just the service layer.
+- Money is BigInt minor units (paise/cents), INR + EUR side by side, FX rate stamped per record.
+- No outbound email/WhatsApp — notifications are in-app only by design (per PRDs).

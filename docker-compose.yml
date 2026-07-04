@@ -1,0 +1,42 @@
+# VPS deployment (Hostinger / AWS Mumbai for DPDP). Redis is only needed once the
+# optional ingest layer is switched on — the manual core runs without it.
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://b2:${POSTGRES_PASSWORD:-b2}@db:5432/b2_dashboard?schema=public
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      FX_API_URL: ${FX_API_URL:-https://api.frankfurter.app}
+      REDIS_URL: redis://redis:6379
+      INGEST_ENABLED: ${INGEST_ENABLED:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_HOST_PORT:-5435}:5432" # non-default host port: avoids clashing with other Postgres instances
+    environment:
+      POSTGRES_USER: b2
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-b2}
+      POSTGRES_DB: b2_dashboard
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U b2 -d b2_dashboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+volumes:
+  pgdata:

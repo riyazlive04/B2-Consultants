@@ -1,0 +1,62 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/rbac";
+import { parseDateInput } from "@/lib/dates";
+import type { ActionResult } from "./finance-actions";
+
+/** Weekly funnel snapshot (PRD3 §3.2) - Admin-only, one row per week (Monday). */
+
+const intField = z
+  .string()
+  .trim()
+  .regex(/^\d{0,7}$/, "Numbers only")
+  .transform((s) => (s === "" ? 0 : parseInt(s, 10)));
+
+const snapshotSchema = z.object({
+  weekStart: z.string().min(10),
+  awarenessReach: intField,
+  leadsCaptured: intField,
+  callsCompleted: intField,
+  proposalsSent: intField,
+  enrollmentsSolo: intField,
+  enrollmentsGuided: intField,
+  enrollmentsElite: intField,
+  ghostedDownloads: intField,
+  workshopAttendees: intField,
+  notes: z.string().trim().optional(),
+});
+
+export async function saveWeeklySnapshot(form: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const parsed = snapshotSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const d = parsed.data;
+
+  const week = parseDateInput(d.weekStart);
+  if (week.getUTCDay() !== 1) {
+    return { ok: false, error: "Week start must be a Monday" };
+  }
+
+  const data = {
+    awarenessReach: d.awarenessReach,
+    leadsCaptured: d.leadsCaptured,
+    callsCompleted: d.callsCompleted,
+    proposalsSent: d.proposalsSent,
+    enrollmentsSolo: d.enrollmentsSolo,
+    enrollmentsGuided: d.enrollmentsGuided,
+    enrollmentsElite: d.enrollmentsElite,
+    ghostedDownloads: d.ghostedDownloads,
+    workshopAttendees: d.workshopAttendees,
+    notes: d.notes || null,
+  };
+  await prisma.weeklyFunnelSnapshot.upsert({
+    where: { weekStart: week },
+    update: data,
+    create: { weekStart: week, ...data },
+  });
+  revalidatePath("/funnel");
+  return { ok: true };
+}

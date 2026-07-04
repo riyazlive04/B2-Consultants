@@ -1,0 +1,813 @@
+// B2 Consultants Founder Dashboard — FULL 3-PHASE SCHEMA (scoped upfront in Phase 0).
+// Phase 1: Finance + Pipeline · Phase 2: People + Students · Phase 3: Funnel + Cash Health.
+// Rules baked in (CONTEXT §6):
+//  - Money is stored as integer minor units (paise / cents) in BigInt, INR and EUR side by side,
+//    with the FX rate used stamped on each record.
+//  - Ingestable entities carry `source` + `manualOverride` + `externalRef` (de-dupe).
+//  - Audit tables (MilestoneLog, SignalChangeLog, DailyLog, LeadStageHistory) are APPEND-ONLY:
+//    no update/delete is exposed at the service layer, ever.
+//  - Dates stored UTC, displayed IST DD/MM/YYYY (presentation concern).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Auth (Better Auth) ─────────────────────────────
+
+enum Role {
+  ADMIN   // Ameen — everything
+  HEAD    // Karthick — own daily log, view-only Students
+  USER    // Asma / Nilofer — own daily log + own pipeline entry
+  STUDENT // portal login linked to ONE Student record — sees only their own journey
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          Role      @default(USER)
+  // Per-user feature overrides (Admin-managed): { "finance": true, "students": false, … }.
+  // Missing key → the role's default access applies. Admins always see everything.
+  sectionAccess Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions            Session[]
+  accounts            Account[]
+  teamProfile         TeamProfile?
+  studentProfile      Student?           @relation("StudentAccount")
+  incomesEntered      Income[]           @relation("IncomeEnteredBy")
+  expensesEntered     Expense[]          @relation("ExpenseEnteredBy")
+  leadsEntered        Lead[]             @relation("LeadEnteredBy")
+  leadsAssigned       Lead[]             @relation("LeadAssignedTo")
+  outcomesEntered     DiscoveryOutcome[] @relation("OutcomeEnteredBy")
+  stageChanges        LeadStageHistory[] @relation("StageChangedBy")
+  slotsAssigned       AppointmentSlot[]  @relation("SlotAssignedTo")
+  dailyLogs           DailyLog[]
+  milestoneLogUpdates MilestoneLog[]     @relation("MilestoneUpdatedBy")
+  signalChanges       SignalChangeLog[]  @relation("SignalChangedBy")
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+// ───────────────────────────── Shared enums ─────────────────────────────
+
+// Ingest provenance (CONTEXT §4). MANUAL is the guaranteed core; everything else is additive.
+// Wave-1 (Synamate in-sourcing): BOOKING_FORM = our own public booking page;
+// META_LEAD_AD / FLEXIFUNNELS = the two external lead-capture webhooks that replace
+// Synamate's lead inbox. SYNAMATE stays only so historical imported rows keep their tag.
+enum Source {
+  MANUAL
+  SYNAMATE
+  RAZORPAY
+  SHEET
+  FATHOM
+  BOOKING_FORM
+  META_LEAD_AD
+  FLEXIFUNNELS
+}
+
+enum ProgramLevel {
+  SOLO
+  GUIDED
+  ELITE
+  GN_A1
+  GN_A2
+  GN_B1
+  GN_B2
+  GN_BUNDLE
+  OTHER
+}
+
+enum Signal {
+  GREEN
+  AMBER
+  RED
+}
+
+// ───────────────────────────── Phase 1 — Finance ─────────────────────────────
+
+enum PaymentType {
+  FULL_PAYMENT
+  INSTALMENT
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER_INR
+  BANK_TRANSFER_EUR
+  PAYPAL
+  RAZORPAY
+  CASH
+  UPI
+  CREDIT_CARD
+  OTHER
+}
+
+enum ExpenseCategory {
+  MARKETING
+  TOOLS_SOFTWARE
+  TEAM_SALARIES
+  CONTENT_CREATION
+  EVENTS_OFFLINE
+  OPERATIONS
+  COGS_DIRECT_DELIVERY
+  OTHER
+}
+
+enum PendingPaymentStatus {
+  ACTIVE
+  PAID_IN_FULL
+  OVERDUE
+  DROPPED
+}
+
+// Daily income entry (PRD1 §4.2). Admin-only.
+model Income {
+  id             String        @id @default(cuid())
+  date           DateTime      @db.Date
+  studentName    String
+  // Optional links — how Finance feeds Student LTV (CONTEXT §7). Never required in Phase 1.
+  studentId      String?
+  student        Student?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  enrollmentId   String?
+  enrollment     Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  amountInrMinor BigInt        @default(0) // paise
+  amountEurMinor BigInt        @default(0) // cents
+  fxRateUsed     Decimal       @db.Decimal(14, 6) // INR per 1 EUR on entry date
+  programLevel   ProgramLevel
+  paymentType    PaymentType
+  paymentMethod  PaymentMethod
+  notes          String?
+  source         Source        @default(MANUAL)
+  manualOverride Boolean       @default(false)
+  externalRef    String? // e.g. Razorpay payment id — de-dupe key for ingest
+  enteredById    String?
+  enteredBy      User?         @relation("IncomeEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([source, externalRef])
+  @@index([date])
+  @@index([studentId])
+  @@index([programLevel, date])
+  @@map("income")
+}
+
+// Daily expense entry (PRD1 §4.3). Admin-only.
+model Expense {
+  id             String          @id @default(cuid())
+  date           DateTime        @db.Date
+  amountInrMinor BigInt          @default(0)
+  amountEurMinor BigInt          @default(0)
+  fxRateUsed     Decimal         @db.Decimal(14, 6)
+  category       ExpenseCategory
+  isCogs         Boolean         @default(false)
+  vendor         String
+  notes          String?
+  source         Source          @default(MANUAL)
+  manualOverride Boolean         @default(false)
+  externalRef    String?
+  enteredById    String?
+  enteredBy      User?           @relation("ExpenseEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([source, externalRef])
+  @@index([date])
+  @@index([isCogs, date])
+  @@map("expense")
+}
+
+// Pending payments tracker (PRD1 §4.4). "Amount paid so far" is COMPUTED at read time
+// by summing Income rows linked to the same student — never stored, never double-entered.
+model PendingPayment {
+  id                String               @id @default(cuid())
+  studentName       String
+  studentId         String?
+  student           Student?             @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  programLevel      ProgramLevel
+  totalFeeInrMinor  BigInt               @default(0)
+  totalFeeEurMinor  BigInt               @default(0)
+  fxRateUsed        Decimal              @db.Decimal(14, 6)
+  nextDueDate       DateTime?            @db.Date
+  status            PendingPaymentStatus @default(ACTIVE)
+  notes             String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([status, nextDueDate])
+  @@map("pending_payment")
+}
+
+// Monthly revenue target for the Pipeline target bar (PRD1 §5.4). Default ₹8,00,000.
+model MonthlyTarget {
+  id             String   @id @default(cuid())
+  month          DateTime @unique @db.Date // first day of month, UTC
+  targetInrMinor BigInt   @default(80000000)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("monthly_target")
+}
+
+// ───────────────────────────── Phase 1 — Pipeline ─────────────────────────────
+
+enum LeadSource {
+  INSTAGRAM
+  YOUTUBE
+  LINKEDIN
+  WHATSAPP
+  REFERRAL
+  SUMMIT
+  WORKSHOP
+  META_ADS // Meta Lead Ads webhook (Wave-1 capture)
+  LANDING_PAGE // FlexiFunnels / website opt-in webhook (Wave-1 capture)
+  GHOSTED_BLUEPRINT // Phase 3 attribution tag (PRD3 §3.4) — scoped now, used later
+  OTHER
+}
+
+enum LeadStage {
+  NEW_LEAD
+  DISCO_BOOKED
+  DISCO_NOT_BOOKED
+  DISCO_COMPLETED
+  SSS_BOOKED
+  SSS_COMPLETED
+  PROPOSAL_SENT
+  WON
+  LOST
+  NO_SHOW
+}
+
+model Lead {
+  id             String       @id @default(cuid())
+  name           String
+  phone          String
+  email          String? // captured from booking form / ad lead (Wave-1)
+  city           String?
+  industry       String?
+  leadSource     LeadSource
+  dateIn         DateTime     @db.Date
+  stage          LeadStage    @default(NEW_LEAD)
+  wonLevel       ProgramLevel? // set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
+  notes          String?
+  source         Source       @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
+  manualOverride Boolean      @default(false)
+  externalRef    String?
+  utm            Json? // captured UTM params from the ad / landing source (Wave-1)
+  // Speed-to-lead (Synamate "Who" + "Speed Ratio"): who owns the lead and when it was
+  // first contacted. Speed = contactedAt − createdAt, computed at read time.
+  assignedToId   String?
+  assignedTo     User?        @relation("LeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  contactedAt    DateTime?
+  enteredById    String?
+  enteredBy      User?        @relation("LeadEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  outcomes     DiscoveryOutcome[]
+  stageHistory LeadStageHistory[]
+  students     Student[]
+  bookings     BookingRequest[]
+
+  @@unique([source, externalRef])
+  @@index([stage])
+  @@index([dateIn])
+  @@index([leadSource])
+  @@index([assignedToId])
+  @@map("lead")
+}
+
+// APPEND-ONLY. Written automatically on every stage change — gives Phase 1 its
+// "calls booked this month" counts and Phase 3 its "proposals sent this week" pulls.
+model LeadStageHistory {
+  id          String     @id @default(cuid())
+  leadId      String
+  lead        Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fromStage   LeadStage?
+  toStage     LeadStage
+  changedAt   DateTime   @default(now())
+  changedById String?
+  changedBy   User?      @relation("StageChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([toStage, changedAt])
+  @@map("lead_stage_history")
+}
+
+enum CallOutcome {
+  QUALIFIED_FOR_SSS
+  NOT_QUALIFIED_FOR_SSS
+  FOLLOW_UP_NEEDED
+  NO_SHOW
+  SENT_TO_WORKSHOP
+}
+
+// Discovery call outcome (PRD1 §5.3), entered by Asma, linked to a lead.
+model DiscoveryOutcome {
+  id              String      @id @default(cuid())
+  leadId          String
+  lead            Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  callDate        DateTime    @db.Date
+  outcome         CallOutcome
+  highlyQualified Boolean     @default(false) // feeds "Highly qualified rate %" (PRD1 §5.4)
+  // BANT qualification (report §3.A) — Asma marks these after the call; drives priority score
+  bantBudget      Boolean     @default(false)
+  bantAuthority   Boolean     @default(false)
+  bantNeed        Boolean     @default(false)
+  bantTimeline    Boolean     @default(false)
+  sssDate         DateTime?   @db.Date
+  notes           String? // key notes to closer
+  source          Source      @default(MANUAL)
+  manualOverride  Boolean     @default(false)
+  externalRef     String?
+  enteredById     String?
+  enteredBy       User?       @relation("OutcomeEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([source, externalRef])
+  @@index([callDate])
+  @@map("discovery_outcome")
+}
+
+// ─────────────────── Wave-1 — Booking + Lead capture (Synamate in-sourcing) ───────────────────
+// Replaces Synamate's two functions in-house: (1) a public qualification booking page that
+// scores BANT and books a slot, (2) a lead inbox fed by our own webhooks (Meta / FlexiFunnels)
+// plus manual entry. No automated messaging here — that is Wave-2, gated on Ameen's sign-off.
+
+enum SlotStatus {
+  OPEN
+  BOOKED
+  BLOCKED
+}
+
+enum BookingStatus {
+  BOOKED
+  RESCHEDULED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+// Bookable discovery-call slots (replaces Synamate's calendar). Admin generates availability;
+// the public booking page shows OPEN future slots. startsAt is a UTC instant, shown in IST + CET.
+model AppointmentSlot {
+  id           String          @id @default(cuid())
+  startsAt     DateTime // UTC instant
+  durationMins Int             @default(30)
+  status       SlotStatus      @default(OPEN)
+  assignedToId String?
+  assignedTo   User?           @relation("SlotAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  booking      BookingRequest?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([status, startsAt])
+  @@map("appointment_slot")
+}
+
+// Public qualification intake (parity with Synamate's "Appointment booking" export).
+// BANT is computed from the answers at submit time (src/lib/bant.ts) and mirrored to the
+// linked Lead so the pipeline's "Call these first" scoring can reuse it.
+model BookingRequest {
+  id     String           @id @default(cuid())
+  slotId String?          @unique
+  slot   AppointmentSlot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  leadId String?
+  lead   Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  // Contact
+  name     String
+  email    String
+  phone    String
+  whatsapp String?
+  city     String?
+
+  // Qualification answers (free-text / select values, stored verbatim as Synamate did)
+  currentJobTitle        String?
+  prospectIndustry       String?
+  linkedInProfile        String?
+  highestEducation       String?
+  yearsExperience        String?
+  whyGermany             String?
+  participateWorkshop    Boolean @default(false)
+  reasonForCall          String?
+  alreadyApplied         String?
+  whenStartGermany       String?
+  germanVisa             String?
+  germanLevel            String?
+  willingnessLearnGerman String?
+  currentIncome          String?
+  readyToInvest          String?
+  decisionMaking         String?
+  commitment             String?
+  howKnowUs              String?
+
+  // BANT — derived on submit; bantScore is 0–4 (count of the four dimensions met)
+  bantBudget    Boolean @default(false)
+  bantAuthority Boolean @default(false)
+  bantNeed      Boolean @default(false)
+  bantTimeline  Boolean @default(false)
+  bantScore     Int     @default(0)
+
+  status      BookingStatus @default(BOOKED)
+  source      Source        @default(BOOKING_FORM)
+  utm         Json?
+  externalRef String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, createdAt])
+  @@index([bantScore])
+  @@map("booking_request")
+}
+
+// ───────────────────────────── Phase 2 — People ─────────────────────────────
+
+enum TeamStatus {
+  ACTIVE
+  ON_LEAVE
+  INACTIVE
+}
+
+// Which daily-log form a person gets (PRD2 §3.3) — by function, not hardcoded name.
+enum DailyLogVariant {
+  DISCOVERY_SPECIALIST // Asma: calls completed, HQ calls, follow-ups, proposals, no-shows
+  APPOINTMENT_SETTER   // Nilofer: leads contacted, appointments set, follow-ups, pipeline adds
+  DELIVERY_COACH       // Karthick: sessions, check-ins, assignments, at-risk flags
+}
+
+model TeamProfile {
+  id                  String          @id @default(cuid())
+  userId              String?         @unique
+  user                User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fullName            String
+  roleTitle           String // e.g. Discovery Call Specialist
+  dashboardRole       Role            @default(USER)
+  email               String
+  phone               String?
+  dateJoined          DateTime?       @db.Date
+  keyResponsibilities String?
+  status              TeamStatus      @default(ACTIVE)
+  logVariant          DailyLogVariant
+  orderIndex          Int             @default(0) // org-chart card order (Admin can rearrange)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  okrs OKR[]
+
+  @@map("team_profile")
+}
+
+// Max 3 per person per month — enforced at the service layer (PRD2 §3.2).
+model OKR {
+  id                  String      @id @default(cuid())
+  teamProfileId       String
+  teamProfile         TeamProfile @relation(fields: [teamProfileId], references: [id], onDelete: Cascade)
+  month               DateTime    @db.Date // first day of month
+  title               String
+  targetValue         String // "80%", "50 calls" — free text per PRD
+  targetNumeric       Decimal?    @db.Decimal(14, 2) // parsed when numeric → auto completion %
+  currentProgress     String?
+  currentNumeric      Decimal?    @db.Decimal(14, 2)
+  manualCompletionPct Int? // Admin sets when target is text (PRD2 §3.2)
+  notes               String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([teamProfileId, month])
+  @@map("okr")
+}
+
+// APPEND-ONLY (PRD2 §6): one per user per day; corrections are notes, never edits.
+model DailyLog {
+  id      String          @id @default(cuid())
+  userId  String
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date    DateTime        @db.Date
+  variant DailyLogVariant
+
+  // DISCOVERY_SPECIALIST
+  discoveryCallsCompleted Int?
+  highlyQualifiedCalls    Int?
+  followUpsDone           Int?
+  proposalsSent           Int?
+  noShows                 Int?
+
+  // APPOINTMENT_SETTER
+  newLeadsContacted     Int?
+  appointmentsSet       Int?
+  followUpMessagesSent  Int?
+  leadsAddedToPipeline  Int?
+
+  // DELIVERY_COACH
+  sessionsDelivered      Int?
+  studentsCheckedInOn    Int?
+  assignmentsReviewed    Int?
+  studentsFlaggedAtRisk  Int?
+
+  notes          String? // notes / blockers
+  correctionNote String? // Admin may append a correction — original stays intact
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, date]) // one log per person per day (PRD2 §3.3)
+  @@index([date])
+  @@map("daily_log")
+}
+
+// ───────────────────────────── Phase 2 — Students ─────────────────────────────
+
+enum StudentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+  PAUSED
+}
+
+enum ProgramDuration {
+  DAYS_90   // Guided
+  DAYS_120  // Elite
+  LIFETIME  // Solo — no end date, no tracker
+}
+
+enum Milestone {
+  ONBOARDING
+  RESUME_BUILD
+  LINKEDIN_OPTIMISATION
+  APPLICATIONS
+  INTERVIEWS
+  OFFER_RECEIVED
+  COMPLETED
+}
+
+enum TaskCompletion {
+  YES
+  NO
+  PENDING
+}
+
+// ONE person = ONE Student record; upgrades create additional Enrollments (CONTEXT §7).
+// LTV = sum of linked Income across all enrollments — computed, never stored.
+model Student {
+  id            String      @id @default(cuid())
+  fullName      String
+  email         String?
+  phone         String?
+  industry      String?
+  targetRole    String? // target country role in Germany
+  leadSource    LeadSource? // GHOSTED_BLUEPRINT here drives Phase 3 attribution
+  leadId        String?
+  lead          Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  // Optional portal login (Role.STUDENT). One student ↔ one user; deleting the
+  // user account never touches the student record.
+  userId        String?     @unique
+  user          User?       @relation("StudentAccount", fields: [userId], references: [id], onDelete: SetNull)
+  internalNotes String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  enrollments   Enrollment[]
+  incomes       Income[]
+  pendingPayments PendingPayment[]
+  satisfactionScores SatisfactionScore[]
+
+  @@index([fullName])
+  @@map("student")
+}
+
+model Enrollment {
+  id              String          @id @default(cuid())
+  studentId       String
+  student         Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  programLevel    ProgramLevel // SOLO / GUIDED / ELITE only for B2 (service-validated)
+  enrollmentDate  DateTime        @db.Date
+  duration        ProgramDuration
+  programEndDate  DateTime?       @db.Date // enrollment + 90/120 days; null for LIFETIME
+  assignedCoach   String? // currently Karthick
+  status          StudentStatus   @default(ACTIVE)
+  statusChangedAt DateTime        @default(now()) // powers "completed/dropped this month"
+
+  // 90/120-day tracker (PRD2 §4.3) — Guided/Elite only
+  lastSessionDate        DateTime? @db.Date
+  totalSessionsCompleted Int       @default(0)
+  totalSessionsPlanned   Int?
+  lastTaskAssigned       String?
+  lastTaskCompleted      TaskCompletion?
+  applicationsSubmitted  Int       @default(0)
+  interviewsReceived     Int       @default(0)
+  currentMilestone       Milestone @default(ONBOARDING)
+  signalColour           Signal?   // manual G/A/R, set by Admin/Head
+  signalNotes            String?
+  nextCheckInDate        DateTime? @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  incomes       Income[]
+  milestoneLogs MilestoneLog[]
+  signalChanges SignalChangeLog[]
+
+  @@index([studentId])
+  @@index([status, programLevel])
+  @@index([signalColour])
+  @@map("enrollment")
+}
+
+// APPEND-ONLY milestone history (PRD2 §4.4) — cannot be deleted by anyone, incl. Admin.
+model MilestoneLog {
+  id                String     @id @default(cuid())
+  enrollmentId      String
+  enrollment        Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  date              DateTime   @default(now())
+  updatedById       String?
+  updatedBy         User?      @relation("MilestoneUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  previousMilestone Milestone?
+  newMilestone      Milestone
+  note              String?
+
+  @@index([enrollmentId])
+  @@map("milestone_log")
+}
+
+// APPEND-ONLY signal-colour audit (PRD2 §6: every change logged with date + user).
+model SignalChangeLog {
+  id             String     @id @default(cuid())
+  enrollmentId   String
+  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  date           DateTime   @default(now())
+  changedById    String?
+  changedBy      User?      @relation("SignalChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  previousSignal Signal?
+  newSignal      Signal
+  note           String?
+
+  @@index([enrollmentId])
+  @@map("signal_change_log")
+}
+
+enum OutcomeAchieved {
+  JOB_OFFER_RECEIVED
+  INTERVIEWS_ONLY
+  APPLICATIONS_STAGE
+  NO_OUTCOME_YET
+}
+
+model SatisfactionScore {
+  id                  String          @id @default(cuid())
+  studentId           String
+  student             Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date                DateTime        @db.Date
+  satisfactionScore   Int // 1–10
+  npsScore            Int // 0–10
+  testimonialReceived Boolean         @default(false)
+  outcomeAchieved     OutcomeAchieved @default(NO_OUTCOME_YET)
+  notes               String?
+  createdAt           DateTime        @default(now())
+
+  @@index([studentId])
+  @@map("satisfaction_score")
+}
+
+// ───────────────────────────── Phase 3 — Conversion Funnel ─────────────────────────────
+
+// Weekly snapshot (PRD3 §3.2). Awareness/GB downloads are always manual; leads/calls/
+// proposals/enrollments are pre-filled from Phase 1+2 native queries, Admin can override.
+model WeeklyFunnelSnapshot {
+  id                String   @id @default(cuid())
+  weekStart         DateTime @unique @db.Date // Monday
+  awarenessReach    Int      @default(0)
+  leadsCaptured     Int      @default(0)
+  callsCompleted    Int      @default(0)
+  proposalsSent     Int      @default(0)
+  enrollmentsSolo   Int      @default(0)
+  enrollmentsGuided Int      @default(0)
+  enrollmentsElite  Int      @default(0)
+  ghostedDownloads  Int      @default(0)
+  workshopAttendees Int      @default(0)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("weekly_funnel_snapshot")
+}
+
+// ───────────────────────────── Phase 3 — Cash Health ─────────────────────────────
+
+// Weekly bank-balance log (PRD3 §4.1). Kept as history for the 12-week line chart.
+model CashPosition {
+  id                       String   @id @default(cuid())
+  date                     DateTime @unique @db.Date // should be a Monday
+  bankBalanceInrMinor      BigInt   @default(0)
+  personalSavingsInrMinor  BigInt? // optional, planning only — excluded from runway
+  notes                    String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@map("cash_position")
+}
+
+enum PayableFrequency {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  ONE_TIME
+}
+
+enum PayableStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+model Payable {
+  id             String           @id @default(cuid())
+  name           String
+  category       ExpenseCategory
+  amountInrMinor BigInt           @default(0)
+  frequency      PayableFrequency @default(MONTHLY)
+  nextDueDate    DateTime?        @db.Date
+  isCogs         Boolean          @default(false)
+  status         PayableStatus    @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([status, nextDueDate])
+  @@map("payable")
+}
+
+// ───────────────────────────── Cross-cutting ─────────────────────────────
+
+// Daily ECB rate cache (frankfurter.app). One row per day; each money record
+// stamps the rate it used so history never shifts.
+model FxRate {
+  id        String   @id @default(cuid())
+  date      DateTime @unique @db.Date
+  inrPerEur Decimal  @db.Decimal(14, 6)
+  provider  String   @default("frankfurter.app")
+  fetchedAt DateTime @default(now())
+
+  @@map("fx_rate")
+}
+
+// Small key/value store: runway growth-rate override, ingest feature flags, etc.
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("app_setting")
+}

@@ -4,23 +4,41 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:sample": "tsx prisma/sample-data.ts",
+    "db:demo": "tsx prisma/demo-data.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "better-auth": "^1.6.23",
+    "bullmq": "^5.79.2",
+    "ioredis": "^5.11.1",
+    "next": "14.2.5",
+    "papaparse": "^5.5.4",
+    "prisma": "^6.19.3",
     "react": "^18",
     "react-dom": "^18",
-    "next": "14.2.5"
+    "server-only": "^0.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5",
     "@types/node": "^20",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.5",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.5"
+    "tsx": "^4.22.4",
+    "typescript": "^5"
   }
 }

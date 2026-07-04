@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Gauge, IndianRupee, BellRing, ClipboardList, GraduationCap, Trophy } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { WorkTracker } from "./_components/WorkTracker";
+import { FounderPulse } from "./_components/FounderPulse";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { formatDate } from "@/lib/format";
 import { signalForRunway } from "@/lib/signals";
@@ -41,10 +42,9 @@ export default async function Home() {
       </h1>
       <p className="mt-2 text-muted">Here is where things stand today.</p>
 
-      {/* Personal work tracker: live timer + weekly progress */}
-      <div className="mt-8">
-        <WorkTracker />
-      </div>
+      {/* Admin sees business outcomes (pulse + wins); team members keep the
+          personal work-time tracker for their own day. */}
+      <div className="mt-8">{isAdmin ? <FounderPulse /> : <WorkTracker />}</div>
 
       {/* At a glance: live, clickable KPIs */}
       <section className="mt-10">

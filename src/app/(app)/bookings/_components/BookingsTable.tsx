@@ -1,8 +1,12 @@
 "use client";
 
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
+import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
 import { toast } from "@/components/ui/feedback";
 import { setBookingStatus } from "@/server/booking-actions";
+import { sendBookingConfirmationMsg, sendBookingReminderMsg } from "@/server/whatsapp-actions";
+import type { WhatsAppStatusCell } from "@/server/whatsapp";
 import { BANT_VERDICT_LABELS, BOOKING_STATUS_LABELS } from "@/lib/labels";
 import { formatDate } from "@/lib/format";
 import type { BookingRow } from "@/server/booking-metrics";
@@ -48,7 +52,13 @@ function BantChips({ r }: { r: BookingRow }) {
   );
 }
 
-export function BookingsTable({ rows }: { rows: BookingRow[] }) {
+export function BookingsTable({
+  rows,
+  waStatus = {},
+}: {
+  rows: BookingRow[];
+  waStatus?: Record<string, WhatsAppStatusCell>;
+}) {
   const changeStatus = async (r: BookingRow, status: string) => {
     if (status === r.status) return;
     const res = await setBookingStatus(r.id, status);
@@ -109,6 +119,20 @@ export function BookingsTable({ rows }: { rows: BookingRow[] }) {
       value: (r) => BOOKING_STATUS_LABELS[r.status],
     },
     { key: "booked", header: "Booked on", cell: (r) => formatDate(r.createdAt), value: (r) => r.createdAt.slice(0, 10) },
+    {
+      key: "whatsapp", header: "WhatsApp", sortable: false,
+      cell: (r) => {
+        const w = waStatus[r.id];
+        return (
+          <span className="flex items-center gap-2 whitespace-nowrap">
+            {w && <WhatsAppStatusBadge status={w.status} kind={w.kind} at={w.at} />}
+            <SendWhatsAppButton action={() => sendBookingReminderMsg(r.id)} label="Remind" />
+            <SendWhatsAppButton action={() => sendBookingConfirmationMsg(r.id)} label="Confirm" />
+          </span>
+        );
+      },
+      value: (r) => waStatus[r.id]?.status ?? "",
+    },
     {
       key: "lead", header: "", sortable: false,
       cell: (r) => (r.leadId ? <a href="/pipeline" className="text-xs text-accent hover:underline">Pipeline →</a> : null),

@@ -15,15 +15,22 @@ function utcDateOnly(d = new Date()): Date {
  * Every money record stamps `fxRateUsed` at write time, so history never shifts
  * when the rate moves (CONTEXT §6).
  */
-export async function getTodayInrPerEur(): Promise<{
-  rate: Prisma.Decimal;
-  date: Date;
-  stale: boolean;
-}> {
+type FxResult = { rate: Prisma.Decimal; date: Date; stale: boolean };
+
+// The rate is constant for a whole UTC day - remember today's answer in-process
+// so repeated callers skip even the indexed DB lookup. Stale results (API down)
+// are not memoized, so recovery is retried on the next call.
+let fxMemo: { dayKey: number; value: FxResult } | null = null;
+
+export async function getTodayInrPerEur(): Promise<FxResult> {
   const today = utcDateOnly();
+  if (fxMemo && fxMemo.dayKey === today.getTime()) return fxMemo.value;
 
   const cached = await prisma.fxRate.findUnique({ where: { date: today } });
-  if (cached) return { rate: cached.inrPerEur, date: cached.date, stale: false };
+  if (cached) {
+    fxMemo = { dayKey: today.getTime(), value: { rate: cached.inrPerEur, date: cached.date, stale: false } };
+    return fxMemo.value;
+  }
 
   try {
     const res = await fetch(`${FX_API_URL}/latest?from=EUR&to=INR`, {
@@ -37,7 +44,8 @@ export async function getTodayInrPerEur(): Promise<{
       update: { inrPerEur: rate },
       create: { date: today, inrPerEur: rate },
     });
-    return { rate: row.inrPerEur, date: row.date, stale: false };
+    fxMemo = { dayKey: today.getTime(), value: { rate: row.inrPerEur, date: row.date, stale: false } };
+    return fxMemo.value;
   } catch {
     // API down → newest cached rate; else hard fallback, marked stale either way.
     const latest = await prisma.fxRate.findFirst({ orderBy: { date: "desc" } });

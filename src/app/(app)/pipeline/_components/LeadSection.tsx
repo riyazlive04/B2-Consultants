@@ -4,6 +4,10 @@ import { useRef, useState } from "react";
 import { assignLead, createLead, deleteLead, markLeadContacted, updateLead } from "@/server/pipeline-actions";
 import type { LeadRow } from "@/server/pipeline-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
+import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
+import { sendLeadReminder } from "@/server/whatsapp-actions";
+import type { WhatsAppStatusCell } from "@/server/whatsapp";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate, formatDuration } from "@/lib/format";
@@ -27,11 +31,13 @@ export function LeadSection({
   today,
   isAdmin,
   assignees,
+  waStatus = {},
 }: {
   rows: LeadRow[];
   today: string;
   isAdmin: boolean;
   assignees: { value: string; label: string }[];
+  waStatus?: Record<string, WhatsAppStatusCell>;
 }) {
   const [editing, setEditing] = useState<LeadRow | null>(null);
   const [stage, setStage] = useState<string>("NEW_LEAD");
@@ -135,7 +141,9 @@ export function LeadSection({
     {
       key: "actions", header: "", sortable: false,
       cell: (r) => (
-        <span className="flex gap-2 whitespace-nowrap">
+        <span className="flex items-center gap-2 whitespace-nowrap">
+          {waStatus[r.id] && <WhatsAppStatusBadge status={waStatus[r.id]!.status} kind={waStatus[r.id]!.kind} at={waStatus[r.id]!.at} />}
+          <SendWhatsAppButton action={() => sendLeadReminder(r.id)} label="WhatsApp" />
           <button type="button" className="py-1 text-accent hover:underline" onClick={() => startEdit(r)}>Edit</button>
           {isAdmin && (
             <button type="button" className="py-1 text-risk hover:underline" onClick={() => remove(r)}>Delete</button>

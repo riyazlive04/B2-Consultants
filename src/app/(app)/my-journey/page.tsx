@@ -24,7 +24,7 @@ export default async function MyJourneyPage() {
   if (!portal) {
     return (
       <div className="mx-auto max-w-3xl">
-        <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">My Journey</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">My Journey</h1>
         <div className="mt-8 rounded-card border border-line bg-surface p-6 text-sm text-muted shadow-card">
           Your login isn&apos;t linked to a student record yet — ask your coach to connect it.
         </div>
@@ -40,7 +40,7 @@ export default async function MyJourneyPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <div>
-        <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
+        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
           My Journey
         </h1>
         <p className="mt-1 text-sm text-muted">
@@ -96,7 +96,7 @@ function MilestonePath({ current }: { current: string }) {
               }`}
               style={{
                 background: active ? "var(--accent)" : done ? "var(--ok)" : undefined,
-                boxShadow: active ? "0 3px 8px rgba(26,25,19,0.25)" : undefined,
+                boxShadow: active ? "0 3px 8px rgba(var(--primary-rgb), 0.35)" : undefined,
               }}
             >
               {done ? "✓" : trophy ? "★" : i + 1}

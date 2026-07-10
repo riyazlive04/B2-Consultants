@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/rbac";
+import { capabilityCheck } from "@/lib/rbac";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
 import { parseDateInput } from "@/lib/dates";
@@ -45,7 +45,8 @@ function requireSomeAmount(inr?: string, eur?: string): string | null {
 }
 
 export async function createIncome(form: FormData): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   const parsed = incomeSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -74,7 +75,8 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
 }
 
 export async function updateIncome(id: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   const parsed = incomeSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -106,7 +108,8 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
 }
 
 export async function deleteIncome(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   await prisma.income.delete({ where: { id } });
   revalidatePath("/finance");
   return { ok: true };
@@ -126,7 +129,8 @@ const expenseSchema = z.object({
 });
 
 export async function createExpense(form: FormData): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   const parsed = expenseSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -152,7 +156,8 @@ export async function createExpense(form: FormData): Promise<ActionResult> {
 }
 
 export async function updateExpense(id: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   const parsed = expenseSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -176,7 +181,8 @@ export async function updateExpense(id: string, form: FormData): Promise<ActionR
 }
 
 export async function deleteExpense(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   await prisma.expense.delete({ where: { id } });
   revalidatePath("/finance");
   return { ok: true };
@@ -195,7 +201,8 @@ const pendingSchema = z.object({
 });
 
 export async function createPendingPayment(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   const parsed = pendingSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -220,7 +227,8 @@ export async function createPendingPayment(form: FormData): Promise<ActionResult
 }
 
 export async function updatePendingPayment(id: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   const parsed = pendingSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -244,7 +252,8 @@ export async function updatePendingPayment(id: string, form: FormData): Promise<
 }
 
 export async function deletePendingPayment(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   await prisma.pendingPayment.delete({ where: { id } });
   revalidatePath("/finance");
   return { ok: true };

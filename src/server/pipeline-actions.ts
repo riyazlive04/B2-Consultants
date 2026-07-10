@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireSection } from "@/lib/rbac";
+import { capabilityCheck, requireSection } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
 import { majorStringToMinor } from "@/lib/format";
 import type { ActionResult } from "./finance-actions";
@@ -118,7 +118,8 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
 }
 
 export async function deleteLead(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
   await prisma.lead.delete({ where: { id } }); // cascades outcomes + history
   revalidatePath("/pipeline");
   return { ok: true };
@@ -152,7 +153,8 @@ export async function markLeadContacted(id: string): Promise<ActionResult> {
 
 /** Admin assigns a lead to a setter (Synamate "Who"). Empty userId unassigns. */
 export async function assignLead(id: string, userId: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
   await prisma.lead.update({ where: { id }, data: { assignedToId: userId || null } });
   revalidatePath("/pipeline");
   return { ok: true };
@@ -233,7 +235,8 @@ export async function updateOutcome(id: string, form: FormData): Promise<ActionR
 }
 
 export async function deleteOutcome(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
   await prisma.discoveryOutcome.delete({ where: { id } });
   revalidatePath("/pipeline");
   return { ok: true };
@@ -241,7 +244,8 @@ export async function deleteOutcome(id: string): Promise<ActionResult> {
 
 /** Admin sets the monthly revenue target for the target bar (default ₹8,00,000). */
 export async function setMonthlyTarget(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
   const raw = String(form.get("targetInr") ?? "").trim();
   if (!/^\d{1,12}(\.\d{0,2})?$/.test(raw)) return { ok: false, error: "Enter a plain amount like 800000" };
   const month = String(form.get("month") ?? "");

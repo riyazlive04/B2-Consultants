@@ -35,11 +35,20 @@ export default async function CashPage() {
   const asOf = formatDate(istToday().toISOString());
   const runwayLevel = runway.runwayMonths === null ? null : signalForRunway(runway.runwayMonths);
 
+  // The date the money actually runs out at this burn — a deadline lands harder
+  // than "3.1 months". Approximate month = 30.44 days; rounded to the day.
+  const cashOutDate =
+    runway.runwayMonths === null
+      ? null
+      : formatDate(new Date(istToday().getTime() + runway.runwayMonths * 30.44 * 86400000).toISOString());
+
   // runway gauge geometry (ring fills toward a 12-month horizon)
   const gaugeR = 72;
   const gaugeC = 2 * Math.PI * gaugeR;
   const gaugeFrac = runway.runwayMonths === null ? 0 : Math.min(1, runway.runwayMonths / 12);
   const gaugeColor = runwayLevel ? `var(--${runwayLevel})` : "var(--muted)";
+  // hero band coloured by the runway signal (green ≥6, amber 3–6, red <3) — soft bg, not a gradient
+  const gaugeBand = runwayLevel ? `var(--${runwayLevel}-soft)` : "var(--surface-2)";
 
   // Receivables age analysis - balance by how late it is
   const inBucket = (lo: number, hi: number) => (r: { overdue: boolean; daysOverdue: number }) =>
@@ -83,7 +92,7 @@ export default async function CashPage() {
             <Gauge size={20} />
           </span>
           <div>
-            <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">Cash Health</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Cash Health</h1>
             <p className="text-xs text-muted">
               Not transactions - survival. If no new money came in from today, how long does the business keep running?
             </p>
@@ -148,11 +157,14 @@ export default async function CashPage() {
 
       {/* Runway - THE number, as a gauge (PRD3 §4.4) */}
       <div className="rounded-card border border-line bg-surface p-6 shadow-card">
-        <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
+        <div
+          className="flex flex-col items-center gap-6 rounded-hero p-5 sm:flex-row sm:items-center sm:gap-8"
+          style={{ background: gaugeBand }}
+        >
           {/* gauge */}
           <div className="relative grid flex-none place-items-center">
             <svg width={180} height={180} viewBox="0 0 180 180" className="-rotate-90">
-              <circle cx="90" cy="90" r={gaugeR} fill="none" stroke="var(--surface-2)" strokeWidth="14" />
+              <circle cx="90" cy="90" r={gaugeR} fill="none" stroke="var(--surface)" strokeWidth="14" />
               <circle
                 cx="90"
                 cy="90"
@@ -183,6 +195,11 @@ export default async function CashPage() {
                 ? "Enter a weekly bank balance to compute runway."
                 : `Cash ${compact(runway.cashInr)} ÷ burn ${compact(runway.burnInr)}/mo (avg last 3 months of expenses)`}
             </p>
+            {cashOutDate && (
+              <p className="tnum mt-1.5 text-sm font-semibold" style={{ color: gaugeColor }}>
+                At this burn, cash reaches ₹0 around {cashOutDate}.
+              </p>
+            )}
             {runwayLevel && (
               <div className="mt-3 flex justify-center sm:justify-start">
                 <SignalBadge

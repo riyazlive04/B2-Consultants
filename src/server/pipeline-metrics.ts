@@ -1,6 +1,8 @@
 import "server-only";
+import { cache } from "react";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { istMonthRange, istToday, istWeekRange } from "@/lib/dates";
+import { istMonthInstantRange, istMonthRange, istToday, istWeekRange } from "@/lib/dates";
 import { aggInrMinor, sumAgg } from "@/lib/money";
 
 /**
@@ -23,13 +25,96 @@ async function distinctLeadsReaching(stage: string, start: Date, end: Date): Pro
   return rows.length;
 }
 
+type FeeIncomeRow = {
+  programLevel: string;
+  studentId: string | null;
+  studentName: string | null;
+  amountInrMinor: bigint;
+  amountEurMinor: bigint;
+  fxRateUsed: Prisma.Decimal;
+};
+
+/**
+ * Average program fee per level from real income history. Sum per STUDENT
+ * first — a fee paid in 4 instalments is one fee, not four small ones —
+ * then average those per-student totals within each level.
+ */
+function computeAvgProgramFeeInr(rows: FeeIncomeRow[]): { avgFeeInr: number; known: boolean } {
+  const perStudent = new Map<string, { level: string; total: number }>();
+  for (const i of rows) {
+    if (!["SOLO", "GUIDED", "ELITE"].includes(i.programLevel)) continue;
+    const who = i.studentId ?? (i.studentName ? `name:${i.studentName.trim().toLowerCase()}` : null);
+    if (!who) continue; // unattributed income can't define a per-deal fee
+    const key = `${i.programLevel}:${who}`;
+    const v = Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
+    const cur = perStudent.get(key) ?? { level: i.programLevel, total: 0 };
+    perStudent.set(key, { level: cur.level, total: cur.total + v });
+  }
+  const levelTotals = new Map<string, { total: number; n: number }>();
+  for (const { level, total } of perStudent.values()) {
+    const cur = levelTotals.get(level) ?? { total: 0, n: 0 };
+    levelTotals.set(level, { total: cur.total + total, n: cur.n + 1 });
+  }
+  const levelAvgs = [...levelTotals.values()].map((v) => v.total / v.n);
+  const avgFeeInr = levelAvgs.length ? levelAvgs.reduce((a, b) => a + b, 0) / levelAvgs.length : 0;
+  return { avgFeeInr, known: levelAvgs.length > 0 };
+}
+
+/**
+ * Light founder-home snapshot: what the open pipeline is worth and how the month
+ * is converting. Same INTERESTED_STAGES + avg-fee logic as getPipelineOverview,
+ * but none of that function's table payloads (500 leads/outcomes) — cheap enough
+ * for the home page on every load.
+ */
+export const getPipelineSnapshot = cache(async () => {
+  const ts = istMonthInstantRange();
+  const [interestedLeads, feeIncomes, wonRows, completedRows] = await Promise.all([
+    prisma.lead.count({ where: { stage: { in: INTERESTED_STAGES as unknown as never[] } } }),
+    prisma.income.findMany({
+      select: {
+        programLevel: true, studentId: true, studentName: true,
+        amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,
+      },
+    }),
+    prisma.leadStageHistory.findMany({
+      where: { toStage: "WON", changedAt: { gte: ts.start, lt: ts.end } },
+      select: { leadId: true },
+      distinct: ["leadId"],
+    }),
+    prisma.leadStageHistory.findMany({
+      where: { toStage: "DISCO_COMPLETED", changedAt: { gte: ts.start, lt: ts.end } },
+      select: { leadId: true },
+      distinct: ["leadId"],
+    }),
+  ]);
+
+  const { avgFeeInr, known } = computeAvgProgramFeeInr(feeIncomes);
+  const winsThisMonth = wonRows.length;
+  const completed = completedRows.length;
+  const closePct = completed > 0 ? (winsThisMonth / completed) * 100 : 0;
+  const pipelineValueInr = interestedLeads * avgFeeInr;
+
+  return {
+    interestedLeads,
+    avgFeeKnown: known,
+    pipelineValueInr,
+    forecast30Inr: pipelineValueInr * (closePct / 100),
+    winsThisMonth,
+    completedThisMonth: completed,
+    closePct,
+  };
+});
+
 export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   const today = istToday();
   const week = istWeekRange(today);
   const month = istMonthRange(today);
-  // stage changes happen at entry time (timestamps), widen month range to full-day bounds
+  // @db.Date columns (dateIn, callDate) use the UTC-midnight day boundaries…
   const mStart = month.start;
   const mEnd = month.end;
+  // …but stage changes are true timestamps: query them with the IST instants,
+  // otherwise 00:00–05:30 IST events on the 1st land in the wrong month.
+  const ts = istMonthInstantRange(today);
 
   const [
     leadsThisWeek, leadsThisMonth, booked, completed, noShows, wonRows,
@@ -37,11 +122,11 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   ] = await Promise.all([
     prisma.lead.count({ where: { dateIn: { gte: week.start, lt: week.end } } }),
     prisma.lead.count({ where: { dateIn: { gte: mStart, lt: mEnd } } }),
-    distinctLeadsReaching("DISCO_BOOKED", mStart, mEnd),
-    distinctLeadsReaching("DISCO_COMPLETED", mStart, mEnd),
-    distinctLeadsReaching("NO_SHOW", mStart, mEnd),
+    distinctLeadsReaching("DISCO_BOOKED", ts.start, ts.end),
+    distinctLeadsReaching("DISCO_COMPLETED", ts.start, ts.end),
+    distinctLeadsReaching("NO_SHOW", ts.start, ts.end),
     prisma.leadStageHistory.findMany({
-      where: { toStage: "WON", changedAt: { gte: mStart, lt: mEnd } },
+      where: { toStage: "WON", changedAt: { gte: ts.start, lt: ts.end } },
       select: { leadId: true },
       distinct: ["leadId"],
     }),
@@ -55,7 +140,10 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
       select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
     }),
     prisma.income.findMany({
-      select: { programLevel: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
+      select: {
+        programLevel: true, studentId: true, studentName: true,
+        amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,
+      },
     }),
     prisma.monthlyTarget.findUnique({ where: { month: mStart } }),
   ]);
@@ -70,21 +158,14 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
     conversionsByLevel[k] += 1;
   }
 
-  // Average program fee per level from real income history (₹ aggregate per entry).
-  const levelTotals = new Map<string, { total: number; n: number }>();
-  for (const i of allIncomes) {
-    if (!["SOLO", "GUIDED", "ELITE"].includes(i.programLevel)) continue;
-    const v = Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
-    const cur = levelTotals.get(i.programLevel) ?? { total: 0, n: 0 };
-    levelTotals.set(i.programLevel, { total: cur.total + v, n: cur.n + 1 });
-  }
-  const levelAvgs = [...levelTotals.values()].map((v) => v.total / v.n);
-  const avgFeeInr = levelAvgs.length ? levelAvgs.reduce((a, b) => a + b, 0) / levelAvgs.length : 0;
+  const { avgFeeInr, known: avgFeeKnown } = computeAvgProgramFeeInr(allIncomes);
 
   const showUpPct = booked > 0 ? (completed / booked) * 100 : 0;
   const closePct = completed > 0 ? (wonLeadIds.length / completed) * 100 : 0;
   const noShowPct = booked > 0 ? (noShows / booked) * 100 : 0;
-  const hqPct = completed > 0 ? (hqOutcomes / completed) * 100 : 0;
+  // HQ ÷ disco conducted (SALES-LOGIC §3): numerator and denominator from the
+  // SAME table + date column, so the ratio can never exceed 100%.
+  const hqPct = monthOutcomes > 0 ? (hqOutcomes / monthOutcomes) * 100 : 0;
   const pipelineValueInr = interestedLeads * avgFeeInr;
   const forecast30Inr = pipelineValueInr * (closePct / 100);
 
@@ -105,10 +186,27 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
     WORKSHOP_FOLLOWUP: 14, SENT_TO_WORKSHOP: 12, NEW_LEAD: 10, DISCO_NOT_BOOKED: 8, NO_SHOW: 5,
   };
 
-  const [openLeads, lastChanges, openOutcomes] = await Promise.all([
-    prisma.lead.findMany({ where: { stage: { in: OPEN_STAGES as unknown as never[] } } }),
-    prisma.leadStageHistory.groupBy({ by: ["leadId"], _max: { changedAt: true } }),
-    prisma.discoveryOutcome.findMany({ orderBy: { callDate: "desc" } }),
+  // Open leads first (lean select), then history/outcomes scoped to just those
+  // ids — the unscoped groupBy walked the entire stage history on every render.
+  const openLeads = await prisma.lead.findMany({
+    where: { stage: { in: OPEN_STAGES as unknown as never[] } },
+    select: { id: true, name: true, phone: true, stage: true, dateIn: true, createdAt: true },
+  });
+  const openLeadIds = openLeads.map((l) => l.id);
+  const [lastChanges, openOutcomes] = await Promise.all([
+    prisma.leadStageHistory.groupBy({
+      by: ["leadId"],
+      where: { leadId: { in: openLeadIds } },
+      _max: { changedAt: true },
+    }),
+    prisma.discoveryOutcome.findMany({
+      where: { leadId: { in: openLeadIds } },
+      orderBy: { callDate: "desc" },
+      select: {
+        leadId: true, outcome: true, highlyQualified: true,
+        bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true,
+      },
+    }),
   ]);
   const lastChangeAt = new Map(lastChanges.map((c) => [c.leadId, c._max.changedAt!]));
   const latestOutcome = new Map<string, (typeof openOutcomes)[number]>();
@@ -163,9 +261,24 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
       take: 500,
       include: { lead: { select: { name: true } }, enteredBy: { select: { name: true } } },
     }),
-    prisma.lead.findMany({ orderBy: { dateIn: "desc" }, take: 500, select: { id: true, name: true, phone: true } }),
-    // Setters a lead can be assigned to (Admin-only control). Everyone with a login.
-    prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    // Outcome-form lead picker: non-admins only see leads they entered or own —
+    // matches the write rules in pipeline-actions and keeps the full lead book
+    // (names + phones) out of a member's serialized page props.
+    prisma.lead.findMany({
+      where: isAdmin ? {} : { OR: [{ enteredById: viewerId }, { assignedToId: viewerId }] },
+      orderBy: { dateIn: "desc" },
+      take: 500,
+      select: { id: true, name: true, phone: true },
+    }),
+    // Setters a lead can be assigned to — the assign control is Admin-only, so
+    // only Admin gets the roster (and never student portal accounts).
+    isAdmin
+      ? prisma.user.findMany({
+          where: { role: { notIn: ["STUDENT", "TUTOR"] } },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -175,7 +288,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
       showUpPct, closePct, noShowPct, hqPct,
       pipelineValueInr, forecast30Inr,
       conversionsByLevel,
-      avgFeeKnown: levelAvgs.length > 0,
+      avgFeeKnown,
       monthOutcomes,
     },
     target: {

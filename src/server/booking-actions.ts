@@ -1,13 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { LeadSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { istWallToUtc } from "@/lib/dates";
+import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 import { computeBant, INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { upsertIntakeLead } from "./lead-intake";
+import { sendBookingConfirmation } from "./whatsapp";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -35,20 +38,21 @@ const HOW_TO_CHANNEL: Record<string, LeadSource> = {
 };
 
 const bookingSchema = z.object({
-  slotId: z.string().min(1, "Please choose an available time"),
-  name: z.string().trim().min(1, "Your name is required"),
-  email: z.string().trim().email("A valid email is required"),
-  phone: z.string().trim().min(5, "Phone / WhatsApp with country code is required"),
-  whatsapp: z.string().trim().optional(),
-  city: z.string().trim().optional(),
-  currentJobTitle: z.string().trim().optional(),
-  prospectIndustry: z.string().trim().optional(),
-  linkedInProfile: z.string().trim().optional(),
+  slotId: z.string().min(1, "Please choose an available time").max(64),
+  // Length caps: this is a PUBLIC form writing into DB text columns.
+  name: z.string().trim().min(1, "Your name is required").max(160, "Name is too long"),
+  email: z.string().trim().email("A valid email is required").max(254),
+  phone: z.string().trim().min(5, "Phone / WhatsApp with country code is required").max(32),
+  whatsapp: z.string().trim().max(32).optional(),
+  city: z.string().trim().max(120).optional(),
+  currentJobTitle: z.string().trim().max(160).optional(),
+  prospectIndustry: z.string().trim().max(160).optional(),
+  linkedInProfile: z.string().trim().max(300).optional(),
   highestEducation: optional("highestEducation"),
   yearsExperience: optional("yearsExperience"),
-  whyGermany: z.string().trim().optional(),
+  whyGermany: z.string().trim().max(2000, "Please keep this under 2000 characters").optional(),
   participateWorkshop: optional("participateWorkshop"),
-  reasonForCall: z.string().trim().optional(),
+  reasonForCall: z.string().trim().max(2000, "Please keep this under 2000 characters").optional(),
   alreadyApplied: optional("alreadyApplied"),
   whenStartGermany: optional("whenStartGermany"),
   germanVisa: optional("germanVisa"),
@@ -61,8 +65,26 @@ const bookingSchema = z.object({
   howKnowUs: optional("howKnowUs"),
   // spam honeypot - real users never fill this hidden field
   company_website: z.string().optional(),
-  utm: z.string().optional(), // JSON blob captured client-side from the URL
+  utm: z.string().max(4000).optional(), // JSON blob captured client-side from the URL
 });
+
+/** Keep only bounded, string-valued utm_* entries from the client-supplied blob. */
+function sanitizeUtm(rawJson: string): Record<string, string> | null {
+  try {
+    const obj = JSON.parse(rawJson);
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+    const utm: Record<string, string> = {};
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      if (Object.keys(utm).length >= 10) break;
+      if (k.toLowerCase().startsWith("utm_") && typeof v === "string" && v) {
+        utm[k.toLowerCase().slice(0, 64)] = v.slice(0, 200);
+      }
+    }
+    return Object.keys(utm).length ? utm : null;
+  } catch {
+    return null; // malformed utm is dropped, never fatal
+  }
+}
 
 function firstError(e: z.ZodError): string {
   return e.issues[0]?.message ?? "Please check the form and try again";
@@ -73,6 +95,14 @@ function clean(v: string | undefined): string | null {
 }
 
 export async function submitBooking(form: FormData): Promise<ActionResult> {
+  // Public endpoint: throttle per IP so one client can't exhaust the open slots
+  // or flood the pipeline with junk leads. 5 attempts / 10 min is generous for a
+  // human correcting form errors.
+  const ip = clientIpFrom(await Promise.resolve(headers()));
+  if (!rateLimitOk(`book:${ip}`, 5, 10 * 60_000)) {
+    return { ok: false, error: "Too many booking attempts - please try again in a few minutes." };
+  }
+
   const parsed = bookingSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -85,15 +115,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   }
 
   const bant = computeBant(d);
-  let utm: Record<string, string> | null = null;
-  if (d.utm) {
-    try {
-      const obj = JSON.parse(d.utm);
-      if (obj && typeof obj === "object") utm = obj as Record<string, string>;
-    } catch {
-      /* ignore malformed utm */
-    }
-  }
+  const utm = d.utm ? sanitizeUtm(d.utm) : null;
 
   // Lead first (its own transaction inside the helper). BOOKING_FORM provenance;
   // channel from "how did you hear about us", default LANDING_PAGE.
@@ -110,15 +132,17 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
 
   // Claim the slot + create the booking + advance the lead to DISCO_BOOKED atomically.
   // updateMany with a status guard is the concurrency lock against a double-book.
+  let bookingId: string;
   try {
-    await prisma.$transaction(async (tx) => {
+    bookingId = await prisma.$transaction(async (tx) => {
       const claim = await tx.appointmentSlot.updateMany({
         where: { id: slot.id, status: "OPEN" },
         data: { status: "BOOKED" },
       });
       if (claim.count === 0) throw new Error("SLOT_TAKEN");
 
-      await tx.bookingRequest.create({
+      const booking = await tx.bookingRequest.create({
+        select: { id: true },
         data: {
           slotId: slot.id,
           leadId: lead.id,
@@ -158,6 +182,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
           data: { leadId: lead.id, fromStage: "NEW_LEAD", toStage: "DISCO_BOOKED" },
         });
       }
+      return booking.id;
     });
   } catch (e) {
     if (e instanceof Error && e.message === "SLOT_TAKEN") {
@@ -165,6 +190,10 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     }
     throw e;
   }
+
+  // Wave-2: fire the WhatsApp booking confirmation. No-op (and writes no row) unless WATI is
+  // configured + enabled; it never throws, so it can't affect the booking result.
+  await sendBookingConfirmation(bookingId);
 
   revalidatePath("/bookings");
   revalidatePath("/book");

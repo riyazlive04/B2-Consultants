@@ -12,9 +12,12 @@ import type { ActionResult } from "./finance-actions";
  * changed by an Admin in People → Users.
  */
 
-// Photos arrive as a client-resized data URL (see ProfileClient). Cap the string
-// so an oversized paste can't bloat the row; ~900 KB of base64 ≈ a 256px avatar.
-const MAX_IMAGE_CHARS = 900_000;
+// Photos arrive as a client-resized data URL (see ProfileClient). Keep the cap
+// tight: better-auth reads the FULL user row (incl. image) on EVERY getSession,
+// and the shell serializes it into every page - a 256px JPEG is ~40-60 KB of
+// base64, so 250 KB is generous headroom without letting one avatar tax
+// every request in the app.
+const MAX_IMAGE_CHARS = 250_000;
 
 const schema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80, "Name is too long"),
@@ -22,9 +25,15 @@ const schema = z.object({
     .string()
     .trim()
     .max(MAX_IMAGE_CHARS, "Image is too large - please choose a smaller photo")
-    .refine((v) => v === "" || v.startsWith("data:image/") || /^https?:\/\//.test(v), {
-      message: "Invalid image",
-    })
+    // Raster data-URLs from the client-side resizer, or an https URL. No http
+    // (mixed content) and no svg (scriptable) - this string lands in <img src>.
+    .refine(
+      (v) =>
+        v === "" ||
+        /^data:image\/(png|jpe?g|webp|gif);base64,/.test(v) ||
+        /^https:\/\//.test(v),
+      { message: "Invalid image" },
+    )
     .optional(),
 });
 

@@ -14,9 +14,11 @@ import {
 import { MetricCard } from "@/components/ui/MetricCard";
 import { JourneyRing, MomentumChip } from "@/components/ui/gamification";
 import { Tabs } from "@/components/ui/Tabs";
+import { PageHeader } from "@/components/ui/kit";
 import { formatInrMinor, formatPct } from "@/lib/format";
 import { requireSection } from "@/lib/rbac";
 import { getStudentsOverview } from "@/server/students-metrics";
+import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { StudentsPanel } from "./_components/StudentsPanel";
 import { TrackerTable } from "./_components/TrackerTable";
 
@@ -27,15 +29,15 @@ export default async function StudentsPage() {
   const isAdmin = session.role === "ADMIN";
   const { counts, avgSatisfaction, avgNps, tracker, momentumBoard, atRiskRadar, ltvSummary, students } =
     await getStudentsOverview();
+  const waByStudent = await getWhatsAppStatusMap("studentId", tracker.map((t) => t.studentId));
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <div>
-        <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">Students</h1>
-        <p className="mt-1 text-sm text-muted">
-          B2 Consultants students only (Solo / Guided / Elite). German Note comes in a later phase.
-        </p>
-      </div>
+      <PageHeader
+        icon={<GraduationCap size={20} />}
+        title="Students"
+        subtitle="B2 Consultants students only (Solo / Guided / Elite). German Note comes in a later phase."
+      />
 
       {/* Count dashboard (PRD2 §4.2) + always-visible satisfaction averages (§4.5) */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -170,7 +172,7 @@ export default async function StudentsPage() {
         tabs={[
           {
             label: `90/120-day tracker${tracker.some((t) => t.signalColour === "RED") ? " ⚠" : ""}`,
-            content: <TrackerTable rows={tracker} isAdmin={isAdmin} />,
+            content: <TrackerTable rows={tracker} isAdmin={isAdmin} waStatus={waByStudent} />,
           },
           { label: "All students & LTV", content: <StudentsPanel rows={students} isAdmin={isAdmin} /> },
         ]}

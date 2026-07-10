@@ -212,12 +212,14 @@ export async function updateTracker(enrollmentId: string, form: FormData): Promi
       where: { id: enrollmentId },
       data: {
         lastSessionDate: d.lastSessionDate?.trim() ? parseDateInput(d.lastSessionDate) : null,
-        totalSessionsCompleted: d.totalSessionsCompleted?.trim() ? parseInt(d.totalSessionsCompleted, 10) : 0,
+        // A blank counter box means "leave it" — never silently reset audited
+        // progress to 0 (these feed journey XP and the at-risk radar).
+        totalSessionsCompleted: d.totalSessionsCompleted?.trim() ? parseInt(d.totalSessionsCompleted, 10) : existing.totalSessionsCompleted,
         totalSessionsPlanned: d.totalSessionsPlanned?.trim() ? parseInt(d.totalSessionsPlanned, 10) : existing.totalSessionsPlanned,
         lastTaskAssigned: d.lastTaskAssigned || null,
         lastTaskCompleted: d.lastTaskCompleted || null,
-        applicationsSubmitted: d.applicationsSubmitted?.trim() ? parseInt(d.applicationsSubmitted, 10) : 0,
-        interviewsReceived: d.interviewsReceived?.trim() ? parseInt(d.interviewsReceived, 10) : 0,
+        applicationsSubmitted: d.applicationsSubmitted?.trim() ? parseInt(d.applicationsSubmitted, 10) : existing.applicationsSubmitted,
+        interviewsReceived: d.interviewsReceived?.trim() ? parseInt(d.interviewsReceived, 10) : existing.interviewsReceived,
         currentMilestone: d.currentMilestone,
         signalColour: d.signalColour || null,
         signalNotes: d.signalNotes || null,
@@ -237,9 +239,10 @@ export async function updateTracker(enrollmentId: string, form: FormData): Promi
         },
       });
     }
-    // Signal changed → append immutable audit (PRD2 §6)
+    // Signal changed → append immutable audit (PRD2 §6). Clearing back to
+    // "not set" is a change too - it must land in the trail, not vanish.
     const newSignal = d.signalColour || null;
-    if (newSignal && existing.signalColour !== newSignal) {
+    if (existing.signalColour !== newSignal) {
       await tx.signalChangeLog.create({
         data: {
           enrollmentId,
@@ -408,17 +411,28 @@ export async function createStudentLogin(studentId: string, form: FormData): Pro
   const existing = await prisma.user.findUnique({ where: { email: d.email } });
   if (existing) return { ok: false, error: "A user with this email already exists" };
 
+  // signUpEmail can't join a Prisma transaction, so if the role-set + student
+  // link fails we delete the just-created account rather than leave an orphan
+  // STUDENT login that can sign in but sees nothing.
+  let createdUserId: string | null = null;
   try {
     const res = await portalAuth.api.signUpEmail({
       body: { name: student.fullName, email: d.email, password: d.password },
     });
-    await prisma.user.update({
-      where: { id: res.user.id },
-      data: { role: "STUDENT", emailVerified: true },
-    });
-    await prisma.student.update({ where: { id: studentId }, data: { userId: res.user.id } });
+    createdUserId = res.user.id;
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: res.user.id },
+        data: { role: "STUDENT", emailVerified: true },
+      }),
+      prisma.student.update({ where: { id: studentId }, data: { userId: res.user.id } }),
+    ]);
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Could not create the login" };
+    if (createdUserId) {
+      await prisma.user.delete({ where: { id: createdUserId } }).catch(() => {});
+    }
+    console.error("createStudentLogin failed", e);
+    return { ok: false, error: "Could not create the login - please try again" };
   }
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/people");

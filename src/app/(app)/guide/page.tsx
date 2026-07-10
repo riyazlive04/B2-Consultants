@@ -1,19 +1,19 @@
 import Link from "next/link";
 import { GUIDES } from "@/lib/guide-content";
-import { requireSection, sectionsFor } from "@/lib/rbac";
+import { requireSection, visibleSections } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
 /** App Guide - short how-tos, filtered to the features this user can actually open. */
 export default async function GuidePage() {
   const session = await requireSection("guide");
-  const accessible = new Set(sectionsFor(session.role, session.overrides).map((s) => s.key));
+  const accessible = new Set((await visibleSections(session.role, session.overrides)).map((s) => s.key));
   const visible = GUIDES.filter((g) => g.section === "general" || accessible.has(g.section));
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">App Guide</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">App Guide</h1>
         <p className="mt-1 text-sm text-muted">
           How to use each feature, in thirty seconds. You only see guides for features you have
           access to.

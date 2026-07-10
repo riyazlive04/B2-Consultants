@@ -15,6 +15,7 @@ import { istToday, istWeekRange, istWallToUtc, parseDateInput, toDateInputValue 
 import { BOOKING_STATUS_LABELS } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { getBookingsOverview, getWeekSlots, type WeekSlot } from "@/server/booking-metrics";
+import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { SlotManager } from "./_components/SlotManager";
 import { BookingsTable } from "./_components/BookingsTable";
 
@@ -43,6 +44,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
     getBookingsOverview(),
     getWeekSlots(weekStartUtc, weekEndUtc),
   ]);
+  const waByBooking = await getWhatsAppStatusMap("bookingRequestId", bookings.map((b) => b.id));
   const bookingUrl = `${process.env.BETTER_AUTH_URL ?? ""}/book`;
 
   const todayKey = toDateInputValue(istToday());
@@ -82,7 +84,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
             <CalendarCheck size={20} />
           </span>
           <div>
-            <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">Bookings</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Bookings</h1>
             <p className="text-xs text-muted">
               Discovery-call bookings and availability - in-house, replacing Synamate.
             </p>
@@ -249,7 +251,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
 
       <Tabs
         tabs={[
-          { label: "Bookings", content: <BookingsTable rows={bookings} /> },
+          { label: "Bookings", content: <BookingsTable rows={bookings} waStatus={waByBooking} /> },
           { label: "Availability", content: <SlotManager slots={slots} /> },
         ]}
       />

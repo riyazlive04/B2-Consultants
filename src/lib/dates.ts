@@ -40,6 +40,26 @@ export function istYearRange(ref = istToday()): { start: Date; end: Date } {
   };
 }
 
+const IST_OFFSET_MS = 5.5 * 3600000;
+
+/**
+ * Convert an IST day boundary (expressed as UTC midnight, the @db.Date encoding)
+ * to the real UTC INSTANT it represents: 00:00 IST = 18:30 UTC the previous day.
+ * Use this whenever an IST month/week range filters a TIMESTAMP column
+ * (changedAt / createdAt / statusChangedAt) — querying those with the raw
+ * UTC-midnight boundary shifts the window 5.5h late and misbuckets everything
+ * that happens between 00:00 and 05:30 IST on the boundary day.
+ */
+export function istBoundaryToInstant(boundary: Date): Date {
+  return new Date(boundary.getTime() - IST_OFFSET_MS);
+}
+
+/** istMonthRange, expressed as UTC instants for timestamp-column queries. */
+export function istMonthInstantRange(ref = istToday()): { start: Date; end: Date } {
+  const { start, end } = istMonthRange(ref);
+  return { start: istBoundaryToInstant(start), end: istBoundaryToInstant(end) };
+}
+
 /** Parse an <input type="date"> value (YYYY-MM-DD) to a UTC-midnight Date. */
 export function parseDateInput(value: string): Date {
   return new Date(`${value}T00:00:00Z`);

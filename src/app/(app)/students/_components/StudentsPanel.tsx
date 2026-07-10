@@ -89,7 +89,7 @@ export function StudentsPanel({ rows, isAdmin }: { rows: StudentListRow[]; isAdm
         <div className="flex justify-end">
           <button
             type="button"
-            className="glow-accent inline-flex items-center gap-1.5 rounded-field bg-accent px-3.5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-95"
+            className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3.5 py-2 text-sm font-semibold text-white hover:bg-primary-strong"
             onClick={() => setAdding(true)}
           >
             <Plus size={16} /> Add student

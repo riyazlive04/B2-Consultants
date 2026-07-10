@@ -120,8 +120,8 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Full name"><TextInput name="name" required placeholder="Your name" /></Field>
           <Field label="Email"><TextInput type="email" name="email" required placeholder="you@email.com" /></Field>
-          <Field label="Phone / WhatsApp" hint="With country code, e.g. +91…">
-            <TextInput name="phone" required placeholder="+91…" />
+          <Field label="Phone / WhatsApp" hint="Always include the country code — +91 (India), +49 (Germany)">
+            <TextInput name="phone" required placeholder="+91… / +49…" />
           </Field>
           <Field label="WhatsApp (if different)"><TextInput name="whatsapp" placeholder="Optional" /></Field>
           <Field label="City"><TextInput name="city" placeholder="Your city" /></Field>
@@ -129,6 +129,10 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
             <Select name="howKnowUs" options={withPlaceholder(INTAKE_OPTIONS.howKnowUs, "Select…")} defaultValue="" />
           </Field>
         </div>
+        <p className="mt-3 text-xs text-muted">
+          By sharing your number you agree to receive your booking confirmation and call reminders on WhatsApp.
+          Reply <strong>STOP</strong> anytime to opt out.
+        </p>
       </section>
 
       {/* ── Qualification (drives BANT) ── */}

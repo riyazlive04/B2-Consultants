@@ -179,7 +179,7 @@ function SprintRowForm({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-field bg-accent px-2.5 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-95 disabled:opacity-60"
+            className="rounded-field bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-strong disabled:opacity-60"
           >
             {saving ? "…" : "Save"}
           </button>

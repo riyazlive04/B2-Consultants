@@ -11,9 +11,9 @@ export const SIGNAL_META: Record<
   SignalLevel,
   { label: string; color: string; soft: string; dot: string }
 > = {
-  ok:    { label: "Green", color: "var(--ok)",    soft: "var(--ok-soft)",    dot: "bg-ok" },
-  watch: { label: "Amber", color: "var(--watch)", soft: "var(--watch-soft)", dot: "bg-watch" },
-  risk:  { label: "Red",   color: "var(--risk)",  soft: "var(--risk-soft)",  dot: "bg-risk" },
+  ok:    { label: "Green", color: "var(--good)", soft: "var(--good-bg)", dot: "bg-ok" },
+  watch: { label: "Amber", color: "var(--warn)", soft: "var(--warn-bg)", dot: "bg-watch" },
+  risk:  { label: "Red",   color: "var(--bad)",  soft: "var(--bad-bg)",  dot: "bg-risk" },
 };
 
 /** OKR completion % + monthly target bar (PRD1 §5.4, PRD2 §3.2): ≥80 green, 50-79 amber, <50 red. */
@@ -23,7 +23,7 @@ export function signalForPercent(pct: number): SignalLevel {
   return "risk";
 }
 
-/** Runway months (PRD3 §4.4): ≥6 green, 3-6 amber, <3 red. */
+/** Runway months (PRD3 §4.4): ≥6 green, ≥3 and <6 amber, <3 red. */
 export function signalForRunway(months: number): SignalLevel {
   if (months >= 6) return "ok";
   if (months >= 3) return "watch";

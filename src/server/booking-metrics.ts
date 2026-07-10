@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { istMonthRange, istToday } from "@/lib/dates";
+import { istMonthInstantRange, istToday } from "@/lib/dates";
 import { formatDateTimeInZone } from "@/lib/format";
 import { intakeLabel } from "@/lib/booking-intake";
 
@@ -15,7 +15,8 @@ const istTime = new Intl.DateTimeFormat("en-GB", {
 
 export async function getBookingsOverview() {
   const now = new Date();
-  const month = istMonthRange(istToday());
+  // createdAt is a timestamp - use IST instants, not @db.Date midnight boundaries
+  const month = istMonthInstantRange(istToday());
 
   const [openSlots, upcomingSlots, monthBookings, bookings] = await Promise.all([
     prisma.appointmentSlot.count({ where: { status: "OPEN", startsAt: { gt: now } } }),

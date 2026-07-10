@@ -146,19 +146,19 @@ export function WorkTracker() {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      {/* Progress: weekly bar chart (spans 2 columns on desktop) — violet hero */}
-      <div className="hero-violet hero-orb rise-in relative overflow-hidden rounded-card p-6 lg:col-span-2">
+      {/* Progress: weekly bar chart (spans 2 columns on desktop) — sky hero */}
+      <div className="hero-sky rise-in relative overflow-hidden rounded-hero p-6 lg:col-span-2">
         <div className="relative flex items-start justify-between">
           <div>
-            <p className="flex items-center gap-1.5 text-[13px] font-medium text-white/70">
+            <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink-2">
               <TrendingUp size={14} /> Work time · this week
             </p>
             <p className="mt-1 font-display text-3xl font-bold tracking-tight sm:text-4xl">
               {(weekTotal / 3600).toFixed(1)}
-              <span className="ml-1 text-lg font-semibold text-white/70">h</span>
+              <span className="ml-1 text-lg font-semibold text-ink-2">h</span>
             </p>
           </div>
-          <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur">
+          <span className="rounded-full bg-surface/70 px-2.5 py-1 text-xs font-semibold text-ink">
             Today {fmtShort(todaySec)}
           </span>
         </div>
@@ -172,11 +172,11 @@ export function WorkTracker() {
                 <div className="flex w-full flex-1 items-end justify-center">
                   <div
                     className="w-full max-w-[26px] rounded-full transition-all"
-                    style={{ height: h, background: isToday ? "#ffffff" : "rgba(255,255,255,0.32)" }}
+                    style={{ height: h, background: isToday ? "var(--primary)" : "var(--primary-tint)" }}
                     title={`${dayLetters[i]} · ${fmtShort(sec)}`}
                   />
                 </div>
-                <span className={`text-[11px] ${isToday ? "font-bold text-white" : "text-white/60"}`}>
+                <span className={`text-[11px] ${isToday ? "font-bold text-ink" : "text-ink-2"}`}>
                   {dayLetters[i]}
                 </span>
               </div>
@@ -186,7 +186,7 @@ export function WorkTracker() {
       </div>
 
       {/* Time tracker: automatic, activity-based */}
-      <div className="glass-card rise-in card-hover flex flex-col rounded-card border border-white/80 p-5">
+      <div className="glass-card rise-in card-hover flex flex-col rounded-card p-5">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
             <Timer size={14} /> Time tracker
@@ -194,13 +194,13 @@ export function WorkTracker() {
           <span
             className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
             style={{
-              background: active ? "var(--ok-soft)" : "var(--surface-2)",
-              color: active ? "var(--ok)" : "var(--muted)",
+              background: active ? "var(--good-bg)" : "var(--bg-surface-2)",
+              color: active ? "var(--good)" : "var(--ink-2)",
             }}
           >
             <span
-              className={`h-1.5 w-1.5 rounded-full ${active ? "flame" : ""}`}
-              style={{ background: active ? "var(--ok)" : "var(--muted)" }}
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: active ? "var(--good)" : "var(--ink-3)" }}
             />
             {active ? "Tracking" : "Idle"}
           </span>
@@ -208,13 +208,13 @@ export function WorkTracker() {
 
         <div className="relative mx-auto my-4 grid place-items-center">
           <svg width={168} height={168} viewBox="0 0 168 168" className="-rotate-90">
-            <circle cx="84" cy="84" r={R} fill="none" stroke="var(--surface-2)" strokeWidth="12" />
+            <circle cx="84" cy="84" r={R} fill="none" stroke="var(--bg-surface-2)" strokeWidth="12" />
             <circle
               cx="84"
               cy="84"
               r={R}
               fill="none"
-              stroke="var(--accent)"
+              stroke="var(--primary)"
               strokeWidth="12"
               strokeLinecap="round"
               strokeDasharray={C}

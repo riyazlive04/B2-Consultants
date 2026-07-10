@@ -10,6 +10,7 @@ import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import {
   optionsFrom, PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, PROGRAM_LEVEL_LABELS,
 } from "@/lib/labels";
+import { AmountPair } from "./AmountPair";
 
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
@@ -20,10 +21,14 @@ export function IncomeSection({
   rows,
   today,
   studentOptions = [],
+  fxRate,
+  fxStale,
 }: {
   rows: IncomeRow[];
   today: string;
   studentOptions?: { value: string; label: string }[];
+  fxRate: number;
+  fxStale?: boolean;
 }) {
   const [editing, setEditing] = useState<IncomeRow | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -110,12 +115,17 @@ export function IncomeSection({
           <Field label="Student name">
             <TextInput name="studentName" required placeholder="Who paid" defaultValue={editing?.studentName ?? ""} />
           </Field>
-          <Field label="Amount received (₹)" hint="INR, EUR, or both">
-            <TextInput name="amountInr" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.amountInrRaw) : ""} />
-          </Field>
-          <Field label="Amount received (€)">
-            <TextInput name="amountEur" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.amountEurRaw) : ""} />
-          </Field>
+          <AmountPair
+            fxRate={fxRate}
+            fxStale={fxStale}
+            inrName="amountInr"
+            eurName="amountEur"
+            inrLabel="Amount received (₹)"
+            eurLabel="Amount received (€)"
+            baseHint="INR, EUR, or both"
+            defaultInr={editing ? minorToInput(editing.amountInrRaw) : ""}
+            defaultEur={editing ? minorToInput(editing.amountEurRaw) : ""}
+          />
           <Field label="Program level">
             <Select name="programLevel" options={optionsFrom(PROGRAM_LEVEL_LABELS)} defaultValue={editing?.programLevel ?? "GUIDED"} />
           </Field>

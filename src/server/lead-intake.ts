@@ -35,7 +35,24 @@ export type IntakeLead = {
 
 export type IntakeResult = { lead: Lead; created: boolean; deduped: "externalRef" | "phone" | null };
 
-export async function upsertIntakeLead(input: IntakeLead): Promise<IntakeResult> {
+/** Defence-in-depth: every caller is external-facing (webhooks, public form), so
+ *  hard-cap the field sizes here too - the columns are unbounded Postgres text. */
+function bound(input: IntakeLead): IntakeLead {
+  const cut = (v: string | null | undefined, max: number) => (v == null ? v : v.slice(0, max));
+  return {
+    ...input,
+    name: input.name.slice(0, 160),
+    phone: input.phone.slice(0, 32),
+    email: cut(input.email, 254),
+    city: cut(input.city, 120),
+    industry: cut(input.industry, 160),
+    externalRef: cut(input.externalRef, 300),
+    notes: cut(input.notes, 2000),
+  };
+}
+
+export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
+  const input = bound(rawInput);
   const utm = input.utm && Object.keys(input.utm).length ? (input.utm as Prisma.InputJsonValue) : undefined;
 
   // 1. exact redelivery of the same external record

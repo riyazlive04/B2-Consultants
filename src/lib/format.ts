@@ -97,15 +97,19 @@ export function formatDuration(ms: number): string {
   return `${days < 10 ? days.toFixed(1) : Math.round(days)}d`;
 }
 
-/** Major-unit string ("1500.50") → minor-unit BigInt (150050). Form-input helper. */
+/** Major-unit string ("1500.50") → minor-unit BigInt (150050). Form-input helper.
+ *  Rounds half-up past 2 decimals (never silently floors money) and only ever
+ *  feeds digit-clean strings to BigInt. */
 export function majorStringToMinor(input: string): bigint {
   const cleaned = input.replace(/[^\d.-]/g, "");
   if (!cleaned || cleaned === "-" || cleaned === ".") return BigInt(0);
-  const [whole, frac = ""] = cleaned.split(".");
+  const [whole, fracRaw = ""] = cleaned.split(".");
+  const frac = fracRaw.replace(/\D/g, ""); // strays like "1.-5" must not reach BigInt
   const fracPadded = (frac + "00").slice(0, 2);
+  const roundUp = frac.length > 2 && Number(frac[2]) >= 5 ? BigInt(1) : BigInt(0);
   const negative = whole.startsWith("-");
-  const wholeAbs = whole.replace("-", "") || "0";
-  const minor = BigInt(wholeAbs) * BigInt(100) + BigInt(fracPadded || "0");
+  const wholeAbs = whole.replace(/\D/g, "") || "0";
+  const minor = BigInt(wholeAbs) * BigInt(100) + BigInt(fracPadded || "0") + roundUp;
   return negative ? -minor : minor;
 }
 

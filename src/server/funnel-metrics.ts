@@ -133,14 +133,43 @@ export async function getFunnelOverview(selectedWeek?: string) {
 
   const current = months[months.length - 1];
 
-  // Biggest drop-off between consecutive stages, current month (PRD3 §3.3)
+  // Weakest stage this month (PRD3 §3.3, sharpened): every funnel's biggest raw
+  // drop is ALWAYS awareness → lead (0.1% reach-to-lead is normal), so a raw-drop
+  // alert is permanent noise. Instead compare each stage's carry-through against
+  // its own average over the prior 3 months and flag the one furthest BELOW norm.
   const stageValues = [current.awareness, current.leads, current.calls, current.proposals, current.enrollTotal];
-  let biggestDrop: { fromStage: string; toStage: string; dropPct: number } | null = null;
+  const stagesOf = (m: MonthAgg) => [m.awareness, m.leads, m.calls, m.proposals, m.enrollTotal];
+  const prior = months.slice(0, -1);
+  let biggestDrop: {
+    fromStage: string;
+    toStage: string;
+    dropPct: number; // raw drop this month (kept for the funnel display)
+    currentPct: number; // carry-through this month
+    avgPct: number; // 3-month norm for the same transition
+    severity: "risk" | "watch"; // risk = ≥15% below norm; small misses stay amber
+  } | null = null;
+  let worstRelShortfall = 0;
   for (let i = 0; i < 4; i++) {
     if (stageValues[i] <= 0) continue;
-    const dropPct = ((stageValues[i] - stageValues[i + 1]) / stageValues[i]) * 100;
-    if (!biggestDrop || dropPct > biggestDrop.dropPct) {
-      biggestDrop = { fromStage: STAGE_NAMES[i], toStage: STAGE_NAMES[i + 1], dropPct };
+    const currentPct = (stageValues[i + 1] / stageValues[i]) * 100;
+    const priorRates = prior
+      .map(stagesOf)
+      .filter((v) => v[i] > 0)
+      .map((v) => (v[i + 1] / v[i]) * 100);
+    if (priorRates.length === 0) continue; // no history to judge against
+    const avgPct = priorRates.reduce((a, b) => a + b, 0) / priorRates.length;
+    if (avgPct <= 0 || currentPct >= avgPct) continue;
+    const relShortfall = (avgPct - currentPct) / avgPct;
+    if (relShortfall > worstRelShortfall) {
+      worstRelShortfall = relShortfall;
+      biggestDrop = {
+        fromStage: STAGE_NAMES[i],
+        toStage: STAGE_NAMES[i + 1],
+        dropPct: 100 - currentPct,
+        currentPct,
+        avgPct,
+        severity: relShortfall >= 0.15 ? "risk" : "watch",
+      };
     }
   }
 

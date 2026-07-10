@@ -8,13 +8,24 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import { EXPENSE_CATEGORY_LABELS, optionsFrom } from "@/lib/labels";
+import { AmountPair } from "./AmountPair";
 
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
   return v === BigInt(0) ? "" : (Number(v) / 100).toFixed(2);
 };
 
-export function ExpenseSection({ rows, today }: { rows: ExpenseRow[]; today: string }) {
+export function ExpenseSection({
+  rows,
+  today,
+  fxRate,
+  fxStale,
+}: {
+  rows: ExpenseRow[];
+  today: string;
+  fxRate: number;
+  fxStale?: boolean;
+}) {
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -97,12 +108,17 @@ export function ExpenseSection({ rows, today }: { rows: ExpenseRow[]; today: str
           <Field label="Date">
             <TextInput type="date" name="date" required defaultValue={editing ? editing.date.slice(0, 10) : today} />
           </Field>
-          <Field label="Amount paid (₹)" hint="INR, EUR, or both">
-            <TextInput name="amountInr" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.amountInrRaw) : ""} />
-          </Field>
-          <Field label="Amount paid (€)">
-            <TextInput name="amountEur" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.amountEurRaw) : ""} />
-          </Field>
+          <AmountPair
+            fxRate={fxRate}
+            fxStale={fxStale}
+            inrName="amountInr"
+            eurName="amountEur"
+            inrLabel="Amount paid (₹)"
+            eurLabel="Amount paid (€)"
+            baseHint="INR, EUR, or both"
+            defaultInr={editing ? minorToInput(editing.amountInrRaw) : ""}
+            defaultEur={editing ? minorToInput(editing.amountEurRaw) : ""}
+          />
           <Field label="Expense category">
             <Select name="category" options={optionsFrom(EXPENSE_CATEGORY_LABELS)} defaultValue={editing?.category ?? "TOOLS_SOFTWARE"} />
           </Field>

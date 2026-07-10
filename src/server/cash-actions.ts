@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/rbac";
+import { capabilityCheck } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
 import { majorStringToMinor } from "@/lib/format";
 import type { ActionResult } from "./finance-actions";
@@ -20,7 +20,8 @@ const cashSchema = z.object({
 });
 
 export async function saveCashPosition(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   const parsed = cashSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
@@ -60,7 +61,8 @@ const payableSchema = z.object({
 });
 
 export async function savePayable(id: string | null, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   const parsed = payableSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
@@ -82,7 +84,8 @@ export async function savePayable(id: string | null, form: FormData): Promise<Ac
 }
 
 export async function deletePayable(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   await prisma.payable.delete({ where: { id } });
   revalidatePath("/cash");
   return { ok: true };
@@ -90,7 +93,8 @@ export async function deletePayable(id: string): Promise<ActionResult> {
 
 /** Admin override for the revenue growth-rate assumption in "months to ₹8L" (PRD3 §4.4). */
 export async function setGrowthOverride(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed, denied } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
   const raw = String(form.get("growthPct") ?? "").trim();
   if (raw === "") {
     await prisma.appSetting.deleteMany({ where: { key: "runwayGrowthRatePct" } });

@@ -59,9 +59,12 @@ export const getPendingRows = cache(async () => {
       inr: Number(aggInrMinor(p.totalFeeInrMinor, p.totalFeeEurMinor, p.fxRateUsed)),
       eur: Number(aggEurMinor(p.totalFeeInrMinor, p.totalFeeEurMinor, p.fxRateUsed)),
     };
-    const paid =
-      (p.studentId ? paidByStudentId.get(p.studentId) : undefined) ??
-      paidByName.get(nameKey(p.studentName)) ?? { inr: 0, eur: 0 };
+    // Id-linked rows NEVER fall back to name matching: two students sharing a
+    // name would otherwise cross-credit payments and silently zero a real
+    // receivable. Name matching is only for rows with no student link at all.
+    const paid = p.studentId
+      ? paidByStudentId.get(p.studentId) ?? { inr: 0, eur: 0 }
+      : paidByName.get(nameKey(p.studentName)) ?? { inr: 0, eur: 0 };
     const balance = { inr: Math.max(0, fee.inr - paid.inr), eur: Math.max(0, fee.eur - paid.eur) };
     const overdue =
       p.status === "ACTIVE" && !!p.nextDueDate && p.nextDueDate.getTime() < todayMs;
@@ -91,15 +94,37 @@ export async function getFinanceOverview() {
   const month = istMonthRange(today);
   const year = istYearRange(today);
 
-  const [monthIncomes, monthExpenses, yearIncomes, pendingRows] = await Promise.all([
-    prisma.income.findMany({ where: { date: { gte: month.start, lt: month.end } } }),
-    prisma.expense.findMany({ where: { date: { gte: month.start, lt: month.end } } }),
-    prisma.income.findMany({
-      where: { date: { gte: year.start, lt: year.end } },
-      select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
-    }),
-    getPendingRows(),
-  ]);
+  // Same-day window into LAST month (day 1..today's day) — the honest month-over-
+  // month comparator mid-month; comparing a part-month to a full month always lies.
+  const prevMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+  const prevSameDayEnd = new Date(
+    Math.min(
+      Date.UTC(prevMonthStart.getUTCFullYear(), prevMonthStart.getUTCMonth(), today.getUTCDate() + 1),
+      month.start.getTime(),
+    ),
+  );
+
+  const [monthIncomes, monthExpenses, yearIncomes, pendingRows, incomeList, expenseList, prevIncomes, prevExpenses] =
+    await Promise.all([
+      prisma.income.findMany({ where: { date: { gte: month.start, lt: month.end } } }),
+      prisma.expense.findMany({ where: { date: { gte: month.start, lt: month.end } } }),
+      prisma.income.findMany({
+        where: { date: { gte: year.start, lt: year.end } },
+        select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
+      }),
+      getPendingRows(),
+      // table rows fetched alongside the aggregates - not as extra serial round-trips
+      prisma.income.findMany({ orderBy: { date: "desc" }, take: 500 }),
+      prisma.expense.findMany({ orderBy: { date: "desc" }, take: 500 }),
+      prisma.income.findMany({
+        where: { date: { gte: prevMonthStart, lt: prevSameDayEnd } },
+        select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
+      }),
+      prisma.expense.findMany({
+        where: { date: { gte: prevMonthStart, lt: prevSameDayEnd } },
+        select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
+      }),
+    ]);
 
   const revenue = sumAgg(monthIncomes);
   const expenses = sumAgg(monthExpenses);
@@ -151,9 +176,15 @@ export async function getFinanceOverview() {
       receivables,
       ytdRevenue: toMoney2(sumAgg(yearIncomes)),
       revenueSpark,
+      // last month, cut off at the SAME day-of-month — for honest MoM deltas
+      prevSameDay: {
+        revenueInr: Number(sumAgg(prevIncomes).inr),
+        expensesInr: Number(sumAgg(prevExpenses).inr),
+        netInr: Number(sumAgg(prevIncomes).inr) - Number(sumAgg(prevExpenses).inr),
+      },
     },
-    incomes: monthAllIncomeRows(await prisma.income.findMany({ orderBy: { date: "desc" }, take: 500 })),
-    expenses: (await prisma.expense.findMany({ orderBy: { date: "desc" }, take: 500 })).map((e) => ({
+    incomes: monthAllIncomeRows(incomeList),
+    expenses: expenseList.map((e) => ({
       id: e.id,
       date: e.date.toISOString(),
       agg: {

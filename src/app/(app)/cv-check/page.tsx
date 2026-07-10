@@ -13,7 +13,7 @@ export default async function CvCheckPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">CV Diagnostic</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">CV Diagnostic</h1>
         <p className="mt-1 text-sm text-muted">
           Paste a student’s CV and the target JD - get the match score, missing keywords and weak
           bullets. A coaching aid: it names what’s broken, the student fixes it. Nothing is saved.

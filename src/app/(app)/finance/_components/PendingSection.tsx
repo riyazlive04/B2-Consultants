@@ -5,9 +5,14 @@ import {
   createPendingPayment, deletePendingPayment, updatePendingPayment,
 } from "@/server/finance-actions";
 import type { PendingRow } from "@/server/finance-metrics";
+import type { WhatsAppStatusCell } from "@/server/whatsapp";
+import { sendPaymentReminderMsg } from "@/server/whatsapp-actions";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
+import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { AmountPair } from "./AmountPair";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import { optionsFrom, PENDING_STATUS_LABELS, PROGRAM_LEVEL_LABELS } from "@/lib/labels";
@@ -20,7 +25,17 @@ const minorToInput = (raw: string) => {
 const money2 = (m: { inr: number; eur: number }) =>
   `${formatInrMinor(m.inr, { compact: true })} · ${formatEurMinor(m.eur, { compact: true })}`;
 
-export function PendingSection({ rows }: { rows: PendingRow[] }) {
+export function PendingSection({
+  rows,
+  waStatus = {},
+  fxRate,
+  fxStale,
+}: {
+  rows: PendingRow[];
+  waStatus?: Record<string, WhatsAppStatusCell>;
+  fxRate: number;
+  fxStale?: boolean;
+}) {
   const [editing, setEditing] = useState<PendingRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -74,6 +89,21 @@ export function PendingSection({ rows }: { rows: PendingRow[] }) {
       value: (r) => (r.overdue ? "Overdue" : PENDING_STATUS_LABELS[r.status]),
     },
     {
+      key: "whatsapp", header: "WhatsApp", sortable: false,
+      cell: (r) => {
+        const w = waStatus[r.id];
+        return (
+          <span className="flex items-center gap-2 whitespace-nowrap">
+            {w && <WhatsAppStatusBadge status={w.status} kind={w.kind} at={w.at} />}
+            {r.balance.inr > 0 && (
+              <SendWhatsAppButton action={() => sendPaymentReminderMsg(r.id)} label="Remind" />
+            )}
+          </span>
+        );
+      },
+      value: (r) => waStatus[r.id]?.status ?? "",
+    },
+    {
       key: "actions", header: "", sortable: false,
       cell: (r) => (
         <span className="flex gap-2 whitespace-nowrap">
@@ -114,12 +144,17 @@ export function PendingSection({ rows }: { rows: PendingRow[] }) {
           <Field label="Program level">
             <Select name="programLevel" options={optionsFrom(PROGRAM_LEVEL_LABELS)} defaultValue={editing?.programLevel ?? "GUIDED"} />
           </Field>
-          <Field label="Total fee agreed (₹)" hint="INR, EUR, or both">
-            <TextInput name="totalFeeInr" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.totalFeeInrRaw) : ""} />
-          </Field>
-          <Field label="Total fee agreed (€)">
-            <TextInput name="totalFeeEur" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.totalFeeEurRaw) : ""} />
-          </Field>
+          <AmountPair
+            fxRate={fxRate}
+            fxStale={fxStale}
+            inrName="totalFeeInr"
+            eurName="totalFeeEur"
+            inrLabel="Total fee agreed (₹)"
+            eurLabel="Total fee agreed (€)"
+            baseHint="INR, EUR, or both"
+            defaultInr={editing ? minorToInput(editing.totalFeeInrRaw) : ""}
+            defaultEur={editing ? minorToInput(editing.totalFeeEurRaw) : ""}
+          />
           <Field label="Next payment due date">
             <TextInput type="date" name="nextDueDate" defaultValue={editing?.nextDueDate?.slice(0, 10) ?? ""} />
           </Field>

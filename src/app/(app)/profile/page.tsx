@@ -11,6 +11,7 @@ const ROLE_LABELS: Record<string, string> = {
   HEAD: "Team Head",
   USER: "Team Member",
   STUDENT: "Student",
+  TUTOR: "Tutor",
 };
 
 export default async function ProfilePage() {
@@ -18,7 +19,7 @@ export default async function ProfilePage() {
   const game = await getMyGame(session.user.id);
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">Your profile</h1>
+      <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Your profile</h1>
       <p className="mt-2 text-muted">Update your photo and display name. This is how you appear across the dashboard.</p>
 
       {/* Player card — level, XP and badges from the Arena */}

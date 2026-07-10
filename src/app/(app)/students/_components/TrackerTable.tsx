@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { TrackerRow } from "@/server/students-metrics";
+import type { WhatsAppStatusCell } from "@/server/whatsapp";
+import { sendStudentNudge } from "@/server/whatsapp-actions";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
+import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
 import { MomentumChip } from "@/components/ui/gamification";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { signalForStudent } from "@/lib/signals";
@@ -13,7 +17,15 @@ import { MILESTONE_LABELS, PROGRAM_LEVEL_LABELS } from "@/lib/labels";
 const SIGNAL_ORDER: Record<string, number> = { RED: 0, AMBER: 1, GREEN: 2 };
 
 /** 90/120-day tracker list (PRD2 §4.3) with the three PRD sorts + signal/level filters. */
-export function TrackerTable({ rows, isAdmin }: { rows: TrackerRow[]; isAdmin: boolean }) {
+export function TrackerTable({
+  rows,
+  isAdmin,
+  waStatus = {},
+}: {
+  rows: TrackerRow[];
+  isAdmin: boolean;
+  waStatus?: Record<string, WhatsAppStatusCell>;
+}) {
   const [signalFilter, setSignalFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
   const [sort, setSort] = useState<"signal" | "session" | "end">("signal");
@@ -79,6 +91,19 @@ export function TrackerTable({ rows, isAdmin }: { rows: TrackerRow[]; isAdmin: b
       key: "checkin", header: "Next check-in",
       cell: (r) => (r.nextCheckInDate ? formatDate(r.nextCheckInDate) : "-"),
       value: (r) => r.nextCheckInDate?.slice(0, 10) ?? "",
+    },
+    {
+      key: "whatsapp", header: "WhatsApp", sortable: false,
+      cell: (r) => {
+        const w = waStatus[r.studentId];
+        return (
+          <span className="flex items-center gap-2 whitespace-nowrap">
+            {w && <WhatsAppStatusBadge status={w.status} kind={w.kind} at={w.at} />}
+            <SendWhatsAppButton action={() => sendStudentNudge(r.enrollmentId, "CHECKIN_NUDGE")} label="Nudge" />
+          </span>
+        );
+      },
+      value: (r) => waStatus[r.studentId]?.status ?? "",
     },
   ];
 

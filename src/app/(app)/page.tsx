@@ -1,13 +1,18 @@
 import { redirect } from "next/navigation";
-import { Gauge, IndianRupee, BellRing, ClipboardList, GraduationCap, Trophy } from "lucide-react";
+import {
+  BellRing, ClipboardList, Gauge, GraduationCap, IndianRupee, Medal, ReceiptText, Trophy, Waypoints,
+} from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { PageHeader } from "@/components/ui/kit";
 import { WorkTracker } from "./_components/WorkTracker";
 import { FounderPulse } from "./_components/FounderPulse";
 import { getTodayInrPerEur } from "@/lib/fx";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { signalForRunway } from "@/lib/signals";
 import { requireSession } from "@/lib/rbac";
 import { getRunwaySnapshot } from "@/server/cash-metrics";
+import { getPendingRows } from "@/server/finance-metrics";
+import { getPipelineSnapshot } from "@/server/pipeline-metrics";
 import { getMyGame, getTeamGame } from "@/server/gamification";
 import { computeNotifications } from "@/server/notifications";
 
@@ -17,14 +22,18 @@ export default async function Home() {
   const session = await requireSession();
   // Students land straight on their journey — the founder home is team-facing.
   if (session.role === "STUDENT") redirect("/my-journey");
+  // Tutors only work inside the German Note section.
+  if (session.role === "TUTOR") redirect("/german-note");
   const isAdmin = session.role === "ADMIN";
 
-  const [fx, runway, notifications, game, teamGame] = await Promise.all([
+  const [fx, runway, notifications, game, teamGame, pipeline, pendingRows] = await Promise.all([
     getTodayInrPerEur(),
     isAdmin ? getRunwaySnapshot() : Promise.resolve(null),
     computeNotifications(session.role, session.user.id),
     getMyGame(session.user.id),
     isAdmin ? getTeamGame() : Promise.resolve(null),
+    isAdmin ? getPipelineSnapshot() : Promise.resolve(null),
+    isAdmin ? getPendingRows() : Promise.resolve(null),
   ]);
 
   // Attention card colour follows the most severe pending notification.
@@ -35,20 +44,27 @@ export default async function Home() {
 
   const months = runway?.runwayMonths ?? null;
 
-  return (
-    <div>
-      <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-accent">Primary</p>
-      <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
-        Welcome back, {session.user.name.split(" ")[0]}
-      </h1>
-      <p className="mt-2 text-muted">Here is where things stand today.</p>
+  // Overdue receivables — money already earned that hasn't arrived (Admin only).
+  const overdueRows = (pendingRows ?? []).filter(
+    (p) => p.status === "ACTIVE" && p.overdue && p.balance.inr > 0,
+  );
+  const overdueInr = overdueRows.reduce((a, p) => a + p.balance.inr, 0);
+  const oldestOverdueDays = overdueRows.reduce((a, p) => Math.max(a, p.daysOverdue), 0);
 
-      {/* Admin sees business outcomes (pulse + wins); team members keep the
-          personal work-time tracker for their own day. */}
-      <div className="mt-8">{isAdmin ? <FounderPulse /> : <WorkTracker />}</div>
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Primary"
+        title={`Welcome back, ${session.user.name.split(" ")[0]}`}
+        subtitle="Here is where things stand today."
+      />
+
+      {/* Admin sees business outcomes (pace + motion + alerts); team members keep
+          the personal work-time tracker for their own day. */}
+      {isAdmin ? <FounderPulse notifications={notifications} /> : <WorkTracker />}
 
       {/* At a glance: live, clickable KPIs */}
-      <section className="mt-10">
+      <section>
         <h2 className="font-display text-lg font-semibold">At a glance</h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {isAdmin && (
@@ -58,8 +74,61 @@ export default async function Home() {
               target={months == null ? undefined : "goal 6 mo"}
               signal={months == null ? undefined : signalForRunway(months)}
               progress={months == null ? undefined : Math.min(1, months / 6)}
+              tooltip="Months the bank balance lasts at the current burn: cash ÷ average monthly expenses over the last 3 months. Green ≥ 6, amber 3–6, red < 3."
               icon={<Gauge size={18} />}
               href="/cash"
+            />
+          )}
+
+          {isAdmin && pipeline && (
+            <MetricCard
+              label="Pipeline value"
+              value={
+                pipeline.avgFeeKnown
+                  ? formatInrMinor(pipeline.pipelineValueInr, { compact: true })
+                  : `${pipeline.interestedLeads} deals`
+              }
+              secondary={
+                !pipeline.avgFeeKnown
+                  ? "No income history yet to price open deals"
+                  : pipeline.forecast30Inr > 0
+                    ? `${pipeline.interestedLeads} open deal${pipeline.interestedLeads === 1 ? "" : "s"} · ${formatInrMinor(pipeline.forecast30Inr, { compact: true })} expected in 30d`
+                    : `${pipeline.interestedLeads} open deal${pipeline.interestedLeads === 1 ? "" : "s"} · no closes yet to forecast from`
+              }
+              tooltip="Open deals in strategy-call → deposit stages × the average program fee from real income history. The 30-day forecast applies this month's close rate. This is next month's revenue — before it happens."
+              icon={<Waypoints size={18} />}
+              href="/pipeline"
+            />
+          )}
+
+          {isAdmin && pipeline && (
+            <MetricCard
+              label="Wins this month"
+              value={String(pipeline.winsThisMonth)}
+              secondary={
+                pipeline.completedThisMonth > 0
+                  ? `${formatPct(pipeline.closePct)} close rate · typical month ≈ 4 wins`
+                  : "typical month ≈ 4 wins (2026 avg)"
+              }
+              tooltip="Deals moved to Won this month, with the close rate from completed discovery calls. The 2026 sheets average ~4 wins a month — the honest yardstick."
+              icon={<Medal size={18} />}
+              href="/pipeline"
+            />
+          )}
+
+          {isAdmin && (
+            <MetricCard
+              label="Overdue receivables"
+              value={overdueRows.length === 0 ? "None" : formatInrMinor(overdueInr, { compact: true })}
+              signal={overdueRows.length === 0 ? "ok" : "risk"}
+              secondary={
+                overdueRows.length === 0
+                  ? "All payments on schedule"
+                  : `${overdueRows.length} payment${overdueRows.length > 1 ? "s" : ""} past due · oldest ${oldestOverdueDays}d`
+              }
+              tooltip="Money already earned that hasn't arrived. Collecting it costs nothing in ad spend or sales calls — chase this before chasing new leads."
+              icon={<ReceiptText size={18} />}
+              href="/finance"
             />
           )}
 
@@ -71,18 +140,22 @@ export default async function Home() {
             href={isAdmin ? "/finance" : undefined}
           />
 
-          <MetricCard
-            label="Needs attention"
-            value={
-              notifications.length === 0
-                ? "All clear"
-                : `${notifications.length} item${notifications.length > 1 ? "s" : ""}`
-            }
-            secondary={top ? top.title : "Nothing needs you right now"}
-            signal={attnSignal}
-            icon={<BellRing size={18} />}
-            href={top ? top.href : undefined}
-          />
+          {/* Non-admins keep the attention card here; the founder gets the full
+              list inside the pulse above instead of a count behind a click. */}
+          {!isAdmin && (
+            <MetricCard
+              label="Needs attention"
+              value={
+                notifications.length === 0
+                  ? "All clear"
+                  : `${notifications.length} item${notifications.length > 1 ? "s" : ""}`
+              }
+              secondary={top ? top.title : "Nothing needs you right now"}
+              signal={attnSignal}
+              icon={<BellRing size={18} />}
+              href={top ? top.href : undefined}
+            />
+          )}
 
           {!isAdmin && (
             <MetricCard
@@ -95,7 +168,7 @@ export default async function Home() {
           )}
 
           {/* Arena: my level + rank, or (Admin) the current weekly champion */}
-          {game && (
+          {!isAdmin && game && (
             <MetricCard
               label="Arena"
               value={`Lv ${game.me.level.level} · ${game.me.level.title}`}

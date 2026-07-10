@@ -13,9 +13,10 @@ import { MILESTONE_LABELS } from "@/lib/labels";
 
 /**
  * IN-APP notification centre. Server-computed on load + light polling - the same
- * "live badge" model the PRDs allow. Deliberately NO email / NO WhatsApp (every
- * PRD excludes outbound alerts). Items are stateless status alerts: they appear
- * while a condition holds and disappear when it's resolved.
+ * "live badge" model the PRDs allow. This centre stays in-app only (no email here).
+ * Outbound WhatsApp lives in a separate, opt-in WATI layer (Wave-2: src/server/whatsapp.ts),
+ * not here — these items are stateless status alerts that appear while a condition holds
+ * and disappear when it's resolved.
  */
 
 export type Notification = {
@@ -34,11 +35,77 @@ function istHourNow(): number {
 }
 
 /**
- * Wrapped in React.cache so the layout, the home page and the notification bell
- * that all run in one request share ONE computation instead of re-querying the
- * (heavy) pending / runway / gamification joins 2–3× per navigation.
+ * German Note community engagement (Skool-style): recent replies, likes and
+ * @mentions on the viewer's own posts/comments. Derived like every other
+ * notification here — surfaces while it's "recent" (last 3 days), no read-state.
  */
-export const computeNotifications = cache(_computeNotifications);
+async function gnEngagementNotifications(userId: string, today: Date): Promise<Notification[]> {
+  const since = new Date(today.getTime() - 3 * 86400000);
+  const [replies, postLikes, commentLikes, mentionPosts, mentionComments] = await Promise.all([
+    prisma.gnComment.count({ where: { post: { authorId: userId }, authorId: { not: userId }, createdAt: { gte: since } } }),
+    prisma.gnLike.count({ where: { post: { authorId: userId }, userId: { not: userId }, createdAt: { gte: since } } }),
+    prisma.gnCommentLike.count({ where: { comment: { authorId: userId }, userId: { not: userId }, createdAt: { gte: since } } }),
+    prisma.gnPost.count({ where: { mentionedUserIds: { has: userId }, authorId: { not: userId }, createdAt: { gte: since } } }),
+    prisma.gnComment.count({ where: { mentionedUserIds: { has: userId }, authorId: { not: userId }, createdAt: { gte: since } } }),
+  ]);
+  const items: Notification[] = [];
+  const mentions = mentionPosts + mentionComments;
+  if (mentions > 0) {
+    items.push({
+      id: "gn-mention",
+      severity: "info",
+      title: `You were mentioned ${mentions} time${mentions > 1 ? "s" : ""} in the community`,
+      body: "Someone tagged you in German Note — jump in and reply.",
+      href: "/german-note",
+    });
+  }
+  if (replies > 0) {
+    items.push({
+      id: "gn-replies",
+      severity: "info",
+      title: `${replies} new repl${replies > 1 ? "ies" : "y"} to your posts`,
+      body: "Your German Note community posts got new comments.",
+      href: "/german-note",
+    });
+  }
+  const likes = postLikes + commentLikes;
+  if (likes > 0) {
+    items.push({
+      id: "gn-likes",
+      severity: "win",
+      title: `${likes} new like${likes > 1 ? "s" : ""} in the community`,
+      body: "People are liking your German Note posts — that's community points toward your level.",
+      href: "/german-note",
+    });
+  }
+  return items;
+}
+
+/**
+ * Two cache layers:
+ *  - React.cache: the layout, home page and bell in ONE request share one run.
+ *  - a module-level TTL memo: the bell's 2-minute poll (per tab!) and every
+ *    navigation re-hit this path; the underlying joins (pending payments, runway,
+ *    the whole gamification engine) are the most expensive queries in the app and
+ *    none of the conditions need sub-minute freshness.
+ * Mutations don't need to invalidate: 45s staleness on a status feed is invisible,
+ * and the per-request layer still guarantees intra-request consistency.
+ */
+const NOTIF_TTL_MS = 45_000;
+const notifMemo = new Map<string, { at: number; items: Notification[] }>();
+
+export const computeNotifications = cache(async (role: AppRole, userId: string) => {
+  const key = `${role}:${userId}`;
+  const hit = notifMemo.get(key);
+  if (hit && Date.now() - hit.at < NOTIF_TTL_MS) return hit.items;
+  const items = await _computeNotifications(role, userId);
+  notifMemo.set(key, { at: Date.now(), items });
+  if (notifMemo.size > 500) {
+    // tiny user base; a hard cap just guards against unbounded growth
+    for (const [k, v] of notifMemo) if (Date.now() - v.at >= NOTIF_TTL_MS) notifMemo.delete(k);
+  }
+  return items;
+});
 
 async function _computeNotifications(role: AppRole, userId: string): Promise<Notification[]> {
   const items: Notification[] = [];
@@ -48,7 +115,12 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   if (role === "STUDENT") {
     const portal = await getMyStudentPortal(userId);
     const e = portal?.primary;
-    if (!e) return items;
+    // German Note learners have no B2 enrollment — still get community engagement.
+    if (!e) {
+      items.push(...(await gnEngagementNotifications(userId, today)));
+      const order = { risk: 0, watch: 1, win: 2, info: 3 };
+      return items.sort((a, b) => order[a.severity] - order[b.severity]);
+    }
 
     // milestone reached in the last 3 days → celebrate
     const threeDaysAgo = new Date(today.getTime() - 3 * 86400000);
@@ -103,6 +175,14 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       });
     }
 
+    items.push(...(await gnEngagementNotifications(userId, today)));
+    const order = { risk: 0, watch: 1, win: 2, info: 3 };
+    return items.sort((a, b) => order[a.severity] - order[b.severity]);
+  }
+
+  // ── TUTOR: German Note only — community engagement, no business notifications ──
+  if (role === "TUTOR") {
+    items.push(...(await gnEngagementNotifications(userId, today)));
     const order = { risk: 0, watch: 1, win: 2, info: 3 };
     return items.sort((a, b) => order[a.severity] - order[b.severity]);
   }
@@ -353,6 +433,9 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       href: "/funnel",
     });
   }
+
+  // Admin also posts in the German Note community (e.g. the pinned welcome).
+  items.push(...(await gnEngagementNotifications(userId, today)));
 
   const order = { risk: 0, watch: 1, win: 2, info: 3 };
   return items.sort((a, b) => order[a.severity] - order[b.severity]);

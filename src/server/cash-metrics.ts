@@ -37,7 +37,7 @@ export const getRunwaySnapshot = cache(async () => {
     prisma.cashPosition.findFirst({ orderBy: { date: "desc" } }),
     prisma.expense.findMany({
       where: { date: { gte: threeMonthsAgo, lt: thisMonthStart } },
-      select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
+      select: { date: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
     }),
   ]);
 
@@ -45,7 +45,13 @@ export const getRunwaySnapshot = cache(async () => {
     (a, e) => a + Number(aggInrMinor(e.amountInrMinor, e.amountEurMinor, e.fxRateUsed)),
     0,
   );
-  const burnInr = totalExpensesInr / 3;
+  // Average over the months that actually have expense data, not a flat /3 —
+  // a young business (or an un-backfilled month) would otherwise dilute burn
+  // and overstate runway, silencing the <3/<6-month alerts.
+  const monthsWithData = new Set(
+    expenses.map((e) => `${e.date.getUTCFullYear()}-${e.date.getUTCMonth()}`),
+  ).size;
+  const burnInr = monthsWithData > 0 ? totalExpensesInr / monthsWithData : 0;
   const cashInr = latestCash ? Number(latestCash.bankBalanceInrMinor) : null;
   const runwayMonths = cashInr !== null && burnInr > 0 ? Math.round((cashInr / burnInr) * 10) / 10 : null;
 

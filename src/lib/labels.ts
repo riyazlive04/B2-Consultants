@@ -46,6 +46,12 @@ export const PENDING_STATUS_LABELS: Record<string, string> = {
   DROPPED: "Dropped",
 };
 
+// Telecaller bonus/commission payout state
+export const PAYOUT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pending",
+  PAID: "Paid",
+};
+
 export const LEAD_SOURCE_LABELS: Record<string, string> = {
   INSTAGRAM: "Instagram",
   YOUTUBE: "YouTube",

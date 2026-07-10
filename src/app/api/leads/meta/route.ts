@@ -12,8 +12,8 @@ import { upsertIntakeLead } from "@/server/lead-intake";
  *        (de-duped on source+externalRef = leadgen_id).
  *
  * Env (see .env.example): META_VERIFY_TOKEN, META_APP_SECRET, META_PAGE_ACCESS_TOKEN,
- * META_GRAPH_VERSION (optional, default v19.0). Absent creds → the endpoint acks but no-ops,
- * so Meta doesn't retry forever while you're still wiring the app.
+ * META_GRAPH_VERSION (optional, default v19.0). META_APP_SECRET is REQUIRED for POSTs -
+ * without it the endpoint refuses (503) rather than accepting unverifiable payloads.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,10 +48,10 @@ function mapFields(fd: FieldDatum[]): { name: string; phone: string; email?: str
     }
     return undefined;
   };
-  const name = get("full_name", "name") ?? get("first_name");
-  const phone = get("phone_number", "phone", "mobile", "whatsapp");
-  const email = get("email");
-  const city = get("city", "location");
+  const name = (get("full_name", "name") ?? get("first_name"))?.slice(0, 160);
+  const phone = get("phone_number", "phone", "mobile", "whatsapp")?.slice(0, 32);
+  const email = get("email")?.slice(0, 254);
+  const city = get("city", "location")?.slice(0, 120);
   if (!name || !phone) return null; // not enough to be a usable lead
   return { name, phone, email, city };
 }
@@ -60,8 +60,10 @@ export async function POST(req: NextRequest) {
   const raw = await req.text();
   const appSecret = process.env.META_APP_SECRET;
 
-  // Verify the payload came from Meta (skip only if no secret configured yet).
-  if (appSecret && !signatureValid(raw, req.headers.get("x-hub-signature-256"), appSecret)) {
+  // Fail CLOSED: without the app secret we cannot verify the sender, so we do not
+  // accept the payload (a fail-open here = unauthenticated lead injection).
+  if (!appSecret) return new Response("Webhook not configured", { status: 503 });
+  if (!signatureValid(raw, req.headers.get("x-hub-signature-256"), appSecret)) {
     return new Response("Invalid signature", { status: 401 });
   }
 
@@ -77,7 +79,9 @@ export async function POST(req: NextRequest) {
   const leadgenIds: { id: string; formId?: string }[] = [];
   for (const entry of body.entry ?? []) {
     for (const ch of entry.changes ?? []) {
-      if (ch.field === "leadgen" && ch.value?.leadgen_id) {
+      // leadgen ids are numeric - reject anything else so the id can never
+      // smuggle path segments or query params into the Graph API URL below.
+      if (ch.field === "leadgen" && ch.value?.leadgen_id && /^\d{1,32}$/.test(ch.value.leadgen_id)) {
         leadgenIds.push({ id: ch.value.leadgen_id, formId: ch.value.form_id });
       }
     }
@@ -88,7 +92,7 @@ export async function POST(req: NextRequest) {
   for (const { id } of leadgenIds) {
     if (!token) continue; // no page token → can't fetch fields; ack without creating
     try {
-      const res = await fetch(`https://graph.facebook.com/${gv}/${id}?access_token=${encodeURIComponent(token)}`, {
+      const res = await fetch(`https://graph.facebook.com/${encodeURIComponent(gv)}/${encodeURIComponent(id)}?access_token=${encodeURIComponent(token)}`, {
         cache: "no-store",
       });
       if (!res.ok) continue;

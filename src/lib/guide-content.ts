@@ -17,6 +17,18 @@ export type GuideEntry = {
 
 export const GUIDES: GuideEntry[] = [
   {
+    section: "console", icon: "🎛️", title: "Founder Console", href: "/console",
+    what: "The rules of the app itself - sections, the XP engine, goals and rewards. Admin-only.",
+    steps: [
+      "Sections: rename, re-icon, reorder, regroup or switch off any nav section, and set which roles see it by default. Per-user overrides in Users → Users & access still win.",
+      "Gamification: edit XP values, the level ladder, badges, weekly quests and the student journey. Use “New version” to change the rules from a future date - work already done keeps the XP it earned, so nobody is demoted and no badge is re-locked.",
+      "Goals: set a target for the team or one person over a month, quarter or year. Progress is derived from work already recorded, so a goal set today immediately shows how the period is going.",
+      "Rewards: write rules like “30-day streak → ₹2,000”, then hit Scan for qualifiers. Whoever qualified shows up as a pending grant to approve, decline or mark paid.",
+      "Scanning is safe to repeat: nobody is ever paid twice, and a grant you declined never comes back.",
+    ],
+    tip: "Editing the live ruleset re-scores work done since that ruleset began. To change only what happens next, create a new version instead.",
+  },
+  {
     section: "finance", icon: "💰", title: "Finance", href: "/finance",
     what: "Daily money picture - income, expenses, profit, receivables. Admin-only.",
     steps: [
@@ -68,9 +80,11 @@ export const GUIDES: GuideEntry[] = [
       "Daily logs tab: who logged today, the 7 PM missing badge, weekly totals per person.",
       "OKRs tab: set max 3 per person per month; circles go green/amber/red on completion %.",
       "Team & org chart: profile cards, display-only chart, reorder with arrows.",
-      "Users & access: create logins, pick a role, then toggle exactly which features each person sees.",
+      "Users & access → Invite user: pick a role as a starting preset, then adjust two separate things. MODULES are what they can see; CAPABILITIES are what they can change. A head coach can read Finance without being able to post to the ledger.",
+      "You'll get a single-use invite link to send them — they set their own password, and nobody else ever sees it. Minting a new link kills the old one.",
+      "Suspend signs a person out immediately and blocks them from signing in again; Reactivate undoes it. Delete removes the login for good — the work they recorded stays.",
     ],
-    tip: "A profile's “daily log form” setting decides which questions that person answers each day.",
+    tip: "Grant “Manage team & access” to delegate seat management. A delegate can never mint an Admin, edit an Admin, edit their own row, or hand out a capability they don't hold themselves.",
   },
   {
     section: "students", icon: "🎓", title: "Students", href: "/students",
@@ -108,6 +122,19 @@ export const GUIDES: GuideEntry[] = [
     tip: "Nothing is saved and nothing is rewritten - it diagnoses, the student does the work.",
   },
   {
+    section: "german-note", icon: "🇩🇪", title: "German Note", href: "/german-note",
+    what: "German language batches: a Classroom of Fathom recordings, a class schedule, a Skool-style community, members and a leaderboard.",
+    steps: [
+      "Open a batch → Classroom: lessons grouped into modules with a course-progress bar. Mark each class Watched to track completion. Recordings are yours for LIFETIME.",
+      "Schedule tab: upcoming live classes with a Join link; tutors schedule them, students see what's next (also surfaced on the main page).",
+      "Tutors: classes are recorded by fathom.ai - hit Copy share link in Fathom and paste it into the batch; use Manage modules to build the curriculum.",
+      "Community feed (main page + each batch's Discussion): post with a title/category/image, @mention people, comment and like. Likes are community points that raise your level.",
+      "Leaderboard ranks members by likes received (7-day / 30-day / all-time); Members lists everyone with their level and activity.",
+      "Admins manage batches, members and tutor accounts under Manage.",
+    ],
+    tip: "Recordings play right on the page - use “open original” to open them on Fathom itself.",
+  },
+  {
     section: "funnel", icon: "⏬", title: "Conversion Funnel", href: "/funnel",
     what: "Awareness → enrolled, weekly snapshots, drop-off alert, source attribution. Admin-only.",
     steps: [
@@ -132,7 +159,7 @@ export const GUIDES: GuideEntry[] = [
     section: "general", icon: "🔔", title: "Notifications & badges", href: "/",
     what: "The bell shows live, in-app alerts - nothing is ever emailed or WhatsApped.",
     steps: [
-      "Red dot items need action now (overdue money, red students); amber is watch; brass is a win.",
+      "Red dot items need action now (overdue money, red students); amber is watch; green is a win.",
       "Alerts clear themselves when the underlying problem is fixed - the bell is always current.",
       "Click any alert to jump straight to the page where you fix it.",
     ],

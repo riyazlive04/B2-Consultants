@@ -14,10 +14,14 @@ import {
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Columns } from "@/components/ui/charts";
 import { Tabs } from "@/components/ui/Tabs";
-import { istToday, toDateInputValue } from "@/lib/dates";
+import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
+import { sendLeadReminder } from "@/server/whatsapp-actions";
+import { istMonthRange, istToday, toDateInputValue } from "@/lib/dates";
 import { formatInrMinor, formatPct } from "@/lib/format";
-import { requireSection } from "@/lib/rbac";
+import { hasCapability, requireSection } from "@/lib/rbac";
+import { PageHeader, Pill } from "@/components/ui/kit";
 import { getPipelineOverview } from "@/server/pipeline-metrics";
+import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { getFirstCallSplit } from "@/server/assignment";
 import { LeadSection } from "./_components/LeadSection";
 import { OutcomeSection } from "./_components/OutcomeSection";
@@ -28,14 +32,26 @@ export const dynamic = "force-dynamic";
 
 export default async function PipelinePage() {
   const session = await requireSection("pipeline");
+  // Two different questions, deliberately answered by two different things:
+  //   isAdmin           → WHOSE leads you see (everyone's, or only your own)
+  //   canConfigure      → whether you may set the target, reassign, or delete
+  // Admins always hold the capability, so nothing changes for them.
   const isAdmin = session.role === "ADMIN";
+  const canConfigure = hasCapability(session.role, session.capabilities, "pipeline.configure");
   const { metrics, target, leads, outcomes, leadOptions, assignees, callFirst, riskDeals } =
     await getPipelineOverview(session.user.id, isAdmin);
   const callSplit = isAdmin ? await getFirstCallSplit() : null;
+  const waByLead = await getWhatsAppStatusMap("leadId", leads.map((l) => l.id));
   const today = toDateInputValue(istToday());
 
   const conv = metrics.conversionsByLevel;
   const wonCount = conv.SOLO + conv.GUIDED + conv.ELITE;
+
+  // % of target the calendar expects by today — the TargetBar judges pace with it
+  const now = istToday();
+  const monthRange = istMonthRange(now);
+  const daysInMonth = Math.round((monthRange.end.getTime() - monthRange.start.getTime()) / 86400000);
+  const expectedPct = Math.min(100, (now.getUTCDate() / daysInMonth) * 100);
 
   // Lead flow, one column per day for the last 7 days (+ delta vs the 7 before)
   const t = istToday();
@@ -67,51 +83,47 @@ export default async function PipelinePage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      {/* Header strip - title left, reporting period right */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-4 shadow-card">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 flex-none place-items-center rounded-field bg-accent-soft text-accent">
-            <Workflow size={20} />
-          </span>
-          <div>
-            <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">Pipeline</h1>
-            <p className="text-xs text-muted">
-              {isAdmin
-                ? "Every lead from first contact to paid student - this month, auto-calculated."
-                : "Enter leads and discovery call outcomes. You see only your own entries."}
-            </p>
-          </div>
-        </div>
-        <span className="rounded-full border border-line bg-surface-2 px-3 py-1.5 text-xs font-medium text-muted">
-          This month
-        </span>
-      </div>
+      <PageHeader
+        icon={<Workflow size={20} />}
+        title="Pipeline"
+        subtitle={
+          isAdmin
+            ? "Every lead from first contact to paid student - this month, auto-calculated."
+            : "Enter leads and discovery call outcomes. You see only your own entries."
+        }
+        actions={<Pill>This month</Pill>}
+      />
+
+      {/* The target bar follows the CAPABILITY, not the role — that's what makes
+          "Configure telecaller board" worth granting to a non-Admin. */}
+      {canConfigure && (
+        <TargetBar
+          month={target.month}
+          targetInrMinor={target.targetInrMinor}
+          revenueInrMinor={target.revenueInrMinor}
+          pct={target.pct}
+          expectedPct={expectedPct}
+          isAdmin={canConfigure}
+        />
+      )}
 
       {isAdmin && (
         <>
-          <TargetBar
-            month={target.month}
-            targetInrMinor={target.targetInrMinor}
-            revenueInrMinor={target.revenueInrMinor}
-            pct={target.pct}
-            isAdmin
-          />
-
           {/* Hero bento - value cards, completion progress, close-rate gauge */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="flex flex-col gap-4">
-              <div className="flex-1 rounded-card p-5 shadow-card" style={{ background: "var(--ink)" }}>
+              <div className="hero-sky flex-1 rounded-card p-5 shadow-card">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[13px] font-medium text-white/70">Pipeline value</p>
-                  <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white">
+                  <p className="text-[13px] font-medium text-ink-2">Pipeline value</p>
+                  <span className="rounded-full bg-surface/70 px-2 py-0.5 text-[11px] font-medium text-ink-2">
                     <TrendingUp size={11} className="mr-1 inline" />
                     {formatInrMinor(metrics.forecast30Inr, { compact: true })} 30-day forecast
                   </span>
                 </div>
-                <p className="mt-2 font-display text-3xl font-bold tracking-tight text-white">
+                <p className="mt-2 font-display text-3xl font-bold tracking-tight text-ink">
                   {formatInrMinor(metrics.pipelineValueInr, { compact: true })}
                 </p>
-                <p className="mt-1 text-xs text-white/50">
+                <p className="mt-1 text-xs text-ink-3">
                   {metrics.avgFeeKnown ? "Open leads × avg program fee" : "Needs income history to learn avg fee"}
                 </p>
               </div>
@@ -140,7 +152,7 @@ export default async function PipelinePage() {
                   className="h-full rounded-full transition-all"
                   style={{
                     width: `${metrics.booked > 0 ? Math.min(100, (metrics.completed / metrics.booked) * 100) : 0}%`,
-                    background: "linear-gradient(90deg, var(--chart-1), var(--chart-4))",
+                    background: "var(--primary)",
                   }}
                 />
               </div>
@@ -178,6 +190,7 @@ export default async function PipelinePage() {
                 <p className="mt-2 text-xs text-muted">
                   Close rate {formatPct(metrics.closePct)} · Solo {conv.SOLO} · Guided {conv.GUIDED} · Elite {conv.ELITE}
                 </p>
+                <p className="tnum mt-1 text-[11px] text-ink-3">typical 2026 month ≈ 4 wins (range 2–7)</p>
               </div>
             </div>
           </div>
@@ -221,12 +234,13 @@ export default async function PipelinePage() {
                     <span className="font-display font-semibold text-muted">{i + 1}.</span>
                     <span className="font-semibold">{l.name}</span>
                     <span className="tnum text-xs text-muted">{l.phone}</span>
-                    <span className="ml-auto flex flex-wrap gap-1">
+                    <span className="ml-auto flex flex-wrap items-center gap-1">
                       {l.reasons.map((r) => (
                         <span key={r} className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
                           {r}
                         </span>
                       ))}
+                      <SendWhatsAppButton action={sendLeadReminder.bind(null, l.id)} label="Remind" />
                     </span>
                   </li>
                 ))}
@@ -252,7 +266,10 @@ export default async function PipelinePage() {
                   <li key={l.id} className="flex flex-wrap items-center gap-2 rounded-field px-3 py-2 text-sm" style={{ background: "var(--risk-soft)" }}>
                     <span className="font-semibold">{l.name}</span>
                     <span className="tnum text-xs text-muted">{l.phone}</span>
-                    <span className="ml-auto text-xs font-medium text-risk">{l.risk}</span>
+                    <span className="ml-auto flex items-center gap-2 text-xs font-medium text-risk">
+                      {l.risk}
+                      <SendWhatsAppButton action={sendLeadReminder.bind(null, l.id)} label="Remind" />
+                    </span>
                   </li>
                 ))}
                 {riskDeals.length === 0 && <p className="text-sm text-muted">Nothing at risk right now. 🌿</p>}
@@ -264,18 +281,24 @@ export default async function PipelinePage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <MetricCard label="Leads this week" value={metrics.leadsThisWeek} icon={<UserPlus size={18} />} />
             <MetricCard label="Calls booked" value={metrics.booked} icon={<PhoneCall size={18} />} />
+            {/* Rate tiles carry the 2026 sheet benchmarks (SALES-LOGIC §4) — a rate
+                without its normal range is just a number. Signals band vs the range,
+                not vs generic 50/80 cutoffs. */}
             <MetricCard
               label="Show-up rate"
               value={formatPct(metrics.showUpPct)}
               secondary="Completed ÷ booked"
+              target="typ. 52–70%"
+              tooltip="Discovery calls conducted ÷ booked. The 2026 sheets run 52–70% at this stage (the famous 91.6% show rate is the later sales call, not this one)."
               progress={metrics.showUpPct / 100}
               icon={<Percent size={18} />}
-              signal={metrics.booked === 0 ? undefined : metrics.showUpPct >= 80 ? "ok" : metrics.showUpPct >= 50 ? "watch" : "risk"}
+              signal={metrics.booked === 0 ? undefined : metrics.showUpPct >= 52 ? "ok" : metrics.showUpPct >= 40 ? "watch" : "risk"}
             />
             <MetricCard
               label="No-show rate"
               value={formatPct(metrics.noShowPct)}
               secondary="No shows ÷ booked"
+              target="goal ≤ 20%"
               progress={metrics.noShowPct / 100}
               icon={<PhoneOff size={18} />}
               signal={metrics.booked === 0 ? undefined : metrics.noShowPct <= 20 ? "ok" : metrics.noShowPct <= 40 ? "watch" : "risk"}
@@ -284,8 +307,11 @@ export default async function PipelinePage() {
               label="Highly qualified rate"
               value={formatPct(metrics.hqPct)}
               secondary="HQ calls ÷ completed"
+              target="typ. 27–47%"
+              tooltip="Highly-qualified outcomes ÷ discovery calls conducted. 2026 sheet average is 37%, ranging 27–47% — below 27% means lead quality or triage is slipping."
               progress={metrics.hqPct / 100}
               icon={<Award size={18} />}
+              signal={metrics.monthOutcomes === 0 ? undefined : metrics.hqPct >= 27 ? "ok" : metrics.hqPct >= 15 ? "watch" : "risk"}
             />
             <MetricCard
               label="Conversions by level"
@@ -353,12 +379,12 @@ export default async function PipelinePage() {
         tabs={[
           {
             label: "Leads",
-            content: <LeadSection rows={leads} today={today} isAdmin={isAdmin} assignees={assignees} />,
+            content: <LeadSection rows={leads} today={today} isAdmin={canConfigure} assignees={assignees} waStatus={waByLead} />,
           },
           {
             label: "Discovery call outcomes",
             content: (
-              <OutcomeSection rows={outcomes} leadOptions={leadOptions} today={today} isAdmin={isAdmin} />
+              <OutcomeSection rows={outcomes} leadOptions={leadOptions} today={today} isAdmin={canConfigure} />
             ),
           },
         ]}

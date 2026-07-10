@@ -3,14 +3,14 @@
 import { useState } from "react";
 import { Flame, Info, ListOrdered, Medal, ScrollText, Swords } from "lucide-react";
 import type { RankedPlayer } from "@/server/gamification";
-import type { XpEvent } from "@/lib/gamification";
-import { XP_RULES, LEVELS } from "@/lib/gamification";
+import type { Ruleset, XpEvent } from "@/lib/gamification";
+import { STAGE_LABELS_SHORT } from "@/lib/gamification";
 import {
   BadgeChip, BadgeStrip, LevelRing, Podium, QuestCard, XpBar,
 } from "@/components/ui/gamification";
 import { formatDate } from "@/lib/format";
 
-type Player = Omit<RankedPlayer, "events">;
+type Player = Omit<RankedPlayer, "events" | "counters" | "logDays" | "levelUps">;
 type Period = "week" | "month" | "all";
 
 const PERIODS: Array<{ key: Period; label: string }> = [
@@ -28,12 +28,15 @@ export function ArenaClient({
   meUserId,
   isAdmin,
   weekStart,
+  ruleset,
 }: {
   players: Player[];
   feed: Array<XpEvent & { name: string }>;
   meUserId: string;
   isAdmin: boolean;
   weekStart: string;
+  /** the rules in force today — the panel below is generated from them, never hardcoded */
+  ruleset: Ruleset;
 }) {
   const [period, setPeriod] = useState<Period>("week");
   const me = players.find((p) => p.userId === meUserId) ?? null;
@@ -247,28 +250,80 @@ export function ArenaClient({
         )}
       </section>
 
-      {/* ── How XP works ── */}
-      <section className="rounded-card border border-line bg-surface-2 p-5">
-        <h2 className="flex items-center gap-2 font-display text-base font-semibold">
-          <Info size={16} /> How XP works
-        </h2>
-        <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-1.5 text-xs text-muted sm:grid-cols-2">
-          <p>Daily log submitted <b className="text-ink">+{XP_RULES.LOG_SUBMITTED}</b></p>
-          <p>Streak bonuses at 7/14/30/60/90 days <b className="text-ink">+40 → +700</b></p>
-          <p>Discovery/SSS call booked <b className="text-ink">+10/+15</b> · proposal sent <b className="text-ink">+{XP_RULES.STAGE_MOVED.PROPOSAL_SENT}</b></p>
-          <p>Deal won <b className="text-ink">+{XP_RULES.STAGE_MOVED.WON}</b> 🎉</p>
-          <p>Call outcome logged <b className="text-ink">+{XP_RULES.OUTCOME_LOGGED}</b> (Highly Qualified <b className="text-ink">+{XP_RULES.OUTCOME_LOGGED + XP_RULES.OUTCOME_HQ_BONUS}</b>)</p>
-          <p>Student milestone advanced <b className="text-ink">+{XP_RULES.MILESTONE_ADVANCED}</b> (offer <b className="text-ink">+{XP_RULES.MILESTONE_ADVANCED + XP_RULES.MILESTONE_OFFER_BONUS}</b>)</p>
-          <p>Red student turned green <b className="text-ink">+{XP_RULES.STUDENT_RESCUED}</b></p>
-          <p>OKR hit at 100% <b className="text-ink">+{XP_RULES.OKR_HIT}</b> · closed ≥80% <b className="text-ink">+{XP_RULES.OKR_NEAR}</b></p>
-          <p>Weekly quests <b className="text-ink">+60 to +80</b> each</p>
-          <p>Levels: {LEVELS.map((l) => l.title).join(" → ")}</p>
-        </div>
-        <p className="mt-3 text-[11px] text-muted">
-          Everything is computed from the audited history — daily logs, pipeline stage changes,
-          milestone logs, signal changes and OKRs. Corrections and backward moves earn nothing.
-        </p>
-      </section>
+      {/* ── How XP works — generated from the live ruleset, so it can never lie ── */}
+      <XpRulesPanel ruleset={ruleset} />
     </div>
+  );
+}
+
+/** Every number here is read off the ruleset the engine is actually scoring with. */
+function XpRulesPanel({ ruleset }: { ruleset: Ruleset }) {
+  const { xpRules: r, levels, quests } = ruleset;
+  const Xp = ({ n }: { n: number }) => <b className="text-ink">+{n}</b>;
+
+  const streaks = Object.entries(r.STREAK_BONUS)
+    .map(([days, bonus]) => [Number(days), bonus] as const)
+    .sort((a, b) => a[0] - b[0]);
+  const stages = Object.entries(r.STAGE_MOVED)
+    .filter(([, xp]) => xp > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const activeQuests = quests.filter((q) => q.enabled);
+  const questXp = activeQuests.map((q) => q.xp);
+
+  return (
+    <section className="rounded-card border border-line bg-surface-2 p-5">
+      <h2 className="flex items-center gap-2 font-display text-base font-semibold">
+        <Info size={16} /> How XP works
+      </h2>
+      <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-1.5 text-xs text-muted sm:grid-cols-2">
+        <p>Daily log submitted <Xp n={r.LOG_SUBMITTED} /></p>
+        {streaks.length > 0 && (
+          <p>
+            Streak bonuses at {streaks.map(([d]) => d).join("/")} days{" "}
+            <b className="text-ink">
+              +{streaks[0][1]}
+              {streaks.length > 1 && ` → +${streaks[streaks.length - 1][1]}`}
+            </b>
+          </p>
+        )}
+        <p>Call outcome logged <Xp n={r.OUTCOME_LOGGED} /> (Highly Qualified <Xp n={r.OUTCOME_LOGGED + r.OUTCOME_HQ_BONUS} />)</p>
+        <p>Student milestone advanced <Xp n={r.MILESTONE_ADVANCED} /> (offer <Xp n={r.MILESTONE_ADVANCED + r.MILESTONE_OFFER_BONUS} />)</p>
+        <p>Red student turned green <Xp n={r.STUDENT_RESCUED} /></p>
+        <p>OKR hit at 100% <Xp n={r.OKR_HIT} /> · closed ≥80% <Xp n={r.OKR_NEAR} /></p>
+        {activeQuests.length > 0 && (
+          <p>
+            Weekly quests{" "}
+            <b className="text-ink">
+              +{Math.min(...questXp)}
+              {Math.min(...questXp) !== Math.max(...questXp) && ` to +${Math.max(...questXp)}`}
+            </b>{" "}
+            each
+          </p>
+        )}
+        <p className="sm:col-span-2">
+          Levels: {[...levels].sort((a, b) => a.minXp - b.minXp).map((l) => l.title).join(" → ")}
+        </p>
+      </div>
+
+      {stages.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Pipeline moves</p>
+          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+            {stages.map(([stage, xp]) => (
+              <span key={stage}>
+                {STAGE_LABELS_SHORT[stage] ?? stage} <Xp n={xp} />
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="mt-3 text-[11px] text-muted">
+        Everything is computed from the audited history — daily logs, pipeline stage changes,
+        milestone logs, signal changes and OKRs. Corrections and backward moves earn nothing.
+        Work is scored by the rules that were in force on the day it happened, so tuning a rule
+        never re-prices what someone already earned.
+      </p>
+    </section>
   );
 }

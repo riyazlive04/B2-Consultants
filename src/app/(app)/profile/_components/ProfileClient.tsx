@@ -96,7 +96,7 @@ export function ProfileClient({
               type="button"
               onClick={() => fileRef.current?.click()}
               aria-label="Change photo"
-              className="absolute -bottom-1 -right-1 grid h-9 w-9 place-items-center rounded-full border-2 border-surface bg-accent text-white shadow-soft hover:opacity-95"
+              className="absolute -bottom-1 -right-1 grid h-9 w-9 place-items-center rounded-full border-2 border-surface bg-primary text-white shadow-soft hover:bg-primary-strong"
             >
               <Camera size={16} />
             </button>
@@ -148,7 +148,7 @@ export function ProfileClient({
             type="button"
             onClick={save}
             disabled={saving || !name.trim()}
-            className="inline-flex items-center gap-2 rounded-field bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-95 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-btn bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-strong disabled:opacity-60"
           >
             {saving && <Loader2 size={15} className="animate-spin" />}
             {saving ? "Saving…" : "Save changes"}

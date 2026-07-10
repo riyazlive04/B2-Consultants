@@ -1,8 +1,9 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { istMonthRange, istToday } from "@/lib/dates";
+import { istMonthInstantRange, istToday } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
-import { computeStudentJourney, type StudentJourney } from "@/lib/gamification";
+import { computeStudentJourney, type GamificationConfig, type StudentJourney } from "@/lib/gamification";
+import { getGamificationConfig } from "./founder-config";
 
 /** Students dashboards (PRD2 §4): counts, 90/120 tracker, satisfaction, LTV. */
 
@@ -14,13 +15,14 @@ const istDayKey = (d: Date) => new Date(d.getTime() + 5.5 * 3600000).toISOString
 /** Gamified journey for one enrollment row (works with or without history rows). */
 function journeyFor(
   today: Date,
+  config: GamificationConfig,
   e: {
     status: string; enrollmentDate: Date; currentMilestone: string;
     totalSessionsCompleted: number; applicationsSubmitted: number; interviewsReceived: number;
     lastSessionDate: Date | null; signalColour: string | null;
   },
   milestoneLogs: Array<{ date: Date; previousMilestone: string | null; newMilestone: string }> = [],
-  signalChanges: Array<{ date: Date; previousSignal: string | null; newSignal: string }> = [],
+  signalChanges: Array<{ date: Date; previousSignal: string | null; newSignal: string | null }> = [],
 ): StudentJourney {
   return computeStudentJourney({
     todayKey: dateKeyOf(today),
@@ -38,7 +40,7 @@ function journeyFor(
     signalChanges: signalChanges.map((c) => ({
       dateKey: istDayKey(c.date), previousSignal: c.previousSignal, newSignal: c.newSignal,
     })),
-  });
+  }, config);
 }
 
 async function ltvByStudent(): Promise<Map<string, number>> {
@@ -56,10 +58,13 @@ async function ltvByStudent(): Promise<Map<string, number>> {
 
 export async function getStudentsOverview() {
   const today = istToday();
-  const month = istMonthRange(today);
+  const config = await getGamificationConfig();
+  // only compared against statusChangedAt (a timestamp) → use IST instants
+  const month = istMonthInstantRange(today);
 
   const [students, enrollments, satisfaction, ltv] = await Promise.all([
-    prisma.student.findMany({ orderBy: { createdAt: "desc" } }),
+    // enrollment-less students are German Note members — they belong to /german-note
+    prisma.student.findMany({ where: { enrollments: { some: {} } }, orderBy: { createdAt: "desc" } }),
     prisma.enrollment.findMany({
       include: {
         student: { select: { id: true, fullName: true } },
@@ -101,7 +106,7 @@ export async function getStudentsOverview() {
       const totalDays = e.programLevel === "GUIDED" ? 90 : 120;
       const dayNumber = Math.min(Math.max(dayDiff(today, e.enrollmentDate) + 1, 1), totalDays);
       // Gamified journey (post-P3 layer): XP, stage title, momentum — derived, never stored
-      const journey = journeyFor(today, e, e.milestoneLogs, e.signalChanges);
+      const journey = journeyFor(today, config, e, e.milestoneLogs, e.signalChanges);
       return {
         enrollmentId: e.id,
         studentId: e.studentId,
@@ -256,6 +261,7 @@ export async function getStudentDetail(id: string) {
   if (!student) return null;
 
   const today = istToday();
+  const config = await getGamificationConfig();
   const ltvInr = student.incomes.reduce(
     (sum, i) => sum + Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
     0,
@@ -283,7 +289,7 @@ export async function getStudentDetail(id: string) {
       return {
         id: e.id,
         // full gamified journey (XP, stage, momentum, badges) — Solo included, tracker aside
-        journey: journeyFor(today, e, e.milestoneLogs, e.signalChanges),
+        journey: journeyFor(today, config, e, e.milestoneLogs, e.signalChanges),
         programLevel: e.programLevel,
         enrollmentDate: e.enrollmentDate.toISOString(),
         duration: e.duration,

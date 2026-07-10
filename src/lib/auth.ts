@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { prisma } from "./prisma";
@@ -50,6 +51,27 @@ export const auth = betterAuth({
   // React.cache'd per request and already queries the DB for sectionAccess, so
   // the cookie cache saved nothing meaningful anyway.
   plugins: [nextCookies()],
+  databaseHooks: {
+    session: {
+      create: {
+        /**
+         * A suspended account gets no session — the credentials may be perfect, but
+         * sign-in stops here. This is the front door; `requireSession` is the back-stop
+         * for sessions minted before the suspension landed.
+         */
+        async before(session) {
+          const user = await prisma.user.findUnique({
+            where: { id: session.userId },
+            select: { status: true },
+          });
+          if (user?.status === "SUSPENDED") {
+            throw new APIError("FORBIDDEN", { message: "This account has been suspended." });
+          }
+          return { data: session };
+        },
+      },
+    },
+  },
 });
 
 export type ServerSession = typeof auth.$Infer.Session;

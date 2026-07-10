@@ -43,8 +43,8 @@ export function CashChart({ points }: { points: Array<{ date: string; balanceInr
     >
       {[min, (min + max) / 2, max].map((v) => (
         <g key={v}>
-          <line x1={PAD} x2={W - PAD} y1={y(v)} y2={y(v)} stroke="var(--line)" strokeWidth="1" />
-          <text x={PAD - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="var(--muted)">
+          <line x1={PAD} x2={W - PAD} y1={y(v)} y2={y(v)} stroke="var(--viz-grid)" strokeWidth="1" />
+          <text x={PAD - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="var(--viz-ink)">
             {formatInrMinor(v, { compact: true })}
           </text>
         </g>
@@ -53,10 +53,10 @@ export function CashChart({ points }: { points: Array<{ date: string; balanceInr
       {/* soft area under the line */}
       <polygon
         points={`${PAD},${H - 28} ${path} ${W - PAD},${H - 28}`}
-        fill="var(--accent-soft)"
-        opacity="0.5"
+        fill="var(--primary-tint)"
+        opacity="0.45"
       />
-      <polyline points={path} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={path} fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
 
       {points.map((p, i) => (
         <g key={p.date}>
@@ -64,10 +64,10 @@ export function CashChart({ points }: { points: Array<{ date: string; balanceInr
             cx={x(i)}
             cy={y(p.balanceInr)}
             r={hover === i ? 4.5 : 3}
-            fill={hover === i ? "var(--ink)" : "var(--accent)"}
+            fill={hover === i ? "var(--ink)" : "var(--primary)"}
           />
           {(i === 0 || i === points.length - 1 || i === Math.floor(points.length / 2)) && (
-            <text x={x(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="var(--muted)">
+            <text x={x(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="var(--viz-ink)">
               {formatDate(p.date)}
             </text>
           )}
@@ -77,7 +77,7 @@ export function CashChart({ points }: { points: Array<{ date: string; balanceInr
       {/* hover tooltip */}
       {h && hover !== null && (
         <g pointerEvents="none">
-          <line x1={x(hover)} x2={x(hover)} y1={12} y2={H - 28} stroke="var(--muted)" strokeDasharray="3 3" strokeWidth="1" />
+          <line x1={x(hover)} x2={x(hover)} y1={12} y2={H - 28} stroke="var(--viz-ink)" strokeDasharray="3 3" strokeWidth="1" />
           {(() => {
             const tx = Math.min(Math.max(x(hover), PAD + 60), W - PAD - 60);
             const ty = Math.max(y(h.balanceInr) - 34, 4);
@@ -87,7 +87,7 @@ export function CashChart({ points }: { points: Array<{ date: string; balanceInr
                 <text x="58" y="11" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">
                   {formatInrMinor(h.balanceInr, { compact: true })}
                 </text>
-                <text x="58" y="21" textAnchor="middle" fontSize="8" fill="#d8d5cc">
+                <text x="58" y="21" textAnchor="middle" fontSize="8" fill="#fff" opacity="0.75">
                   {formatDate(h.date)}
                 </text>
               </g>

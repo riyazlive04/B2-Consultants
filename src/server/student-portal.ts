@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import {
   computeStudentJourney,
-  STUDENT_NEXT_STEPS,
+  currentRuleset,
   type StudentJourney,
 } from "@/lib/gamification";
+import { getGamificationConfig } from "./founder-config";
 
 /**
  * Student portal (Role.STUDENT): everything the signed-in student may see about
@@ -59,6 +60,8 @@ export const getMyStudentPortal = cache(async (userId: string) => {
 
   const today = istToday();
   const todayKey = dateKeyOf(today);
+  const config = await getGamificationConfig();
+  const nextStepsByMilestone = currentRuleset(config, todayKey).student.nextSteps;
 
   const enrollments = student.enrollments.map((e) => {
     const totalDays = e.programLevel === "GUIDED" ? 90 : e.programLevel === "ELITE" ? 120 : null;
@@ -82,7 +85,7 @@ export const getMyStudentPortal = cache(async (userId: string) => {
         previousSignal: c.previousSignal,
         newSignal: c.newSignal,
       })),
-    });
+    }, config);
 
     return {
       id: e.id,
@@ -109,7 +112,7 @@ export const getMyStudentPortal = cache(async (userId: string) => {
         previousMilestone: l.previousMilestone,
         newMilestone: l.newMilestone,
       })),
-      nextSteps: STUDENT_NEXT_STEPS[e.currentMilestone] ?? null,
+      nextSteps: nextStepsByMilestone[e.currentMilestone] ?? null,
       // Week-wise sprint plan (client notes): the weekend check-in happens HERE.
       sprintWeeks: e.sprintWeeks.map((w) => ({
         id: w.id,

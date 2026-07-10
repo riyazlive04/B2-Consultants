@@ -37,10 +37,10 @@ export default async function BookPage() {
     <main className="min-h-screen bg-canvas px-4 py-10 sm:py-14">
       <div className="mx-auto w-full max-w-2xl">
         <header className="mb-8 text-center">
-          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent text-base font-bold text-white shadow-pop">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary font-display text-base font-bold text-white shadow-soft">
             B2
           </span>
-          <h1 className="mt-4 font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+          <h1 className="mt-4 font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">
             Book your Germany Career Call
           </h1>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted">

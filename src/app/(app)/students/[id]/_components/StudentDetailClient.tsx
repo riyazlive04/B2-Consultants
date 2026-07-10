@@ -54,10 +54,8 @@ function MilestoneJourney({ current }: { current: string }) {
                     : "border-line bg-surface text-muted"
               }`}
               style={{
-                background: active
-                  ? trophy ? "var(--brass)" : "var(--accent)"
-                  : done ? "var(--ok)" : undefined,
-                boxShadow: active ? "0 3px 8px rgba(26,25,19,0.25)" : undefined,
+                background: active ? "var(--primary)" : done ? "var(--ok)" : undefined,
+                boxShadow: active ? "var(--e-2)" : undefined,
               }}
             >
               {done ? "✓" : trophy ? "★" : i + 1}
@@ -325,7 +323,7 @@ export function StudentDetailClient({
               <h4 className="mb-1 text-sm font-semibold text-ink">Signal history</h4>
               {e.signalChanges.map((c) => (
                 <p key={c.id}>
-                  {formatDate(c.date)} - {c.previousSignal ? SIGNAL_LABELS[c.previousSignal] : "unset"} → {SIGNAL_LABELS[c.newSignal]} by {c.changedBy}
+                  {formatDate(c.date)} - {c.previousSignal ? SIGNAL_LABELS[c.previousSignal] : "unset"} → {c.newSignal ? SIGNAL_LABELS[c.newSignal] : "cleared"} by {c.changedBy}
                   {c.note ? ` · ${c.note}` : ""}
                 </p>
               ))}

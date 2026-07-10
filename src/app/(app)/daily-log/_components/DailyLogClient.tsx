@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Flame, ClipboardList, Target, Sparkles } from "lucide-react";
 import { submitDailyLog, updateOwnOkrProgress } from "@/server/people-actions";
 import type { MyDailyLogView } from "@/server/people-metrics";
-import { XP_RULES, type QuestProgress } from "@/lib/gamification";
+import { type QuestProgress } from "@/lib/gamification";
 import { QuestCard } from "@/components/ui/gamification";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { celebrate, toast } from "@/components/ui/feedback";
@@ -42,7 +42,19 @@ function Donut({ pct, color, label }: { pct: number; color: string; label: strin
   );
 }
 
-export function DailyLogClient({ view, quests = [] }: { view: MyDailyLogView; quests?: QuestProgress[] }) {
+export function DailyLogClient({
+  view,
+  quests = [],
+  logXp,
+  streakMilestones,
+}: {
+  view: MyDailyLogView;
+  quests?: QuestProgress[];
+  /** XP a log is worth under today's rules — the toast must not quote a stale number */
+  logXp: number;
+  /** streak lengths that pay a bonus today; hitting one earns confetti */
+  streakMilestones: number[];
+}) {
   const [error, setError] = useState<string | null>(null);
   const [okrError, setOkrError] = useState<string | null>(null);
 
@@ -61,10 +73,10 @@ export function DailyLogClient({ view, quests = [] }: { view: MyDailyLogView; qu
     const newStreak = view.streak + 1;
     toast(
       view.streak > 0
-        ? `Log submitted · +${XP_RULES.LOG_SUBMITTED} XP - ${newStreak}-day streak! 🔥`
-        : `Log submitted · +${XP_RULES.LOG_SUBMITTED} XP ✓`,
+        ? `Log submitted · +${logXp} XP - ${newStreak}-day streak! 🔥`
+        : `Log submitted · +${logXp} XP ✓`,
     );
-    if ([7, 14, 30, 60, 90].includes(newStreak)) celebrate(); // milestone streaks get confetti
+    if (streakMilestones.includes(newStreak)) celebrate(); // milestone streaks get confetti
   };
 
   const columns: Column<LogRow>[] = [
@@ -96,7 +108,7 @@ export function DailyLogClient({ view, quests = [] }: { view: MyDailyLogView; qu
             <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
               <Flame size={15} /> Logging streak
             </p>
-            {view.streak > 0 && <span className="flame text-xl" aria-hidden>🔥</span>}
+            {view.streak > 0 && <span className="text-xl" aria-hidden>🔥</span>}
           </div>
           <p className="mt-1 font-display text-3xl font-bold tracking-tight">
             {view.streak}

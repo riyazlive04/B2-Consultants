@@ -17,6 +17,20 @@ npm run db:demo                # ⟵ full production-style demo dataset (see bel
 npm run build && npm start     # production server on :3000
 ```
 
+### Without Docker
+
+If a PostgreSQL installation exists on the machine (its server doesn't need to be
+running or accessible — only the binaries are used), `npm run db:local` replaces
+`docker compose up -d db`: it runs a project-local instance (data in `.pgdata/`,
+gitignored) on the same port 5435 with the same `b2` user, so `.env.example`'s
+`DATABASE_URL` works unchanged. Binaries are auto-discovered from the default
+install path; set `PG_BIN` to override. Stop it with `npm run db:local:stop`.
+
+```bash
+npm run db:local               # instead of: docker compose up -d db
+# ...then the same steps as above from `npm run db:deploy`
+```
+
 `npm run db:demo` **wipes all business data** (auth users survive) and seeds ~5 months of
 coherent history anchored to today: income/expenses/pending payments, 68 leads with full stage
 history + BANT outcomes, 14 students with milestone journeys and signals, daily-log streaks,
@@ -51,6 +65,10 @@ Do **not** run `db:demo` on the real deployment — it resets business data by d
 
 ## Structure
 
+- `docs/DESIGN_SYSTEM.md` — the "Daylight" design language: every colour/font/radius/component
+  token. `globals.css` + `tailwind.config.ts` implement it; if a value isn't in the doc, it
+  doesn't belong in the product.
+- `docs/SALES-LOGIC.md` — funnel stages, BANT rules, formulas and 2026 benchmarks (source of truth)
 - `prisma/schema.prisma` — FULL 3-phase data model (Phase 0 mandate; never refactor P1 tables later)
 - `prisma/demo-data.ts` — one-command production-style demo dataset (`npm run db:demo`)
 - `src/lib/rbac.ts` + `src/lib/sections.ts` — the one section/role access table; sidebar + page guards read from it
@@ -67,4 +85,8 @@ Do **not** run `db:demo` on the real deployment — it resets business data by d
 - Audit tables (daily logs, milestone log, signal changes, lead stage history) are append-only —
   enforced by Postgres triggers, not just the service layer.
 - Money is BigInt minor units (paise/cents), INR + EUR side by side, FX rate stamped per record.
-- No outbound email/WhatsApp — notifications are in-app only by design (per PRDs).
+- In-app notifications are the always-on notification centre. Outbound **WhatsApp** reminders (WATI,
+  "Wave-2") are a separate opt-in layer — off by default (`WATI_ENABLED`), config-driven, and
+  flag-gated; with it off every send is a no-op logged as `SKIPPED`. See the WhatsApp section
+  (`/whatsapp`), `src/lib/wati.ts`, `src/server/whatsapp.ts`, and the `/api/cron/whatsapp` +
+  `/api/wati/webhook` routes. No outbound **email** yet.

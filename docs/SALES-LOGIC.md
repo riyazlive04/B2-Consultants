@@ -112,7 +112,10 @@ experience, German level, visa status, income bracket, "how do you know us".
 
 ## 7. Known gaps between app and sheet logic (for future waves)
 
-- No WhatsApp touchpoint stages (sent / confirmed) between booking and disco call.
+- WhatsApp touchpoints (sent / confirmed) are now built as the Wave-2 WATI layer: outbound
+  reminders are logged per lead, and an inbound reply flips the message to "Replied"
+  (= "WhatsApp confirmed"). It is NOT yet a distinct pipeline *stage* — the signal lives in the
+  WhatsApp message log + the pipeline lead's status badge, not in `LeadStage`.
 - No SSS "sales pattern" (SSS Call vs Workshop vs Summit routing).
 - No offer / price / objection / 3-follow-up tracking → no offer-rate or
   close-rate-from-offers metric; app's close rate uses disco completions.

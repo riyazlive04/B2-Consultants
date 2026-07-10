@@ -6,6 +6,7 @@ RUN npm ci
 
 FROM node:20-alpine AS build
 WORKDIR /app
+ENV NEXT_OUTPUT_STANDALONE=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate && npm run build

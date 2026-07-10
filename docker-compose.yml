@@ -12,6 +12,12 @@ services:
       FX_API_URL: ${FX_API_URL:-https://api.frankfurter.app}
       REDIS_URL: redis://redis:6379
       INGEST_ENABLED: ${INGEST_ENABLED:-false}
+      # Wave-2 WhatsApp (WATI) — off by default; nothing sends until these are set.
+      WATI_ENABLED: ${WATI_ENABLED:-false}
+      WATI_API_ENDPOINT: ${WATI_API_ENDPOINT:-}
+      WATI_ACCESS_TOKEN: ${WATI_ACCESS_TOKEN:-}
+      WATI_WEBHOOK_SECRET: ${WATI_WEBHOOK_SECRET:-}
+      CRON_SECRET: ${CRON_SECRET:-}
     depends_on:
       db:
         condition: service_healthy

@@ -4,13 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import {
   computeTeamGame,
+  currentRuleset,
   monthKeyOf,
   weekStartKey,
   type DailyLogVariant,
   type GameInputs,
   type PlayerGame,
+  type Ruleset,
   type XpEvent,
 } from "@/lib/gamification";
+import { getGamificationConfig } from "./founder-config";
 import { okrCompletionPct } from "./people-metrics";
 
 /**
@@ -33,7 +36,14 @@ const dateKeyOf = (d: Date) => d.toISOString().slice(0, 10);
 /** Timestamps (changedAt etc.) → the IST business day they happened on. */
 const istDayKey = (d: Date) => new Date(d.getTime() + 5.5 * 3600000).toISOString().slice(0, 10);
 
-export type RankedPlayer = PlayerGame & { rankWeek: number; rankMonth: number; rankAll: number };
+export type RankedPlayer = PlayerGame & {
+  rankWeek: number;
+  rankMonth: number;
+  rankAll: number;
+  /** the dashboard role, so reward rules can filter by it */
+  role: string;
+  teamProfileId: string;
+};
 
 export type TeamGame = {
   todayKey: string;
@@ -41,10 +51,13 @@ export type TeamGame = {
   monthKey: string;
   players: RankedPlayer[];
   feed: Array<XpEvent & { name: string }>;
+  /** the rules in force today — what the Arena explains and what new work scores by */
+  ruleset: Ruleset;
 };
 
 export const getTeamGame = cache(async (): Promise<TeamGame> => {
   const todayKey = dateKeyOf(istToday());
+  const config = await getGamificationConfig();
 
   const [profiles, logs, stageHistory, outcomes, milestoneLogs, signalLogs, okrs] = await Promise.all([
     prisma.teamProfile.findMany({
@@ -132,7 +145,7 @@ export const getTeamGame = cache(async (): Promise<TeamGame> => {
       })),
   };
 
-  const { players } = computeTeamGame(inputs);
+  const { players } = computeTeamGame(inputs, config);
 
   const rank = (key: "xpWeek" | "xpMonth" | "xpTotal") => {
     const order = [...players].sort((a, b) => b[key] - a[key] || b.xpTotal - a.xpTotal);
@@ -141,6 +154,7 @@ export const getTeamGame = cache(async (): Promise<TeamGame> => {
   const rw = rank("xpWeek");
   const rm = rank("xpMonth");
   const ra = rank("xpTotal");
+  const byUserId = new Map(profiles.map((p) => [p.userId!, p]));
 
   const ranked: RankedPlayer[] = players
     .map((p) => ({
@@ -148,6 +162,8 @@ export const getTeamGame = cache(async (): Promise<TeamGame> => {
       rankWeek: rw.get(p.userId)!,
       rankMonth: rm.get(p.userId)!,
       rankAll: ra.get(p.userId)!,
+      role: byUserId.get(p.userId)!.dashboardRole,
+      teamProfileId: byUserId.get(p.userId)!.id,
     }))
     .sort((a, b) => a.rankWeek - b.rankWeek);
 
@@ -156,12 +172,21 @@ export const getTeamGame = cache(async (): Promise<TeamGame> => {
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
     .slice(0, 30);
 
-  return { todayKey, weekStart: weekStartKey(todayKey), monthKey: monthKeyOf(todayKey), players: ranked, feed };
+  return {
+    todayKey,
+    weekStart: weekStartKey(todayKey),
+    monthKey: monthKeyOf(todayKey),
+    players: ranked,
+    feed,
+    ruleset: currentRuleset(config, todayKey),
+  };
 });
 
 /** This user's player card, or null when they don't play (no team profile / Admin). */
-export async function getMyGame(userId: string): Promise<{ me: RankedPlayer; playerCount: number } | null> {
+export async function getMyGame(
+  userId: string,
+): Promise<{ me: RankedPlayer; playerCount: number; ruleset: Ruleset } | null> {
   const game = await getTeamGame();
   const me = game.players.find((p) => p.userId === userId);
-  return me ? { me, playerCount: game.players.length } : null;
+  return me ? { me, playerCount: game.players.length, ruleset: game.ruleset } : null;
 }

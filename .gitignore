@@ -11,6 +11,7 @@
 
 # next.js
 /.next/
+/.next-prod/
 /out/
 
 # production
@@ -37,3 +38,10 @@ next-env.d.ts
 
 # local env — real secrets live here, never commit
 .env
+
+# no-Docker local Postgres (scripts/local-db.mjs)
+/.pgdata/
+
+# local dev noise
+dev-server.log
+scripts/tmp/

@@ -32,13 +32,14 @@ export function SignalBadge({
   );
 }
 
-/** Bare dot for dense lists (e.g. the 3 OKR circles per team member). */
+/** Bare dot for dense lists (e.g. the 3 OKR circles per team member).
+ *  Carries its meaning in text too (sr-only) - colour is never the only channel (§7). */
 export function SignalDot({ level, title }: { level: SignalLevel; title?: string }) {
+  const meta = SIGNAL_META[level];
   return (
-    <span
-      title={title}
-      className="inline-block h-3 w-3 rounded-full"
-      style={{ background: SIGNAL_META[level].color }}
-    />
+    <span title={title ?? meta.label} className="inline-flex">
+      <span aria-hidden className="inline-block h-3 w-3 rounded-full" style={{ background: meta.color }} />
+      <span className="sr-only">{title ?? meta.label}</span>
+    </span>
   );
 }

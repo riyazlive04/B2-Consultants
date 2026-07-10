@@ -87,12 +87,20 @@ export function DataTable<T>({
     setPage(0);
   };
 
+  // CSV formula-injection guard: a cell starting with = + - @ (or a tab/CR) is
+  // executed as a formula by Excel/Sheets. Lead names/notes are attacker-supplied
+  // (public booking form, webhooks), so neutralise them with a leading apostrophe.
+  const csvSafe = (v: string | number | null): string | number => {
+    if (typeof v !== "string") return v ?? "";
+    return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+  };
+
   const exportCsv = async () => {
     // Load papaparse only when the viewer actually exports - keeps it out of the
     // bundle of every table-bearing page (it's only used here, on a click).
     const Papa = (await import("papaparse")).default;
     const data = visible.map((row) =>
-      Object.fromEntries(columns.map((col) => [col.header, raw(row, col) ?? ""])),
+      Object.fromEntries(columns.map((col) => [col.header, csvSafe(raw(row, col))])),
     );
     const csv = Papa.unparse(data);
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
@@ -115,7 +123,7 @@ export function DataTable<T>({
               onChange={(e) => { setFilter(e.target.value); setPage(0); }}
               placeholder={filterPlaceholder}
               aria-label={filterPlaceholder}
-              className="w-full rounded-field border border-line bg-surface-2 py-1.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-surface"
+              className="w-full rounded-field border border-line bg-surface-2 py-1.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary-soft"
             />
           </div>
           <span className="whitespace-nowrap text-xs text-muted tnum">
@@ -137,16 +145,29 @@ export function DataTable<T>({
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
+          {/* header typography matches kit.tsx <Th> so a DataTable and a hand-built
+              TableShell read as the same component on screen */}
           <thead className="sticky top-0 z-10 bg-surface-2">
-            <tr className="border-b border-line text-left text-xs font-semibold text-muted">
+            <tr className="border-b border-line text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
               {columns.map((col) => (
-                <th key={col.key} className={`px-4 py-3 font-semibold ${col.align === "right" ? "text-right" : ""}`}>
+                <th
+                  key={col.key}
+                  aria-sort={
+                    col.sortable === false || sortKey !== col.key
+                      ? undefined
+                      : sortDir === "asc"
+                        ? "ascending"
+                        : "descending"
+                  }
+                  className={`px-5 py-3 ${col.align === "right" ? "text-right" : ""}`}
+                >
                   {col.sortable === false ? (
                     col.header
                   ) : (
                     <button
                       type="button"
                       onClick={() => toggleSort(col.key)}
+                      aria-label={`Sort by ${col.header}`}
                       className={`inline-flex items-center gap-1 transition-colors hover:text-ink ${col.align === "right" ? "flex-row-reverse" : ""}`}
                     >
                       {col.header}
@@ -169,7 +190,7 @@ export function DataTable<T>({
               paged.map((row, i) => (
                 <tr key={i} className={`border-b border-line last:border-b-0 ${rowClassName?.(row) ?? ""}`}>
                   {columns.map((col) => (
-                    <td key={col.key} className={`px-4 py-3 ${col.align === "right" ? "tnum text-right" : ""}`}>
+                    <td key={col.key} className={`px-5 py-3.5 ${col.align === "right" ? "tnum text-right" : ""}`}>
                       {col.cell(row)}
                     </td>
                   ))}

@@ -6,10 +6,10 @@ import { Bell } from "lucide-react";
 import type { Notification } from "@/server/notifications";
 
 const SEVERITY_STYLE: Record<Notification["severity"], { dot: string; label: string }> = {
-  risk: { dot: "var(--risk)", label: "Act now" },
-  watch: { dot: "var(--watch)", label: "Watch" },
-  win: { dot: "var(--brass)", label: "Win" },
-  info: { dot: "var(--accent)", label: "FYI" },
+  risk: { dot: "var(--bad)", label: "Act now" },
+  watch: { dot: "var(--warn)", label: "Watch" },
+  win: { dot: "var(--good)", label: "Win" },
+  info: { dot: "var(--primary)", label: "FYI" },
 };
 
 /** In-app notification centre - visual-only per the PRDs (no email/WhatsApp ever). */
@@ -96,7 +96,16 @@ export function NotificationBell({ items: initialItems }: { items: Notification[
                       style={{ background: SEVERITY_STYLE[n.severity].dot }}
                     />
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium">{n.title}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="min-w-0 truncate text-sm font-medium">{n.title}</span>
+                        {/* severity in words, not colour alone (§7) */}
+                        <span
+                          className="flex-none text-[10px] font-semibold uppercase tracking-wide"
+                          style={{ color: SEVERITY_STYLE[n.severity].dot }}
+                        >
+                          {SEVERITY_STYLE[n.severity].label}
+                        </span>
+                      </span>
                       <span className="block text-xs text-muted">{n.body}</span>
                     </span>
                   </Link>

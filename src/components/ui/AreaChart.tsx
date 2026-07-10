@@ -47,21 +47,21 @@ export function AreaChart({
     >
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          <stop offset="0%" stopColor="var(--primary-tint)" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="var(--primary-tint)" stopOpacity="0" />
         </linearGradient>
       </defs>
       <polygon points={area} fill={`url(#${gid})`} />
       <polyline
         points={line}
         fill="none"
-        stroke="var(--accent)"
+        stroke="var(--primary)"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
-      <circle cx={ex} cy={ey} r="4.5" fill="var(--accent)" stroke="#fff" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      <circle cx={ex} cy={ey} r="4.5" fill="var(--primary)" stroke="var(--bg-surface)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

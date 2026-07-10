@@ -36,9 +36,9 @@ export function MetricCard({
   progress?: number; // 0-1 → renders a progress bar coloured by the signal/accent
 }) {
   const tint = signal ? SIGNAL_META[signal] : undefined;
-  const barColor = tint ? tint.color : "var(--accent)";
+  const barColor = tint ? tint.color : "var(--primary)";
   const className =
-    "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-line bg-surface p-5";
+    "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-line bg-surface p-5 shadow-card";
 
   const inner = (
     <>
@@ -51,21 +51,30 @@ export function MetricCard({
           {icon && (
             <span
               aria-hidden
-              className="grid h-9 w-9 flex-none place-items-center rounded-2xl shadow-sm"
-              style={{ background: tint ? tint.soft : "var(--accent-soft)", color: barColor }}
+              className="grid h-9 w-9 flex-none place-items-center rounded-btn"
+              style={{ background: tint ? tint.soft : "var(--primary-soft)", color: barColor }}
             >
               {icon}
             </span>
           )}
-          <span className="flex items-center gap-1.5 truncate text-[13px] font-medium text-muted">
+          <span className="flex items-center gap-1.5 truncate text-xs font-medium uppercase tracking-[0.04em] text-ink-3">
             <span className="truncate">{label}</span>
             {tooltip && (
-              <span
-                title={tooltip}
-                aria-label={tooltip}
-                className="inline-flex h-4 w-4 flex-none cursor-help items-center justify-center rounded-full border border-line bg-surface-2 text-[11px] leading-none text-muted"
-              >
-                i
+              // keyboard- and touch-reachable (§5.9): the definition shows on
+              // hover AND focus, not only via the mouse-only title attribute
+              <span className="group/tip relative inline-flex" tabIndex={0} aria-label={tooltip}>
+                <span
+                  aria-hidden
+                  className="inline-flex h-4 w-4 flex-none cursor-help items-center justify-center rounded-full border border-line bg-surface-2 text-[11px] leading-none text-muted"
+                >
+                  i
+                </span>
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 w-56 -translate-x-1/2 whitespace-normal rounded-field bg-ink px-2.5 py-1.5 text-left text-[11px] font-normal normal-case leading-snug tracking-normal text-white opacity-0 shadow-soft transition-opacity group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
+                >
+                  {tooltip}
+                </span>
               </span>
             )}
           </span>

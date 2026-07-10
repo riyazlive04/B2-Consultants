@@ -4,54 +4,26 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  Wallet,
-  Landmark,
-  GitBranch,
-  CalendarCheck,
-  Users,
-  GraduationCap,
-  ClipboardList,
-  Filter,
-  FileSearch,
-  Map,
-  BookOpen,
-  UserCircle,
-  LayoutGrid,
   LogOut,
   Menu,
-  Trophy,
   X,
   PanelLeftClose,
   PanelLeftOpen,
-  Search,
-  type LucideIcon,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { ThemeToggle } from "./ThemeToggle";
+import { FallbackIcon, SECTION_ICONS } from "./section-icons";
+import type { SectionIconName } from "@/lib/sections";
 
-export type NavItem = { key: string; label: string; href: string; phase: number };
-
-const ICONS: Record<string, LucideIcon> = {
-  finance: Wallet,
-  cash: Landmark,
-  pipeline: GitBranch,
-  bookings: CalendarCheck,
-  people: Users,
-  students: GraduationCap,
-  "daily-log": ClipboardList,
-  arena: Trophy,
-  "my-journey": Map,
-  funnel: Filter,
-  "cv-check": FileSearch,
-  guide: BookOpen,
+/** Label, icon, group and order all come from the founder's section config. */
+export type NavItem = {
+  key: string;
+  label: string;
+  href: string;
+  phase: number;
+  icon: SectionIconName;
+  group: string;
 };
-
-// Information architecture: 9+ flat sections grouped into scannable areas.
-const GROUP_DEFS: { label: string; keys: string[] }[] = [
-  { label: "Money", keys: ["finance", "cash", "pipeline", "bookings"] },
-  { label: "People", keys: ["people", "students", "daily-log", "arena", "my-journey"] },
-  { label: "Insights", keys: ["funnel", "cv-check"] },
-  { label: "Workspace", keys: ["guide"] },
-];
 
 export function AppShell({
   items,
@@ -121,20 +93,20 @@ export function AppShell({
 
   const initials = user.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
-  // Role identity: the accent hue already shifts per role (globals.css data-role themes);
-  // this labelled chip anchors what the colour means.
+  // Seat names from the design file: USER seats are the telecallers.
   const roleLabel =
-    { ADMIN: "Admin", HEAD: "Head", USER: "Member", STUDENT: "Student" }[user.role] ?? user.role;
+    { ADMIN: "Admin", HEAD: "Head coach", USER: "Telecaller", STUDENT: "Student", TUTOR: "Tutor" }[user.role] ??
+    user.role;
 
-  // Build groups from the role-filtered items; anything unmatched still shows.
-  const used = new Set<string>();
-  const groups = GROUP_DEFS.map((g) => ({
-    label: g.label,
-    items: g.keys.map((k) => items.find((i) => i.key === k)).filter(Boolean) as NavItem[],
-  })).filter((g) => g.items.length);
-  groups.forEach((g) => g.items.forEach((i) => used.add(i.key)));
-  const leftovers = items.filter((i) => !used.has(i.key));
-  if (leftovers.length) groups.push({ label: "More", items: leftovers });
+  // `items` arrives pre-sorted in the founder's order. Group by its `group`, and let
+  // each group land where its first item does — so reordering a section can move its
+  // whole group up the rail, and no section can be orphaned by a group that isn't listed.
+  const groups: { label: string; items: NavItem[] }[] = [];
+  for (const item of items) {
+    const group = groups.find((g) => g.label === item.group);
+    if (group) group.items.push(item);
+    else groups.push({ label: item.group, items: [item] });
+  }
 
   const Avatar = ({ size = 36 }: { size?: number }) =>
     user.image ? (
@@ -142,25 +114,31 @@ export function AppShell({
       <img src={user.image} alt="" className="flex-none rounded-full object-cover" style={{ height: size, width: size }} />
     ) : (
       <span
-        className="grid flex-none place-items-center rounded-full bg-accent font-semibold text-white"
+        className="grid flex-none place-items-center rounded-full bg-primary font-semibold text-white"
         style={{ height: size, width: size, fontSize: size * 0.34 }}
       >
         {initials}
       </span>
     );
 
+  // Nav item (§5.2): resting ink-2 · hover surface-2 · active = primary-soft fill,
+  // primary text, 3px accent bar on the left edge.
   const NavRow = ({ item, compact }: { item: NavItem; compact: boolean }) => {
     const active = isActive(item.href);
-    const Icon = ICONS[item.key] ?? LayoutGrid;
+    const Icon = SECTION_ICONS[item.icon] ?? FallbackIcon;
     return (
       <Link
         href={item.href}
         prefetch
         title={compact ? item.label : undefined}
-        className={`rail-item group flex items-center gap-3 rounded-field text-sm ${
+        aria-current={active ? "page" : undefined}
+        className={`relative flex items-center gap-3 rounded-btn text-sm font-medium transition-colors ${
           compact ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
-        } ${active ? "is-active" : ""}`}
+        } ${active ? "bg-primary-soft text-primary" : "text-ink-2 hover:bg-surface-2 hover:text-ink"}`}
       >
+        {active && (
+          <span aria-hidden className="absolute bottom-2 left-0 top-2 w-[3px] rounded-full bg-primary" />
+        )}
         <Icon size={18} strokeWidth={2.1} className="flex-none" />
         {!compact && <span className="truncate">{item.label}</span>}
       </Link>
@@ -172,13 +150,13 @@ export function AppShell({
       {/* brand + collapse toggle */}
       <div className={`mb-5 flex items-center ${compact ? "justify-center" : "justify-between"} px-1`}>
         <Link href="/" prefetch className="flex items-center gap-2.5">
-          <span className="rail-brand grid h-10 w-10 flex-none place-items-center rounded-2xl text-sm font-bold backdrop-blur">
+          <span className="grid h-10 w-10 flex-none place-items-center rounded-btn bg-primary text-sm font-bold text-white">
             B2
           </span>
           {!compact && (
             <span className="flex flex-col leading-tight">
-              <span className="text-sm font-semibold text-white">B2 Consultants</span>
-              <span className="rail-eyebrow text-[11px]">Founder Dashboard</span>
+              <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
+              <span className="text-[11px] text-ink-3">Founder Dashboard</span>
             </span>
           )}
         </Link>
@@ -187,7 +165,7 @@ export function AppShell({
             type="button"
             onClick={toggleCollapse}
             aria-label="Collapse sidebar"
-            className="rail-soft grid h-8 w-8 place-items-center rounded-field"
+            className="grid h-8 w-8 place-items-center rounded-field text-ink-3 hover:bg-surface-2 hover:text-ink"
           >
             <PanelLeftClose size={17} />
           </button>
@@ -199,7 +177,7 @@ export function AppShell({
           type="button"
           onClick={toggleCollapse}
           aria-label="Expand sidebar"
-          className="rail-soft mb-2 grid h-9 w-full place-items-center rounded-field"
+          className="mb-2 grid h-9 w-full place-items-center rounded-field text-ink-3 hover:bg-surface-2 hover:text-ink"
         >
           <PanelLeftOpen size={17} />
         </button>
@@ -210,9 +188,9 @@ export function AppShell({
         {groups.map((g) => (
           <div key={g.label}>
             {compact ? (
-              <div className="rail-divider mx-2 mb-1 border-t" />
+              <div className="mx-2 mb-1 border-t border-line" />
             ) : (
-              <p className="rail-eyebrow px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em]">
+              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
                 {g.label}
               </p>
             )}
@@ -229,36 +207,39 @@ export function AppShell({
         {/* Account */}
         <div>
           {compact ? (
-            <div className="rail-divider mx-2 mb-1 border-t" />
+            <div className="mx-2 mb-1 border-t border-line" />
           ) : (
-            <p className="rail-eyebrow px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em]">
+            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
               Account
             </p>
           )}
-          <NavRow item={{ key: "profile", label: "My Profile", href: "/profile", phase: 0 }} compact={compact} />
+          <NavRow
+            item={{ key: "profile", label: "My Profile", href: "/profile", phase: 0, icon: "layout-grid", group: "Account" }}
+            compact={compact}
+          />
         </div>
       </div>
 
       {/* user + logout */}
-      <div className="rail-divider mt-3 border-t pt-3">
+      <div className="mt-3 border-t border-line pt-3">
         <Link
           href="/profile"
           prefetch
           title={compact ? user.name : undefined}
-          className={`rail-soft flex items-center gap-3 rounded-field py-2 ${
+          className={`flex items-center gap-3 rounded-btn py-2 transition-colors hover:bg-surface-2 ${
             compact ? "justify-center px-2" : "px-2"
           }`}
         >
           <Avatar size={compact ? 30 : 36} />
           {!compact && (
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-white">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                 <span className="truncate">{user.name}</span>
-                <span className="rail-chip flex-none rounded-full px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide">
+                <span className="flex-none rounded-full bg-primary-soft px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-primary-strong">
                   {roleLabel}
                 </span>
               </p>
-              <p className="rail-eyebrow truncate text-xs">{user.email}</p>
+              <p className="truncate text-xs text-ink-3">{user.email}</p>
             </div>
           )}
         </Link>
@@ -266,7 +247,7 @@ export function AppShell({
           type="button"
           onClick={logout}
           title={compact ? "Log out" : undefined}
-          className={`rail-soft mt-1 flex w-full items-center gap-3 rounded-field py-2 text-sm ${
+          className={`mt-1 flex w-full items-center gap-3 rounded-btn py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink ${
             compact ? "justify-center px-2" : "px-2.5"
           }`}
         >
@@ -279,20 +260,18 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-canvas">
-      {/* desktop rail — floating violet dock */}
+      {/* desktop rail — flat white sidebar on a hairline border (§5.1) */}
       <aside
-        className={`sticky top-0 hidden h-screen flex-none p-3 transition-[width] duration-200 md:block ${
-          collapsed ? "w-[92px]" : "w-[272px]"
+        className={`sticky top-0 hidden h-screen flex-none border-r border-line bg-surface transition-[width] duration-200 md:block ${
+          collapsed ? "w-[76px]" : "w-[240px]"
         }`}
       >
-        <div className="rail-violet h-full overflow-hidden rounded-[28px]">
-          <Rail compact={collapsed} />
-        </div>
+        <Rail compact={collapsed} />
       </aside>
 
       {/* main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="glass sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line px-4 md:px-8">
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-surface px-4 md:px-8">
           {/* mobile: hamburger + brand */}
           <button
             type="button"
@@ -303,27 +282,20 @@ export function AppShell({
             <Menu size={20} />
           </button>
           <Link href="/" className="flex items-center gap-2 md:hidden">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-accent text-xs font-bold text-white">B2</span>
+            <span className="grid h-8 w-8 place-items-center rounded-field bg-primary text-xs font-bold text-white">B2</span>
           </Link>
 
-          {/* search pill — signature top-bar element */}
-          <label className="ml-1 hidden items-center gap-2 rounded-full border border-line bg-surface-2 px-3.5 py-2 text-sm text-muted transition-colors focus-within:border-accent md:flex md:w-72">
-            <Search size={16} className="flex-none" />
-            <input
-              type="search"
-              placeholder="Search dashboard…"
-              className="w-full bg-transparent text-ink placeholder:text-muted focus:outline-none"
-            />
-          </label>
-
+          {/* the always-visible metric strip: month · runway · theme · alerts · user */}
           <div className="ml-auto flex items-center gap-2 md:gap-3">
-            <span className="hidden rounded-full bg-accent-soft px-3 py-1.5 font-display text-xs font-semibold tracking-tight text-accent lg:inline">
-              {currentMonth}
-            </span>
+            <span className="hidden text-sm font-medium text-ink-2 lg:inline">{currentMonth}</span>
             {runwaySlot}
+            <ThemeToggle />
             {bellSlot}
-            <Link href="/profile" title="Your profile" className="rounded-full transition-transform hover:scale-105">
+            <Link href="/profile" title="Your profile" className="flex items-center gap-2 rounded-full py-1 md:pr-2">
               <Avatar size={34} />
+              <span className="hidden max-w-36 truncate text-sm font-semibold text-ink xl:inline">
+                {user.name}
+              </span>
             </Link>
           </div>
         </header>
@@ -335,12 +307,12 @@ export function AppShell({
       {drawer && (
         <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
           <div className="overlay-in glass-scrim absolute inset-0" onClick={() => setDrawer(false)} />
-          <aside className="dialog-in rail-violet absolute left-0 top-0 h-full w-[82%] max-w-xs rounded-r-[28px] shadow-pop">
+          <aside className="dialog-in absolute left-0 top-0 h-full w-[82%] max-w-xs bg-surface shadow-pop">
             <button
               type="button"
               aria-label="Close menu"
               onClick={() => setDrawer(false)}
-              className="rail-soft absolute right-3 top-4 z-10 grid h-9 w-9 place-items-center rounded-field"
+              className="absolute right-3 top-4 z-10 grid h-9 w-9 place-items-center rounded-field text-ink-2 hover:bg-surface-2 hover:text-ink"
             >
               <X size={20} />
             </button>

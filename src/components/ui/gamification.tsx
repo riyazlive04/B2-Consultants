@@ -10,15 +10,16 @@ import { formatDate } from "@/lib/format";
 /**
  * Gamification UI kit — level rings, XP bars, badge chips, quest cards, podium.
  * Pure presentation over lib/gamification.ts data; matches the app's card
- * language (rounded-card / border-line / shadow-card) and the role accent.
+ * language (rounded-card / border-line / shadow-card) and the primary blue.
  */
 
-// ── tier styling: emoji medallion in a tiered ring ──
+// ── tier styling: emoji medallion in a tiered ring. Bronze/silver/gold are
+// medal materials; legend is the brand blue (one accent hue, DESIGN_SYSTEM §9). ──
 const TIER_RING: Record<BadgeTier, string> = {
   bronze: "linear-gradient(135deg, #d2a679, #a05a2c)",
   silver: "linear-gradient(135deg, #e9edf2, #9aa7b5)",
   gold: "linear-gradient(135deg, #ffe08a, #d99a06)",
-  legend: "linear-gradient(135deg, #c4b5fd, #6d28d9)",
+  legend: "linear-gradient(135deg, var(--primary-tint), var(--primary-strong))",
 };
 
 export const TIER_LABELS: Record<BadgeTier, string> = {
@@ -182,7 +183,7 @@ export function Podium({
         const rank = rankOf(e);
         return (
           <div key={e.name} className="flex w-28 flex-col items-center gap-1.5 sm:w-36">
-            <span className={`${rank === 0 ? "text-3xl trophy-float" : "text-2xl"}`} aria-hidden>
+            <span className={rank === 0 ? "text-3xl" : "text-2xl"} aria-hidden>
               {medals[rank]}
             </span>
             <p className="w-full truncate text-center text-sm font-bold">{e.name}</p>
@@ -194,8 +195,8 @@ export function Podium({
               style={{
                 background:
                   rank === 0
-                    ? "linear-gradient(180deg, var(--accent-soft), var(--surface))"
-                    : "linear-gradient(180deg, var(--surface-2), var(--surface))",
+                    ? "linear-gradient(180deg, var(--primary-soft), var(--bg-surface))"
+                    : "linear-gradient(180deg, var(--bg-surface-2), var(--bg-surface))",
               }}
             />
           </div>

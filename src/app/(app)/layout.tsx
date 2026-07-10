@@ -3,22 +3,24 @@ import { NotificationBell } from "@/components/shell/NotificationBell";
 import { RunwayBadge } from "@/components/shell/RunwayBadge";
 import { AppShell } from "@/components/shell/AppShell";
 import { formatMonth } from "@/lib/format";
-import { requireSession, sectionsFor } from "@/lib/rbac";
+import { requireSession, visibleSections } from "@/lib/rbac";
 import { getRunwaySnapshot } from "@/server/cash-metrics";
 import { computeNotifications } from "@/server/notifications";
 
 /** Authenticated shell: grouped, collapsible left sidebar + slim top bar. */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
-  const items = sectionsFor(session.role, session.overrides)
+  const items = (await visibleSections(session.role, session.overrides))
     // Admin technically has access to everything, but the student portal is a
     // student-only surface — Admin reviews students via /students instead.
     .filter((s) => s.key !== "my-journey" || session.role === "STUDENT")
-    .map(({ key, label, href, phase }) => ({
+    .map(({ key, label, href, phase, icon, group }) => ({
       key,
       label,
       href,
       phase,
+      icon,
+      group,
     }));
 
   // Runway on every screen (PRD3 §5) - Admin only; others never see cash data.
@@ -28,8 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
 
   return (
-    // data-role re-keys the accent tokens (globals.css): Admin indigo · Head teal · Member orange.
-    <div data-role={session.role} className="contents">
+    <div className="contents">
       <AppShell
         items={items}
         user={{

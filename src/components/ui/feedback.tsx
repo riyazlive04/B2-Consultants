@@ -43,7 +43,7 @@ type ConfettiPiece = {
 };
 type Burst = { id: number; pieces: ConfettiPiece[] };
 
-const CONFETTI_COLORS = ["var(--accent)", "var(--ok)", "var(--watch)", "#ec4899", "#8b5cf6"];
+const CONFETTI_COLORS = ["var(--viz-1)", "var(--viz-2)", "var(--viz-3)", "var(--viz-4)", "var(--viz-5)"];
 
 function makeBurst(id: number): Burst {
   const pieces = Array.from({ length: 32 }, (_, i) => ({
@@ -122,12 +122,13 @@ export function FeedbackHost() {
     [confirm],
   );
 
-  // Esc closes the dialog as "cancel"
+  // Esc always cancels. Enter only confirms NON-destructive dialogs — a stray
+  // double-Enter after a form submit must never delete a record (§5.9).
   useEffect(() => {
     if (!confirm) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") answer(false);
-      if (e.key === "Enter") answer(true);
+      if (e.key === "Enter" && !confirm.opts.danger) answer(true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -159,13 +160,13 @@ export function FeedbackHost() {
         </div>
       )}
 
-      {/* Toasts — frosted glass with a semantic tint */}
+      {/* Toasts — white surface with a semantic tint */}
       <div aria-live="polite" className="pointer-events-none fixed bottom-5 right-5 z-[100] flex flex-col gap-2">
         {toasts.map((t) => (
           <div
             key={t.id}
             className="toast-in glass-modal pointer-events-auto flex items-center gap-2.5 rounded-field px-4 py-2.5 text-sm font-medium"
-            style={{ color: t.kind === "success" ? "var(--ok)" : "var(--risk)" }}
+            style={{ color: t.kind === "success" ? "var(--good)" : "var(--bad)" }}
           >
             <DrawnMark kind={t.kind} />
             <span className="text-ink">{t.text}</span>
@@ -173,7 +174,7 @@ export function FeedbackHost() {
         ))}
       </div>
 
-      {/* Confirm dialog — frosted glass over a blurred scrim */}
+      {/* Confirm dialog — white panel over an ink scrim */}
       {confirm && (
         <div
           className="fixed inset-0 z-[99] flex items-center justify-center p-4"
@@ -188,17 +189,19 @@ export function FeedbackHost() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
+                // destructive dialogs land focus on the SAFE choice
+                autoFocus={confirm.opts.danger}
                 onClick={() => answer(false)}
-                className="rounded-field border border-line bg-surface/80 px-4 py-2 text-sm font-medium hover:bg-surface-2"
+                className="rounded-btn border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-surface-2"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                autoFocus
+                autoFocus={!confirm.opts.danger}
                 onClick={() => answer(true)}
-                className="rounded-field px-4 py-2 text-sm font-semibold text-white shadow-sm"
-                style={{ background: confirm.opts.danger ? "var(--risk)" : "var(--accent)" }}
+                className="rounded-btn px-4 py-2 text-sm font-semibold text-white"
+                style={{ background: confirm.opts.danger ? "var(--bad)" : "var(--primary)" }}
               >
                 {confirm.opts.confirmLabel ?? "Confirm"}
               </button>

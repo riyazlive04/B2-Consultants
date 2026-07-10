@@ -29,20 +29,32 @@ enum Role {
   HEAD    // Karthick — own daily log, view-only Students
   USER    // Asma / Nilofer — own daily log + own pipeline entry
   STUDENT // portal login linked to ONE Student record — sees only their own journey
+  TUTOR   // German Note tutor — GN section only (batches they teach + community)
+}
+
+// A suspended account cannot sign in, and its live sessions are deleted the moment
+// it is suspended — the badge in Users & access is not decorative.
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 model User {
-  id            String    @id
+  id            String     @id
   name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  email         String     @unique
+  emailVerified Boolean    @default(false)
   image         String?
-  role          Role      @default(USER)
+  role          Role       @default(USER)
+  status        UserStatus @default(ACTIVE)
   // Per-user feature overrides (Admin-managed): { "finance": true, "students": false, … }.
   // Missing key → the role's default access applies. Admins always see everything.
   sectionAccess Json?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  // Per-user capability overrides: { "finance.write": true, … }. What they may DO, as
+  // opposed to which screens they may open. See src/lib/capabilities.ts.
+  capabilities  Json?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   sessions            Session[]
   accounts            Account[]
@@ -59,6 +71,19 @@ model User {
   milestoneLogUpdates MilestoneLog[]     @relation("MilestoneUpdatedBy")
   signalChanges       SignalChangeLog[]  @relation("SignalChangedBy")
   sprintWeeksEntered  SprintWeek[]       @relation("SprintEnteredBy")
+  rewardGrantsDecided RewardGrant[]      @relation("RewardGrantDecidedBy")
+  invite              UserInvite?        @relation("UserInviteFor")
+  invitesCreated      UserInvite[]       @relation("UserInviteCreatedBy")
+  gnBatchesTutored    GnBatch[]          @relation("GnBatchTutor")
+  gnRecordingsPosted  GnRecording[]      @relation("GnRecordingPostedBy")
+  gnRecordingWatches  GnRecordingWatch[] @relation("GnRecordingWatchUser")
+  gnEventsCreated     GnEvent[]          @relation("GnEventCreatedBy")
+  gnPosts             GnPost[]           @relation("GnPostAuthor")
+  gnComments          GnComment[]        @relation("GnCommentAuthor")
+  gnLikes             GnLike[]           @relation("GnLikeUser")
+  gnCommentLikes      GnCommentLike[]    @relation("GnCommentLikeUser")
+  telecallerPayoutsEntered TelecallerPayout[] @relation("TelecallerPayoutEnteredBy")
+  whatsappMessagesSent WhatsAppMessage[] @relation("WhatsAppSentBy")
 
   @@map("user")
 }
@@ -254,6 +279,8 @@ model PendingPayment {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
+  whatsappMessages  WhatsAppMessage[]
+
   @@index([status, nextDueDate])
   @@map("pending_payment")
 }
@@ -342,6 +369,7 @@ model Lead {
   stageHistory LeadStageHistory[]
   students     Student[]
   bookings     BookingRequest[]
+  whatsappMessages WhatsAppMessage[]
 
   @@unique([source, externalRef])
   @@index([stage])
@@ -503,6 +531,8 @@ model BookingRequest {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  whatsappMessages WhatsAppMessage[]
+
   @@index([status, createdAt])
   @@index([bantScore])
   @@map("booking_request")
@@ -545,7 +575,10 @@ model TeamProfile {
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
-  okrs OKR[]
+  okrs             OKR[]
+  telecallerPayouts TelecallerPayout[]
+  goals            Goal[]
+  rewardGrants     RewardGrant[]
 
   @@map("team_profile")
 }
@@ -606,6 +639,39 @@ model DailyLog {
   @@map("daily_log")
 }
 
+// Whether an assigned reward has actually been paid out yet.
+enum PayoutStatus {
+  PENDING
+  PAID
+}
+
+// Telecaller rewards: Admin (Ameen) assigns a BONUS and/or COMMISSION to a
+// telecaller (a USER-role TeamProfile — appointment setters / discovery specialists)
+// for a given month, with a free-text reason ("based on the calls or any other
+// criteria"). Amounts are entered manually. Dual-currency like all money in the
+// app: INR + EUR minor units, FX stamped at entry so history never re-prices.
+model TelecallerPayout {
+  id            String       @id @default(cuid())
+  teamProfileId String
+  teamProfile   TeamProfile  @relation(fields: [teamProfileId], references: [id], onDelete: Cascade)
+  month         DateTime     @db.Date // first day of the month this reward is for
+  bonusInrMinor BigInt       @default(0) // paise
+  bonusEurMinor BigInt       @default(0) // cents
+  commInrMinor  BigInt       @default(0) // commission, paise
+  commEurMinor  BigInt       @default(0) // commission, cents
+  fxRateUsed    Decimal      @db.Decimal(14, 6) // INR per 1 EUR at entry
+  reason        String // the criteria: calls hit, targets, QA, spot bonus…
+  status        PayoutStatus @default(PENDING)
+  enteredById   String?
+  enteredBy     User?        @relation("TelecallerPayoutEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([teamProfileId, month])
+  @@index([month])
+  @@map("telecaller_payout")
+}
+
 // ───────────────────────────── Phase 2 — Students ─────────────────────────────
 
 enum StudentStatus {
@@ -661,6 +727,8 @@ model Student {
   incomes       Income[]
   pendingPayments PendingPayment[]
   satisfactionScores SatisfactionScore[]
+  gnMemberships GnBatchMember[]
+  whatsappMessages WhatsAppMessage[]
 
   @@index([fullName])
   @@map("student")
@@ -764,7 +832,7 @@ model SignalChangeLog {
   changedById    String?
   changedBy      User?      @relation("SignalChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
   previousSignal Signal?
-  newSignal      Signal
+  newSignal      Signal? // null = signal cleared back to "not set" (still audited)
   note           String?
 
   @@index([enrollmentId])
@@ -861,6 +929,213 @@ model Payable {
   @@map("payable")
 }
 
+// ───────────────────────────── Phase 4 — German Note ─────────────────────────────
+// LMS-lite for the German language program: Admin creates batches (A1..B2 cohorts)
+// and assigns a TUTOR + Students. Classes are recorded by fathom.ai; the tutor
+// pastes the Fathom share link (YouTube/Vimeo/Drive also accepted) into their
+// batch. Students keep LIFETIME access to their batch's recordings — batch
+// membership never expires; archiving a batch only closes its discussion.
+// Community = Skool-style feed: GnPost.batchId null → global, set → batch.
+
+enum GnBatchStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum GnVideoProvider {
+  FATHOM // primary: classes are recorded by fathom.ai, tutor pastes the share link
+  YOUTUBE
+  VIMEO
+  GDRIVE
+}
+
+model GnBatch {
+  id        String        @id @default(cuid())
+  name      String // "A1 Evening — July 2026"
+  level     ProgramLevel // GN_A1..GN_B2 only (service-validated, like B2_LEVELS)
+  tutorId   String?
+  tutor     User?         @relation("GnBatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
+  status    GnBatchStatus @default(ACTIVE)
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  members    GnBatchMember[]
+  recordings GnRecording[]
+  posts      GnPost[]
+  modules    GnModule[]
+  events     GnEvent[]
+
+  @@index([status])
+  @@index([tutorId])
+  @@map("gn_batch")
+}
+
+// Classroom curriculum: an ordered section grouping a batch's lessons
+// (recordings). Recordings with moduleId null fall into the default section.
+model GnModule {
+  id         String   @id @default(cuid())
+  batchId    String
+  batch      GnBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  title      String
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  recordings GnRecording[]
+
+  @@index([batchId, orderIndex])
+  @@map("gn_module")
+}
+
+// Scheduled live classes (calendar). Students see upcoming + a join link;
+// the recording gets posted afterwards as a GnRecording.
+model GnEvent {
+  id           String    @id @default(cuid())
+  batchId      String
+  batch        GnBatch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  title        String
+  startsAt     DateTime
+  durationMins Int?
+  joinUrl      String?
+  notes        String?
+  createdById  String?
+  createdBy    User?     @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([batchId, startsAt])
+  @@map("gn_event")
+}
+
+// Members reference Student (not User) so Admin can add people before any
+// portal login exists; the existing createStudentLogin flow links a User later.
+model GnBatchMember {
+  id        String   @id @default(cuid())
+  batchId   String
+  batch     GnBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  addedAt   DateTime @default(now())
+
+  @@unique([batchId, studentId])
+  @@index([studentId])
+  @@map("gn_batch_member")
+}
+
+model GnRecording {
+  id         String          @id @default(cuid())
+  batchId    String
+  batch      GnBatch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  moduleId   String? // classroom section; null = default "Class recordings"
+  module     GnModule?       @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  title      String
+  classDate  DateTime        @db.Date
+  videoUrl   String // original pasted URL ("open original" link)
+  provider   GnVideoProvider
+  embedUrl   String // derived iframe src, stored at write time
+  notes      String?
+  postedById String?
+  postedBy   User?           @relation("GnRecordingPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  watches GnRecordingWatch[]
+
+  @@index([batchId, classDate])
+  @@index([moduleId])
+  @@map("gn_recording")
+}
+
+// Per-viewer "watched" state → the batch progress bar + completion checkmarks.
+// Recordings are lifetime, so this is progress, not access control.
+model GnRecordingWatch {
+  id          String      @id @default(cuid())
+  recordingId String
+  recording   GnRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User        @relation("GnRecordingWatchUser", fields: [userId], references: [id], onDelete: Cascade)
+  watchedAt   DateTime    @default(now())
+
+  @@unique([recordingId, userId])
+  @@index([userId])
+  @@map("gn_recording_watch")
+}
+
+// Skool-style post categories — power the filter chips on the feed.
+enum GnPostCategory {
+  GENERAL
+  ANNOUNCEMENT
+  QUESTION
+  WIN
+}
+
+// Authors are SetNull so revoking a login never destroys community content —
+// UI renders "Former member" when author is null. Feed order is Skool-like:
+// pinned first, then by latest activity (a new comment bumps the post).
+model GnPost {
+  id               String         @id @default(cuid())
+  batchId          String? // null = global GN community feed; set = batch discussion
+  batch            GnBatch?       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  authorId         String?
+  author           User?          @relation("GnPostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  title            String? // Skool posts lead with a bold title; optional for quick questions
+  category         GnPostCategory @default(GENERAL)
+  pinned           Boolean        @default(false) // Admin (global) / batch tutor (batch) pin posts to the top
+  body             String
+  imageUrl         String? // optional single image, stored as a resized data URL (like avatars)
+  mentionedUserIds String[] // @mention targets, resolved server-side → notifications
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  comments GnComment[]
+  likes    GnLike[]
+
+  @@index([batchId, createdAt])
+  @@map("gn_post")
+}
+
+model GnComment {
+  id               String   @id @default(cuid())
+  postId           String
+  post             GnPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId         String?
+  author           User?    @relation("GnCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body             String
+  mentionedUserIds String[]
+  createdAt        DateTime @default(now())
+
+  likes GnCommentLike[]
+
+  @@index([postId, createdAt])
+  @@map("gn_comment")
+}
+
+model GnLike {
+  id        String   @id @default(cuid())
+  postId    String
+  post      GnPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("GnLikeUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+  @@map("gn_like")
+}
+
+// Comment likes — separate table from post likes; both feed community points/levels.
+model GnCommentLike {
+  id        String    @id @default(cuid())
+  commentId String
+  comment   GnComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation("GnCommentLikeUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@unique([commentId, userId])
+  @@map("gn_comment_like")
+}
+
 // ───────────────────────────── Cross-cutting ─────────────────────────────
 
 // Daily ECB rate cache (frankfurter.app). One row per day; each money record
@@ -875,11 +1150,230 @@ model FxRate {
   @@map("fx_rate")
 }
 
+// ───────────────────────────── Invites ─────────────────────────────
+// Public sign-up is off: an Admin provisions the account, and the person sets their own
+// password through a single-use link. Nobody — not even the Admin who invited them —
+// ever knows their password.
+//
+// Only the SHA-256 of the token is stored, so a leaked database row cannot be redeemed.
+// One row per user (`userId @unique`): re-inviting replaces the old token, which
+// instantly invalidates any link already sent.
+model UserInvite {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  user        User      @relation("UserInviteFor", fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime? // set once redeemed — a link is good for exactly one use
+  createdById String?
+  createdBy   User?     @relation("UserInviteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@map("user_invite")
+}
+
+// ───────────────────────────── Founder console — goals & rewards ─────────────────────────────
+// The founder steers the team with GOALS ("₹12L revenue this quarter", "Asma: 40 discovery
+// calls in July") and pays for outcomes with REWARD RULES ("30-day streak → ₹2,000").
+//
+// Neither stores progress. A goal's actual and a rule's qualifiers are DERIVED on read from
+// the same append-only history the Arena scores (daily logs, stage moves, milestone logs), so
+// nothing here can drift out of sync with the work that was actually done.
+
+enum GoalScope {
+  COMPANY // judged on the whole team's combined total
+  USER    // judged on one person's total
+}
+
+enum GoalPeriod {
+  MONTH
+  QUARTER
+  YEAR
+}
+
+model Goal {
+  id            String       @id @default(cuid())
+  name          String
+  // A key from GOAL_METRICS in src/lib/goals.ts (e.g. "wins", "xp", "revenueInr"). Text, not an
+  // enum: the vocabulary is derived from the gamification engine, and adding a metric there
+  // shouldn't force a database migration.
+  metric        String
+  scope         GoalScope    @default(COMPANY)
+  teamProfileId String? // set when scope = USER
+  teamProfile   TeamProfile? @relation(fields: [teamProfileId], references: [id], onDelete: Cascade)
+  period        GoalPeriod   @default(MONTH)
+  periodStart   DateTime     @db.Date // first day of the month / quarter / year
+  targetValue   Decimal      @db.Decimal(16, 2)
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([active, periodStart])
+  @@index([teamProfileId])
+  @@map("goal")
+}
+
+enum RewardKind {
+  BONUS
+  COMMISSION
+  PERK // a thing, not a payout — amounts stay zero
+}
+
+enum RewardGrantStatus {
+  PENDING  // auto-detected, waiting on the founder
+  APPROVED // founder said yes; not yet paid out
+  DECLINED // founder said no — never re-offered
+  PAID
+}
+
+model RewardRule {
+  id             String        @id @default(cuid())
+  name           String
+  description    String
+  kind           RewardKind    @default(BONUS)
+  active         Boolean       @default(true)
+  // A RewardTrigger from src/lib/rewards.ts, validated by rewardTriggerSchema on write.
+  trigger        Json
+  roles          Role[] // empty = every role plays
+  amountInrMinor BigInt        @default(0) // paise
+  amountEurMinor BigInt        @default(0) // cents
+  perkLabel      String? // what they get when kind = PERK
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  grants         RewardGrant[]
+
+  @@index([active])
+  @@map("reward_rule")
+}
+
+// One person, one rule, one period. `periodKey` is derived from the trigger (a badge key, a
+// level, a month…) — see src/lib/rewards.ts. The unique constraint below is what makes a
+// re-scan idempotent: re-deriving every qualification in history inserts nothing new, so a
+// rule can be edited and rescanned without ever double-paying, and a DECLINED grant stays
+// declined instead of reappearing as PENDING.
+model RewardGrant {
+  id             String            @id @default(cuid())
+  ruleId         String
+  rule           RewardRule        @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  teamProfileId  String
+  teamProfile    TeamProfile       @relation(fields: [teamProfileId], references: [id], onDelete: Cascade)
+  periodKey      String
+  qualifiedOn    DateTime          @db.Date
+  reason         String
+  status         RewardGrantStatus @default(PENDING)
+  // Amounts are copied off the rule and the rate stamped at grant time, so later edits to the
+  // rule (or a move in the FX rate) never re-price what someone already earned.
+  amountInrMinor BigInt            @default(0)
+  amountEurMinor BigInt            @default(0)
+  fxRateUsed     Decimal           @db.Decimal(14, 6)
+  decidedById    String?
+  decidedBy      User?             @relation("RewardGrantDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([ruleId, teamProfileId, periodKey])
+  @@index([status, qualifiedOn])
+  @@index([teamProfileId])
+  @@map("reward_grant")
+}
+
 // Small key/value store: runway growth-rate override, ingest feature flags, etc.
+// Founder-console keys: "sectionsConfig" (nav layout + role defaults),
+// "gamificationRulesets" (the effective-dated XP/level/badge/quest rules).
 model AppSetting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
 
   @@map("app_setting")
+}
+
+// ───────────────────────────── Wave-2 — WhatsApp (WATI) ─────────────────────────────
+// Outbound WhatsApp via the WATI Business API BSP (the "Wave-2, gated on Ameen's sign-off"
+// messaging the Wave-1 comments anticipated). Everything here is INERT unless WATI_ENABLED
+// is set AND credentials + template names are configured: with the flag off every send is a
+// no-op that still writes a SKIPPED row so the history is honest. Business-initiated messages
+// are always pre-approved WhatsApp *templates* (24h-window rule); numbers are stored normalized
+// (digits + country code) and STOP replies write a WhatsAppOptOut that blocks all future sends.
+
+enum WhatsAppDirection {
+  OUTBOUND
+  INBOUND
+}
+
+// One value per lifecycle touchpoint (§ "all touchpoints"). MANUAL = a one-off send a human
+// triggered from a section row; the rest are the automatic reminder cadence.
+enum WhatsAppKind {
+  DISCO_REMINDER        // funnel: nudge an un-booked lead to book the discovery call
+  BOOKING_CONFIRMATION  // a slot was just booked
+  BOOKING_REMINDER      // pre-call reminder (~24h / ~1h before the slot)
+  NO_SHOW_FOLLOWUP      // missed the call — rebook
+  PAYMENT_REMINDER      // overdue pending payment / receivable
+  CHECKIN_NUDGE         // student coaching check-in due
+  SPRINT_MISS_NUDGE     // student missed a sprint-week target
+  MANUAL                // free-form / manual send from a section
+}
+
+enum WhatsAppStatus {
+  SKIPPED   // flag off / unconfigured / opted-out / deduped — nothing left the app
+  QUEUED
+  SENT      // accepted by WATI
+  DELIVERED // WATI delivery callback
+  READ      // WATI read callback
+  REPLIED   // prospect replied (inbound) — "WhatsApp confirmed" (SALES-LOGIC §2)
+  FAILED
+}
+
+// Append-only send/receive log. Doubles as the idempotency source (sentRecently checks the
+// last row for a kind+target) and the per-row status badge shown across the sections.
+model WhatsAppMessage {
+  id               String            @id @default(cuid())
+  direction        WhatsAppDirection @default(OUTBOUND)
+  kind             WhatsAppKind
+  status           WhatsAppStatus    @default(QUEUED)
+  toNumber         String            // normalized (digits incl. country code, no '+')
+  templateName     String?           // WATI approved template used (null for inbound / free text)
+  body             String?           // rendered summary (outbound) or message text (inbound)
+  params           Json?             // template variables sent, for audit/debug
+  watiMessageId    String?           // WATI id — matched by the status-callback webhook
+  error            String?           // failure reason when status = FAILED
+
+  // Optional links to whatever this message was about (all SetNull — a message row must
+  // survive deletion of the lead/student it referenced, like the rest of the audit tables).
+  leadId           String?
+  lead             Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  studentId        String?
+  student          Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  bookingRequestId String?
+  bookingRequest   BookingRequest?   @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
+  pendingPaymentId String?
+  pendingPayment   PendingPayment?   @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
+
+  sentById         String?           // the admin/user who triggered a manual send (null = automatic)
+  sentBy           User?             @relation("WhatsAppSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([kind, createdAt])
+  @@index([leadId])
+  @@index([studentId])
+  @@index([bookingRequestId])
+  @@index([pendingPaymentId])
+  @@index([watiMessageId])
+  @@index([toNumber])
+  @@map("whatsapp_message")
+}
+
+// Phone-keyed opt-out (WhatsApp STOP / DPDP + GDPR). Checked before every send; written by
+// the inbound webhook on a STOP-style reply and toggleable by Admin in the WhatsApp settings.
+model WhatsAppOptOut {
+  phone     String   @id // normalized, same shape as WhatsAppMessage.toNumber
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@map("whatsapp_opt_out")
 }

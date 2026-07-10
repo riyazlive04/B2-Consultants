@@ -66,6 +66,8 @@ async function resetBusinessData() {
       "appointment_slot", "booking_request",
       "okr", "daily_log",
       "student", "enrollment", "milestone_log", "signal_change_log", "satisfaction_score",
+      "gn_batch", "gn_batch_member", "gn_module", "gn_recording", "gn_recording_watch",
+      "gn_event", "gn_post", "gn_comment", "gn_like", "gn_comment_like",
       "weekly_funnel_snapshot", "cash_position", "payable", "fx_rate"
     CASCADE
   `);
@@ -533,6 +535,179 @@ async function seedExtraIncome(ids: Ids, studentIdByName: Record<string, string>
   console.log(`· ${rows.length} extra income rows (GN courses + this-month collections)`);
 }
 
+// ───────────────────────── German Note: batches, recordings, community ─────────────────────────
+
+async function seedGermanNote(ids: Ids) {
+  const auth = betterAuth({
+    database: prismaAdapter(prisma, { provider: "postgresql" }),
+    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+    emailAndPassword: { enabled: true },
+    user: { additionalFields: { role: { type: "string", defaultValue: "USER", input: false } } },
+  });
+  const ctx = await auth.$context;
+
+  // Demo accounts survive resets (users aren't truncated) — upsert-by-email.
+  const ensureUser = async (name: string, email: string, password: string, role: "TUTOR" | "STUDENT") => {
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      const res = await auth.api.signUpEmail({ body: { name, email, password } });
+      user = await prisma.user.findUnique({ where: { id: res.user.id } });
+    } else {
+      await ctx.internalAdapter.updatePassword(user.id, await ctx.password.hash(password));
+    }
+    await prisma.user.update({ where: { id: user!.id }, data: { role, emailVerified: true } });
+    return user!.id;
+  };
+
+  const tutorEmail = process.env.SEED_TUTOR_EMAIL || "tutor.demo@b2consultants.in";
+  const tutorId = await ensureUser("Lena Fischer", tutorEmail, process.env.SEED_TUTOR_PASSWORD || "deutsch-2026", "TUTOR");
+
+  // Promote the GN income names (seedExtraIncome) into real Student records —
+  // no enrollment: GN learners live in batches, not the 90/120-day tracker.
+  const gnLearners: Array<[string, string, string]> = [
+    ["Meghna Suresh", "meghna.s@example.com", "+91 98111 55001"],
+    ["Joel Mathew", "joel.m@example.com", "+91 98111 55002"],
+    ["Farida Begum", "farida.b@example.com", "+91 98111 55003"],
+    ["Sandeep Rao", "sandeep.r@example.com", "+91 98111 55004"],
+  ];
+  const sid: Record<string, string> = {};
+  for (const [fullName, email, phone] of gnLearners) {
+    const s = await prisma.student.create({ data: { fullName, email, phone, leadSource: "WORKSHOP" } });
+    sid[fullName] = s.id;
+    await prisma.income.updateMany({ where: { studentId: null, studentName: fullName }, data: { studentId: s.id } });
+  }
+
+  // GN student portal demo login → Meghna (member of the A1 batch)
+  const gnStudentEmail = process.env.SEED_GN_STUDENT_EMAIL || "gn.student.demo@b2consultants.in";
+  const meghnaUserId = await ensureUser(
+    "Meghna Suresh", gnStudentEmail, process.env.SEED_GN_STUDENT_PASSWORD || "hallo-2026", "STUDENT"
+  );
+  await prisma.student.update({ where: { id: sid["Meghna Suresh"] }, data: { userId: meghnaUserId } });
+
+  // Two batches, both taught by Lena
+  const a1 = await prisma.gnBatch.create({
+    data: {
+      name: "A1 Evening — July 2026", level: "GN_A1", tutorId,
+      notes: "Mon/Wed/Fri 7–8:30 PM IST · Zoom link pinned in the batch discussion",
+      members: { create: [{ studentId: sid["Meghna Suresh"] }, { studentId: sid["Sandeep Rao"] }] },
+    },
+  });
+  const b1 = await prisma.gnBatch.create({
+    data: {
+      name: "B1 Weekend — Pflege track", level: "GN_B1", tutorId,
+      notes: "Sat/Sun 10 AM–1 PM IST",
+      members: { create: [{ studentId: sid["Farida Begum"] }, { studentId: sid["Joel Mathew"] }] },
+    },
+  });
+
+  // Classroom modules → a structured curriculum for the A1 batch
+  const mod = (batchId: string, title: string, orderIndex: number) =>
+    prisma.gnModule.create({ data: { batchId, title, orderIndex } });
+  const a1Grammar = await mod(a1.id, "A1 · Grammar foundations", 0);
+  const a1Speaking = await mod(a1.id, "A1 · Speaking & questions", 1);
+
+  // Class recordings (placeholder public YouTube videos so the embeds actually play)
+  const rec = (batchId: string, dAgo: number, title: string, ytId: string, notes?: string, moduleId?: string) =>
+    prisma.gnRecording.create({
+      data: {
+        batchId, moduleId: moduleId ?? null, title, classDate: daysAgo(dAgo),
+        videoUrl: `https://youtu.be/${ytId}`, provider: "YOUTUBE",
+        embedUrl: `https://www.youtube-nocookie.com/embed/${ytId}`,
+        notes: notes ?? null, postedById: tutorId, createdAt: at(daysAgo(dAgo), 21),
+      },
+    });
+  await rec(a1.id, 7, "Class 10 — Verben: sein & haben", "jNQXAC9IVRw", "Homework: workbook p. 32–34. Quiz on Friday!", a1Grammar.id);
+  await rec(a1.id, 4, "Class 11 — Akkusativ basics", "9bZkp7q19f0", undefined, a1Grammar.id);
+  await rec(a1.id, 1, "Class 12 — Fragen stellen (W-Fragen)", "dQw4w9WgXcQ", "Bring 5 questions about your day to next class.", a1Speaking.id);
+  await rec(b1.id, 5, "Woche 8 — Pflegeberichte schreiben", "jNQXAC9IVRw", "Focus: documentation vocabulary for the ward.");
+  await rec(b1.id, 2, "Woche 9 — Telefongespräche im Krankenhaus", "9bZkp7q19f0");
+
+  // Calendar — next live classes (with join links) + one past class
+  const evt = (batchId: string, dAgoOrAhead: number, hh: number, title: string, joinUrl: string | null, notes?: string) =>
+    prisma.gnEvent.create({
+      data: {
+        batchId, title, startsAt: at(dAgoOrAhead >= 0 ? daysAhead(dAgoOrAhead) : daysAgo(-dAgoOrAhead), hh),
+        durationMins: 90, joinUrl, notes: notes ?? null, createdById: tutorId,
+      },
+    });
+  await evt(a1.id, 2, 19, "Class 13 — Modalverben (live)", "https://zoom.us/j/9876543210", "We'll drill Akkusativ from the homework too.");
+  await evt(a1.id, 5, 19, "Class 14 — Perfekt tense intro (live)", "https://zoom.us/j/9876543210");
+  await evt(b1.id, 3, 10, "Woche 10 — Rollenspiel: Visite (live)", "https://meet.google.com/abc-defg-hij", "Bring your anonymised Pflegebericht.");
+  await evt(a1.id, -1, 19, "Class 12 — Fragen stellen (live)", null); // past — recording already posted
+
+  // Community: global feed + batch discussions (authors need logins → Lena / Meghna / Ameen).
+  // Skool-style: titles + categories, welcome post pinned.
+  type GnCat = "GENERAL" | "ANNOUNCEMENT" | "QUESTION" | "WIN";
+  // comments: [authorId, body, likerIds?] — likerIds feed comment-like points/levels
+  const post = async (
+    batchId: string | null, authorId: string, dAgo: number, hh: number, body: string,
+    comments: Array<[string, string] | [string, string, string[]]> = [], likerIds: string[] = [],
+    opts: { title?: string; category?: GnCat; pinned?: boolean; mentions?: string[] } = {}
+  ) => {
+    const p = await prisma.gnPost.create({
+      data: {
+        batchId, authorId, body, createdAt: at(daysAgo(dAgo), hh),
+        title: opts.title ?? null, category: opts.category ?? "GENERAL", pinned: opts.pinned ?? false,
+        mentionedUserIds: opts.mentions ?? [],
+      },
+    });
+    for (const [cAuthor, cBody, cLikers] of comments) {
+      const c = await prisma.gnComment.create({
+        data: { postId: p.id, authorId: cAuthor, body: cBody, createdAt: at(daysAgo(dAgo), hh + 1) },
+      });
+      if (cLikers && cLikers.length) {
+        await prisma.gnCommentLike.createMany({ data: cLikers.map((userId) => ({ commentId: c.id, userId })) });
+      }
+    }
+    if (likerIds.length) {
+      await prisma.gnLike.createMany({ data: likerIds.map((userId) => ({ postId: p.id, userId })) });
+    }
+  };
+
+  await post(null, ids.ameen, 9, 10,
+    "Willkommen! 🎉 This is the German Note community — introduce yourself and say which level you're working towards.",
+    [[tutorId, "Hallo zusammen! I'm Lena, your tutor for A1 and B1. Ask me anything here between classes.", [ids.ameen, meghnaUserId]],
+     [meghnaUserId, "Hi everyone! Meghna here, A1 evening batch. Goal: B1 by next summer 💪"]],
+    [tutorId, meghnaUserId],
+    { title: "Willkommen bei German Note! Start here 👋", category: "ANNOUNCEMENT", pinned: true });
+  await post(null, tutorId, 5, 18,
+    "Label 10 things in your kitchen with sticky notes — der Kühlschrank, die Pfanne, das Messer. Vocabulary sticks when you SEE it daily.",
+    [[meghnaUserId, "Did this yesterday — my flatmates think I've lost it 😄", [tutorId]]],
+    [ids.ameen, meghnaUserId],
+    { title: "Tip of the week: sticky-note your kitchen", category: "GENERAL" });
+  await post(null, meghnaUserId, 2, 20,
+    "Passed my first mock test with 82%! The recording from Class 10 helped so much — danke Lena!",
+    [[tutorId, "Sehr gut, Meghna! 👏", [ids.ameen, meghnaUserId]]],
+    [tutorId, ids.ameen],
+    { title: "82% on my first mock test 🎉", category: "WIN" });
+  // @mention demo — Lena tags Meghna (drives the mention highlight + her notification)
+  await post(null, tutorId, 1, 12,
+    "@Meghna Suresh that mock-test result is fantastic — would you share your study routine with the group?",
+    [], [ids.ameen],
+    { category: "GENERAL", mentions: [meghnaUserId] });
+
+  await post(a1.id, meghnaUserId, 3, 21,
+    "Is it “Ich habe einen Hund” or “Ich habe ein Hund”? The Akkusativ endings confuse me.",
+    [[tutorId, "„einen Hund“ — Hund is masculine, and the direct object takes Akkusativ: der → den/einen. We'll drill this on Friday!", [meghnaUserId]]],
+    [tutorId],
+    { title: "Frage zur Hausaufgabe (Akkusativ)", category: "QUESTION" });
+  await post(b1.id, tutorId, 4, 9,
+    "B1 group: bring one real Pflegebericht example (anonymised!) to Saturday's class — we'll rewrite them together.",
+    [], [ids.ameen],
+    { title: "Homework for Saturday", category: "ANNOUNCEMENT", pinned: true });
+
+  // Meghna's watch progress → 2 of 3 A1 recordings watched (progress bar demo)
+  const a1recs = await prisma.gnRecording.findMany({
+    where: { batchId: a1.id }, orderBy: { classDate: "asc" }, take: 2, select: { id: true },
+  });
+  for (const r of a1recs) {
+    await prisma.gnRecordingWatch.create({ data: { recordingId: r.id, userId: meghnaUserId } });
+  }
+
+  console.log(`· German Note: 2 batches, 2 modules, 5 recordings, 4 scheduled classes, 6 posts + likes/mention/progress (tutor: ${tutorEmail} → Lena Fischer)`);
+}
+
 // ───────────────────────── Finance: expenses, targets, payables, cash ─────────────────────────
 
 async function seedFinanceOps(ids: Ids) {
@@ -844,6 +1019,7 @@ async function main() {
   const studentIdByName = await seedStudents(ids);
   await seedPipeline(ids, studentIdByName);
   await seedExtraIncome(ids, studentIdByName);
+  await seedGermanNote(ids);
   await seedFinanceOps(ids);
   await seedFunnel();
   await seedPeople(ids, pids);
@@ -865,7 +1041,9 @@ Logins (passwords in .env):
   Ameen (Admin)  ${process.env.SEED_ADMIN_EMAIL}
   Karthick (Head) ${process.env.SEED_HEAD_EMAIL}
   Asma / Nilofer (Users) ${process.env.SEED_USER1_EMAIL} / ${process.env.SEED_USER2_EMAIL}
-  Student portal  ${process.env.SEED_STUDENT_EMAIL} → Ravi Kumar`);
+  Student portal  ${process.env.SEED_STUDENT_EMAIL} → Ravi Kumar
+  GN tutor        ${process.env.SEED_TUTOR_EMAIL || "tutor.demo@b2consultants.in"} → Lena Fischer
+  GN student      ${process.env.SEED_GN_STUDENT_EMAIL || "gn.student.demo@b2consultants.in"} → Meghna Suresh`);
 }
 
 main()

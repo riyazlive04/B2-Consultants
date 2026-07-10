@@ -1,261 +1,345 @@
 "use client";
 
 import { useState } from "react";
-import { createUser, resetUserAccess, setUserPassword, updateUserAccess } from "@/server/users-actions";
+import { Link2, Trash2, UserPlus } from "lucide-react";
+import { declineAccessRequest, type AccessRequest } from "@/server/access-requests";
+import {
+  deleteUser,
+  reactivateUser,
+  resendInvite,
+  setUserPassword,
+  suspendUser,
+  type ListedUser,
+} from "@/server/users-actions";
 import { askConfirm, toast } from "@/components/ui/feedback";
-import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { Modal } from "@/components/ui/Modal";
+import { Field, FormError, TextInput } from "@/components/ui/form";
+import { Card, Chip, Hint, PersonCell, Pill, Td, Th, TableShell, Toolbar, Tr, type Tone } from "@/components/ui/kit";
+import { Btn, CopyField, IconButton, SubmitBtn } from "@/components/ui/controls";
 import { formatDate } from "@/lib/format";
-import { roleDefaultKeys, SECTIONS, type AppRole, type SectionOverrides } from "@/lib/sections";
+import { effectiveSectionKeys, type AppRole, type ResolvedSection } from "@/lib/sections";
+import { AccessDialog, type Actor } from "./AccessDialog";
 
-export type UserRow = {
-  id: string;
-  name: string;
-  email: string;
-  role: AppRole;
-  sectionAccess: SectionOverrides | null;
-  createdAt: string;
+/**
+ * Team & access.
+ *
+ * A scannable table — who, what role, what they can open, whether they're active —
+ * with every change made in a modal so the list never leaves the screen. The two
+ * destructive actions (suspend, delete) both confirm, and both are refused by the
+ * server if they'd leave the business without an Admin.
+ */
+
+const ROLE_TONE: Record<AppRole, { tone: Tone; label: string }> = {
+  ADMIN: { tone: "primary", label: "Admin" },
+  HEAD: { tone: "info", label: "Head coach" },
+  USER: { tone: "good", label: "Telecaller" },
+  STUDENT: { tone: "neutral", label: "Student" },
+  TUTOR: { tone: "neutral", label: "Tutor" },
 };
 
-const ROLE_OPTIONS = [
-  { value: "USER", label: "User - own daily log + own pipeline entry" },
-  { value: "HEAD", label: "Head - students view + own daily log" },
-  { value: "ADMIN", label: "Admin - everything, always" },
-  { value: "STUDENT", label: "Student - own journey portal + CV check only" },
-];
+const MAX_CHIPS = 4;
 
-/** Which sections a user effectively sees right now (mirror of rbac.hasAccess). */
-function effectiveKeys(role: AppRole, overrides: SectionOverrides | null): Set<string> {
-  if (role === "ADMIN") return new Set(SECTIONS.map((s) => s.key));
-  const defaults = new Set<string>(roleDefaultKeys(role));
-  const out = new Set(defaults);
-  for (const s of SECTIONS) {
-    const o = overrides?.[s.key];
-    if (o === true) out.add(s.key);
-    if (o === false) out.delete(s.key);
-  }
-  return out;
+function StatusPill({ user }: { user: ListedUser }) {
+  if (user.status === "SUSPENDED") return <Pill tone="bad">Suspended</Pill>;
+  if (user.invite?.pending) return <Pill tone="warn">Invite pending</Pill>;
+  if (user.invite?.expired) return <Pill tone="neutral">Invite expired</Pill>;
+  return <Pill tone="good">Active</Pill>;
 }
 
-/** Checkbox grid over every feature - used by both create and edit forms. */
-function AccessGrid({ role, checked }: { role: AppRole; checked: Set<string> }) {
-  if (role === "ADMIN") {
-    return <p className="text-sm text-muted">Admins always have access to everything.</p>;
-  }
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {SECTIONS.map((s) => (
-        <label key={s.key} className="flex items-center gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
-          <input
-            type="checkbox"
-            name={`section_${s.key}`}
-            defaultChecked={checked.has(s.key)}
-            className="h-4 w-4 accent-[var(--accent)]"
-          />
-          <span>{s.label}</span>
-        </label>
-      ))}
-    </div>
-  );
-}
+export function UsersPanel({
+  users,
+  currentUserId,
+  accessRequests = [],
+  sections,
+  actor,
+}: {
+  users: ListedUser[];
+  currentUserId: string;
+  accessRequests?: AccessRequest[];
+  /** the founder's live section layout — labels, order and on/off all come from here */
+  sections: ResolvedSection[];
+  /** whoever is looking at this screen; decides what they're allowed to hand out */
+  actor: Actor;
+}) {
+  const [dialog, setDialog] = useState<
+    { mode: "invite"; prefill?: AccessRequest } | { mode: "edit"; user: ListedUser } | null
+  >(null);
+  const [invite, setInvite] = useState<{ url: string; expiresInDays: number } | null>(null);
+  const [pwFor, setPwFor] = useState<ListedUser | null>(null);
+  const [pwError, setPwError] = useState<string | null>(null);
 
-export function UsersPanel({ users, currentUserId }: { users: UserRow[]; currentUserId: string }) {
-  const [creating, setCreating] = useState(false);
-  const [createRole, setCreateRole] = useState<AppRole>("USER");
-  const [editing, setEditing] = useState<UserRow | null>(null);
-  const [editRole, setEditRole] = useState<AppRole>("USER");
-  const [pwFor, setPwFor] = useState<UserRow | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const run = async (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, success: string) => {
+    const res = await fn();
+    if (!res.ok) return toast(res.error, "error");
+    toast(success);
+  };
 
-  const startEdit = (u: UserRow) => {
-    setEditing(u);
-    setEditRole(u.role);
-    setPwFor(null);
-    setCreating(false);
+  const onSuspend = async (u: ListedUser) => {
+    const ok = await askConfirm({
+      title: `Suspend ${u.name}?`,
+      body: "They're signed out immediately and can't sign in again until you reactivate them.",
+      confirmLabel: "Suspend",
+      danger: true,
+    });
+    if (ok) await run(() => suspendUser(u.id), `${u.name} suspended`);
+  };
+
+  const onDelete = async (u: ListedUser) => {
+    const ok = await askConfirm({
+      title: `Delete ${u.name}?`,
+      body: "Their login is removed for good. Work they recorded stays, attributed to nobody.",
+      confirmLabel: "Delete account",
+      danger: true,
+    });
+    if (ok) await run(() => deleteUser(u.id), `${u.name} deleted`);
+  };
+
+  const onResend = async (u: ListedUser) => {
+    const res = await resendInvite(u.id);
+    if (!res.ok) return toast(res.error, "error");
+    setInvite({ url: res.inviteUrl, expiresInDays: res.expiresInDays });
   };
 
   return (
     <section className="space-y-5">
-      <div className="flex items-center justify-between">
+      <Toolbar>
         <div>
-          <h3 className="font-display text-lg font-semibold">Users & access</h3>
-          <p className="text-xs text-muted">
-            Create logins and choose exactly which features each person can open. Role sets the
-            baseline; the toggles override it per user.
-          </p>
+          <h3 className="font-display text-lg font-semibold">Users &amp; access</h3>
+          <Hint>Provision accounts, choose what each person can open, and what they&apos;re allowed to change.</Hint>
         </div>
-        <button
-          type="button"
-          className="rounded-field bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:opacity-95"
-          onClick={() => { setCreating((v) => !v); setEditing(null); setPwFor(null); }}
-        >
-          {creating ? "Close" : "Create user"}
-        </button>
-      </div>
+        <Btn variant="primary" icon={<UserPlus size={16} />} onClick={() => setDialog({ mode: "invite" })}>
+          Invite user
+        </Btn>
+      </Toolbar>
 
-      {/* Create */}
-      {creating && (
-        <form
-          action={async (form) => {
-            setError(null);
-            const res = await createUser(form);
-            if (!res.ok) return setError(res.error);
-            toast("User created - share the password securely");
-            setCreating(false);
-          }}
-          className="rounded-card border border-line bg-surface p-5 shadow-card"
+      {/* Pending access requests (from the login screen's "Request access") */}
+      {accessRequests.length > 0 && (
+        <Card
+          flush
+          title={
+            <span className="flex items-center gap-2.5">
+              <span aria-hidden className="h-2 w-2 rounded-full bg-watch" />
+              <span className="font-display text-[15px] font-semibold">Pending access requests</span>
+              <Pill tone="warn">{accessRequests.length} waiting</Pill>
+            </span>
+          }
         >
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Full name"><TextInput name="name" required /></Field>
-            <Field label="Email (login)"><TextInput type="email" name="email" required /></Field>
-            <Field label="Temporary password" hint="Min 8 characters; ask them to change it">
-              <TextInput name="password" required minLength={8} />
-            </Field>
-            <Field label="Role (baseline access)">
-              <Select
-                name="role"
-                options={ROLE_OPTIONS}
-                value={createRole}
-                onChange={(e) => setCreateRole(e.target.value as AppRole)}
-              />
-            </Field>
-          </div>
-          <div className="mt-4">
-            <p className="mb-2 text-sm font-medium">Feature access</p>
-            <AccessGrid key={createRole} role={createRole} checked={new Set(roleDefaultKeys(createRole))} />
-          </div>
-          <div className="mt-4 flex items-center gap-3">
-            <SubmitButton>Create user</SubmitButton>
-            <FormError message={error} />
-          </div>
-        </form>
+          {accessRequests.map((r) => (
+            <div key={r.id} className="flex flex-wrap items-center gap-3.5 border-b border-line px-5 py-4 last:border-b-0">
+              <div className="min-w-[200px] flex-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-sm font-semibold text-ink">{r.name}</span>
+                  <Pill tone={ROLE_TONE[r.role as AppRole]?.tone ?? "neutral"}>
+                    requested: {ROLE_TONE[r.role as AppRole]?.label ?? r.role}
+                  </Pill>
+                </div>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {r.email} · {formatDate(r.requestedAt)}
+                </p>
+                {r.note && <p className="mt-1 text-xs text-ink-2">{r.note}</p>}
+              </div>
+              <div className="flex gap-2">
+                <Btn
+                  size="sm"
+                  onClick={async () => {
+                    const ok = await askConfirm({
+                      title: `Decline ${r.name}'s request?`,
+                      body: "They won't be notified — the request is simply removed.",
+                      confirmLabel: "Decline",
+                    });
+                    if (!ok) return;
+                    await run(() => declineAccessRequest(r.id), "Access request declined");
+                  }}
+                >
+                  Decline
+                </Btn>
+                <Btn size="sm" variant="primary" onClick={() => setDialog({ mode: "invite", prefill: r })}>
+                  Review &amp; grant
+                </Btn>
+              </div>
+            </div>
+          ))}
+        </Card>
       )}
 
-      {/* User list */}
-      <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-        {users.map((u) => {
-          const eff = effectiveKeys(u.role, u.sectionAccess);
-          const customized = u.role !== "ADMIN" && u.sectionAccess !== null;
-          return (
-            <div key={u.id} className="border-b border-line px-5 py-4 last:border-b-0">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="w-44">
-                  <p className="font-semibold">
-                    {u.name}
-                    {u.id === currentUserId && <span className="ml-1 text-xs text-muted">(you)</span>}
-                  </p>
-                  <p className="truncate text-xs text-muted">{u.email}</p>
-                </div>
-                <span
-                  className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                  style={{
-                    background: u.role === "ADMIN" ? "var(--accent-soft)" : "var(--surface-2)",
-                    color: u.role === "ADMIN" ? "var(--accent)" : "var(--muted)",
-                  }}
-                >
-                  {u.role}{customized ? " · customised" : ""}
-                </span>
-                <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-                  {SECTIONS.filter((s) => eff.has(s.key)).map((s) => (
-                    <span key={s.key} className="rounded-full border border-line px-2 py-0.5 text-[11px] text-muted">
-                      {s.label}
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-2 text-sm">
-                  <button type="button" className="py-1 text-accent hover:underline" onClick={() => startEdit(u)}>
-                    Edit access
-                  </button>
-                  <button type="button" className="py-1 text-accent hover:underline" onClick={() => { setPwFor(u); setEditing(null); }}>
-                    Reset password
-                  </button>
-                </div>
-              </div>
+      {/* Users table */}
+      <Card flush>
+        <TableShell
+          minWidth={880}
+          head={
+            <>
+              <Th>User</Th>
+              <Th>Role</Th>
+              <Th>Access</Th>
+              <Th>Status</Th>
+              <Th align="right">Manage</Th>
+            </>
+          }
+        >
+          {users.map((u) => {
+            const allowed = effectiveSectionKeys(sections, u.role, u.sectionAccess);
+            const visible = sections.filter((s) => allowed.has(s.key));
+            const shown = visible.slice(0, MAX_CHIPS);
+            const overflow = visible.length - shown.length;
+            const role = ROLE_TONE[u.role];
+            const isSelf = u.id === currentUserId;
+            const awaitingInvite = Boolean(u.invite?.pending || u.invite?.expired);
 
-              {/* Edit access */}
-              {editing?.id === u.id && (
-                <form
-                  action={async (form) => {
-                    setError(null);
-                    const res = await updateUserAccess(u.id, form);
-                    if (!res.ok) return setError(res.error);
-                    toast(`Access updated for ${u.name} - applies on their next page load`);
-                    setEditing(null);
-                  }}
-                  className="mt-4 space-y-4 border-t border-line pt-4"
-                >
-                  <div className="max-w-sm">
-                    <Field label="Role (baseline)">
-                      <Select
-                        name="role"
-                        options={ROLE_OPTIONS}
-                        value={editRole}
-                        onChange={(e) => setEditRole(e.target.value as AppRole)}
-                      />
-                    </Field>
+            return (
+              <Tr key={u.id}>
+                <Td>
+                  <PersonCell
+                    name={u.name}
+                    secondary={u.email}
+                    badge={isSelf ? <span className="text-xs font-normal text-muted">(you)</span> : undefined}
+                  />
+                </Td>
+                <Td>
+                  <Pill tone={role.tone}>{role.label}</Pill>
+                </Td>
+                <Td>
+                  <div className="flex max-w-md flex-wrap gap-1.5">
+                    {shown.map((s) => (
+                      <Chip key={s.key}>{s.label}</Chip>
+                    ))}
+                    {overflow > 0 && <span className="px-1 py-0.5 text-[11px] font-semibold text-ink-3">+{overflow}</span>}
+                    {visible.length === 0 && <span className="text-[11px] text-ink-3">No modules</span>}
                   </div>
-                  <AccessGrid key={editRole} role={editRole} checked={editRole === u.role ? effectiveKeys(editRole, u.sectionAccess) : new Set(roleDefaultKeys(editRole))} />
-                  <div className="flex items-center gap-3">
-                    <SubmitButton>Save access</SubmitButton>
-                    {u.sectionAccess !== null && (
-                      <button
-                        type="button"
-                        className="text-sm text-accent hover:underline"
-                        onClick={async () => {
-                          const ok = await askConfirm({
-                            title: `Reset ${u.name} to role defaults?`,
-                            body: "All per-feature customisation is removed.",
-                            confirmLabel: "Reset",
-                          });
-                          if (!ok) return;
-                          await resetUserAccess(u.id);
-                          toast("Access reset to role defaults");
-                          setEditing(null);
-                        }}
-                      >
-                        Reset to role defaults
-                      </button>
+                </Td>
+                <Td>
+                  <StatusPill user={u} />
+                </Td>
+                <Td align="right">
+                  <div className="flex justify-end gap-2">
+                    <Btn size="sm" onClick={() => setDialog({ mode: "edit", user: u })}>
+                      Edit access
+                    </Btn>
+                    {awaitingInvite ? (
+                      <Btn size="sm" icon={<Link2 size={14} />} title="Mint a new single-use link" onClick={() => onResend(u)}>
+                        Invite link
+                      </Btn>
+                    ) : (
+                      <Btn size="sm" onClick={() => { setPwFor(u); setPwError(null); }}>
+                        Reset password
+                      </Btn>
                     )}
-                    <button type="button" className="text-sm text-muted hover:underline" onClick={() => setEditing(null)}>
-                      Cancel
-                    </button>
-                    <FormError message={error} />
+                    {u.status === "SUSPENDED" ? (
+                      <Btn size="sm" onClick={() => run(() => reactivateUser(u.id), `${u.name} reactivated`)}>
+                        Reactivate
+                      </Btn>
+                    ) : (
+                      <Btn
+                        size="sm"
+                        disabled={isSelf}
+                        title={isSelf ? "You cannot suspend your own account" : undefined}
+                        onClick={() => onSuspend(u)}
+                      >
+                        Suspend
+                      </Btn>
+                    )}
+                    <IconButton
+                      label={`Delete ${u.name}`}
+                      tone="danger"
+                      disabled={isSelf}
+                      onClick={() => onDelete(u)}
+                    >
+                      <Trash2 size={15} />
+                    </IconButton>
                   </div>
-                </form>
-              )}
+                </Td>
+              </Tr>
+            );
+          })}
+        </TableShell>
+      </Card>
 
-              {/* Reset password */}
-              {pwFor?.id === u.id && (
-                <form
-                  action={async (form) => {
-                    setError(null);
-                    const res = await setUserPassword(u.id, form);
-                    if (!res.ok) return setError(res.error);
-                    toast(`Password updated for ${u.name}`);
-                    setPwFor(null);
-                  }}
-                  className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4"
-                >
-                  <div className="w-64">
-                    <Field label={`New password for ${u.name}`} hint="Min 8 characters">
-                      <TextInput name="password" required minLength={8} />
-                    </Field>
-                  </div>
-                  <SubmitButton>Set password</SubmitButton>
-                  <button type="button" className="text-sm text-muted hover:underline" onClick={() => setPwFor(null)}>
-                    Cancel
-                  </button>
-                  <FormError message={error} />
-                </form>
-              )}
+      <Hint>
+        {users.length} account{users.length === 1 ? "" : "s"}. Public sign-up is disabled — every account is created
+        here, and everyone sets their own password from a single-use invite link.
+      </Hint>
+
+      {/* Invite / edit */}
+      {dialog && (
+        <AccessDialog
+          key={dialog.mode === "edit" ? dialog.user.id : dialog.prefill?.id ?? "invite"}
+          mode={dialog.mode}
+          user={dialog.mode === "edit" ? dialog.user : undefined}
+          prefill={dialog.mode === "invite" ? dialog.prefill : undefined}
+          sections={sections}
+          actor={actor}
+          onClose={() => setDialog(null)}
+          onInvited={(link) => {
+            setDialog(null);
+            setInvite(link);
+          }}
+        />
+      )}
+
+      {invite && <InviteLinkDialog invite={invite} onClose={() => setInvite(null)} />}
+
+      {/* Reset password — the fallback for someone who can't use their link */}
+      {pwFor && (
+        <Modal
+          open
+          onClose={() => setPwFor(null)}
+          title={`Reset password for ${pwFor.name}`}
+          subtitle="Share it securely — then ask them to change it."
+          size="sm"
+        >
+          <form
+            action={async (form) => {
+              setPwError(null);
+              const res = await setUserPassword(pwFor.id, form);
+              if (!res.ok) return setPwError(res.error);
+              toast(`Password updated for ${pwFor.name}`);
+              setPwFor(null);
+            }}
+            className="space-y-4"
+          >
+            <Field label="New password" hint="At least 8 characters">
+              <TextInput type="password" name="password" required minLength={8} autoComplete="new-password" />
+            </Field>
+            <div className="flex items-center gap-3">
+              <SubmitBtn>Set password</SubmitBtn>
+              <Btn variant="ghost" onClick={() => setPwFor(null)}>
+                Cancel
+              </Btn>
+              <FormError message={pwError} />
             </div>
-          );
-        })}
-      </div>
-      <p className="text-xs text-muted">
-        Created {users.length} account{users.length === 1 ? "" : "s"} · first account seeded{" "}
-        {formatDate(users[0]?.createdAt ?? new Date().toISOString())}. Public sign-up is disabled -
-        every account is created here.
-      </p>
+          </form>
+        </Modal>
+      )}
     </section>
+  );
+}
+
+/** The link is shown exactly once — it isn't recoverable, only re-mintable. */
+function InviteLinkDialog({
+  invite,
+  onClose,
+}: {
+  invite: { url: string; expiresInDays: number };
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Invite link ready"
+      subtitle="Send this to them yourself — the app has no mailer."
+      size="md"
+    >
+      <div className="space-y-4">
+        <CopyField value={invite.url} label="Invite link" />
+        <ul className="space-y-1 text-xs text-muted">
+          <li>· Single use, and it expires in {invite.expiresInDays} days.</li>
+          <li>· They set their own password — you will never see it.</li>
+          <li>· Minting a new link for the same person immediately invalidates this one.</li>
+        </ul>
+        <div className="flex justify-end">
+          <Btn onClick={onClose}>Done</Btn>
+        </div>
+      </div>
+    </Modal>
   );
 }

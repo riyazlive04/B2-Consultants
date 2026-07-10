@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireSession } from "@/lib/rbac";
+import { requireAdmin, requireSection, requireSession } from "@/lib/rbac";
 import { istToday } from "@/lib/dates";
 import type { ActionResult } from "./finance-actions";
 
@@ -192,7 +193,9 @@ const logSchema = z.object({
 });
 
 export async function submitDailyLog(form: FormData): Promise<ActionResult> {
-  const session = await requireSession();
+  // Same guard as the /daily-log page (HEAD/USER + overrides) — requireSession
+  // alone would let a STUDENT account write daily-log rows.
+  const session = await requireSection("daily-log");
   const parsed = logSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -205,7 +208,8 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
     return { ok: false, error: "You have already submitted today. Contact Admin to make changes." };
   }
 
-  await prisma.dailyLog.create({
+  try {
+    await prisma.dailyLog.create({
     data: {
       userId: session.user.id,
       date: today,
@@ -225,7 +229,15 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
       studentsFlaggedAtRisk: d.studentsFlaggedAtRisk ?? null,
       notes: d.notes || null,
     },
-  });
+    });
+  } catch (e) {
+    // The friendly pre-check above can race a double-submit; the @@unique on
+    // (userId, date) is the real guard - surface it as the same message.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return { ok: false, error: "You have already submitted today. Contact Admin to make changes." };
+    }
+    throw e;
+  }
   revalidatePath("/daily-log");
   revalidatePath("/people");
   return { ok: true };

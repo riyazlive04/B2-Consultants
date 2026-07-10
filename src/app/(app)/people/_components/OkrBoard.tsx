@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Papa from "papaparse";
 import { deleteOkr, saveOkr } from "@/server/people-actions";
 import type { MemberRow } from "@/server/people-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";
@@ -33,7 +32,10 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
     toast("OKR deleted");
   };
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
+    // Lazy-load papaparse so the People route's initial bundle stays lean —
+    // same pattern as DataTable's export.
+    const Papa = (await import("papaparse")).default;
     const rows = withOkrs.flatMap((m) =>
       m.okrs.map((o) => ({
         Member: m.fullName,
@@ -85,7 +87,7 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
               <div
                 key={r.name}
                 className={`flex items-center gap-2 rounded-card border px-4 py-2.5 shadow-card ${
-                  i === 0 ? "border-brass bg-surface" : "border-line bg-surface"
+                  i === 0 ? "border-primary bg-surface" : "border-line bg-surface"
                 }`}
               >
                 <span className="text-lg" aria-hidden>{medals[i] ?? "·"}</span>

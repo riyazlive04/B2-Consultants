@@ -1,12 +1,14 @@
 "use server";
 
 import { headers } from "next/headers";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 import { AGREEMENT_EVENT_LABELS, OTP_MAX_ATTEMPTS, type AgreementData } from "@/lib/agreement";
 import { hashAgreementToken, mintOtp, otpMatches } from "@/lib/agreement-token";
 import {
+  buildSigningDevice,
   decodeSignaturePng,
   firstName,
   loadAgreementByToken,
@@ -123,8 +125,11 @@ export async function requestSignOtp(
 const signSchema = z.object({
   token: z.string().min(10).max(200),
   code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code"),
-  signature: z.string().min(64).max(400_000),
+  signature: z.string().min(64).max(600_000),
   consent: z.literal(true, { message: "Please confirm you agree to sign electronically." }),
+  // Validated separately by buildSigningDevice: a browser that withholds its details must still
+  // be able to sign, so a bad device payload degrades to null rather than blocking the signature.
+  device: z.unknown().optional(),
 });
 
 /**
@@ -140,6 +145,7 @@ export async function signAgreement(input: {
   code: string;
   signature: string;
   consent: boolean;
+  device?: unknown;
 }): Promise<ActionResult<{ documentNo: string }>> {
   const { ip, userAgent } = await requestContext();
   if (!rateLimitOk(`agr:sign:ip:${ip}`, 30, 60 * 60_000)) {
@@ -183,6 +189,9 @@ export async function signAgreement(input: {
   const otpVerifiedAt = now;
   await recordAgreementEvent(row.id, "OTP_VERIFIED", { ip, userAgent });
 
+  // The browser's claims about itself, plus the IP and header WE saw. Never the other way round.
+  const device = buildSigningDevice(parsed.data.device, { ip, userAgent });
+
   // ── Certificate trail: everything on record, plus the two lines this request is about to write ──
   const priorEvents = await prisma.agreementEvent.findMany({
     where: { agreementId: row.id },
@@ -203,6 +212,7 @@ export async function signAgreement(input: {
     signerUserAgent: userAgent,
     otpVerifiedAt,
     deliveredTo: maskPhone(data.student.phone),
+    device,
   };
 
   // ── Render once. These exact bytes are what gets hashed and stored. ──
@@ -224,6 +234,7 @@ export async function signAgreement(input: {
       status: "SIGNED",
       signedAt: now,
       studentSignaturePng: png,
+      signerDevice: device ?? Prisma.JsonNull,
       pdfBytes: sealed.bytes,
       pdfSha256: sealed.sha256,
       pdfSize: sealed.size,
@@ -236,7 +247,12 @@ export async function signAgreement(input: {
   await recordAgreementEvent(row.id, "SIGNED", {
     ip,
     userAgent,
-    meta: { consent: true, pdfSha256: sealed.sha256, dataSha256: row.dataSha256 },
+    meta: {
+      consent: true,
+      pdfSha256: sealed.sha256,
+      dataSha256: row.dataSha256,
+      device: device ? { pointerType: device.capture.pointerType, strokes: device.capture.strokeCount } : null,
+    },
   });
 
   return { ok: true, data: { documentNo: row.documentNo } };

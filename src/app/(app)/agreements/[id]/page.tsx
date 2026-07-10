@@ -2,17 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, ShieldCheck } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
-import { formatDateTimeInZone } from "@/lib/format";
+import { formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import {
   AGREEMENT_EVENT_LABELS,
   formatGermanDate,
-  formatInrPlain,
   type AgreementStatusKey,
 } from "@/lib/agreement";
 import { WHATSAPP_KIND_LABELS, WHATSAPP_STATUS_LABELS } from "@/lib/whatsapp";
 import { getAgreementDetail } from "@/server/agreement-metrics";
+import { readStoredDevice } from "@/server/agreement-core";
 import { StatusBadge } from "../_components/StatusBadge";
 import { AgreementActions } from "./_components/AgreementActions";
+import { DevicePanel } from "./_components/DevicePanel";
 import { AgreementForm } from "../_components/AgreementForm";
 
 export const dynamic = "force-dynamic";
@@ -119,16 +120,30 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
               <Row label="WhatsApp">{data.student.phone}</Row>
               <Row label="Batch">{data.batch.number}</Row>
               <Row label="Starts">{formatGermanDate(data.batch.startDate)}</Row>
-              <Row label="Total fee">{formatInrPlain(data.payment.totalInrMinor)}</Row>
+              <Row label="Total fee">{formatInrMinor(BigInt(data.payment.totalInrMinor))}</Row>
               <Row label="Plan">
                 {data.payment.option === "FULL"
                   ? "Option A — full payment"
                   : `Option B — ${data.payment.instalments
-                      .map((i) => formatInrPlain(i.amountInrMinor))
+                      .map((i) => formatInrMinor(BigInt(i.amountInrMinor)))
                       .join(" + ")}`}
               </Row>
             </dl>
           </div>
+
+          <DevicePanel
+            title="Signer's device"
+            device={readStoredDevice(row.signerDevice)}
+            signedAt={row.signedAt}
+          />
+
+          {readStoredDevice(row.founderDevice) && (
+            <DevicePanel
+              title="Countersigning device"
+              device={readStoredDevice(row.founderDevice)}
+              signedAt={row.founderSignedAt}
+            />
+          )}
 
           <div className="rounded-card border border-line bg-surface p-5 shadow-card">
             <h2 className="mb-3 font-display text-lg font-bold">Audit trail</h2>

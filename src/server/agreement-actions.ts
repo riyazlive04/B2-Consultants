@@ -1,14 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import { headers } from "next/headers";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
+import { clientIpFrom } from "@/lib/rate-limit";
 import { AGREEMENT_TEMPLATE_VERSION } from "@/lib/agreement";
 import { mintAgreementToken } from "@/lib/agreement-token";
 import { contentHash } from "./agreement-render";
 import {
   AGREEMENTS_PATH,
+  buildSigningDevice,
   decodeSignaturePng,
   firstName,
   isUniqueViolation,
@@ -99,12 +102,19 @@ export async function updateAgreement(id: string, data: unknown): Promise<Action
 export async function issueAgreement(
   id: string,
   founderSignatureDataUrl: string,
+  device?: unknown,
 ): Promise<ActionResult<{ signingUrl: string; delivery: string; sent: boolean }>> {
   const { allowed, denied, session } = await capabilityCheck("agreements.issue");
   if (!allowed) return denied;
 
   const png = decodeSignaturePng(founderSignatureDataUrl);
   if (!png) return { ok: false, error: "Your signature didn't come through. Draw it again." };
+
+  const h = await Promise.resolve(headers());
+  const founderDevice = buildSigningDevice(device, {
+    ip: clientIpFrom(h),
+    userAgent: h.get("user-agent"),
+  });
 
   const row = await prisma.agreement.findUnique({
     where: { id },
@@ -129,6 +139,7 @@ export async function issueAgreement(
       issuedById: session.user.id,
       founderSignedAt: now,
       founderSignaturePng: png,
+      founderDevice: founderDevice ?? Prisma.JsonNull,
     },
   });
   if (issued.count === 0) return { ok: false, error: "This agreement was issued by someone else." };

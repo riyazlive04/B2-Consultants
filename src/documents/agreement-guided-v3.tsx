@@ -9,7 +9,7 @@
  * 1. GLYPHS. The built-in Helvetica/Times use WinAnsi encoding. The characters the master
  *    document uses — ☒ ☐ ⚠ ✓ ₹ ◦ — are NOT in it and render as blank boxes. So checkboxes and
  *    warning icons are drawn as <Svg>, sub-bullets use "–", and money is written "69,999 INR"
- *    (see formatInrPlain). "•" and "§" and "–" ARE in WinAnsi and are safe as literal text.
+ *    (see formatInrPlainForDocument). "•" and "§" and "–" ARE in WinAnsi and are safe as literal text.
  *    Don't paste a glyph in here without checking it, and don't "fix" it by registering a
  *    Unicode font just to get a tick.
  *
@@ -36,12 +36,13 @@ import {
   Polyline,
 } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
+import { deviceRows, userAgentMismatch, type StoredDevice } from "@/lib/device";
 import {
   AGREEMENT_BANKS,
   AGREEMENT_PROVIDER,
   formatGermanDate,
   formatGermanDateOf,
-  formatInrPlain,
+  formatInrPlainForDocument,
   shortHash,
   type AgreementData,
 } from "@/lib/agreement";
@@ -259,6 +260,8 @@ export type AgreementDocProps = {
     signerUserAgent?: string | null;
     otpVerifiedAt?: Date | null;
     deliveredTo?: string | null; // masked
+    /** How the signature was physically made. Reported half is a claim; observed half is not. */
+    device?: StoredDevice | null;
   } | null;
 };
 
@@ -767,7 +770,7 @@ export function AgreementGuidedV3({
         <H2>§7 Payment</H2>
         <H3>7.1 Total Programme Fee</H3>
         <Text style={[s.bold, { marginBottom: 4 }]}>
-          Total Programme Fee (INR): {formatInrPlain(payment.totalInrMinor)}
+          Total Programme Fee (INR): {formatInrPlainForDocument(payment.totalInrMinor)}
         </Text>
 
         <H3>7.2 Payment Option (select one)</H3>
@@ -790,7 +793,7 @@ export function AgreementGuidedV3({
             </View>
             <Text style={[s.td, s.cellDivider, s.bold, { width: "32%" }]}>Option A - Full Payment</Text>
             <Text style={[s.td, s.cellDivider, { width: "24%" }]}>
-              {formatInrPlain(payment.totalInrMinor)}
+              {formatInrPlainForDocument(payment.totalInrMinor)}
             </Text>
             <Text style={[s.td, { width: "36%" }]}>
               {payment.option === "FULL" ? payment.dueMilestone : "Before commencement of Week 1"}
@@ -811,7 +814,7 @@ export function AgreementGuidedV3({
               <View key={i} style={i === arr.length - 1 ? s.trLast : s.tr}>
                 <Text style={[s.td, s.cellDivider, { width: "8%" }]} />
                 <Text style={[s.td, s.cellDivider, { width: "32%", paddingLeft: 16 }]}>Instalment {i + 1}</Text>
-                <Text style={[s.td, s.cellDivider, { width: "24%" }]}>{formatInrPlain(inst.amountInrMinor)}</Text>
+                <Text style={[s.td, s.cellDivider, { width: "24%" }]}>{formatInrPlainForDocument(inst.amountInrMinor)}</Text>
                 <Text style={[s.td, { width: "36%" }]}>{inst.dueMilestone}</Text>
               </View>
             ))}
@@ -1106,9 +1109,44 @@ export function AgreementGuidedV3({
           {certificate.signerIp && <Party label="Signer IP" value={certificate.signerIp} />}
           {certificate.signerUserAgent && (
             <View style={s.partyRow}>
-              <Text style={s.partyLabel}>Device</Text>
+              <Text style={s.partyLabel}>User agent</Text>
               <Text style={{ flex: 1, fontSize: 7.5, color: MUTED }}>{certificate.signerUserAgent}</Text>
             </View>
+          )}
+
+          {certificate.device && (
+            <>
+              <H2>Signing Device</H2>
+              <P>
+                The Student signed by hand on the device below. The rows marked as reported are the browser’s
+                own account of itself and could in principle be altered by the signer; the IP address and the
+                request headers are observed by B2 Consultants’ server and cannot be.
+              </P>
+              <View style={s.table}>
+                {deviceRows(certificate.device).map((row, i, arr) => (
+                  <View key={row[0]} style={i === arr.length - 1 ? s.trLast : s.tr}>
+                    <Text style={[s.td, s.cellDivider, { width: "32%", fontFamily: "Helvetica-Bold" }]}>
+                      {row[0]}
+                    </Text>
+                    <Text style={[s.td, { width: "68%" }]}>{row[1]}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={s.partyRow}>
+                <Text style={[s.partyLabel, { width: 78 }]}>Reported UA</Text>
+                <Text style={{ flex: 1, fontSize: 7.5, color: MUTED }}>
+                  {certificate.device.reported.userAgent || "not reported"}
+                </Text>
+              </View>
+              {/* A discrepancy is not proof of anything. Hiding it would be. */}
+              {userAgentMismatch(certificate.device) && (
+                <Callout warn>
+                  The user agent reported by the signer’s browser differs from the one carried by the request
+                  our server received. This is recorded for completeness and does not by itself indicate that
+                  the signature is invalid.
+                </Callout>
+              )}
+            </>
           )}
 
           <H2>Audit Trail</H2>

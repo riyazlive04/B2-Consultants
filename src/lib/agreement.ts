@@ -13,6 +13,7 @@
  */
 
 import { z } from "zod";
+import { formatInrMinor } from "./format";
 
 /** The git-pinned renderer. Bump when the clauses change; old agreements keep rendering their own. */
 export const AGREEMENT_TEMPLATE_VERSION = "guided-v3";
@@ -104,7 +105,7 @@ export const agreementDataSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["payment", "instalments"],
-        message: `Instalments add up to ${formatInrPlain(sum)}, but the total fee is ${formatInrPlain(
+        message: `Instalments add up to ${formatInrMinor(sum)}, but the total fee is ${formatInrMinor(
           BigInt(d.payment.totalInrMinor),
         )}.`,
       });
@@ -120,11 +121,12 @@ const inrGrouping = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 })
 /**
  * "69,999 INR" — Indian grouping, the word INR, and deliberately NO ₹ symbol.
  *
- * ₹ (U+20B9) does not exist in WinAnsi, the encoding of react-pdf's built-in Helvetica, so it
- * renders as a blank box in the PDF. The master agreement writes "69,999 INR" for the same
- * reason a typesetter would. `formatInrMinor` (₹1,00,000.99) stays correct for the dashboard.
+ * DOCUMENT / LEGAL-PROSE ONLY. ₹ (U+20B9) does not exist in WinAnsi, the encoding of react-pdf's
+ * built-in Helvetica, so it renders as a blank box in the PDF. The master agreement writes
+ * "69,999 INR" for the same reason a typesetter would. On-screen surfaces must instead use
+ * `formatInrMinor` (₹1,00,000.99) per DESIGN_SYSTEM §3 — a bare number is never shown for money.
  */
-export function formatInrPlain(minor: bigint | string): string {
+export function formatInrPlainForDocument(minor: bigint | string): string {
   const n = typeof minor === "string" ? BigInt(minor) : minor;
   const whole = n / BigInt(100);
   const paise = n % BigInt(100);

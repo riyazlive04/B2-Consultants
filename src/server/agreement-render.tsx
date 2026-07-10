@@ -2,6 +2,7 @@ import "server-only";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { AgreementGuidedV3, type CertificateEvent } from "@/documents/agreement-guided-v3";
 import { sha256Hex, toOwnedBytes } from "@/lib/agreement-token";
+import type { StoredDevice } from "@/lib/device";
 import {
   AGREEMENT_TEMPLATE_VERSION,
   canonicalPayload,
@@ -41,6 +42,7 @@ export type RenderInput = {
     signerUserAgent?: string | null;
     otpVerifiedAt?: Date | null;
     deliveredTo?: string | null;
+    device?: StoredDevice | null;
   } | null;
 };
 

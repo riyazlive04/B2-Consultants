@@ -52,6 +52,8 @@ export async function getAgreementDetail(id: string) {
       dataSha256: true,
       pdfSize: true,
       founderSignedAt: true,
+      founderDevice: true,
+      signerDevice: true,
       declinedAt: true,
       declineReason: true,
       voidedAt: true,

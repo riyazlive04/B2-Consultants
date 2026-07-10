@@ -3,6 +3,7 @@ import { Prisma, type AgreementEventType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { agreementDataSchema, type AgreementData } from "@/lib/agreement";
 import { hashAgreementToken, toOwnedBytes } from "@/lib/agreement-token";
+import { signingDeviceSchema, storedDeviceSchema, type StoredDevice } from "@/lib/device";
 import { displayWhatsappNumber, normalizeWhatsappNumber } from "@/lib/phone";
 
 /**
@@ -21,7 +22,10 @@ export const AGREEMENTS_PATH = "/agreements";
 
 // ───────────────────────────── Signature intake ─────────────────────────────
 
-const MAX_SIGNATURE_BYTES = 250_000;
+// The pad now exports a crop redrawn at 1200px across the full width, so a dense signature can
+// run to a couple of hundred KB. Generous, but still far below anything that could bloat the
+// sealed PDF or the `bytea` column.
+const MAX_SIGNATURE_BYTES = 400_000;
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /**
@@ -126,6 +130,41 @@ export function otpDevEchoEnabled(): boolean {
   const optedIn = process.env.AGREEMENT_OTP_DEV_ECHO === "true";
   const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(process.env.BETTER_AUTH_URL ?? "");
   return optedIn && local;
+}
+
+// ───────────────────────────── Signing device ─────────────────────────────
+
+/**
+ * Take the browser's account of itself, and staple our own observation to it.
+ *
+ * The client half is a CLAIM and is treated as one: parsed through a clamped schema, and stored
+ * under `reported` so nothing downstream can mistake it for fact. `observed` is filled in here,
+ * from the request — never from the payload — because the IP and the User-Agent header are the
+ * only parts of this record a signer cannot choose.
+ *
+ * Returns null when the payload is unusable. A signature must never fail because a browser
+ * withheld its screen size, so callers proceed with a null device rather than rejecting.
+ */
+export function buildSigningDevice(
+  raw: unknown,
+  observed: { ip: string | null; userAgent: string | null },
+): StoredDevice | null {
+  const parsed = signingDeviceSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  return {
+    ...parsed.data,
+    observed: {
+      ip: observed.ip,
+      userAgent: observed.userAgent?.slice(0, 400) ?? null,
+      at: new Date().toISOString(),
+    },
+  };
+}
+
+/** Read a `Json` column back into a typed record. A Json column is not a type. */
+export function readStoredDevice(raw: unknown): StoredDevice | null {
+  const parsed = storedDeviceSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
 }
 
 /**

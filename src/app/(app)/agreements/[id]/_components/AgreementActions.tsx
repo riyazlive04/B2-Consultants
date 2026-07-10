@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, Loader2, PenLine, Send, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
-import { SignaturePad } from "@/components/ui/SignaturePad";
+import { SignaturePad, type SignatureValue } from "@/components/ui/SignaturePad";
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
 import {
   cloneAgreement,
@@ -32,7 +32,7 @@ export function AgreementActions({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [signOpen, setSignOpen] = useState(false);
-  const [signature, setSignature] = useState<string | null>(null);
+  const [signature, setSignature] = useState<SignatureValue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<{ url: string; delivery: string; sent: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -47,7 +47,8 @@ export function AgreementActions({
     }
     setError(null);
     startTransition(async () => {
-      const res = await issueAgreement(id, signature);
+      // The founder's own device is captured too: the certificate names both signatories.
+      const res = await issueAgreement(id, signature.dataUrl, signature.device);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -169,7 +170,7 @@ export function AgreementActions({
         subtitle={`You sign first, then ${studentName} receives the link on WhatsApp.`}
       >
         <div className="space-y-4">
-          <SignaturePad onChange={setSignature} disabled={pending} />
+          <SignaturePad onChange={(v) => setSignature(v)} disabled={pending} allowFullScreen={false} />
           {error && (
             <p role="alert" className="rounded-field bg-risk-soft px-3 py-2 text-sm font-medium text-risk">
               {error}

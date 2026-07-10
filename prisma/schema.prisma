@@ -1455,9 +1455,15 @@ model Agreement {
   issuedAt            DateTime?
   founderSignedAt     DateTime?
   founderSignaturePng Bytes?
+  founderDevice       Json? // same shape as signerDevice, captured when the founder countersigns
 
   signedAt            DateTime? // also the burn marker — never set twice
   studentSignaturePng Bytes?
+  // How the signature was physically made. Three parts, and the distinction is the whole point:
+  // what the browser CLAIMS about itself, how the strokes were actually drawn, and — the only
+  // half a disputing counterparty cannot rewrite — the IP and User-Agent our server OBSERVED.
+  // See src/lib/device.ts. Frozen by the seal trigger; printed on the certificate.
+  signerDevice        Json?
   declinedAt          DateTime?
   declineReason       String?
   voidedAt            DateTime?

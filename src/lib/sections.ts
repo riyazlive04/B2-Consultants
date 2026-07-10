@@ -23,7 +23,7 @@ export const SECTION_ICON_NAMES = [
   "wallet", "landmark", "phone", "git-branch", "calendar-check", "users",
   "graduation-cap", "clipboard-list", "filter", "file-search", "languages",
   "map", "book-open", "message-circle", "trophy", "sliders", "target", "gift",
-  "sparkles", "bar-chart", "shield", "layout-grid",
+  "sparkles", "bar-chart", "shield", "layout-grid", "file-signature",
 ] as const;
 export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];
 
@@ -51,6 +51,7 @@ export const SECTION_CATALOGUE = [
   { key: "bookings", label: "Bookings", href: "/bookings", phase: 1, icon: "calendar-check", group: "Money", roles: ["ADMIN"] },
   { key: "people", label: "Users", href: "/people", phase: 2, icon: "users", group: "People", roles: ["ADMIN"] },
   { key: "students", label: "Students", href: "/students", phase: 2, icon: "graduation-cap", group: "People", roles: ["ADMIN", "HEAD"] },
+  { key: "agreements", label: "Agreements", href: "/agreements", phase: 4, icon: "file-signature", group: "People", roles: ["ADMIN"] },
   { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "People", roles: ["HEAD", "USER"] },
   { key: "arena", label: "Arena", href: "/arena", phase: 2, icon: "trophy", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
   // STUDENT portal: their own journey only + the CV diagnostic (stores nothing).

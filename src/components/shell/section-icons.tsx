@@ -21,6 +21,7 @@ import {
   BarChart3,
   Shield,
   LayoutGrid,
+  FileSignature,
   type LucideIcon,
 } from "lucide-react";
 import type { SectionIconName } from "@/lib/sections";
@@ -53,6 +54,7 @@ export const SECTION_ICONS: Record<SectionIconName, LucideIcon> = {
   "bar-chart": BarChart3,
   shield: Shield,
   "layout-grid": LayoutGrid,
+  "file-signature": FileSignature,
 };
 
 export const FallbackIcon = LayoutGrid;

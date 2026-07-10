@@ -84,6 +84,7 @@ model User {
   gnCommentLikes      GnCommentLike[]    @relation("GnCommentLikeUser")
   telecallerPayoutsEntered TelecallerPayout[] @relation("TelecallerPayoutEnteredBy")
   whatsappMessagesSent WhatsAppMessage[] @relation("WhatsAppSentBy")
+  agreementsIssued    Agreement[]        @relation("AgreementIssuedBy")
 
   @@map("user")
 }
@@ -370,6 +371,7 @@ model Lead {
   students     Student[]
   bookings     BookingRequest[]
   whatsappMessages WhatsAppMessage[]
+  agreements   Agreement[]
 
   @@unique([source, externalRef])
   @@index([stage])
@@ -729,6 +731,7 @@ model Student {
   satisfactionScores SatisfactionScore[]
   gnMemberships GnBatchMember[]
   whatsappMessages WhatsAppMessage[]
+  agreements    Agreement[]
 
   @@index([fullName])
   @@map("student")
@@ -1314,6 +1317,9 @@ enum WhatsAppKind {
   PAYMENT_REMINDER      // overdue pending payment / receivable
   CHECKIN_NUDGE         // student coaching check-in due
   SPRINT_MISS_NUDGE     // student missed a sprint-week target
+  AGREEMENT_SEND        // coaching agreement is ready — carries the tokenized signing link
+  AGREEMENT_OTP         // 6-digit code binding the signature to control of this number
+  AGREEMENT_REMINDER    // an issued agreement is still unsigned
   MANUAL                // free-form / manual send from a section
 }
 
@@ -1351,6 +1357,8 @@ model WhatsAppMessage {
   bookingRequest   BookingRequest?   @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
   pendingPaymentId String?
   pendingPayment   PendingPayment?   @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
+  agreementId      String?
+  agreement        Agreement?        @relation(fields: [agreementId], references: [id], onDelete: SetNull)
 
   sentById         String?           // the admin/user who triggered a manual send (null = automatic)
   sentBy           User?             @relation("WhatsAppSentBy", fields: [sentById], references: [id], onDelete: SetNull)
@@ -1363,6 +1371,7 @@ model WhatsAppMessage {
   @@index([studentId])
   @@index([bookingRequestId])
   @@index([pendingPaymentId])
+  @@index([agreementId])
   @@index([watiMessageId])
   @@index([toNumber])
   @@map("whatsapp_message")
@@ -1376,4 +1385,121 @@ model WhatsAppOptOut {
   createdAt DateTime @default(now())
 
   @@map("whatsapp_opt_out")
+}
+
+// ─────────────────────────────── Agreements (e-signature) ───────────────────────────────
+//
+// The founder fills a field form, signs, and WhatsApps a tokenized link; the student verifies a
+// one-time code sent to the same number, signs on a canvas, and the PDF is rendered ONCE and
+// sealed into `pdfBytes`.
+//
+// Two independent integrity claims, because they answer different questions:
+//   dataSha256 — SHA-256 of the canonical JSON of `data` + `templateVersion`. Deterministic and
+//                reproducible forever: it proves WHAT WAS AGREED. Printed on every page.
+//   pdfSha256  — SHA-256 of the sealed bytes. It proves THE STORED ARTIFACT IS UNTOUCHED.
+//                It is NOT reproducible: PDFKit stamps a creation date and document id, so
+//                re-rendering identical data yields different bytes. Never re-render to verify.
+//
+// `data` is a frozen snapshot on purpose. The document must show what was true at signing, so
+// rendering never joins back to the mutable Student row. It also carries the two fields the rest
+// of the schema has no home for: the student's postal address and the programme batch.
+
+enum AgreementStatus {
+  DRAFT     // founder is still editing; no token exists
+  SENT      // countersigned + link delivered; awaiting the student
+  VIEWED    // the student opened the link at least once
+  SIGNED    // sealed — pdfBytes + pdfSha256 are set and never change
+  DECLINED  // the student explicitly refused
+  VOIDED    // superseded or cancelled by the founder
+  EXPIRED   // the token's TTL elapsed unsigned
+}
+
+// Append-only trail. This IS the audit certificate: without it a canvas squiggle proves nothing.
+enum AgreementEventType {
+  CREATED
+  ISSUED           // founder countersigned and sent
+  DELIVERY_SENT    // handed to WATI
+  DELIVERY_SKIPPED // WATI off / opted-out / no valid number — the founder must be told
+  VIEWED
+  OTP_SENT
+  OTP_VERIFIED
+  OTP_FAILED
+  SIGNED
+  DECLINED
+  VOIDED
+  COPY_DOWNLOADED
+}
+
+model Agreement {
+  id              String          @id @default(cuid())
+  documentNo      String          @unique // human reference, printed on every page: B2-GM-2026-0001
+  templateVersion String                  // git-pinned renderer, e.g. "guided-v3"
+  status          AgreementStatus @default(DRAFT)
+
+  // Who it is for. SetNull like every other audit link: a signed agreement outlives its student row.
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  data       Json    // frozen AgreementData — validated by agreementDataSchema, never re-joined
+  dataSha256 String  // canonical-JSON hash of (data + templateVersion)
+
+  // Signing link. Same shape as UserInvite: only the SHA-256 lands in the database, so a leaked
+  // row cannot be redeemed. `signedAt` doubles as the single-use burn marker (compare-and-set).
+  tokenHash String?   @unique
+  expiresAt DateTime?
+
+  issuedById          String?
+  issuedBy            User?     @relation("AgreementIssuedBy", fields: [issuedById], references: [id], onDelete: SetNull)
+  issuedAt            DateTime?
+  founderSignedAt     DateTime?
+  founderSignaturePng Bytes?
+
+  signedAt            DateTime? // also the burn marker — never set twice
+  studentSignaturePng Bytes?
+  declinedAt          DateTime?
+  declineReason       String?
+  voidedAt            DateTime?
+
+  // OTP that binds the signature to control of the delivery number. Hashed, single-window,
+  // attempt-capped. Cleared on success so a replayed code is worthless.
+  otpHash      String?
+  otpExpiresAt DateTime?
+  otpAttempts  Int       @default(0)
+
+  // The sealed artifact. Written exactly once, at signing. `bytea` rather than object storage:
+  // link-only delivery means no public URL is ever needed, and the document carries the student's
+  // home address and B2's IBANs. NEVER select pdfBytes in a list query.
+  pdfBytes  Bytes?
+  pdfSha256 String?
+  pdfSize   Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events           AgreementEvent[]
+  whatsappMessages WhatsAppMessage[]
+
+  @@index([status, createdAt])
+  @@index([studentId])
+  @@index([leadId])
+  @@index([expiresAt])
+  @@map("agreement")
+}
+
+// Append-only (DB trigger, see the agreements migration). No updatedAt — matches milestone_log,
+// signal_change_log and the rest of the immutable-history tables.
+model AgreementEvent {
+  id          String             @id @default(cuid())
+  agreementId String
+  agreement   Agreement          @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  type        AgreementEventType
+  ip          String?
+  userAgent   String?
+  meta        Json?
+  createdAt   DateTime           @default(now())
+
+  @@index([agreementId, createdAt])
+  @@map("agreement_event")
 }

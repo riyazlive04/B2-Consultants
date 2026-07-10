@@ -24,18 +24,65 @@ const nextConfig = {
     // direct deep imports so each route compiles only the icons it actually uses.
     optimizePackageImports: ["papaparse", "lucide-react"],
   },
+  /**
+   * @react-pdf/renderer (the agreement PDF renderer) needs careful handling, and every obvious
+   * shortcut here has been tried and fails:
+   *
+   *  - It is ESM-only ("type": "module") and its layout engine, yoga-layout, loads WASM with a
+   *    TOP-LEVEL AWAIT.
+   *  - Next auto-externalises ESM packages on the server as an async `import()` external. Webpack
+   *    turns that into top-level await *in the importing chunk*, and swcMinify then dies with
+   *    "await isn't allowed in non-async function".
+   *  - `serverComponentsExternalPackages` does the same thing, so it does not help.
+   *  - Appending to `config.externals` does not help either: Next's own handler sits at index 0,
+   *    matches first, and wins.
+   *
+   * So the entry is PREPENDED, and typed `commonjs`, which compiles to a plain require() at
+   * runtime (Node 20.19+/22+ can require an ES module). Nothing async escapes into the bundle.
+   */
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = [
+        { "@react-pdf/renderer": "commonjs @react-pdf/renderer" },
+        ...(config.externals ?? []),
+      ];
+    } else {
+      // The renderer must never reach the browser. Aliasing to false turns an accidental import
+      // into a build-time empty module rather than a multi-megabyte client chunk.
+      config.resolve.alias["@react-pdf/renderer"] = false;
+    }
+    return config;
+  },
   // Security baseline. No embedding anywhere (incl. /book), no MIME sniffing,
   // no referrer leakage of internal URLs, no powerful browser APIs.
   async headers() {
+    const baseline = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+    ];
     return [
       {
-        source: "/(.*)",
+        // The agreement PDF renders inside an <iframe> on our own review + signing pages.
+        // `frame-ancestors 'none'` would block that even same-origin, so the PDF responses —
+        // and only those — relax to 'self'. The signing PAGE itself stays DENY.
+        //
+        // Next applies every matching rule, and a browser seeing both DENY and SAMEORIGIN
+        // resolves to DENY, so the catch-all below must explicitly exclude these paths rather
+        // than merely being listed second.
+        source: "/:path*/pdf",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          ...baseline,
+        ],
+      },
+      {
+        source: "/((?!.*/pdf$).*)",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          ...baseline,
         ],
       },
     ];

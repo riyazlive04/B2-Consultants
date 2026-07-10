@@ -19,6 +19,9 @@ export const WHATSAPP_KINDS = [
   "PAYMENT_REMINDER",
   "CHECKIN_NUDGE",
   "SPRINT_MISS_NUDGE",
+  "AGREEMENT_SEND",
+  "AGREEMENT_OTP",
+  "AGREEMENT_REMINDER",
   "MANUAL",
 ] as const satisfies readonly WhatsAppKind[];
 
@@ -30,6 +33,9 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   PAYMENT_REMINDER: "Payment reminder",
   CHECKIN_NUDGE: "Check-in nudge",
   SPRINT_MISS_NUDGE: "Sprint-miss nudge",
+  AGREEMENT_SEND: "Agreement signing link",
+  AGREEMENT_OTP: "Agreement signing code",
+  AGREEMENT_REMINDER: "Unsigned agreement reminder",
   MANUAL: "Manual message",
 };
 
@@ -42,6 +48,9 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   PAYMENT_REMINDER: "A pending payment that is overdue.",
   CHECKIN_NUDGE: "A student whose coaching check-in date has arrived / passed.",
   SPRINT_MISS_NUDGE: "A student who missed a sprint-week target.",
+  AGREEMENT_SEND: "The founder countersigned an agreement — carries the tokenized signing link.",
+  AGREEMENT_OTP: "The one-time code that binds the signature to control of this number.",
+  AGREEMENT_REMINDER: "An issued agreement is still unsigned and the link has not expired.",
   MANUAL: "Free-form one-off send triggered by a human from a section row.",
 };
 
@@ -64,6 +73,12 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   PAYMENT_REMINDER: ["name", "amount"],
   CHECKIN_NUDGE: ["name"],
   SPRINT_MISS_NUDGE: ["name"],
+  // `sign_url` is the full tokenized link. If the approved template puts the token in a dynamic
+  // URL-button suffix instead of the body, map `sign_token` — the raw base64url token is 43
+  // URL-safe characters and slots straight into the suffix.
+  AGREEMENT_SEND: ["name", "sign_url", "sign_token", "document_no"],
+  AGREEMENT_OTP: ["name", "code"],
+  AGREEMENT_REMINDER: ["name", "sign_url", "sign_token", "document_no"],
   MANUAL: ["name"],
 };
 

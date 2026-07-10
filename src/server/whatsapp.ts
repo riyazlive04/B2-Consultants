@@ -46,6 +46,7 @@ export type WhatsAppTarget = {
   studentId?: string | null;
   bookingRequestId?: string | null;
   pendingPaymentId?: string | null;
+  agreementId?: string | null;
 };
 
 export type SendWhatsAppInput = WhatsAppTarget & {
@@ -120,6 +121,7 @@ async function writeRow(input: {
       studentId: input.target.studentId ?? null,
       bookingRequestId: input.target.bookingRequestId ?? null,
       pendingPaymentId: input.target.pendingPaymentId ?? null,
+      agreementId: input.target.agreementId ?? null,
     },
     select: { id: true },
   });
@@ -137,6 +139,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
       studentId: input.studentId,
       bookingRequestId: input.bookingRequestId,
       pendingPaymentId: input.pendingPaymentId,
+      agreementId: input.agreementId,
     } satisfies WhatsAppTarget,
   };
 
@@ -229,7 +232,12 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
 
 // ───────────────────────── Status lookup (for section badges) ─────────────────────────
 
-export type WhatsAppTargetField = "leadId" | "studentId" | "bookingRequestId" | "pendingPaymentId";
+export type WhatsAppTargetField =
+  | "leadId"
+  | "studentId"
+  | "bookingRequestId"
+  | "pendingPaymentId"
+  | "agreementId";
 export type LastMessage = { status: WhatsAppStatus; kind: WhatsAppKind; createdAt: Date };
 
 /** Most-recent OUTBOUND message per target id — powers the "last WhatsApp" badge in the sections. */
@@ -253,6 +261,7 @@ export async function getLastWhatsAppByTarget(
       studentId: true,
       bookingRequestId: true,
       pendingPaymentId: true,
+      agreementId: true,
     },
   });
   for (const r of rows) {

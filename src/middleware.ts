@@ -12,10 +12,16 @@ import { getSessionCookie } from "better-auth/cookies";
 //  - /book            the prospect-facing booking page (Wave-1, replaces Synamate's form)
 //  - /invite/*        redeem a single-use invite link. The token IS the credential; the page
 //                     re-validates it server-side (unknown / already used / expired / suspended)
+//  - /agreement/*     sign a coaching agreement. Same shape as /invite: the token IS the
+//                     credential and is re-validated server-side on every call; signing also
+//                     requires a one-time code sent to the student's WhatsApp number.
+//                     NOTE THE SINGULAR. The founder's section is /agreements (plural) and stays
+//                     behind the session — the test below is exact-match-or-followed-by-"/", so
+//                     "/agreements" does not match the "/agreement" prefix.
 //  - /api/leads/*     the Meta / FlexiFunnels lead-capture webhooks
 //  - /api/wati/*      WATI delivery-status + inbound-reply webhook  (WATI_WEBHOOK_SECRET)
 //  - /api/cron/*      the scheduled reminder trigger, hit by an external cron (CRON_SECRET)
-const PUBLIC_PREFIXES = ["/book", "/invite", "/api/leads", "/api/wati", "/api/cron"];
+const PUBLIC_PREFIXES = ["/book", "/invite", "/agreement", "/api/leads", "/api/wati", "/api/cron"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

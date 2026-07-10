@@ -62,6 +62,13 @@ export const CAPABILITIES = [
     actions: "console-actions (scan, grant status) · telecaller-actions (payouts)",
     roles: ["ADMIN"],
   },
+  {
+    key: "agreements.issue",
+    name: "Countersign & send agreements",
+    description: "Draft, sign and issue coaching agreements",
+    actions: "agreement-actions (create, update, issue, void, resend link)",
+    roles: ["ADMIN"],
+  },
 ] as const satisfies readonly CapabilityDef[];
 
 export type CapabilityKey = (typeof CAPABILITIES)[number]["key"];

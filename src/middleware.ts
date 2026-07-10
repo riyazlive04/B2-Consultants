@@ -6,10 +6,16 @@ import { getSessionCookie } from "better-auth/cookies";
  * real session + role checks happen server-side in layouts/pages (requireSession /
  * requireSection), so nothing leaks even if a cookie is forged.
  */
-// Public paths that must stay reachable without a session:
+// Public paths that must stay reachable without a session. Each machine-facing route below does
+// its OWN authentication (shared secret, constant-time compared, fail-closed when unset) — they
+// are "public" only in the sense that they carry no session cookie:
 //  - /book            the prospect-facing booking page (Wave-1, replaces Synamate's form)
+//  - /invite/*        redeem a single-use invite link. The token IS the credential; the page
+//                     re-validates it server-side (unknown / already used / expired / suspended)
 //  - /api/leads/*     the Meta / FlexiFunnels lead-capture webhooks
-const PUBLIC_PREFIXES = ["/book", "/api/leads"];
+//  - /api/wati/*      WATI delivery-status + inbound-reply webhook  (WATI_WEBHOOK_SECRET)
+//  - /api/cron/*      the scheduled reminder trigger, hit by an external cron (CRON_SECRET)
+const PUBLIC_PREFIXES = ["/book", "/invite", "/api/leads", "/api/wati", "/api/cron"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

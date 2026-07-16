@@ -1,0 +1,68 @@
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ✓ Ready in 885ms
+[lead-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "full_name",
+    "phone_number",
+    "email_address",
+    "city",
+    "utm_source",
+    "utm_campaign"
+  ],
+  "body": {
+    "id": "pabbly-test-0001",
+    "full_name": "Pabbly Test Lead",
+    "phone_number": "+919000000001",
+    "email_address": "pabbly.test@example.com",
+    "city": "Hyderabad",
+    "utm_source": "pabbly",
+    "utm_campaign": "connection-test"
+  }
+}
+[lead-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "full_name",
+    "phone_number",
+    "email_address",
+    "city"
+  ],
+  "body": {
+    "id": "pabbly-test-0001",
+    "full_name": "Pabbly Test Lead",
+    "phone_number": "+919000000001",
+    "email_address": "pabbly.test@example.com",
+    "city": "Hyderabad"
+  }
+}
+[lead-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "full_name",
+    "phone_number",
+    "email_address"
+  ],
+  "body": {
+    "id": "pabbly-test-0002",
+    "full_name": "Pabbly Test Lead",
+    "phone_number": "919000000001",
+    "email_address": "pabbly.test@example.com"
+  }
+}
+[lead-webhook] raw inbound payload: {
+  "keys": [
+    "data"
+  ],
+  "body": {
+    "data": {
+      "id": "pabbly-test-0003",
+      "name": "Nested Pabbly Lead",
+      "phone": "+919000000002",
+      "email": "nested.test@example.com"
+    }
+  }
+}

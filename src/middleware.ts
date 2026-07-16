@@ -20,8 +20,21 @@ import { getSessionCookie } from "better-auth/cookies";
 //                     "/agreements" does not match the "/agreement" prefix.
 //  - /api/leads/*     the Meta / FlexiFunnels lead-capture webhooks
 //  - /api/wati/*      WATI delivery-status + inbound-reply webhook  (WATI_WEBHOOK_SECRET)
+//  - /api/resend/*    Resend delivery-status + inbound-email webhook  (Svix-signed, RESEND_WEBHOOK_SECRET)
+//  - /api/twilio/*    Twilio inbound-SMS + delivery-status webhook  (X-Twilio-Signature, TWILIO_AUTH_TOKEN)
 //  - /api/cron/*      the scheduled reminder trigger, hit by an external cron (CRON_SECRET)
-const PUBLIC_PREFIXES = ["/book", "/invite", "/agreement", "/api/leads", "/api/wati", "/api/cron"];
+//  - /f/*             Phase 2: publicly-hosted native forms (submit → idempotent lead-intake)
+//  - /p/*             Phase 2: publicly-hosted funnel / landing pages
+//  - /i/*             Phase 3: public invoice / estimate view + PDF (addressed by publicToken)
+//  - /forgot-password, /reset-password  password-reset flow — no session exists yet by definition
+// NOTE: the test is exact-match-or-followed-by-"/", so "/f", "/p" and "/i" never match app routes
+// like /funnel, /finance, /people, /pipeline, /profile, /invite (invite is its own prefix anyway).
+const PUBLIC_PREFIXES = [
+  "/book", "/invite", "/agreement",
+  "/api/leads", "/api/wati", "/api/resend", "/api/twilio", "/api/cron",
+  "/f", "/p", "/i",
+  "/forgot-password", "/reset-password",
+];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

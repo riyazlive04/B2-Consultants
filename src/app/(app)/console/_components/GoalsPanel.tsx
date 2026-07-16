@@ -7,6 +7,8 @@ import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/
 import { Modal } from "@/components/ui/Modal";
 import { deleteGoal, saveGoal } from "@/server/console-actions";
 import { GOAL_METRIC_LABELS, GOAL_METRICS, periodLabel, type GoalProgress } from "@/lib/goals";
+import { formatDate, formatInrMinor } from "@/lib/format";
+import { EmptyState, Pill, ProgressBar } from "@/components/ui/kit";
 import { Btn, Card, Hint } from "./kit";
 
 /**
@@ -31,15 +33,16 @@ const SCOPE_OPTIONS = [
 const fmt = (n: number) =>
   Number.isInteger(n) ? n.toLocaleString("en-IN") : n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
-function ProgressBar({ pct, met }: { pct: number; met: boolean }) {
-  return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-      <div
-        className="h-full rounded-full transition-[width]"
-        style={{ width: `${pct}%`, background: met ? "var(--good)" : "var(--primary)" }}
-      />
-    </div>
-  );
+/** Revenue goals are money (set in whole rupees) → ₹ formatter. Count/XP metrics stay plain. */
+const showMetricValue = (metric: GoalProgress["goal"]["metric"], n: number) =>
+  metric === "revenueInr" ? formatInrMinor(Math.round(n * 100)) : fmt(n);
+
+/** met / missed / running — the pill that says where a goal stands at a glance. */
+function GoalStatus({ g }: { g: GoalProgress }) {
+  if (g.met) return <Pill tone="good">✓ Met{g.metOn ? ` ${formatDate(g.metOn)}` : ""}</Pill>;
+  if (!g.open) return <Pill tone="bad">Missed</Pill>;
+  if (!g.goal.active) return <Pill tone="neutral">Paused</Pill>;
+  return <Pill tone="primary">{Math.round(g.pct)}%</Pill>;
 }
 
 export function GoalsPanel({ goals, people }: { goals: GoalProgress[]; people: GoalPerson[] }) {
@@ -89,24 +92,27 @@ export function GoalsPanel({ goals, people }: { goals: GoalProgress[]; people: G
       actions={<Btn variant="primary" onClick={() => open(null)}>+ New goal</Btn>}
     >
       {goals.length === 0 ? (
-        <p className="rounded-field border border-line bg-surface-2 p-5 text-sm text-muted">
-          No goals yet. Set one and it starts tracking immediately — including backwards, over history
-          that&apos;s already recorded.
-        </p>
+        <EmptyState
+          icon={<Target size={26} />}
+          title="No goals yet"
+          body="Set one and it starts tracking immediately — including backwards, over history that's already recorded."
+          action={<Btn variant="primary" onClick={() => open(null)}>+ New goal</Btn>}
+        />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {goals.map((g) => (
-            <div key={g.goal.id} className="rounded-field border border-line bg-surface-2 p-3">
+            <div
+              key={g.goal.id}
+              className={`rounded-field border border-line bg-surface-2 p-3 ${g.goal.active ? "" : "opacity-60"}`}
+            >
               <div className="flex flex-wrap items-center gap-3">
                 <Target size={16} className="flex-none text-ink-3" />
                 <div className="min-w-52 flex-1">
-                  <p className="text-sm font-semibold">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
                     {g.goal.name}
-                    {!g.goal.active && <span className="ml-2 text-xs font-normal text-muted">paused</span>}
-                    {g.met && <span className="ml-2 text-xs font-semibold text-good">✓ met{g.metOn ? ` on ${g.metOn}` : ""}</span>}
-                    {!g.open && !g.met && <span className="ml-2 text-xs font-semibold text-risk">missed</span>}
+                    <GoalStatus g={g} />
                   </p>
-                  <p className="text-xs text-muted">
+                  <p className="text-caption text-muted">
                     {GOAL_METRIC_LABELS[g.goal.metric]} ·{" "}
                     {g.goal.scope === "COMPANY"
                       ? "whole team"
@@ -115,14 +121,14 @@ export function GoalsPanel({ goals, people }: { goals: GoalProgress[]; people: G
                   </p>
                 </div>
                 <div className="w-full max-w-64">
-                  <div className="mb-1 flex justify-between text-xs tnum">
-                    <span className="font-semibold text-ink">{fmt(g.actual)}</span>
-                    <span className="text-muted">of {fmt(g.goal.targetValue)}</span>
+                  <div className="tnum mb-1 flex justify-between text-caption">
+                    <span className="font-semibold text-ink">{showMetricValue(g.goal.metric, g.actual)}</span>
+                    <span className="text-muted">of {showMetricValue(g.goal.metric, g.goal.targetValue)}</span>
                   </div>
-                  <ProgressBar pct={g.pct} met={g.met} />
+                  <ProgressBar pct={g.pct} tone={g.met ? "good" : !g.open ? "bad" : "primary"} />
                 </div>
-                <div className="flex gap-2 text-sm">
-                  <button type="button" className="text-accent hover:underline" onClick={() => open(g)}>
+                <div className="flex flex-none gap-2 text-sm">
+                  <button type="button" className="font-medium text-accent hover:underline" onClick={() => open(g)}>
                     Edit
                   </button>
                   <button type="button" className="text-risk hover:underline" onClick={() => remove(g)}>

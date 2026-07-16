@@ -13,16 +13,27 @@ import { useFormStatus } from "react-dom";
 
 // ───────────────────────────── buttons ─────────────────────────────
 
-export type BtnVariant = "primary" | "secondary" | "ghost" | "danger";
+/**
+ * §5.4 defines exactly four variants: Primary / Soft / Ghost / Danger.
+ * `secondary` is kept as a deprecated alias of `soft` so existing call sites
+ * keep compiling; it renders the Soft style.
+ */
+export type BtnVariant = "primary" | "soft" | "secondary" | "ghost" | "danger";
 export type BtnSize = "sm" | "md";
 
+// `text-on-accent` (not `text-white`): the dark theme's fills are light, so a
+// hardcoded white label measures 2.72:1 there. The token inverts with the theme.
+const SOFT = "bg-primary-soft text-primary-strong hover:bg-primary-tint";
+
 const VARIANT: Record<BtnVariant, string> = {
-  primary: "bg-primary text-white hover:bg-primary-strong",
-  secondary: "border border-line bg-surface text-ink hover:bg-surface-2",
+  primary: "bg-primary text-on-accent hover:bg-primary-strong",
+  soft: SOFT,
+  secondary: SOFT,
   ghost: "text-ink-2 hover:bg-surface-2 hover:text-ink",
-  danger: "border border-line text-risk hover:bg-risk-soft",
+  danger: "bg-bad text-on-accent hover:brightness-95",
 };
 
+// §5.4: height 40, or 36 compact.
 const SIZE: Record<BtnSize, string> = {
   sm: "h-9 px-3 text-[13px]",
   md: "h-10 px-4 text-sm",
@@ -57,7 +68,7 @@ export function Btn({
       onClick={onClick}
       disabled={disabled || busy}
       title={title}
-      className={`inline-flex flex-none items-center justify-center gap-1.5 rounded-btn font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT[variant]} ${SIZE[size]} ${className}`}
+      className={`press inline-flex flex-none items-center justify-center gap-2 rounded-btn font-semibold transition-colors disabled:cursor-not-allowed disabled:border-transparent disabled:bg-surface-2 disabled:text-ink-disabled ${VARIANT[variant]} ${SIZE[size]} ${className}`}
     >
       {busy ? <Loader2 size={15} className="animate-spin" /> : icon}
       {children}
@@ -72,12 +83,15 @@ export function IconButton({
   onClick,
   disabled,
   tone = "neutral",
+  size = "md",
 }: {
   label: string;
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   tone?: "neutral" | "danger";
+  /** `md` = 40px (§7 hit-target floor). `sm` = 36px, the §5.4 compact size — dense table rows only. */
+  size?: BtnSize;
 }) {
   return (
     <button
@@ -86,9 +100,9 @@ export function IconButton({
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className={`grid h-9 w-9 flex-none place-items-center rounded-btn border border-line transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-        tone === "danger" ? "text-risk hover:bg-risk-soft" : "text-ink-2 hover:bg-surface-2 hover:text-ink"
-      }`}
+      className={`grid flex-none place-items-center rounded-btn border border-line transition-colors disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-ink-disabled ${
+        size === "sm" ? "h-9 w-9" : "h-10 w-10"
+      } ${tone === "danger" ? "text-risk hover:bg-risk-soft" : "text-ink-2 hover:bg-surface-2 hover:text-ink"}`}
     >
       {children}
     </button>
@@ -136,7 +150,7 @@ export function Switch({
         disabled={disabled}
         aria-checked={checked}
         onChange={(e) => onChange?.(e.target.checked)}
-        className="peer h-7 w-12 cursor-pointer appearance-none rounded-full bg-line-strong transition-colors checked:bg-good disabled:cursor-not-allowed disabled:opacity-50"
+        className="peer my-1.5 h-7 w-12 cursor-pointer appearance-none rounded-full bg-line-strong transition-colors checked:bg-good disabled:cursor-not-allowed disabled:opacity-50"
       />
       <span
         aria-hidden
@@ -204,8 +218,8 @@ export function CheckCard({
     >
       <span
         aria-hidden
-        className={`grid h-5 w-5 flex-none place-items-center rounded-[6px] border ${
-          checked ? "border-primary bg-primary text-white" : "border-line-strong bg-surface"
+        className={`grid h-5 w-5 flex-none place-items-center rounded-field border ${
+          checked ? "border-primary bg-primary text-on-accent" : "border-line-strong bg-surface"
         }`}
       >
         {checked && <Check size={13} strokeWidth={3.2} />}
@@ -320,7 +334,9 @@ export function SaveBar({
   resetLabel?: string;
 }) {
   return (
-    <div className="sticky bottom-0 z-10 -mx-5 -mb-5 mt-5 flex flex-wrap items-center gap-3 border-t border-line bg-surface/95 px-5 py-3 backdrop-blur">
+    // The insets must match Card's body padding (p-6) exactly, or the bar floats
+    // 4px inside the card edge and the seam reads as a mistake. -mx-5 did that.
+    <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-6 flex flex-wrap items-center gap-3 border-t border-line bg-surface px-6 py-3">
       <Btn variant="primary" onClick={onSave} disabled={!dirty} busy={busy}>
         {dirty ? "Save changes" : "Saved"}
       </Btn>
@@ -329,7 +345,7 @@ export function SaveBar({
           {resetLabel}
         </Btn>
       )}
-      {dirty && <span className="text-xs text-warn">Unsaved changes</span>}
+      {dirty && <span className="text-caption font-medium text-warn">Unsaved changes</span>}
       {error && (
         <p role="alert" className="rounded-field bg-risk-soft px-3 py-1.5 text-sm font-medium text-risk">
           {error}

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Image from "next/image";
 
 /**
  * The app's presentational vocabulary, extracted from the Users & access screen.
@@ -58,10 +59,9 @@ export function PageHeader({
           </span>
         )}
         <div className="min-w-0">
-          {eyebrow && (
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">{eyebrow}</p>
-          )}
-          <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
+          {eyebrow && <p className="mb-1 text-label font-semibold uppercase text-primary">{eyebrow}</p>}
+          {/* §2.1 display-l (30/38). The old `sm:text-4xl` bumped to 36px, which is on no scale step. */}
+          <h1 className="font-display text-display-l tracking-tight">{title}</h1>
           {subtitle && <p className="mt-1 max-w-3xl text-sm text-muted">{subtitle}</p>}
         </div>
       </div>
@@ -95,20 +95,17 @@ export function Card({
   return (
     <section className={`overflow-hidden rounded-card border border-line bg-surface shadow-card ${className}`}>
       {hasHeader && (
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-6 py-4">
           <div className="min-w-0">
-            {typeof title === "string" ? (
-              <h2 className="font-display text-[15px] font-semibold text-ink">{title}</h2>
-            ) : (
-              title
-            )}
-            {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
+            {typeof title === "string" ? <h2 className="font-display text-h3 text-ink">{title}</h2> : title}
+            {subtitle && <p className="mt-0.5 text-caption text-muted">{subtitle}</p>}
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
       )}
-      <div className={flush ? "" : "p-5"}>{children}</div>
-      {footer && <div className="border-t border-line bg-surface-2 px-5 py-3">{footer}</div>}
+      {/* §4: card padding is 24, not 20. */}
+      <div className={flush ? "" : "p-6"}>{children}</div>
+      {footer && <div className="border-t border-line bg-surface-2 px-6 py-3">{footer}</div>}
     </section>
   );
 }
@@ -116,7 +113,7 @@ export function Card({
 /** An icon + words card heading. Pass it as `Card`'s `title`. */
 export function CardTitle({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
   return (
-    <span className="flex items-center gap-2 font-display text-[15px] font-semibold text-ink">
+    <span className="flex items-center gap-2 font-display text-h3 text-ink">
       {icon && <span className="text-primary">{icon}</span>}
       {children}
     </span>
@@ -148,7 +145,8 @@ export function Grid({ cols = 4, children }: { cols?: 2 | 3 | 4; children: React
       : cols === 3
         ? "sm:grid-cols-2 lg:grid-cols-3"
         : "sm:grid-cols-2 lg:grid-cols-4";
-  return <div className={`grid grid-cols-1 gap-4 ${cls}`}>{children}</div>;
+  // §4: grid gutter is 20 (gap-5), not 16.
+  return <div className={`grid grid-cols-1 gap-5 ${cls}`}>{children}</div>;
 }
 
 // ───────────────────────────── badges & identity ─────────────────────────────
@@ -165,7 +163,8 @@ export function Pill({
   return (
     <span
       title={title}
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${TONE_CLASS[tone]}`}
+      // §5.7 status badge: caption (12px) 600. 11px is below the type scale's floor.
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption font-semibold ${TONE_CLASS[tone]}`}
     >
       {children}
     </span>
@@ -175,7 +174,7 @@ export function Pill({
 /** A chip that names a thing rather than a state — outlined, not filled. */
 export function Chip({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex whitespace-nowrap rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-2">
+    <span className="inline-flex whitespace-nowrap rounded-full border border-line px-2 py-0.5 text-caption text-ink-2">
       {children}
     </span>
   );
@@ -192,14 +191,26 @@ export function Avatar({
 }) {
   const initials = name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase() || "?";
   if (image) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={image} alt="" className="flex-none rounded-full object-cover" style={{ height: size, width: size }} />;
+    // `image` can be an arbitrary user-supplied https URL or a data: URL (profile photo
+    // resizer) — neither is a domain we can whitelist in next.config's remotePatterns, so
+    // this opts out of the optimizer instead of widening it to "any host".
+    return (
+      <Image
+        src={image}
+        alt=""
+        width={size}
+        height={size}
+        unoptimized
+        className="flex-none rounded-full object-cover"
+      />
+    );
   }
   return (
     <span
       aria-hidden
       className="grid flex-none place-items-center rounded-full bg-primary-soft font-bold text-primary-strong"
-      style={{ height: size, width: size, fontSize: size * 0.36 }}
+      // never let initials fall below the 12px caption floor (§2.1) on small avatars
+      style={{ height: size, width: size, fontSize: Math.max(12, Math.round(size * 0.36)) }}
     >
       {initials}
     </span>
@@ -251,7 +262,9 @@ export function TableShell({
     <div className="overflow-x-auto">
       <table className="w-full text-left" style={{ minWidth }}>
         <thead>
-          <tr className="border-b border-line bg-surface-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+          {/* §5.6 header row: the `label` type token, and --ink-2 (§1.1 assigns
+              --ink-2 to labels/table text). --ink-3 here measured 2.84:1. */}
+          <tr className="border-b border-line bg-surface-2 text-label font-semibold uppercase text-ink-2">
             {head}
           </tr>
         </thead>
@@ -299,10 +312,11 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="grid place-items-center rounded-field border border-dashed border-line-strong bg-surface-2 px-6 py-12 text-center">
-      {icon && <span className="mb-3 text-ink-3">{icon}</span>}
-      <p className="font-display text-[15px] font-semibold text-ink">{title}</p>
-      {body && <p className="mt-1 max-w-md text-sm text-muted">{body}</p>}
+    // §5.6: the empty state sits on --bg-sky, not --bg-surface-2.
+    <div className="grid place-items-center rounded-field border border-dashed border-primary-tint bg-sky px-6 py-12 text-center">
+      {icon && <span className="mb-3 text-primary-strong">{icon}</span>}
+      <p className="font-display text-h3 text-ink">{title}</p>
+      {body && <p className="mt-1 max-w-md text-sm text-ink-2">{body}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -312,9 +326,9 @@ export function EmptyState({
 export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: Tone }) {
   return (
     <div className="min-w-0">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">{label}</p>
+      <p className="text-label font-semibold uppercase text-ink-3">{label}</p>
       <p
-        className={`tnum mt-0.5 font-display text-xl font-bold tracking-tight ${
+        className={`tnum mt-0.5 font-display text-h2 tracking-tight ${
           tone && tone !== "neutral" ? TONE_CLASS[tone].split(" ")[0] : "text-ink"
         }`}
       >

@@ -14,7 +14,7 @@ export default async function GnMembersPage() {
   const members = await getGnMembers();
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/german-note" className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
           <ArrowLeft size={13} /> German Note

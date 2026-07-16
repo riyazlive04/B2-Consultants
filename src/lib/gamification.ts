@@ -204,6 +204,28 @@ export const QUEST_FIELDS = [
   "studentsFlaggedAtRisk",
 ] as const;
 
+/**
+ * Human names for the quest fields. Without these the Founder Console's quest
+ * editor renders the raw column names ("discoveryCallsCompleted") in a dropdown
+ * the founder actually reads — the same reason EMPLOYEE_METRIC_LABELS exists.
+ */
+export const QUEST_FIELD_LABELS: Record<(typeof QUEST_FIELDS)[number], string> = {
+  [WEEKDAY_LOGS_FIELD]: "Weekday logs (Mon–Fri count)",
+  discoveryCallsCompleted: "Discovery calls completed",
+  highlyQualifiedCalls: "Highly-qualified calls",
+  followUpsDone: "Follow-ups done",
+  proposalsSent: "Proposals sent",
+  noShows: "No-shows",
+  newLeadsContacted: "New leads contacted",
+  appointmentsSet: "Appointments set",
+  followUpMessagesSent: "Follow-up messages sent",
+  leadsAddedToPipeline: "Leads added to pipeline",
+  sessionsDelivered: "Coaching sessions delivered",
+  studentsCheckedInOn: "Students checked in on",
+  assignmentsReviewed: "Assignments reviewed",
+  studentsFlaggedAtRisk: "Students flagged at risk",
+};
+
 export type StudentJourneyConfig = {
   /** milestone → journey XP weight. Their SUM is the 100% denominator. */
   milestoneXp: Record<string, number>;

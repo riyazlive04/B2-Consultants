@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -9,10 +10,12 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "./ThemeToggle";
 import { FallbackIcon, SECTION_ICONS } from "./section-icons";
+import { CommandPalette, openCommandPalette } from "@/components/ui/CommandPalette";
 import type { SectionIconName } from "@/lib/sections";
 
 /** Label, icon, group and order all come from the founder's section config. */
@@ -44,6 +47,8 @@ export function AppShell({
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  // §5.1: the rail collapses to icons below 1100px, regardless of preference.
+  const [narrow, setNarrow] = useState(false);
 
   // restore collapsed preference
   useEffect(() => {
@@ -53,6 +58,18 @@ export function AppShell({
       /* ignore */
     }
   }, []);
+
+  // Track the 1100px breakpoint. The manual toggle can only ever collapse further,
+  // never expand a rail the viewport is too narrow to hold.
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1099px)");
+    const sync = () => setNarrow(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const compactRail = collapsed || narrow;
 
   // close the mobile drawer on navigation + lock scroll + Esc
   useEffect(() => setDrawer(false), [pathname]);
@@ -110,12 +127,22 @@ export function AppShell({
 
   const Avatar = ({ size = 36 }: { size?: number }) =>
     user.image ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={user.image} alt="" className="flex-none rounded-full object-cover" style={{ height: size, width: size }} />
+      // `user.image` is an arbitrary https URL or data: URL (see profile-actions.ts) — not a
+      // fixed domain we can whitelist, so this opts out of the optimizer rather than widening
+      // next.config's remotePatterns to any host.
+      <Image
+        src={user.image}
+        alt=""
+        width={size}
+        height={size}
+        unoptimized
+        className="flex-none rounded-full object-cover"
+      />
     ) : (
       <span
-        className="grid flex-none place-items-center rounded-full bg-primary font-semibold text-white"
-        style={{ height: size, width: size, fontSize: size * 0.34 }}
+        className="grid flex-none place-items-center rounded-full bg-primary font-semibold text-on-accent"
+        // floor initials at the 12px caption minimum (§2.1); a 32px avatar was 10.88px
+        style={{ height: size, width: size, fontSize: Math.max(12, Math.round(size * 0.34)) }}
       >
         {initials}
       </span>
@@ -150,13 +177,13 @@ export function AppShell({
       {/* brand + collapse toggle */}
       <div className={`mb-5 flex items-center ${compact ? "justify-center" : "justify-between"} px-1`}>
         <Link href="/" prefetch className="flex items-center gap-2.5">
-          <span className="grid h-10 w-10 flex-none place-items-center rounded-btn bg-primary text-sm font-bold text-white">
+          <span className="grid h-10 w-10 flex-none place-items-center rounded-btn bg-primary text-sm font-bold text-on-accent">
             B2
           </span>
           {!compact && (
             <span className="flex flex-col leading-tight">
               <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-              <span className="text-[11px] text-ink-3">Founder Dashboard</span>
+              <span className="text-caption text-ink-3">Founder Dashboard</span>
             </span>
           )}
         </Link>
@@ -165,32 +192,34 @@ export function AppShell({
             type="button"
             onClick={toggleCollapse}
             aria-label="Collapse sidebar"
-            className="grid h-8 w-8 place-items-center rounded-field text-ink-3 hover:bg-surface-2 hover:text-ink"
+            className="grid h-10 w-10 place-items-center rounded-btn text-ink-2 hover:bg-surface-2 hover:text-ink"
           >
             <PanelLeftClose size={17} />
           </button>
         )}
       </div>
 
-      {!inDrawer && compact && (
+      {!inDrawer && compact && !narrow && (
         <button
           type="button"
           onClick={toggleCollapse}
           aria-label="Expand sidebar"
-          className="mb-2 grid h-9 w-full place-items-center rounded-field text-ink-3 hover:bg-surface-2 hover:text-ink"
+          className="mb-2 grid h-10 w-full place-items-center rounded-btn text-ink-3 hover:bg-surface-2 hover:text-ink"
         >
           <PanelLeftOpen size={17} />
         </button>
       )}
 
-      {/* grouped nav */}
-      <div className="no-scrollbar flex flex-1 flex-col gap-3 overflow-y-auto">
+      {/* Grouped nav. The scrollbar is deliberately shown: this list overflows by ~400px
+          at 1080p (Reports, Founder Console, Automation, App Guide, My Profile all sit
+          below the fold), and with it hidden there was no signal those sections existed. */}
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto">
         {groups.map((g) => (
           <div key={g.label}>
             {compact ? (
               <div className="mx-2 mb-1 border-t border-line" />
             ) : (
-              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+              <p className="px-3 pb-1 text-label font-semibold uppercase text-ink-3">
                 {g.label}
               </p>
             )}
@@ -209,7 +238,7 @@ export function AppShell({
           {compact ? (
             <div className="mx-2 mb-1 border-t border-line" />
           ) : (
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+            <p className="px-3 pb-1 text-label font-semibold uppercase text-ink-3">
               Account
             </p>
           )}
@@ -226,16 +255,16 @@ export function AppShell({
           href="/profile"
           prefetch
           title={compact ? user.name : undefined}
-          className={`flex items-center gap-3 rounded-btn py-2 transition-colors hover:bg-surface-2 ${
+          className={`flex min-h-10 items-center gap-3 rounded-btn py-2 transition-colors hover:bg-surface-2 ${
             compact ? "justify-center px-2" : "px-2"
           }`}
         >
-          <Avatar size={compact ? 30 : 36} />
+          <Avatar size={compact ? 32 : 36} />
           {!compact && (
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                 <span className="truncate">{user.name}</span>
-                <span className="flex-none rounded-full bg-primary-soft px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-primary-strong">
+                <span className="flex-none rounded-full bg-primary-soft px-1.5 py-0.5 text-caption font-semibold uppercase tracking-wide text-primary-strong">
                   {roleLabel}
                 </span>
               </p>
@@ -247,7 +276,7 @@ export function AppShell({
           type="button"
           onClick={logout}
           title={compact ? "Log out" : undefined}
-          className={`mt-1 flex w-full items-center gap-3 rounded-btn py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink ${
+          className={`mt-1 flex min-h-10 w-full items-center gap-3 rounded-btn py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink ${
             compact ? "justify-center px-2" : "px-2.5"
           }`}
         >
@@ -263,10 +292,10 @@ export function AppShell({
       {/* desktop rail — flat white sidebar on a hairline border (§5.1) */}
       <aside
         className={`sticky top-0 hidden h-screen flex-none border-r border-line bg-surface transition-[width] duration-200 md:block ${
-          collapsed ? "w-[76px]" : "w-[240px]"
+          compactRail ? "w-[76px]" : "w-[240px]"
         }`}
       >
-        <Rail compact={collapsed} />
+        <Rail compact={compactRail} />
       </aside>
 
       {/* main column */}
@@ -277,19 +306,39 @@ export function AppShell({
             type="button"
             aria-label="Open menu"
             onClick={() => setDrawer(true)}
-            className="grid h-9 w-9 place-items-center rounded-field text-ink hover:bg-surface-2 md:hidden"
+            className="grid h-10 w-10 place-items-center rounded-btn text-ink hover:bg-surface-2 md:hidden"
           >
             <Menu size={20} />
           </button>
           <Link href="/" className="flex items-center gap-2 md:hidden">
-            <span className="grid h-8 w-8 place-items-center rounded-field bg-primary text-xs font-bold text-white">B2</span>
+            <span className="grid h-8 w-8 place-items-center rounded-field bg-primary text-xs font-bold text-on-accent">B2</span>
           </Link>
 
-          {/* the always-visible metric strip: month · runway · theme · alerts · user */}
-          <div className="ml-auto flex items-center gap-2 md:gap-3">
+          {/* The always-visible metric strip: search · month · runway · theme · alerts · user.
+              On a phone this cluster is what overflows the viewport (it needs ~320px next to
+              the hamburger and brand), so the gap tightens and the month/theme drop out below
+              their breakpoints. Search, runway (§9.4), alerts, profile and logout all stay. */}
+          <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-2 md:gap-3">
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              aria-label="Search contacts, opportunities, invoices (Ctrl K)"
+              title="Search (Ctrl K)"
+              className="flex h-10 items-center gap-2 rounded-full border border-line-strong bg-surface-2 px-3 text-sm text-ink-2 transition-colors hover:bg-surface hover:text-ink md:w-52"
+            >
+              <Search size={15} className="flex-none text-ink-3" />
+              <span className="hidden truncate md:inline">Search…</span>
+              <kbd className="ml-auto hidden flex-none rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-3 md:inline">
+                ⌘K
+              </kbd>
+            </button>
             <span className="hidden text-sm font-medium text-ink-2 lg:inline">{currentMonth}</span>
             {runwaySlot}
-            <ThemeToggle />
+            {/* Theme falls back to the OS `prefers-color-scheme` when this is hidden, so a
+                phone still gets the right mode — it just can't override it from the top bar. */}
+            <span className="hidden sm:inline-flex">
+              <ThemeToggle />
+            </span>
             {bellSlot}
             <Link href="/profile" title="Your profile" className="flex items-center gap-2 rounded-full py-1 md:pr-2">
               <Avatar size={34} />
@@ -297,10 +346,22 @@ export function AppShell({
                 {user.name}
               </span>
             </Link>
+            {/* PRD §6: logout lives in the top bar (username · month · logout). */}
+            <button
+              type="button"
+              onClick={logout}
+              title="Log out"
+              aria-label="Log out"
+              className="grid h-10 w-10 place-items-center rounded-btn text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+        {/* Full-width content: pages set their own max-width. Synamate-parity list pages
+            (Contacts, Opportunities, Payments, …) go edge-to-edge; classic pages stay centred. */}
+        <main className="w-full flex-1 px-4 py-6 md:px-7 md:py-7">{children}</main>
       </div>
 
       {/* mobile drawer */}
@@ -312,7 +373,7 @@ export function AppShell({
               type="button"
               aria-label="Close menu"
               onClick={() => setDrawer(false)}
-              className="absolute right-3 top-4 z-10 grid h-9 w-9 place-items-center rounded-field text-ink-2 hover:bg-surface-2 hover:text-ink"
+              className="absolute right-3 top-4 z-10 grid h-10 w-10 place-items-center rounded-btnd text-ink-2 hover:bg-surface-2 hover:text-ink"
             >
               <X size={20} />
             </button>
@@ -320,6 +381,10 @@ export function AppShell({
           </aside>
         </div>
       )}
+
+      {/* Global ⌘K command palette (BUILD_CHECKLIST.md §3) — one instance for the whole shell,
+          so it's available from Contacts, Opportunities, Payments and everywhere else. */}
+      <CommandPalette />
     </div>
   );
 }

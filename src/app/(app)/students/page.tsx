@@ -14,8 +14,9 @@ import {
 import { MetricCard } from "@/components/ui/MetricCard";
 import { JourneyRing, MomentumChip } from "@/components/ui/gamification";
 import { Tabs } from "@/components/ui/Tabs";
-import { PageHeader } from "@/components/ui/kit";
+import { Card, CardTitle, PageHeader, Pill } from "@/components/ui/kit";
 import { formatInrMinor, formatPct } from "@/lib/format";
+import { istToday, toDateInputValue } from "@/lib/dates";
 import { requireSection } from "@/lib/rbac";
 import { getStudentsOverview } from "@/server/students-metrics";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
@@ -30,9 +31,10 @@ export default async function StudentsPage() {
   const { counts, avgSatisfaction, avgNps, tracker, momentumBoard, atRiskRadar, ltvSummary, students } =
     await getStudentsOverview();
   const waByStudent = await getWhatsAppStatusMap("studentId", tracker.map((t) => t.studentId));
+  const today = toDateInputValue(istToday());
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="w-full space-y-8">
       <PageHeader
         icon={<GraduationCap size={20} />}
         title="Students"
@@ -94,15 +96,11 @@ export default async function StudentsPage() {
       {/* Momentum board — gamified journey showcase: who's moving fastest right now.
           Derived from milestones + sessions + activity recency; nothing extra to enter. */}
       {momentumBoard.length > 0 && (
-        <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
-            <Rocket size={18} className="text-accent" /> Momentum board
-          </h3>
-          <p className="mt-0.5 text-xs text-muted">
-            Journey XP = milestones covered + sessions + applications + interviews. Use it in
-            check-ins — students love seeing their bar move.
-          </p>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card
+          title={<CardTitle icon={<Rocket size={18} />}>Momentum board</CardTitle>}
+          subtitle="Journey XP = milestones covered + sessions + applications + interviews. Use it in check-ins — students love seeing their bar move."
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {momentumBoard.map((t, i) => (
               <Link
                 key={t.enrollmentId}
@@ -127,21 +125,17 @@ export default async function StudentsPage() {
               </Link>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Early-warning radar (report §3.B): machine-detected disengagement, human decides.
           Suggestions only - the manual G/A/R signal remains the source of truth. */}
       {atRiskRadar.length > 0 && (
-        <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
-            <LifeBuoy size={18} className="text-watch" /> Early-warning radar
-          </h3>
-          <p className="mt-0.5 text-xs text-muted">
-            Auto-detected from sessions, check-ins, tasks and pace. Review and set the signal
-            colour yourself - the radar suggests, you decide.
-          </p>
-          <ul className="mt-3 space-y-2">
+        <Card
+          title={<CardTitle icon={<LifeBuoy size={18} className="text-watch" />}>Early-warning radar</CardTitle>}
+          subtitle="Auto-detected from sessions, check-ins, tasks and pace. Review and set the signal colour yourself - the radar suggests, you decide."
+        >
+          <ul className="space-y-2">
             {atRiskRadar.map((t) => (
               <li key={t.enrollmentId} className="flex flex-wrap items-center gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
                 <Link href={`/students/${t.studentId}`} className="font-semibold text-accent hover:underline">
@@ -150,22 +144,16 @@ export default async function StudentsPage() {
                 <span className="text-xs text-muted">
                   {t.programLevel === "GUIDED" ? "Guided" : "Elite"} · Day {t.dayNumber}/{t.totalDays}
                 </span>
-                {t.alreadyRed && (
-                  <span className="rounded-full bg-risk-soft px-2 py-0.5 text-[11px] font-semibold text-risk">
-                    already RED
-                  </span>
-                )}
+                {t.alreadyRed && <Pill tone="bad">already RED</Pill>}
                 <span className="ml-auto flex flex-wrap justify-end gap-1">
                   {t.flags.map((f) => (
-                    <span key={f} className="rounded-full bg-watch-soft px-2 py-0.5 text-[11px] font-medium text-watch">
-                      {f}
-                    </span>
+                    <Pill key={f} tone="warn">{f}</Pill>
                   ))}
                 </span>
               </li>
             ))}
           </ul>
-        </div>
+        </Card>
       )}
 
       <Tabs
@@ -174,7 +162,7 @@ export default async function StudentsPage() {
             label: `90/120-day tracker${tracker.some((t) => t.signalColour === "RED") ? " ⚠" : ""}`,
             content: <TrackerTable rows={tracker} isAdmin={isAdmin} waStatus={waByStudent} />,
           },
-          { label: "All students & LTV", content: <StudentsPanel rows={students} isAdmin={isAdmin} /> },
+          { label: "All students & LTV", content: <StudentsPanel rows={students} isAdmin={isAdmin} today={today} /> },
         ]}
       />
     </div>

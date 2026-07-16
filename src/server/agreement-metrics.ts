@@ -150,7 +150,9 @@ export async function getAgreementPrefill(opts: {
     if (lead) {
       data.student.fullName = lead.name;
       data.student.email = lead.email ?? "";
-      data.student.phone = lead.phone;
+      // Blank, not null, when the lead has no number (nullable since the Synamate import) — this
+      // is a form suggestion, and `agreement.ts` requires min(5) before it can ever be issued.
+      data.student.phone = lead.phone ?? "";
       if (lead.paymentPlan === "FULL_PAY") {
         data.payment = {
           option: "FULL",

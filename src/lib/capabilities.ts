@@ -69,6 +69,27 @@ export const CAPABILITIES = [
     actions: "agreement-actions (create, update, issue, void, resend link)",
     roles: ["ADMIN"],
   },
+  /**
+   * The Outreach SOP's role boundary, made real.
+   *
+   * The SOP is explicit that "Highly Qualified" is the Discovery Specialist's verdict, and that
+   * the Outreach Specialist merely reads it to decide whether to run Step 19 — they must never
+   * write it. Before this key, the only gate was `requireSection("pipeline")`, which every USER
+   * and HEAD passes, on any lead: the boundary existed in the printed SOP and in a hidden UI tab,
+   * but not in the server.
+   *
+   * A capability rather than a new Role because this app's roles are named after people
+   * (USER = "Asma / Nilofer" collapses the Discovery Specialist and the Outreach Specialist into
+   * one role). Splitting the enum would touch every guard in the app; granting Asma this one key
+   * expresses exactly the SOP's rule and nothing more.
+   */
+  {
+    key: "outreach.qualify",
+    name: "Set Highly Qualified (Discovery Specialist)",
+    description: "Record the post-discovery verdict that unlocks the SSS sequence",
+    actions: "outreach-actions (setHighlyQualified) · pipeline-actions (createOutcome, updateOutcome)",
+    roles: ["ADMIN"],
+  },
 ] as const satisfies readonly CapabilityDef[];
 
 export type CapabilityKey = (typeof CAPABILITIES)[number]["key"];

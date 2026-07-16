@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import NextImage from "next/image";
 import { Camera, Loader2, Lock, Mail, Shield, Trash2 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { updateMyProfile } from "@/server/profile-actions";
@@ -81,14 +82,19 @@ export function ProfileClient({
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
           <div className="relative">
             {image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              // `image` is an arbitrary https URL or a data: URL from the client-side resizer
+              // above — not a fixed domain, so this opts out of the optimizer rather than
+              // widening next.config's remotePatterns to any host.
+              <NextImage
                 src={image}
                 alt=""
+                width={96}
+                height={96}
+                unoptimized
                 className="h-24 w-24 rounded-full border border-line object-cover"
               />
             ) : (
-              <span className="grid h-24 w-24 place-items-center rounded-full bg-accent text-2xl font-bold text-white">
+              <span className="grid h-24 w-24 place-items-center rounded-full bg-accent text-2xl font-bold text-on-accent">
                 {initials || "?"}
               </span>
             )}
@@ -96,7 +102,7 @@ export function ProfileClient({
               type="button"
               onClick={() => fileRef.current?.click()}
               aria-label="Change photo"
-              className="absolute -bottom-1 -right-1 grid h-9 w-9 place-items-center rounded-full border-2 border-surface bg-primary text-white shadow-soft hover:bg-primary-strong"
+              className="absolute -bottom-1 -right-1 grid h-9 w-9 place-items-center rounded-full border-2 border-surface bg-primary text-on-accent shadow-soft hover:bg-primary-strong"
             >
               <Camera size={16} />
             </button>
@@ -109,7 +115,7 @@ export function ProfileClient({
             />
           </div>
           <div className="min-w-0 text-center sm:text-left">
-            <p className="font-display text-lg font-semibold">{name || "Your name"}</p>
+            <p className="font-display text-h2 font-semibold">{name || "Your name"}</p>
             <p className="flex items-center justify-center gap-1.5 text-sm text-muted sm:justify-start">
               <Mail size={14} /> {user.email}
             </p>
@@ -148,7 +154,7 @@ export function ProfileClient({
             type="button"
             onClick={save}
             disabled={saving || !name.trim()}
-            className="inline-flex items-center gap-2 rounded-btn bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-strong disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-btn bg-primary px-4 py-2 text-sm font-semibold text-on-accent shadow-sm hover:bg-primary-strong disabled:opacity-60"
           >
             {saving && <Loader2 size={15} className="animate-spin" />}
             {saving ? "Saving…" : "Save changes"}
@@ -187,7 +193,7 @@ function PasswordCard() {
 
   return (
     <form onSubmit={submit} className="rounded-card border border-line bg-surface p-6 shadow-card">
-      <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
+      <h2 className="flex items-center gap-2 font-display text-h2 font-semibold">
         <Lock size={17} /> Change password
       </h2>
       <p className="mt-1 text-sm text-muted">You&apos;ll stay signed in here; other devices are signed out.</p>

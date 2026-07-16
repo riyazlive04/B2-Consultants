@@ -6,7 +6,8 @@ import { CalendarClock, CalendarPlus, ExternalLink, Pencil, Trash2 } from "lucid
 import { deleteGnEvent, scheduleGnEvent, updateGnEvent } from "@/server/german-note-actions";
 import type { GnEventRow } from "@/server/german-note-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";
-import { Field, FormError, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { Btn, IconButton } from "@/components/ui/controls";
+import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
 import { formatDateTimeInZone } from "@/lib/format";
 
@@ -18,12 +19,27 @@ function toLocalInput(iso: string): string {
   return local.toISOString().slice(0, 16);
 }
 
+const EVENT_TYPE_OPTIONS = [
+  { value: "LIVE_CLASS", label: "Live class" },
+  { value: "KICKOFF", label: "Kickoff / onboarding" },
+  { value: "COACHING", label: "Coaching" },
+  { value: "LINKEDIN", label: "LinkedIn session" },
+  { value: "QA", label: "Q&A" },
+  { value: "OPEN_MARKET", label: "Open-market strategy" },
+  { value: "OTHER", label: "Other" },
+];
+
 function EventFields({ event }: { event?: GnEventRow }) {
   return (
     <div className="space-y-4">
-      <Field label="Class title">
-        <TextInput name="title" required maxLength={160} placeholder="A1 · Class 13 — Modalverben" defaultValue={event?.title} />
-      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Class title">
+          <TextInput name="title" required maxLength={160} placeholder="A1 · Class 13 — Modalverben" defaultValue={event?.title} />
+        </Field>
+        <Field label="Session type">
+          <Select name="type" options={EVENT_TYPE_OPTIONS} defaultValue={event?.type ?? "LIVE_CLASS"} />
+        </Field>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Starts at">
           <TextInput name="startsAt" type="datetime-local" required defaultValue={event ? toLocalInput(event.startsAt) : ""} />
@@ -50,7 +66,7 @@ function EventCard({ e, canManage, onEdit, onChanged }: {
       <div className="flex flex-wrap items-center gap-2">
         <CalendarClock size={15} className="text-[var(--lvl-gn)]" />
         <h4 className="font-display text-[15px] font-semibold">{e.title}</h4>
-        {!e.isPast && <span className="rounded-full bg-[#3fc0b722] px-2 py-0.5 text-[10px] font-semibold text-[var(--lvl-gn)]">Upcoming</span>}
+        {!e.isPast && <span className="rounded-full bg-lvl-gn/10 px-2 py-0.5 text-caption font-semibold text-ink">Upcoming</span>}
         {canManage && (
           <span className="ml-auto flex items-center gap-1.5">
             <button type="button" aria-label="Edit class" className="grid h-7 w-7 place-items-center rounded-field text-muted hover:bg-ink/5 hover:text-ink" onClick={() => onEdit(e)}>
@@ -76,7 +92,7 @@ function EventCard({ e, canManage, onEdit, onChanged }: {
       {e.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{e.notes}</p>}
       {!e.isPast && e.joinUrl && (
         <a href={e.joinUrl} target="_blank" rel="noopener noreferrer"
-          className="mt-3 inline-flex items-center gap-1.5 rounded-btn bg-[var(--lvl-gn)] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90">
+          className="mt-3 inline-flex items-center gap-1.5 rounded-btn bg-[var(--lvl-gn)] px-3 py-1.5 text-sm font-semibold text-ink hover:opacity-90">
           <ExternalLink size={14} /> Join class
         </a>
       )}
@@ -100,7 +116,7 @@ export function SchedulePanel({ batchId, events, canManage }: { batchId: string;
     <div className="space-y-4">
       {canManage && (
         <div>
-          <button type="button" className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-strong"
+          <button type="button" className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3 py-1.5 text-sm font-semibold text-on-accent hover:bg-primary-strong"
             onClick={() => { setAdding((v) => !v); setError(null); }}>
             <CalendarPlus size={15} /> {adding ? "Close" : "Schedule class"}
           </button>

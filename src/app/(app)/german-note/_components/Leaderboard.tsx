@@ -27,7 +27,7 @@ export function Leaderboard({ data }: { data: GnLeaderboard }) {
             type="button"
             onClick={() => setTab(k)}
             className={`flex-1 rounded-[7px] px-2 py-1 text-xs font-medium transition-colors ${
-              tab === k ? "bg-accent text-white shadow-sm" : "text-muted hover:text-ink"
+              tab === k ? "bg-accent text-on-accent shadow-sm" : "text-muted hover:text-ink"
             }`}
           >
             {windows[k].label}
@@ -50,7 +50,7 @@ export function Leaderboard({ data }: { data: GnLeaderboard }) {
           <Row r={active.me} />
         </>
       )}
-      <p className="mt-3 text-[11px] text-muted">Points = likes your posts and comments receive.</p>
+      <p className="mt-3 text-caption text-muted">Points = likes your posts and comments receive.</p>
     </div>
   );
 }
@@ -75,11 +75,11 @@ function Row({ r }: { r: GnLeaderRow }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={r.image} alt="" className="h-7 w-7 rounded-full object-cover" />
         ) : (
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-[#3fc0b722] text-[10px] font-bold text-[var(--lvl-gn)]">
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-lvl-gn/10 text-caption font-bold text-ink">
             {initials}
           </span>
         )}
-        <span className="absolute -bottom-1 -right-1 grid h-[15px] w-[15px] place-items-center rounded-full bg-primary text-[9px] font-bold leading-none text-white ring-2 ring-[var(--surface)]">
+        <span className="absolute -bottom-1 -right-1 grid h-[15px] w-[15px] place-items-center rounded-full bg-primary text-caption font-bold leading-none text-on-accent ring-2 ring-[var(--surface)]">
           {r.level}
         </span>
       </span>

@@ -38,7 +38,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
   const isSigned = row.status === "SIGNED";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link href="/agreements" className="text-muted transition-colors hover:text-ink">
@@ -69,7 +69,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
 
       {/* Integrity — the two hashes, and why they are different things. */}
       <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold">
+        <h2 className="mb-3 flex items-center gap-2 font-display text-h2 font-semibold">
           <ShieldCheck size={18} className="text-accent" /> Integrity
         </h2>
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -97,7 +97,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
       <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
           <div className="border-b border-line px-5 py-3">
-            <h2 className="font-display text-lg font-bold">{isSigned ? "Signed document" : "Preview"}</h2>
+            <h2 className="font-display text-h2 font-semibold">{isSigned ? "Signed document" : "Preview"}</h2>
             <p className="text-xs text-muted">
               {isSigned
                 ? "The sealed bytes, served exactly as they were hashed."
@@ -113,7 +113,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
 
         <div className="space-y-6">
           <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-            <h2 className="mb-3 font-display text-lg font-bold">Terms</h2>
+            <h2 className="mb-3 font-display text-h2 font-semibold">Terms</h2>
             <dl className="space-y-2 text-sm">
               <Row label="Student">{data.student.fullName}</Row>
               <Row label="Address">{data.student.address}</Row>
@@ -146,7 +146,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
           )}
 
           <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-            <h2 className="mb-3 font-display text-lg font-bold">Audit trail</h2>
+            <h2 className="mb-3 font-display text-h2 font-semibold">Audit trail</h2>
             <p className="mb-3 text-xs text-muted">
               Append-only, enforced by a database trigger. Reproduced in the certificate page of the signed PDF.
             </p>
@@ -168,7 +168,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
 
           {row.whatsappMessages.length > 0 && (
             <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-              <h2 className="mb-3 font-display text-lg font-bold">WhatsApp</h2>
+              <h2 className="mb-3 font-display text-h2 font-semibold">WhatsApp</h2>
               <ul className="space-y-2.5">
                 {row.whatsappMessages.map((m) => (
                   <li key={m.id} className="text-sm">
@@ -187,7 +187,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
 
       {isDraft && (
         <div className="space-y-3">
-          <h2 className="font-display text-lg font-bold">Edit fields</h2>
+          <h2 className="font-display text-h2 font-semibold">Edit fields</h2>
           <p className="text-xs text-muted">
             Only a draft can be edited. Once issued, the terms are frozen — void and clone to revise.
           </p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { Card } from "@/components/ui/kit";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { PROGRAM_LEVEL_LABELS } from "@/lib/labels";
 import type { CommissionReport, CommissionRow } from "@/server/commission-metrics";
@@ -38,7 +39,7 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
         r.payouts.length ? (
           <span className="flex flex-wrap gap-1">
             {r.payouts.map((p) => (
-              <span key={p.name} className="tnum whitespace-nowrap rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-semibold text-ok">
+              <span key={p.name} className="tnum whitespace-nowrap rounded-full bg-ok-soft px-2 py-0.5 text-caption font-semibold text-ok">
                 {p.name} {formatInrMinor(p.amountInrMinor, { compact: true })} ({p.pct}%)
               </span>
             ))}
@@ -52,20 +53,21 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-display text-lg font-semibold">Commission - this month</h3>
+      <Card
+        title="Commission - this month"
+        actions={
           <span className="text-xs text-muted">
             One person on both calls = {report.rules.bothCallsPct}% · split calls = {report.rules.splitPct}% each
           </span>
-        </div>
+        }
+      >
         {report.totals.length === 0 ? (
-          <p className="mt-3 text-sm text-muted">
+          <p className="text-sm text-muted">
             No commissionable payments yet this month. A payment earns commission once it&apos;s
             linked to a student whose lead has a first-caller and a discovery outcome.
           </p>
         ) : (
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3">
             {report.totals.map((t) => (
               <div key={t.name} className="min-w-44 flex-1 rounded-field border border-line bg-surface-2 px-4 py-3 sm:flex-none">
                 <p className="text-xs font-medium text-muted">{t.name}</p>
@@ -83,7 +85,7 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
             assign the lead a first-caller on Pipeline and make sure the discovery outcome is recorded.
           </p>
         )}
-      </div>
+      </Card>
 
       <DataTable
         rows={report.rows}

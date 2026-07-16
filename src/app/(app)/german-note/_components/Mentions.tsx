@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { segmentMentions, type MentionCandidate } from "@/lib/gn-mentions";
 
 const fieldCls =
@@ -13,7 +13,9 @@ export function MentionText({ body, candidates }: { body: string; candidates: Me
     <>
       {segments.map((s, i) =>
         s.mention ? (
-          <span key={i} className="font-semibold text-[var(--lvl-gn)]">
+          // program colour is an identity TINT, not a text colour (§8 a11y): keep
+          // the teal as a soft background and let the ink text carry the contrast.
+          <span key={i} className="rounded bg-lvl-gn/10 px-0.5 font-semibold text-ink">
             {s.text}
           </span>
         ) : (
@@ -28,6 +30,11 @@ export function MentionText({ body, candidates }: { body: string; candidates: Me
  * Uncontrolled textarea (so <form> reset works) with an @mention autocomplete.
  * Typing `@` then a name filters the batch/community members; picking one
  * inserts the full display name.
+ *
+ * Keyboard: the textarea keeps focus and drives the listbox — ↑/↓ move the active
+ * option, Enter selects it, Esc dismisses. The options are real buttons too, so a
+ * mouse click (onMouseDown, which must preventDefault to stop the textarea
+ * blurring) and a native button activation (onClick → Enter/Space) both select.
  */
 export function MentionTextArea({
   name,
@@ -48,7 +55,10 @@ export function MentionTextArea({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [matches, setMatches] = useState<MentionCandidate[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
   const anchorRef = useRef<number>(-1); // index of the '@' being completed
+  const listId = useId();
+  const optionId = (i: number) => `${listId}-opt-${i}`;
 
   const recompute = () => {
     const el = ref.current;
@@ -64,6 +74,7 @@ export function MentionTextArea({
     const q = query.toLowerCase();
     const found = candidates.filter((c) => c.name.toLowerCase().startsWith(q)).slice(0, 6);
     setMatches(found);
+    setActiveIndex(0);
   };
 
   const pick = (c: MentionCandidate) => {
@@ -80,6 +91,8 @@ export function MentionTextArea({
     setMatches([]);
   };
 
+  const open = matches.length > 0;
+
   return (
     <div className="relative">
       <textarea
@@ -90,28 +103,62 @@ export function MentionTextArea({
         required={required}
         maxLength={maxLength}
         aria-label={ariaLabel}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open ? optionId(activeIndex) : undefined}
+        aria-autocomplete="list"
         className={fieldCls}
         onInput={recompute}
         onClick={recompute}
+        onKeyDown={(e) => {
+          if (!open) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setActiveIndex((i) => (i + 1) % matches.length);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setActiveIndex((i) => (i - 1 + matches.length) % matches.length);
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            const c = matches[activeIndex];
+            if (c) pick(c);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setMatches([]);
+          }
+        }}
         onKeyUp={(e) => {
-          if (e.key === "Escape") return setMatches([]);
+          // navigation/selection keys are handled in onKeyDown; recomputing here
+          // would reset the active option and undo arrow navigation
+          if (["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key)) return;
           recompute();
         }}
         onBlur={() => setTimeout(() => setMatches([]), 150)}
       />
-      {matches.length > 0 && (
-        <ul className="absolute z-20 mt-1 max-h-52 w-full max-w-xs overflow-auto rounded-field border border-line-strong bg-surface p-1 shadow-card">
-          {matches.map((c) => (
-            <li key={c.id}>
+      {open && (
+        <ul
+          id={listId}
+          role="listbox"
+          className="absolute z-20 mt-1 max-h-52 w-full max-w-xs overflow-auto rounded-field border border-line-strong bg-surface p-1 shadow-card"
+        >
+          {matches.map((c, i) => (
+            <li key={c.id} role="presentation">
               <button
                 type="button"
+                id={optionId(i)}
+                role="option"
+                aria-selected={i === activeIndex}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   pick(c);
                 }}
-                className="flex w-full items-center gap-2 rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-surface-2"
+                onClick={() => pick(c)}
+                className={`flex w-full items-center gap-2 rounded-[7px] px-2.5 py-1.5 text-left text-sm ${
+                  i === activeIndex ? "bg-surface-2" : "hover:bg-surface-2"
+                }`}
               >
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-[#3fc0b722] text-[10px] font-bold text-[var(--lvl-gn)]">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-lvl-gn/10 text-caption font-bold text-ink">
                   {c.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                 </span>
                 <span className="truncate">{c.name}</span>

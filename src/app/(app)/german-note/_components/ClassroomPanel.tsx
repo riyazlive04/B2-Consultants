@@ -13,9 +13,10 @@ import {
 import type { GnModuleRow, GnRecordingRow, GnSection } from "@/server/german-note-metrics";
 import { parseVideoUrl, VIDEO_PROVIDER_LABELS } from "@/lib/video-embed";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatPct } from "@/lib/format";
 import { toDateInputValue } from "@/lib/dates";
 
 /** Structured Classroom: recordings grouped into ordered modules, with course + per-module progress. */
@@ -151,7 +152,7 @@ function LessonCard({ r, index, canManage, onEdit, onChanged }: {
       </div>
       <div className="p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="grid h-6 min-w-6 place-items-center rounded-full bg-[#3fc0b722] px-1.5 text-[11px] font-bold text-[var(--lvl-gn)]">
+          <span className="grid h-6 min-w-6 place-items-center rounded-full bg-lvl-gn/10 px-1.5 text-caption font-bold text-ink">
             {index + 1}
           </span>
           {r.watched && <CheckCircle2 size={15} className="text-[var(--lvl-gn)]" />}
@@ -161,7 +162,9 @@ function LessonCard({ r, index, canManage, onEdit, onChanged }: {
           </span>
           <span className="ml-auto flex items-center gap-2">
             <button type="button"
-              className={`inline-flex items-center gap-1 text-xs font-medium ${r.watched ? "text-[var(--lvl-gn)]" : "text-muted hover:text-ink"}`}
+              // "watched" is a done-state, so it takes the success signal (AA-safe 5.07:1);
+              // the program teal fails as text (2.23:1) and is an identity fill, not a state.
+              className={`inline-flex items-center gap-1 text-xs font-medium ${r.watched ? "text-ok" : "text-muted hover:text-ink"}`}
               onClick={async () => { const res = await toggleRecordingWatched(r.id); if (!res.ok) return toast(res.error, "error"); onChanged(); }}>
               {r.watched ? <CheckCircle2 size={13} /> : <Circle size={13} />}
               {r.watched ? "Watched" : "Mark watched"}
@@ -171,10 +174,13 @@ function LessonCard({ r, index, canManage, onEdit, onChanged }: {
             </a>
             {canManage && (
               <>
-                <button type="button" aria-label="Edit recording" className="grid h-7 w-7 place-items-center rounded-field text-muted hover:bg-ink/5 hover:text-ink" onClick={() => onEdit(r)}>
+                <IconButton label="Edit recording" size="sm" onClick={() => onEdit(r)}>
                   <Pencil size={14} />
-                </button>
-                <button type="button" aria-label="Delete recording" className="grid h-7 w-7 place-items-center rounded-field text-muted hover:bg-risk-soft hover:text-risk"
+                </IconButton>
+                <IconButton
+                  label="Delete recording"
+                  size="sm"
+                  tone="danger"
                   onClick={async () => {
                     const ok = await askConfirm({ title: `Delete “${r.title}”?`, body: "The video stays on its platform — only the batch entry is removed.", confirmLabel: "Delete", danger: true });
                     if (!ok) return;
@@ -182,9 +188,10 @@ function LessonCard({ r, index, canManage, onEdit, onChanged }: {
                     if (!res.ok) return toast(res.error, "error");
                     toast("Recording deleted");
                     onChanged();
-                  }}>
+                  }}
+                >
                   <Trash2 size={14} />
-                </button>
+                </IconButton>
               </>
             )}
           </span>
@@ -212,7 +219,7 @@ export function ClassroomPanel({ batchId, classroom, modules, canManage, recordi
   const addFormRef = useRef<HTMLFormElement>(null);
 
   const refresh = () => startTransition(() => router.refresh());
-  const pct = recordingTotal ? Math.round((watchedCount / recordingTotal) * 100) : 0;
+  const pct = recordingTotal ? (watchedCount / recordingTotal) * 100 : 0;
 
   return (
     <div className="space-y-4">
@@ -221,25 +228,23 @@ export function ClassroomPanel({ batchId, classroom, modules, canManage, recordi
         <div className="rounded-card border border-line bg-surface p-4 shadow-card">
           <div className="flex items-center justify-between text-sm">
             <span className="font-semibold">Course progress</span>
-            <span className="tnum text-muted">{watchedCount} of {recordingTotal} watched · {pct}%</span>
+            <span className="tnum text-muted">{watchedCount} of {recordingTotal} watched · {formatPct(pct)}</span>
           </div>
           <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
             <div className="h-full rounded-full bg-[var(--lvl-gn)] transition-all" style={{ width: `${pct}%` }} />
           </div>
-          {watchedCount === recordingTotal && <p className="mt-2 text-xs font-medium text-[var(--lvl-gn)]">🎉 You&apos;ve completed every class in this batch!</p>}
+          {watchedCount === recordingTotal && <p className="mt-2 text-xs font-medium text-ok">🎉 You&apos;ve completed every class in this batch!</p>}
         </div>
       )}
 
       {canManage && (
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-strong"
-            onClick={() => { setAdding((v) => !v); setError(null); }}>
-            <Plus size={15} /> {adding ? "Close" : "Post recording"}
-          </button>
-          <button type="button" className="inline-flex items-center gap-1.5 rounded-btn border border-line-strong px-3 py-1.5 text-sm font-semibold text-ink-2 hover:bg-surface-2"
-            onClick={() => setManagingModules((v) => !v)}>
-            <Settings2 size={15} /> {managingModules ? "Done" : "Manage modules"}
-          </button>
+          <Btn variant="soft" icon={<Plus size={15} />} onClick={() => { setAdding((v) => !v); setError(null); }}>
+            {adding ? "Close" : "Post recording"}
+          </Btn>
+          <Btn variant="soft" icon={<Settings2 size={15} />} onClick={() => setManagingModules((v) => !v)}>
+            {managingModules ? "Done" : "Manage modules"}
+          </Btn>
         </div>
       )}
 

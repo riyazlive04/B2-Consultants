@@ -14,7 +14,8 @@ import {
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Modal } from "@/components/ui/Modal";
 import { Field, FormError, TextInput } from "@/components/ui/form";
-import { Card, Chip, Hint, PersonCell, Pill, Td, Th, TableShell, Toolbar, Tr, type Tone } from "@/components/ui/kit";
+import { Card, Chip, Hint, PersonCell, Pill, Toolbar, type Tone } from "@/components/ui/kit";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Btn, CopyField, IconButton, SubmitBtn } from "@/components/ui/controls";
 import { formatDate } from "@/lib/format";
 import { effectiveSectionKeys, type AppRole, type ResolvedSection } from "@/lib/sections";
@@ -100,11 +101,90 @@ export function UsersPanel({
     setInvite({ url: res.inviteUrl, expiresInDays: res.expiresInDays });
   };
 
+  const columns: Column<ListedUser>[] = [
+    {
+      key: "user", header: "User",
+      cell: (u) => (
+        <PersonCell
+          name={u.name}
+          secondary={u.email}
+          badge={u.id === currentUserId ? <span className="text-xs font-normal text-muted">(you)</span> : undefined}
+        />
+      ),
+      value: (u) => u.name,
+    },
+    { key: "role", header: "Role", cell: (u) => <Pill tone={ROLE_TONE[u.role].tone}>{ROLE_TONE[u.role].label}</Pill>, value: (u) => ROLE_TONE[u.role].label },
+    {
+      key: "access", header: "Access", sortable: false,
+      cell: (u) => {
+        const allowed = effectiveSectionKeys(sections, u.role, u.sectionAccess);
+        const visible = sections.filter((s) => allowed.has(s.key));
+        const shown = visible.slice(0, MAX_CHIPS);
+        const overflow = visible.length - shown.length;
+        return (
+          <div className="flex max-w-md flex-wrap gap-1.5">
+            {shown.map((s) => (
+              <Chip key={s.key}>{s.label}</Chip>
+            ))}
+            {overflow > 0 && <span className="px-1 py-0.5 text-caption font-semibold text-ink-3">+{overflow}</span>}
+            {visible.length === 0 && <span className="text-caption text-ink-3">No modules</span>}
+          </div>
+        );
+      },
+    },
+    { key: "status", header: "Status", cell: (u) => <StatusPill user={u} />, value: (u) => u.status },
+    {
+      key: "manage", header: "Manage", align: "right", sortable: false,
+      cell: (u) => {
+        const isSelf = u.id === currentUserId;
+        const awaitingInvite = Boolean(u.invite?.pending || u.invite?.expired);
+        return (
+          <div className="flex justify-end gap-2">
+            <Btn size="sm" onClick={() => setDialog({ mode: "edit", user: u })}>
+              Edit access
+            </Btn>
+            {awaitingInvite ? (
+              <Btn size="sm" icon={<Link2 size={14} />} title="Mint a new single-use link" onClick={() => onResend(u)}>
+                Invite link
+              </Btn>
+            ) : (
+              <Btn size="sm" onClick={() => { setPwFor(u); setPwError(null); }}>
+                Reset password
+              </Btn>
+            )}
+            {u.status === "SUSPENDED" ? (
+              <Btn size="sm" onClick={() => run(() => reactivateUser(u.id), `${u.name} reactivated`)}>
+                Reactivate
+              </Btn>
+            ) : (
+              <Btn
+                size="sm"
+                disabled={isSelf}
+                title={isSelf ? "You cannot suspend your own account" : undefined}
+                onClick={() => onSuspend(u)}
+              >
+                Suspend
+              </Btn>
+            )}
+            <IconButton
+              label={`Delete ${u.name}`}
+              tone="danger"
+              disabled={isSelf}
+              onClick={() => onDelete(u)}
+            >
+              <Trash2 size={15} />
+            </IconButton>
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
     <section className="space-y-5">
       <Toolbar>
         <div>
-          <h3 className="font-display text-lg font-semibold">Users &amp; access</h3>
+          <h3 className="font-display text-h2 font-semibold">Users &amp; access</h3>
           <Hint>Provision accounts, choose what each person can open, and what they&apos;re allowed to change.</Hint>
         </div>
         <Btn variant="primary" icon={<UserPlus size={16} />} onClick={() => setDialog({ mode: "invite" })}>
@@ -163,95 +243,12 @@ export function UsersPanel({
       )}
 
       {/* Users table */}
-      <Card flush>
-        <TableShell
-          minWidth={880}
-          head={
-            <>
-              <Th>User</Th>
-              <Th>Role</Th>
-              <Th>Access</Th>
-              <Th>Status</Th>
-              <Th align="right">Manage</Th>
-            </>
-          }
-        >
-          {users.map((u) => {
-            const allowed = effectiveSectionKeys(sections, u.role, u.sectionAccess);
-            const visible = sections.filter((s) => allowed.has(s.key));
-            const shown = visible.slice(0, MAX_CHIPS);
-            const overflow = visible.length - shown.length;
-            const role = ROLE_TONE[u.role];
-            const isSelf = u.id === currentUserId;
-            const awaitingInvite = Boolean(u.invite?.pending || u.invite?.expired);
-
-            return (
-              <Tr key={u.id}>
-                <Td>
-                  <PersonCell
-                    name={u.name}
-                    secondary={u.email}
-                    badge={isSelf ? <span className="text-xs font-normal text-muted">(you)</span> : undefined}
-                  />
-                </Td>
-                <Td>
-                  <Pill tone={role.tone}>{role.label}</Pill>
-                </Td>
-                <Td>
-                  <div className="flex max-w-md flex-wrap gap-1.5">
-                    {shown.map((s) => (
-                      <Chip key={s.key}>{s.label}</Chip>
-                    ))}
-                    {overflow > 0 && <span className="px-1 py-0.5 text-[11px] font-semibold text-ink-3">+{overflow}</span>}
-                    {visible.length === 0 && <span className="text-[11px] text-ink-3">No modules</span>}
-                  </div>
-                </Td>
-                <Td>
-                  <StatusPill user={u} />
-                </Td>
-                <Td align="right">
-                  <div className="flex justify-end gap-2">
-                    <Btn size="sm" onClick={() => setDialog({ mode: "edit", user: u })}>
-                      Edit access
-                    </Btn>
-                    {awaitingInvite ? (
-                      <Btn size="sm" icon={<Link2 size={14} />} title="Mint a new single-use link" onClick={() => onResend(u)}>
-                        Invite link
-                      </Btn>
-                    ) : (
-                      <Btn size="sm" onClick={() => { setPwFor(u); setPwError(null); }}>
-                        Reset password
-                      </Btn>
-                    )}
-                    {u.status === "SUSPENDED" ? (
-                      <Btn size="sm" onClick={() => run(() => reactivateUser(u.id), `${u.name} reactivated`)}>
-                        Reactivate
-                      </Btn>
-                    ) : (
-                      <Btn
-                        size="sm"
-                        disabled={isSelf}
-                        title={isSelf ? "You cannot suspend your own account" : undefined}
-                        onClick={() => onSuspend(u)}
-                      >
-                        Suspend
-                      </Btn>
-                    )}
-                    <IconButton
-                      label={`Delete ${u.name}`}
-                      tone="danger"
-                      disabled={isSelf}
-                      onClick={() => onDelete(u)}
-                    >
-                      <Trash2 size={15} />
-                    </IconButton>
-                  </div>
-                </Td>
-              </Tr>
-            );
-          })}
-        </TableShell>
-      </Card>
+      <DataTable
+        rows={users}
+        columns={columns}
+        filterPlaceholder="Filter users…"
+        emptyMessage="No users match."
+      />
 
       <Hint>
         {users.length} account{users.length === 1 ? "" : "s"}. Public sign-up is disabled — every account is created

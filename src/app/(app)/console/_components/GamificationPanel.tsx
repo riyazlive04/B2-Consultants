@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarPlus, Info } from "lucide-react";
+import { CalendarPlus, Info, Plus } from "lucide-react";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Tabs } from "@/components/ui/Tabs";
 import { resetGamificationConfig, saveGamificationConfig } from "@/server/console-actions";
@@ -9,6 +9,7 @@ import {
   EMPLOYEE_BADGE_METRICS,
   EMPLOYEE_METRIC_LABELS,
   MILESTONE_ORDER,
+  QUEST_FIELD_LABELS,
   QUEST_FIELDS,
   STAGE_LABELS_SHORT,
   STUDENT_BADGE_METRICS,
@@ -24,7 +25,24 @@ import {
   type StudentBadgeMetric,
   type StudentBadgeRule,
 } from "@/lib/gamification";
-import { Btn, Card, Hint, NumInput, Picker, Row, SaveBar, TextIn, Toggle } from "./kit";
+import { formatDate } from "@/lib/format";
+import { DatePicker } from "@/components/ui/DatePicker";
+import {
+  Btn,
+  Card,
+  ColHead,
+  ColRow,
+  EditorSection,
+  Hint,
+  NameCell,
+  NumInput,
+  Picker,
+  RemoveCell,
+  SaveBar,
+  TextIn,
+  Toggle,
+  type Cols,
+} from "./kit";
 
 /**
  * The gamification rules, versioned by effective date.
@@ -50,10 +68,7 @@ const VARIANTS = [
   { value: "DELIVERY_COACH", label: "Delivery coach" },
 ] as const;
 
-const QUEST_FIELD_OPTIONS = QUEST_FIELDS.map((f) => ({
-  value: f,
-  label: f === "__weekdayLogs" ? "Weekday logs (Mon–Fri count)" : f,
-}));
+const QUEST_FIELD_OPTIONS = QUEST_FIELDS.map((f) => ({ value: f, label: QUEST_FIELD_LABELS[f] }));
 
 const EMPLOYEE_METRIC_OPTIONS = EMPLOYEE_BADGE_METRICS.map((m) => ({
   value: m,
@@ -66,6 +81,20 @@ const STUDENT_METRIC_OPTIONS = STUDENT_BADGE_METRICS.map((m) => ({
 }));
 
 const MILESTONE_OPTIONS = MILESTONE_ORDER.map((m) => ({ value: m, label: m.replace(/_/g, " ") }));
+
+/**
+ * Column tracks, one per list editor. The header and the rows read the same string —
+ * that shared constant is the whole reason the two align. The trailing 2rem is the
+ * remove button; the 1fr before it eats the slack so the fields don't stretch.
+ */
+const STREAK_COLS: Cols = "8rem 9rem 1fr 2rem";
+const LEVEL_COLS: Cols = "5rem minmax(9rem,22rem) 8rem 1fr 2rem";
+// The metric <select>s carry the longest strings on the page ("Reached a milestone
+// within N days"), so they get the width before the free-text name does.
+const BADGE_COLS: Cols = "3.25rem minmax(8rem,1fr) minmax(11rem,18rem) 6rem 7rem 4.25rem 2rem";
+const QUEST_COLS: Cols = "3.25rem minmax(8rem,1fr) minmax(11rem,16rem) 5.5rem 5.5rem minmax(8rem,11rem) 4.25rem 2rem";
+const STUDENT_BADGE_COLS: Cols = "3.25rem minmax(8rem,1fr) minmax(11rem,18rem) minmax(11rem,19rem) 7rem 4.25rem 2rem";
+const MILESTONE_COLS: Cols = "minmax(10rem,14rem) 7rem minmax(9rem,1fr)";
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
 const tomorrowKey = () => new Date(Date.now() + 86400000).toISOString().slice(0, 10);
@@ -166,7 +195,7 @@ export function GamificationPanel({ config }: { config: GamificationConfig }) {
             onChange={setSelectedId}
             options={ordered.map((r) => ({
               value: r.id,
-              label: `${r.label} · from ${r.effectiveFrom}${r.id === liveId ? " (live)" : ""}`,
+              label: `${r.label} · from ${formatDate(r.effectiveFrom)}${r.id === liveId ? " (live)" : ""}`,
             }))}
             className="w-72"
           />
@@ -181,24 +210,23 @@ export function GamificationPanel({ config }: { config: GamificationConfig }) {
         </>
       }
     >
+      {/* Tone carries the stake: amber = you are editing history that has already paid out. */}
       <div
-        className="mb-4 flex items-start gap-2 rounded-field px-3 py-2 text-xs"
-        style={{
-          background: isLive ? "var(--warn-bg)" : "var(--primary-soft)",
-          color: isLive ? "var(--warn)" : "var(--primary-strong)",
-        }}
+        className={`mb-5 flex items-start gap-2.5 rounded-field px-3.5 py-2.5 text-caption ${
+          isLive ? "bg-warn-soft text-warn" : "bg-primary-soft text-primary-strong"
+        }`}
       >
         <Info size={15} className="mt-px flex-none" />
-        <p>
+        <p className="leading-5">
           {isFuture ? (
             <>
-              This version starts on <b>{selected.effectiveFrom}</b>. Nothing changes until then —
+              This version starts on <b>{formatDate(selected.effectiveFrom)}</b>. Nothing changes until then —
               edit freely.
             </>
           ) : isLive ? (
             <>
               You are editing the <b>live</b> rules. Work already done keeps the XP it earned — but the
-              rules in force since <b>{selected.effectiveFrom}</b> apply to every day from that date on, so
+              rules in force since <b>{formatDate(selected.effectiveFrom)}</b> apply to every day from that date on, so
               recent XP will be recalculated. To change only future work, use <b>New version</b> instead.
             </>
           ) : (
@@ -209,27 +237,30 @@ export function GamificationPanel({ config }: { config: GamificationConfig }) {
         </p>
       </div>
 
-      <div className="mb-5 flex flex-wrap items-end gap-3">
-        <label className="text-xs font-semibold uppercase tracking-wide text-ink-3">
+      <div className="mb-6 flex flex-wrap items-end gap-3">
+        <label className="text-label font-semibold uppercase text-ink-3">
           Version name
           <div className="mt-1">
             <TextIn value={selected.label} onChange={(label) => patch({ label })} className="w-64" />
           </div>
         </label>
-        <label className="text-xs font-semibold uppercase tracking-wide text-ink-3">
+        <label className="text-label font-semibold uppercase text-ink-3">
           In force from
           <div className="mt-1">
-            <input
-              type="date"
+            <DatePicker
+              size="sm"
+              aria-label="In force from"
               value={selected.effectiveFrom}
               onChange={(e) => e.target.value && patch({ effectiveFrom: e.target.value })}
-              className="rounded-field border border-line-strong bg-surface px-2.5 py-1.5 text-sm text-ink"
             />
           </div>
         </label>
       </div>
 
+      {/* underline, not pills: this strip sits inside the Card that the page's own
+          pill tabs already opened. Two filled strips would rank as equals. */}
       <Tabs
+        variant="underline"
         tabs={[
           { label: "XP rules", content: <XpRulesEditor ruleset={selected} patch={patch} /> },
           { label: "Levels", content: <LevelsEditor ruleset={selected} patch={patch} /> },
@@ -272,77 +303,87 @@ function XpRulesEditor({ ruleset, patch }: EditorProps) {
   ];
 
   return (
-    <div className="space-y-6 pt-4">
-      <div>
-        <h4 className="mb-2 text-sm font-semibold">Actions</h4>
+    <div className="space-y-7">
+      <EditorSection title="Actions" hint={<Hint>XP paid the moment each of these happens.</Hint>}>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {SCALARS.map(([key, label]) => (
-            <label key={key} className="flex items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
-              <span className="text-ink-2">{label}</span>
-              <div className="w-24 flex-none">
-                <NumInput ariaLabel={label} value={r[key] as number} onChange={(n) => set(key, n)} max={100000} />
-              </div>
-            </label>
+            <XpField key={key} label={label} value={r[key] as number} onChange={(n) => set(key, n)} />
           ))}
         </div>
-      </div>
+      </EditorSection>
 
-      <div>
-        <h4 className="mb-1 text-sm font-semibold">Pipeline stage moves</h4>
-        <Hint>XP earned for moving a lead into each stage. Set 0 to pay nothing.</Hint>
-        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <EditorSection
+        title="Pipeline stage moves"
+        hint={<Hint>XP earned for moving a lead into each stage. Set 0 to pay nothing.</Hint>}
+      >
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {Object.entries(r.STAGE_MOVED).map(([stage, xp]) => (
-            <label key={stage} className="flex items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
-              <span className="text-ink-2">{STAGE_LABELS_SHORT[stage] ?? stage}</span>
-              <div className="w-24 flex-none">
-                <NumInput
-                  ariaLabel={stage}
-                  value={xp}
-                  onChange={(n) => patch({ xpRules: { ...r, STAGE_MOVED: { ...r.STAGE_MOVED, [stage]: n } } })}
-                />
-              </div>
-            </label>
+            <XpField
+              key={stage}
+              label={STAGE_LABELS_SHORT[stage] ?? stage}
+              value={xp}
+              onChange={(n) => patch({ xpRules: { ...r, STAGE_MOVED: { ...r.STAGE_MOVED, [stage]: n } } })}
+            />
           ))}
         </div>
-      </div>
+      </EditorSection>
 
-      <div>
-        <h4 className="mb-1 text-sm font-semibold">Streak ladder</h4>
-        <Hint>A bonus paid the day someone&apos;s consecutive-logging run reaches that length.</Hint>
-        <div className="mt-2 space-y-2">
+      <EditorSection
+        title="Streak ladder"
+        hint={<Hint>A bonus paid the day someone&apos;s consecutive-logging run reaches that length.</Hint>}
+      >
+        <ColHead cols={STREAK_COLS} labels={["At (days)", "Pays (XP)", "", ""]} />
+        <div className="space-y-1.5">
           {streaks.map(([days, xp], i) => (
-            <Row key={i} onRemove={() => setStreaks(streaks.filter((_, j) => j !== i))}>
-              <span className="text-sm text-ink-2">At</span>
-              <div className="w-20">
-                <NumInput
-                  ariaLabel="Streak length in days"
-                  value={days}
-                  min={1}
-                  onChange={(n) => setStreaks(streaks.map((s, j) => (j === i ? [n, s[1]] : s)))}
-                />
-              </div>
-              <span className="text-sm text-ink-2">days, pay</span>
-              <div className="w-24">
-                <NumInput
-                  ariaLabel="Streak bonus XP"
-                  value={xp}
-                  onChange={(n) => setStreaks(streaks.map((s, j) => (j === i ? [s[0], n] : s)))}
-                />
-              </div>
-              <span className="text-sm text-ink-2">XP</span>
-            </Row>
+            <ColRow key={i} cols={STREAK_COLS} index={i}>
+              <NumInput
+                ariaLabel="Streak length in days"
+                value={days}
+                min={1}
+                onChange={(n) => setStreaks(streaks.map((s, j) => (j === i ? [n, s[1]] : s)))}
+              />
+              <NumInput
+                ariaLabel="Streak bonus XP"
+                value={xp}
+                onChange={(n) => setStreaks(streaks.map((s, j) => (j === i ? [s[0], n] : s)))}
+              />
+              <NameCell className="text-ink-3">
+                {days} consecutive days of logging → {xp.toLocaleString("en-IN")} XP
+              </NameCell>
+              <RemoveCell
+                label={`Remove the ${days}-day streak tier`}
+                onClick={() => setStreaks(streaks.filter((_, j) => j !== i))}
+              />
+            </ColRow>
           ))}
+        </div>
+        <div className="mt-2.5">
           <Btn
+            size="sm"
+            variant="soft"
+            icon={<Plus size={14} />}
             onClick={() => {
               const next = (streaks[streaks.length - 1]?.[0] ?? 0) + 7;
               setStreaks([...streaks, [next, 50]]);
             }}
           >
-            + Add streak tier
+            Add streak tier
           </Btn>
         </div>
-      </div>
+      </EditorSection>
     </div>
+  );
+}
+
+/** Label left, number right — the shape every scalar XP value takes. */
+function XpField({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+  return (
+    <label className="flex items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
+      <span className="min-w-0 truncate text-ink-2">{label}</span>
+      <div className="w-24 flex-none">
+        <NumInput ariaLabel={label} value={value} onChange={onChange} max={100000} />
+      </div>
+    </label>
   );
 }
 
@@ -353,48 +394,61 @@ function LevelsEditor({ ruleset, patch }: EditorProps) {
   const set = (next: LevelDef[]) => patch({ levels: next });
 
   return (
-    <div className="space-y-2 pt-4">
-      <Hint>
-        The lowest level must start at 0 XP, and each level up the ladder needs strictly more XP than
-        the one below. Raising a threshold never demotes anyone who already climbed past it.
-      </Hint>
-      {levels.map((l, i) => (
-        <Row key={i} onRemove={levels.length > 1 ? () => set(levels.filter((_, j) => j !== i)) : undefined}>
-          <span className="w-16 flex-none text-sm font-semibold text-ink-3">Lvl</span>
-          <div className="w-16">
+    <EditorSection
+      hint={
+        <Hint>
+          The lowest level must start at 0 XP, and each level up the ladder needs strictly more XP than
+          the one below. Raising a threshold never demotes anyone who already climbed past it.
+        </Hint>
+      }
+    >
+      <ColHead cols={LEVEL_COLS} labels={["Level", "Title", "From (XP)", "", ""]} />
+      <div className="space-y-1.5">
+        {levels.map((l, i) => (
+          <ColRow key={i} cols={LEVEL_COLS} index={i}>
             <NumInput
               ariaLabel="Level number"
               value={l.level}
               min={1}
               onChange={(n) => set(levels.map((x, j) => (j === i ? { ...x, level: n } : x)))}
             />
-          </div>
-          <TextIn
-            ariaLabel="Level title"
-            value={l.title}
-            onChange={(title) => set(levels.map((x, j) => (j === i ? { ...x, title } : x)))}
-            className="w-44"
-          />
-          <span className="text-sm text-ink-2">from</span>
-          <div className="w-28">
+            <TextIn
+              ariaLabel="Level title"
+              value={l.title}
+              onChange={(title) => set(levels.map((x, j) => (j === i ? { ...x, title } : x)))}
+            />
             <NumInput
               ariaLabel="Minimum XP"
               value={l.minXp}
               onChange={(n) => set(levels.map((x, j) => (j === i ? { ...x, minXp: n } : x)))}
             />
-          </div>
-          <span className="text-sm text-ink-2">XP</span>
-        </Row>
-      ))}
-      <Btn
-        onClick={() => {
-          const last = levels[levels.length - 1];
-          set([...levels, { level: (last?.level ?? 0) + 1, title: "New level", minXp: (last?.minXp ?? 0) + 1000 }]);
-        }}
-      >
-        + Add level
-      </Btn>
-    </div>
+            {/* the band this level actually covers — the thing you're really editing */}
+            <NameCell className="text-ink-3">
+              {l.minXp.toLocaleString("en-IN")}
+              {levels[i + 1] ? `–${(levels[i + 1].minXp - 1).toLocaleString("en-IN")} XP` : "+ XP"}
+            </NameCell>
+            {levels.length > 1 ? (
+              <RemoveCell label={`Remove level ${l.level}`} onClick={() => set(levels.filter((_, j) => j !== i))} />
+            ) : (
+              <span />
+            )}
+          </ColRow>
+        ))}
+      </div>
+      <div className="mt-2.5">
+        <Btn
+          size="sm"
+          variant="soft"
+          icon={<Plus size={14} />}
+          onClick={() => {
+            const last = levels[levels.length - 1];
+            set([...levels, { level: (last?.level ?? 0) + 1, title: "New level", minXp: (last?.minXp ?? 0) + 1000 }]);
+          }}
+        >
+          Add level
+        </Btn>
+      </div>
+    </EditorSection>
   );
 }
 
@@ -406,50 +460,63 @@ function EmployeeBadgesEditor({ ruleset, patch }: EditorProps) {
   const upd = (i: number, p: Partial<EmployeeBadgeRule>) => set(badges.map((b, j) => (j === i ? { ...b, ...p } : b)));
 
   return (
-    <div className="space-y-2 pt-4">
-      <Hint>
-        Pick what a badge counts and how many it takes. Raising a threshold only affects people who
-        haven&apos;t earned it yet — a badge already unlocked stays unlocked.
-      </Hint>
-      {badges.map((b, i) => (
-        <Row key={b.key} onRemove={() => set(badges.filter((_, j) => j !== i))}>
-          <TextIn ariaLabel="Emoji" value={b.icon} onChange={(icon) => upd(i, { icon })} className="w-16 text-center" />
-          <TextIn ariaLabel="Badge name" value={b.name} onChange={(name) => upd(i, { name })} className="w-40" />
-          <Picker
-            ariaLabel="Metric"
-            value={b.metric}
-            onChange={(metric) => upd(i, { metric: metric as EmployeeBadgeMetric })}
-            options={EMPLOYEE_METRIC_OPTIONS}
-            className="w-56"
-          />
-          <span className="text-sm text-ink-2">≥</span>
-          <div className="w-24">
-            <NumInput ariaLabel="Threshold" value={b.threshold} min={1} onChange={(threshold) => upd(i, { threshold })} />
-          </div>
-          <Picker ariaLabel="Tier" value={b.tier} onChange={(tier) => upd(i, { tier: tier as BadgeTier })} options={TIERS} className="w-28" />
-          <Toggle checked={b.enabled} onChange={(enabled) => upd(i, { enabled })} label="On" />
-          <div className="w-full">
-            <TextIn
-              ariaLabel="Badge description"
-              value={b.description}
-              onChange={(description) => upd(i, { description })}
-              placeholder="What earns this badge"
+    <EditorSection
+      hint={
+        <Hint>
+          Pick what a badge counts and how many it takes. Raising a threshold only affects people who
+          haven&apos;t earned it yet — a badge already unlocked stays unlocked.
+        </Hint>
+      }
+    >
+      <ColHead cols={BADGE_COLS} labels={["", "Name", "Counts", "At least", "Tier", "On", ""]} />
+      <div className="space-y-1.5">
+        {badges.map((b, i) => (
+          <ColRow
+            key={b.key}
+            cols={BADGE_COLS}
+            index={i}
+            dim={!b.enabled}
+            sub={
+              <TextIn
+                ariaLabel={`Description for ${b.name}`}
+                value={b.description}
+                onChange={(description) => upd(i, { description })}
+                placeholder="What earns this badge"
+              />
+            }
+          >
+            <TextIn ariaLabel={`Emoji for ${b.name}`} value={b.icon} onChange={(icon) => upd(i, { icon })} className="text-center" />
+            <TextIn ariaLabel="Badge name" value={b.name} onChange={(name) => upd(i, { name })} />
+            <Picker
+              ariaLabel={`What ${b.name} counts`}
+              value={b.metric}
+              onChange={(metric) => upd(i, { metric: metric as EmployeeBadgeMetric })}
+              options={EMPLOYEE_METRIC_OPTIONS}
             />
-          </div>
-        </Row>
-      ))}
-      <Btn
-        onClick={() => {
-          const key = freshKey("new-badge", new Set(badges.map((b) => b.key)));
-          set([...badges, {
-            key, name: "New badge", description: "Describe what earns this.", icon: "🏅",
-            tier: "bronze", metric: "logs", threshold: 10, enabled: true,
-          }]);
-        }}
-      >
-        + Add badge
-      </Btn>
-    </div>
+            <NumInput ariaLabel={`Threshold for ${b.name}`} value={b.threshold} min={1} onChange={(threshold) => upd(i, { threshold })} />
+            <Picker ariaLabel={`Tier for ${b.name}`} value={b.tier} onChange={(tier) => upd(i, { tier: tier as BadgeTier })} options={TIERS} />
+            <Toggle checked={b.enabled} onChange={(enabled) => upd(i, { enabled })} label={b.enabled ? "On" : "Off"} />
+            <RemoveCell label={`Remove ${b.name}`} onClick={() => set(badges.filter((_, j) => j !== i))} />
+          </ColRow>
+        ))}
+      </div>
+      <div className="mt-2.5">
+        <Btn
+          size="sm"
+          variant="soft"
+          icon={<Plus size={14} />}
+          onClick={() => {
+            const key = freshKey("new-badge", new Set(badges.map((b) => b.key)));
+            set([...badges, {
+              key, name: "New badge", description: "Describe what earns this.", icon: "🏅",
+              tier: "bronze", metric: "logs", threshold: 10, enabled: true,
+            }]);
+          }}
+        >
+          Add badge
+        </Btn>
+      </div>
+    </EditorSection>
   );
 }
 
@@ -461,56 +528,69 @@ function QuestsEditor({ ruleset, patch }: EditorProps) {
   const upd = (i: number, p: Partial<QuestDef>) => set(quests.map((q, j) => (j === i ? { ...q, ...p } : q)));
 
   return (
-    <div className="space-y-2 pt-4">
-      <Hint>
-        Weekly quests are scored from the daily log — no extra data entry. A quest is assigned by the
-        person&apos;s log variant, and pays out for every past week that already met the bar.
-      </Hint>
-      {quests.map((q, i) => (
-        <Row key={q.key} onRemove={() => set(quests.filter((_, j) => j !== i))}>
-          <TextIn ariaLabel="Emoji" value={q.icon} onChange={(icon) => upd(i, { icon })} className="w-16 text-center" />
-          <TextIn ariaLabel="Quest title" value={q.title} onChange={(title) => upd(i, { title })} className="w-40" />
-          <Picker
-            ariaLabel="Metric field"
-            value={q.field}
-            onChange={(field) => upd(i, { field })}
-            options={QUEST_FIELD_OPTIONS}
-            className="w-56"
-          />
-          <span className="text-sm text-ink-2">≥</span>
-          <div className="w-20">
-            <NumInput ariaLabel="Weekly target" value={q.target} min={1} onChange={(target) => upd(i, { target })} />
-          </div>
-          <span className="text-sm text-ink-2">pays</span>
-          <div className="w-20">
-            <NumInput ariaLabel="Quest XP" value={q.xp} onChange={(xp) => upd(i, { xp })} />
-          </div>
-          <span className="text-sm text-ink-2">XP</span>
-          <Picker
-            ariaLabel="Who gets this quest"
-            value={q.variant}
-            onChange={(variant) => upd(i, { variant: variant as QuestDef["variant"] })}
-            options={VARIANTS}
-            className="w-44"
-          />
-          <Toggle checked={q.enabled} onChange={(enabled) => upd(i, { enabled })} label="On" />
-          <div className="w-full">
-            <TextIn ariaLabel="Quest description" value={q.description} onChange={(description) => upd(i, { description })} />
-          </div>
-        </Row>
-      ))}
-      <Btn
-        onClick={() => {
-          const key = freshKey("new-quest", new Set(quests.map((q) => q.key)));
-          set([...quests, {
-            key, title: "New quest", description: "Describe the weekly target.", icon: "🎯",
-            field: "discoveryCallsCompleted", target: 10, xp: 60, variant: "ANY", enabled: true,
-          }]);
-        }}
-      >
-        + Add quest
-      </Btn>
-    </div>
+    <EditorSection
+      hint={
+        <Hint>
+          Weekly quests are scored from the daily log — no extra data entry. A quest is assigned by the
+          person&apos;s log variant, and pays out for every past week that already met the bar.
+        </Hint>
+      }
+    >
+      <ColHead cols={QUEST_COLS} labels={["", "Title", "Counts (weekly)", "Target", "Pays (XP)", "Who gets it", "On", ""]} />
+      <div className="space-y-1.5">
+        {quests.map((q, i) => (
+          <ColRow
+            key={q.key}
+            cols={QUEST_COLS}
+            index={i}
+            dim={!q.enabled}
+            sub={
+              <TextIn
+                ariaLabel={`Description for ${q.title}`}
+                value={q.description}
+                onChange={(description) => upd(i, { description })}
+                placeholder="Describe the weekly target"
+              />
+            }
+          >
+            <TextIn ariaLabel={`Emoji for ${q.title}`} value={q.icon} onChange={(icon) => upd(i, { icon })} className="text-center" />
+            <TextIn ariaLabel="Quest title" value={q.title} onChange={(title) => upd(i, { title })} />
+            <Picker
+              ariaLabel={`What ${q.title} counts`}
+              value={q.field}
+              onChange={(field) => upd(i, { field })}
+              options={QUEST_FIELD_OPTIONS}
+            />
+            <NumInput ariaLabel={`Weekly target for ${q.title}`} value={q.target} min={1} onChange={(target) => upd(i, { target })} />
+            <NumInput ariaLabel={`XP paid by ${q.title}`} value={q.xp} onChange={(xp) => upd(i, { xp })} />
+            <Picker
+              ariaLabel={`Who gets ${q.title}`}
+              value={q.variant}
+              onChange={(variant) => upd(i, { variant: variant as QuestDef["variant"] })}
+              options={VARIANTS}
+            />
+            <Toggle checked={q.enabled} onChange={(enabled) => upd(i, { enabled })} label={q.enabled ? "On" : "Off"} />
+            <RemoveCell label={`Remove ${q.title}`} onClick={() => set(quests.filter((_, j) => j !== i))} />
+          </ColRow>
+        ))}
+      </div>
+      <div className="mt-2.5">
+        <Btn
+          size="sm"
+          variant="soft"
+          icon={<Plus size={14} />}
+          onClick={() => {
+            const key = freshKey("new-quest", new Set(quests.map((q) => q.key)));
+            set([...quests, {
+              key, title: "New quest", description: "Describe the weekly target.", icon: "🎯",
+              field: "discoveryCallsCompleted", target: 10, xp: 60, variant: "ANY", enabled: true,
+            }]);
+          }}
+        >
+          Add quest
+        </Btn>
+      </div>
+    </EditorSection>
   );
 }
 
@@ -527,51 +607,47 @@ function StudentEditor({ ruleset, patch }: EditorProps) {
   const totalXp = MILESTONE_ORDER.reduce((a, m) => a + (s.milestoneXp[m] ?? 0), 0);
 
   return (
-    <div className="space-y-6 pt-4">
-      <div>
-        <h4 className="mb-1 text-sm font-semibold">Milestone weights &amp; stage titles</h4>
-        <Hint>
-          The weights add up to {totalXp.toLocaleString("en-IN")} XP, and that total is the 100% mark on the
-          journey ring — reweight freely without the progress drifting.
-        </Hint>
-        <div className="mt-2 space-y-2">
+    <div className="space-y-7">
+      <EditorSection
+        title="Milestone weights & stage titles"
+        hint={
+          <Hint>
+            The weights add up to {totalXp.toLocaleString("en-IN")} XP, and that total is the 100% mark on the
+            journey ring — reweight freely without the progress drifting.
+          </Hint>
+        }
+      >
+        <ColHead cols={MILESTONE_COLS} labels={["Milestone", "XP weight", "Stage title"]} />
+        <div className="space-y-1.5">
           {MILESTONE_ORDER.map((m, i) => (
-            <Row key={m}>
-              <span className="w-52 flex-none text-sm text-ink-2">{m.replace(/_/g, " ")}</span>
-              <div className="w-24">
-                <NumInput
-                  ariaLabel={`${m} XP weight`}
-                  value={s.milestoneXp[m] ?? 0}
-                  onChange={(n) => setStudent({ milestoneXp: { ...s.milestoneXp, [m]: n } })}
-                />
-              </div>
-              <span className="text-sm text-ink-2">XP · stage title</span>
+            <ColRow key={m} cols={MILESTONE_COLS} index={i}>
+              <NameCell>{m.replace(/_/g, " ")}</NameCell>
+              <NumInput
+                ariaLabel={`${m} XP weight`}
+                value={s.milestoneXp[m] ?? 0}
+                onChange={(n) => setStudent({ milestoneXp: { ...s.milestoneXp, [m]: n } })}
+              />
               <TextIn
                 ariaLabel={`${m} stage title`}
                 value={s.stageTitles[i] ?? ""}
                 onChange={(v) => setStudent({ stageTitles: s.stageTitles.map((t, j) => (j === i ? v : t)) })}
-                className="w-44"
               />
-            </Row>
+            </ColRow>
           ))}
         </div>
-      </div>
+      </EditorSection>
 
-      <div>
-        <h4 className="mb-1 text-sm font-semibold">Bonus XP &amp; momentum</h4>
-        <Hint>Bonus XP is added per unit of work on top of the milestone weights.</Hint>
-        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <EditorSection
+        title="Bonus XP & momentum"
+        hint={<Hint>Bonus XP is added per unit of work on top of the milestone weights.</Hint>}
+      >
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {([
             ["perSession", "Per coaching session"],
             ["perApplication", "Per application"],
             ["perInterview", "Per interview"],
           ] as const).map(([k, label]) => (
-            <label key={k} className="flex items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
-              <span className="text-ink-2">{label}</span>
-              <div className="w-20 flex-none">
-                <NumInput ariaLabel={label} value={s.bonusXp[k]} onChange={(n) => setStudent({ bonusXp: { ...s.bonusXp, [k]: n } })} />
-              </div>
-            </label>
+            <XpField key={k} label={label} value={s.bonusXp[k]} onChange={(n) => setStudent({ bonusXp: { ...s.bonusXp, [k]: n } })} />
           ))}
         </div>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -581,27 +657,52 @@ function StudentEditor({ ruleset, patch }: EditorProps) {
             ["cooling", "🌥️ Cooling — idle up to"],
           ] as const).map(([k, label]) => (
             <label key={k} className="flex items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
-              <span className="text-ink-2">{label}</span>
+              <span className="min-w-0 truncate text-ink-2">{label}</span>
               <div className="w-20 flex-none">
-                <NumInput ariaLabel={label} value={s.momentumDays[k]} min={1} onChange={(n) => setStudent({ momentumDays: { ...s.momentumDays, [k]: n } })} />
+                <NumInput
+                  ariaLabel={label}
+                  value={s.momentumDays[k]}
+                  min={1}
+                  onChange={(n) => setStudent({ momentumDays: { ...s.momentumDays, [k]: n } })}
+                />
               </div>
             </label>
           ))}
         </div>
-        <Hint>Days must widen: hot &lt; steady &lt; cooling. Anything past cooling reads as 🧊 Stalled.</Hint>
-      </div>
+        <div className="mt-1.5">
+          <Hint>Days must widen: hot &lt; steady &lt; cooling. Anything past cooling reads as 🧊 Stalled.</Hint>
+        </div>
+      </EditorSection>
 
-      <div>
-        <h4 className="mb-1 text-sm font-semibold">Student badges</h4>
-        <div className="mt-2 space-y-2">
+      <EditorSection
+        title="Student badges"
+        hint={<Hint>What the student earns on their own portal as the journey progresses.</Hint>}
+      >
+        <ColHead cols={STUDENT_BADGE_COLS} labels={["", "Name", "Counts", "Condition", "Tier", "On", ""]} />
+        <div className="space-y-1.5">
           {badges.map((b, i) => {
             const needsMilestone = b.metric === "milestoneReached" || b.metric === "milestoneWithinDays";
+            const needsThreshold =
+              b.metric !== "comeback" && b.metric !== "greenSignal" && b.metric !== "milestoneReached";
             return (
-              <Row key={b.key} onRemove={() => setBadges(badges.filter((_, j) => j !== i))}>
-                <TextIn ariaLabel="Emoji" value={b.icon} onChange={(icon) => updBadge(i, { icon })} className="w-16 text-center" />
-                <TextIn ariaLabel="Badge name" value={b.name} onChange={(name) => updBadge(i, { name })} className="w-40" />
+              <ColRow
+                key={b.key}
+                cols={STUDENT_BADGE_COLS}
+                index={i}
+                dim={!b.enabled}
+                sub={
+                  <TextIn
+                    ariaLabel={`Description for ${b.name}`}
+                    value={b.description}
+                    onChange={(description) => updBadge(i, { description })}
+                    placeholder="What earns this badge"
+                  />
+                }
+              >
+                <TextIn ariaLabel={`Emoji for ${b.name}`} value={b.icon} onChange={(icon) => updBadge(i, { icon })} className="text-center" />
+                <TextIn ariaLabel="Badge name" value={b.name} onChange={(name) => updBadge(i, { name })} />
                 <Picker
-                  ariaLabel="Metric"
+                  ariaLabel={`What ${b.name} counts`}
                   value={b.metric}
                   onChange={(metric) => {
                     const m = metric as StudentBadgeMetric;
@@ -609,35 +710,43 @@ function StudentEditor({ ruleset, patch }: EditorProps) {
                     updBadge(i, { metric: m, milestone: wantsMilestone ? (b.milestone ?? "RESUME_BUILD") : null });
                   }}
                   options={STUDENT_METRIC_OPTIONS}
-                  className="w-64"
                 />
-                {needsMilestone && (
-                  <Picker
-                    ariaLabel="Milestone"
-                    value={b.milestone ?? "RESUME_BUILD"}
-                    onChange={(milestone) => updBadge(i, { milestone })}
-                    options={MILESTONE_OPTIONS}
-                    className="w-48"
-                  />
-                )}
-                {b.metric !== "comeback" && b.metric !== "greenSignal" && b.metric !== "milestoneReached" && (
-                  <>
-                    <span className="text-sm text-ink-2">{b.metric === "milestoneWithinDays" ? "within" : "≥"}</span>
-                    <div className="w-20">
-                      <NumInput ariaLabel="Threshold" value={b.threshold} min={1} onChange={(threshold) => updBadge(i, { threshold })} />
-                    </div>
-                    {b.metric === "milestoneWithinDays" && <span className="text-sm text-ink-2">days</span>}
-                  </>
-                )}
-                <Picker ariaLabel="Tier" value={b.tier} onChange={(tier) => updBadge(i, { tier: tier as BadgeTier })} options={TIERS} className="w-28" />
-                <Toggle checked={b.enabled} onChange={(enabled) => updBadge(i, { enabled })} label="On" />
-                <div className="w-full">
-                  <TextIn ariaLabel="Badge description" value={b.description} onChange={(description) => updBadge(i, { description })} />
+                {/* One cell, not three columns: which controls appear depends on the metric,
+                    and letting them be their own tracks would misalign every other row. */}
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {needsMilestone && (
+                    <Picker
+                      ariaLabel={`Milestone for ${b.name}`}
+                      value={b.milestone ?? "RESUME_BUILD"}
+                      onChange={(milestone) => updBadge(i, { milestone })}
+                      options={MILESTONE_OPTIONS}
+                    />
+                  )}
+                  {needsThreshold && (
+                    <>
+                      <span className="flex-none text-caption text-ink-3">
+                        {b.metric === "milestoneWithinDays" ? "within" : "≥"}
+                      </span>
+                      <div className="w-16 flex-none">
+                        <NumInput ariaLabel={`Threshold for ${b.name}`} value={b.threshold} min={1} onChange={(threshold) => updBadge(i, { threshold })} />
+                      </div>
+                      {b.metric === "milestoneWithinDays" && <span className="flex-none text-caption text-ink-3">days</span>}
+                    </>
+                  )}
+                  {!needsMilestone && !needsThreshold && <span className="text-caption text-ink-3">No condition</span>}
                 </div>
-              </Row>
+                <Picker ariaLabel={`Tier for ${b.name}`} value={b.tier} onChange={(tier) => updBadge(i, { tier: tier as BadgeTier })} options={TIERS} />
+                <Toggle checked={b.enabled} onChange={(enabled) => updBadge(i, { enabled })} label={b.enabled ? "On" : "Off"} />
+                <RemoveCell label={`Remove ${b.name}`} onClick={() => setBadges(badges.filter((_, j) => j !== i))} />
+              </ColRow>
             );
           })}
+        </div>
+        <div className="mt-2.5">
           <Btn
+            size="sm"
+            variant="soft"
+            icon={<Plus size={14} />}
             onClick={() => {
               const key = freshKey("new-student-badge", new Set(badges.map((b) => b.key)));
               setBadges([...badges, {
@@ -646,15 +755,16 @@ function StudentEditor({ ruleset, patch }: EditorProps) {
               }]);
             }}
           >
-            + Add student badge
+            Add student badge
           </Btn>
         </div>
-      </div>
+      </EditorSection>
 
-      <div>
-        <h4 className="mb-1 text-sm font-semibold">Coaching next steps</h4>
-        <Hint>Shown to the student on their portal for whichever milestone they are on. One step per line.</Hint>
-        <div className="mt-2 space-y-3">
+      <EditorSection
+        title="Coaching next steps"
+        hint={<Hint>Shown to the student on their portal for whichever milestone they are on. One step per line.</Hint>}
+      >
+        <div className="space-y-2">
           {MILESTONE_ORDER.map((m) => {
             const entry = s.nextSteps[m] ?? { focus: "", steps: [] };
             return (
@@ -673,6 +783,7 @@ function StudentEditor({ ruleset, patch }: EditorProps) {
                   aria-label={`${m} steps`}
                   rows={3}
                   value={entry.steps.join("\n")}
+                  placeholder="One step per line"
                   onChange={(e) =>
                     setStudent({
                       nextSteps: {
@@ -681,13 +792,13 @@ function StudentEditor({ ruleset, patch }: EditorProps) {
                       },
                     })
                   }
-                  className="mt-2 w-full rounded-field border border-line-strong bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                  className="mt-2 w-full rounded-field border border-line-strong bg-surface px-2.5 py-1.5 text-sm text-ink outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary-soft"
                 />
               </div>
             );
           })}
         </div>
-      </div>
+      </EditorSection>
     </div>
   );
 }

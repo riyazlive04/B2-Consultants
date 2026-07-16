@@ -30,6 +30,9 @@ const profileSchema = z.object({
   // First-call rotation (client notes: 80/20 split, Asma off Saturdays)
   firstCallSharePct: z.string().trim().regex(/^\d{0,3}$/, "Share must be 0-100").optional(),
   worksSaturdays: z.string().optional(), // checkbox
+  // How many calls a day this person is expected to make — drives the My Desk bar and the
+  // once-a-day greeting. Blank/0 = no target, which hides the bar rather than showing 0/0.
+  dailyCallTarget: z.string().trim().regex(/^\d{0,3}$/, "Daily call target must be 0-999").optional(),
 });
 
 export async function saveTeamProfile(id: string | null, form: FormData): Promise<ActionResult> {
@@ -50,6 +53,7 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
     logVariant: d.logVariant,
     firstCallSharePct: Math.min(100, d.firstCallSharePct?.trim() ? parseInt(d.firstCallSharePct, 10) : 0),
     worksSaturdays: d.worksSaturdays === "on",
+    dailyCallTarget: Math.min(999, d.dailyCallTarget?.trim() ? parseInt(d.dailyCallTarget, 10) : 0),
   };
 
   if (id) {

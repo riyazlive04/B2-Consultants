@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 /**
  * App-wide feedback layer - one <FeedbackHost /> mounted in the shell provides:
@@ -81,10 +81,16 @@ function DrawnMark({ kind }: { kind: ToastKind }) {
   );
 }
 
+const FOCUSABLE =
+  'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 export function FeedbackHost() {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [confirm, setConfirm] = useState<{ opts: ConfirmOptions; resolve: (v: boolean) => void } | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const bodyId = useId();
 
   useEffect(() => {
     let id = 0;
@@ -93,7 +99,7 @@ export function FeedbackHost() {
       const { text, kind } = (e as CustomEvent).detail as { text: string; kind: ToastKind };
       const t = { id: ++id, text, kind };
       setToasts((prev) => [...prev.slice(-3), t]);
-      setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== t.id)), 3500);
+      setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== t.id)), 4000); // §5.9 auto-dismiss 4s
     };
     const onCelebrate = () => {
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -122,16 +128,59 @@ export function FeedbackHost() {
     [confirm],
   );
 
+  // While the dialog is open: lock the page behind it, and hand focus back to
+  // whatever opened it on close (WCAG 2.4.3). Without this, dismissing a delete
+  // confirm dropped focus to <body> and the keyboard user lost their place.
+  useEffect(() => {
+    if (!confirm) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      opener?.focus?.();
+    };
+  }, [confirm]);
+
   // Esc always cancels. Enter only confirms NON-destructive dialogs — a stray
   // double-Enter after a form submit must never delete a record (§5.9).
+  // Tab is trapped inside the panel: a modal that leaks focus to the page behind
+  // its own scrim is not modal (WCAG 2.1.2).
   useEffect(() => {
     if (!confirm) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") answer(false);
-      if (e.key === "Enter" && !confirm.opts.danger) answer(true);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        answer(false);
+        return;
+      }
+      if (e.key === "Enter" && !confirm.opts.danger) {
+        answer(true);
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const panel = panelRef.current;
+      if (!panel) return;
+      const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (nodes.length === 0) return;
+
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = document.activeElement;
+      const outside = !panel.contains(active);
+
+      if (e.shiftKey && (active === first || outside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || outside)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // capture phase: win before any page-level key handler sees the event
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
   }, [confirm, answer]);
 
   return (
@@ -161,12 +210,18 @@ export function FeedbackHost() {
       )}
 
       {/* Toasts — white surface with a semantic tint */}
-      <div aria-live="polite" className="pointer-events-none fixed bottom-5 right-5 z-[100] flex flex-col gap-2">
+      <div
+        role="status"
+        aria-live="polite"
+        className="pointer-events-none fixed bottom-5 right-5 z-[100] flex flex-col gap-2"
+      >
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="toast-in glass-modal pointer-events-auto flex items-center gap-2.5 rounded-field px-4 py-2.5 text-sm font-medium"
-            style={{ color: t.kind === "success" ? "var(--good)" : "var(--bad)" }}
+            // §5.9: r-md, e-2, and a signal-coloured left bar (not e-3 / r-sm)
+            className={`toast-in pointer-events-auto flex items-center gap-2.5 rounded-btn border border-line border-l-4 bg-surface px-4 py-2.5 text-sm font-medium shadow-soft ${
+              t.kind === "success" ? "border-l-ok text-ok" : "border-l-risk text-risk"
+            }`}
           >
             <DrawnMark kind={t.kind} />
             <span className="text-ink">{t.text}</span>
@@ -180,19 +235,26 @@ export function FeedbackHost() {
           className="fixed inset-0 z-[99] flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
-          aria-label={confirm.opts.title}
+          aria-labelledby={titleId}
+          aria-describedby={confirm.opts.body ? bodyId : undefined}
         >
-          <div className="overlay-in glass-scrim absolute inset-0" onClick={() => answer(false)} />
-          <div className="dialog-in glass-modal relative w-full max-w-sm rounded-card p-6">
-            <p className="font-display text-lg font-semibold">{confirm.opts.title}</p>
-            {confirm.opts.body && <p className="mt-2 text-sm text-muted">{confirm.opts.body}</p>}
+          <div aria-hidden className="overlay-in glass-scrim absolute inset-0" onClick={() => answer(false)} />
+          <div ref={panelRef} className="dialog-in glass-modal relative w-full max-w-sm rounded-card p-6">
+            <p id={titleId} className="font-display text-h2">
+              {confirm.opts.title}
+            </p>
+            {confirm.opts.body && (
+              <p id={bodyId} className="mt-2 text-sm text-muted">
+                {confirm.opts.body}
+              </p>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 // destructive dialogs land focus on the SAFE choice
                 autoFocus={confirm.opts.danger}
                 onClick={() => answer(false)}
-                className="rounded-btn border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-surface-2"
+                className="h-10 rounded-btn border border-line bg-surface px-4 text-sm font-medium hover:bg-surface-2"
               >
                 Cancel
               </button>
@@ -200,8 +262,9 @@ export function FeedbackHost() {
                 type="button"
                 autoFocus={!confirm.opts.danger}
                 onClick={() => answer(true)}
-                className="rounded-btn px-4 py-2 text-sm font-semibold text-white"
-                style={{ background: confirm.opts.danger ? "var(--bad)" : "var(--primary)" }}
+                className={`h-10 rounded-btn px-4 text-sm font-semibold text-on-accent ${
+                  confirm.opts.danger ? "bg-bad" : "bg-primary"
+                }`}
               >
                 {confirm.opts.confirmLabel ?? "Confirm"}
               </button>

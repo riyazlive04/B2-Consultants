@@ -1,15 +1,18 @@
+import { SlidersHorizontal } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import { currentRuleset } from "@/lib/gamification";
 import { Tabs } from "@/components/ui/Tabs";
-import { getGamificationConfig, getResolvedSections } from "@/server/founder-config";
+import { PageHeader } from "@/components/ui/kit";
+import { getCommissionRulesConfig, getGamificationConfig, getResolvedSections } from "@/server/founder-config";
 import { getGoalsWithProgress } from "@/server/goals";
 import { listRewardGrants, listRewardRules } from "@/server/rewards";
 import { SectionsPanel } from "./_components/SectionsPanel";
 import { GamificationPanel } from "./_components/GamificationPanel";
 import { GoalsPanel } from "./_components/GoalsPanel";
 import { RewardsPanel, type GrantView, type RuleRow } from "./_components/RewardsPanel";
+import { CommissionPanel } from "./_components/CommissionPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function ConsolePage() {
   await requireSection("console");
 
-  const [sections, config, goals, rules, grants, people] = await Promise.all([
+  const [sections, config, goals, rules, grants, people, commissionRules] = await Promise.all([
     getResolvedSections(),
     getGamificationConfig(),
     getGoalsWithProgress(),
@@ -35,6 +38,7 @@ export default async function ConsolePage() {
       select: { id: true, fullName: true },
       orderBy: { orderIndex: "asc" },
     }),
+    getCommissionRulesConfig(),
   ]);
 
   // Reward triggers point at badges and quests by key — offer today's, not the code defaults.
@@ -73,14 +77,13 @@ export default async function ConsolePage() {
   const pendingCount = grantViews.filter((g) => g.status === "PENDING").length;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Founder Console</h1>
-        <p className="mt-1 text-sm text-muted">
-          The rules of the app, in one place. Sections, the XP engine, the team&apos;s goals, and the
-          rewards that pay out when they&apos;re hit — all editable, none of it hardcoded.
-        </p>
-      </div>
+    <div className="w-full space-y-6">
+      <PageHeader
+        eyebrow="Admin only"
+        icon={<SlidersHorizontal size={20} />}
+        title="Founder Console"
+        subtitle="The rules of the app, in one place. Sections, the XP engine, the team's goals, and the rewards that pay out when they're hit — all editable, none of it hardcoded."
+      />
 
       <Tabs
         tabs={[
@@ -99,6 +102,7 @@ export default async function ConsolePage() {
               />
             ),
           },
+          { label: "Commission", content: <CommissionPanel rules={commissionRules} /> },
         ]}
       />
     </div>

@@ -60,6 +60,62 @@ export function istMonthInstantRange(ref = istToday()): { start: Date; end: Date
   return { start: istBoundaryToInstant(start), end: istBoundaryToInstant(end) };
 }
 
+/**
+ * Minutes elapsed since IST midnight for a real instant (0..1439). IST is a fixed +05:30
+ * with no DST, so this is exact arithmetic rather than a timezone-database lookup.
+ * Used by the automation engine's quiet-hours window.
+ */
+export function istMinutesOfDay(instant: Date): number {
+  const shifted = new Date(instant.getTime() + IST_OFFSET_MS);
+  return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
+}
+
+/**
+ * Home-page KPI date-range control (BUILD_CHECKLIST §2). Three presets threaded into the
+ * metrics functions that used to hardcode "this month" (`getPipelineSnapshot`,
+ * `getRunwaySnapshot`). Default is always "this-month" so every other caller of those
+ * functions (the top-bar runway badge, the notification centre, FounderPulse, Cash Health)
+ * keeps its exact current behavior with no argument passed.
+ */
+export type KpiRangeKey = "this-month" | "last-month" | "qtd";
+
+export const KPI_RANGE_OPTIONS: ReadonlyArray<{ value: KpiRangeKey; label: string }> = [
+  { value: "this-month", label: "This Month" },
+  { value: "last-month", label: "Last Month" },
+  { value: "qtd", label: "QTD" },
+];
+
+/** Parse a `?range=` search param, defaulting to "this-month" for anything absent/unrecognised. */
+export function parseKpiRange(v: string | string[] | undefined): KpiRangeKey {
+  const s = Array.isArray(v) ? v[0] : v;
+  return s === "last-month" || s === "qtd" ? s : "this-month";
+}
+
+/** [start, end) day-boundary window (UTC-midnight/@db.Date encoding) for a KPI range preset. */
+export function kpiDateRange(key: KpiRangeKey, ref = istToday()): { start: Date; end: Date } {
+  if (key === "last-month") {
+    return {
+      start: new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth() - 1, 1)),
+      end: new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), 1)),
+    };
+  }
+  if (key === "qtd") {
+    const quarterStartMonth = Math.floor(ref.getUTCMonth() / 3) * 3;
+    return {
+      start: new Date(Date.UTC(ref.getUTCFullYear(), quarterStartMonth, 1)),
+      // through today, inclusive - end is the exclusive next-day boundary
+      end: new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate() + 1)),
+    };
+  }
+  return istMonthRange(ref);
+}
+
+/** kpiDateRange, expressed as UTC instants for TIMESTAMP-column queries (changedAt, etc). */
+export function kpiInstantRange(key: KpiRangeKey, ref = istToday()): { start: Date; end: Date } {
+  const { start, end } = kpiDateRange(key, ref);
+  return { start: istBoundaryToInstant(start), end: istBoundaryToInstant(end) };
+}
+
 /** Parse an <input type="date"> value (YYYY-MM-DD) to a UTC-midnight Date. */
 export function parseDateInput(value: string): Date {
   return new Date(`${value}T00:00:00Z`);

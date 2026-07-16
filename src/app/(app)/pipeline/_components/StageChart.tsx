@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Workflow } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { Card, CardTitle, Pill } from "@/components/ui/kit";
 import { formatDate, formatDuration } from "@/lib/format";
 import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, PROGRAM_LEVEL_LABELS } from "@/lib/labels";
 import type { LeadRow } from "@/server/pipeline-metrics";
@@ -35,14 +36,11 @@ export function StageChart({ leads }: { leads: LeadRow[] }) {
   const openLeads = open ? leads.filter((l) => l.stage === open.key) : [];
 
   return (
-    <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-      <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
-        <Workflow size={18} className="text-accent" /> Pipeline by stage
-      </h3>
-      <p className="mt-0.5 text-xs text-muted">
-        Every lead by its current stage - spot where deals pile up or leak. Click a stage to see its leads.
-      </p>
-      <div className="mt-4 space-y-2">
+    <Card
+      title={<CardTitle icon={<Workflow size={18} />}>Pipeline by stage</CardTitle>}
+      subtitle="Every lead by its current stage - spot where deals pile up or leak. Click a stage to see its leads."
+    >
+      <div className="space-y-2">
         {stageCounts.map((s) => (
           <button
             key={s.key}
@@ -62,7 +60,7 @@ export function StageChart({ leads }: { leads: LeadRow[] }) {
                 className="flex h-full items-center justify-end rounded-full px-2 transition-all"
                 style={{ width: `${Math.max(s.count ? 8 : 0, (s.count / maxStage) * 100)}%`, background: stageColor(s.key) }}
               >
-                {s.count > 0 && <span className="text-[11px] font-bold text-white">{s.count}</span>}
+                {s.count > 0 && <span className="text-caption font-bold text-on-accent">{s.count}</span>}
               </div>
             </div>
             <span className="w-6 flex-none text-right text-sm font-semibold tnum">{s.count}</span>
@@ -83,11 +81,7 @@ export function StageChart({ leads }: { leads: LeadRow[] }) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{l.name}</span>
                 <span className="tnum text-xs text-muted">{l.phone}</span>
-                {l.wonLevel && (
-                  <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok">
-                    {PROGRAM_LEVEL_LABELS[l.wonLevel]}
-                  </span>
-                )}
+                {l.wonLevel && <Pill tone="good">{PROGRAM_LEVEL_LABELS[l.wonLevel]}</Pill>}
                 <span className="ml-auto text-xs text-muted">{formatDate(l.dateIn)}</span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
@@ -101,6 +95,6 @@ export function StageChart({ leads }: { leads: LeadRow[] }) {
           ))}
         </ul>
       </Modal>
-    </div>
+    </Card>
   );
 }

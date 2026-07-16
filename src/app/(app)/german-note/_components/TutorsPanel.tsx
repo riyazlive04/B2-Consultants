@@ -6,6 +6,7 @@ import { Plus, UserX } from "lucide-react";
 import { createTutorLogin, revokeTutorLogin } from "@/server/german-note-actions";
 import type { GnTutorRow } from "@/server/german-note-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { Btn } from "@/components/ui/controls";
 import { Field, FormError, SubmitButton, TextInput } from "@/components/ui/form";
 
 /** Tutor accounts (Role.TUTOR): they see ONLY the German Note section. */
@@ -21,19 +22,15 @@ export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
     <section className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-display text-lg font-semibold">Tutor accounts</h3>
+          <h3 className="font-display text-h2 font-semibold">Tutor accounts</h3>
           <p className="text-xs text-muted">
             Tutors sign in and see only German Note: their batches, posting recordings, and the community.
             Assign them to batches in the Batches tab.
           </p>
         </div>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-strong"
-          onClick={() => { setCreating((v) => !v); setError(null); }}
-        >
-          <Plus size={15} /> {creating ? "Close" : "Create tutor"}
-        </button>
+        <Btn variant="soft" icon={<Plus size={15} />} onClick={() => { setCreating((v) => !v); setError(null); }}>
+          {creating ? "Close" : "Create tutor"}
+        </Btn>
       </div>
 
       {creating && (
@@ -75,10 +72,7 @@ export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
             <div className="min-w-[200px] flex-1">
               <div className="flex items-center gap-2.5">
                 <span className="text-sm font-semibold text-ink">{t.name}</span>
-                <span
-                  className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-                  style={{ color: "var(--lvl-gn)", background: "#3fc0b722" }}
-                >
+                <span className="rounded-full bg-lvl-gn/10 px-2.5 py-0.5 text-caption font-semibold text-ink">
                   Tutor
                 </span>
               </div>
@@ -86,9 +80,10 @@ export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
                 {t.email} · {t.batchCount} batch{t.batchCount === 1 ? "" : "es"}
               </p>
             </div>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-btn px-3 py-1.5 text-[13px] font-semibold text-muted hover:bg-risk-soft hover:text-risk"
+            <Btn
+              variant="danger"
+              size="sm"
+              icon={<UserX size={14} />}
               onClick={async () => {
                 const ok = await askConfirm({
                   title: `Remove ${t.name}'s account?`,
@@ -103,8 +98,8 @@ export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
                 refresh();
               }}
             >
-              <UserX size={14} /> Remove
-            </button>
+              Remove
+            </Btn>
           </div>
         ))}
       </div>

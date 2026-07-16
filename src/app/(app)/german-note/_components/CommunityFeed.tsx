@@ -29,7 +29,7 @@ const timeAgo = (iso: string) => `${formatDuration(Date.now() - new Date(iso).ge
 const CATEGORIES: { key: GnPostCategoryKey; label: string; fg: string; bg: string }[] = [
   { key: "GENERAL", label: "General", fg: "var(--ink-3)", bg: "var(--surface-2)" },
   { key: "ANNOUNCEMENT", label: "Announcement", fg: "var(--primary-strong)", bg: "var(--primary-soft)" },
-  { key: "QUESTION", label: "Question", fg: "var(--lvl-gn)", bg: "#3fc0b722" },
+  { key: "QUESTION", label: "Question", fg: "var(--ink)", bg: "color-mix(in srgb, var(--lvl-gn) 14%, transparent)" },
   { key: "WIN", label: "Win", fg: "var(--good)", bg: "var(--good-bg)" },
 ];
 const categoryOf = (key: GnPostCategoryKey) => CATEGORIES.find((c) => c.key === key) ?? CATEGORIES[0];
@@ -63,7 +63,7 @@ function resizeImage(file: File, maxDim = 1200): Promise<string> {
 function CategoryChip({ category }: { category: GnPostCategoryKey }) {
   const c = categoryOf(category);
   return (
-    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ color: c.fg, background: c.bg }}>
+    <span className="rounded-full px-2 py-0.5 text-caption font-semibold" style={{ color: c.fg, background: c.bg }}>
       {c.label}
     </span>
   );
@@ -82,14 +82,14 @@ function Avatar({ name, image, level }: { name: string | null; image: string | n
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image} alt="" className="h-9 w-9 rounded-full object-cover" />
       ) : (
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-[#3fc0b722] text-xs font-bold text-[var(--lvl-gn)]">
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-lvl-gn/10 text-xs font-bold text-ink">
           {initials}
         </span>
       )}
       {level !== undefined && (
         <span
           title={`Level ${level} — earn levels when your posts and comments get likes`}
-          className="absolute -bottom-1 -right-1 grid h-[18px] w-[18px] place-items-center rounded-full bg-primary text-[10px] font-bold leading-none text-white ring-2 ring-[var(--surface)]"
+          className="absolute -bottom-1 -right-1 grid h-[18px] w-[18px] place-items-center rounded-full bg-primary text-caption font-bold leading-none text-on-accent ring-2 ring-[var(--surface)]"
         >
           {level}
         </span>
@@ -100,9 +100,9 @@ function Avatar({ name, image, level }: { name: string | null; image: string | n
 
 function RoleChip({ role }: { role: string | null }) {
   if (role === "TUTOR")
-    return <span className="ml-1.5 rounded-full bg-[#3fc0b722] px-2 py-0.5 text-[10px] font-semibold text-[var(--lvl-gn)]">Tutor</span>;
+    return <span className="ml-1.5 rounded-full bg-lvl-gn/10 px-2 py-0.5 text-caption font-semibold text-ink">Tutor</span>;
   if (role === "ADMIN")
-    return <span className="ml-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary-strong">Admin</span>;
+    return <span className="ml-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-caption font-semibold text-primary-strong">Admin</span>;
   return null;
 }
 
@@ -147,7 +147,10 @@ function CommentRow({
         <button
           type="button"
           disabled={!canPost}
-          className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${
+          // the count vanishes at 0, leaving an icon-only control — name it explicitly
+          aria-label={c.likedByMe ? "Unlike comment" : "Like comment"}
+          aria-pressed={c.likedByMe}
+          className={`mt-1 inline-flex min-h-10 items-center gap-1 text-xs font-medium ${
             c.likedByMe ? "text-risk" : "text-muted hover:text-ink"
           } disabled:opacity-60`}
           onClick={async () => {
@@ -156,7 +159,7 @@ function CommentRow({
             onChanged();
           }}
         >
-          <Heart size={12} fill={c.likedByMe ? "currentColor" : "none"} />
+          <Heart size={14} fill={c.likedByMe ? "currentColor" : "none"} aria-hidden />
           {c.likeCount > 0 && <span className="tnum">{c.likeCount}</span>}
         </button>
       </div>
@@ -194,7 +197,7 @@ function CommentBox({
       <button
         type="submit"
         aria-label="Send comment"
-        className="grid h-9 w-9 flex-none place-items-center rounded-btn bg-primary text-white transition-colors hover:bg-primary-strong"
+        className="grid h-9 w-9 flex-none place-items-center rounded-btn bg-primary text-on-accent transition-colors hover:bg-primary-strong"
       >
         <Send size={15} />
       </button>
@@ -307,7 +310,7 @@ export function CommunityFeed({
               type="button"
               onClick={() => setFilter(key as GnPostCategoryKey | "ALL")}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                filter === key ? "border-transparent bg-accent text-white" : "border-line-strong text-muted hover:text-ink"
+                filter === key ? "border-transparent bg-accent text-on-accent" : "border-line-strong text-muted hover:text-ink"
               }`}
             >
               {key === "ALL" ? "All" : categoryOf(key as GnPostCategoryKey).label}
@@ -333,7 +336,7 @@ export function CommunityFeed({
           className={`rounded-card border bg-surface p-4 shadow-card ${post.pinned ? "border-[var(--lvl-gn)]" : "border-line"}`}
         >
           {post.pinned && (
-            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-[var(--lvl-gn)]">
+            <p className="mb-2 flex items-center gap-1.5 text-caption font-semibold text-ink-2">
               <Pin size={12} /> Pinned
             </p>
           )}
@@ -403,7 +406,7 @@ export function CommunityFeed({
                       className="inline-flex items-center gap-1 font-medium hover:text-risk"
                       onClick={async () => {
                         const ok = await askConfirm({
-                          title: "Delete this post?",
+                          title: post.title ? `Delete post “${post.title}”?` : "Delete this post?",
                           body: "Its comments and likes are removed too.",
                           confirmLabel: "Delete",
                           danger: true,

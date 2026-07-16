@@ -7,6 +7,7 @@ import { addExistingMember, addNewMember, removeBatchMember } from "@/server/ger
 import { createStudentLogin, revokeStudentLogin } from "@/server/students-actions";
 import type { GnManageBatch, GnStudentOption } from "@/server/german-note-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
 import { LevelChip, StatusChip } from "./LevelChip";
@@ -46,7 +47,7 @@ export function MembersPanel({
   return (
     <section className="space-y-5">
       <div>
-        <h3 className="font-display text-lg font-semibold">Batch members</h3>
+        <h3 className="font-display text-h2 font-semibold">Batch members</h3>
         <p className="text-xs text-muted">
           Pick a batch, then add students — existing ones from anywhere in the system, or quick-create a new
           German Note learner (no B2 enrollment needed).
@@ -87,9 +88,10 @@ export function MembersPanel({
                   <p className="text-xs text-muted">{m.email ?? "no email on file"}</p>
                 </div>
                 {m.hasLogin ? (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 rounded-btn border border-line-strong px-3 py-1.5 text-[13px] font-semibold text-ink-2 hover:bg-surface-2"
+                  <Btn
+                    variant="soft"
+                    size="sm"
+                    icon={<KeyRound size={14} />}
                     onClick={async () => {
                       const ok = await askConfirm({
                         title: `Remove ${m.fullName}'s portal login?`,
@@ -104,21 +106,22 @@ export function MembersPanel({
                       refresh();
                     }}
                   >
-                    <KeyRound size={14} /> Revoke login
-                  </button>
+                    Revoke login
+                  </Btn>
                 ) : (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 rounded-btn border border-line-strong px-3 py-1.5 text-[13px] font-semibold text-ink-2 hover:bg-surface-2"
+                  <Btn
+                    variant="soft"
+                    size="sm"
+                    icon={<KeyRound size={14} />}
                     onClick={() => setLoginFor({ studentId: m.studentId, fullName: m.fullName, email: m.email })}
                   >
-                    <KeyRound size={14} /> Portal login
-                  </button>
+                    Portal login
+                  </Btn>
                 )}
-                <button
-                  type="button"
-                  aria-label={`Remove ${m.fullName} from batch`}
-                  className="inline-flex items-center gap-1.5 rounded-btn px-3 py-1.5 text-[13px] font-semibold text-muted hover:bg-risk-soft hover:text-risk"
+                <Btn
+                  variant="danger"
+                  size="sm"
+                  icon={<UserMinus size={14} />}
                   onClick={async () => {
                     const ok = await askConfirm({
                       title: `Remove ${m.fullName} from ${batch.name}?`,
@@ -133,8 +136,8 @@ export function MembersPanel({
                     refresh();
                   }}
                 >
-                  <UserMinus size={14} /> Remove
-                </button>
+                  Remove
+                </Btn>
               </div>
             ))}
           </div>

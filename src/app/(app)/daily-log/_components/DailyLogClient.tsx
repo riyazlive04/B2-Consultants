@@ -105,14 +105,14 @@ export function DailyLogClient({
         {/* Streak with milestone progress */}
         <div className="rise-in card-hover rounded-card border border-line bg-surface p-5 shadow-card">
           <div className="flex items-center justify-between">
-            <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
+            <p className="flex items-center gap-1.5 text-label text-muted">
               <Flame size={15} /> Logging streak
             </p>
             {view.streak > 0 && <span className="text-xl" aria-hidden>🔥</span>}
           </div>
           <p className="mt-1 font-display text-3xl font-bold tracking-tight">
             {view.streak}
-            <span className="ml-1 text-lg font-semibold text-muted">days</span>
+            <span className="ml-1 text-h3 text-muted">days</span>
           </p>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-2">
             <div
@@ -129,7 +129,7 @@ export function DailyLogClient({
         <div className="rise-in card-hover flex items-center gap-4 rounded-card border border-line bg-surface p-5 shadow-card">
           <Donut pct={avgOkr} color={SIGNAL_META[signalForPercent(avgOkr)].color} label={`${avgOkr}%`} />
           <div>
-            <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
+            <p className="flex items-center gap-1.5 text-label text-muted">
               <Target size={15} /> OKR completion
             </p>
             <p className="mt-1 font-display text-2xl font-bold tracking-tight">{onTrack}/{view.okrs.length}</p>
@@ -139,7 +139,7 @@ export function DailyLogClient({
 
         {/* Logs recorded */}
         <div className="rise-in card-hover rounded-card border border-line bg-surface p-5 shadow-card">
-          <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
+          <p className="flex items-center gap-1.5 text-label text-muted">
             <ClipboardList size={15} /> Logs recorded
           </p>
           <p className="mt-1 font-display text-3xl font-bold tracking-tight">{view.myLogs.length}</p>
@@ -153,7 +153,7 @@ export function DailyLogClient({
       {quests.length > 0 && (
         <section>
           <div className="mb-3 flex items-baseline justify-between">
-            <h3 className="font-display text-lg font-semibold">This week&apos;s quests</h3>
+            <h3 className="font-display text-h2 font-semibold">This week&apos;s quests</h3>
             <span className="text-xs text-muted">
               {quests.filter((q) => q.done).length}/{quests.length} complete · auto-tracked from your logs
             </span>
@@ -169,7 +169,7 @@ export function DailyLogClient({
       {/* My OKRs as progress bars */}
       {view.okrs.length > 0 && (
         <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <h3 className="font-display text-lg font-semibold">My OKRs this month</h3>
+          <h3 className="font-display text-h2 font-semibold">My OKRs this month</h3>
           <div className="mt-4 space-y-5">
             {view.okrs.map((o) => {
               const meta = SIGNAL_META[signalForPercent(o.completionPct)];
@@ -223,7 +223,7 @@ export function DailyLogClient({
         </div>
       ) : (
         <form action={submit} className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <h3 className="font-display text-lg font-semibold">Daily log - {formatDate(view.today)}</h3>
+          <h3 className="font-display text-h2 font-semibold">Daily log - {formatDate(view.today)}</h3>
           <p className="mb-4 mt-1 text-xs text-muted">
             Date is fixed to today. Submit once per day, before 7:00 PM.
           </p>
@@ -266,7 +266,7 @@ export function DailyLogClient({
 
       {/* My recent logs */}
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold">My recent logs</h3>
+        <h3 className="mb-3 font-display text-h2 font-semibold">My recent logs</h3>
         <DataTable rows={view.myLogs} columns={columns} emptyMessage="No logs yet - submit your first above." />
       </section>
     </div>

@@ -9,6 +9,10 @@
    never hardcode a hex in a component.
    ════════════════════════════════════════════════════════════════════════ */
 :root {
+  /* Themes every native control popup the app still uses (the time/month/datetime
+     pickers) so a dark session never opens a white OS calendar. Dates & selects are
+     fully custom, but this is the floor for anything native. */
+  color-scheme: light;
   /* surface */
   --bg-app: #f1f5fb;       /* app canvas — the "half-white" */
   --bg-surface: #ffffff;   /* cards, panels, modals */
@@ -16,28 +20,41 @@
   --bg-sky: #e4effe;       /* soft blue tint panels (highlight boxes, empty states) */
   --bg-sky-grad: linear-gradient(135deg, #e8f1fe 0%, #d9e9ff 100%); /* the ONE allowed gradient: hero strips */
 
-  /* brand — one accent, used with restraint */
-  --primary: #4b93f7;
-  --primary-strong: #2f6fe0;
+  /* brand — one accent, used with restraint.
+     --primary carries WHITE TEXT (primary button) and is itself used as text on
+     --primary-soft (active nav), so it is tuned to clear 4.5:1 in both directions. */
+  --primary: #0a64e2;
+  --primary-strong: #0855c0;
   --primary-soft: #e6f0fe;
   --primary-tint: #bbd6ff;
-  --primary-rgb: 75, 147, 247; /* raw channels for rgba() tints */
+  --primary-rgb: 10, 100, 226; /* raw channels for rgba() tints */
 
   /* ink */
   --ink: #16203a;   /* primary text, headings, key figures — never pure black */
   --ink-2: #4a566e; /* secondary text, labels, table body */
-  --ink-3: #8a95a8; /* muted text, placeholders, captions, disabled */
+  --ink-3: #636f85; /* muted text, placeholders, captions — passes 4.5:1 on every surface except --bg-sky */
+
+  /* the ONLY legitimate use of the old, low-contrast grey: inactive controls.
+     WCAG 1.4.3 exempts disabled elements from the contrast minimum. Never use for text. */
+  --ink-disabled: #8a95a8;
+
+  /* text/icon colour that sits ON a saturated fill (--primary, --good, --bad).
+     Light theme fills are dark, so white wins; the dark theme inverts this. Never
+     hardcode `text-white` on a fill — it cannot re-theme and fails AA in dark mode. */
+  --on-accent: #ffffff;
 
   /* lines */
   --border: #e2e9f3;
   --border-strong: #cbd6e6;
 
-  /* signal — colour spent on MEANING only (runway, OKRs, overdue, profit sign) */
-  --good: #1f9d63;
+  /* signal — colour spent on MEANING only (runway, OKRs, overdue, profit sign).
+     The *text* tones clear 4.5:1 against their own soft fill (badges are 12px);
+     the soft fills are unchanged, so the app's colour temperature is untouched. */
+  --good: #197e50;
   --good-bg: #e4f7ee;
-  --warn: #c97e12;
+  --warn: #9a610e;
   --warn-bg: #fbefd7;
-  --bad: #d63a40;
+  --bad: #cb2a31;
   --bad-bg: #fce7e8;
 
   /* data-viz — calm, blue-led; use in slot order */
@@ -48,6 +65,13 @@
   --viz-5: #f4799e;
   --viz-grid: #eaf0f8;
   --viz-ink: #8a95a8;
+
+  /* medal materials (gamification tiers). Physical metals, not brand hues — they
+     sit outside the signal palette on purpose and must not be re-used elsewhere. */
+  --medal-bronze: linear-gradient(135deg, #d2a679, #a05a2c);
+  --medal-silver: linear-gradient(135deg, #e9edf2, #9aa7b5);
+  --medal-gold: linear-gradient(135deg, #ffe08a, #d99a06);
+  --medal-legend: linear-gradient(135deg, var(--primary-tint), var(--primary-strong));
 
   /* program-level colours — FIXED across the whole app so the eye learns them */
   --lvl-solo: #f4799e;
@@ -69,6 +93,17 @@
 
   /* frosted chip on tinted panels (hero pills, theme button on gradients) */
   --bg-frost: rgba(255, 255, 255, 0.7);
+
+  /* ── motion (§6) ──
+     One scale, so "how fast should this be?" is never re-litigated per component.
+     --ease-spring overshoots slightly: it is for things the user PUSHED (a tab, a
+     press) where the overshoot reads as responsiveness. Never put it on data — a
+     number that bounces reads as unreliable (§9). */
+  --dur-fast: 120ms;  /* hover, colour, focus ring */
+  --dur-base: 200ms;  /* the default: entrances, cross-fades */
+  --dur-slow: 320ms;  /* a travelling element (the tab indicator) */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   /* type */
   --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
@@ -104,6 +139,7 @@
    Set data-theme="dark" on <html>; every component re-themes through the vars.
    Legacy aliases resolve via var() so they follow automatically. */
 [data-theme="dark"] {
+  color-scheme: dark; /* native time/month/datetime popups render dark to match */
   --bg-app: #0e1626;
   --bg-surface: #16213a;
   --bg-surface-2: #1e2b47;
@@ -116,7 +152,10 @@
   --primary-rgb: 91, 157, 255;
   --ink: #eaf0fb;
   --ink-2: #aab7ce;
-  --ink-3: #76849d;
+  --ink-3: #8894aa; /* lifted from #76849d: the old value read 3.73:1 on --bg-surface-2 */
+  --ink-disabled: #76849d;
+  /* dark fills are light, so on-fill text must be near-black (white would be 2.72:1) */
+  --on-accent: #0e1626;
   --border: #293650;
   --border-strong: #3b4a68;
   --good: #46c98b;
@@ -140,6 +179,20 @@
 
 html {
   background: var(--bg-app);
+  /* Smooth scrolling for in-page jumps (anchor links, scrollIntoView, "back to top").
+     The §6 reduced-motion block at the foot of this file already forces this back to
+     `auto`, so it was guarded before it was ever switched on. */
+  scroll-behavior: smooth;
+  /* Anything scrolled to via an anchor clears the 64px sticky top bar instead of
+     hiding underneath it. */
+  scroll-padding-top: 80px;
+}
+
+/* The sidebar nav and any inner scroll region get the same easing, so a keyboard
+   jump to the active item glides rather than snaps. */
+nav [class*="overflow-y-auto"],
+.scroll-smooth {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -260,6 +313,21 @@ button:disabled,
   cursor: not-allowed;
 }
 
+/* Native date-ish fields (time / month / datetime-local) that TextInput leaves native:
+   make the OS picker indicator themeable and clickable. color-scheme (set on :root and
+   the dark theme) already flips the glyph light/dark; this just tidies the affordance. */
+.dateish-native {
+  cursor: pointer;
+}
+.dateish-native::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 120ms ease;
+}
+.dateish-native::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 /* clickable cards give a small press response */
 a.card-hover:active:not(:disabled),
 .card-hover[role="button"]:active {
@@ -271,8 +339,11 @@ a.card-hover:active:not(:disabled),
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* `backwards`, NOT `both` — see the note on page-enter below. `forwards` would hold
+   the final keyframe's transform, and a held transform (even an identity matrix) makes
+   the element a containing block for any `position:fixed` descendant. */
 .rise-in {
-  animation: rise-in 240ms ease-out both;
+  animation: rise-in 240ms ease-out backwards;
 }
 .rise-in:nth-child(2) { animation-delay: 30ms; }
 .rise-in:nth-child(3) { animation-delay: 60ms; }
@@ -281,6 +352,61 @@ a.card-hover:active:not(:disabled),
 .rise-in:nth-child(6) { animation-delay: 150ms; }
 .rise-in:nth-child(7) { animation-delay: 180ms; }
 .rise-in:nth-child(8) { animation-delay: 210ms; }
+/* Pages now run fluid, so a wide window fits more cards per row than the original
+   8-deep stagger covered — beyond it the tail popped in with no delay at all. */
+.rise-in:nth-child(9)  { animation-delay: 240ms; }
+.rise-in:nth-child(10) { animation-delay: 270ms; }
+.rise-in:nth-child(11) { animation-delay: 300ms; }
+.rise-in:nth-child(12) { animation-delay: 330ms; }
+/* Cap the cascade: past ~12 the stagger stops reading as one motion and starts
+   feeling like lag, so everything after lands together on the last beat. */
+.rise-in:nth-child(n + 13) { animation-delay: 350ms; }
+
+/* ── Route transition ──
+   App Router swaps <main>'s subtree on navigation, so the page root mounts fresh and
+   this replays without needing a key. Deliberately quieter and shorter than a landing
+   page would use (§0 "trust through calm", §9 "don't animate the dashboard like a
+   landing page") — it exists to soften the swap, not to perform. */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+/* ⚠ `backwards`, never `both`.
+   `both` = backwards + FORWARDS, and forwards holds the last keyframe's *animated*
+   value. The animated form of `transform: none` is not none — it is the identity
+   matrix `matrix(1,0,0,1,0,0)`. A held transform of ANY kind, identity included,
+   makes the element the containing block for `position:fixed` descendants (CSS
+   Position §4). So `both` here quietly re-anchored every fixed overlay in the app to
+   this element's box instead of the viewport: modals centred inside the page root and
+   hung off the bottom of short windows, with the submit button unreachable.
+   `backwards` still hides the pre-start frame, then hands styling back to the
+   element — computed transform returns to a real `none`, and fixed means fixed. */
+main > * {
+  animation: page-enter 260ms cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+}
+
+/* ── Scrollbars ──
+   The sidebar nav's scrollbar is now shown (it hides ~400px of sections), so it has to
+   look deliberate rather than like a stock OS bar. Thin, quiet, and it only gains
+   contrast on hover — chrome stays out of the way (§0 "the data is the hero"). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  transition: background-color 120ms ease-out;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner { background: transparent; }
 
 /* card hover: lift to e-2 with a whisper of blue on the edge (120ms, §6) */
 .card-hover {
@@ -387,11 +513,108 @@ tbody tr:hover {
 *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
 *::-webkit-scrollbar-track { background: transparent; }
 
+/* ════════════════════════════════════════════════════════════════════════
+   §6 motion — the interaction layer
+   Everything here answers a gesture: a tab you clicked, a row you pointed at, a
+   button you pressed. None of it runs on its own, and none of it touches a figure.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tabs ──
+   The indicator is one element that TRAVELS between tabs rather than a border
+   that blinks on and off. The moving object is what tells you the two tabs are
+   the same control — the blink says nothing. JS measures the active tab and sets
+   --tab-x/--tab-w; the transition does the rest. */
+.tab-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(var(--tab-x, 0), var(--tab-y, 0));
+  width: var(--tab-w, 0);
+  height: var(--tab-h, 0);
+  transition:
+    transform var(--dur-slow) var(--ease-spring),
+    width var(--dur-slow) var(--ease-spring),
+    height var(--dur-fast) var(--ease-out);
+}
+/* First paint must not fly in from x=0 — it should already be under the active tab. */
+.tab-indicator[data-ready="false"] {
+  transition: none;
+}
+
+/* Panels cross-fade on swap. Keyed on the active index so React remounts it. */
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+/* `backwards` for the same containing-block reason as page-enter — a tab panel is an
+   ancestor of any modal opened from inside it. */
+.panel-in {
+  animation: panel-in var(--dur-base) var(--ease-out) backwards;
+}
+
+/* ── List rows ──
+   A settings row is a control, so it may lift; §9's "don't animate like a landing
+   page" is about DATA. The lift is the affordance: it says "this row is a thing
+   you act on". */
+.row-lift {
+  transition:
+    box-shadow var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.row-lift:hover {
+  background: var(--bg-surface);
+  border-color: var(--primary-tint);
+  box-shadow: var(--e-2);
+  transform: translateY(-1px);
+}
+/* A row being edited outranks a row being hovered. */
+.row-lift:focus-within {
+  background: var(--bg-surface);
+  border-color: var(--primary-tint);
+  box-shadow: var(--e-2);
+}
+
+/* Rows arrive in sequence. Cheap stagger via an index the caller sets.
+   `backwards` (not `both`) holds the pre-start frame through the delay — which is the
+   whole point of a stagger — without leaving a transform behind afterwards. */
+.row-in {
+  animation: rise-in var(--dur-base) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 22ms);
+}
+
+/* ── Press ──
+   Buttons acknowledge the finger. Spring, so it snaps back rather than oozing. */
+.press {
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+.press:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rise-in, .toast-in, .dialog-in, .overlay-in, .card-hover { animation: none; transition: none; }
+  /* The new §6 layer holds still too — the END STATE must survive, so hover/focus
+     still recolour and lift; only the travel and the entrances are removed. */
+  .tab-indicator { transition: none; }
+  .panel-in, .row-in { animation: none; animation-delay: 0ms; }
+  .row-lift { transition: none; }
+  .row-lift:hover, .row-lift:focus-within { transform: none; }
+  .press { transition: none; }
+  .press:active:not(:disabled) { transform: none; }
+  /* the route transition and its stagger must hold still too */
+  main > * { animation: none; }
+  .rise-in:nth-child(n) { animation-delay: 0ms; }
+  ::-webkit-scrollbar-thumb { transition: none; }
   .card-hover:hover { transform: none; }
   button:active:not(:disabled) { transform: none; }
   .check-draw { animation: none; stroke-dashoffset: 0; }
   .confetti-piece { display: none; }
   .badge-shine:hover { transform: none; }
+  /* .skeleton loops forever (§6 forbids ambient animation) and .xp-fill animates width.
+     Both must hold still; the skeleton keeps a flat inset so it still reads as a placeholder. */
+  .skeleton { animation: none; background: var(--bg-surface-2); }
+  .xp-fill { transition: none; }
+  * { scroll-behavior: auto !important; }
 }

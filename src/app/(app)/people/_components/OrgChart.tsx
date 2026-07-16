@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { moveProfile, saveTeamProfile } from "@/server/people-actions";
 import type { MemberRow } from "@/server/people-metrics";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { toast } from "@/components/ui/feedback";
+import { Card, Pill } from "@/components/ui/kit";
+import { Btn, IconButton } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate } from "@/lib/format";
 import { LOG_VARIANT_LABELS, optionsFrom, TEAM_STATUS_LABELS } from "@/lib/labels";
@@ -37,14 +40,10 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
     <div key={m.id} className="w-64 rounded-card border border-line bg-surface p-4 shadow-card">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-display text-lg font-semibold">{m.fullName}</p>
+          <p className="font-display text-h2 font-semibold">{m.fullName}</p>
           <p className="text-sm text-muted">{m.roleTitle}</p>
         </div>
-        {m.status !== "ACTIVE" && (
-          <span className="rounded-full bg-watch-soft px-2 py-0.5 text-xs text-watch">
-            {TEAM_STATUS_LABELS[m.status]}
-          </span>
-        )}
+        {m.status !== "ACTIVE" && <Pill tone="warn">{TEAM_STATUS_LABELS[m.status]}</Pill>}
       </div>
       <p className="mt-2 truncate text-xs text-muted">{m.email}</p>
       {m.dateJoined && <p className="text-xs text-muted">Joined {formatDate(m.dateJoined)}</p>}
@@ -52,13 +51,17 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
         <p className="mt-2 line-clamp-3 text-xs text-muted">{m.keyResponsibilities}</p>
       )}
       <div className="mt-3 flex items-center gap-2 text-sm">
-        <button type="button" className="text-accent hover:underline" onClick={() => { setEditing(m); setAdding(false); }}>
+        <Btn variant="ghost" size="sm" onClick={() => { setEditing(m); setAdding(false); }}>
           Edit
-        </button>
+        </Btn>
         {canMove && (
           <>
-            <button type="button" aria-label="Move left" className="text-muted hover:text-ink" onClick={() => moveProfile(m.id, "up")}>←</button>
-            <button type="button" aria-label="Move right" className="text-muted hover:text-ink" onClick={() => moveProfile(m.id, "down")}>→</button>
+            <IconButton label="Move left" size="sm" onClick={() => moveProfile(m.id, "up")}>
+              <ArrowLeft size={16} />
+            </IconButton>
+            <IconButton label="Move right" size="sm" onClick={() => moveProfile(m.id, "down")}>
+              <ArrowRight size={16} />
+            </IconButton>
           </>
         )}
       </div>
@@ -68,14 +71,10 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
   return (
     <section className="space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="font-display text-lg font-semibold">Org chart</h3>
-        <button
-          type="button"
-          className="rounded-field border border-line bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-2"
-          onClick={() => { setAdding(true); setEditing(null); }}
-        >
+        <h3 className="font-display text-h2 font-semibold">Org chart</h3>
+        <Btn variant="soft" onClick={() => { setAdding(true); setEditing(null); }}>
           Add team member
-        </button>
+        </Btn>
       </div>
 
       <div className="flex flex-col items-center gap-6">
@@ -85,15 +84,15 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
       </div>
 
       {showForm && (
-        <form action={submit} key={editing?.id ?? "new"} className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <div className="mb-4 flex items-center justify-between">
-            <h4 className="font-display text-lg font-semibold">
-              {editing ? `Edit profile - ${editing.fullName}` : "New team member"}
-            </h4>
-            <button type="button" className="text-sm text-muted hover:underline" onClick={() => { setEditing(null); setAdding(false); }}>
+        <Card
+          title={editing ? `Edit profile - ${editing.fullName}` : "New team member"}
+          actions={
+            <Btn variant="ghost" size="sm" onClick={() => { setEditing(null); setAdding(false); }}>
               Close
-            </button>
-          </div>
+            </Btn>
+          }
+        >
+        <form action={submit} key={editing?.id ?? "new"}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Full name">
               <TextInput name="fullName" required defaultValue={editing?.fullName ?? ""} />
@@ -122,6 +121,9 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
             <Field label="First-call share %" hint="Target share of new leads (0 = not in rotation)">
               <TextInput name="firstCallSharePct" inputMode="numeric" defaultValue={String(editing?.firstCallSharePct ?? 0)} />
             </Field>
+            <Field label="Daily call target" hint="Calls expected per day (0 = no target). Shows on their My Desk.">
+              <TextInput name="dailyCallTarget" inputMode="numeric" defaultValue={String(editing?.dailyCallTarget ?? 0)} />
+            </Field>
             <div className="flex items-end pb-1">
               <CheckboxField name="worksSaturdays" label="Works Saturdays" defaultChecked={editing?.worksSaturdays ?? true} />
             </div>
@@ -136,6 +138,7 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
             <FormError message={error} />
           </div>
         </form>
+        </Card>
       )}
     </section>
   );

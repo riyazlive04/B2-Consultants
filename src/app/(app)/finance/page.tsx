@@ -20,7 +20,7 @@ import { BarRows, Donut } from "@/components/ui/charts";
 import { Tabs } from "@/components/ui/Tabs";
 import { Card, CardTitle, EmptyState, PageHeader, Pill } from "@/components/ui/kit";
 import { toDateInputValue, istToday } from "@/lib/dates";
-import { formatDate, formatEurMinor, formatInrMinor, formatPct } from "@/lib/format";
+import { formatDate, formatEurMinor, formatInrMinor, formatMonth, formatPct } from "@/lib/format";
 import { PROGRAM_LEVEL_LABELS, PAYMENT_METHOD_LABELS, EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
@@ -61,7 +61,7 @@ export default async function FinancePage() {
   const waByPending = await getWhatsAppStatusMap("pendingPaymentId", pendings.map((p) => p.id));
   const today = toDateInputValue(istToday());
   const monthKey = today.slice(0, 7);
-  const monthLabel = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(istToday());
+  const monthLabel = formatMonth(istToday());
   const studentOptions = (
     await prisma.student.findMany({ orderBy: { fullName: "asc" }, select: { id: true, fullName: true } })
   ).map((s) => ({ value: s.id, label: s.fullName }));
@@ -116,13 +116,69 @@ export default async function FinancePage() {
     .slice(0, 5);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         icon={<Wallet size={20} />}
         title="Finance"
         subtitle="Big number = INR aggregate (entry-stamped FX); EUR aggregate beneath."
         actions={<Pill>This month · {monthLabel}</Pill>}
       />
+
+      {/* KPI cards first: §4.4 names nine figures this section must show, and six of
+          them (gross profit, margin, COGS, expenses, receivables, YTD) used to sit
+          below the fold behind the bento charts. Numbers lead, charts explain. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
+          label="Net profit"
+          value={inr(metrics.net)}
+          secondary={eurLine(metrics.net)}
+          target={`was ${formatInrMinor(metrics.prevSameDay.netInr, { compact: true })} by this day last mo`}
+          tooltip="Net Profit = Revenue minus all costs including marketing and tools. The comparison is to the same day of last month, so a part-month is never judged against a full one."
+          signal={metrics.net.inr < 0 ? "risk" : "ok"}
+          icon={<Wallet size={18} />}
+        />
+        <MetricCard
+          label="Profit margin"
+          value={formatPct(metrics.marginPct)}
+          secondary="Net profit ÷ revenue × 100"
+          signal={metrics.marginPct < 0 ? "risk" : undefined}
+          progress={Math.max(0, Math.min(1, metrics.marginPct / 100))}
+          icon={<Percent size={18} />}
+        />
+        <MetricCard
+          label="Gross profit"
+          value={inr(metrics.gross)}
+          secondary={eurLine(metrics.gross)}
+          tooltip="Gross Profit = Revenue minus only delivery costs (COGS)."
+          signal={metrics.gross.inr < 0 ? "risk" : "ok"}
+          icon={<PiggyBank size={18} />}
+        />
+        <MetricCard
+          label="COGS this month"
+          value={inr(metrics.cogs)}
+          secondary={eurLine(metrics.cogs)}
+          icon={<Package size={18} />}
+        />
+        <MetricCard
+          label="Expenses this month"
+          value={inr(metrics.expenses)}
+          secondary={eurLine(metrics.expenses)}
+          icon={<CreditCard size={18} />}
+        />
+        <MetricCard
+          label="Pending receivables"
+          value={formatInrMinor(metrics.receivables.inr, { compact: true })}
+          secondary={`${formatEurMinor(metrics.receivables.eur, { compact: true })} · active balances`}
+          signal={metrics.receivables.inr > 0 ? "watch" : undefined}
+          icon={<Clock size={18} />}
+        />
+        <MetricCard
+          label="Yearly revenue to date"
+          value={inr(metrics.ytdRevenue)}
+          secondary={eurLine(metrics.ytdRevenue)}
+          icon={<CalendarRange size={18} />}
+        />
+      </div>
 
       {/* Bento grid - hero + breakdowns left, top payments right */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -176,7 +232,7 @@ export default async function FinancePage() {
                       {PAYMENT_METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod} · {formatDate(p.date)}
                     </span>
                   </span>
-                  <span className="flex-none font-display text-lg font-bold text-ink">
+                  <span className="flex-none font-display text-h2 font-bold text-ink">
                     {formatInrMinor(p.agg.inr, { compact: true })}
                   </span>
                 </li>
@@ -239,60 +295,6 @@ export default async function FinancePage() {
             ))}
           </div>
         </Card>
-      </div>
-
-      {/* KPI cards - everything not already in the bento charts */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Net profit"
-          value={inr(metrics.net)}
-          secondary={eurLine(metrics.net)}
-          target={`was ${formatInrMinor(metrics.prevSameDay.netInr, { compact: true })} by this day last mo`}
-          tooltip="Net Profit = Revenue minus all costs including marketing and tools. The comparison is to the same day of last month, so a part-month is never judged against a full one."
-          signal={metrics.net.inr < 0 ? "risk" : "ok"}
-          icon={<Wallet size={18} />}
-        />
-        <MetricCard
-          label="Profit margin"
-          value={formatPct(metrics.marginPct)}
-          secondary="Net profit ÷ revenue × 100"
-          signal={metrics.marginPct < 0 ? "risk" : undefined}
-          progress={Math.max(0, Math.min(1, metrics.marginPct / 100))}
-          icon={<Percent size={18} />}
-        />
-        <MetricCard
-          label="Gross profit"
-          value={inr(metrics.gross)}
-          secondary={eurLine(metrics.gross)}
-          tooltip="Gross Profit = Revenue minus only delivery costs (COGS)."
-          signal={metrics.gross.inr < 0 ? "risk" : "ok"}
-          icon={<PiggyBank size={18} />}
-        />
-        <MetricCard
-          label="COGS this month"
-          value={inr(metrics.cogs)}
-          secondary={eurLine(metrics.cogs)}
-          icon={<Package size={18} />}
-        />
-        <MetricCard
-          label="Expenses this month"
-          value={inr(metrics.expenses)}
-          secondary={eurLine(metrics.expenses)}
-          icon={<CreditCard size={18} />}
-        />
-        <MetricCard
-          label="Pending receivables"
-          value={formatInrMinor(metrics.receivables.inr, { compact: true })}
-          secondary={`${formatEurMinor(metrics.receivables.eur, { compact: true })} · active balances`}
-          signal={metrics.receivables.inr > 0 ? "watch" : undefined}
-          icon={<Clock size={18} />}
-        />
-        <MetricCard
-          label="Yearly revenue to date"
-          value={inr(metrics.ytdRevenue)}
-          secondary={eurLine(metrics.ytdRevenue)}
-          icon={<CalendarRange size={18} />}
-        />
       </div>
 
       <Tabs

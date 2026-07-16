@@ -5,6 +5,7 @@ import { istMonthRange, istToday } from "@/lib/dates";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import type { AppRole } from "@/lib/rbac";
 import { aggInrMinor } from "@/lib/money";
+import { parseMentions } from "@/lib/gn-mentions";
 import { getPendingRows } from "./finance-metrics";
 import { getRunwaySnapshot } from "./cash-metrics";
 import { getTeamGame } from "./gamification";
@@ -79,6 +80,38 @@ async function gnEngagementNotifications(userId: string, today: Date): Promise<N
     });
   }
   return items;
+}
+
+/**
+ * ContactNote @mentions (BUILD_CHECKLIST.md §3), ported from the GN mention pattern above.
+ * GnPost/GnComment can filter mentions in SQL (`mentionedUserIds: { has: userId }`) because they
+ * have that column; ContactNote doesn't and the schema is frozen this round, so this re-parses
+ * each recent note's body against the same @Name matcher `contacts-actions.ts` uses at write
+ * time. Same recency window (3 days), same in-app-only, never-persisted delivery as
+ * gnEngagementNotifications — the note author gets no push, the mentioned person sees it purely
+ * because THEIR OWN next bell load/poll happens to re-run this query and find their name.
+ */
+async function contactNoteMentionNotifications(userId: string, today: Date): Promise<Notification[]> {
+  const since = new Date(today.getTime() - 3 * 86400000);
+  const [notes, candidates] = await Promise.all([
+    prisma.contactNote.findMany({
+      where: { createdAt: { gte: since }, createdById: { not: userId } },
+      select: { id: true, body: true, leadId: true },
+      take: 500, // recent-note volume is small; this is a safety cap, not a real limit
+    }),
+    prisma.user.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
+  ]);
+  const mentions = notes.filter((n) => parseMentions(n.body, candidates).includes(userId));
+  if (mentions.length === 0) return [];
+  return [
+    {
+      id: "contact-note-mention",
+      severity: "info",
+      title: `You were mentioned ${mentions.length} time${mentions.length > 1 ? "s" : ""} in a contact note`,
+      body: "Someone tagged you in a CRM note — open the contact to see it.",
+      href: mentions.length === 1 ? `/contacts/${mentions[0].leadId}` : "/contacts",
+    },
+  ];
 }
 
 /**
@@ -186,6 +219,12 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
     const order = { risk: 0, watch: 1, win: 2, info: 3 };
     return items.sort((a, b) => order[a.severity] - order[b.severity]);
   }
+
+  // ── ADMIN/HEAD/USER: CRM @mentions on contact notes. Coarse role gate, matching every other
+  // check in this function (own-log, badges, radar, …) — none of them thread the founder's
+  // per-user section-override JSON in here either, so a HEAD granted Contacts access via an
+  // override still sees this the same as everyone else at this role tier. ──
+  items.push(...(await contactNoteMentionNotifications(userId, today)));
 
   // ── Everyone with a daily-log duty: own log reminder ──
   if (role !== "ADMIN") {

@@ -40,7 +40,7 @@ export default async function WhatsAppPage() {
         : "Not configured — add WATI endpoint + token to go live";
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="w-full space-y-6">
       {/* Header strip */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-4 shadow-card">
         <div className="flex items-center gap-3">

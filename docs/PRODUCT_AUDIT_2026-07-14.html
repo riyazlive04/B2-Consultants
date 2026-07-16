@@ -1,0 +1,1043 @@
+<title>B2 Consultants — CRM & Product Audit</title>
+<style>
+:root{
+  --bg:#F7F5F0; --surface:#FFFFFF; --surface-2:#F1EEE6;
+  --ink:#1C1B18; --ink-2:#54514A; --ink-3:#8B8778;
+  --border:#E4E0D4; --border-strong:#CFC8B4;
+  --accent:#2B3A55; --accent-strong:#1C2740; --accent-soft:#E7EAF1;
+  --good:#2F6F4E; --good-bg:#E5F1E9;
+  --warn:#96650F; --warn-bg:#FBF0DC;
+  --bad:#A3342F; --bad-bg:#FAEAE8;
+  --shadow-1:0 1px 2px rgba(28,27,24,.05), 0 1px 3px rgba(28,27,24,.07);
+  --shadow-2:0 6px 20px rgba(28,27,24,.10);
+  --font-display:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+  --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,'SF Mono',Consolas,'Liberation Mono',monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#17150F; --surface:#211E17; --surface-2:#28241B;
+    --ink:#F1EDE2; --ink-2:#C7C1AE; --ink-3:#8E8875;
+    --border:#3A3527; --border-strong:#4C4633;
+    --accent:#93A6CC; --accent-strong:#B3C2E0; --accent-soft:#232B3C;
+    --good:#74CE9F; --good-bg:#173226;
+    --warn:#E5B45E; --warn-bg:#3B2B0E;
+    --bad:#E4908B; --bad-bg:#3B1B18;
+    --shadow-1:0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.35);
+    --shadow-2:0 10px 26px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#17150F; --surface:#211E17; --surface-2:#28241B;
+  --ink:#F1EDE2; --ink-2:#C7C1AE; --ink-3:#8E8875;
+  --border:#3A3527; --border-strong:#4C4633;
+  --accent:#93A6CC; --accent-strong:#B3C2E0; --accent-soft:#232B3C;
+  --good:#74CE9F; --good-bg:#173226;
+  --warn:#E5B45E; --warn-bg:#3B2B0E;
+  --bad:#E4908B; --bad-bg:#3B1B18;
+  --shadow-1:0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.35);
+  --shadow-2:0 10px 26px rgba(0,0,0,.45);
+}
+:root[data-theme="light"]{
+  --bg:#F7F5F0; --surface:#FFFFFF; --surface-2:#F1EEE6;
+  --ink:#1C1B18; --ink-2:#54514A; --ink-3:#8B8778;
+  --border:#E4E0D4; --border-strong:#CFC8B4;
+  --accent:#2B3A55; --accent-strong:#1C2740; --accent-soft:#E7EAF1;
+  --good:#2F6F4E; --good-bg:#E5F1E9;
+  --warn:#96650F; --warn-bg:#FBF0DC;
+  --bad:#A3342F; --bad-bg:#FAEAE8;
+  --shadow-1:0 1px 2px rgba(28,27,24,.05), 0 1px 3px rgba(28,27,24,.07);
+  --shadow-2:0 6px 20px rgba(28,27,24,.10);
+}
+
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  font-size:15.5px; line-height:1.6; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent-strong);}
+::selection{background:var(--accent-soft);}
+
+.skip{position:absolute;left:-9999px;}
+.skip:focus{left:16px;top:16px;background:var(--surface);padding:8px 14px;border-radius:8px;z-index:200;box-shadow:var(--shadow-2);}
+
+/* ---- shell ---- */
+.shell{
+  display:grid;
+  grid-template-columns:272px minmax(0,1fr);
+  max-width:1320px; margin:0 auto;
+}
+@media (max-width:960px){ .shell{grid-template-columns:1fr;} }
+
+.toc{
+  position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+  padding:36px 20px 40px 32px; border-right:1px solid var(--border);
+}
+@media (max-width:960px){
+  .toc{position:relative; height:auto; border-right:none; border-bottom:1px solid var(--border);
+       padding:20px 20px 18px; overflow-x:auto;}
+  .toc nav{display:flex; gap:4px; white-space:nowrap;}
+  .toc .toc-group{display:none;}
+}
+.toc .brand{font-family:var(--font-display); font-size:15px; color:var(--ink-3); letter-spacing:.02em; margin-bottom:22px;}
+.toc .brand b{color:var(--ink); font-weight:600;}
+.toc nav a{
+  display:block; padding:6px 10px; margin:1px 0; border-radius:7px; font-size:13px;
+  color:var(--ink-2); text-decoration:none; border-left:2px solid transparent;
+}
+.toc nav a:hover{background:var(--surface-2); color:var(--ink);}
+.toc nav a.active{background:var(--accent-soft); color:var(--accent-strong); border-left-color:var(--accent);}
+.toc-group{font:600 10px/1 var(--font-body); letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); margin:18px 0 6px 10px;}
+.toc-group:first-child{margin-top:0;}
+
+main{padding:52px clamp(20px,4vw,64px) 100px;}
+@media (max-width:960px){ main{padding:32px 20px 80px;} }
+
+/* ---- header / hero ---- */
+.doc-head{max-width:760px; margin-bottom:44px;}
+.eyebrow{font:600 11px/1 var(--font-body); letter-spacing:.1em; text-transform:uppercase; color:var(--accent-strong);}
+h1.title{
+  font-family:var(--font-display); font-weight:600; font-size:clamp(30px,4vw,42px);
+  line-height:1.12; margin:14px 0 12px; text-wrap:balance; color:var(--ink);
+}
+.dek{font-size:17px; color:var(--ink-2); max-width:640px; line-height:1.6;}
+.meta-row{display:flex; gap:22px; flex-wrap:wrap; margin-top:22px; font-size:12.5px; color:var(--ink-3);}
+.meta-row strong{color:var(--ink-2); font-weight:600;}
+
+/* ---- callout / category question ---- */
+.callout{
+  background:var(--surface); border:1px solid var(--border-strong); border-left:3px solid var(--accent);
+  border-radius:4px; padding:26px 28px; margin:30px 0 46px; box-shadow:var(--shadow-1);
+}
+.callout h2{font-family:var(--font-display); font-size:20px; margin:0 0 10px; font-weight:600;}
+.callout p{margin:0 0 12px; color:var(--ink-2);}
+.callout p:last-child{margin-bottom:0;}
+.callout .verdict{font-weight:600; color:var(--ink);}
+
+/* ---- scorecard ---- */
+.scorecard{margin:0 0 56px;}
+.scorecard h2{font-family:var(--font-display); font-size:22px; font-weight:600; margin:0 0 4px;}
+.scorecard .sub{color:var(--ink-3); font-size:13.5px; margin:0 0 20px;}
+.score-grid{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1px;
+  background:var(--border); border:1px solid var(--border); border-radius:10px; overflow:hidden;
+}
+.score-cell{background:var(--surface); padding:14px 16px; display:flex; flex-direction:column; gap:6px;}
+.score-cell .row1{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+.score-cell a{font-weight:600; font-size:13.5px; color:var(--ink); text-decoration:none;}
+.score-cell a:hover{color:var(--accent-strong);}
+.score-cell .take{font-size:12.5px; color:var(--ink-3); line-height:1.45;}
+
+/* ---- chips ---- */
+.chip{
+  display:inline-flex; align-items:center; gap:5px; font:600 10.5px/1 var(--font-body);
+  letter-spacing:.04em; text-transform:uppercase; padding:4px 9px; border-radius:999px; white-space:nowrap;
+}
+.chip::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor;}
+.chip[data-level="solid"]{background:var(--good-bg); color:var(--good);}
+.chip[data-level="partial"]{background:var(--warn-bg); color:var(--warn);}
+.chip[data-level="gap"]{background:var(--bad-bg); color:var(--bad);}
+
+/* ---- layer sections ---- */
+.layer{padding-top:52px; margin-top:12px; border-top:1px solid var(--border); scroll-margin-top:20px;}
+.layer:first-of-type{border-top:none;}
+.layer-head{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:6px;}
+.layer-head .num{font-family:var(--font-mono); font-size:12.5px; color:var(--ink-3);}
+.layer h2{font-family:var(--font-display); font-weight:600; font-size:25px; margin:0; text-wrap:balance;}
+.layer-lede{color:var(--ink-2); font-size:14px; max-width:680px; margin:8px 0 26px;}
+
+.layer-grid{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--border); border:1px solid var(--border); border-radius:10px; overflow:hidden;}
+@media (max-width:760px){ .layer-grid{grid-template-columns:1fr;} }
+.block{background:var(--surface); padding:20px 22px;}
+.block h3{
+  font:600 11px/1 var(--font-body); letter-spacing:.07em; text-transform:uppercase; margin:0 0 12px;
+  display:flex; align-items:center; gap:7px;
+}
+.block.current h3{color:var(--ink-3);}
+.block.gaps h3{color:var(--bad);}
+.block.upgrade h3{color:var(--accent-strong);}
+.block.benchmark h3{color:var(--good);}
+.block ul, .block ol{margin:0; padding-left:19px; display:flex; flex-direction:column; gap:9px;}
+.block li{font-size:13.6px; color:var(--ink-2); line-height:1.55;}
+.block li b, .block li strong{color:var(--ink); font-weight:600;}
+.block.benchmark p{font-size:13.6px; color:var(--ink-2); line-height:1.6; margin:0 0 10px;}
+.block.benchmark p:last-child{margin-bottom:0;}
+.block.upgrade li{padding-left:2px;}
+.tag{font:600 9.5px/1 var(--font-body); letter-spacing:.03em; text-transform:uppercase; padding:2px 6px; border-radius:4px; margin-left:6px; white-space:nowrap; vertical-align:1px;}
+.tag.hi{background:var(--good-bg); color:var(--good);}
+.tag.mi{background:var(--warn-bg); color:var(--warn);}
+.tag.lo{background:var(--surface-2); color:var(--ink-3);}
+
+code.cite{
+  font-family:var(--font-mono); font-size:12px; background:var(--surface-2); color:var(--accent-strong);
+  padding:1.5px 5px; border-radius:4px; white-space:nowrap;
+}
+
+/* ---- roadmap ---- */
+.roadmap{margin-top:70px; padding-top:52px; border-top:1px solid var(--border);}
+.roadmap > h2{font-family:var(--font-display); font-weight:600; font-size:28px; margin:0 0 8px;}
+.roadmap > .dek{color:var(--ink-2); font-size:14.5px; max-width:680px; margin-bottom:32px;}
+.road-cols{display:grid; grid-template-columns:repeat(3,1fr); gap:18px;}
+@media (max-width:860px){ .road-cols{grid-template-columns:1fr;} }
+.road-col{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:22px 20px; box-shadow:var(--shadow-1);}
+.road-col h3{font-family:var(--font-display); font-size:17px; margin:0 0 3px; font-weight:600;}
+.road-col .horizon{font-size:12px; color:var(--ink-3); margin-bottom:16px;}
+.road-col ol{margin:0; padding-left:19px; display:flex; flex-direction:column; gap:12px;}
+.road-col li{font-size:13.4px; color:var(--ink-2); line-height:1.55;}
+.road-col li b{color:var(--ink);}
+.road-col.quick{border-top:3px solid var(--good);}
+.road-col.mid{border-top:3px solid var(--warn);}
+.road-col.long{border-top:3px solid var(--accent);}
+
+.closing{margin-top:56px; padding:26px 28px; background:var(--surface-2); border-radius:10px; font-size:14px; color:var(--ink-2); line-height:1.7;}
+.closing p{margin:0 0 12px;}
+.closing p:last-child{margin-bottom:0;}
+.closing b{color:var(--ink);}
+
+footer{margin-top:48px; font-size:12px; color:var(--ink-3); padding-bottom:20px;}
+
+@media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} }
+</style>
+
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+  <aside class="toc">
+    <div class="brand"><b>B2 Consultants</b><br>CRM &amp; Product Audit</div>
+    <nav id="tocnav">
+      <div class="toc-group">Framing</div>
+      <a href="#category">The category question</a>
+      <a href="#scorecard">Scorecard</a>
+      <div class="toc-group">Foundation</div>
+      <a href="#onboarding">1. Onboarding</a>
+      <a href="#ia-nav">2. IA &amp; Navigation</a>
+      <a href="#dashboard">3. Dashboard / Home</a>
+      <a href="#permissions">4. Permissions &amp; Collaboration</a>
+      <a href="#datamodel">5. Data Model</a>
+      <div class="toc-group">Core CRM</div>
+      <a href="#contacts">6. Contacts &amp; Companies</a>
+      <a href="#pipeline">7. Pipeline &amp; Deals</a>
+      <a href="#search">8. Search &amp; Filtering</a>
+      <a href="#automation">9. Automation &amp; Workflows</a>
+      <a href="#forms">10. Forms &amp; Funnels</a>
+      <div class="toc-group">Money &amp; Channels</div>
+      <a href="#payments">11. Payments &amp; Billing</a>
+      <a href="#conversations">12. Conversations</a>
+      <a href="#bookings">13. Calendars &amp; Bookings</a>
+      <a href="#integrations">14. Integrations</a>
+      <a href="#reporting">15. Reporting &amp; Analytics</a>
+      <div class="toc-group">Craft</div>
+      <a href="#mobile">16. Mobile</a>
+      <a href="#performance">17. Performance</a>
+      <a href="#a11y">18. Accessibility</a>
+      <a href="#design">19. Visual Design &amp; Motion</a>
+      <div class="toc-group">Verdict</div>
+      <a href="#roadmap">Roadmap</a>
+    </nav>
+  </aside>
+
+  <main id="main">
+    <div class="doc-head">
+      <div class="eyebrow">Product &amp; Engineering Audit</div>
+      <h1 class="title">B2 Consultants Dashboard — full-stack CRM teardown</h1>
+      <p class="dek">A layer-by-layer read of the app as it exists in the repository today — onboarding through micro-interactions — benchmarked against Salesforce, HubSpot, Attio, Close and Pipedrive. Every claim below is sourced to a specific file and line.</p>
+      <div class="meta-row">
+        <span><strong>Scope:</strong> B2-Consultants Next.js/Prisma app, Synamate-clone CRM module</span>
+        <span><strong>Method:</strong> 7 independent code-reading passes, cross-checked against docs/BUILD_SPEC.md, DESIGN_SYSTEM.md, SYNAMATE_CLONE_SPEC.md</span>
+        <span><strong>Prepared:</strong> 14 Jul 2026</span>
+      </div>
+    </div>
+
+    <section id="category" class="callout">
+      <h2>Read this before the scorecard</h2>
+      <p>This is not a CRM startup's product. BUILD_SPEC.md says it outright: <em>"Multi-tenant? No — single org."</em> This is a private, five-seat internal cockpit for one career-coaching business, with three named roles (Ameen/Admin, Karthick/Head, Asma &amp; Nilofer/User) hardcoded around one company's workflow. The Contacts/Pipeline/Automation/Payments/Conversations module was <em>cloned from a GoHighLevel white-label (Synamate)</em> the founder was paying a seat for — a build-vs-buy decision to own the logic and the data, not a go-to-market bet on becoming a CRM vendor.</p>
+      <p>Grading this against Salesforce/HubSpot/Attio at Series-C due-diligence intensity is, strictly, a category mismatch — there's no <code class="cite">orgId</code> anywhere in the 2,384-line schema, no self-serve signup (signup is disabled by config), no billing infrastructure for tenants. <span class="verdict">I'm doing the teardown exactly as asked anyway</span> — every layer below, scored against category leaders — because the underlying UX and architecture questions are real regardless of who's paying for a seat. But the roadmap at the end forks in two directions depending on which future is actually being built: <b>sharpen the internal tool</b>, or <b>decide to productize it</b>. Conflating the two will waste months.</p>
+    </section>
+
+    <section id="scorecard" class="scorecard">
+      <h2>Scorecard</h2>
+      <p class="sub">The three-second read this app's own dashboard aspires to give its founder — applied to itself.</p>
+      <div class="score-grid">
+        <div class="score-cell"><div class="row1"><a href="#onboarding">1. Onboarding</a><span class="chip" data-level="partial">By design</span></div><div class="take">Invite-only, no self-serve — correct for 5 seats, but zero first-run guidance once invited.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#ia-nav">2. IA &amp; Nav</a><span class="chip" data-level="partial">Partial</span></div><div class="take">Genuinely role-driven and server-enforced, but the "always-visible" runway pill is Admin-only and Head loses Pipeline entirely.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#dashboard">3. Dashboard</a><span class="chip" data-level="partial">Partial</span></div><div class="take">A real 3-second read for Admin; almost no business signal for Head or User.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#permissions">4. Permissions</a><span class="chip" data-level="solid">Solid</span></div><div class="take">Real two-layer, server-enforced RBAC — rarer than it should be. Collaboration primitives (@mentions) exist elsewhere but not here.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#datamodel">5. Data Model</a><span class="chip" data-level="partial">Partial</span></div><div class="take">Correct money types and a real EAV custom-field pattern; two parallel stage models that can silently drift.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#contacts">6. Contacts</a><span class="chip" data-level="partial">Partial</span></div><div class="take">Real record + merged timeline, but a hardcoded 1,000-row cap and one filter, no saved views.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#pipeline">7. Pipeline</a><span class="chip" data-level="gap">Split</span></div><div class="take">A real drag-drop Kanban shipped — next to a disconnected, still-read-only legacy chart on a different stage taxonomy.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#search">8. Search</a><span class="chip" data-level="gap">Gap</span></div><div class="take">No app-wide search or command palette exists anywhere in the product.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#automation">9. Automation</a><span class="chip" data-level="partial">Partial</span></div><div class="take">A real trigger→action engine that executes — linear only, one trigger silently never fires, BullMQ installed and unused.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#forms">10. Forms &amp; Funnels</a><span class="chip" data-level="partial">Partial</span></div><div class="take">Form builder is real and wired end-to-end; funnel builder is a single vertical block stack, not the promised page builder.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#payments">11. Payments</a><span class="chip" data-level="gap">Gap</span></div><div class="take">No processor is wired anywhere. Every rupee "received" is an admin typing it in — and it's disconnected from the real ledger.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#conversations">12. Conversations</a><span class="chip" data-level="partial">Partial</span></div><div class="take">Email and SMS are surprisingly real (Resend/Twilio, send-only). WhatsApp is genuinely excellent. The inbox itself has no read state, assignment, or realtime.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#bookings">13. Bookings</a><span class="chip" data-level="partial">Partial</span></div><div class="take">A real public self-book flow — but one slot type, manual per-day generation, and it never fires automation.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#integrations">14. Integrations</a><span class="chip" data-level="gap">Gap</span></div><div class="take">WATI is the only true bidirectional integration. No payment processor, no calendar sync.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#reporting">15. Reporting</a><span class="chip" data-level="gap">Gap</span></div><div class="take">Every number lives on a hardcoded page. No report builder, no custom dashboards, no self-serve question-asking.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#mobile">16. Mobile</a><span class="chip" data-level="partial">Partial</span></div><div class="take">The shell and half the tables genuinely adapt below 720px; the other half (17 files) is scroll-only. Kanban has no mobile story at all.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#performance">17. Performance</a><span class="chip" data-level="partial">Partial</span></div><div class="take">Disciplined batched queries server-side; undermined by unbounded client fetches on the two lists most likely to grow.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#a11y">18. Accessibility</a><span class="chip" data-level="solid">Solid</span></div><div class="take">The strongest layer in the app — real focus states, sr-only labels, semantic tables. Kanban is mouse-only with no fallback.</div></div>
+        <div class="score-cell"><div class="row1"><a href="#design">19. Design System</a><span class="chip" data-level="partial">Partial</span></div><div class="take">Motion timing matches the spec to the millisecond; token discipline collapses specifically in the Agreements module.</div></div>
+      </div>
+    </section>
+
+    <!-- 1 ONBOARDING -->
+    <section id="onboarding" class="layer">
+      <div class="layer-head"><span class="num">01</span><h2>Onboarding &amp; Provisioning</h2><span class="chip" data-level="partial">By design, thin in execution</span></div>
+      <p class="layer-lede">There is no self-serve signup, and that's correct for a 5-seat internal tool — the gap is what happens in the sixty seconds after someone accepts an invite.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Public sign-up is hard-disabled: <code class="cite">auth.ts:35-37</code> sets <code class="cite">disableSignUp: true</code>, with a comment stating admin-only provisioning is intentional.</li>
+            <li>Provisioning is invite-token based (<code class="cite">UserInvite</code> model, <code class="cite">schema.prisma:1828-1841</code>) with compare-and-set redemption to block double-accept races (<code class="cite">invite-actions.ts:81-84</code>).</li>
+            <li>A static, role-filtered <b>App Guide</b> page exists (<code class="cite">app/(app)/guide/page.tsx</code>) — reference material, not a triggered sequence.</li>
+            <li>Suspension is enforced at two independent layers (route guard <em>and</em> a better-auth session-creation hook) — unusually careful for an internal tool.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>Zero first-run tutorial, empty-state walkthrough, or setup wizard anywhere in the codebase (grepped: onboard/tutorial/walkthrough — no matches).</li>
+            <li>A new Head or User lands directly on the home page with no context for what the five nav groups mean or what's expected of them today.</li>
+            <li>No visible password-reset/forgot-password flow alongside login — recovery appears to be admin-mediated only, same as provisioning.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li><b>Post-invite first-touch</b> — on first login, route new users through a 3-screen "here's what you'll do here" tied to their specific role, not the generic guide page. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+            <li><b>Contextual empty states</b> — every empty list in the app should end in one primary action, not a blank table (several currently do neither, see §7 and §11). <span class="tag mi">Med impact</span><span class="tag lo">Low effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Irrelevant framing for this product's actual scope — Attio/HubSpot-style self-serve trial funnels are solving a different problem (converting anonymous signups) than this app has. The relevant comparison is internal-tool onboarding: Linear's "invite → role-scoped welcome checklist → first real object created in under 2 minutes" pattern is the right model to imitate, not a marketing-site signup flow.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2 IA & NAV -->
+    <section id="ia-nav" class="layer">
+      <div class="layer-head"><span class="num">02</span><h2>Information Architecture &amp; Navigation</h2><span class="chip" data-level="partial">Well-built, spec drift</span></div>
+      <p class="layer-lede">The nav engine is more sophisticated than most internal tools ever get — founder-configurable, server-enforced — but it's already drifted from its own written spec.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Single source of truth: <code class="cite">sections.ts</code> defines a 25-item catalogue with role lists, merged at render with a founder-editable override stored as JSON on <code class="cite">AppSetting</code> — reorderable from <code class="cite">/console</code> without a deploy.</li>
+            <li><code class="cite">sectionAllowed()</code> (<code class="cite">sections.ts:159-170</code>) is re-checked independently by <code class="cite">requireSection()</code> on every page <em>and</em> inside every mutating server action — not a UI-only gate.</li>
+            <li>Desktop rail collapses to icons under 1100px and persists the choice to <code class="cite">localStorage</code>; mobile hides it behind a hamburger drawer with scroll-lock and Esc-to-close (<code class="cite">AppShell.tsx:71-86</code>).</li>
+            <li>Active state matches DESIGN_SYSTEM §5.2 exactly: soft-blue background, accent text, 3px left accent bar.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li><b>No breadcrumbs anywhere</b> in the app — a zero-result grep across the whole tree.</li>
+            <li>Code has <b>five</b> roles (<code class="cite">ADMIN/HEAD/USER/STUDENT/TUTOR</code>, <code class="cite">sections.ts:16-18</code>) against BUILD_SPEC's documented three — STUDENT and TUTOR are unwritten reality.</li>
+            <li><b>Pipeline access regressed from spec</b>: BUILD_SPEC §2.1 grants Head "View"; the live role list is <code class="cite">["ADMIN","USER"]</code> (<code class="cite">sections.ts:54</code>) — Head is redirected out with <code class="cite">?denied=pipeline</code>.</li>
+            <li>DESIGN_SYSTEM's flagship top-bar requirement — the runway pill "visible on every screen" — is coded as <b>Admin-only</b> (<code class="cite">layout.tsx:59-65</code>). The documentation and the build disagree.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li><b>Fix the Pipeline role list</b> — a one-line change in <code class="cite">sections.ts</code> to match the written spec, or update the spec to match reality. Either is a five-minute fix; leaving the mismatch is the wrong outcome. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+            <li>Add a lightweight breadcrumb/section-title pattern on nested routes (<code class="cite">/contacts/[id]</code>, <code class="cite">/automation/[id]</code>) — currently the only way back is the sidebar or browser back. <span class="tag mi">Med impact</span><span class="tag lo">Low effort</span></li>
+            <li>Reconcile the doc: either the runway pill becomes genuinely universal (a role-appropriate summary metric for Head/User), or DESIGN_SYSTEM.md stops claiming universality. <span class="tag mi">Med impact</span><span class="tag lo">Low effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Attio and Linear both treat the nav rail as a live reflection of workspace state (unread counts, record badges) rather than a static list — worth stealing once there's inbox/task volume to justify it. Salesforce's App Launcher and permission-set-driven nav prove the founder-configurable-JSON approach here is directionally right; the missing piece is just breadcrumb-level "where am I" that every one of those products treats as non-negotiable past two nesting levels.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 DASHBOARD -->
+    <section id="dashboard" class="layer">
+      <div class="layer-head"><span class="num">03</span><h2>Dashboard / Home</h2><span class="chip" data-level="partial">Great for one role, thin for the rest</span></div>
+      <p class="layer-lede">BUILD_SPEC's north star — "answers 'are we okay?' in three seconds" — is genuinely achieved, for exactly one of five roles.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>A single server-side <code class="cite">Promise.all</code> (<code class="cite">page.tsx:29-37</code>) fetches FX rate, runway, notifications, gamification, pipeline snapshot and pending payments in one pass — no client waterfall.</li>
+            <li>Admin sees <code class="cite">FounderPulse</code>: month-pace hero, 7-day pipeline deltas, a "needs attention" list, plus a KPI grid (cash runway, pipeline value, wins this month, overdue receivables, live FX).</li>
+            <li>Non-Admin sees <code class="cite">WorkTracker</code> (a personal time tracker) instead of any business KPI — by design per the access matrix, but undocumented as a UX decision in BUILD_SPEC §1.</li>
+            <li><code class="cite">MetricCard</code> faithfully implements the design spec: label, <code class="cite">(i)</code> tooltip, tabular value, delta chip with an <code class="cite">sr-only</code> direction label.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>No date-range picker or pipeline filter on the home page at all — every figure is hard-fixed to "this month."</li>
+            <li>Head sees no Pipeline-value or Wins-this-month card despite the spec entitling them to Pipeline "View" — a second symptom of the §2 access-matrix drift.</li>
+            <li>The runway pill, the one thing DESIGN_SYSTEM insists must be everywhere, isn't on this page for 4 of 5 roles.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Give Head a genuine, scoped "are we okay" view (pipeline health + their own delivery metrics) instead of the personal time-tracker substitute. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Add a date-range control to the KPI grid — even a simple This Month / Last Month / QTD toggle closes a real gap against every benchmark below. <span class="tag mi">Med impact</span><span class="tag mi">Med effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>HubSpot and Salesforce both let every role land on a dashboard scoped to <em>them</em>, not a binary "full view or personal tracker" split — reports and widgets are assignable per user/team by permission, not by an if/else on role. Attio's home feed treats "what changed since you last looked" as the primary object, which this dashboard doesn't attempt at all outside the Admin's "needs attention" list.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 PERMISSIONS -->
+    <section id="permissions" class="layer">
+      <div class="layer-head"><span class="num">04</span><h2>Permissions &amp; Collaboration</h2><span class="chip" data-level="solid">The strongest architecture in the app</span></div>
+      <p class="layer-lede">Two independently-checked, server-enforced authorization layers — sections (what you see) and capabilities (what you can do) — is more rigor than most Series A products ship. Collaboration is the weak half of this pairing.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li><code class="cite">sectionAllowed()</code> and <code class="cite">hasCapability()</code> are pure functions, each with a per-user JSON override (<code class="cite">User.sectionAccess</code>, <code class="cite">User.capabilities</code>) layered over role defaults (<code class="cite">rbac.ts</code>, <code class="cite">capabilities.ts:36-72</code>).</li>
+            <li>Every <code class="cite">*-actions.ts</code> file re-checks its own guard independently of the page that calls it — <code class="cite">middleware.ts</code> deliberately does <em>only</em> a cookie-presence check and documents why (real checks belong server-side, not in middleware).</li>
+            <li>Real assignment (<code class="cite">ContactTask.assignedToId</code>) and a real audit trail (<code class="cite">LeadStageHistory</code>) exist on Contacts.</li>
+            <li><code class="cite">@mention</code> support with notification wiring genuinely exists in the codebase — on <code class="cite">GnPost</code>/<code class="cite">GnComment</code> (the German-Note community feature), not on Contacts or Opportunities.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>The @mention pattern that already exists and already fires notifications was never extended to <code class="cite">ContactNote</code> — an inconsistency, not a missing capability from scratch.</li>
+            <li><code class="cite">Opportunity</code> has no notes/tasks of its own; all collaboration data lives on the parent <code class="cite">Lead</code>, so a deal-specific conversation has nowhere to live.</li>
+            <li>Read-only <code class="cite">*-metrics.ts</code> helpers carry no guard of their own — safe today only because every current caller is already behind a page/action guard; a future direct caller wouldn't be.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Port the existing <code class="cite">mentionedUserIds</code> + notification pattern from GN community onto <code class="cite">ContactNote</code> — the hard part (notification delivery) is already built. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+            <li>Give <code class="cite">Opportunity</code> its own notes, so deal-specific conversation doesn't have to overload the contact record. <span class="tag mi">Med impact</span><span class="tag mi">Med effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Attio's real-time multiplayer cursors and per-record activity feed, and Salesforce's field-level security plus role hierarchy, are both a tier above what's needed here — but the specific pattern worth adopting from both is treating every record (not just Contacts) as a first-class collaboration surface with its own comment thread, not routing everything through one parent object.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 DATA MODEL -->
+    <section id="datamodel" class="layer">
+      <div class="layer-head"><span class="num">05</span><h2>Data Model</h2><span class="chip" data-level="partial">Correct fundamentals, one real drift risk</span></div>
+      <p class="layer-lede">Money is modeled correctly everywhere it matters. The one structural risk is that "which stage is this contact in" now has two independent answers.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>All money fields are <code class="cite">BigInt</code> integer minor-units (<code class="cite">…InrMinor</code>/<code class="cite">…EurMinor</code>) — zero <code class="cite">Float</code> money fields found, matching BUILD_SPEC §3's "never floats" rule.</li>
+            <li><code class="cite">Tag↔Lead</code> is a real Prisma-managed many-to-many, not a string array; <code class="cite">CustomFieldDefinition</code> is genuine metadata-driven EAV (field defs are rows, values live in a <code class="cite">Json</code> blob keyed by field <code class="cite">key</code>).</li>
+            <li>No unified <code class="cite">ActivityLog</code> table exists — the schema itself documents that the timeline is "a read-time merge" of six different tables (<code class="cite">schema.prisma:545-546</code>).</li>
+            <li><code class="cite">Lead.stage</code> (the legacy 18-value enum) and <code class="cite">Opportunity.stageId</code> (the new relational multi-pipeline model) coexist; a <code class="cite">legacyStage</code> bridge field keeps only the one seeded default pipeline in sync.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li><b>Dual stage model is a real drift risk</b> — any second pipeline's stage moves have no write-through to <code class="cite">Lead.stage</code>, so any legacy report reading <code class="cite">Lead.stage</code> silently misses non-default-pipeline activity.</li>
+            <li>No <code class="cite">deletedAt</code>/soft-delete convention anywhere — only ad hoc <code class="cite">archived</code>/<code class="cite">active</code>/<code class="cite">published</code> booleans on a few models; everything else hard-deletes.</li>
+            <li><code class="cite">InvoicePayment.recordedById</code> is a bare, unindexed string with no FK to <code class="cite">User</code> — the one audit-trail field in the schema that breaks the pattern every other "who did this" field follows.</li>
+            <li>Zero tenant scoping anywhere (confirmed: no <code class="cite">orgId</code>/<code class="cite">tenantId</code> on any of the 74 models) — fine for the current single-org scope, a large migration if that scope ever changes.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Extend <code class="cite">legacyStage</code> write-through to <em>every</em> pipeline, or retire <code class="cite">Lead.stage</code> as a read-only projection computed from <code class="cite">Opportunity</code> — pick one, don't leave two ledgers of truth. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Give <code class="cite">InvoicePayment.recordedById</code> a real FK. <span class="tag lo">Low impact</span><span class="tag lo">Low effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Attio's fully generic object/attribute model (any record type, any relation, no schema migration to add a field) is the ceiling here, but it's arguably over-engineering for a single-org tool. The more relevant benchmark is Pipedrive's discipline: one deal, one pipeline, one stage — no parallel legacy model left running alongside the real one.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 CONTACTS -->
+    <section id="contacts" class="layer">
+      <div class="layer-head"><span class="num">06</span><h2>Contacts &amp; Companies</h2><span class="chip" data-level="partial">Real record, thin list tooling</span></div>
+      <p class="layer-lede">The contact detail page is a genuinely good unified timeline. The list view in front of it is a client-side array with a silent ceiling.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Contact detail merges Notes, StageHistory, WhatsApp messages, DiscoveryOutcomes, Bookings and completed Tasks into one real sorted timeline (<code class="cite">contacts-metrics.ts:191-261</code>), not per-type tab silos.</li>
+            <li>Inline edit for owner/custom-fields/tags; modal edit for core identity fields. Companies and Tasks are full CRUD, not stubs.</li>
+            <li>Bulk actions exist for exactly one operation: add-tag (<code class="cite">ContactsTable.tsx:78-98</code>).</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>Server caps the contacts fetch at <code class="cite">LIST_CAP = 1000</code> (<code class="cite">contacts-metrics.ts:33</code>, commented "Phase 1 … server pagination is a later refinement") — beyond that, rows silently vanish from the list with no indicator.</li>
+            <li>Search box is a client-side substring filter over the already-fetched array; the DB-level <code class="cite">search</code> param on <code class="cite">getContactsList</code> exists but is <em>never called</em> by the page — dead code.</li>
+            <li>Exactly one filter (tag). No filter by owner, stage, source, city, or date range, despite all of those being real <code class="cite">Lead</code> fields. No saved views/smart lists anywhere.</li>
+            <li>The Opportunities tab on a contact record is view-only — no inline create or close-deal.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Wire the already-built <code class="cite">search</code> param into the page — this is a ~10-line change turning dead code into real DB search. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+            <li>Replace the hard 1,000-row cap with real cursor pagination before the list silently starts dropping records. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Ship a multi-field filter panel (owner, stage, source, date) plus saved views — the single most-requested CRM primitive this product doesn't have. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Attio's and Close's "smart list" — a saved, shareable, live-updating filter — is the single feature every category leader treats as table stakes and this product is missing entirely. HubSpot's list segmentation and Salesforce's list views both prove the same point from the enterprise end: a CRM without saved filtered views makes every user re-build the same query from memory, every day.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7 PIPELINE -->
+    <section id="pipeline" class="layer">
+      <div class="layer-head"><span class="num">07</span><h2>Pipeline &amp; Deal Management</h2><span class="chip" data-level="gap">A real Kanban, running next to a ghost</span></div>
+      <p class="layer-lede">This is the single most important finding in the whole audit: two separate, disconnected pipeline systems are live in production at once.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li><code class="cite">/opportunities</code> is a real, working Kanban: native HTML5 drag-and-drop (no library — <code class="cite">Board.tsx:123-165</code>), a real stage editor (add/rename/delete via <code class="cite">ManageBoard</code>), and multi-pipeline support with a pipeline switcher.</li>
+            <li><code class="cite">/pipeline</code> is the original Phase-1 dashboard: a bar chart over the legacy 15-value <code class="cite">Lead.stage</code> enum, click-to-view read-only modal — exactly the "read-only chart" the clone spec's own footnote describes, unchanged.</li>
+            <li>Stage totals on the Kanban recompute server-side on every load, not incrementally — a full board revalidate follows every card move, with no optimistic UI (<code class="cite">opportunities-actions.ts:104-106</code>).</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li><b>The two pipelines don't talk to each other</b> beyond one bridge field for the single seeded default pipeline (§5) — a rep working the Kanban board and a founder reading the Pipeline dashboard can be looking at different realities.</li>
+            <li>The Kanban's empty state literally reads <em>"Seed the Sales pipeline with <code class="cite">npm run db:crm</code>"</em> (<code class="cite">Board.tsx:87</code>) — a developer setup instruction, visible in the live product.</li>
+            <li>No optimistic drag feedback — every card move waits for a full server round-trip before settling, which will read as laggy under real usage.</li>
+            <li>Stages can be added/renamed/deleted but not reordered; deleting a stage or pipeline cascades its opportunities behind only a confirm dialog, no undo.</li>
+            <li>No probability/weighted-forecast field anywhere in the schema — "pipeline value" is a flat sum, not a forecast.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Kill the dev-instruction empty state before anyone external ever sees it — a one-line copy fix. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+            <li>Pick a direction on the split: either retire <code class="cite">/pipeline</code>'s chart in favor of a stage-distribution view built on <code class="cite">Opportunity</code>, or make the legacy chart read from the same data. Two disconnected "sources of truth" for deal stage is the highest-risk finding in this whole audit. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Add optimistic UI to the drag interaction — move the card locally, reconcile on response. <span class="tag mi">Med impact</span><span class="tag lo">Low effort</span></li>
+            <li>Add a probability field per stage to make "pipeline value" mean something closer to forecast. <span class="tag mi">Med impact</span><span class="tag mi">Med effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Pipedrive's entire product thesis is "one visual pipeline, always accurate, forces a next action on every deal" — this app currently has the visual pipeline but not the single-source-of-truth discipline. Attio's boards use optimistic, sub-100ms card moves with server reconciliation in the background; that's the interaction-latency bar to clear once the data model is unified.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 SEARCH -->
+    <section id="search" class="layer">
+      <div class="layer-head"><span class="num">08</span><h2>Search &amp; Filtering</h2><span class="chip" data-level="gap">Doesn't exist as a product surface</span></div>
+      <p class="layer-lede">There is no way, anywhere in this app, to search for something without first knowing which page it lives on.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Search is siloed per page — Contacts has its own box, every <code class="cite">DataTable</code>-based list has its own independent "Filter…" box. No shared component, no shared index.</li>
+            <li>Every one of those filters is a client-side substring match over an already-fully-fetched, in-memory array.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>Confirmed absent by grep across the entire tree: no <code class="cite">cmdk</code>, no command palette, no <code class="cite">⌘K</code>/<code class="cite">Ctrl+K</code> handler, and <code class="cite">cmdk</code> is not even a <code class="cite">package.json</code> dependency.</li>
+            <li>No cross-entity search — a phone number typed anywhere can't surface the matching contact <em>and</em> its opportunity <em>and</em> its invoice in one place.</li>
+            <li>No keyboard shortcut to invoke search from any screen in the app.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>One global <code class="cite">⌘K</code> palette across Contacts, Opportunities, and Invoices — even a simple client-side fuzzy match over pre-fetched summaries would beat the current zero. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Once that exists, add recent/frequent record shortcuts — the highest-leverage addition for a founder who touches the same 20 contacts daily. <span class="tag mi">Med impact</span><span class="tag lo">Low effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Attio, Linear and Close all treat <code class="cite">⌘K</code> as the primary navigation method, not a nice-to-have — Close in particular is built around "never touch the mouse to find a lead." This is the single largest missing product surface identified in this entire audit, and one of the cheapest to add a first version of.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9 AUTOMATION -->
+    <section id="automation" class="layer">
+      <div class="layer-head"><span class="num">09</span><h2>Automation &amp; Workflows</h2><span class="chip" data-level="partial">A real engine, linear only</span></div>
+      <p class="layer-lede">This is not a mockup — triggers fire, actions execute, waits resume. It just can't branch, and one documented trigger is wired into the UI but never actually fires.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Real execution: <code class="cite">emitTrigger()</code> creates an enrollment and synchronously runs actions inline (<code class="cite">automation.ts:19-44</code>); a <code class="cite">WAIT</code> action parks the enrollment via <code class="cite">nextRunAt</code>, resumed by a cron-polled <code class="cite">/api/cron/workflows</code> route.</li>
+            <li>Seven real action types (send email/SMS, add/remove tag, move stage, create task, wait) and five live trigger types (form submitted, tag added, stage changed, contact created, invoice paid) are wired into actual server actions across Contacts, Opportunities, Forms and Payments.</li>
+            <li>Enrollment counts (Total/Active) on the workflow list are real DB aggregates, not decoration.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li><b><code class="cite">BOOKING_CREATED</code> is a dead trigger</b> — it's defined in the schema and selectable in the workflow-trigger UI, but no <code class="cite">emitTrigger("BOOKING_CREATED", …)</code> call exists anywhere in <code class="cite">booking-actions.ts</code>. A founder can build a "send reminder on booking" workflow today that will never once fire.</li>
+            <li>The builder is a top-to-bottom reorderable list, not a canvas — and the schema backs that up: actions are a flat, sequential <code class="cite">Json</code> array with no branch/condition field anywhere.</li>
+            <li><code class="cite">bullmq</code> is a listed dependency and is never imported anywhere in <code class="cite">src</code> — every delayed step depends entirely on an external cron actually hitting the workflow route on schedule, with no in-process fallback if it doesn't.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Add the missing <code class="cite">emitTrigger("BOOKING_CREATED", …)</code> call — a single line closes a gap between what the product claims and what it does. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+            <li>Put the already-installed BullMQ to work as the actual scheduler for <code class="cite">WAIT</code> steps, instead of depending entirely on external cron reliability. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Add one branch action type (if tag / if stage) — doesn't need a visual canvas yet, just an <code class="cite">IF</code> action that skips to a labeled step. <span class="tag mi">Med impact</span><span class="tag hi">High effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>HubSpot's and Salesforce Flow's visual branching canvases are the ceiling, but the more immediately relevant gap is reliability: GoHighLevel (the very product this module was cloned from) guarantees delayed actions fire via a real job queue, not a hope that an external cron is configured correctly — which is exactly the risk this app currently carries.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 10 FORMS & FUNNELS -->
+    <section id="forms" class="layer">
+      <div class="layer-head"><span class="num">10</span><h2>Forms &amp; Funnels (Sites)</h2><span class="chip" data-level="partial">Forms: real. Funnels: one dimension short</span></div>
+      <p class="layer-lede">Form submissions genuinely flow through to contacts, opportunities and workflows exactly as the connectivity map promised. The page builder stops at "a stack of blocks" — no rows, no columns.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Form submit → <code class="cite">upsertIntakeLead</code> (creates/updates the contact) → optional tag → optional <code class="cite">Opportunity</code> creation → <code class="cite">emitTrigger("FORM_SUBMITTED")</code>, all in one server action (<code class="cite">forms-actions.ts:120-229</code>) — the full connectivity chain the clone spec asked for, working.</li>
+            <li>Public form/funnel hosting is real, not a stub: <code class="cite">/f/[slug]</code> and <code class="cite">/p/[slug]/[step]</code> render server-side, gate on <code class="cite">published</code>, and record real page-view metrics.</li>
+            <li>Funnel builder supports 10 block types (heading, image, button, form, video, etc.) with type-specific fields, reordered via up/down buttons.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>No rows/sections/columns — blocks stack in a single vertical column only; no visual/WYSIWYG canvas, editing is a form-field panel with a separate "Preview" tab.</li>
+            <li>No embeddable widget/script for third-party sites — only "copy link," despite forms being designed to also embed on external pages.</li>
+            <li>No calendar/payment block type — booking and checkout can't be embedded directly into a funnel step.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Add a 2-column row container as the one missing layout primitive — closes most of the visual gap without building a full drag-drop canvas. <span class="tag hi">High impact</span><span class="tag hi">High effort</span></li>
+            <li>Ship an <code class="cite">&lt;iframe&gt;</code> embed snippet for forms — a small addition that unlocks external-site lead capture, which is the whole point of a forms product. <span class="tag mi">Med impact</span><span class="tag lo">Low effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>HubSpot's and Unbounce's drag-drop page builders (real canvas, snap-to-grid rows/columns, live WYSIWYG) are a full tier above this — but the underlying connectivity (submission → CRM → workflow) this app already has is the harder engineering problem and it's already solved. The visual gap is real but is the cheaper of the two problems to close.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11 PAYMENTS -->
+    <section id="payments" class="layer">
+      <div class="layer-head"><span class="num">11</span><h2>Payments, Invoicing &amp; Billing</h2><span class="chip" data-level="gap">No money actually moves through this yet</span></div>
+      <p class="layer-lede">The single most consequential finding in the audit: Payments is a fully-realized bookkeeping UI wrapped around zero payment infrastructure, running in parallel with — and disconnected from — the app's real double-entry ledger.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Invoice editor, line items from a Products catalog, tax/discount fields, PDF generation (<code class="cite">@react-pdf/renderer</code>), estimate→invoice conversion — all real (<code class="cite">payments-actions.ts</code>, <code class="cite">InvoiceEditor.tsx</code>).</li>
+            <li>"Pay online" literally says <em>"Online payment coming soon"</em> on the public invoice page (<code class="cite">app/i/[token]/page.tsx:76</code>). "Record payment" is a manual form — an admin typing in what they were told was paid.</li>
+            <li>By contrast, <b>Finance's double-entry engine is real and rigorous</b>: every income/expense write posts a balanced journal entry in the same DB transaction (<code class="cite">finance-actions.ts:16-24</code>), with a hash-chained audit trail and an enforced Debits=Credits invariant on <code class="cite">/ledger</code>.</li>
+            <li><b>Agreements (e-sign) is the most production-grade module in the app</b> — a self-built, OTP-verified signing flow with a DB-trigger-enforced immutable seal and content/PDF hashes, not a simulation.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li><b>No payment processor is integrated anywhere</b> — a full-repo grep for stripe/razorpay/paypal/webhook turns up zero gateway code; the schema's <code class="cite">InvoicePayment.provider</code>/<code class="cite">externalId</code> fields are unused placeholders explicitly commented "future."</li>
+            <li><b>Payments and Finance are two disconnected books for the same event.</b> <code class="cite">payments-actions.ts</code> never references the ledger — there isn't even a <code class="cite">LedgerSourceType</code> enum value for <code class="cite">INVOICE</code>/<code class="cite">PAYMENT</code>. An invoice marked paid in Payments produces no journal entry and never reaches the Cash Health runway math, which instead reads exclusively from Finance's own <code class="cite">PendingPayment</code> model.</li>
+            <li>Subscriptions have no billing engine behind them — the empty state admits it: <em>"billing runs manually until a processor is wired."</em> <code class="cite">nextBillingDate</code> is written but never read by any job.</li>
+            <li>"Send" on an invoice only flips a status flag — it doesn't email or deliver anything; the admin must manually copy a link.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li><b>Reconcile the two books before anything else in this section</b> — add <code class="cite">INVOICE</code>/<code class="cite">PAYMENT</code> to <code class="cite">LedgerSourceType</code> and post every <code class="cite">InvoicePayment</code> into the real ledger in the same transaction Finance already uses as its pattern. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Wire "Send" to actually deliver the invoice (email, using the Resend integration that already exists — see §12). <span class="tag mi">Med impact</span><span class="tag lo">Low effort</span></li>
+            <li>Integrate one real processor (Razorpay is the natural fit for an India-based, INR-primary business) for online payment + webhook-confirmed status — the schema already has the seam (<code class="cite">provider</code>/<code class="cite">externalId</code>) waiting for it. <span class="tag hi">High impact</span><span class="tag hi">High effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Every category-leading CRM's payments module (HubSpot Payments, Pipedrive+Stripe, GoHighLevel itself — the very product this was cloned from) has one non-negotiable property this doesn't yet have: a webhook confirms money actually moved, and that confirmation is the only thing allowed to change an invoice's paid status. Until that exists, this is a beautifully-modeled bookkeeping form, not a payments product.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 12 CONVERSATIONS -->
+    <section id="conversations" class="layer">
+      <div class="layer-head"><span class="num">12</span><h2>Conversations &amp; Messaging Channels</h2><span class="chip" data-level="partial">Two real surprises, one mature channel, thin inbox</span></div>
+      <p class="layer-lede">The clone spec's own inventory says Email is "none today" — that's now false. The bigger gap is that the inbox wrapped around these channels doesn't behave like an inbox yet.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li><b>Email is real</b>: <code class="cite">lib/email.ts:70-94</code> posts to the actual Resend API, fail-closed behind <code class="cite">EMAIL_ENABLED</code> + an API key, with every attempt logged as a <code class="cite">Message</code> row.</li>
+            <li><b>SMS is real</b>: <code class="cite">lib/sms.ts:70-96</code> posts to the actual Twilio API with the same fail-closed pattern.</li>
+            <li><b>WhatsApp/WATI is the most mature channel in the product</b> — template catalog synced live from WATI, automatic opt-out on "STOP," a six-touchpoint reminder cadence with idempotency throttling, a full inbound webhook, and a reconciliation pass to correct stale delivery statuses.</li>
+            <li>The inbox genuinely merges <code class="cite">Message</code> and <code class="cite">WhatsAppMessage</code> into one thread list per contact (<code class="cite">messaging-metrics.ts:19-80</code>) — not WhatsApp-only under the hood.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>Email and SMS are <b>send-only</b> — no inbound webhook route exists for either, so a lead's email reply or SMS reply is never captured. Only WhatsApp is bidirectional.</li>
+            <li>The unified composer only sends Email/SMS — replying to a WhatsApp thread still requires leaving Conversations for the separate <code class="cite">/whatsapp</code> page.</li>
+            <li>No read/unread state, no assign-to-user field on <code class="cite">Message</code>, and no realtime — a new reply won't appear until the page is reloaded.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Add WhatsApp to the unified composer — the send function already exists (<code class="cite">whatsapp.ts</code>); this is UI wiring, not new backend work. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+            <li>Add Resend and Twilio inbound webhooks, mirroring the WATI pattern that already works — this is the single change that would make Conversations a real unified inbox instead of a merged read-only view for two of three channels. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Add <code class="cite">read</code>/<code class="cite">assignedToId</code> fields and light polling (or SSE) for new-message detection. <span class="tag mi">Med impact</span><span class="tag mi">Med effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Close's entire product identity is a merged, real-time, assignable inbox across every channel from one screen — that's the exact bar this section needs to clear. HubSpot's Conversations inbox and Intercom both treat inbound capture as the whole point of a shared inbox; a send-only "inbox" for 2 of 3 channels is a half-built version of the category's baseline feature.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 13 BOOKINGS -->
+    <section id="bookings" class="layer">
+      <div class="layer-head"><span class="num">13</span><h2>Calendars &amp; Bookings</h2><span class="chip" data-level="partial">A real self-book flow, one slot type only</span></div>
+      <p class="layer-lede">The public booking page genuinely works end-to-end — it just can't do anything GoHighLevel's calendar types do, and it never tells the automation engine a booking happened.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>A real week-grid calendar (<code class="cite">bookings/page.tsx:190-246</code>) with color-coded booked/open/blocked cards, plus a separate flat-list tab.</li>
+            <li>The public page transactionally claims a slot, upserts the lead, creates the booking, advances <code class="cite">Lead.stage</code>, and fires a WhatsApp confirmation — one real, working self-serve flow (<code class="cite">booking-actions.ts:97-201</code>).</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>Only one hardcoded 30-minute "discovery call" slot type exists — no round-robin, collective, or class-style calendars, and no buffer/min-notice/max-advance window.</li>
+            <li>Availability is generated <b>one date at a time</b> by an admin — no recurring weekly availability rule.</li>
+            <li><code class="cite">AppointmentSlot.assignedToId</code> exists in the schema but is dead — never read, set, or filtered on anywhere, so there's no real per-team-member calendar despite the column existing.</li>
+            <li><b><code class="cite">BOOKING_CREATED</code> never fires</b> (cross-referenced in §9) — a new booking cannot trigger any automation workflow today.</li>
+            <li>No Google/Outlook/ICS sync; timezone handling is a static IST/CET display, not actual visitor-timezone detection.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Fire <code class="cite">BOOKING_CREATED</code> from <code class="cite">submitBooking()</code> — same one-line fix as §9, and it unlocks every booking-triggered reminder workflow at once. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+            <li>Add a recurring weekly-availability rule so slots don't need manual daily generation. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Detect visitor timezone client-side on the public booking page. <span class="tag mi">Med impact</span><span class="tag lo">Low effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Calendly-grade products (and GoHighLevel's own calendar module, the direct source here) treat recurring availability, buffers, and multiple bookable event types as baseline, not advanced features. The one-slot-type, one-day-at-a-time model this app has today is roughly where most booking tools started five years ago.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 14 INTEGRATIONS -->
+    <section id="integrations" class="layer">
+      <div class="layer-head"><span class="num">14</span><h2>Integrations</h2><span class="chip" data-level="gap">One real integration, everything else is a seam waiting to be filled</span></div>
+      <p class="layer-lede">Rolling up the channel-by-channel findings above: this app has exactly one deep, bidirectional third-party integration.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li><b>WATI (WhatsApp)</b> — deep, bidirectional, production-grade (§12).</li>
+            <li><b>Resend (Email) and Twilio (SMS)</b> — real, but outbound-only (§12).</li>
+            <li>Per the clone-spec inventory, a <b>Meta lead-ads webhook</b> and a legacy <b>FlexiFunnels intake webhook</b> predate the CRM module and are described as already working (<code class="cite">api/leads/</code>) — inherited from the pre-CRM system, not independently re-verified in this pass.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li><b>No payment processor</b> — the single highest-value missing integration (§11).</li>
+            <li><b>No calendar sync</b> — no Google/Outlook/ICS anywhere (§13).</li>
+            <li>No CRM-side webhook/HTTP action type in the automation engine (§9) — there's no way for this app to notify <em>another</em> system when something happens here.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Sequence integrations by leverage, not by what's easiest: payment processor first (unblocks real revenue tracking), calendar sync second (removes the last manual-entry step from bookings). <span class="tag hi">High impact</span><span class="tag hi">High effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>The category leaders differentiate on breadth (HubSpot/Salesforce app marketplaces, hundreds of integrations) — irrelevant at this product's current scale. The relevant benchmark is depth on the handful that matter: this app's WATI integration is already at that bar. The task is bringing payments and calendar to the same standard, not adding a marketplace.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 15 REPORTING -->
+    <section id="reporting" class="layer">
+      <div class="layer-head"><span class="num">15</span><h2>Reporting &amp; Analytics</h2><span class="chip" data-level="gap">Every number lives on a page someone hardcoded</span></div>
+      <p class="layer-lede">The KPI cards that do exist are genuinely well-built. There is no way to ask the data a question nobody anticipated.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Home page KPI grid, a runway gauge on Cash Health, a trial-balance view on <code class="cite">/ledger</code>, and a dedicated Conversion Funnel report (Awareness→Leads→Calls→Proposals→Enrollments) with a weakest-stage-vs-3-month-norm alert.</li>
+            <li>The Conversion Funnel report is fed by a <b>weekly manual-entry form</b> with computed "auto" hints the admin can override (<code class="cite">SnapshotForm.tsx</code>) — a hand-maintained KPI ledger, not a live pipe.</li>
+            <li>Every one of these is a distinct, hardcoded page and query — none share a report-definition layer.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>No custom report builder, no saved/shareable custom dashboards, no ad hoc "group opportunities by source and show win rate" capability anywhere.</li>
+            <li>The one cross-functional analytics view (Conversion Funnel) still requires a human to type in two fields (awareness reach, ghosted downloads) every week — a real automation opportunity going unaddressed.</li>
+            <li>No export/scheduled-report capability beyond the per-table CSV export buttons noted in the design system.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>A minimal "pivot" report — pick an object (Contacts/Opportunities/Invoices), a group-by field, an aggregate — covers most of what a founder would otherwise ask an engineer for. <span class="tag hi">High impact</span><span class="tag hi">High effort</span></li>
+            <li>Automate the two remaining manual fields in the weekly funnel snapshot if their source (Meta/IG/YT dashboards) exposes any API. <span class="tag mi">Med impact</span><span class="tag mi">Med effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>HubSpot's and Salesforce's custom report builders are the clear ceiling — drag any field, any filter, any chart type, save and share. Even a lightweight version of that (Pipedrive's Insights is a reasonable minimum bar) would eliminate the majority of "can you pull me a number" requests this app currently routes to an engineer by default.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 16 MOBILE -->
+    <section id="mobile" class="layer">
+      <div class="layer-head"><span class="num">16</span><h2>Mobile Responsiveness</h2><span class="chip" data-level="partial">The pattern exists — it's just not applied everywhere</span></div>
+      <p class="layer-lede">This isn't a case of no mobile design. It's a case of a correct mobile design existing in one table component and not the other.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>The shell itself is genuinely responsive: real mobile drawer with scrim, focus trap, and Esc-to-close; desktop rail auto-collapses under 1100px.</li>
+            <li><code class="cite">DataTable.tsx</code> implements exactly what DESIGN_SYSTEM §7 asks for — a real <code class="cite">&lt;table&gt;</code> above 720px and a stacked key-value <code class="cite">&lt;ul&gt;</code> below it, on a purpose-built <code class="cite">tab:</code> breakpoint. 15 files use it correctly.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li><code class="cite">TableShell</code> (<code class="cite">ui/kit.tsx:240-263</code>) — a <em>second</em> table component — is <code class="cite">overflow-x-auto</code> and nothing else, with no mobile fallback. It's used by <b>17 files</b>, including Contacts and Companies (the two components this pass was specifically asked to check).</li>
+            <li>The Opportunities Kanban has zero mobile treatment — fixed-width columns in a horizontal scroll, full stop.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Migrate the 17 <code class="cite">TableShell</code> call sites to <code class="cite">DataTable</code> — the correct component already exists; this is a mechanical, low-risk rollout, not new design work. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+            <li>Give the Kanban board a real mobile mode — a single-column "my stage" view with a stage switcher, rather than horizontal scroll across five 288px columns. <span class="tag mi">Med impact</span><span class="tag mi">Med effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Pipedrive's mobile app turns the Kanban into a swipeable card stack rather than attempting a literal miniaturized board — the right model to follow once mobile Kanban is prioritized. For tables, this app's own <code class="cite">DataTable</code> component is already at the standard HubSpot and Attio hit; the fix here is consistency, not invention.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 17 PERFORMANCE -->
+    <section id="performance" class="layer">
+      <div class="layer-head"><span class="num">17</span><h2>Performance</h2><span class="chip" data-level="partial">Disciplined queries, undisciplined payload size</span></div>
+      <p class="layer-lede">The server layer shows real engineering discipline. The two lists most likely to grow large are the two shipping every row to the client today.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>No N+1 pattern found anywhere in <code class="cite">src/server</code> — metrics loaders consistently batch with <code class="cite">Promise.all</code> rather than looping awaits.</li>
+            <li>Bounded fetches exist and are used correctly elsewhere (e.g. WhatsApp history caps at 300/200 rows).</li>
+            <li>CSV export is genuinely code-split via dynamic <code class="cite">import("papaparse")</code> — the one lazy-loading pattern in the app, applied consistently across three components.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li>Contacts ships up to 1,000 rows to a client component that then filters/sorts/paginates entirely in <code class="cite">useMemo</code> — real work happening in the browser that a database index should be doing.</li>
+            <li>The Opportunities board fetches <b>every</b> open/won/lost deal with no cap at all (<code class="cite">opportunities-metrics.ts:70-82</code>) and renders each as a plain DOM card — no windowing.</li>
+            <li>Zero <code class="cite">next/image</code> usage anywhere — 11 files use raw <code class="cite">&lt;img&gt;</code>, including the app-wide <code class="cite">Avatar</code> component, with no lazy-loading or automatic optimization.</li>
+            <li>No <code class="cite">next/dynamic</code> anywhere — heavy client modules (signature pad, resume editor, invoice editor) ship fully in their route's initial bundle.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Move Contacts filtering/sorting server-side and paginate for real — directly unblocks the search fix in §6 and §8 too. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Cap and paginate the Opportunities board query before a real pipeline (thousands of deals, per the original Synamate account's 10,499 opportunities) makes this page unusable. <span class="tag hi">High impact</span><span class="tag mi">Med effort</span></li>
+            <li>Swap <code class="cite">Avatar</code> and other repeated <code class="cite">&lt;img&gt;</code> usages to <code class="cite">next/image</code> — small, mechanical, real payload win. <span class="tag lo">Low impact</span><span class="tag lo">Low effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>Attio's lists stay responsive into the tens of thousands of records specifically because filtering/sorting never leaves the server — this app's own metrics layer already proves the team knows how to write that query, it's just not applied to the two screens that need it most.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 18 A11Y -->
+    <section id="a11y" class="layer">
+      <div class="layer-head"><span class="num">18</span><h2>Accessibility</h2><span class="chip" data-level="solid">The best-executed layer in the app</span></div>
+      <p class="layer-lede">This is worth saying plainly: the accessibility floor documented in DESIGN_SYSTEM §7 is largely real, not aspirational — a genuinely uncommon result for an internal tool. One interaction is a real exception.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Icon-only buttons are labeled <em>by construction</em> — the shared <code class="cite">IconButton</code> component requires a <code class="cite">label</code> prop wired to both <code class="cite">aria-label</code> and <code class="cite">title</code>; no bare unlabeled icon button was found anywhere sampled.</li>
+            <li>A single global <code class="cite">:focus-visible</code> ring (<code class="cite">globals.css:257-261</code>) matches the spec's 2px primary-color requirement app-wide.</li>
+            <li>Signal is never color-only, consistently: every status badge and delta chip pairs its color with a text label or an <code class="cite">sr-only</code> span — including the dashboard's up/down delta arrows.</li>
+            <li>Modals and confirm dialogs implement real focus-trapping, Esc-to-close, and focus restoration to the trigger element — above what most internal tools bother to build.</li>
+            <li>Tables are semantic <code class="cite">&lt;table&gt;</code> markup with <code class="cite">scope="col"</code> and <code class="cite">aria-sort</code> on sortable headers.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li><b>The Kanban board is mouse-only with no fallback</b> — cards are plain <code class="cite">&lt;div draggable&gt;</code> elements with no <code class="cite">role</code>, no <code class="cite">tabIndex</code>, no <code class="cite">onKeyDown</code>. Worse, the card's own edit modal doesn't expose a Stage field at all (only Status) — there is currently no keyboard-operable way to move a deal between stages, full stop.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>Add a "Move to stage" select to the opportunity edit modal — closes the one real accessibility blocker in the app, and doubles as the optimistic-UI fix and the mobile-Kanban fix noted in §7 and §16. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>This layer is already close to the bar Salesforce (which has government/enterprise accessibility obligations) sets. The one gap — keyboard-operable drag-and-drop — is exactly the pattern Atlassian's <code class="cite">pragmatic-drag-and-drop</code> and most modern DnD libraries solve by pairing native drag with an explicit keyboard-triggered move menu; worth adopting that pattern rather than hand-rolling one.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 19 DESIGN -->
+    <section id="design" class="layer">
+      <div class="layer-head"><span class="num">19</span><h2>Visual Design System &amp; Micro-interactions</h2><span class="chip" data-level="partial">Faithful at the core, leaks at the edges</span></div>
+      <p class="layer-lede">The motion spec is followed to the millisecond. Token discipline is strong in the shared component kit and breaks down in exactly one feature module.</p>
+      <div class="layer-grid">
+        <div class="block current">
+          <h3>Current state</h3>
+          <ul>
+            <li>Motion timing matches DESIGN_SYSTEM §6 exactly: 120ms hover, 160ms modal entrance, 200ms toast slide, with <code class="cite">prefers-reduced-motion</code> respected globally.</li>
+            <li>Toast and confirm dialogs run through one shared <code class="cite">FeedbackHost</code> singleton everywhere sampled — no page rolls its own <code class="cite">window.confirm()</code> or ad hoc toast.</li>
+            <li>The shared component kit explicitly documents <em>why</em> it uses <code class="cite">text-on-accent</code> instead of hardcoded <code class="cite">text-white</code> (dark-mode contrast) — the reasoning from DESIGN_SYSTEM §1.4 made it into code comments.</li>
+          </ul>
+        </div>
+        <div class="block gaps">
+          <h3>Gaps &amp; weaknesses</h3>
+          <ul>
+            <li><b>The Agreements/e-sign module is the one place token discipline breaks</b> — hardcoded <code class="cite">text-white</code> on hand-rolled buttons in four files (<code class="cite">agreements/page.tsx:32</code>, <code class="cite">AgreementActions.tsx:112,189</code>, <code class="cite">AgreementForm.tsx:210</code>) is the exact 2.72:1 dark-mode contrast failure the design doc warns about by name.</li>
+            <li>Off-scale type (<code class="cite">text-lg</code>, arbitrary <code class="cite">text-[15px]</code>/<code class="cite">text-[13px]</code>) recurs in the same Agreements pages plus <code class="cite">daily-log</code> and <code class="cite">german-note</code> — the design system's own rule ("if you're typing <code class="cite">text-lg</code>, you're off the scale") is violated in exactly the modules built outside the core kit components.</li>
+          </ul>
+        </div>
+        <div class="block upgrade">
+          <h3>Upgrade path</h3>
+          <ol>
+            <li>A one-pass token-compliance sweep of the Agreements module — replace hardcoded <code class="cite">text-white</code> with <code class="cite">text-on-accent</code> and off-scale sizes with the type-scale tokens. Small, mechanical, and closes the one real dark-mode contrast bug found in this audit. <span class="tag hi">High impact</span><span class="tag lo">Low effort</span></li>
+          </ol>
+        </div>
+        <div class="block benchmark">
+          <h3>Top 1% benchmark</h3>
+          <p>What this app already does — a written, versioned design system with contrast math done up front, and code that mostly follows it — is exactly the practice that separates Linear/Attio-caliber products from everyone else. The gap here isn't the system; it's enforcement. A Tailwind lint rule banning raw <code class="cite">text-white</code>/arbitrary-value classes outside the kit would have caught every violation in this section automatically.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROADMAP -->
+    <section id="roadmap" class="roadmap">
+      <h2>The roadmap</h2>
+      <p class="dek">Sequenced for <b>sharpening the internal tool as it exists today</b> — five seats, one company, GoHighLevel replacement. If the actual goal is productizing this into a sellable multi-tenant CRM, everything in "Long-Term Bets" gets reordered in front of a much bigger, unlisted item: tenant scoping across all 74 models plus a billing/self-serve layer. Decide which future this is before committing engineering time past the Quick Wins.</p>
+      <div class="road-cols">
+        <div class="road-col quick">
+          <h3>Quick Wins</h3>
+          <div class="horizon">Days · mechanical or single-line fixes</div>
+          <ol>
+            <li><b>Fix Head's Pipeline access</b> to match BUILD_SPEC's documented "View" — one role-array edit in <code class="cite">sections.ts</code>.</li>
+            <li><b>Wire <code class="cite">emitTrigger("BOOKING_CREATED")</code></b> — unlocks every booking-reminder workflow at once.</li>
+            <li><b>Delete the dev-instruction empty state</b> in the Opportunities board (<code class="cite">Board.tsx:87</code>) before an investor or new hire sees a <code class="cite">npm run</code> command in the product.</li>
+            <li><b>Wire the dead <code class="cite">search</code> param</b> into the Contacts page — turns unused code into real DB search.</li>
+            <li><b>Add EUR-minor fields</b> to Product/Subscription — the dual-currency convention every other money model follows is silently broken here.</li>
+            <li><b>Migrate the 17 <code class="cite">TableShell</code> tables</b> to the already-built <code class="cite">DataTable</code> component for real mobile support.</li>
+            <li><b>Token-compliance sweep</b> of the Agreements module — fixes the one real dark-mode contrast bug found.</li>
+            <li><b>Surface overdue tasks visually</b> — <code class="cite">dueAt</code> exists on <code class="cite">ContactTask</code> and is never rendered as a flag.</li>
+          </ol>
+        </div>
+        <div class="road-col mid">
+          <h3>Mid-Term</h3>
+          <div class="horizon">Weeks · real feature work</div>
+          <ol>
+            <li><b>Global <code class="cite">⌘K</code> search</b> across Contacts, Opportunities and Invoices — the single largest missing surface in the product.</li>
+            <li><b>Saved views / smart lists</b> plus a multi-field filter panel on Contacts.</li>
+            <li><b>Server-side pagination</b> for Contacts and Opportunities — remove the 1,000/unbounded fetch risk before either list grows.</li>
+            <li><b>Reconcile the two pipelines</b> — retire or unify <code class="cite">/pipeline</code>'s legacy chart against <code class="cite">/opportunities</code>'s real Kanban.</li>
+            <li><b>Make Conversations bidirectional</b> — inbound webhooks for Resend/Twilio, WhatsApp send from the unified composer, read/unread + assignment.</li>
+            <li><b>Put BullMQ to work</b> as the real scheduler for delayed workflow steps instead of depending on external cron alone.</li>
+            <li><b>Post Payments into the real ledger</b> — add <code class="cite">INVOICE</code>/<code class="cite">PAYMENT</code> to <code class="cite">LedgerSourceType</code> and stop running two disconnected books.</li>
+            <li><b>Calendar depth</b> — recurring availability, buffers, a second bookable event type.</li>
+            <li><b>Keyboard-operable Kanban</b> — a "Move to stage" control as the accessible fallback to native drag-and-drop.</li>
+          </ol>
+        </div>
+        <div class="road-col long">
+          <h3>Long-Term Bets</h3>
+          <div class="horizon">Quarters · strategic, largest engineering lift</div>
+          <ol>
+            <li><b>A real payment processor</b> (Razorpay/Stripe) with webhook-confirmed status — the highest-leverage single integration; today Payments cannot move money.</li>
+            <li><b>A self-serve report/dashboard builder</b> — every number in the app currently lives on a page an engineer had to write.</li>
+            <li><b>Decide the multi-tenancy question on purpose</b> — either commit to org-scoping across the schema (only worth it if the ambition is to sell this beyond B2 Consultants), or explicitly stop benchmarking the roadmap against multi-tenant SaaS platforms.</li>
+            <li><b>A visual workflow canvas and a real row/column funnel builder</b> — both current builders are list-based stand-ins for what was originally speced.</li>
+            <li><b>An AI layer</b> (lead scoring, reply drafting, next-best-action) — table stakes at the tier this audit benchmarks against now, not a differentiator.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <div class="closing">
+      <p><b>The honest summary:</b> this codebase has real engineering discipline in the places that are hardest to get right and easiest to skip — double-entry accounting with a hash-chained audit trail, a genuinely tamper-evident e-sign flow, server-enforced RBAC checked twice, and an accessibility floor that's mostly not aspirational. It has real gaps in the places that are easy to demo and hard to notice are shallow — search doesn't exist, two pipelines silently disagree, and the "Payments" module can't move money. None of that is a surprise for a five-person internal tool that absorbed a CRM clone on top of an accounting system in one build cycle. It <em>is</em> a surprise for anything being pitched at Series-C intensity — which is exactly why the first decision on the roadmap isn't a feature, it's which product this is trying to be.</p>
+    </div>
+
+    <footer>Prepared from 7 independent code-reading passes over the B2-Consultants repository, cross-referenced against docs/BUILD_SPEC.md, DESIGN_SYSTEM.md and SYNAMATE_CLONE_SPEC.md. All file:line citations reflect the state of the repository at time of writing.</footer>
+  </main>
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('#tocnav a'));
+  var map = {};
+  links.forEach(function(a){
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) map[id] = a;
+  });
+  if (!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      var link = map[entry.target.id];
+      if (!link) return;
+      if (entry.isIntersecting) {
+        links.forEach(function(l){ l.classList.remove('active'); });
+        link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+  Object.keys(map).forEach(function(id){ io.observe(document.getElementById(id)); });
+})();
+</script>

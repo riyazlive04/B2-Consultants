@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "test": "node --import tsx --test \"src/**/__tests__/*.test.ts\"",
     "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "next lint",
@@ -11,9 +12,18 @@
     "db:local:stop": "node scripts/local-db.mjs stop",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:supabase": "node scripts/migrate-to-supabase.mjs",
+    "db:lockdown": "node scripts/migrate-to-supabase.mjs --lockdown-only",
     "db:seed": "tsx prisma/seed.ts",
+    "db:ledger": "tsx prisma/seed-ledger.ts",
+    "db:verify-ledger": "tsx prisma/verify-ledger.ts",
     "db:sample": "tsx prisma/sample-data.ts",
-    "db:demo": "tsx prisma/demo-data.ts"
+    "db:demo": "tsx prisma/demo-data.ts",
+    "db:workshops": "tsx prisma/seed-workshops.ts",
+    "db:crm": "tsx prisma/seed-crm.ts",
+    "verify:outreach": "tsx prisma/verify-outreach.ts",
+    "verify:automation": "tsx prisma/verify-automation.ts",
+    "docs:whatsapp": "tsx scripts/whatsapp-templates-docx.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -23,11 +33,14 @@
     "@react-pdf/renderer": "^4.5.1",
     "better-auth": "^1.6.23",
     "bullmq": "^5.79.2",
+    "docx": "^9.7.1",
     "ioredis": "^5.11.1",
     "libphonenumber-js": "^1.13.8",
     "lucide-react": "^1.23.0",
+    "mammoth": "^1.12.0",
     "next": "14.2.5",
     "papaparse": "^5.5.4",
+    "pdf-parse": "^1.1.1",
     "prisma": "^6.19.3",
     "react": "^18",
     "react-dom": "^18",
@@ -37,6 +50,7 @@
   "devDependencies": {
     "@types/node": "^20",
     "@types/papaparse": "^5.5.2",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",

@@ -56,6 +56,26 @@ function isStopMessage(text: string): boolean {
 }
 
 /**
+ * Does this reply actually CONFIRM attendance?
+ *
+ * The SOP's confirmation templates say "Please reply *YES* to confirm your participation", and the
+ * Key Metrics "WhatsApp Confirmed" column is meant to mean exactly that. Treating any inbound text
+ * as a confirmation — which is what this webhook used to do — marks "no thanks, not interested" as
+ * confirmed, and the prospect keeps a slot they've just declined.
+ *
+ * Deliberately narrow and fail-closed: an unrecognised reply is NOT a confirmation, it simply
+ * stays a reply for the specialist to read and action by hand (outreach-actions.setWhatsappConfirmed).
+ * Accepting a few common phrasings around the SOP's own instruction is the whole scope here — this
+ * is not sentiment analysis, and it must never guess.
+ */
+function isConfirmationMessage(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  // Reject explicit negations first: "no", "not yes", "yes... actually no" must never confirm.
+  if (/\b(no|not|can'?t|cannot|won'?t|unable|reschedule|another time|busy)\b/.test(t)) return false;
+  return /^\s*(yes|yess+|ya|yeah|yep|yup|sure|ok(ay)?|confirmed?|confirming|i'?m in|will join|joining|👍|✅)\b/i.test(t);
+}
+
+/**
  * Apply a delivery-status callback.
  *
  * WATI's `sendTemplateMessage` response does NOT return a message id (verified against the live
@@ -93,6 +113,48 @@ async function handleStatus(watiId: string | undefined, sender: string | null, s
   });
 }
 
+/**
+ * Apply a prospect's YES to whichever confirmation ladder is currently open for them.
+ *
+ * Which flag it sets depends on the journey's phase, not on the message: a YES during the Disco
+ * ladder is "WhatsApp Confirmed" (Steps 14/15), a YES during the SSS ladder is "Sales Call
+ * Confirmed" (Steps 19/20). A YES at any other time is just friendliness and sets nothing.
+ */
+async function confirmJourneyFor(leadId: string): Promise<void> {
+  const journey = await prisma.outreachJourney.findUnique({
+    where: { leadId },
+    select: { id: true, phase: true, whatsappConfirmed: true, salesCallConfirmed: true },
+  });
+  if (!journey) return;
+
+  const now = new Date();
+  if (journey.phase === "SSS_CONFIRMATION" && !journey.salesCallConfirmed) {
+    await prisma.outreachJourney.update({
+      where: { id: journey.id },
+      data: { salesCallConfirmed: true, salesCallConfirmedAt: now },
+    });
+  } else if (journey.phase === "DISCO_CONFIRMATION" && !journey.whatsappConfirmed) {
+    await prisma.outreachJourney.update({
+      where: { id: journey.id },
+      data: { whatsappConfirmed: true, whatsappConfirmedAt: now },
+    });
+  }
+}
+
+/**
+ * Apply a prospect's YES to their upcoming booking (Bookings confirmation loop, Module E). Sets
+ * `confirmedAt`, which is exactly what stops the auto-cancel engine from releasing the slot. Only a
+ * live BOOKED, still-unconfirmed booking is touched — a YES after the fact changes nothing.
+ */
+async function confirmBookingFor(bookingRequestId: string): Promise<void> {
+  const b = await prisma.bookingRequest.findUnique({
+    where: { id: bookingRequestId },
+    select: { status: true, confirmedAt: true },
+  });
+  if (!b || b.confirmedAt || b.status !== "BOOKED") return;
+  await prisma.bookingRequest.update({ where: { id: bookingRequestId }, data: { confirmedAt: new Date() } });
+}
+
 async function handleInbound(sender: string, text: string): Promise<void> {
   // Link the reply to whatever we last sent this number, so the pipeline badge + history connect.
   const lastOutbound = await prisma.whatsAppMessage.findFirst({
@@ -109,8 +171,16 @@ async function handleInbound(sender: string, text: string): Promise<void> {
       update: { reason: `STOP reply: "${text.slice(0, 120)}"` },
     });
   } else if (lastOutbound) {
-    // A reply = "WhatsApp confirmed". Mark the outbound thread REPLIED.
+    // A reply marks the outbound thread REPLIED — that is a delivery fact and stays as it was.
     await prisma.whatsAppMessage.update({ where: { id: lastOutbound.id }, data: { status: "REPLIED" } });
+
+    // …but REPLIED is NOT the same as confirmed. The SOP's "WhatsApp Confirmed" / "Sales Call
+    // Confirmed" columns (and the booking's confirmedAt) mean the prospect said yes, so only an
+    // actual YES flips them. Anything else stays a reply for a human to read.
+    if (isConfirmationMessage(text)) {
+      if (lastOutbound.leadId) await confirmJourneyFor(lastOutbound.leadId);
+      if (lastOutbound.bookingRequestId) await confirmBookingFor(lastOutbound.bookingRequestId);
+    }
   }
 
   await prisma.whatsAppMessage.create({

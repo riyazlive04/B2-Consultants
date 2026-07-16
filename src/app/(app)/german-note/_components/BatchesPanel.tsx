@@ -7,6 +7,7 @@ import { Pencil, Plus, Trash2, Users, Video } from "lucide-react";
 import { createBatch, deleteBatch, updateBatch } from "@/server/german-note-actions";
 import type { GnManageBatch, GnTutorRow } from "@/server/german-note-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
 import { LevelChip, StatusChip } from "./LevelChip";
@@ -36,6 +37,9 @@ function BatchFields({ batch, tutors }: { batch?: GnManageBatch; tutors: GnTutor
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Tutor" hint="Create tutor accounts in the Tutors tab first.">
           <Select name="tutorId" options={tutorOptions} defaultValue={batch?.tutorId ?? ""} />
+        </Field>
+        <Field label="Target class size" hint="Spec target is ~8 per batch.">
+          <TextInput name="targetStrength" inputMode="numeric" defaultValue={batch?.targetStrength?.toString() ?? "8"} />
         </Field>
         {batch && (
           <Field label="Status" hint="Archived batches keep recordings readable but close their discussion.">
@@ -70,16 +74,12 @@ export function BatchesPanel({ batches, tutors }: { batches: GnManageBatch[]; tu
     <section className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-display text-lg font-semibold">Batches</h3>
+          <h3 className="font-display text-h2 font-semibold">Batches</h3>
           <p className="text-xs text-muted">One batch = one cohort with a tutor, its recordings and its own discussion.</p>
         </div>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-strong"
-          onClick={() => { setCreating((v) => !v); setError(null); }}
-        >
-          <Plus size={15} /> {creating ? "Close" : "Create batch"}
-        </button>
+        <Btn variant="soft" icon={<Plus size={15} />} onClick={() => { setCreating((v) => !v); setError(null); }}>
+          {creating ? "Close" : "Create batch"}
+        </Btn>
       </div>
 
       {creating && (
@@ -123,20 +123,20 @@ export function BatchesPanel({ batches, tutors }: { batches: GnManageBatch[]; tu
                 {b.tutorName ? `Tutor: ${b.tutorName}` : "No tutor assigned"}
               </p>
             </div>
-            <span className="inline-flex items-center gap-1 text-xs text-muted"><Users size={13} /> {b.memberCount}</span>
-            <span className="inline-flex items-center gap-1 text-xs text-muted"><Video size={13} /> {b.recordingCount}</span>
-            <button
-              type="button"
-              aria-label={`Edit ${b.name}`}
-              className="grid h-8 w-8 place-items-center rounded-field text-muted hover:bg-ink/5 hover:text-ink"
-              onClick={() => { setEditing(b); setError(null); }}
+            <span
+              className="inline-flex items-center gap-1 text-xs text-muted"
+              title={`${b.memberCount} of ${b.targetStrength} target seats`}
             >
+              <Users size={13} /> {b.memberCount}/{b.targetStrength}
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted"><Video size={13} /> {b.recordingCount}</span>
+            <IconButton label={`Edit ${b.name}`} size="sm" onClick={() => { setEditing(b); setError(null); }}>
               <Pencil size={15} />
-            </button>
-            <button
-              type="button"
-              aria-label={`Delete ${b.name}`}
-              className="grid h-8 w-8 place-items-center rounded-field text-muted hover:bg-risk-soft hover:text-risk"
+            </IconButton>
+            <IconButton
+              label={`Delete ${b.name}`}
+              size="sm"
+              tone="danger"
               onClick={async () => {
                 const ok = await askConfirm({
                   title: `Delete “${b.name}”?`,
@@ -152,7 +152,7 @@ export function BatchesPanel({ batches, tutors }: { batches: GnManageBatch[]; tu
               }}
             >
               <Trash2 size={15} />
-            </button>
+            </IconButton>
           </div>
         ))}
       </div>

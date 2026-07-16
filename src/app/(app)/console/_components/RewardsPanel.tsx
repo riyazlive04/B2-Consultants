@@ -21,8 +21,9 @@ import {
 } from "@/lib/rewards";
 import { COUNTABLE_METRICS, EMPLOYEE_METRIC_LABELS, type CountableMetric } from "@/lib/gamification";
 import { APP_ROLES, type AppRole } from "@/lib/sections";
-import { formatDate } from "@/lib/format";
-import { Btn, Card, Hint, Toggle } from "./kit";
+import { formatDate, formatEurMinor, formatInrMinor, minorToMajorString } from "@/lib/format";
+import { EmptyState, Pill, type Tone } from "@/components/ui/kit";
+import { Btn, Card, Hint, NumInput, Picker, Toggle } from "./kit";
 
 /**
  * Reward rules and the grants they produce.
@@ -74,11 +75,19 @@ const ROLE_LABELS: Record<AppRole, string> = {
   ADMIN: "Admin", HEAD: "Head coach", USER: "Telecaller", STUDENT: "Student", TUTOR: "Tutor",
 };
 
-const STATUS_STYLE: Record<GrantView["status"], { fg: string; bg: string }> = {
-  PENDING: { fg: "var(--warn)", bg: "var(--warn-bg)" },
-  APPROVED: { fg: "var(--primary-strong)", bg: "var(--primary-soft)" },
-  DECLINED: { fg: "var(--muted)", bg: "var(--surface-2)" },
-  PAID: { fg: "var(--good)", bg: "var(--good-bg)" },
+/** §1.2 — the four meanings, straight from the shared tone scale. */
+const STATUS_TONE: Record<GrantView["status"], Tone> = {
+  PENDING: "warn",
+  APPROVED: "primary",
+  DECLINED: "neutral",
+  PAID: "good",
+};
+
+const STATUS_LABEL: Record<GrantView["status"], string> = {
+  PENDING: "Pending",
+  APPROVED: "Approved",
+  DECLINED: "Declined",
+  PAID: "Paid",
 };
 
 /** Build the default trigger for a kind, so switching kinds never leaves a half-filled shape. */
@@ -94,7 +103,8 @@ function blankTrigger(kind: RewardTriggerKind, badges: BadgeOption[], quests: Qu
   }
 }
 
-const money = (minor: string) => (Number(minor) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+/** A plain, editable major-unit string ("1500.50") for prefilling money inputs. */
+const moneyInput = (minor: string) => minorToMajorString(BigInt(minor));
 
 export function RewardsPanel({
   rules,
@@ -117,7 +127,9 @@ export function RewardsPanel({
       subtitle="Rules that decide who has earned a bonus, commission or perk — detected automatically."
       actions={<ScanButton />}
     >
+      {/* underline: this strip is a child of the page's pill tabs (see Tabs' variant note). */}
       <Tabs
+        variant="underline"
         tabs={[
           {
             label: `Pending (${pending.length})`,
@@ -160,35 +172,30 @@ function ScanButton() {
 
 function GrantsTable({ grants, empty }: { grants: GrantView[]; empty: string }) {
   if (grants.length === 0) {
-    return <p className="mt-4 rounded-field border border-line bg-surface-2 p-5 text-sm text-muted">{empty}</p>;
+    return <EmptyState icon={<Gift size={26} />} title="Nothing here" body={empty} />;
   }
   return (
-    <div className="mt-4 space-y-2">
+    <div className="space-y-1.5">
       {grants.map((g) => (
         <div key={g.id} className="flex flex-wrap items-center gap-3 rounded-field border border-line bg-surface-2 p-3">
           <Gift size={16} className="flex-none text-ink-3" />
           <div className="min-w-52 flex-1">
-            <p className="text-sm font-semibold">
+            <p className="text-sm font-semibold text-ink">
               {g.personName} · {g.ruleName}
             </p>
-            <p className="text-xs text-muted">
+            <p className="text-caption text-muted">
               {g.reason} · qualified {formatDate(g.qualifiedOn)}
             </p>
           </div>
-          <p className="tnum w-28 flex-none text-sm font-semibold">
+          <p className="tnum w-28 flex-none text-sm font-semibold text-ink">
             {g.ruleKind === "PERK"
               ? (g.perkLabel ?? "Perk")
               : [
-                  Number(g.amountInr) > 0 ? `₹${money(g.amountInr)}` : null,
-                  Number(g.amountEur) > 0 ? `€${money(g.amountEur)}` : null,
+                  Number(g.amountInr) > 0 ? formatInrMinor(BigInt(g.amountInr)) : null,
+                  Number(g.amountEur) > 0 ? formatEurMinor(BigInt(g.amountEur)) : null,
                 ].filter(Boolean).join(" + ")}
           </p>
-          <span
-            className="flex-none rounded-full px-2.5 py-0.5 text-xs font-semibold"
-            style={{ color: STATUS_STYLE[g.status].fg, background: STATUS_STYLE[g.status].bg }}
-          >
-            {g.status}
-          </span>
+          <Pill tone={STATUS_TONE[g.status]}>{STATUS_LABEL[g.status]}</Pill>
           <GrantActions grant={g} />
         </div>
       ))}
@@ -270,45 +277,63 @@ function RulesTab({
   };
 
   return (
-    <div className="mt-4 space-y-2">
-      <Btn variant="primary" onClick={() => setCreating(true)}>+ New reward rule</Btn>
+    <div className="space-y-3">
+      {rules.length === 0 ? (
+        <EmptyState
+          icon={<Gift size={26} />}
+          title="No reward rules yet"
+          body="A rule says “when this happens, that person has earned it”. Create one, then scan to find everyone who already qualifies."
+          action={<Btn variant="primary" onClick={() => setCreating(true)}>+ New reward rule</Btn>}
+        />
+      ) : (
+        <>
+          <Btn variant="primary" onClick={() => setCreating(true)}>+ New reward rule</Btn>
 
-      {rules.map((r) => (
-        <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-field border border-line bg-surface-2 p-3">
-          <div className="min-w-52 flex-1">
-            <p className="flex items-center gap-2 text-sm font-semibold">
-              {r.name}
-              {!r.active && <span className="text-xs font-normal text-muted">paused</span>}
-              {!r.trigger && (
-                <span className="flex items-center gap-1 text-xs font-semibold text-risk">
-                  <AlertTriangle size={13} /> broken trigger — edit to fix
-                </span>
-              )}
-            </p>
-            <p className="text-xs text-muted">
-              {r.trigger ? describeTrigger(r.trigger) : "Unrecognised trigger"} ·{" "}
-              {r.roles.length ? r.roles.map((x) => ROLE_LABELS[x as AppRole] ?? x).join(", ") : "everyone"}
-            </p>
+          <div className="space-y-1.5">
+            {rules.map((r) => (
+              <div
+                key={r.id}
+                className={`flex flex-wrap items-center gap-3 rounded-field border border-line bg-surface-2 p-3 ${
+                  r.active ? "" : "opacity-60"
+                }`}
+              >
+                <div className="min-w-52 flex-1">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
+                    {r.name}
+                    {!r.active && <Pill tone="neutral">Paused</Pill>}
+                    {!r.trigger && (
+                      <Pill tone="bad">
+                        <AlertTriangle size={12} /> Broken trigger — edit to fix
+                      </Pill>
+                    )}
+                  </p>
+                  <p className="text-caption text-muted">
+                    {r.trigger ? describeTrigger(r.trigger) : "Unrecognised trigger"} ·{" "}
+                    {r.roles.length ? r.roles.map((x) => ROLE_LABELS[x as AppRole] ?? x).join(", ") : "everyone"}
+                  </p>
+                </div>
+                <p className="tnum w-32 flex-none text-sm font-semibold text-ink">
+                  {r.kind === "PERK"
+                    ? (r.perkLabel ?? "Perk")
+                    : [
+                        Number(r.amountInrMinor) > 0 ? formatInrMinor(BigInt(r.amountInrMinor)) : null,
+                        Number(r.amountEurMinor) > 0 ? formatEurMinor(BigInt(r.amountEurMinor)) : null,
+                      ].filter(Boolean).join(" + ")}
+                </p>
+                <div className="flex flex-none gap-2 text-sm">
+                  <button type="button" className="font-medium text-accent hover:underline" onClick={() => setEditing(r)}>Edit</button>
+                  <button type="button" className="text-risk hover:underline" onClick={() => remove(r)}>Delete</button>
+                </div>
+              </div>
+            ))}
           </div>
-          <p className="tnum w-32 flex-none text-sm font-semibold">
-            {r.kind === "PERK"
-              ? (r.perkLabel ?? "Perk")
-              : [
-                  Number(r.amountInrMinor) > 0 ? `₹${money(r.amountInrMinor)}` : null,
-                  Number(r.amountEurMinor) > 0 ? `€${money(r.amountEurMinor)}` : null,
-                ].filter(Boolean).join(" + ")}
-          </p>
-          <div className="flex flex-none gap-2 text-sm">
-            <button type="button" className="text-accent hover:underline" onClick={() => setEditing(r)}>Edit</button>
-            <button type="button" className="text-risk hover:underline" onClick={() => remove(r)}>Delete</button>
-          </div>
-        </div>
-      ))}
 
-      <Hint>
-        Editing a rule doesn&apos;t re-price grants it already produced — amounts are stamped when a
-        grant is created. Scan again after editing to pick up anyone who now qualifies.
-      </Hint>
+          <Hint>
+            Editing a rule doesn&apos;t re-price grants it already produced — amounts are stamped when a
+            grant is created. Scan again after editing to pick up anyone who now qualifies.
+          </Hint>
+        </>
+      )}
 
       {(creating || editing) && (
         <RuleForm
@@ -386,10 +411,10 @@ function RuleForm({
           ) : (
             <>
               <Field label="Amount ₹" hint="Leave blank if paying in EUR only">
-                <TextInput name="amountInr" inputMode="decimal" defaultValue={rule && Number(rule.amountInrMinor) > 0 ? money(rule.amountInrMinor) : ""} />
+                <TextInput name="amountInr" inputMode="decimal" defaultValue={rule && Number(rule.amountInrMinor) > 0 ? moneyInput(rule.amountInrMinor) : ""} />
               </Field>
               <Field label="Amount €">
-                <TextInput name="amountEur" inputMode="decimal" defaultValue={rule && Number(rule.amountEurMinor) > 0 ? money(rule.amountEurMinor) : ""} />
+                <TextInput name="amountEur" inputMode="decimal" defaultValue={rule && Number(rule.amountEurMinor) > 0 ? moneyInput(rule.amountEurMinor) : ""} />
               </Field>
             </>
           )}
@@ -441,27 +466,15 @@ function TriggerBuilder({
   quests: QuestOption[];
   goals: GoalOption[];
 }) {
+  // These were hand-rolled 32px natives — the one corner of the console still on the
+  // old chrome. They defer to the kit now, so the modal matches the grid behind it.
   const num = (v: number, set: (n: number) => void, label: string, min = 1) => (
-    <input
-      type="number"
-      aria-label={label}
-      value={v}
-      min={min}
-      onChange={(e) => set(Number.isFinite(e.target.valueAsNumber) ? e.target.valueAsNumber : min)}
-      className="tnum w-28 rounded-field border border-line-strong bg-surface px-2.5 py-1.5 text-sm"
-    />
+    <span className="w-28 flex-none">
+      <NumInput ariaLabel={label} value={v} min={min} onChange={set} />
+    </span>
   );
   const pick = <T extends string>(v: T, set: (x: T) => void, opts: ReadonlyArray<{ value: T; label: string }>, label: string) => (
-    <select
-      aria-label={label}
-      value={v}
-      onChange={(e) => set(e.target.value as T)}
-      className="rounded-field border border-line-strong bg-surface px-2.5 py-1.5 text-sm"
-    >
-      {opts.map((o) => (
-        <option key={o.value} value={o.value}>{o.label}</option>
-      ))}
-    </select>
+    <Picker ariaLabel={label} value={v} onChange={set} options={opts} className="w-auto min-w-40 flex-none" />
   );
 
   return (

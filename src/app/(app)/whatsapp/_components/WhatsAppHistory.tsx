@@ -2,17 +2,12 @@
 
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
+import { formatDateTimeInZone } from "@/lib/format";
 import { WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
 import type { WhatsAppMessageRow } from "@/server/whatsapp-metrics";
 
-const fmt = (iso: string) =>
-  new Date(iso).toLocaleString("en-GB", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+// Timestamps in IST, DD/MM-style, per DESIGN_SYSTEM §3.
+const fmt = (iso: string) => formatDateTimeInZone(iso, "Asia/Kolkata");
 
 export function WhatsAppHistory({ rows }: { rows: WhatsAppMessageRow[] }) {
   const columns: Column<WhatsAppMessageRow>[] = [

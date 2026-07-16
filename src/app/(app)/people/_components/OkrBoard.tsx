@@ -4,6 +4,8 @@ import { useState } from "react";
 import { deleteOkr, saveOkr } from "@/server/people-actions";
 import type { MemberRow } from "@/server/people-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { Card } from "@/components/ui/kit";
+import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { SignalDot } from "@/components/ui/SignalBadge";
 import { signalForPercent } from "@/lib/signals";
@@ -60,14 +62,8 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display text-lg font-semibold">OKRs - {month}</h3>
-        <button
-          type="button"
-          onClick={exportCsv}
-          className="rounded-field border border-line bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-2"
-        >
-          Export CSV
-        </button>
+        <h3 className="font-display text-h2 font-semibold">OKRs - {month}</h3>
+        <Btn variant="soft" onClick={exportCsv}>Export CSV</Btn>
       </div>
 
       {/* Leaderboard - avg OKR completion this month; friendly competition, visual only */}
@@ -124,23 +120,19 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
                   <span className="tnum text-xs text-muted">
                     {o.currentProgress ?? "-"} / {o.targetValue} · {formatPct(o.completionPct)}
                   </span>
-                  <button type="button" className="py-1 text-sm text-accent hover:underline" onClick={() => setEditing({ member: m, okr: o })}>
+                  <Btn variant="ghost" size="sm" onClick={() => setEditing({ member: m, okr: o })}>
                     Edit
-                  </button>
-                  <button type="button" className="py-1 text-sm text-risk hover:underline" onClick={() => remove(o)}>
+                  </Btn>
+                  <Btn variant="danger" size="sm" onClick={() => remove(o)}>
                     Delete
-                  </button>
+                  </Btn>
                 </div>
               ))}
             </div>
             {m.okrs.length < 3 && (
-              <button
-                type="button"
-                className="rounded-field border border-line px-3 py-1.5 text-sm text-accent hover:bg-surface-2"
-                onClick={() => setEditing({ member: m, okr: null })}
-              >
+              <Btn variant="soft" size="sm" onClick={() => setEditing({ member: m, okr: null })}>
                 + OKR
-              </button>
+              </Btn>
             )}
           </div>
         ))}
@@ -150,15 +142,15 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
       </div>
 
       {editing && (
-        <form action={submit} key={editing.okr?.id ?? `new-${editing.member.id}`} className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <div className="mb-4 flex items-center justify-between">
-            <h4 className="font-display text-lg font-semibold">
-              {editing.okr ? "Edit OKR" : "New OKR"} - {editing.member.fullName}
-            </h4>
-            <button type="button" className="text-sm text-muted hover:underline" onClick={() => setEditing(null)}>
+        <Card
+          title={`${editing.okr ? "Edit OKR" : "New OKR"} - ${editing.member.fullName}`}
+          actions={
+            <Btn variant="ghost" size="sm" onClick={() => setEditing(null)}>
               Close
-            </button>
-          </div>
+            </Btn>
+          }
+        >
+        <form action={submit} key={editing.okr?.id ?? `new-${editing.member.id}`}>
           <input type="hidden" name="teamProfileId" value={editing.member.id} />
           <input type="hidden" name="month" value={month} />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -185,6 +177,7 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
             <FormError message={error} />
           </div>
         </form>
+        </Card>
       )}
     </section>
   );

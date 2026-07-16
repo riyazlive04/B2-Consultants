@@ -16,10 +16,10 @@ import { formatDate } from "@/lib/format";
 // ── tier styling: emoji medallion in a tiered ring. Bronze/silver/gold are
 // medal materials; legend is the brand blue (one accent hue, DESIGN_SYSTEM §9). ──
 const TIER_RING: Record<BadgeTier, string> = {
-  bronze: "linear-gradient(135deg, #d2a679, #a05a2c)",
-  silver: "linear-gradient(135deg, #e9edf2, #9aa7b5)",
-  gold: "linear-gradient(135deg, #ffe08a, #d99a06)",
-  legend: "linear-gradient(135deg, var(--primary-tint), var(--primary-strong))",
+  bronze: "var(--medal-bronze)",
+  silver: "var(--medal-silver)",
+  gold: "var(--medal-gold)",
+  legend: "var(--medal-legend)",
 };
 
 export const TIER_LABELS: Record<BadgeTier, string> = {
@@ -43,7 +43,7 @@ export function LevelRing({ level, size = 72 }: { level: LevelInfo; size?: numbe
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center leading-none">
         <div>
-          <p className="text-[9px] font-semibold uppercase tracking-wide text-muted">Lv</p>
+          <p className="text-caption font-semibold uppercase tracking-wide text-muted">Lv</p>
           <p className="font-display text-xl font-bold tabular-nums">{level.level}</p>
         </div>
       </div>
@@ -97,7 +97,7 @@ export function BadgeChip({ badge, size = "md" }: { badge: UnlockedBadge; size?:
       >
         <span aria-hidden>{badge.icon}</span>
       </span>
-      <span className={`w-full truncate text-[10px] leading-tight ${unlocked ? "font-semibold" : "text-muted"}`}>
+      <span className={`w-full truncate text-caption leading-tight ${unlocked ? "font-semibold" : "text-muted"}`}>
         {badge.name}
       </span>
     </div>
@@ -143,8 +143,8 @@ export function QuestCard({ quest }: { quest: QuestProgress }) {
           {quest.title}
         </p>
         <span
-          className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-bold ${
-            quest.done ? "bg-accent text-white" : "bg-surface-2 text-muted"
+          className={`flex-none rounded-full px-2 py-0.5 text-caption font-bold ${
+            quest.done ? "bg-accent text-on-accent" : "bg-surface-2 text-muted"
           }`}
         >
           {quest.done ? "✓ done" : `+${quest.xp} XP`}
@@ -188,7 +188,7 @@ export function Podium({
             </span>
             <p className="w-full truncate text-center text-sm font-bold">{e.name}</p>
             <p className="tnum text-xs font-semibold text-accent">{e.value}</p>
-            <p className="w-full truncate text-center text-[11px] text-muted">{e.detail}</p>
+            <p className="w-full truncate text-center text-caption text-muted">{e.detail}</p>
             {e.badge}
             <div
               className={`w-full rounded-t-xl border border-b-0 border-line ${heights[rank]}`}
@@ -212,7 +212,7 @@ export function MomentumChip({ momentum, size = "md" }: { momentum: Momentum; si
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full font-semibold ${
-        size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"
+        size === "sm" ? "px-2 py-0.5 text-caption" : "px-2.5 py-1 text-xs"
       }`}
       style={{ background: meta.soft, color: meta.color }}
       title={`Momentum: ${meta.label}`}

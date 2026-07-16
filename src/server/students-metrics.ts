@@ -62,10 +62,22 @@ export async function getStudentsOverview() {
   // only compared against statusChangedAt (a timestamp) → use IST instants
   const month = istMonthInstantRange(today);
 
-  const [students, enrollments, satisfaction, ltv] = await Promise.all([
+  const [students, enrollments, trackerRows, satisfaction, ltv] = await Promise.all([
     // enrollment-less students are German Note members — they belong to /german-note
     prisma.student.findMany({ where: { enrollments: { some: {} } }, orderBy: { createdAt: "desc" } }),
+    // Lean pass: every enrollment, scalars only. Powers the count tiles, the LTV
+    // roll-ups and the list rows — none of which look at journey history.
     prisma.enrollment.findMany({
+      select: {
+        id: true, studentId: true, programLevel: true, status: true,
+        statusChangedAt: true, enrollmentDate: true, programEndDate: true, assignedCoach: true,
+      },
+    }),
+    // Rich pass: ONLY the active Guided/Elite rows the 90/120 tracker actually
+    // renders. Previously the three journey collections were joined onto every
+    // enrollment ever — completed and dropped ones included — and thrown away.
+    prisma.enrollment.findMany({
+      where: { status: "ACTIVE", programLevel: { in: ["GUIDED", "ELITE"] } },
       include: {
         student: { select: { id: true, fullName: true } },
         milestoneLogs: { select: { date: true, previousMilestone: true, newMilestone: true } },
@@ -73,7 +85,11 @@ export async function getStudentsOverview() {
         sprintWeeks: { select: { weekIndex: true, weekEnd: true, status: true, target: true } },
       },
     }),
-    prisma.satisfactionScore.findMany(),
+    // PRD2 §4.5: averages are across COMPLETED students only — a student is
+    // "completed" once any of their enrollments reaches COMPLETED status.
+    prisma.satisfactionScore.findMany({
+      where: { student: { enrollments: { some: { status: "COMPLETED" } } } },
+    }),
     ltvByStudent(),
   ]);
 
@@ -100,8 +116,7 @@ export async function getStudentsOverview() {
   const avgNps = avg(satisfaction.map((s) => s.npsScore));
 
   // ── 90/120 tracker rows: ACTIVE Guided + Elite only (PRD2 §4.3) ──
-  const tracker = active
-    .filter((e) => e.programLevel === "GUIDED" || e.programLevel === "ELITE")
+  const tracker = trackerRows
     .map((e) => {
       const totalDays = e.programLevel === "GUIDED" ? 90 : 120;
       const dayNumber = Math.min(Math.max(dayDiff(today, e.enrollmentDate) + 1, 1), totalDays);
@@ -143,7 +158,7 @@ export async function getStudentsOverview() {
   };
   const atRiskRadar = tracker
     .map((t) => {
-      const e = active.find((x) => x.id === t.enrollmentId)!;
+      const e = trackerRows.find((x) => x.id === t.enrollmentId)!;
       const flags: string[] = [];
       if (t.daysSinceLastSession !== null && t.daysSinceLastSession > 14) {
         flags.push(`${t.daysSinceLastSession} days since last session`);
@@ -206,6 +221,8 @@ export async function getStudentsOverview() {
 
   const studentRows = students.map((s) => {
     const es = enrollments.filter((e) => e.studentId === s.id);
+    // Latest program end date across this student's enrollments (Solo has none).
+    const endDates = es.map((e) => e.programEndDate).filter((d): d is Date => !!d);
     return {
       id: s.id,
       fullName: s.fullName,
@@ -213,6 +230,12 @@ export async function getStudentsOverview() {
       phone: s.phone,
       leadSource: s.leadSource,
       industry: s.industry,
+      targetRole: s.targetRole,
+      internalNotes: s.internalNotes,
+      assignedCoach: [...new Set(es.map((e) => e.assignedCoach).filter((c): c is string => !!c))].join(" / ") || null,
+      programEndDate: endDates.length
+        ? new Date(Math.max(...endDates.map((d) => d.getTime()))).toISOString()
+        : null,
       levels: es.map((e) => e.programLevel).join(" + ") || "-",
       statuses: [...new Set(es.map((e) => e.status))].join(", ") || "-",
       enrollmentsCount: es.length,
@@ -251,6 +274,8 @@ export async function getStudentDetail(id: string) {
           milestoneLogs: { orderBy: { date: "desc" }, include: { updatedBy: { select: { name: true } } } },
           signalChanges: { orderBy: { date: "desc" }, include: { changedBy: { select: { name: true } } } },
           sprintWeeks: { orderBy: { weekIndex: "asc" }, include: { enteredBy: { select: { name: true } } } },
+          closer: { select: { id: true, name: true } },
+          jobApplications: { orderBy: [{ status: "asc" }, { appliedAt: "desc" }] },
         },
       },
       satisfactionScores: { orderBy: { date: "desc" } },
@@ -271,6 +296,12 @@ export async function getStudentDetail(id: string) {
     orderBy: { date: "desc" },
     take: 100,
     select: { id: true, studentName: true, date: true, amountInrMinor: true },
+  });
+  // Active team accounts (not students) — the closer picker for the commission split.
+  const teamMembers = await prisma.user.findMany({
+    where: { status: "ACTIVE", role: { not: "STUDENT" } },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
   });
 
   return {
@@ -295,6 +326,8 @@ export async function getStudentDetail(id: string) {
         duration: e.duration,
         programEndDate: e.programEndDate?.toISOString() ?? null,
         assignedCoach: e.assignedCoach,
+        closerId: e.closerId,
+        closerName: e.closer?.name ?? null,
         status: e.status,
         dayNumber: totalDays ? Math.min(Math.max(dayDiff(today, e.enrollmentDate) + 1, 1), totalDays) : null,
         totalDays,
@@ -337,6 +370,17 @@ export async function getStudentDetail(id: string) {
           newSignal: c.newSignal,
           note: c.note,
         })),
+        jobApplications: e.jobApplications.map((a) => ({
+          id: a.id,
+          company: a.company,
+          role: a.role,
+          jobUrl: a.jobUrl,
+          location: a.location,
+          status: a.status,
+          appliedAt: a.appliedAt.toISOString(),
+          statusAt: a.statusAt.toISOString(),
+          notes: a.notes,
+        })),
       };
     }),
     satisfaction: student.satisfactionScores.map((s) => ({
@@ -358,6 +402,7 @@ export async function getStudentDetail(id: string) {
       value: i.id,
       label: `${i.studentName} · ${i.date.toISOString().slice(0, 10)} · ₹${(Number(i.amountInrMinor) / 100).toLocaleString("en-IN")}`,
     })),
+    teamMembers: teamMembers.map((m) => ({ id: m.id, name: m.name })),
   };
 }
 

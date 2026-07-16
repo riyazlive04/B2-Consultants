@@ -45,6 +45,15 @@ function coerceCadence(raw: unknown): WatiCadence {
     bookingReminderLeadHours: leadHours.length ? leadHours : DEFAULT_CADENCE.bookingReminderLeadHours,
     noShowDelayHours: num(c.noShowDelayHours, DEFAULT_CADENCE.noShowDelayHours),
     paymentRepeatHours: num(c.paymentRepeatHours, DEFAULT_CADENCE.paymentRepeatHours),
+    // An explicitly stored [] means "EMI pre-due is off" and is honoured — unlike
+    // bookingReminderLeadHours above, which treats empty as "unset, use defaults".
+    emiPreDueLeadDays: Array.isArray(c.emiPreDueLeadDays)
+      ? c.emiPreDueLeadDays.filter((d): d is number => typeof d === "number" && Number.isInteger(d) && d >= 0)
+      : DEFAULT_CADENCE.emiPreDueLeadDays,
+    // Fails SAFE: only an explicit `false` turns rehearsal off. Absent, null, or a
+    // malformed value all keep the dry run on, so a corrupted settings blob can never
+    // silently start WhatsApping every paying student.
+    emiPreDueDryRun: c.emiPreDueDryRun === false ? false : true,
     studentRepeatHours: num(c.studentRepeatHours, DEFAULT_CADENCE.studentRepeatHours),
     maxPerRun: num(c.maxPerRun, DEFAULT_CADENCE.maxPerRun),
   };

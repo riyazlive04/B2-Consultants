@@ -5,7 +5,9 @@ import { getMyGame } from "@/server/gamification";
 import { getGamificationConfig } from "@/server/founder-config";
 import { currentRuleset } from "@/lib/gamification";
 import { istToday } from "@/lib/dates";
+import { ClipboardList } from "lucide-react";
 import { LevelRing, XpBar, BadgeStrip } from "@/components/ui/gamification";
+import { PageHeader } from "@/components/ui/kit";
 import { DailyLogClient } from "./_components/DailyLogClient";
 
 export const dynamic = "force-dynamic";
@@ -23,13 +25,12 @@ export default async function DailyLogPage() {
   const streakMilestones = Object.keys(ruleset.xpRules.STREAK_BONUS).map(Number).sort((a, b) => a - b);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">My Daily Log</h1>
-        <p className="mt-1 text-sm text-muted">
-          {view.fullName ? `${view.fullName} - ` : ""}log your key numbers for today. One entry per day.
-        </p>
-      </div>
+    <div className="w-full space-y-6">
+      <PageHeader
+        icon={<ClipboardList size={20} />}
+        title="My Daily Log"
+        subtitle={`${view.fullName ? `${view.fullName} - ` : ""}log your key numbers for today. One entry per day.`}
+      />
 
       {/* Player strip: level, XP and badges — the log below is where the XP comes from */}
       {game && (

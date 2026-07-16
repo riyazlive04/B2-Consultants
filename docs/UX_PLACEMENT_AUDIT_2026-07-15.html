@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Measured UX placement audit of all 10 B2 founder dashboards across 4 roles, graded against BUILD_SPEC.">
+<title>B2 Founder Dashboard — UX Placement Audit</title>
+
+<style>
+  :root {
+    --paper:   #FAFAF7;
+    --surface: #FFFFFF;
+    --ink:     #16203A;
+    --ink-2:   #55617A;
+    --ink-3:   #8A93A6;
+    --rule:    #DFE2E8;
+    --rule-2:  #EDEFF3;
+    --accent:  #0A64E2;
+    --accent-soft: #E8F0FE;
+    --crit:    #C0272D;
+    --crit-soft:#FBEAEA;
+    --mod:     #A8690B;
+    --mod-soft:#FBF1E0;
+    --minor:   #55617A;
+    --minor-soft:#EFF1F4;
+    --ok:      #1A7F5A;
+    --ok-soft: #E4F3EC;
+
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Times New Roman', serif;
+    --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Segoe UI Mono', Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:   #0F1523;
+      --surface: #161E30;
+      --ink:     #E9EDF5;
+      --ink-2:   #A3AEC4;
+      --ink-3:   #6E7A92;
+      --rule:    #2A344B;
+      --rule-2:  #1E2739;
+      --accent:  #6BA6FF;
+      --accent-soft: #17263F;
+      --crit:    #FF8A8A;
+      --crit-soft:#331A1C;
+      --mod:     #E8B45C;
+      --mod-soft:#31261245;
+      --minor:   #A3AEC4;
+      --minor-soft:#1E2739;
+      --ok:      #5FD3A0;
+      --ok-soft: #142E24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:   #0F1523;
+    --surface: #161E30;
+    --ink:     #E9EDF5;
+    --ink-2:   #A3AEC4;
+    --ink-3:   #6E7A92;
+    --rule:    #2A344B;
+    --rule-2:  #1E2739;
+    --accent:  #6BA6FF;
+    --accent-soft: #17263F;
+    --crit:    #FF8A8A;
+    --crit-soft:#331A1C;
+    --mod:     #E8B45C;
+    --mod-soft:#312612;
+    --minor:   #A3AEC4;
+    --minor-soft:#1E2739;
+    --ok:      #5FD3A0;
+    --ok-soft: #142E24;
+  }
+  :root[data-theme="light"] {
+    --paper:   #FAFAF7;
+    --surface: #FFFFFF;
+    --ink:     #16203A;
+    --ink-2:   #55617A;
+    --ink-3:   #8A93A6;
+    --rule:    #DFE2E8;
+    --rule-2:  #EDEFF3;
+    --accent:  #0A64E2;
+    --accent-soft: #E8F0FE;
+    --crit:    #C0272D;
+    --crit-soft:#FBEAEA;
+    --mod:     #A8690B;
+    --mod-soft:#FBF1E0;
+    --minor:   #55617A;
+    --minor-soft:#EFF1F4;
+    --ok:      #1A7F5A;
+    --ok-soft: #E4F3EC;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0 24px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .prose { max-width: 68ch; }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    padding: 56px 0 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 8px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(34px, 5vw, 52px);
+    line-height: 1.08;
+    letter-spacing: -.015em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-family: var(--serif);
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin: 0;
+  }
+  .meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 32px;
+    padding: 14px 0 0;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    border-top: 1px solid var(--rule);
+    margin-top: 28px;
+  }
+  .meta-strip b { color: var(--ink-2); font-weight: 500; }
+
+  /* ---------- structure ---------- */
+  h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 30px;
+    line-height: 1.2;
+    letter-spacing: -.01em;
+    margin: 64px 0 4px;
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    letter-spacing: .1em;
+    display: block;
+    margin-bottom: 8px;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-weight: 650;
+    font-size: 15px;
+    letter-spacing: .01em;
+    margin: 32px 0 10px;
+  }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  .lede { font-size: 17px; color: var(--ink-2); max-width: 66ch; }
+
+  /* ---------- callouts ---------- */
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 16px 18px;
+    margin: 24px 0;
+    border-radius: 0 6px 6px 0;
+    max-width: 78ch;
+  }
+  .note.warn { border-left-color: var(--mod); background: var(--mod-soft); }
+  .note.crit { border-left-color: var(--crit); background: var(--crit-soft); }
+  .note p:last-child { margin-bottom: 0; }
+  .note-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  /* ---------- the fold gauge (recurring motif) ---------- */
+  .gauge {
+    margin: 20px 0 28px;
+    max-width: 620px;
+  }
+  .gauge-track {
+    position: relative;
+    height: 40px;
+    background: var(--rule-2);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .gauge-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--accent-soft);
+    border-right: 2px dashed var(--accent);
+  }
+  .gauge-fill.thin { background: var(--crit-soft); border-right-color: var(--crit); }
+  .gauge-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+  .gauge-labels b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- tables ---------- */
+  .scroller {
+    overflow-x: auto;
+    margin: 18px 0 8px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 900px;
+    font-size: 13.5px;
+  }
+  thead th {
+    text-align: left;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+    background: var(--surface);
+  }
+  tbody td {
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--rule-2);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.el { font-weight: 600; min-width: 130px; }
+  td.pos { font-family: var(--mono); font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  code, .m {
+    font-family: var(--mono);
+    font-size: .88em;
+    background: var(--minor-soft);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .pos code { background: none; padding: 0; }
+
+  /* ---------- severity ---------- */
+  .sev {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 3px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+    display: inline-block;
+  }
+  .sev-crit  { color: var(--crit);  background: var(--crit-soft);  }
+  .sev-mod   { color: var(--mod);   background: var(--mod-soft);   }
+  .sev-minor { color: var(--minor); background: var(--minor-soft); }
+  .sev-ok    { color: var(--ok);    background: var(--ok-soft);    }
+
+  /* ---------- verdict ---------- */
+  .verdict {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--ink-3);
+    background: var(--surface);
+    padding: 16px 18px;
+    border-radius: 0 6px 6px 0;
+    margin: 22px 0 8px;
+    max-width: 82ch;
+  }
+  .verdict.yes  { border-left-color: var(--ok); }
+  .verdict.part { border-left-color: var(--mod); }
+  .verdict.no   { border-left-color: var(--crit); }
+  .verdict.na   { border-left-color: var(--ink-3); }
+  .verdict-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding-top: 2px;
+    white-space: nowrap;
+  }
+  .verdict.yes .verdict-tag  { color: var(--ok); }
+  .verdict.part .verdict-tag { color: var(--mod); }
+  .verdict.no .verdict-tag   { color: var(--crit); }
+  .verdict.na .verdict-tag   { color: var(--ink-3); }
+  .verdict p { margin: 0; font-size: 14.5px; }
+
+  /* ---------- fixes ---------- */
+  ol.fixes { margin: 12px 0 0; padding-left: 0; list-style: none; counter-reset: f; max-width: 80ch; }
+  ol.fixes li {
+    counter-increment: f;
+    position: relative;
+    padding: 0 0 0 38px;
+    margin-bottom: 12px;
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+  ol.fixes li::before {
+    content: counter(f);
+    position: absolute;
+    left: 0; top: 1px;
+    width: 24px; height: 24px;
+    display: grid; place-items: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+    border-radius: 50%;
+  }
+  .effort {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+
+  /* ---------- summary table ---------- */
+  .summary td.dash { font-weight: 600; white-space: nowrap; }
+  .bar {
+    display: inline-block;
+    width: 96px; height: 8px;
+    background: var(--rule-2);
+    border-radius: 2px;
+    overflow: hidden;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  .bar > i.low { background: var(--crit); }
+  .pct { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  hr.rule { border: 0; border-top: 1px solid var(--rule); margin: 8px 0 0; }
+
+  details {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 16px 0;
+    background: var(--surface);
+    max-width: 82ch;
+  }
+  summary { cursor: pointer; font-weight: 600; font-size: 14.5px; }
+  details p:first-of-type { margin-top: 12px; }
+
+  ul.tight { margin: 10px 0 14px; padding-left: 20px; max-width: 78ch; }
+  ul.tight li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.55; }
+
+  .quote {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 17px;
+    color: var(--ink-2);
+    border-left: 2px solid var(--rule);
+    padding-left: 16px;
+    margin: 18px 0;
+    max-width: 66ch;
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 0 16px 64px; }
+    h2 { font-size: 25px; }
+  }
+</style>
+<style>
+  img, svg { max-width: 100%; height: auto; }
+  @media print {
+    body { background: #fff; color: #000; padding: 0; }
+    .scroller { overflow: visible; border-color: #ccc; }
+    table { min-width: 0; font-size: 10pt; }
+    h2 { break-after: avoid; page-break-after: avoid; }
+    .note, .verdict, tr { break-inside: avoid; page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Placement &amp; Hierarchy Audit · Measured against BUILD_SPEC v1.0</p>
+    <h1>The B2 Founder Dashboard, measured against its own three-second promise</h1>
+    <p class="standfirst">Ten dashboards, four roles, every card measured in the rendered browser rather than read from source. The headline: the screen everyone would assume is broken actually passes — and the real damage is somewhere nobody is looking.</p>
+    <div class="meta-strip">
+      <span><b>Method</b> live app, Playwright</span>
+      <span><b>Viewport</b> 1440×900 (baseline), 1280×800 (stress)</span>
+      <span><b>Roles</b> Admin · Head · User · Student</span>
+      <span><b>Usage data</b> none exists</span>
+      <span><b>Date</b> 15 Jul 2026</span>
+    </div>
+  </header>
+
+  <!-- ============ METHOD / HONESTY ============ -->
+  <h2><span class="num">00 — Before the findings</span>What I could and couldn't judge</h2>
+
+  <div class="prose">
+    <p class="lede">Three things about this audit's evidence base are worth stating plainly, because they change how much weight each finding can carry.</p>
+  </div>
+
+  <h3>There is no usage data, and there never can be</h3>
+  <div class="prose">
+    <p>The brief asked me to cross-check visual prominence against click frequency. I checked: there is no analytics library in <code>package.json</code> — no PostHog, Mixpanel, Amplitude, GA, Hotjar, Clarity. The only event-shaped table in the schema, <code>AuditEntry</code>, is written exclusively by <code>ledger-core.ts</code> — it's the accounting hash-chain, not a usage log.</p>
+    <p>But the more important point is that <strong>heatmaps are the wrong instrument here anyway</strong>. This is a single-org internal cockpit with roughly five users, and most of these screens have exactly one user: Ameen. Recommending an A/B test at n=1 would be consultancy theatre. Every finding in Section 4 territory is therefore marked <span class="sev sev-minor">Hypothesis</span>, and the honest validation step is not a test — it's fifteen minutes watching Ameen use this while narrating what he's looking for.</p>
+  </div>
+
+  <h3>The spec covers six of these ten dashboards</h3>
+  <div class="prose">
+    <p><code>BUILD_SPEC.md</code> is the stated authority — §0: <em>"Nothing outside this document is in scope."</em> It contains <strong>zero occurrences</strong> of "telecaller", "arena", "my-journey", or a workshops screen. So Telecaller Pay, Arena, My Journey and GN Workshops have <strong>no stated goal I can audit against</strong>. Per your own constraint, I say so rather than invent one. I've audited their structure and left goal-alignment open, with the questions I'd need answered at the end.</p>
+    <p>I read this as the spec being stale rather than those screens being illegitimate — they look deliberately commissioned. But that's your call to confirm, not mine to assume.</p>
+  </div>
+
+  <h3>Only four screens have placement language in the spec</h3>
+  <div class="prose">
+    <p>This constrains severity honestly. The spec gives explicit placement instructions for <strong>Funnel</strong> (§8.3 "alert box <em>at top</em>"), <strong>Cash Health</strong> (§9.5 "Four numbers <em>first</em>"), <strong>Students</strong> (§7.5 "<em>at top</em> of the section"), and the <strong>global runway pill</strong> (§9.4, §15). Finance, Pipeline and People have <em>no</em> stated hierarchy. So a fold complaint on Finance cannot be graded Critical on ordering grounds — it would be general best-practice dressed up as a requirement. I've held that line throughout, which is why there are only three Criticals in this report.</p>
+  </div>
+
+  <!-- ============ SUMMARY ============ -->
+  <h2><span class="num">01 — Overview</span>All ten, by how much of the page you can actually see</h2>
+
+  <div class="prose">
+    <p class="lede">Percentage of the page visible without scrolling at 1440×900. This single number turned out to be the most diagnostic thing I measured.</p>
+  </div>
+
+  <div class="scroller">
+    <table class="summary">
+      <thead>
+        <tr>
+          <th>Dashboard</th><th>Visible without scrolling</th><th>Page height</th><th>Stated goal in spec?</th><th>Serves its goal?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="dash">Home <span class="m">/</span> (Admin)</td><td><span class="bar"><i style="width:65%"></i></span><span class="pct">65%</span></td><td class="pct">1390px</td><td>Yes — §1.1</td><td><span class="sev sev-ok">Yes</span></td></tr>
+        <tr><td class="dash">Home <span class="m">/</span> (Head)</td><td><span class="bar"><i style="width:100%"></i></span><span class="pct">100%</span></td><td class="pct">900px</td><td>Partial — §2.1</td><td><span class="sev sev-mod">Partially</span></td></tr>
+        <tr><td class="dash">Home <span class="m">/</span> (User)</td><td><span class="bar"><i style="width:96%"></i></span><span class="pct">96%</span></td><td class="pct">941px</td><td>Yes — §2.1</td><td><span class="sev sev-crit">No</span></td></tr>
+        <tr><td class="dash">Cash Health</td><td><span class="bar"><i style="width:33%"></i></span><span class="pct">33%</span></td><td class="pct">2690px</td><td>Yes — §9</td><td><span class="sev sev-ok">Yes</span></td></tr>
+        <tr><td class="dash">Conversion Funnel</td><td><span class="bar"><i style="width:23%"></i></span><span class="pct">23%</span></td><td class="pct">3916px</td><td>Yes — §8</td><td><span class="sev sev-ok">Yes</span></td></tr>
+        <tr><td class="dash">Students</td><td><span class="bar"><i style="width:38%"></i></span><span class="pct">38%</span></td><td class="pct">2386px</td><td>Yes — §7</td><td><span class="sev sev-ok">Yes</span></td></tr>
+        <tr><td class="dash">Finance</td><td><span class="bar"><i class="low" style="width:20%"></i></span><span class="pct">20%</span></td><td class="pct">4508px</td><td>Yes — §4</td><td><span class="sev sev-mod">Partially</span></td></tr>
+        <tr><td class="dash">Pipeline</td><td><span class="bar"><i class="low" style="width:15%"></i></span><span class="pct">15%</span></td><td class="pct">5849px</td><td>Yes — §5</td><td><span class="sev sev-mod">Partially</span></td></tr>
+        <tr><td class="dash">Telecaller Pay</td><td><span class="bar"><i style="width:67%"></i></span><span class="pct">67%</span></td><td class="pct">1337px</td><td><strong>None</strong></td><td><span class="sev sev-minor">Can't judge</span></td></tr>
+        <tr><td class="dash">Arena</td><td><span class="bar"><i style="width:32%"></i></span><span class="pct">32%</span></td><td class="pct">2850px</td><td><strong>None</strong></td><td><span class="sev sev-minor">Can't judge</span></td></tr>
+        <tr><td class="dash">My Journey</td><td><span class="bar"><i style="width:74%"></i></span><span class="pct">74%</span></td><td class="pct">1219px</td><td><strong>None</strong></td><td><span class="sev sev-minor">Can't judge</span></td></tr>
+        <tr><td class="dash">GN Workshop</td><td><span class="bar"><i style="width:33%"></i></span><span class="pct">33%</span></td><td class="pct">2758px</td><td><strong>None</strong></td><td><span class="sev sev-minor">Can't judge</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="note-label">The counter-intuitive result</span>
+    <p>Home <em>looks</em> like the problem child — six KPI cards sitting below the fold. It isn't. It passes its stated goal. Meanwhile <strong>Pipeline shows you 15% of itself</strong> and <strong>Finance 20%</strong>, and those two are where Ameen's daily money and sales work actually happens. If you fix one thing on page count alone, it isn't Home.</p>
+  </div>
+
+  <!-- ============ HOME ADMIN ============ -->
+  <h2><span class="num">02 — Dashboard 1 of 10</span>Home <span class="m">/</span> — Admin (Ameen)</h2>
+
+  <div class="prose">
+    <p><strong>Job-to-be-done</strong>, and this is the only screen in the entire spec given a time budget — §1.1, verbatim:</p>
+    <p class="quote">"One screen to know the business. The Home view answers 'are we okay?' in three seconds: revenue vs target, runway, pipeline health."</p>
+    <p>Those three metrics are the whole test. Nothing else on this page is spec-named. So I tested exactly them.</p>
+  </div>
+
+  <div class="gauge">
+    <div class="gauge-track"><div class="gauge-fill" style="width:65%"></div></div>
+    <div class="gauge-labels"><span><b>65%</b> visible</span><span>fold at 900px</span><span>page runs to <b>1390px</b></span></div>
+  </div>
+
+  <h3>The three-second test, measured</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Spec-named metric</th><th>Where it actually is</th><th>Above fold?</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td class="el">Revenue vs target</td><td class="pos">FounderPulse, top-left · <code>y=594–657</code> · ₹1,47,000 of ₹8,00,000, "behind pace"</td><td class="pos">Yes</td><td><span class="sev sev-ok">Pass</span></td></tr>
+        <tr><td class="el">Runway</td><td class="pos">Top-bar pill · <code>y=24</code> · "Runway: 3.1 months", amber</td><td class="pos">Yes</td><td><span class="sev sev-ok">Pass</span></td></tr>
+        <tr><td class="el">Pipeline health</td><td class="pos">"Last 7 days" panel, right column · <code>y=298–474</code> · leads/calls/proposals/wins</td><td class="pos">Yes</td><td><span class="sev sev-ok">Pass</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="note-label">A finding I had to retract mid-audit</span>
+    <p>I initially flagged the runway pill as redundant duplication — runway appears three times at three sizes. Then I read the spec. §9.4 <em>requires</em> it: <em>"The runway number + colour appears in the top bar on every screen — Ameen never has to open Cash Health to see it."</em> §15 lists "Runway pill correct and visible on every screen" as an acceptance criterion. The pill isn't redundancy, it's the delivery mechanism, and it's <strong>why Home passes</strong>. Reporting it as a defect would have been wrong.</p>
+  </div>
+
+  <h3>Findings</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Element</th><th>Current position</th><th>Issue</th><th>Severity</th><th>Evidence / reasoning</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="el">Left column dead space</td>
+          <td class="pos"><code>x=268 y=682→900</code><br>750×218px</td>
+          <td>163,662px² of empty page in the single highest-attention zone, directly above six cards that were pushed below the fold to make room for nothing.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>Measured: FounderPulse's left column ends at <code>y=682</code>; the next content ("At a glance") starts at <code>y=979</code>. The right column runs to <code>y=947</code>, so the gap is a column-height mismatch, not intent. Cause: <code>FounderPulse.tsx:314</code> carries <code>self-start</code>, so the hero doesn't stretch to the row height. Not Critical — the spec's three metrics still pass — but it is the cheapest real estate in the app spent on nothing.</td>
+          <td><strong>Not the one-liner I first implied.</strong> Removing <code>self-start</code> stretches the card but leaves the whitespace <em>inside</em> it. And filling it by growing the chart is worse: <code>PaceChart</code> is an SVG with <code>preserveAspectRatio="none"</code>, so a ~265px taller chart would <strong>exaggerate the revenue line's slope</strong> — and on a pace chart, slope is the metric. The void also isn't fixed: the row height follows the right column's notification count. Realistic fix: cap "Needs attention" at 3 items (it already has a "+N more" affordance) to shorten the right column.</td>
+        </tr>
+        <tr>
+          <td class="el">"At a glance" grid<br><span class="sev sev-minor" style="margin-top:6px">Corrected 15 Jul</span></td>
+          <td class="pos"><code>y=1035–1362</code><br>all 6 below fold</td>
+          <td>At the default range the grid opens by restating the hero — so its actual purpose (re-scoping to Last Month / QTD) is invisible until you find a control most people won't.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td><strong>This finding was overstated and is corrected here.</strong> I originally called these three cards duplicates and recommended deleting them. They are not. <code>getRunwaySnapshot(range)</code> (<code>cash-metrics.ts:38–43</code>) re-anchors the burn window to the selected range, and <code>getPipelineSnapshot(range)</code> does the same — these cards are the <em>only</em> way to see runway, pipeline value and wins for <strong>Last Month or QTD</strong>. The pill calls <code>getRunwaySnapshot()</code> with the default and is always current-month; FounderPulse is hard-scoped to "Month so far". They coincide <em>only</em> at the default range — the state I measured in. I mistook a time-scoped view for redundancy; deleting them would have removed a working feature and orphaned <code>KpiRangeSwitch</code>.</td>
+          <td>Not a defect — a product call. Best option: render the three only when <code>range !== "this-month"</code>, so they appear exactly when they have something new to say. Or move the range switch beside the hero so the time dimension is legible. Or accept the 383px.</td>
+        </tr>
+        <tr>
+          <td class="el">"Live FX (ECB)"</td>
+          <td class="pos"><code>y=1207</code> · 57,136px²<br>not clickable</td>
+          <td>Reference data given exactly the same visual weight as cash runway, and it's a dead end — no link, nothing to do with it.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td>All six cards measure an identical 57,136px² (367×156). Visual weight is perfectly uniform, so it encodes nothing about importance: an exchange rate, the runway, and the Arena leaderboard are declared equally significant. <em>Hypothesis — no usage data; validate by asking Ameen when he last acted on the FX card.</em></td>
+          <td>Demote FX to the top bar next to the month, where §5 already puts ambient reference data. Free the card slot.</td>
+        </tr>
+        <tr>
+          <td class="el">"Welcome back, Ameen"</td>
+          <td class="pos"><code>y=92</code> · 84px tall<br>+ "PRIMARY" eyebrow</td>
+          <td>84px of the top-left attention zone carrying zero information, on the one screen with a three-second budget.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td>"Here is where things stand today" tells Ameen nothing he didn't know by opening the app. Compare Cash Health's header, which spends the same space stating the actual job: <em>"If no new money came in from today, how long does the business keep running?"</em> The pattern exists in the codebase — it just isn't used here.</td>
+          <td>Replace with the single most urgent nudge. <code>CLAUDE_DESIGN_BRIEF</code> §3.1 already specifies exactly this: welcome strip carrying "the single most urgent nudge". The data is already computed — it's sitting in "Needs attention".</td>
+        </tr>
+        <tr>
+          <td class="el">Bank balance freshness</td>
+          <td class="pos">Cash Health <code>y=178</code><br>"⚠ stale"</td>
+          <td>Runway — one of the three three-second metrics — is computed from a bank balance the app itself marks stale.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>The pill reads a confident "3.1 months" with no staleness marker, while <code>/cash</code> flags its own input <code>⚠ stale</code> and Home lists "Bank balance entry overdue" as a Watch. The most-promoted number in the app is the one whose freshness is least visible at the point of use.</td>
+          <td>Carry the staleness state into the pill (e.g. muted + "~3.1 mo"). A precise-looking number from stale input is worse than an obviously hedged one.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Top 3 fixes, by effort-to-impact</h3>
+  <ol class="fixes">
+    <li><strong>Put the urgent nudge in the welcome strip.</strong> <span class="effort">~2 hrs</span> Converts 84px of prime dead space into the one thing Ameen opens the app to learn. The nudge data already exists in "Needs attention" — this is a move, not a build. Now the top fix here, because the one I originally ranked first was wrong.</li>
+    <li><strong>Show the range-scoped cards only when the range isn't "this month."</strong> <span class="effort">~1 hr</span> Kills the at-rest redundancy without deleting a working feature — they appear exactly when they have something the hero doesn't. A product call, not a defect fix.</li>
+    <li><strong>Shorten the right column to close the void.</strong> <span class="effort">~1 hr</span> Cap "Needs attention" at 3 items using its existing "+N more" affordance. Don't stretch the chart — see the finding above for why that backfires.</li>
+  </ol>
+
+  <div class="verdict yes">
+    <span class="verdict-tag">Yes</span>
+    <p><strong>Home serves its stated primary goal.</strong> All three spec-named metrics — revenue vs target, runway, pipeline health — are reachable without scrolling at both 1440×900 and 1280×800, with runway delivered by the spec-mandated top-bar pill. The page is wasteful (a 218px void, 383px of duplication) but wastefulness is not goal failure, and I won't inflate it into one. <em>The caveat that matters:</em> runway passes on a stale input.</p>
+  </div>
+
+  <!-- ============ HOME HEAD / USER ============ -->
+  <h2><span class="num">03 — Dashboards 2 &amp; 3 of 10</span>Home — Head (Karthick) and User (Asma)</h2>
+
+  <div class="prose">
+    <p>One file renders three different dashboards. The Admin variant passes. The other two are where this audit found its real problems — and they're invisible from Ameen's login, which is presumably why they've survived.</p>
+    <p>The governing spec is §2.1's access matrix, verbatim:</p>
+    <p class="quote">| Home / overview | Full | Limited (no finance tiles) | Redirected to own daily log |</p>
+    <p>That's Admin, Head, User in order. Two of those three cells are not what the app does.</p>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Element</th><th>Current position</th><th>Issue</th><th>Severity</th><th>Evidence / reasoning</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="el">User lands on <span class="m">/</span></td>
+          <td class="pos">Asma → <code>/</code><br>not <code>/daily-log</code></td>
+          <td>§2.1 says User is "Redirected to own daily log". She isn't — she gets a bespoke home the spec never describes.</td>
+          <td><span class="sev sev-crit">Critical</span></td>
+          <td>Measured on login as <code>asma@b2consultants.in</code>: <code>location.pathname === "/"</code>, <code>redirectedToDailyLog: false</code>. This is a direct, unambiguous contradiction of a stated behaviour — not a hierarchy preference, which is why it clears the Critical bar the fold findings don't.</td>
+          <td>Decide which is right and make the spec and app agree. The built home isn't obviously worse than a redirect — but right now no document describes what ships.</td>
+        </tr>
+        <tr>
+          <td class="el">"Live FX (ECB)" on Head + User home</td>
+          <td class="pos"><strong>Position 1</strong> of the grid<br>Head <code>x=268 y=452</code><br>User <code>x=268 y=586</code></td>
+          <td>A finance tile in the top-left slot of a home the spec says has <em>no finance tiles</em> — for two roles with no finance access. It's also the only non-clickable card on either page.</td>
+          <td><span class="sev sev-crit">Critical</span></td>
+          <td>§2.1 Head: <em>"Limited (no finance tiles)"</em>. §2 User: <em>"No Finance."</em> A EUR/INR exchange rate is a finance tile by any reading. Measured <code>clickable: "NOT CLICKABLE"</code> — a dead end. Neither Karthick (delivery) nor Asma (telecalling) can act on it, and neither has the finance access that would make it meaningful. This is the "rarely-used card in prime real estate" mismatch your brief asks about, and it's provable from the access matrix without any usage data.</td>
+          <td>Drop FX from the Head and User homes entirely. It is the strongest single placement error in the app and the cheapest to fix.</td>
+        </tr>
+        <tr>
+          <td class="el">Asma's daily log</td>
+          <td class="pos">Position 3 of 4<br><code>x=1034 y=586</code></td>
+          <td>Her one mandatory recurring action sits third, behind an exchange rate she can't use.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>§6.3 requires a daily log per person with a missing-log badge at 7:00 PM IST — it is her highest-frequency obligation in the entire product. The page even knows it's outstanding ("Daily log not submitted yet"). Ordering by frequency-of-use would put it first. <em>Hypothesis — validate by asking Asma what she opens this page to do.</em></td>
+          <td>Promote "Your daily log" to position 1 for User and Head; it's the one card whose action is due every single day.</td>
+        </tr>
+        <tr>
+          <td class="el">Asma's job metrics</td>
+          <td class="pos">Absent</td>
+          <td>None of her five spec-defined metrics appear anywhere on her home.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>Measured by regex across the rendered page: <code>jobMetricsPresent: false</code>. §6.3 defines Asma's work as <em>"discovery calls completed · highly-qualified calls · follow-ups · proposals sent · no shows"</em>. Her home instead leads with a work-time tracker (0.0h) and an Arena level. Graded Moderate, not Critical, only because §2.1 says this page shouldn't exist for her at all — so there's no stated goal for it to fail.</td>
+          <td>Resolve the redirect question first. If the home stays, its hero should be her five §6.3 numbers, not a stopwatch.</td>
+        </tr>
+        <tr>
+          <td class="el">Karthick's biggest cards</td>
+          <td class="pos">Pipeline Value + Wins<br>87,758px² each, top row</td>
+          <td>The two largest cards on the Head Coach's home are sales metrics; his own domain is the smallest card, last.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td>Measured: Pipeline Value and Wins at 87,758px² each; Students at 57,675px², position 5 of 5, bottom-left. §6.3 defines Karthick's work as <em>"sessions delivered · students checked in on · assignments reviewed · students flagged at risk"</em> — delivery, not sales. Marked Minor and <em>hypothesis</em>: BUILD_SPEC §2 does permit Head to see Pipeline, and states no priority for his home.</td>
+          <td>Worth 15 minutes with Karthick before changing anything. If he doesn't act on pipeline value, swap the weighting toward Students.</td>
+        </tr>
+        <tr>
+          <td class="el">Runway pill absence</td>
+          <td class="pos">Correctly absent for both</td>
+          <td>None — this is right.</td>
+          <td><span class="sev sev-ok">Correct</span></td>
+          <td>Measured <code>runwayPillPresent: false</code> for Head and User. DESIGN §5.1: <em>"Cash Health is Admin-only … so Head and User never see this pill; it is not rendered for them, by design."</em> Worth recording that the role-gating logic here is exactly right, which makes the FX tile leak more surprising.</td>
+          <td>No action.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Top 3 fixes, by effort-to-impact</h3>
+  <ol class="fixes">
+    <li><strong>Remove the FX tile from Head and User homes.</strong> <span class="effort">~15 min</span> Deletes a spec violation, a dead-end click target, and the worst-placed card in the product — in one line. Highest impact-per-minute in this entire audit.</li>
+    <li><strong>Promote "Your daily log" to position 1 for both roles.</strong> <span class="effort">~30 min</span> Puts the only daily-mandatory action in the primary attention zone.</li>
+    <li><strong>Settle the User redirect.</strong> <span class="effort">~1 hr + decision</span> Either honour §2.1 or update §2.1. Cheap to do, but needs your call — which is why it's third despite being the Critical.</li>
+  </ol>
+
+  <div class="verdict part">
+    <span class="verdict-tag">Partially</span>
+    <p><strong>Head's home: partially.</strong> It fits in one viewport with no scrolling and the runway gating is correct, but it leads with a finance tile on a home §2.1 says must have none, and orders his own domain last.</p>
+  </div>
+  <div class="verdict no">
+    <span class="verdict-tag">No</span>
+    <p><strong>User's home: no.</strong> It contradicts §2.1's stated behaviour (she should be redirected), shows a finance tile to a role with "No Finance", and displays none of her five §6.3 job metrics. The page is well-built; it's pointed at the wrong person.</p>
+  </div>
+
+  <!-- ============ FINANCE ============ -->
+  <h2><span class="num">04 — Dashboard 4 of 10</span>Finance</h2>
+
+  <div class="prose">
+    <p><strong>Job-to-be-done</strong>, §4 verbatim: <em>"The most important day-to-day section. Ameen sees the money picture daily without opening Excel."</em></p>
+    <p>§4.4 names nine metrics that must be visible. The spec states <strong>no hierarchy</strong> for this screen, so nothing below can be graded Critical on ordering — I'm holding that line even though this is the page I'd most want to fix.</p>
+  </div>
+
+  <div class="gauge">
+    <div class="gauge-track"><div class="gauge-fill thin" style="width:20%"></div></div>
+    <div class="gauge-labels"><span><b>20%</b> visible</span><span>fold at 900px</span><span>page runs to <b>4508px</b></span></div>
+  </div>
+
+  <h3>Where §4.4's nine required metrics actually landed</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>§4.4 metric</th><th>Position</th><th>Above fold?</th></tr></thead>
+      <tbody>
+        <tr><td class="el">Total revenue this month</td><td class="pos"><code>y=178</code> · ₹1,47,000</td><td class="pos">Yes</td></tr>
+        <tr><td class="el">Revenue by level</td><td class="pos"><code>y=178</code> · Solo/Guided/Elite/GN</td><td class="pos">Yes</td></tr>
+        <tr><td class="el">Net profit</td><td class="pos"><code>y=650</code> · −₹27,500 in "Money in vs money out"</td><td class="pos">Yes</td></tr>
+        <tr><td class="el">Net profit <em>(duplicate card)</em></td><td class="pos"><code>y=989</code></td><td class="pos">No</td></tr>
+        <tr><td class="el">Profit margin %</td><td class="pos"><code>y=989</code> · −18.7%</td><td class="pos">No</td></tr>
+        <tr><td class="el">Gross profit</td><td class="pos"><code>y=989</code> · ₹93,000</td><td class="pos">No</td></tr>
+        <tr><td class="el">COGS this month</td><td class="pos"><code>y=989</code> · ₹54,000</td><td class="pos">No</td></tr>
+        <tr><td class="el">Total expenses this month</td><td class="pos"><code>y=1180</code> · ₹1,74,500</td><td class="pos">No</td></tr>
+        <tr><td class="el">Pending receivables</td><td class="pos"><code>y=1180</code> · ₹3,75,500</td><td class="pos">No</td></tr>
+        <tr><td class="el">Yearly revenue to date</td><td class="pos"><code>y=1180</code> · ₹20,91,851</td><td class="pos">No</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="note-label">Correction I made by looking rather than inferring</span>
+    <p>From geometry alone I had concluded net profit was below the fold — the <code>NET PROFIT</code> card sits at <code>y=989</code>. The screenshot showed the real story: <strong>−₹27,500 is rendered large and red at <code>y≈650</code></strong> inside "Money in vs money out", comfortably above the fold. The card below is a <em>duplicate</em>. Had I audited from source, I'd have filed a false Critical.</p>
+  </div>
+
+  <h3>Findings</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Element</th><th>Current position</th><th>Issue</th><th>Severity</th><th>Evidence / reasoning</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="el">"Top 5 payments"<br><span class="sev sev-minor" style="margin-top:6px">Partly withdrawn</span></td>
+          <td class="pos"><code>x=1034 y=178</code><br>367×787 · 288,913px²<br><code>lg:row-span-2</code></td>
+          <td>Over-tall by construction — but two-thirds of what I originally reported here was an artifact of the month I measured in.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td><strong>Corrected.</strong> I reported "3 rows under a title promising 5" as a defect. It isn't: July 2026 has exactly <strong>3 income entries</strong> (June 5, May 8 — queried directly). The card correctly shows all of them, half-way through a sparse month. The "61% empty" figure came from that same emptiest month; with June's data the card is ~45% empty. What survives: <code>lg:row-span-2</code> (<code>:159</code>) pins it to 787px regardless of content, so it is over-tall even when full — and it still outweighs the revenue chart 2.3×.</td>
+          <td><strong>Low priority, and not the one-liner I implied.</strong> Deleting <code>row-span-2</code> leaves an empty cell at row 2 / column 3 of the bento — the whitespace moves outside the card rather than closing, exactly like the Home void. Only worth touching as part of a deliberate bento re-layout.</td>
+        </tr>
+        <tr>
+          <td class="el">Profit metrics</td>
+          <td class="pos"><code>y=989–1180</code><br>6 of 9 below fold</td>
+          <td>Gross profit, profit margin and COGS — §4.4's only <strong>bolded</strong> metrics — need a scroll on a 4508px page.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>§4.4 bolds <em>Gross profit</em> and <em>Net profit</em>, the sole emphasis marker in the section. Net profit is above the fold (via Money-in-vs-out); gross profit isn't. Held at Moderate <strong>only</strong> because §4 states no hierarchy — on your constraint, a Critical here would be best-practice wearing a spec costume. It is nonetheless the highest-value fix on this page.</td>
+          <td>Move the profit strip above "Top 5 payments" and drop the duplicate Net Profit card. The business is running at −18.7% margin; that number should not require scrolling on "the most important day-to-day section".</td>
+        </tr>
+        <tr>
+          <td class="el">Section tabs</td>
+          <td class="pos"><code>y=1364</code></td>
+          <td>Income / Expenses / Pending / Commission — the page's own navigation — sits 464px below the fold.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>A first-time or returning user cannot see that this page <em>has</em> four sections without scrolling past five charts. Navigation that is invisible at rest under-reports the page's own capability.</td>
+          <td>Move the tab bar directly under the page header, above the chart band.</td>
+        </tr>
+        <tr>
+          <td class="el">50 × "Delete"</td>
+          <td class="pos"><code>x=1319</code>, repeating<br>8px from "Edit"</td>
+          <td>50 solid-red buttons down the right edge, each 8px from a benign, frequently-used Edit.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td>Measured: 50 buttons, <code>rgb(203,42,49)</code>, 62×36px, 8px gap to Edit, Delete outermost (the easier rightward target — Fitts's Law). <strong>But I checked the handler before grading:</strong> <code>askConfirm()</code> fires with "This cannot be undone", names the record, danger-styled — exactly what DESIGN §5.9 requires. The accidental-click risk is genuinely mitigated, so this is Minor, not the Critical it looks like. The residual issue is chromatic: red is now the most-repeated colour on Finance while the one red-worthy signal (−18.7%) is below the fold — which inverts DESIGN §0's "the data is the hero, not the chrome".</td>
+          <td>Consider Ghost styling for row actions — DESIGN §5.4 assigns Ghost to <em>"tertiary, table row actions"</em>, and the confirm dialog is already carrying the safety. Low priority; the guardrail works.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Top 3 fixes, by effort-to-impact</h3>
+  <ol class="fixes">
+    <li><strong>Lift the profit strip above the charts and delete the duplicate Net Profit card.</strong> <span class="effort">~2 hrs</span> Puts margin, gross profit and COGS in the first viewport of the section the spec calls most important. Reordering, not new code.</li>
+    <li><strong>Let "Top 5 payments" size to its content.</strong> <span class="effort">~30 min</span> Reclaims 484px of prime space from whitespace.</li>
+    <li><strong>Move the section tabs under the header.</strong> <span class="effort">~30 min</span> Makes the page's four sections discoverable without a 464px scroll.</li>
+  </ol>
+
+  <div class="verdict part">
+    <span class="verdict-tag">Partially</span>
+    <p><strong>Finance partially serves its goal.</strong> Ameen genuinely can see the money picture without Excel — revenue, revenue-by-level and net profit are all above the fold, and the ledger integration means the numbers are trustworthy. But 6 of §4.4's 9 required metrics need scrolling on a page that reveals 20% of itself, and the section's own navigation is below the fold. It answers "how much came in" instantly and "are we profitable" only on request.</p>
+  </div>
+
+  <!-- ============ PIPELINE ============ -->
+  <h2><span class="num">05 — Dashboard 5 of 10</span>Pipeline</h2>
+
+  <div class="prose">
+    <p><strong>Job-to-be-done</strong>, §5 verbatim: <em>"tells Ameen in real time whether activity is enough to hit the monthly target."</em> No stated hierarchy — same severity discipline as Finance.</p>
+  </div>
+
+  <div class="gauge">
+    <div class="gauge-track"><div class="gauge-fill thin" style="width:15%"></div></div>
+    <div class="gauge-labels"><span><b>15%</b> visible</span><span>fold at 900px</span><span>page runs to <b>5849px</b></span></div>
+  </div>
+
+  <div class="note">
+    <span class="note-label">A contradiction I chased down and disproved</span>
+    <p>Home reports <code>PIPELINE VALUE ₹8,18,803</code>; Pipeline's card initially read <code>₹0 30-day forecast</code> in the DOM text. Two dashboards disagreeing on one metric would have been the most serious finding in this report. It's not real: the card shows <strong>₹8,18,803</strong>, and the ₹0 is the <em>30-day forecast</em> — correctly zero, because the close rate is 0%. The two screens agree. Worth stating because it's the kind of thing a code-only audit reports as fact.</p>
+  </div>
+
+  <h3>Findings</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Element</th><th>Current position</th><th>Issue</th><th>Severity</th><th>Evidence / reasoning</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="el">Target bar</td>
+          <td class="pos"><code>y=178</code> full width<br>227,173px²</td>
+          <td>None — this is right.</td>
+          <td><span class="sev sev-ok">Correct</span></td>
+          <td>§5.3 requires the target bar with red/amber/green bands; it's top of page, full width, red at 38% of pace, labelled "₹1,47,000 of ₹8,00,000 · 18.4%" exactly as specified. It answers §5's stated question in the first viewport. Credit where due.</td>
+          <td>No action.</td>
+        </tr>
+        <tr>
+          <td class="el">Discovery-call metrics</td>
+          <td class="pos"><code>y=1971–2163</code><br>6 cards</td>
+          <td>Show-up rate, no-show rate, highly-qualified rate and conversions-by-level — four §5.3-required metrics — sit ~1,100–1,260px below the fold.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>§5.3 names eleven metrics; these four are among them, and they're the ones that answer "is the <em>activity</em> good enough" as opposed to "how much money is in play". On a 5849px page, only 15% is visible — the lowest of any dashboard audited. Moderate, not Critical: §5 states no ordering.</td>
+          <td>Merge this six-card row into the top KPI band. It's the same information class as the cards already there.</td>
+        </tr>
+        <tr>
+          <td class="el">"Calls completed" / "Won this month"</td>
+          <td class="pos"><code>y=402</code> · 308px tall<br>113,171px² each</td>
+          <td>Both cards carry large empty regions below their content; "Won this month" is a mostly-empty ring around a 0.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td>Same grid-stretch mechanic as Finance's "Top 5 payments": two 146px cards stacked in column 1 force columns 2–3 to 308px. Visual weight follows the grid, not importance.</td>
+          <td>Same fix as Finance — size to content, or fill the space with the below-fold call metrics.</td>
+        </tr>
+        <tr>
+          <td class="el">"Change target for this month"</td>
+          <td class="pos"><code>y=343</code>, inside target card</td>
+          <td>None — good proximity.</td>
+          <td><span class="sev sev-ok">Correct</span></td>
+          <td>Fitts's Law satisfied: the action sits inside the card holding the decision it affects. §5.3 says "Ameen sets it" and the control is exactly where the number is. This is the pattern the rest of the app should copy.</td>
+          <td>No action.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Top 3 fixes, by effort-to-impact</h3>
+  <ol class="fixes">
+    <li><strong>Move the six discovery-call metrics into the top KPI band.</strong> <span class="effort">~2 hrs</span> Puts four §5.3-required activity metrics in the first viewport, answering §5's actual question ("is activity enough?") rather than only the money question.</li>
+    <li><strong>Size "Calls completed" and "Won this month" to content.</strong> <span class="effort">~30 min</span> Reclaims the space the metrics above need.</li>
+    <li><strong>Audit the 5849px page height itself.</strong> <span class="effort">~half day</span> This page is 6.5 viewports tall. It's doing the job of a dashboard <em>and</em> a lead CRM; the leads table (2778px) probably belongs behind a tab.</li>
+  </ol>
+
+  <div class="verdict part">
+    <span class="verdict-tag">Partially</span>
+    <p><strong>Pipeline partially serves its goal.</strong> The target bar answers "are we on pace?" instantly and correctly, in the first viewport, exactly as §5.3 specifies — that's the core of the job and it works. But "is activity enough to hit target" depends on show-up, no-show and qualification rates, and all of those are ~1,100px below the fold on the least-visible page in the product.</p>
+  </div>
+
+  <!-- ============ CASH ============ -->
+  <h2><span class="num">06 — Dashboard 6 of 10</span>Cash Health</h2>
+
+  <div class="prose">
+    <p><strong>Job-to-be-done</strong>, §9 verbatim: <em>"Not transactions — survival. 'If no new money comes in from today, how long do we last?'"</em></p>
+    <p>This is the best dashboard in the product, and it's worth saying why: it's the counter-example that proves the other screens' problems are choices, not constraints.</p>
+  </div>
+
+  <div class="gauge">
+    <div class="gauge-track"><div class="gauge-fill" style="width:33%"></div></div>
+    <div class="gauge-labels"><span><b>33%</b> visible</span><span>fold at 900px</span><span>page runs to <b>2690px</b></span></div>
+  </div>
+
+  <div class="note">
+    <span class="note-label">What this screen gets right that the others don't</span>
+    <p><strong>Visual weight tracks importance.</strong> The runway ring is the largest element on the page — 428,954px² at <code>y=332</code>, above the fold. Compare Home, where the same metric gets 57,136px² <em>below</em> the fold. Same design system, same metric, 7.5× the weight. Cash Health proves the system can express hierarchy; the other screens just don't ask it to.</p>
+    <p><strong>The header does work.</strong> "If no new money came in from today, how long does the business keep running?" states the job in the same 84px Home spends on "Here is where things stand today."</p>
+    <p><strong>It answers, rather than displays.</strong> "At this burn, cash reaches ₹0 around 17/10/2026" plus the threshold legend (green ≥6, amber 3–6, red &lt;3) means Ameen doesn't have to interpret 3.1.</p>
+  </div>
+
+  <h3>Findings</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Element</th><th>Current position</th><th>Issue</th><th>Severity</th><th>Evidence / reasoning</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="el">Summary strip</td>
+          <td class="pos"><code>y=178</code> · 5 numbers</td>
+          <td>§9.5 specifies four numbers with runway among them; the strip shows five, and runway isn't one.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td>§9.5 verbatim: <em>"Four numbers first: cash in bank now · total receivables · total payables due this month · runway (with colour)."</em> Built: cash in bank, receivables, overdue, expected-next-30-days, payables — runway is the ring below. Minor because runway is still above the fold and in the pill, so the intent is met by other means.</td>
+          <td>Leave it. The ring serves runway better than a strip cell would. Worth amending §9.5 to match reality rather than the reverse.</td>
+        </tr>
+        <tr>
+          <td class="el">"⚠ stale" bank balance</td>
+          <td class="pos"><code>y=178</code>, small caption</td>
+          <td>The input to every number on the page is flagged stale in 12px caption text.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>§9.1 requires a "reminder badge if the latest entry is >7 days old" — present and correct. But runway, break-even and the ₹0 date all derive from it, and all render at full confidence. The page states a precise survival date from an input it knows is old.</td>
+          <td>Propagate staleness into the derived numbers, not just their source.</td>
+        </tr>
+        <tr>
+          <td class="el">"Save position" / "Export CSV"</td>
+          <td class="pos"><code>y=1892</code> / <code>y=1985</code><br>Export at <code>x=1266</code></td>
+          <td>None — consistent with Finance.</td>
+          <td><span class="sev sev-ok">Correct</span></td>
+          <td>Export CSV sits at <code>x=1266</code> on both Cash Health and Finance — same action, same location, which is exactly the cross-dashboard consistency your brief asks for. One primary action per view (§5.4's "one per view") holds on both pages.</td>
+          <td>No action.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Top 3 fixes, by effort-to-impact</h3>
+  <ol class="fixes">
+    <li><strong>Propagate the staleness flag into runway, break-even and the ₹0 date.</strong> <span class="effort">~2 hrs</span> The only finding here that affects a decision — and it also fixes the Home pill.</li>
+    <li><strong>Amend §9.5 to match the built strip.</strong> <span class="effort">~15 min</span> The build is better than the spec; correct the document.</li>
+    <li><strong>Nothing else.</strong> <span class="effort">—</span> Don't touch this page. Use it as the reference for fixing the others.</li>
+  </ol>
+
+  <div class="verdict yes">
+    <span class="verdict-tag">Yes</span>
+    <p><strong>Cash Health serves its stated goal, and does it better than any other screen here.</strong> "How long do we last?" is answered above the fold, in the largest element on the page, in plain language, with the threshold legend that makes 3.1 mean something. The one real caveat is that it's confident about a number derived from an input it has itself marked stale.</p>
+  </div>
+
+  <!-- ============ FUNNEL ============ -->
+  <h2><span class="num">07 — Dashboard 7 of 10</span>Conversion Funnel</h2>
+
+  <div class="prose">
+    <p><strong>Job-to-be-done</strong>, §8 verbatim: <em>"of everyone who hears about B2, how many pay, and at which level."</em> §8.3 carries the spec's most explicit placement instruction anywhere: <em>"Biggest-drop-off alert box <strong>at top</strong>."</em></p>
+  </div>
+
+  <div class="gauge">
+    <div class="gauge-track"><div class="gauge-fill thin" style="width:23%"></div></div>
+    <div class="gauge-labels"><span><b>23%</b> visible</span><span>fold at 900px</span><span>page runs to <b>3916px</b></span></div>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Element</th><th>Current position</th><th>Issue</th><th>Severity</th><th>Evidence / reasoning</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="el">Weakest-stage alert</td>
+          <td class="pos"><code>y=186</code>, full width, first</td>
+          <td>None — and it's the best-written element in the product.</td>
+          <td><span class="sev sev-ok">Correct</span></td>
+          <td>§8.3 demands the alert box "at top"; measured at <code>y=186</code>, the first content block. It reads <em>"Weakest stage this month vs your 3-month norm (small miss — watch, don't panic)"</em> — it delivers the answer <em>and</em> calibrates the reaction. This is the "answer, don't display" pattern the rest of the app should steal.</td>
+          <td>No action. Copy this pattern to Home's welcome strip.</td>
+        </tr>
+        <tr>
+          <td class="el">Ghosted Blueprint metrics</td>
+          <td class="pos"><code>y=1530</code> · 6 cards<br>176×156 · 27,323px² each</td>
+          <td>§8.4's "key outcome" metrics are 630px below the fold in the smallest cards in the entire product.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>§8 states the section exists partly to answer whether <em>"The Ghosted Blueprint actually feeds Guided enrollments"</em>, and §8.4 flags downloads→Guided % as <em>"the key outcome"</em> and revenue-attributed as required. These render at 27,323px² — less than half a Home KPI card (57,136px²) and one-tenth the funnel block above them. The card carrying a stated "key outcome" is the smallest card in the app.</td>
+          <td>Promote the Blueprint strip above the metrics table, and size it like the KPI cards elsewhere. This is a stated goal rendered at minimum weight.</td>
+        </tr>
+        <tr>
+          <td class="el">Overall conversion %</td>
+          <td class="pos">Metrics table, <code>y=826</code></td>
+          <td>§8.3's "<strong>the key number</strong>" is a table cell, not a headline.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>§8.3 verbatim marks overall conversion % as <em>"the key number"</em> — the only metric in the whole spec given that phrase. It currently lives inside a 10-row metrics table that straddles the fold, styled identically to nine peers. Nothing encodes its stated primacy.</td>
+          <td>Lift it out as a single headline figure beside the drop-off alert.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Top 3 fixes, by effort-to-impact</h3>
+  <ol class="fixes">
+    <li><strong>Promote overall conversion % to a headline.</strong> <span class="effort">~1 hr</span> The spec calls it "the key number" and it's currently a table cell. One-line change, direct spec compliance.</li>
+    <li><strong>Move the Ghosted Blueprint strip above the metrics table and size it like a real KPI row.</strong> <span class="effort">~2 hrs</span> §8.4's "key outcome" currently renders in the smallest cards in the product, 630px below the fold.</li>
+    <li><strong>Leave the drop-off alert exactly as it is.</strong> <span class="effort">—</span> It's the best thing in the app.</li>
+  </ol>
+
+  <div class="verdict yes">
+    <span class="verdict-tag">Yes</span>
+    <p><strong>Funnel serves its stated goal.</strong> It's the only screen that obeys an explicit spec placement instruction to the letter (§8.3's alert box at top), and the only one that tells Ameen what to <em>feel</em> about a number, not just what the number is. It falls short on emphasis rather than presence: the two things §8 calls "the key number" and "the key outcome" are respectively a table cell and the smallest cards in the app.</p>
+  </div>
+
+  <!-- ============ STUDENTS ============ -->
+  <h2><span class="num">08 — Dashboard 8 of 10</span>Students</h2>
+
+  <div class="prose">
+    <p><strong>Job-to-be-done</strong>, §7. Placement requirements: §7.5 <em>"Average satisfaction &amp; average NPS shown at top of the section"</em>; §7.6 <em>"LTV shown prominently"</em>; §7.3 sort by signal, <em>"red first"</em>.</p>
+  </div>
+
+  <div class="gauge">
+    <div class="gauge-track"><div class="gauge-fill" style="width:38%"></div></div>
+    <div class="gauge-labels"><span><b>38%</b> visible</span><span>fold at 900px</span><span>page runs to <b>2386px</b></span></div>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Element</th><th>Current position</th><th>Issue</th><th>Severity</th><th>Evidence / reasoning</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="el">Avg satisfaction / Avg NPS</td>
+          <td class="pos"><code>y=358</code>, above fold</td>
+          <td>None — §7.5 satisfied.</td>
+          <td><span class="sev sev-ok">Correct</span></td>
+          <td>§7.5 requires both "at top of the section"; measured at <code>y=358</code>, second KPI row, comfortably above the fold. All eight KPI cards are above the fold — the best KPI placement of any dashboard here.</td>
+          <td>No action.</td>
+        </tr>
+        <tr>
+          <td class="el">Highest-LTV student</td>
+          <td class="pos"><code>y=358</code> · "Thomas Müller"</td>
+          <td>None — §7.6 satisfied.</td>
+          <td><span class="sev sev-ok">Correct</span></td>
+          <td>§7.6 requires the highest-LTV student "highlighted"; present as a dedicated above-fold card.</td>
+          <td>No action.</td>
+        </tr>
+        <tr>
+          <td class="el">KPI card heights</td>
+          <td class="pos">Row 1 <code>271×156</code><br>Row 2 <code>271×176</code></td>
+          <td>Two different card heights inside the same grid, 20px apart.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td>Measured: row 1 = 42,338px² per card, row 2 = 47,658px². The difference tracks content length, not importance — so a 12% visual-weight difference between "Total active students" and "Avg NPS" encodes nothing. Small, but it's the same mechanic that produces the bigger problems elsewhere: geometry deciding hierarchy by accident.</td>
+          <td>Fix the row height to the taller value. Cosmetic, but it removes accidental emphasis.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Top 3 fixes, by effort-to-impact</h3>
+  <ol class="fixes">
+    <li><strong>Equalise the two KPI row heights.</strong> <span class="effort">~15 min</span> The only placement defect on the page.</li>
+    <li><strong>Nothing else at this level of the audit.</strong> <span class="effort">—</span> Students meets every placement instruction §7 states.</li>
+    <li><strong>Worth a separate look:</strong> <span class="effort">—</span> §7.3's "sort by signal, red first" is a behaviour I did not exercise — I audited placement, not interaction. Flagging as untested rather than passing it silently.</li>
+  </ol>
+
+  <div class="verdict yes">
+    <span class="verdict-tag">Yes</span>
+    <p><strong>Students serves its stated goal.</strong> It satisfies all three of §7's explicit placement instructions — satisfaction and NPS at top, highest-LTV highlighted, all eight KPIs above the fold. The only defect I can measure is a 20px height mismatch between two rows of the same grid.</p>
+  </div>
+
+  <!-- ============ THE FOUR ============ -->
+  <h2><span class="num">09 — Dashboards 9 &amp; 10 of 10, plus two</span>Telecaller Pay · Arena · My Journey · GN Workshop</h2>
+
+  <div class="note warn">
+    <span class="note-label">Why these four are grouped and graded differently</span>
+    <p><code>BUILD_SPEC.md</code> — the document that declares itself the sole authority — contains <strong>no mention of any of these screens</strong>. Grepped: zero hits for "telecaller", "arena", "my-journey", "gamification", "leaderboard". "Workshop" appears three times, always as a field value, never a screen.</p>
+    <p>So I cannot restate a job-to-be-done for them, and I won't invent one. <strong>Goal alignment for these four is unaudited, not passed and not failed.</strong> Structural findings below stand on their own; the goal question is in the open items at the end.</p>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Element</th><th>Current position</th><th>Issue</th><th>Severity</th><th>Evidence / reasoning</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="el">My Journey — overdue check-in</td>
+          <td class="pos"><code>y=293</code><br><code>rgb(10,100,226)</code> on <code>rgb(230,240,254)</code></td>
+          <td>A check-in 2 days overdue renders in accent blue, styled identically to the neutral "Steady" chip. The student cannot see they're late.</td>
+          <td><span class="sev sev-mod">Moderate</span></td>
+          <td>Measured: chip reads "Next check-in 13/07/2026"; today is 15/07/2026. Its computed colour is the primary accent — the same treatment as the informational "Coach: Karthick" chip. DESIGN §0 rule 2 verbatim: <em>"One accent, used with restraint … It is never used for 'this number is good' — that is what the signal palette is for."</em> The system <strong>already knows</strong>: Ameen's home lists "9 check-ins due — Next check-in date is today or has passed" as a Watch. So overdue-ness is computed, surfaced to the founder, and hidden from the person who has to act on it.</td>
+          <td>Route the chip through the signal palette when the date has passed. The computation already exists; only the colour binding is missing.</td>
+        </tr>
+        <tr>
+          <td class="el">My Journey — everything else</td>
+          <td class="pos"><code>y=186</code>, 719,846px² hero</td>
+          <td>None — this is a strong screen.</td>
+          <td><span class="sev sev-ok">Correct</span></td>
+          <td>The header states the job ("aiming for Design Engineer in Germany — every session, application and interview moves the bar"), the hero answers "where am I" (70%, stage 5 of 7, Day 77 of 90), and "This stage: Convert interviews into offers" answers "what do I do next" with three concrete actions. Whatever its spec status, it is well-built.</td>
+          <td>No action.</td>
+        </tr>
+        <tr>
+          <td class="el">GN Workshop — page width</td>
+          <td class="pos"><code>max-w-5xl</code> = 1024px</td>
+          <td>Content width contradicts DESIGN §5.1, and it's 110px narrower than every finance screen.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td>DESIGN §5.1 verbatim: <em>"Content sits on --bg-app with 32px gutters, max content width 1280px."</em> Measured 1024px. Cards are 244×104 (25,278px²) — the smallest in the product — and carry no <code>.text-metric</code>, meaning this page doesn't use the design system's KPI card at all. DESIGN §2.1: <em>"If you are typing text-lg or text-[15px], you are off the scale."</em></td>
+          <td>Move to <code>max-w-7xl</code> and adopt <code>MetricCard</code>. Mechanical.</td>
+        </tr>
+        <tr>
+          <td class="el">Arena — gradients on data</td>
+          <td class="pos">XP podium bars, badges</td>
+          <td>Gradient fills on data marks, against an explicit design-system prohibition.</td>
+          <td><span class="sev sev-minor">Minor</span></td>
+          <td>Measured 10 gradient-filled elements; the podium bars encode XP — they are data, not chrome. DESIGN §9 "Don't" verbatim: <em>"gradient-fill data cards"</em>; §0 rule 3: <em>"No loud gradients on data, no decorative noise."</em> Flagged as a stated-rule conflict rather than taste — I'd otherwise leave it alone under your no-aesthetics constraint. There is a real tension here worth naming: DESIGN §0's "trust through calm" and a gamification leaderboard want opposite things, and no document adjudicates.</td>
+          <td>Decide whether Arena is exempt from §0 and write that down, or flatten the fills. Either is fine; the silence isn't.</td>
+        </tr>
+        <tr>
+          <td class="el">Telecaller Pay</td>
+          <td class="pos">4 KPIs at <code>y=178</code><br>67% visible</td>
+          <td>No placement defect found.</td>
+          <td><span class="sev sev-ok">Correct</span></td>
+          <td>All four KPIs above the fold, per-person cards below, entry form and history last — a clean, conventional descent from summary to detail. The only note is card size: 271×156, a fifth distinct KPI dimension (see §10).</td>
+          <td>No action beyond the global card-size normalisation.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="verdict na">
+    <span class="verdict-tag">Cannot judge</span>
+    <p><strong>Goal alignment for these four is unaudited.</strong> None has a stated goal in <code>BUILD_SPEC.md</code>, so there is no restatable job-to-be-done to measure placement against. Structurally, Telecaller Pay and My Journey are sound, GN Workshop is off the design system, and Arena has an unadjudicated conflict with DESIGN §0. My read is that the spec is stale rather than these screens being illegitimate — but that's yours to confirm.</p>
+  </div>
+
+  <!-- ============ CROSS-DASHBOARD ============ -->
+  <h2><span class="num">10 — Across all ten</span>Cross-dashboard consistency</h2>
+
+  <div class="prose">
+    <p class="lede">Ameen switches between these screens many times a day. Every inconsistency below is a small relearning tax charged on every switch.</p>
+  </div>
+
+  <h3>The KPI card is a different size on almost every dashboard</h3>
+  <div class="prose">
+    <p>DESIGN §5.3 calls the KPI card <em>"the workhorse of every dashboard"</em> and specifies its padding, radius and internal anatomy — but never its dimensions. The result, measured:</p>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Dashboard</th><th>KPI card</th><th>Area</th><th>Relative to smallest</th></tr></thead>
+      <tbody>
+        <tr><td class="dash">Home (Admin)</td><td class="pos"><code>367×156</code></td><td class="pct">57,136px²</td><td class="pct">2.1×</td></tr>
+        <tr><td class="dash">Home (Head)</td><td class="pos"><code>564×156</code> / <code>371×156</code></td><td class="pct">87,758 / 57,675px²</td><td class="pct">3.2× / 2.1×</td></tr>
+        <tr><td class="dash">Finance</td><td class="pos"><code>271×176</code> / <code>271×156</code></td><td class="pct">47,658 / 42,230px²</td><td class="pct">1.7×</td></tr>
+        <tr><td class="dash">Pipeline</td><td class="pos"><code>367×176</code></td><td class="pct">64,480px²</td><td class="pct">2.4×</td></tr>
+        <tr><td class="dash">Students</td><td class="pos"><code>271×156</code> + <code>271×176</code></td><td class="pct">42,338 / 47,658px²</td><td class="pct">1.7×</td></tr>
+        <tr><td class="dash">Telecaller</td><td class="pos"><code>271×156</code></td><td class="pct">42,230px²</td><td class="pct">1.5×</td></tr>
+        <tr><td class="dash">Funnel</td><td class="pos"><code>176×156</code></td><td class="pct">27,323px²</td><td class="pct">1.0× (smallest)</td></tr>
+        <tr><td class="dash">GN Workshop</td><td class="pos"><code>244×104</code></td><td class="pct">25,278px²</td><td class="pct">0.9×</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="note-label">Why this matters beyond tidiness</span>
+    <p>Size is the main hierarchy signal available to a metric card, and it currently means nothing — it's decided by whichever grid the card landed in. The clearest consequence: <strong>Funnel's Ghosted Blueprint cards, which §8.4 calls "the key outcome", are the smallest cards in the product</strong> — less than half a Home KPI card. A metric's importance and its size are uncorrelated across this app.</p>
+  </div>
+
+  <h3>Four different content widths, where the spec states one</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Dashboards</th><th>Wrapper</th><th>Width</th><th>Matches DESIGN §5.1 (1280px)?</th></tr></thead>
+      <tbody>
+        <tr><td>Home, Finance, Cash, Pipeline, Funnel, Students, Telecaller</td><td class="pos"><code>max-w-7xl</code></td><td class="pct">1280px</td><td><span class="sev sev-ok">Yes</span></td></tr>
+        <tr><td>Arena</td><td class="pos"><code>max-w-6xl</code></td><td class="pct">1152px</td><td><span class="sev sev-minor">No</span></td></tr>
+        <tr><td>GN Workshop</td><td class="pos"><code>max-w-5xl</code></td><td class="pct">1024px</td><td><span class="sev sev-minor">No</span></td></tr>
+        <tr><td>My Journey</td><td class="pos"><code>max-w-3xl</code></td><td class="pct">768px</td><td><span class="sev sev-minor">No</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>Seven screens agree; three don't. Switching from Students to GN Workshop shifts the whole content column by 128px and every card with it. My Journey's 768px is arguably defensible as a reading-width choice for a single-column student view — the other two look like drift.</p>
+  </div>
+
+  <h3>What is consistent — and worth protecting</h3>
+  <ul class="tight">
+    <li><strong>Export CSV sits at <code>x=1266</code> on both Finance and Cash Health.</strong> Same action, same location — exactly the rule your brief asks for.</li>
+    <li><strong>Destructive actions are uniformly guarded.</strong> Every delete routes through <code>askConfirm()</code> with the record named and "This cannot be undone", per DESIGN §5.9. I went looking for an accidental-delete hole and didn't find one.</li>
+    <li><strong>"One primary per view" (§5.4) holds</strong> on every screen I measured. Blue-filled tab chips are active states, not competing primaries — I checked before flagging.</li>
+    <li><strong>Role gating for the runway pill is exactly right</strong> — present for Admin, absent for Head, User and Student, precisely as DESIGN §5.1 describes.</li>
+  </ul>
+
+  <h3>Page headers do two different jobs</h3>
+  <div class="prose">
+    <p>Cash Health: <em>"Not transactions — survival. If no new money came in from today, how long does the business keep running?"</em> — states the job.<br>
+    Funnel: <em>"Free content → paid programs: where people stop, and what it costs."</em> — states the job.<br>
+    Pipeline: <em>"Every lead from first contact to paid student — this month, auto-calculated."</em> — states the job.<br>
+    Home: <em>"Here is where things stand today."</em> — states nothing.</p>
+    <p>Three of four headers teach the reader what the screen is for. The fourth is on the screen with the three-second budget.</p>
+  </div>
+
+  <!-- ============ PRIORITIES ============ -->
+  <h2><span class="num">11 — If you only do a few things</span>The whole audit, ranked</h2>
+
+  <ol class="fixes">
+    <li><strong>Remove the Live FX tile from the Head and User homes.</strong> <span class="effort">~15 min</span> <span class="sev sev-crit">Critical</span><br>A finance tile in the top-left slot of a home §2.1 says has none, shown to two roles with no finance access, non-clickable. Highest impact-per-minute in the report.</li>
+    <li><strong>Lift Finance's profit strip above the charts; drop the duplicate Net Profit card.</strong> <span class="effort">~2 hrs</span> <span class="sev sev-mod">Moderate</span><br>The business is at −18.7% margin and that requires a scroll on "the most important day-to-day section".</li>
+    <li><strong>Promote "Your daily log" to position 1 for Head and User.</strong> <span class="effort">~30 min</span> <span class="sev sev-mod">Moderate</span><br>The only action either role must take every single day, currently third.</li>
+    <li><strong>Put Home's urgent nudge in the welcome strip.</strong> <span class="effort">~2 hrs</span> <span class="sev sev-minor">Minor</span><br>Converts 84px of prime dead space on the most-opened screen into the one thing Ameen opens the app to learn. <em>This replaces "cut Home's three duplicate cards", which I withdrew after finding those cards are range-scoped, not duplicates — see the Home findings table.</em></li>
+    <li><strong>Move Pipeline's six discovery-call metrics into the top band.</strong> <span class="effort">~2 hrs</span> <span class="sev sev-mod">Moderate</span><br>Four §5.3-required activity metrics currently ~1,100px below the fold on the least-visible page in the app.</li>
+    <li><strong>Propagate the stale-bank-balance flag into runway and the pill.</strong> <span class="effort">~2 hrs</span> <span class="sev sev-mod">Moderate</span><br>The app's most-promoted number is confident about an input it knows is old.</li>
+    <li><strong>Settle the User redirect (§2.1) — spec or app, pick one.</strong> <span class="effort">decision</span> <span class="sev sev-crit">Critical</span><br>Cheap to implement, but nobody should touch it until you decide which document is telling the truth.</li>
+  </ol>
+
+  <div class="note">
+    <span class="note-label">The one-line version</span>
+    <p>Home is fine and Cash Health is excellent. The damage is concentrated in two places: <strong>the money and sales screens Ameen uses daily hide 80–85% of themselves</strong>, and <strong>the two dashboards Ameen never sees</strong> — Karthick's and Asma's — <strong>lead with a currency rate neither of them is allowed to care about.</strong></p>
+  </div>
+
+  <!-- ============ OPEN ============ -->
+  <h2><span class="num">12 — What I need from you</span>Open questions this audit couldn't close</h2>
+
+  <ul class="tight">
+    <li><strong>What are Telecaller Pay, Arena, My Journey and GN Workshop <em>for</em>?</strong> No stated goal exists for any of them. Give me one sentence each and I can audit their placement properly — right now I've only audited their structure.</li>
+    <li><strong>Is <code>BUILD_SPEC.md</code> still authoritative?</strong> It's v1.0 and describes three roles; the app ships five and four screens the spec has never heard of. Several findings here are graded against a document that may simply be out of date. If so, the grading changes.</li>
+    <li><strong>Does Karthick act on pipeline value?</strong> The two biggest cards on his home are sales metrics; §6.3 says his job is delivery. Fifteen minutes watching him would settle it — and would be worth more than any A/B test at this team size.</li>
+    <li><strong>Is Arena exempt from DESIGN §0's "trust through calm"?</strong> Gamification and "no decorative noise" are in genuine conflict and no document adjudicates. Either answer is fine; the silence is the problem.</li>
+    <li><strong>Two <code>DESIGN_SYSTEM.md</code> copies exist and have diverged</strong> — <code>B2-Consultants/docs/</code> (v1.1) vs <code>docs/</code> (stale). I audited against v1.1. Worth deleting one before it produces a real bug.</li>
+  </ul>
+
+  <hr class="rule">
+  <p class="meta-strip" style="border-top:0;margin-top:24px;">
+    <span>All coordinates measured in the rendered browser at 1440×900 unless noted · <b>10 dashboards</b> · <b>4 roles</b> · <b>2 Critical · 12 Moderate · 10 Minor · 9 verified correct</b> · 3 findings retracted or downgraded after verification, 1 of them during implementation</span>
+  </p>
+
+</div>
+</body>
+</html>

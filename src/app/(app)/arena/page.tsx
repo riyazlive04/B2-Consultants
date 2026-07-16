@@ -1,3 +1,5 @@
+import { Trophy } from "lucide-react";
+import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
 import { getTeamGame } from "@/server/gamification";
 import { ArenaClient } from "./_components/ArenaClient";
@@ -21,14 +23,12 @@ export default async function ArenaPage() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Arena</h1>
-        <p className="mt-1 text-sm text-muted">
-          XP, levels, quests and badges — earned automatically from the work you already log.
-          No extra data entry, no way to farm points except doing the job.
-        </p>
-      </div>
+    <div className="w-full space-y-8">
+      <PageHeader
+        icon={<Trophy size={20} />}
+        title="Arena"
+        subtitle="XP, levels, quests and badges — earned automatically from the work you already log. No extra data entry, no way to farm points except doing the job."
+      />
       <ArenaClient
         players={players}
         feed={game.feed}

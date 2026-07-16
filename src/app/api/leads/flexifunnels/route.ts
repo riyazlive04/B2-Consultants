@@ -1,7 +1,7 @@
-import crypto from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { upsertIntakeLead } from "@/server/lead-intake";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
+import { extractContact, extractUtm, secretMatches, unwrap } from "@/server/webhook-payload";
 
 /**
  * FlexiFunnels / generic landing-page lead webhook (Wave-1 capture).
@@ -9,31 +9,14 @@ import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
  * FlexiFunnels (and most funnel builders) POST a flat JSON object of the opt-in fields.
  * We accept a permissive shape and pull the common contact fields case-insensitively, so
  * the same endpoint works for FlexiFunnels, a custom landing page, or a Zapier relay.
+ * A lead arriving here is attributed LANDING_PAGE unconditionally; a relay carrying leads from
+ * MIXED origins wants /api/leads/pabbly instead, which reads the origin off the payload.
  *
  * Auth: a shared secret via `x-webhook-secret` header or `?key=` query, checked against
  * FLEXIFUNNELS_WEBHOOK_SECRET. De-dupe: source+externalRef (payload id) then phone.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function pick(obj: Record<string, unknown>, ...keys: string[]): string | undefined {
-  const lower = new Map(Object.entries(obj).map(([k, v]) => [k.toLowerCase(), v]));
-  for (const k of keys) {
-    const v = lower.get(k);
-    if (typeof v === "string" && v.trim()) return v.trim();
-    if (typeof v === "number") return String(v);
-  }
-  return undefined;
-}
-
-/** Constant-time string comparison - a plain !== leaks length/prefix timing. */
-function secretMatches(provided: string, secret: string): boolean {
-  const a = crypto.createHash("sha256").update(provided).digest();
-  const b = crypto.createHash("sha256").update(secret).digest();
-  return crypto.timingSafeEqual(a, b);
-}
-
-const cap = (v: string | undefined, max: number) => (v ? v.slice(0, max) : v);
 
 export async function POST(req: NextRequest) {
   // Fail CLOSED: without a configured secret this endpoint would accept
@@ -57,34 +40,25 @@ export async function POST(req: NextRequest) {
   } catch {
     return new Response("Bad request", { status: 400 });
   }
-  // Some builders nest the fields under `data`/`contact`/`fields`.
-  const src = (["data", "contact", "fields", "payload"] as const)
-    .map((k) => body[k])
-    .find((v) => v && typeof v === "object") as Record<string, unknown> | undefined;
-  const f = src ?? body;
 
-  // Length caps: webhook fields go straight into DB text columns.
-  const name = cap(pick(f, "name", "full_name", "fullname", "first_name", "fname"), 160);
-  const phone = cap(pick(f, "phone", "phone_number", "mobile", "whatsapp", "contact_number"), 32);
-  const email = cap(pick(f, "email", "email_address"), 254);
-  const city = cap(pick(f, "city", "location"), 120);
-  const externalRef = cap(
-    pick(f, "id", "lead_id", "submission_id", "contact_id") ?? (email ? `email:${email}` : undefined),
-    300,
-  );
+  // TEMPORARY (LEAD_WEBHOOK_DEBUG): echo the raw body to the server log so a new sender's
+  // exact field names can be read off a real delivery instead of guessed at. This prints
+  // lead PII — turn the flag off once the mapping is confirmed. Logged after the secret
+  // check, so an unauthenticated caller can never write to the log.
+  if (process.env.LEAD_WEBHOOK_DEBUG === "true") {
+    console.log(
+      "[lead-webhook] raw inbound payload:",
+      JSON.stringify({ keys: Object.keys(body), body }, null, 2).slice(0, 4000),
+    );
+  }
+  const f = unwrap(body);
+  const { name, phone, email, city, externalRef } = extractContact(f);
 
   if (!name || !phone) {
     return NextResponse.json({ ok: false, error: "name and phone are required" }, { status: 422 });
   }
 
-  // Attribution: forward any utm_* fields present in the payload (bounded).
-  const utm: Record<string, string> = {};
-  for (const [k, v] of Object.entries(f)) {
-    if (Object.keys(utm).length >= 10) break;
-    if (k.toLowerCase().startsWith("utm_") && typeof v === "string" && v) {
-      utm[k.toLowerCase().slice(0, 64)] = v.slice(0, 200);
-    }
-  }
+  const utm = extractUtm(f);
 
   const { created, deduped } = await upsertIntakeLead({
     name,

@@ -1,0 +1,175 @@
+
+> b2-dashboard@0.1.0 start
+> next start
+
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ⚠ Disabling outputFileTracing will not be an option in the next major version. Please report any issues you may be experiencing to https://github.com/vercel/next.js/issues
+ ✓ Ready in 476ms
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "full_name",
+    "phone_number",
+    "email_address",
+    "city",
+    "lead_source",
+    "campaign"
+  ],
+  "body": {
+    "id": "pabtest-a1",
+    "full_name": "Amit Sharma",
+    "phone_number": "+919000000011",
+    "email_address": "amit@example.com",
+    "city": "Pune",
+    "lead_source": "Facebook Lead Ad",
+    "campaign": "Ghosted Blueprint Jul"
+  }
+}
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "full_name",
+    "phone_number",
+    "lead_source"
+  ],
+  "body": {
+    "id": "pabtest-a1",
+    "full_name": "Amit Sharma",
+    "phone_number": "+919000000011",
+    "lead_source": "Facebook Lead Ad"
+  }
+}
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "name",
+    "phone",
+    "lead_source"
+  ],
+  "body": {
+    "id": "pabtest-a2",
+    "name": "Priya R",
+    "phone": "+919000000012",
+    "lead_source": "ig"
+  }
+}
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "data"
+  ],
+  "body": {
+    "data": {
+      "id": "pabtest-a3",
+      "name": "Ravi K",
+      "phone": "+919000000013",
+      "utm_source": "youtube",
+      "utm_campaign": "webinar-jul"
+    }
+  }
+}
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "name",
+    "phone",
+    "lead_source"
+  ],
+  "body": {
+    "id": "pabtest-a4",
+    "name": "Sunita M",
+    "phone": "+919000000014",
+    "lead_source": "carrier pigeon"
+  }
+}
+[pabbly-webhook] unmapped lead_source "carrier pigeon" → OTHER
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "phone",
+    "lead_source"
+  ],
+  "body": {
+    "id": "pabtest-a5",
+    "phone": "+919000000015",
+    "lead_source": "fb"
+  }
+}
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "name",
+    "phone",
+    "lead_source"
+  ],
+  "body": {
+    "id": "pabtest-a6",
+    "name": "Query Auth",
+    "phone": "+919000000016",
+    "lead_source": "landing_page"
+  }
+}
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "full_name",
+    "phone_number",
+    "email_address",
+    "city",
+    "lead_source",
+    "campaign"
+  ],
+  "body": {
+    "id": "pubtest-1",
+    "full_name": "Public Tunnel Lead",
+    "phone_number": "+919000000021",
+    "email_address": "pub@example.com",
+    "city": "Mumbai",
+    "lead_source": "facebook",
+    "campaign": "tunnel check"
+  }
+}
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "name",
+    "phone",
+    "lead_source"
+  ],
+  "body": {
+    "id": "diag-1",
+    "name": "Diag Lead",
+    "phone": "+919000000031",
+    "lead_source": "facebook"
+  }
+}
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "name",
+    "phone",
+    "lead_source"
+  ],
+  "body": {
+    "id": "diag-1",
+    "name": "Diag Lead",
+    "phone": "+919000000031",
+    "lead_source": "facebook"
+  }
+}
+[pabbly-webhook] raw inbound payload: {
+  "keys": [
+    "id",
+    "name",
+    "phone",
+    "lead_source"
+  ],
+  "body": {
+    "id": "diag-1",
+    "name": "Diag Lead",
+    "phone": "+919000000031",
+    "lead_source": "facebook"
+  }
+}

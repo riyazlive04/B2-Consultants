@@ -1,3 +1,10 @@
 {
   "extends": "next/core-web-vitals"
+  // TODO(design-system): add eslint-plugin-tailwindcss (rule `no-custom-classname`, allowlisting
+  // the project's own token classes: text-display-l|h1|h2|h3|metric|body|body-strong|label|
+  // caption|mono-data, on-accent, etc.) to ban raw `text-white` and Tailwind arbitrary-value
+  // classes (`text-\[...\]`) outside src/components/ui/**. See docs/DESIGN_SYSTEM.md §2.1 and
+  // §1.4 — this is the exact class of bug fixed in the §13 design-token sweep (BUILD_CHECKLIST.md).
+  // Not added now because it is a new npm dependency (requires `npm install` / package.json
+  // changes) which this workstream is scoped to avoid; wire it up in a pass that owns tooling deps.
 }

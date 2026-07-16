@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma, type WhatsAppKind, type WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
-import { formatDateTimeInZone, formatInrMinor } from "@/lib/format";
+import { formatDate, formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import { WHATSAPP_KIND_LABELS, type WatiTemplateConfig } from "@/lib/whatsapp";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import {
@@ -59,6 +59,16 @@ export type SendWhatsAppInput = WhatsAppTarget & {
   logSkips?: boolean;
   /** Pass a shared runtime when sending in a loop, to avoid re-reading config each time. */
   runtime?: WatiRuntime;
+  /**
+   * Rehearse: run every check (number, template, opt-out, variables) and write the row that
+   * proves what WOULD have gone out — but never call WATI. The row lands as SKIPPED with a
+   * `DRY RUN` reason, so the WhatsApp history shows the exact recipient and text for review.
+   *
+   * This is the ONLY safe way to develop a new touchpoint against a live WATI account: the
+   * checks that matter run for real, so a dry run that says SKIPPED-for-dry-run genuinely
+   * means "this would have sent", not "this might have".
+   */
+  dryRun?: boolean;
 };
 
 export type SendOutcome = {
@@ -132,7 +142,7 @@ async function writeRow(input: {
  * Send one WhatsApp template message and log it. Fail-safe: resolves a SendOutcome, never throws.
  */
 export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcome> {
-  const { kind, to, vars, sentById = null, target, logSkips = true } = {
+  const { kind, to, vars, sentById = null, target, logSkips = true, dryRun = false } = {
     ...input,
     target: {
       leadId: input.leadId,
@@ -196,6 +206,24 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
       target,
     });
     return { messageId, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
+  }
+
+  // Would have sent. Rehearsal stops exactly here — after every check has passed for real,
+  // and before the only line that touches the outside world.
+  if (dryRun) {
+    const reason = `DRY RUN — not sent. Would have gone to ${number} via template "${template!.name}".`;
+    const messageId = await writeRow({
+      kind,
+      status: "SKIPPED",
+      toNumber: number!,
+      templateName: template!.name,
+      body,
+      params: paramsJson,
+      error: reason,
+      sentById,
+      target,
+    });
+    return { messageId, status: "SKIPPED", sent: false, skipped: true, error: reason };
   }
 
   // Enabled + configured + template + valid number + not opted-out → real send.
@@ -529,6 +557,65 @@ export async function runDueReminders(): Promise<ReminderRun> {
     }
   }
 
+  // 4b. EMI pre-due reminders — an instalment falls due in N days. The counterpart to #4:
+  // that one chases money that is already LATE; this one arrives while paying is still easy,
+  // which is the whole point ("remind me BEFORE the day").
+  //
+  // Reads Instalment directly rather than PendingPayment.nextDueDate, because the headline
+  // next-due only ever names the earliest unpaid instalment — it cannot say "#2 of 3", and it
+  // is a denormalised mirror that emi-actions keeps in sync. The instalment row is the fact.
+  if (budget > 0 && hasTemplate("EMI_PRE_DUE") && cadence.emiPreDueLeadDays.length > 0) {
+    const DAY = 24 * HR;
+    // today is IST-midnight UTC; dueDate is @db.Date (also midnight) → exact day equality.
+    const wanted = cadence.emiPreDueLeadDays.map((d) => new Date(today.getTime() + d * DAY));
+    const due = await prisma.instalment.findMany({
+      where: {
+        status: "DUE", // PAID needs no chasing; OVERDUE is #4's job
+        dueDate: { in: wanted },
+        pendingPayment: { status: "ACTIVE" },
+      },
+      include: {
+        pendingPayment: {
+          select: {
+            id: true,
+            studentId: true,
+            studentName: true,
+            student: { select: { phone: true } },
+            _count: { select: { instalments: true } },
+          },
+        },
+      },
+      take: Math.min(budget * 2 + 50, 300),
+    });
+    for (const it of due) {
+      if (budget <= 0) break;
+      const p = it.pendingPayment;
+      const phone = p.student?.phone;
+      if (!phone) continue; // no linked student / no number — nothing to send to
+      // Spacing, not maxCount: each lead-day should land once, and a 20h window lets the
+      // "3 days out" and "on the day" messages both through while a 15-min cron re-running
+      // all day cannot double-send. (maxCount would also miscount in dry run, where rows
+      // are SKIPPED and therefore never "successful".)
+      if (!(await throttleOk("EMI_PRE_DUE", { pendingPaymentId: p.id }, { minSpacingMs: 20 * HR }))) continue;
+      record("EMI_PRE_DUE", await sendWhatsApp({
+        kind: "EMI_PRE_DUE",
+        to: phone,
+        pendingPaymentId: p.id,
+        studentId: p.studentId ?? undefined,
+        runtime,
+        dryRun: cadence.emiPreDueDryRun,
+        bodySummary: `EMI ${it.seq}/${p._count.instalments} · ${formatInrMinor(Number(it.amountInrMinor))} due ${formatDate(it.dueDate)}`,
+        vars: {
+          name: firstName(p.studentName),
+          amount: formatInrMinor(Number(it.amountInrMinor)),
+          due_date: formatDate(it.dueDate),
+          seq: String(it.seq),
+          total: String(p._count.instalments),
+        },
+      }));
+    }
+  }
+
   // 5. Check-in nudges — active enrollments whose check-in date has arrived/passed.
   if (budget > 0 && hasTemplate("CHECKIN_NUDGE")) {
     const enrollments = await prisma.enrollment.findMany({
@@ -633,6 +720,54 @@ export async function sendBookingReminderFor(bookingRequestId: string, sentById?
       slot_time: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Asia/Kolkata") : "",
       booking_url: bookingUrl(),
     },
+  });
+}
+
+// ── Bookings confirmation loop (Module E) ──
+// These three mirror the wrappers above and are driven by booking-automation.ts + booking-actions.ts.
+// The auto path passes no sentById and stays quiet when WATI is off; a manual resend passes one.
+
+/** "Please reply YES to hold your slot." Sent once as the call approaches (confirm-request lead). */
+export async function sendBookingConfirmRequest(bookingRequestId: string, sentById?: string | null): Promise<SendOutcome> {
+  const b = await loadBooking(bookingRequestId);
+  if (!b) return notFound("Booking");
+  return sendWhatsApp({
+    kind: "BOOKING_CONFIRM_REQUEST", to: b.whatsapp || b.phone, bookingRequestId: b.id, leadId: b.leadId ?? undefined,
+    sentById: sentById ?? null,
+    logSkips: !!sentById,
+    vars: {
+      name: firstName(b.name),
+      slot_time: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Asia/Kolkata") : "",
+      booking_url: bookingUrl(),
+    },
+  });
+}
+
+/** "Your call has been moved to <new time>." Used by manual postpone AND the promote-next path. */
+export async function sendBookingRescheduled(bookingRequestId: string, sentById?: string | null): Promise<SendOutcome> {
+  const b = await loadBooking(bookingRequestId);
+  if (!b) return notFound("Booking");
+  return sendWhatsApp({
+    kind: "BOOKING_RESCHEDULED", to: b.whatsapp || b.phone, bookingRequestId: b.id, leadId: b.leadId ?? undefined,
+    sentById: sentById ?? null,
+    logSkips: !!sentById,
+    vars: {
+      name: firstName(b.name),
+      slot_time: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Asia/Kolkata") : "",
+      booking_url: bookingUrl(),
+    },
+  });
+}
+
+/** "We didn't hear back, so we've released your slot — rebook here." Sent on auto-cancel. */
+export async function sendBookingAutoCancelled(bookingRequestId: string, sentById?: string | null): Promise<SendOutcome> {
+  const b = await loadBooking(bookingRequestId);
+  if (!b) return notFound("Booking");
+  return sendWhatsApp({
+    kind: "BOOKING_AUTO_CANCELLED", to: b.whatsapp || b.phone, bookingRequestId: b.id, leadId: b.leadId ?? undefined,
+    sentById: sentById ?? null,
+    logSkips: !!sentById,
+    vars: { name: firstName(b.name), booking_url: bookingUrl() },
   });
 }
 

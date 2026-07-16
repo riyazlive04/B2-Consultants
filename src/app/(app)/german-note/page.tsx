@@ -2,14 +2,19 @@ import Link from "next/link";
 import { CalendarClock, CheckCircle2, ExternalLink, Languages, Settings, Users, Video } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { getGnOverview } from "@/server/german-note-metrics";
+import { OnboardingWalkthrough } from "@/components/onboarding/OnboardingWalkthrough";
 import { CommunityFeed } from "./_components/CommunityFeed";
 import { Leaderboard } from "./_components/Leaderboard";
 import { LevelChip, StatusChip } from "./_components/LevelChip";
-import { formatDateTimeInZone } from "@/lib/format";
+import { formatDateTimeInZone, formatPct } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function GermanNotePage() {
+export default async function GermanNotePage({
+  searchParams,
+}: {
+  searchParams?: { onboarding?: string };
+}) {
   const session = await requireSection("german-note");
   const { access, batches, feed, leaderboard, levelProgress, upcomingEvents, mentionCandidates } =
     await getGnOverview(session.role, session.user.id);
@@ -17,7 +22,14 @@ export default async function GermanNotePage() {
   const isParticipant = access.isAdmin || access.isTutor || batches.length > 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="w-full space-y-8">
+      {/* Home forwards ?onboarding=1 here for TUTOR before it can redirect this far. */}
+      <OnboardingWalkthrough
+        userId={session.user.id}
+        role={session.role}
+        firstName={session.user.name.split(" ")[0]}
+        initialOpen={searchParams?.onboarding === "1"}
+      />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">German Note</h1>
@@ -48,7 +60,7 @@ export default async function GermanNotePage() {
       {!isParticipant ? (
         <div className="rounded-card border border-dashed border-line bg-surface-2 px-6 py-12 text-center">
           <Languages size={28} className="mx-auto text-[var(--lvl-gn)]" />
-          <p className="mt-3 font-display text-lg font-semibold">You&apos;re not in a German Note batch yet</p>
+          <p className="mt-3 font-display text-h2 font-semibold">You&apos;re not in a German Note batch yet</p>
           <p className="mt-1 text-sm text-muted">
             Once you join a batch, your class recordings and the community appear here. Ask your admin.
           </p>
@@ -60,7 +72,7 @@ export default async function GermanNotePage() {
             <div className="grid gap-4 sm:grid-cols-2">
               {batches.map((b) => {
                 const pct = b.watchedCount !== null && b.recordingCount > 0
-                  ? Math.round((b.watchedCount / b.recordingCount) * 100)
+                  ? (b.watchedCount / b.recordingCount) * 100
                   : null;
                 return (
                   <Link
@@ -69,7 +81,7 @@ export default async function GermanNotePage() {
                     className="card-hover rounded-card border border-line bg-surface p-4 shadow-card"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-display text-[15px] font-semibold">{b.name}</span>
+                      <span className="font-display text-h3">{b.name}</span>
                       <LevelChip level={b.level} />
                       <StatusChip status={b.status} />
                     </div>
@@ -82,11 +94,11 @@ export default async function GermanNotePage() {
                     </p>
                     {pct !== null && (
                       <div className="mt-3">
-                        <div className="flex items-center justify-between text-[11px] text-muted">
+                        <div className="flex items-center justify-between text-caption text-muted">
                           <span className="inline-flex items-center gap-1">
                             <CheckCircle2 size={12} className="text-[var(--lvl-gn)]" /> {b.watchedCount}/{b.recordingCount} watched
                           </span>
-                          <span className="tnum">{pct}%</span>
+                          <span className="tnum">{formatPct(pct)}</span>
                         </div>
                         <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
                           <div className="h-full rounded-full bg-[var(--lvl-gn)]" style={{ width: `${pct}%` }} />
@@ -111,14 +123,14 @@ export default async function GermanNotePage() {
           {/* upcoming live classes across the viewer's batches */}
           {upcomingEvents.length > 0 && (
             <div className="rounded-card border border-line bg-surface p-4 shadow-card">
-              <h2 className="flex items-center gap-2 font-display text-[15px] font-semibold">
+              <h2 className="flex items-center gap-2 font-display text-h3">
                 <CalendarClock size={16} className="text-[var(--lvl-gn)]" /> Upcoming classes
               </h2>
               <ul className="mt-3 space-y-2">
                 {upcomingEvents.map((e) => (
                   <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
                     <span className="font-semibold">{e.title}</span>
-                    {e.batchName && <span className="rounded-full bg-[#3fc0b722] px-2 py-0.5 text-[10px] font-semibold text-[var(--lvl-gn)]">{e.batchName}</span>}
+                    {e.batchName && <span className="rounded-full bg-lvl-gn/10 px-2 py-0.5 text-caption font-semibold text-ink">{e.batchName}</span>}
                     <span className="text-xs text-muted">{formatDateTimeInZone(e.startsAt, "Asia/Kolkata")} IST</span>
                     {e.joinUrl && (
                       <a href={e.joinUrl} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline">
@@ -145,7 +157,7 @@ export default async function GermanNotePage() {
               {levelProgress && (
                 <div className="rounded-card border border-line bg-surface p-4 shadow-card">
                   <div className="flex items-center gap-2">
-                    <span className="grid h-9 w-9 place-items-center rounded-full bg-primary text-sm font-bold text-white">{levelProgress.level}</span>
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-primary text-sm font-bold text-on-accent">{levelProgress.level}</span>
                     <div>
                       <p className="text-sm font-semibold">Level {levelProgress.level}</p>
                       <p className="text-xs text-muted">{levelProgress.points} community points</p>
@@ -154,7 +166,7 @@ export default async function GermanNotePage() {
                   <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-2">
                     <div className="h-full rounded-full bg-primary" style={{ width: `${levelProgress.pct}%` }} />
                   </div>
-                  <p className="mt-1.5 text-[11px] text-muted">
+                  <p className="mt-1.5 text-caption text-muted">
                     {levelProgress.ceil === null
                       ? "Max level reached 🏆"
                       : `${levelProgress.toNext} more point${levelProgress.toNext === 1 ? "" : "s"} to level ${levelProgress.level + 1}`}

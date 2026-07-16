@@ -3,17 +3,20 @@
 import { useState } from "react";
 import {
   addEnrollment, addSatisfactionScore, createStudentLogin, linkIncomeToStudent,
-  revokeStudentLogin, setEnrollmentStatus, updateStudent, updateTracker,
+  revokeStudentLogin, setEnrollmentCloser, setEnrollmentStatus, updateStudent, updateTracker,
 } from "@/server/students-actions";
+import { createJobApplication, deleteJobApplication, updateJobApplicationStatus } from "@/server/job-applications-actions";
 import type { StudentDetail } from "@/server/students-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { BadgeChip, JourneyRing, MomentumChip } from "@/components/ui/gamification";
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
+import { Card, Pill } from "@/components/ui/kit";
+import { Btn } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { SprintTracker } from "./SprintTracker";
 import { signalForStudent } from "@/lib/signals";
-import { formatDate, formatInrMinor } from "@/lib/format";
+import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import {
   LEAD_SOURCE_LABELS, MILESTONE_LABELS, optionsFrom, OUTCOME_ACHIEVED_LABELS,
   PROGRAM_LEVEL_LABELS, SIGNAL_LABELS, STUDENT_STATUS_LABELS, TASK_COMPLETION_LABELS,
@@ -26,6 +29,12 @@ const B2_LEVEL_OPTIONS = [
   { value: "SOLO", label: "Solo" },
   { value: "GUIDED", label: "Guided (90d)" },
   { value: "ELITE", label: "Elite (120d)" },
+];
+
+// PRD2 §4.1: assigned coach is a dropdown (currently Karthick).
+const COACH_OPTIONS = [
+  { value: "Karthick", label: "Karthick" },
+  { value: "Ameen", label: "Ameen" },
 ];
 
 const MILESTONE_ORDER = [
@@ -46,11 +55,11 @@ function MilestoneJourney({ current }: { current: string }) {
           <li key={m} className="flex items-center">
             <span
               title={MILESTONE_LABELS[m]}
-              className={`flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold ${
+              className={`flex h-7 w-7 items-center justify-center rounded-full border text-caption font-bold ${
                 active
-                  ? "border-transparent text-white"
+                  ? "border-transparent text-on-accent"
                   : done
-                    ? "border-transparent text-white"
+                    ? "border-transparent text-on-accent"
                     : "border-line bg-surface text-muted"
               }`}
               style={{
@@ -74,6 +83,135 @@ function MilestoneJourney({ current }: { current: string }) {
         );
       })}
     </ol>
+  );
+}
+
+const JOB_APP_STATUS_OPTIONS = [
+  { value: "APPLIED", label: "Applied" },
+  { value: "INTERVIEW", label: "Interview" },
+  { value: "SELECTED", label: "Selected" },
+  { value: "REJECTED", label: "Rejected" },
+];
+const JOB_APP_STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  JOB_APP_STATUS_OPTIONS.map((o) => [o.value, o.label]),
+);
+function jobAppTone(status: string): "good" | "bad" | "warn" | "neutral" {
+  return status === "SELECTED" ? "good" : status === "REJECTED" ? "bad" : status === "INTERVIEW" ? "warn" : "neutral";
+}
+
+/** Per-application placement tracking (spec Module I): applied → interview → selected/rejected. */
+function JobApplications({
+  enrollmentId,
+  applications,
+  canEdit,
+  todayKey,
+  onError,
+}: {
+  enrollmentId: string;
+  applications: Enrollment["jobApplications"];
+  canEdit: boolean;
+  todayKey: string;
+  onError: (msg: string | null) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  return (
+    <div className="mt-5 border-t border-line pt-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Job applications</h4>
+        {canEdit && (
+          <button type="button" className="text-sm text-accent hover:underline" onClick={() => setAdding((v) => !v)}>
+            {adding ? "Close" : "+ Add application"}
+          </button>
+        )}
+      </div>
+
+      {applications.length === 0 ? (
+        <p className="mt-2 text-sm text-muted">No applications logged yet.</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {applications.map((a) => (
+            <div
+              key={a.id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-card border border-line bg-surface-2 px-3 py-2 text-sm"
+            >
+              <span className="font-medium">
+                {a.jobUrl ? (
+                  <a href={a.jobUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                    {a.role}
+                  </a>
+                ) : (
+                  a.role
+                )}
+                <span className="text-muted"> · {a.company}</span>
+                {a.location && <span className="text-muted"> · {a.location}</span>}
+              </span>
+              <span className="text-xs text-muted">applied {formatDate(a.appliedAt)}</span>
+              <div className="ml-auto flex items-center gap-2">
+                {canEdit ? (
+                  <Select
+                    value={a.status}
+                    aria-label="Application status"
+                    options={JOB_APP_STATUS_OPTIONS}
+                    onChange={async (ev) => {
+                      onError(null);
+                      const res = await updateJobApplicationStatus(a.id, ev.target.value);
+                      if (!res.ok) onError(res.error);
+                      else toast("Application updated");
+                    }}
+                  />
+                ) : (
+                  <Pill tone={jobAppTone(a.status)}>{JOB_APP_STATUS_LABEL[a.status]}</Pill>
+                )}
+                {canEdit && (
+                  <button
+                    type="button"
+                    aria-label="Delete application"
+                    className="px-1 text-muted hover:text-risk"
+                    onClick={async () => {
+                      const ok = await askConfirm({
+                        title: "Delete this application?",
+                        body: `${a.role} · ${a.company}`,
+                        confirmLabel: "Delete",
+                        danger: true,
+                      });
+                      if (!ok) return;
+                      onError(null);
+                      const res = await deleteJobApplication(a.id);
+                      if (!res.ok) onError(res.error);
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {canEdit && adding && (
+        <form
+          action={async (form) => {
+            onError(null);
+            const res = await createJobApplication(enrollmentId, form);
+            if (!res.ok) return onError(res.error);
+            setAdding(false);
+            toast("Application added");
+          }}
+          className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          <Field label="Company"><TextInput name="company" required /></Field>
+          <Field label="Role"><TextInput name="role" required /></Field>
+          <Field label="Location"><TextInput name="location" /></Field>
+          <Field label="Applied date"><TextInput type="date" name="appliedAt" required defaultValue={todayKey} /></Field>
+          <div className="lg:col-span-2">
+            <Field label="Job URL (optional)"><TextInput type="url" name="jobUrl" placeholder="https://…" /></Field>
+          </div>
+          <Field label="Status"><Select name="status" options={JOB_APP_STATUS_OPTIONS} defaultValue="APPLIED" /></Field>
+          <div className="flex items-end"><SubmitButton>Add application</SubmitButton></div>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -109,7 +247,7 @@ export function StudentDetailClient({
       <FormError message={error} />
 
       {/* Profile */}
-      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
+      <Card>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-display text-2xl font-semibold">{student.fullName}</h2>
@@ -157,24 +295,31 @@ export function StudentDetailClient({
             <div className="flex items-end"><SubmitButton>Save profile</SubmitButton></div>
           </form>
         )}
-      </section>
+      </Card>
 
       {/* Enrollments + tracker */}
       {student.enrollments.map((e) => (
-        <section key={e.id} className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-display text-lg font-semibold">
+        <Card
+          key={e.id}
+          title={
+            <span className="font-display text-h3 text-ink">
               {PROGRAM_LEVEL_LABELS[e.programLevel]} - enrolled {formatDate(e.enrollmentDate)}
               {e.totalDays && e.status === "ACTIVE" && (
                 <span className="ml-2 text-sm font-normal text-muted">
-                  Day {e.dayNumber} of {e.totalDays} · {Math.round(((e.dayNumber ?? 0) / e.totalDays) * 100)}%
+                  Day {e.dayNumber} of {e.totalDays} · {formatPct(((e.dayNumber ?? 0) / e.totalDays) * 100)}
                 </span>
               )}
-            </h3>
-            <div className="flex items-center gap-2">
+              {/* PRD2 §4.1: program end date (Solo has none — lifetime). */}
+              <span className="ml-2 text-sm font-normal text-muted">
+                · {e.programEndDate ? `ends ${formatDate(e.programEndDate)}` : "lifetime"}
+              </span>
+            </span>
+          }
+          actions={
+            <>
               {e.signalColour && <SignalBadge level={signalForStudent(e.signalColour)} size="sm" />}
               {isAdmin ? (
-                <select
+                <Select
                   name="status"
                   value={e.status}
                   onChange={async (ev) => {
@@ -195,25 +340,46 @@ export function StudentDetailClient({
                       toast("Enrollment status updated");
                     }
                   }}
-                  className="rounded-field border border-line bg-surface-2 px-2 py-1.5 text-sm"
                   aria-label="Enrollment status"
-                >
-                  {optionsFrom(STUDENT_STATUS_LABELS).map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+                  options={optionsFrom(STUDENT_STATUS_LABELS)}
+                />
               ) : (
                 <span className="text-sm text-muted">{STUDENT_STATUS_LABELS[e.status]}</span>
               )}
-            </div>
+            </>
+          }
+        >
+          {/* Deal team + coach — the closer (L3) drives the commission split */}
+          <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+            <span className="text-muted">
+              Coach: <span className="text-ink">{e.assignedCoach ?? "—"}</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="text-muted">Closer (L3):</span>
+              {isAdmin ? (
+                <Select
+                  value={e.closerId ?? ""}
+                  aria-label="Deal closer"
+                  onChange={async (ev) => {
+                    setError(null);
+                    const res = await setEnrollmentCloser(e.id, ev.target.value);
+                    if (!res.ok) setError(res.error);
+                    else toast("Closer updated — commission split recalculated");
+                  }}
+                  options={[{ value: "", label: "— none —" }, ...student.teamMembers.map((m) => ({ value: m.id, label: m.name }))]}
+                />
+              ) : (
+                <span className="text-ink">{e.closerName ?? "—"}</span>
+              )}
+            </span>
           </div>
 
           {/* Gamified journey card — stage title, XP, momentum, achievement badges.
               Show it in sessions: the ring and badges are the student's scoreboard. */}
-          <div className="mt-4 flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface-2 p-4">
+          <div className="flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface-2 p-4">
             <JourneyRing pct={e.journey.journeyPct} stageIndex={e.journey.stageIndex} size={64} />
             <div className="min-w-44">
-              <p className="font-display text-lg font-semibold">{e.journey.stageTitle}</p>
+              <p className="font-display text-h2 font-semibold">{e.journey.stageTitle}</p>
               <p className="tnum text-xs text-muted">
                 {e.journey.xp.toLocaleString("en-IN")} journey XP · stage {e.journey.stageIndex + 1} of 7 ·{" "}
                 {e.journey.unlockedCount}/{e.journey.badges.length} badges
@@ -309,6 +475,15 @@ export function StudentDetailClient({
             <SprintTracker enrollment={e} todayKey={todayKey} canEdit={canEditTracker} />
           )}
 
+          {/* Per-application job tracking (spec Module I) */}
+          <JobApplications
+            enrollmentId={e.id}
+            applications={e.jobApplications}
+            canEdit={canEditTracker}
+            todayKey={todayKey}
+            onError={setError}
+          />
+
           {/* Milestone progress log - append-only, CSV exportable (PRD2 §4.4) */}
           {e.milestoneLogs.length > 0 && (
             <div className="mt-5">
@@ -329,28 +504,28 @@ export function StudentDetailClient({
               ))}
             </div>
           )}
-        </section>
+        </Card>
       ))}
 
       {/* Student portal access (Admin): a Role.STUDENT login that sees only /my-journey */}
       {isAdmin && (
-        <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <h3 className="font-display text-lg font-semibold">Student portal access</h3>
-          <p className="mt-1 text-xs text-muted">
+        <Card title="Student portal access">
+          <p className="text-xs text-muted">
             A portal login shows this student their own journey, XP, badges and next steps —
             plus the CV Diagnostic. It never sees money, signals or internal notes.
           </p>
           {student.portalEmail ? (
             <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-              <span className="rounded-full bg-ok-soft px-2.5 py-1 font-semibold text-ok">Portal active</span>
+              <Pill tone="good">Portal active</Pill>
               <span className="text-muted">Login: {student.portalEmail}</span>
               <span className="text-xs text-muted">(reset the password from People → Users &amp; access)</span>
-              <button
-                type="button"
-                className="ml-auto text-sm text-risk hover:underline"
+              <Btn
+                variant="danger"
+                size="sm"
+                className="ml-auto"
                 onClick={async () => {
                   const ok = await askConfirm({
-                    title: "Revoke portal access?",
+                    title: `Revoke portal access for ${student.portalEmail}?`,
                     body: "The login is deleted and all their sessions end. The student record is untouched.",
                     confirmLabel: "Revoke",
                     danger: true,
@@ -363,7 +538,7 @@ export function StudentDetailClient({
                 }}
               >
                 Revoke access
-              </button>
+              </Btn>
             </div>
           ) : (
             <form
@@ -388,12 +563,12 @@ export function StudentDetailClient({
               <SubmitButton>Create portal login</SubmitButton>
             </form>
           )}
-        </section>
+        </Card>
       )}
 
       {/* Upgrade: add enrollment (Admin) */}
       {isAdmin && (
-        <section className="rounded-card border border-line bg-surface p-5 shadow-card">
+        <Card>
           <button type="button" className="text-sm text-accent hover:underline" onClick={() => setAddingEnrollment((v) => !v)}>
             {addingEnrollment ? "Close" : "+ Add enrollment (upgrade)"}
           </button>
@@ -408,18 +583,24 @@ export function StudentDetailClient({
               className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
             >
               <Field label="Program level"><Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" /></Field>
-              <Field label="Enrollment date"><TextInput type="date" name="enrollmentDate" required /></Field>
+              <Field label="Enrollment date"><TextInput type="date" name="enrollmentDate" required defaultValue={todayKey} /></Field>
               <Field label="Sessions planned"><TextInput name="totalSessionsPlanned" inputMode="numeric" /></Field>
-              <Field label="Assigned coach"><TextInput name="assignedCoach" defaultValue="Karthick" /></Field>
+              <Field label="Assigned coach"><Select name="assignedCoach" options={COACH_OPTIONS} defaultValue="Karthick" /></Field>
+              <Field label="Closer (L3)" hint="For the commission split">
+                <Select
+                  name="closerId"
+                  options={[{ value: "", label: "— none —" }, ...student.teamMembers.map((m) => ({ value: m.id, label: m.name }))]}
+                  defaultValue=""
+                />
+              </Field>
               <div className="flex items-end"><SubmitButton>Add enrollment</SubmitButton></div>
             </form>
           )}
-        </section>
+        </Card>
       )}
 
       {/* Satisfaction / NPS (Admin, PRD2 §4.5) */}
-      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h3 className="font-display text-lg font-semibold">Satisfaction & NPS</h3>
+      <Card title="Satisfaction & NPS">
         {student.satisfaction.length > 0 && (
           <div className="mt-3 space-y-1 text-sm">
             {student.satisfaction.map((s) => (
@@ -441,7 +622,7 @@ export function StudentDetailClient({
             }}
             className="mt-4 grid grid-cols-1 gap-4 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-4"
           >
-            <Field label="Date of score"><TextInput type="date" name="date" required /></Field>
+            <Field label="Date of score"><TextInput type="date" name="date" required defaultValue={todayKey} /></Field>
             <Field label="Satisfaction (1-10)"><TextInput name="satisfactionScore" inputMode="numeric" required /></Field>
             <Field label="NPS (0-10)"><TextInput name="npsScore" inputMode="numeric" required /></Field>
             <Field label="Outcome achieved">
@@ -456,11 +637,10 @@ export function StudentDetailClient({
             <div className="flex items-end"><SubmitButton>Record score</SubmitButton></div>
           </form>
         )}
-      </section>
+      </Card>
 
       {/* Linked payments (fee ↔ Finance, CONTEXT §7) */}
-      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h3 className="font-display text-lg font-semibold">Payments (from Finance)</h3>
+      <Card title="Payments (from Finance)">
         {student.incomes.length ? (
           <div className="mt-3 space-y-1 text-sm">
             {student.incomes.map((i) => (
@@ -493,7 +673,7 @@ export function StudentDetailClient({
             <SubmitButton>Link payment</SubmitButton>
           </form>
         )}
-      </section>
+      </Card>
     </div>
   );
 }

@@ -85,6 +85,7 @@ export async function getPeopleOverview(monthStr?: string) {
     orderIndex: p.orderIndex,
     firstCallSharePct: p.firstCallSharePct,
     worksSaturdays: p.worksSaturdays,
+    dailyCallTarget: p.dailyCallTarget,
     logsDaily: p.dashboardRole !== "ADMIN" && p.status === "ACTIVE",
     submittedToday: p.userId ? submittedUserIds.has(p.userId) : false,
     streak: streakFor(p.userId),
@@ -132,10 +133,34 @@ export async function getPeopleOverview(monthStr?: string) {
       .map(([week, sums]) => ({ week, sums })),
   }));
 
+  // Monthly rollup (PRD2 §3.3): same daily numbers summed into calendar-month
+  // buckets (YYYY-MM), last 6 months per user.
+  const monthRollup = new Map<string, Map<string, Record<string, number>>>();
+  for (const log of recentLogs) {
+    const uname = log.user.name;
+    const mk = log.date.toISOString().slice(0, 7);
+    if (!monthRollup.has(uname)) monthRollup.set(uname, new Map());
+    const months = monthRollup.get(uname)!;
+    if (!months.has(mk)) months.set(mk, {});
+    const sums = months.get(mk)!;
+    for (const f of LOG_FIELDS) {
+      const v = log[f];
+      if (v !== null && v !== undefined) sums[f] = (sums[f] ?? 0) + v;
+    }
+  }
+  const monthlyRollup = [...monthRollup.entries()].map(([user, months]) => ({
+    user,
+    months: [...months.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .slice(0, 6)
+      .map(([month, sums]) => ({ month, sums })),
+  }));
+
   return {
     month: month.toISOString().slice(0, 7),
     members,
     weeklyRollup,
+    monthlyRollup,
     logs: recentLogs.map((l) => ({
       id: l.id,
       user: l.user.name,

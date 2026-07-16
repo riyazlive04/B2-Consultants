@@ -11,6 +11,8 @@ import {
 import type { PayoutRow, TelecallerBoard } from "@/server/telecaller-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
+import { Card, CardTitle, Pill } from "@/components/ui/kit";
+import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { formatEurMinor, formatInrMinor } from "@/lib/format";
 import { LOG_VARIANT_LABELS, PAYOUT_STATUS_LABELS, optionsFrom } from "@/lib/labels";
@@ -108,13 +110,9 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
           type="button"
           onClick={() => toggleStatus(r)}
           title={r.status === "PAID" ? "Mark as not paid yet" : "Mark as paid"}
-          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
-            r.status === "PAID"
-              ? "bg-ok-soft text-ok hover:bg-ok/20"
-              : "bg-watch-soft text-watch hover:bg-watch/20"
-          }`}
+          className="rounded-full transition-transform hover:brightness-95"
         >
-          {PAYOUT_STATUS_LABELS[r.status]}
+          <Pill tone={r.status === "PAID" ? "good" : "warn"}>{PAYOUT_STATUS_LABELS[r.status]}</Pill>
         </button>
       ),
       value: (r) => r.status,
@@ -124,8 +122,8 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
       key: "actions", header: "", sortable: false,
       cell: (r) => (
         <span className="flex gap-2 whitespace-nowrap">
-          <button type="button" className="py-1 text-accent hover:underline" onClick={() => startEdit(r)}>Edit</button>
-          <button type="button" className="py-1 text-risk hover:underline" onClick={() => remove(r)}>Delete</button>
+          <Btn variant="ghost" size="sm" onClick={() => startEdit(r)}>Edit</Btn>
+          <Btn variant="danger" size="sm" onClick={() => remove(r)}>Delete</Btn>
         </span>
       ),
       value: () => null,
@@ -137,7 +135,7 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
       {/* Telecaller call-context cards — the basis for the reward */}
       {hasTelecallers ? (
         <div>
-          <h2 className="mb-3 font-display text-lg font-semibold">
+          <h2 className="mb-3 font-display text-h2 font-semibold">
             Telecallers <span className="text-sm font-normal text-muted">· calls this month</span>
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -148,17 +146,13 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
                     <p className="truncate font-display text-base font-semibold">{t.name}</p>
                     <p className="truncate text-xs text-muted">{LOG_VARIANT_LABELS[t.logVariant] ?? t.roleTitle}</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => assignTo(t.teamProfileId)}
-                    className="flex-none rounded-btn bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-strong"
-                  >
+                  <Btn variant="soft" size="sm" onClick={() => assignTo(t.teamProfileId)}>
                     Assign
-                  </button>
+                  </Btn>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {t.calls.map((c) => (
-                    <span key={c.key} className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">
+                    <span key={c.key} className="rounded-full bg-surface-2 px-2 py-0.5 text-caption text-muted">
                       {c.label}: <span className="tnum font-semibold text-ink">{c.value}</span>
                     </span>
                   ))}
@@ -183,23 +177,21 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
 
       {/* Assignment form */}
       {hasTelecallers && (
-        <form
-          ref={formRef}
-          action={submit}
-          key={editing?.id ?? `new-${prefill ?? ""}`}
-          className="rounded-card border border-line bg-surface p-5 shadow-card"
-        >
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
-              <Gift size={18} className="text-accent" />
+        <Card
+          title={
+            <CardTitle icon={<Gift size={18} />}>
               {editing ? `Edit payout — ${editing.name}` : "Assign bonus / commission"}
-            </h3>
-            {editing && (
-              <button type="button" className="text-sm text-muted hover:underline" onClick={() => setEditing(null)}>
+            </CardTitle>
+          }
+          actions={
+            editing ? (
+              <Btn variant="ghost" size="sm" onClick={() => setEditing(null)}>
                 Cancel edit
-              </button>
-            )}
-          </div>
+              </Btn>
+            ) : undefined
+          }
+        >
+        <form ref={formRef} action={submit} key={editing?.id ?? `new-${prefill ?? ""}`}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Telecaller">
               <Select name="teamProfileId" options={board.teamOptions} defaultValue={selectedProfile} />
@@ -231,11 +223,12 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
             <FormError message={error} />
           </div>
         </form>
+        </Card>
       )}
 
       {/* Payouts ledger for the month */}
       <div>
-        <h3 className="mb-3 font-display text-lg font-semibold">
+        <h3 className="mb-3 font-display text-h2 font-semibold">
           Payouts <span className="text-sm font-normal text-muted">· {board.monthLabel}</span>
         </h3>
         <DataTable

@@ -112,12 +112,12 @@ export const GUIDES: GuideEntry[] = [
   },
   {
     section: "cv-check", icon: "🧾", title: "CV Diagnostic", href: "/cv-check",
-    what: "Paste CV + target JD → match score, missing keywords, weak bullets.",
+    what: "Upload/paste CV + target JD → JD-match score, B2-template conformance, generated fix-list.",
     steps: [
-      "Paste the student's CV text on the left, the German JD on the right, hit Run diagnostic.",
-      "Missing keywords are what the JD asks for and the CV lacks - coach them in where true.",
-      "Weak bullets have no action verb and no number - rebuild as “Verb + what + result”.",
-      "Structure checks cover LinkedIn link, skills block, quantification, length and German-market signals.",
+      "Upload the CV as a PDF or Word (.docx) - or paste the text - on the left, the German JD on the right, hit Run diagnostic. Uploaded files are read in-memory and never stored.",
+      "Generated suggestions are the risk-first to-do list - work top-down, most urgent first.",
+      "Template match grades the CV against the B2 “How to edit the resume” manual; a red placeholder alert catches un-edited fields (“Position Name”, “mm/jjjj”, “xxxx@gmail.com”).",
+      "Missing keywords are what the JD asks for and the CV lacks; weak bullets have no verb and no number - rebuild as “Verb + what + result”.",
     ],
     tip: "Nothing is saved and nothing is rewritten - it diagnoses, the student does the work.",
   },

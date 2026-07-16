@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { istMonthRange, istToday } from "@/lib/dates";
+import { istMonthRange, istToday, kpiDateRange, type KpiRangeKey } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
 import { getPendingRows } from "./finance-metrics";
 
@@ -27,11 +27,20 @@ function monthlyEquivalentInr(p: { amountInrMinor: bigint; frequency: string }):
  * Runway core - shared by the Cash Health page and the top-bar badge.
  * burn = average monthly expenses over the LAST 3 CALENDAR MONTHS (PRD3 §4.4);
  * runway = latest bank balance ÷ burn, 1 decimal.
+ *
+ * `range` (default "this-month") drives the home page's KPI date-range control. It
+ * shifts the "last 3 calendar months" burn window to end at the LAST day the selected
+ * range covers, not always today — "Last Month" shows the runway as it stood at the end
+ * of last month. "This Month"/"QTD" both end today, so they match the original
+ * always-today anchor exactly. Every caller that doesn't pass `range` (the top-bar badge,
+ * the notification centre, Cash Health's getCashOverview) keeps today's exact behavior.
  */
-export const getRunwaySnapshot = cache(async () => {
+export const getRunwaySnapshot = cache(async (range: KpiRangeKey = "this-month") => {
   const today = istToday();
-  const threeMonthsAgo = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 3, 1));
-  const thisMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const { end: rangeEnd } = kpiDateRange(range, today);
+  const anchor = new Date(Math.min(rangeEnd.getTime() - 86400000, today.getTime()));
+  const threeMonthsAgo = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 3, 1));
+  const thisMonthStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
 
   const [latestCash, expenses] = await Promise.all([
     prisma.cashPosition.findFirst({ orderBy: { date: "desc" } }),
@@ -58,6 +67,8 @@ export const getRunwaySnapshot = cache(async () => {
   return {
     cashInr,
     cashDate: latestCash?.date.toISOString() ?? null,
+    // Staleness is real-world (vs actual today), not range-relative - an old cash figure
+    // is stale regardless of which KPI range you're viewing.
     cashStale: latestCash ? today.getTime() - latestCash.date.getTime() > 7 * 86400000 : true,
     burnInr,
     runwayMonths,

@@ -153,6 +153,7 @@ export type GnEventRow = {
   batchId: string;
   batchName: string | null;
   title: string;
+  type: string;
   startsAt: string;
   durationMins: number | null;
   joinUrl: string | null;
@@ -500,6 +501,7 @@ export const getGnOverview = cache(async (role: AppRole, userId: string) => {
       batchId: e.batchId,
       batchName: e.batch.name,
       title: e.title,
+      type: e.type,
       startsAt: e.startsAt.toISOString(),
       durationMins: e.durationMins,
       joinUrl: e.joinUrl,
@@ -573,6 +575,7 @@ export const getGnBatchDetail = cache(
       batchId: batch.id,
       batchName: batch.name,
       title: e.title,
+      type: e.type,
       startsAt: e.startsAt.toISOString(),
       durationMins: e.durationMins,
       joinUrl: e.joinUrl,
@@ -606,6 +609,7 @@ export const getGnBatchDetail = cache(
 export type GnManageBatch = GnBatchCard & {
   notes: string | null;
   tutorId: string | null;
+  targetStrength: number;
   createdAt: string;
   members: { id: string; studentId: string; fullName: string; email: string | null; hasLogin: boolean }[];
 };
@@ -654,6 +658,7 @@ export const getGnManageData = cache(async () => {
       ...batchToCard(b),
       notes: b.notes,
       tutorId: b.tutorId,
+      targetStrength: b.targetStrength,
       createdAt: b.createdAt.toISOString(),
       members: b.members.map((m) => ({
         id: m.id,

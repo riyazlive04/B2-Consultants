@@ -23,6 +23,11 @@ const nextConfig = {
     // on-demand compilation crawl. This rewrites `{ X } from "lucide-react"` into
     // direct deep imports so each route compiles only the icons it actually uses.
     optimizePackageImports: ["papaparse", "lucide-react"],
+    // CV-upload text extraction (/api/cv-extract) runs these CommonJS libs in the
+    // Node runtime. Keep them as runtime require()s instead of bundling: pdf-parse
+    // ships its own pdf.js and lazily reads test fixtures, and mammoth pulls a large
+    // dependency tree — bundling either into the route is slow and brittle.
+    serverComponentsExternalPackages: ["mammoth", "pdf-parse"],
   },
   /**
    * @react-pdf/renderer (the agreement PDF renderer) needs careful handling, and every obvious

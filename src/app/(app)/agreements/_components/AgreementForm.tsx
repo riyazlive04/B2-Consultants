@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Field, FormError, Select, TextArea, TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
-import { formatInrPlain, type AgreementData } from "@/lib/agreement";
-import { majorStringToMinor, minorToMajorString } from "@/lib/format";
+import { type AgreementData } from "@/lib/agreement";
+import { formatInrMinor, majorStringToMinor, minorToMajorString } from "@/lib/format";
 import { createAgreement, updateAgreement } from "@/server/agreement-actions";
 
 /**
@@ -55,7 +55,7 @@ export function AgreementForm({ initial, mode, notes }: { initial: AgreementData
     const totalMinor = majorStringToMinor(total || "0");
     const sum = inst.reduce((a, i) => a + majorStringToMinor(i.amount || "0"), BigInt(0));
     if (sum === totalMinor || totalMinor === BigInt(0)) return null;
-    return `Instalments add up to ${formatInrPlain(sum)}, but the total fee is ${formatInrPlain(totalMinor)}.`;
+    return `Instalments add up to ${formatInrMinor(sum)}, but the total fee is ${formatInrMinor(totalMinor)}.`;
   }, [option, total, inst]);
 
   function build(): AgreementData {
@@ -103,7 +103,7 @@ export function AgreementForm({ initial, mode, notes }: { initial: AgreementData
       )}
 
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="mb-1 font-display text-lg font-bold">The Student</h2>
+        <h2 className="mb-1 font-display text-h2 font-semibold">The Student</h2>
         <p className="mb-4 text-xs text-muted">
           These values are frozen into the agreement when you issue it. Editing the student record later never
           changes a signed contract.
@@ -127,7 +127,7 @@ export function AgreementForm({ initial, mode, notes }: { initial: AgreementData
       </section>
 
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="mb-4 font-display text-lg font-bold">Batch (§2.1)</h2>
+        <h2 className="mb-4 font-display text-h2 font-semibold">Batch (§2.1)</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Batch">
             <TextInput value={batchNo} onChange={(e) => setBatchNo(e.target.value)} required placeholder="Batch 12" />
@@ -139,7 +139,7 @@ export function AgreementForm({ initial, mode, notes }: { initial: AgreementData
       </section>
 
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="mb-4 font-display text-lg font-bold">Payment (§7)</h2>
+        <h2 className="mb-4 font-display text-h2 font-semibold">Payment (§7)</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Total programme fee (INR)">
             <TextInput
@@ -207,7 +207,7 @@ export function AgreementForm({ initial, mode, notes }: { initial: AgreementData
         <button
           type="submit"
           disabled={pending || !!sumMismatch}
-          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-strong disabled:opacity-60"
+          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong disabled:opacity-60"
         >
           {pending && <Loader2 size={15} className="animate-spin" />}
           {mode.kind === "create" ? "Create draft" : "Save draft"}

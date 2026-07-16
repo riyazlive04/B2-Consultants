@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { RotateCcw, Timer, TrendingUp } from "lucide-react";
+import { IconButton } from "@/components/ui/controls";
 
 /**
  * Personal work-time widget pair (Crextio-style): an automatic Time Tracker that
@@ -176,7 +177,7 @@ export function WorkTracker() {
                     title={`${dayLetters[i]} · ${fmtShort(sec)}`}
                   />
                 </div>
-                <span className={`text-[11px] ${isToday ? "font-bold text-ink" : "text-ink-2"}`}>
+                <span className={`text-caption ${isToday ? "font-bold text-ink" : "text-ink-2"}`}>
                   {dayLetters[i]}
                 </span>
               </div>
@@ -192,7 +193,7 @@ export function WorkTracker() {
             <Timer size={14} /> Time tracker
           </p>
           <span
-            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-caption font-semibold"
             style={{
               background: active ? "var(--good-bg)" : "var(--bg-surface-2)",
               color: active ? "var(--good)" : "var(--ink-2)",
@@ -232,15 +233,9 @@ export function WorkTracker() {
 
         <div className="mt-auto flex items-center justify-center gap-2 text-xs text-muted">
           <span>Auto-tracks while you work</span>
-          <button
-            type="button"
-            onClick={reset}
-            aria-label="Reset today's time"
-            title="Reset today"
-            className="grid h-8 w-8 place-items-center rounded-full border border-line bg-surface text-muted hover:bg-surface-2 hover:text-ink"
-          >
+          <IconButton label="Reset today's time" onClick={reset}>
             <RotateCcw size={15} />
-          </button>
+          </IconButton>
         </div>
       </div>
     </div>

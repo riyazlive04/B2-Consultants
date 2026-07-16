@@ -28,7 +28,10 @@ const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 export const getPendingRows = cache(async () => {
   const today = istToday();
   const [allPendings, allIncomes] = await Promise.all([
-    prisma.pendingPayment.findMany({ orderBy: { nextDueDate: "asc" } }),
+    prisma.pendingPayment.findMany({
+      orderBy: { nextDueDate: "asc" },
+      include: { instalments: { orderBy: { seq: "asc" } } },
+    }),
     prisma.income.findMany({
       select: {
         studentId: true, studentName: true,
@@ -81,6 +84,15 @@ export const getPendingRows = cache(async () => {
       status: p.status,
       overdue, // display rule: red row (PRD1 §4.4)
       notes: p.notes,
+      instalments: p.instalments.map((it) => ({
+        id: it.id,
+        seq: it.seq,
+        inr: Number(it.amountInrMinor),
+        eur: Number(it.amountEurMinor),
+        dueDate: it.dueDate.toISOString(),
+        paidDate: it.paidDate?.toISOString() ?? null,
+        status: it.status,
+      })),
       daysOverdue:
         p.status === "ACTIVE" && p.nextDueDate
           ? Math.max(0, Math.floor((todayMs - p.nextDueDate.getTime()) / 86400000))

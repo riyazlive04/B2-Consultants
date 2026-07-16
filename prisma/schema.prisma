@@ -13,7 +13,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // Runtime queries use DATABASE_URL (on Neon: the pooled -pooler endpoint).
   // Migrations (`prisma migrate deploy`) use DIRECT_URL — Neon's direct, non-pooled
   // endpoint — because migrate needs session-level advisory locks PgBouncer can't hold.
@@ -25,11 +25,11 @@ datasource db {
 // ───────────────────────────── Auth (Better Auth) ─────────────────────────────
 
 enum Role {
-  ADMIN   // Ameen — everything
-  HEAD    // Karthick — own daily log, view-only Students
-  USER    // Asma / Nilofer — own daily log + own pipeline entry
+  ADMIN // Ameen — everything
+  HEAD // Karthick — own daily log, view-only Students
+  USER // Asma / Nilofer — own daily log + own pipeline entry
   STUDENT // portal login linked to ONE Student record — sees only their own journey
-  TUTOR   // German Note tutor — GN section only (batches they teach + community)
+  TUTOR // German Note tutor — GN section only (batches they teach + community)
 }
 
 // A suspended account cannot sign in, and its live sessions are deleted the moment
@@ -56,35 +56,63 @@ model User {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  sessions            Session[]
-  accounts            Account[]
-  teamProfile         TeamProfile?
-  studentProfile      Student?           @relation("StudentAccount")
-  incomesEntered      Income[]           @relation("IncomeEnteredBy")
-  expensesEntered     Expense[]          @relation("ExpenseEnteredBy")
-  leadsEntered        Lead[]             @relation("LeadEnteredBy")
-  leadsAssigned       Lead[]             @relation("LeadAssignedTo")
-  outcomesEntered     DiscoveryOutcome[] @relation("OutcomeEnteredBy")
-  stageChanges        LeadStageHistory[] @relation("StageChangedBy")
-  slotsAssigned       AppointmentSlot[]  @relation("SlotAssignedTo")
-  dailyLogs           DailyLog[]
-  milestoneLogUpdates MilestoneLog[]     @relation("MilestoneUpdatedBy")
-  signalChanges       SignalChangeLog[]  @relation("SignalChangedBy")
-  sprintWeeksEntered  SprintWeek[]       @relation("SprintEnteredBy")
-  rewardGrantsDecided RewardGrant[]      @relation("RewardGrantDecidedBy")
-  invite              UserInvite?        @relation("UserInviteFor")
-  invitesCreated      UserInvite[]       @relation("UserInviteCreatedBy")
-  gnBatchesTutored    GnBatch[]          @relation("GnBatchTutor")
-  gnRecordingsPosted  GnRecording[]      @relation("GnRecordingPostedBy")
-  gnRecordingWatches  GnRecordingWatch[] @relation("GnRecordingWatchUser")
-  gnEventsCreated     GnEvent[]          @relation("GnEventCreatedBy")
-  gnPosts             GnPost[]           @relation("GnPostAuthor")
-  gnComments          GnComment[]        @relation("GnCommentAuthor")
-  gnLikes             GnLike[]           @relation("GnLikeUser")
-  gnCommentLikes      GnCommentLike[]    @relation("GnCommentLikeUser")
+  sessions                 Session[]
+  accounts                 Account[]
+  teamProfile              TeamProfile?
+  studentProfile           Student?           @relation("StudentAccount")
+  incomesEntered           Income[]           @relation("IncomeEnteredBy")
+  expensesEntered          Expense[]          @relation("ExpenseEnteredBy")
+  leadsEntered             Lead[]             @relation("LeadEnteredBy")
+  leadsAssigned            Lead[]             @relation("LeadAssignedTo")
+  outcomesEntered          DiscoveryOutcome[] @relation("OutcomeEnteredBy")
+  callsLogged              CallLog[]          @relation("CallLoggedBy")
+  stageChanges             LeadStageHistory[] @relation("StageChangedBy")
+  slotsAssigned            AppointmentSlot[]  @relation("SlotAssignedTo")
+  dailyLogs                DailyLog[]
+  milestoneLogUpdates      MilestoneLog[]     @relation("MilestoneUpdatedBy")
+  signalChanges            SignalChangeLog[]  @relation("SignalChangedBy")
+  sprintWeeksEntered       SprintWeek[]       @relation("SprintEnteredBy")
+  rewardGrantsDecided      RewardGrant[]      @relation("RewardGrantDecidedBy")
+  invite                   UserInvite?        @relation("UserInviteFor")
+  invitesCreated           UserInvite[]       @relation("UserInviteCreatedBy")
+  gnBatchesTutored         GnBatch[]          @relation("GnBatchTutor")
+  gnRecordingsPosted       GnRecording[]      @relation("GnRecordingPostedBy")
+  gnRecordingWatches       GnRecordingWatch[] @relation("GnRecordingWatchUser")
+  gnEventsCreated          GnEvent[]          @relation("GnEventCreatedBy")
+  gnPosts                  GnPost[]           @relation("GnPostAuthor")
+  gnComments               GnComment[]        @relation("GnCommentAuthor")
+  gnLikes                  GnLike[]           @relation("GnLikeUser")
+  gnCommentLikes           GnCommentLike[]    @relation("GnCommentLikeUser")
   telecallerPayoutsEntered TelecallerPayout[] @relation("TelecallerPayoutEnteredBy")
-  whatsappMessagesSent WhatsAppMessage[] @relation("WhatsAppSentBy")
-  agreementsIssued    Agreement[]        @relation("AgreementIssuedBy")
+  whatsappMessagesSent     WhatsAppMessage[]  @relation("WhatsAppSentBy")
+  agreementsIssued         Agreement[]        @relation("AgreementIssuedBy")
+  journalEntriesPosted     JournalEntry[]     @relation("JournalEntryPostedBy")
+  periodLocksSet           PeriodLock[]       @relation("PeriodLockedBy")
+  auditEntries             AuditEntry[]       @relation("AuditActor")
+  // Synamate CRM (Phase 1)
+  companiesOwned           Company[]          @relation("CompanyOwner")
+  contactNotes             ContactNote[]      @relation("NoteAuthor")
+  tasksAssigned            ContactTask[]      @relation("TaskAssignee")
+  tasksCreated             ContactTask[]      @relation("TaskCreatedBy")
+  opportunitiesOwned       Opportunity[]      @relation("OppOwner")
+  // Synamate Sites (Phase 2)
+  formsCreated             Form[]             @relation("FormCreatedBy")
+  funnelsCreated           Funnel[]           @relation("FunnelCreatedBy")
+  // Synamate Payments (Phase 3)
+  invoicesCreated          Invoice[]          @relation("InvoiceCreatedBy")
+  invoicePaymentsRecorded  InvoicePayment[]   @relation("InvoicePaymentRecordedBy")
+  // Synamate Conversations (Phase 4)
+  messagesSent             Message[]          @relation("MessageSentBy")
+  messagesAssigned         Message[]          @relation("MessageAssignedTo")
+  // Synamate Automation (Phase 5)
+  workflowsCreated         Workflow[]         @relation("WorkflowCreatedBy")
+  // Outreach Specialist SOP
+  outreachStepsActed       OutreachStepLog[]  @relation("OutreachStepActedBy")
+  outreachQualified        OutreachJourney[]  @relation("OutreachQualifiedBy")
+  outreachTouchpoints      OutreachJourney[]  @relation("OutreachRespTouchpoint")
+  outreachDiscos           OutreachJourney[]  @relation("OutreachRespDisco")
+  enrollmentsClosed        Enrollment[]       @relation("EnrollmentCloser")
+  sssSlotsOwned            SssSlot[]          @relation("SssSlotOwner")
 
   @@map("user")
 }
@@ -141,6 +169,10 @@ model Verification {
 // Wave-1 (Synamate in-sourcing): BOOKING_FORM = our own public booking page;
 // META_LEAD_AD / FLEXIFUNNELS = the two external lead-capture webhooks that replace
 // Synamate's lead inbox. SYNAMATE stays only so historical imported rows keep their tag.
+//
+// Source answers "which pipe carried this row to us", NOT "where did the human come from" —
+// that is LeadSource. PABBLY is a relay: it fans the same opt-in out to Synamate and to us,
+// so a PABBLY row's LeadSource is whatever origin the payload declares (Meta ad, IG, …).
 enum Source {
   MANUAL
   SYNAMATE
@@ -150,6 +182,8 @@ enum Source {
   BOOKING_FORM
   META_LEAD_AD
   FLEXIFUNNELS
+  NATIVE_FORM // Phase 2: our own hosted forms / funnel opt-ins (Synamate Sites parity)
+  PABBLY // Pabbly Connect relay → /api/leads/pabbly (runs alongside Synamate)
 }
 
 enum ProgramLevel {
@@ -266,24 +300,55 @@ model Expense {
 // Pending payments tracker (PRD1 §4.4). "Amount paid so far" is COMPUTED at read time
 // by summing Income rows linked to the same student — never stored, never double-entered.
 model PendingPayment {
-  id                String               @id @default(cuid())
-  studentName       String
-  studentId         String?
-  student           Student?             @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  programLevel      ProgramLevel
-  totalFeeInrMinor  BigInt               @default(0)
-  totalFeeEurMinor  BigInt               @default(0)
-  fxRateUsed        Decimal              @db.Decimal(14, 6)
-  nextDueDate       DateTime?            @db.Date
-  status            PendingPaymentStatus @default(ACTIVE)
-  notes             String?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  id               String               @id @default(cuid())
+  studentName      String
+  studentId        String?
+  student          Student?             @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  programLevel     ProgramLevel
+  totalFeeInrMinor BigInt               @default(0)
+  totalFeeEurMinor BigInt               @default(0)
+  fxRateUsed       Decimal              @db.Decimal(14, 6)
+  nextDueDate      DateTime?            @db.Date
+  status           PendingPaymentStatus @default(ACTIVE)
+  notes            String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
-  whatsappMessages  WhatsAppMessage[]
+  whatsappMessages WhatsAppMessage[]
+  instalments      Instalment[]
 
   @@index([status, nextDueDate])
   @@map("pending_payment")
+}
+
+// ── Structured EMI schedule (spec Module G) ─────────────────────────
+// The per-instalment rows the aggregate PendingPayment had no home for: 1 level = 2
+// EMIs, 3 levels = 6, each with its own amount, due date, paid date and status.
+// PendingPayment.nextDueDate stays as the headline "next due" the dashboards read.
+enum InstalmentStatus {
+  DUE
+  PAID
+  OVERDUE
+}
+
+model Instalment {
+  id               String           @id @default(cuid())
+  pendingPaymentId String
+  pendingPayment   PendingPayment   @relation(fields: [pendingPaymentId], references: [id], onDelete: Cascade)
+  seq              Int // 1-based instalment number
+  amountInrMinor   BigInt           @default(0) // paise
+  amountEurMinor   BigInt           @default(0) // cents
+  fxRateUsed       Decimal          @db.Decimal(14, 6)
+  dueDate          DateTime         @db.Date
+  paidDate         DateTime?        @db.Date
+  status           InstalmentStatus @default(DUE)
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([pendingPaymentId, seq])
+  @@index([status, dueDate])
+  @@map("instalment")
 }
 
 // Monthly revenue target for the Pipeline target bar (PRD1 §5.4). Default ₹8,00,000.
@@ -340,44 +405,63 @@ enum PaymentPlan {
 }
 
 model Lead {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   name           String
-  phone          String
+  // Nullable since the Synamate import (16 Jul): 5,886 of 23,432 imported contacts have
+  // no phone at all — 5,086 of those have no email either. Every code path that sends
+  // (WATI/WhatsApp, the Outreach SOP ladder) MUST null-check before dialling.
+  phone          String?
   email          String? // captured from booking form / ad lead (Wave-1)
   city           String?
   industry       String?
   leadSource     LeadSource
-  dateIn         DateTime     @db.Date
-  stage          LeadStage    @default(NEW_LEAD)
+  dateIn         DateTime      @db.Date
+  stage          LeadStage     @default(NEW_LEAD)
   wonLevel       ProgramLevel? // set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
   paymentPlan    PaymentPlan? // set from DEPOSIT_PAID onward — split pay vs full pay
   notes          String?
-  source         Source       @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
-  manualOverride Boolean      @default(false)
+  source         Source        @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
+  manualOverride Boolean       @default(false)
   externalRef    String?
   utm            Json? // captured UTM params from the ad / landing source (Wave-1)
   // Speed-to-lead (Synamate "Who" + "Speed Ratio"): who owns the lead and when it was
   // first contacted. Speed = contactedAt − createdAt, computed at read time.
   assignedToId   String?
-  assignedTo     User?        @relation("LeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedTo     User?         @relation("LeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
   contactedAt    DateTime?
   enteredById    String?
-  enteredBy      User?        @relation("LeadEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  enteredBy      User?         @relation("LeadEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  outcomes     DiscoveryOutcome[]
-  stageHistory LeadStageHistory[]
-  students     Student[]
-  bookings     BookingRequest[]
-  whatsappMessages WhatsAppMessage[]
-  agreements   Agreement[]
+  outcomes            DiscoveryOutcome[]
+  callLogs            CallLog[]
+  stageHistory        LeadStageHistory[]
+  students            Student[]
+  bookings            BookingRequest[]
+  outreachJourney     OutreachJourney?
+  whatsappMessages    WhatsAppMessage[]
+  agreements          Agreement[]
+  // Synamate CRM (Phase 1): the Lead is the Contact record.
+  tags                Tag[]                @relation("LeadTags")
+  companyId           String?
+  company             Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  customFields        Json? // values keyed by CustomFieldDefinition.key (object = CONTACT)
+  contactNotes        ContactNote[]
+  tasks               ContactTask[]
+  opportunities       Opportunity[]
+  formSubmissions     FormSubmission[]
+  invoices            Invoice[]
+  subscriptions       Subscription[]
+  messages            Message[]
+  workflowEnrollments WorkflowEnrollment[]
 
   @@unique([source, externalRef])
   @@index([stage])
   @@index([dateIn])
   @@index([leadSource])
   @@index([assignedToId])
+  @@index([companyId])
   @@map("lead")
 }
 
@@ -434,6 +518,620 @@ model DiscoveryOutcome {
   @@map("discovery_outcome")
 }
 
+// What actually happened on ONE dial. Distinct from CallOutcome, which grades a completed
+// discovery CONVERSATION — this grades the attempt, including the attempts that never connected.
+enum CallLogOutcome {
+  SPOKE // connected and talked — the only outcome that counts as "client spoken to"
+  NO_ANSWER
+  BUSY
+  CALLBACK // asked to be called back later
+  WRONG_NUMBER
+  NOT_INTERESTED
+}
+
+/// One row per dial attempt: (who × which lead × when × what happened).
+///
+/// Why this exists: before it, "calls made" came only from DailyLog — a self-reported
+/// aggregate the telecaller typed in themselves, with no link to a lead. Nothing recorded
+/// that a specific person rang a specific number, so "which of my leads still need a call
+/// today?" was unanswerable. This is the append-only fact behind the telecaller desk.
+///
+/// Append-only by intent: a mis-logged call is corrected with another row, never edited,
+/// so the count can't be silently rewritten after the fact (same rule as DailyLog).
+model CallLog {
+  id        String         @id @default(cuid())
+  leadId    String
+  lead      Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  // Who dialled. SetNull (not Cascade): deleting a user must never delete the call history
+  // that their commission and the team's counts were computed from.
+  userId    String?
+  user      User?          @relation("CallLoggedBy", fields: [userId], references: [id], onDelete: SetNull)
+  calledAt  DateTime       @default(now())
+  outcome   CallLogOutcome
+  notes     String?
+  createdAt DateTime       @default(now())
+
+  // [userId, calledAt] serves "my calls today"; [leadId, calledAt] serves "when was this
+  // lead last called" — the two questions the desk asks on every load.
+  @@index([userId, calledAt])
+  @@index([leadId, calledAt])
+  @@index([calledAt])
+  @@map("call_log")
+}
+
+// ═══════════════ Synamate CRM parity — Phase 1 (SYNAMATE_CLONE_SPEC §5) ═══════════════
+// Brings GoHighLevel/Synamate's Contacts + Opportunities into B2. The Lead IS the Contact;
+// these models add tags, user-defined custom fields, notes, tasks, company grouping, and a
+// proper Opportunity/Pipeline board. The seeded "Sales" pipeline mirrors the LeadStage enum
+// and write-throughs to Lead.stage, so existing pipeline/funnel/reminder logic is untouched.
+
+/// Freeform contact tag (Synamate "Tags"). Names stored lowercased+trimmed; implicit m-n to Lead.
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String? // optional design-token key; falls back to a hashed default in the UI
+  createdAt DateTime @default(now())
+  leads     Lead[]   @relation("LeadTags")
+
+  @@map("tag")
+}
+
+enum CustomFieldType {
+  TEXT
+  LONG_TEXT
+  NUMBER
+  DATE
+  DROPDOWN
+  MULTI_SELECT
+  CHECKBOX
+  PHONE
+  EMAIL
+  URL
+  MONETARY
+}
+
+enum CustomFieldObject {
+  CONTACT
+  OPPORTUNITY
+  COMPANY
+}
+
+/// User-defined custom field (Synamate "Custom Fields"). Values live as a JSON blob on the
+/// owning record (Lead.customFields / Company.customFields), keyed by `key`.
+model CustomFieldDefinition {
+  id        String            @id @default(cuid())
+  object    CustomFieldObject @default(CONTACT)
+  name      String
+  key       String // slug, unique per object
+  fieldType CustomFieldType   @default(TEXT)
+  options   Json? // string[] for DROPDOWN / MULTI_SELECT
+  position  Int               @default(0)
+  createdAt DateTime          @default(now())
+
+  @@unique([object, key])
+  @@map("custom_field_definition")
+}
+
+/// B2B org grouping (Synamate "Companies"). One company → many contacts.
+model Company {
+  id           String    @id @default(cuid())
+  name         String
+  domain       String?
+  phone        String?
+  email        String?
+  address      String?
+  city         String?
+  country      String?
+  ownerId      String?
+  owner        User?     @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  customFields Json?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  leads Lead[]
+
+  @@index([ownerId])
+  @@index([deletedAt])
+  @@map("company")
+}
+
+/// Contact "Notes" tab. The activity timeline is a read-time merge of these + LeadStageHistory
+/// + WhatsAppMessage + DiscoveryOutcome + BookingRequest + completed ContactTasks.
+model ContactNote {
+  id            String       @id @default(cuid())
+  leadId        String
+  lead          Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  // Optional: a note can also be tagged to one specific deal, so an Opportunity has its own
+  // conversation instead of everything being forced onto the parent Lead (BUILD_CHECKLIST.md §3).
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  body          String
+  pinned        Boolean      @default(false)
+  createdById   String?
+  createdBy     User?        @relation("NoteAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([leadId, createdAt])
+  @@index([opportunityId, createdAt])
+  @@map("contact_note")
+}
+
+enum TaskStatus {
+  OPEN
+  COMPLETED
+}
+
+/// Contacts › Tasks (Synamate "Tasks"). May attach to a contact or stand alone.
+model ContactTask {
+  id           String     @id @default(cuid())
+  leadId       String?
+  lead         Lead?      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  title        String
+  body         String?
+  dueAt        DateTime?
+  status       TaskStatus @default(OPEN)
+  completedAt  DateTime?
+  assignedToId String?
+  assignedTo   User?      @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdById  String?
+  createdBy    User?      @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([status, dueAt])
+  @@index([leadId])
+  @@index([assignedToId, status])
+  @@map("contact_task")
+}
+
+enum OpportunityStatus {
+  OPEN
+  WON
+  LOST
+  ABANDONED
+}
+
+/// A sales pipeline (Synamate "Pipelines"). Seeded default "Sales" pipeline mirrors LeadStage.
+model Pipeline {
+  id        String          @id @default(cuid())
+  name      String
+  position  Int             @default(0)
+  isDefault Boolean         @default(false)
+  deletedAt DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  stages    PipelineStage[]
+  opps      Opportunity[]
+
+  @@map("pipeline")
+}
+
+model PipelineStage {
+  id          String        @id @default(cuid())
+  pipelineId  String
+  pipeline    Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name        String
+  position    Int
+  // Bridge to the legacy enum: set on the seeded Sales pipeline so a board move write-throughs
+  // to Lead.stage (keeping pipeline-metrics / funnel / reminders correct). Null on other pipelines.
+  //
+  // Known gap (docs/BUILD_CHECKLIST.md §7): this bridge is only populated for the one seeded
+  // default pipeline today. A second pipeline's stage moves have no write-through to Lead.stage,
+  // so anything reading Lead.stage can silently miss non-default-pipeline activity. Fixing that
+  // is a Pipeline Unification Agent decision (extend the bridge everywhere, or make Lead.stage a
+  // read-only projection computed from Opportunity) — deliberately not done here: it's a
+  // cross-cutting behavior change, not an additive schema column, and touches every place that
+  // reads or writes Lead.stage (funnel-metrics, WhatsApp reminders, pipeline dashboard, etc.).
+  legacyStage LeadStage?
+  // Default deal probability (0-100) for opportunities sitting in this stage, so "pipeline value"
+  // can be shown as a weighted forecast rather than a flat sum. Nullable: existing/unset stages
+  // fall back to flat-sum behavior until an admin sets one.
+  probability Int?
+  deletedAt   DateTime?
+  opps        Opportunity[]
+
+  @@index([pipelineId, position])
+  @@map("pipeline_stage")
+}
+
+/// A deal/opportunity on a board (Synamate "Opportunity"). Value stored dual-currency (paise +
+/// cents) with the stamped FX rate, exactly like Income/Expense.
+model Opportunity {
+  id            String            @id @default(cuid())
+  leadId        String
+  lead          Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  pipelineId    String
+  pipeline      Pipeline          @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stageId       String
+  stage         PipelineStage     @relation(fields: [stageId], references: [id])
+  name          String
+  status        OpportunityStatus @default(OPEN)
+  valueInrMinor BigInt            @default(0)
+  valueEurMinor BigInt            @default(0)
+  fxRateUsed    Decimal           @db.Decimal(14, 6)
+  source        LeadSource?
+  assignedToId  String?
+  assignedTo    User?             @relation("OppOwner", fields: [assignedToId], references: [id], onDelete: SetNull)
+  position      Int               @default(0) // order within its stage column on the board
+  wonAt         DateTime?
+  lostReason    String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  notes         ContactNote[]
+
+  @@index([pipelineId, stageId, position])
+  @@index([leadId])
+  @@index([assignedToId, status])
+  @@map("opportunity")
+}
+
+// ═══════════════ Synamate Sites parity — Phase 2 (SYNAMATE_CLONE_SPEC §Forms/Funnels) ═══════════════
+// Native, self-hosted Forms + Funnels/landing pages. A public form/funnel submission funnels through
+// the same idempotent lead-intake as the webhooks (source = NATIVE_FORM), so captures land straight
+// in the CRM and (optionally) create an Opportunity. Retires the external FlexiFunnels dependency.
+
+/// A reusable form (Synamate "Forms"). `fields` is FormField[]; `settings` is FormSettings JSON
+/// (submit text, success message/redirect, tag, lead source, optional opportunity creation).
+model Form {
+  id              String           @id @default(cuid())
+  name            String
+  slug            String           @unique
+  fields          Json // FormField[]  {key,label,type,required,placeholder?,options?}
+  settings        Json // FormSettings
+  published       Boolean          @default(false)
+  submissionCount Int              @default(0)
+  createdById     String?
+  createdBy       User?            @relation("FormCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  submissions     FormSubmission[]
+
+  @@map("form")
+}
+
+model FormSubmission {
+  id        String   @id @default(cuid())
+  formId    String
+  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  data      Json // raw answers keyed by field key
+  utm       Json?
+  createdAt DateTime @default(now())
+
+  @@index([formId, createdAt])
+  @@index([leadId])
+  @@map("form_submission")
+}
+
+/// A funnel / multi-step landing site (Synamate "Funnels"/"Websites"). Public at /p/<slug>.
+model Funnel {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  published   Boolean      @default(false)
+  createdById String?
+  createdBy   User?        @relation("FunnelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  steps       FunnelStep[]
+
+  @@map("funnel")
+}
+
+/// One page/step of a funnel. `blocks` is a Block[] JSON (heading/text/image/button/form/video/…).
+model FunnelStep {
+  id             String  @id @default(cuid())
+  funnelId       String
+  funnel         Funnel  @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  name           String
+  slug           String
+  position       Int
+  blocks         Json // Block[]
+  seoTitle       String?
+  seoDescription String?
+  views          Int     @default(0)
+
+  @@unique([funnelId, slug])
+  @@index([funnelId, position])
+  @@map("funnel_step")
+}
+
+// ═══════════════ Synamate Payments parity — Phase 3 (invoicing, no processor yet) ═══════════════
+// Invoices + estimates (kind), reusable Products, manual Payments (Transactions), and Subscriptions.
+// Money is dual INR (paise, primary) + EUR (cents) with a stamped fxRate, like Income/Expense. No
+// payment processor is wired yet — status is advanced manually; `publicToken` powers /i/<token>.
+// A `provider` + `externalId` seam is left on payments so Razorpay/Stripe can drop in later.
+
+enum ProductInterval {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+model Product {
+  id            String          @id @default(cuid())
+  name          String
+  description   String?
+  priceInrMinor BigInt          @default(0)
+  priceEurMinor BigInt          @default(0)
+  fxRateUsed    Decimal?        @db.Decimal(14, 6) // INR per 1 EUR when the EUR price was last set
+  interval      ProductInterval @default(ONE_TIME)
+  active        Boolean         @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  subscriptions Subscription[]
+
+  @@map("product")
+}
+
+enum InvoiceKind {
+  INVOICE
+  ESTIMATE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  PARTIAL
+  OVERDUE
+  VOID
+  ACCEPTED // estimates
+  DECLINED // estimates
+}
+
+model Invoice {
+  id               String            @id @default(cuid())
+  kind             InvoiceKind       @default(INVOICE)
+  number           String            @unique // INV-0001 / EST-0001
+  status           InvoiceStatus     @default(DRAFT)
+  leadId           String?
+  lead             Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  customerName     String
+  customerEmail    String?
+  customerPhone    String?
+  issueDate        DateTime          @db.Date
+  dueDate          DateTime?         @db.Date
+  subtotalInrMinor BigInt            @default(0)
+  discountInrMinor BigInt            @default(0)
+  taxPercent       Decimal           @default(0) @db.Decimal(6, 3)
+  taxInrMinor      BigInt            @default(0)
+  totalInrMinor    BigInt            @default(0)
+  totalEurMinor    BigInt            @default(0)
+  fxRateUsed       Decimal           @db.Decimal(14, 6)
+  notes            String?
+  publicToken      String            @unique @default(cuid())
+  sentAt           DateTime?
+  paidAt           DateTime?
+  createdById      String?
+  createdBy        User?             @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  items            InvoiceLineItem[]
+  payments         InvoicePayment[]
+
+  @@index([status])
+  @@index([kind, createdAt])
+  @@index([leadId])
+  @@map("invoice")
+}
+
+model InvoiceLineItem {
+  id                String  @id @default(cuid())
+  invoiceId         String
+  invoice           Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description       String
+  quantity          Int     @default(1)
+  unitPriceInrMinor BigInt  @default(0)
+  position          Int     @default(0)
+
+  @@index([invoiceId])
+  @@map("invoice_line_item")
+}
+
+model InvoicePayment {
+  id             String   @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amountInrMinor BigInt
+  method         String // cash / upi / bank / razorpay / stripe (free text until a processor is wired)
+  reference      String?
+  provider       String? // future: "razorpay" | "stripe"
+  externalId     String? // future: processor payment id
+  paidAt         DateTime @default(now())
+  recordedById   String?
+  recordedBy     User?    @relation("InvoicePaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([recordedById])
+  @@map("invoice_payment")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+model Subscription {
+  id              String             @id @default(cuid())
+  leadId          String?
+  lead            Lead?              @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  customerName    String
+  productId       String?
+  product         Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+  amountInrMinor  BigInt             @default(0)
+  amountEurMinor  BigInt             @default(0)
+  fxRateUsed      Decimal?           @db.Decimal(14, 6) // INR per 1 EUR when the EUR amount was last set
+  interval        ProductInterval    @default(MONTHLY)
+  status          SubscriptionStatus @default(ACTIVE)
+  nextBillingDate DateTime?          @db.Date
+  startedAt       DateTime           @default(now())
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([status])
+  @@index([leadId])
+  @@map("subscription")
+}
+
+// ═══════════════ Synamate Conversations parity — Phase 4 (Email + SMS + templates) ═══════════════
+// Adds Email + SMS channels beside the existing WhatsApp/WATI log, reusable message templates, and
+// a unified inbox (read-time merge of Message + WhatsAppMessage per contact). Providers (Resend for
+// email, Twilio for SMS) are fetch-based and OFF by default — with keys unset a send writes a
+// SKIPPED row and nothing leaves the app, exactly like the WATI seam.
+
+enum MessageChannel {
+  EMAIL
+  SMS
+}
+
+enum MessageDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum MessageStatus {
+  SKIPPED // provider off / opted out — logged, not sent
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+model Message {
+  id           String           @id @default(cuid())
+  channel      MessageChannel
+  direction    MessageDirection @default(OUTBOUND)
+  status       MessageStatus    @default(QUEUED)
+  leadId       String?
+  lead         Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  toAddress    String // email address or phone number
+  fromAddress  String?
+  subject      String? // email only
+  body         String
+  provider     String? // "resend" | "twilio"
+  externalId   String?
+  error        String?
+  sentById     String?
+  sentBy       User?            @relation("MessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  // Conversations inbox read-state + assignment (docs/BUILD_CHECKLIST.md §8). Inbound messages
+  // default unread; outbound ones are meaningless to mark unread but the field stays uniform.
+  read         Boolean          @default(false)
+  assignedToId String?
+  assignedTo   User?            @relation("MessageAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt    DateTime         @default(now())
+
+  @@index([leadId, createdAt])
+  @@index([channel, createdAt])
+  @@index([direction, read])
+  @@index([assignedToId])
+  @@map("message")
+}
+
+model MessageTemplate {
+  id        String         @id @default(cuid())
+  channel   MessageChannel
+  name      String
+  subject   String? // email only
+  body      String // supports {{name}} / {{first_name}} tokens
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@map("message_template")
+}
+
+// ═══════════════ Synamate Automation parity — Phase 5 (workflow engine) ═══════════════
+// A trigger (form submit / tag added / stage change / contact created / invoice paid / booking)
+// enrolls a contact, then runs a linear list of actions (send email/SMS, add/remove tag, move stage,
+// create task, wait). WAIT actions pause the enrollment; a cron (/api/cron/workflows, CRON_SECRET)
+// resumes due ones — the SAME external-cron seam the WhatsApp reminders use. Loop-guarded: an active
+// enrollment is never re-created for the same (workflow, contact), and actions never re-emit triggers.
+
+enum WorkflowStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum TriggerType {
+  FORM_SUBMITTED
+  TAG_ADDED
+  STAGE_CHANGED
+  CONTACT_CREATED
+  INVOICE_PAID
+  BOOKING_CREATED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+/// Synamate parity: workflows are grouped into folders ("Calendar Booking Automations",
+/// "Pipeline Automations", …). Flat (no nesting) — the reference only ever shows one level.
+model WorkflowFolder {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  workflows Workflow[]
+
+  @@map("workflow_folder")
+}
+
+model Workflow {
+  id            String               @id @default(cuid())
+  name          String
+  status        WorkflowStatus       @default(DRAFT)
+  triggerType   TriggerType
+  triggerConfig Json? // { formId? | tag? | stage? }
+  actions       Json // WorkflowAction[]
+  totalEnrolled Int                  @default(0)
+  /// null = the root ("Home") folder in the UI. SetNull so deleting a folder never
+  /// takes its workflows with it — they fall back to root.
+  folderId      String?
+  folder        WorkflowFolder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  /// Soft delete: set = in the "Deleted" tab, excluded from every live read and from
+  /// emitTrigger's enrollment scan. Restorable. Hard delete is admin-only + explicit.
+  deletedAt     DateTime?
+  createdById   String?
+  createdBy     User?                @relation("WorkflowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  enrollments   WorkflowEnrollment[]
+
+  // emitTrigger filters on (status, triggerType, deletedAt) — keep all three together.
+  @@index([status, triggerType, deletedAt])
+  @@index([folderId])
+  @@index([deletedAt])
+  @@map("workflow")
+}
+
+model WorkflowEnrollment {
+  id          String           @id @default(cuid())
+  workflowId  String
+  workflow    Workflow         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  leadId      String
+  lead        Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  status      EnrollmentStatus @default(ACTIVE)
+  currentStep Int              @default(0)
+  nextRunAt   DateTime? // null = ready now; set to a future time by a WAIT action
+  context     Json?
+  lastError   String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([status, nextRunAt])
+  @@index([workflowId, leadId])
+  @@map("workflow_enrollment")
+}
+
 // ─────────────────── Wave-1 — Booking + Lead capture (Synamate in-sourcing) ───────────────────
 // Replaces Synamate's two functions in-house: (1) a public qualification booking page that
 // scores BANT and books a slot, (2) a lead inbox fed by our own webhooks (Meta / FlexiFunnels)
@@ -448,8 +1146,8 @@ enum SlotStatus {
 // Weighted-BANT recommendation (avg of the four 0–5 dimension scores).
 enum BantVerdict {
   CONFIRM // avg > 3 — confirm the call
-  DOUBT   // avg 2–3 — go ahead, but doubt they'll convert
-  CANCEL  // avg < 2 — cancel / don't book the call
+  DOUBT // avg 2–3 — go ahead, but doubt they'll convert
+  CANCEL // avg < 2 — cancel / don't book the call
 }
 
 enum BookingStatus {
@@ -475,6 +1173,34 @@ model AppointmentSlot {
 
   @@index([status, startsAt])
   @@map("appointment_slot")
+}
+
+/// SSS (Success Strategy Session) slot — the founder-run sales/closing call calendar. Distinct
+/// from AppointmentSlot (the public discovery booking): an SSS slot is booked by linking an
+/// existing OutreachJourney, not a fresh BANT intake. Reuses SlotStatus (OPEN/BOOKED/BLOCKED).
+///
+/// Block/unblock and auto-reschedule (server/sss-slots.ts) mirror the discovery
+/// booking-automation engine: blocking a BOOKED slot moves its journey to the next OPEN slot for
+/// the same owner and resets the SSS confirmation. journey.sssAt is kept in sync with startsAt.
+model SssSlot {
+  id           String     @id @default(cuid())
+  startsAt     DateTime // UTC instant
+  durationMins Int        @default(45)
+  status       SlotStatus @default(OPEN)
+  // Who runs this SSS (defaults to the configured SSS owner). Per-slot so a reschedule keeps the
+  // same closer and blocking one owner's day leaves another owner's slots untouched.
+  ownerId      String?
+  owner        User?      @relation("SssSlotOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  // The prospect's journey booked into this slot (null unless BOOKED). One journey → at most one
+  // SSS slot.
+  journeyId    String?          @unique
+  journey      OutreachJourney? @relation("SssSlotJourney", fields: [journeyId], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([status, startsAt])
+  @@index([ownerId, startsAt])
+  @@map("sss_slot")
 }
 
 // Public qualification intake (parity with Synamate's "Appointment booking" export).
@@ -526,6 +1252,14 @@ model BookingRequest {
   bantAvg       Float?
   bantVerdict   BantVerdict?
 
+  // Confirmation loop (Module E). A booked call must be confirmed before it happens; if the
+  // prospect never confirms, the auto-cancel engine (booking-automation.ts) releases the slot and
+  // promotes the next same-caller/same-day call into it. `confirmSentAt` records when the
+  // confirm-request went out (so the engine asks once, then cancels if unanswered); `confirmedAt`
+  // is set by a WhatsApp "yes" (wati/webhook) or a manual "Mark confirmed" from the Bookings table.
+  confirmSentAt DateTime?
+  confirmedAt   DateTime?
+
   status      BookingStatus @default(BOOKED)
   source      Source        @default(BOOKING_FORM)
   utm         Json?
@@ -534,9 +1268,13 @@ model BookingRequest {
   updatedAt   DateTime      @updatedAt
 
   whatsappMessages WhatsAppMessage[]
+  outreachJourney  OutreachJourney?
 
   @@index([status, createdAt])
   @@index([bantScore])
+  // Step 10 (booking cross-check) matches a lead to a booking by email. Postgres can only use
+  // an index for that if the query's lower(email) matches an expression index of the same shape.
+  @@index([email])
   @@map("booking_request")
 }
 
@@ -551,8 +1289,8 @@ enum TeamStatus {
 // Which daily-log form a person gets (PRD2 §3.3) — by function, not hardcoded name.
 enum DailyLogVariant {
   DISCOVERY_SPECIALIST // Asma: calls completed, HQ calls, follow-ups, proposals, no-shows
-  APPOINTMENT_SETTER   // Nilofer: leads contacted, appointments set, follow-ups, pipeline adds
-  DELIVERY_COACH       // Karthick: sessions, check-ins, assignments, at-risk flags
+  APPOINTMENT_SETTER // Nilofer: leads contacted, appointments set, follow-ups, pipeline adds
+  DELIVERY_COACH // Karthick: sessions, check-ins, assignments, at-risk flags
 }
 
 model TeamProfile {
@@ -574,13 +1312,18 @@ model TeamProfile {
   // Drives the intake auto-assign suggestion; manual reassignment always overrides.
   firstCallSharePct   Int             @default(0) // 0 = not in the first-call rotation
   worksSaturdays      Boolean         @default(true)
+  // How many calls this person is expected to make on a working day. Admin-set (dynamic),
+  // 0 = no target, which hides the target UI rather than showing "0 / 0".
+  // Deliberately NOT a Goal: GoalPeriod has no DAY, and a daily bar is a working-day
+  // notion (Saturdays follow worksSaturdays) that the monthly Goal engine doesn't model.
+  dailyCallTarget     Int             @default(0)
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
-  okrs             OKR[]
+  okrs              OKR[]
   telecallerPayouts TelecallerPayout[]
-  goals            Goal[]
-  rewardGrants     RewardGrant[]
+  goals             Goal[]
+  rewardGrants      RewardGrant[]
 
   @@map("team_profile")
 }
@@ -621,16 +1364,16 @@ model DailyLog {
   noShows                 Int?
 
   // APPOINTMENT_SETTER
-  newLeadsContacted     Int?
-  appointmentsSet       Int?
-  followUpMessagesSent  Int?
-  leadsAddedToPipeline  Int?
+  newLeadsContacted    Int?
+  appointmentsSet      Int?
+  followUpMessagesSent Int?
+  leadsAddedToPipeline Int?
 
   // DELIVERY_COACH
-  sessionsDelivered      Int?
-  studentsCheckedInOn    Int?
-  assignmentsReviewed    Int?
-  studentsFlaggedAtRisk  Int?
+  sessionsDelivered     Int?
+  studentsCheckedInOn   Int?
+  assignmentsReviewed   Int?
+  studentsFlaggedAtRisk Int?
 
   notes          String? // notes / blockers
   correctionNote String? // Admin may append a correction — original stays intact
@@ -684,9 +1427,9 @@ enum StudentStatus {
 }
 
 enum ProgramDuration {
-  DAYS_90   // Guided
-  DAYS_120  // Elite
-  LIFETIME  // Solo — no end date, no tracker
+  DAYS_90 // Guided
+  DAYS_120 // Elite
+  LIFETIME // Solo — no end date, no tracker
 }
 
 enum Milestone {
@@ -725,13 +1468,13 @@ model Student {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  enrollments   Enrollment[]
-  incomes       Income[]
-  pendingPayments PendingPayment[]
+  enrollments        Enrollment[]
+  incomes            Income[]
+  pendingPayments    PendingPayment[]
   satisfactionScores SatisfactionScore[]
-  gnMemberships GnBatchMember[]
-  whatsappMessages WhatsAppMessage[]
-  agreements    Agreement[]
+  gnMemberships      GnBatchMember[]
+  whatsappMessages   WhatsAppMessage[]
+  agreements         Agreement[]
 
   @@index([fullName])
   @@map("student")
@@ -746,34 +1489,71 @@ model Enrollment {
   duration        ProgramDuration
   programEndDate  DateTime?       @db.Date // enrollment + 90/120 days; null for LIFETIME
   assignedCoach   String? // currently Karthick
+  // L3 closer who ran the sales/SSS call — the third leg of the commission split
+  // (setter + discovery are inferred from the Lead; the closer had no home before).
+  closerId        String?
+  closer          User?           @relation("EnrollmentCloser", fields: [closerId], references: [id], onDelete: SetNull)
   status          StudentStatus   @default(ACTIVE)
   statusChangedAt DateTime        @default(now()) // powers "completed/dropped this month"
 
   // 90/120-day tracker (PRD2 §4.3) — Guided/Elite only
-  lastSessionDate        DateTime? @db.Date
-  totalSessionsCompleted Int       @default(0)
+  lastSessionDate        DateTime?       @db.Date
+  totalSessionsCompleted Int             @default(0)
   totalSessionsPlanned   Int?
   lastTaskAssigned       String?
   lastTaskCompleted      TaskCompletion?
-  applicationsSubmitted  Int       @default(0)
-  interviewsReceived     Int       @default(0)
-  currentMilestone       Milestone @default(ONBOARDING)
-  signalColour           Signal?   // manual G/A/R, set by Admin/Head
+  applicationsSubmitted  Int             @default(0)
+  interviewsReceived     Int             @default(0)
+  currentMilestone       Milestone       @default(ONBOARDING)
+  signalColour           Signal? // manual G/A/R, set by Admin/Head
   signalNotes            String?
-  nextCheckInDate        DateTime? @db.Date
+  nextCheckInDate        DateTime?       @db.Date
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  incomes       Income[]
-  milestoneLogs MilestoneLog[]
-  signalChanges SignalChangeLog[]
-  sprintWeeks   SprintWeek[]
+  incomes         Income[]
+  milestoneLogs   MilestoneLog[]
+  signalChanges   SignalChangeLog[]
+  sprintWeeks     SprintWeek[]
+  jobApplications JobApplication[]
 
   @@index([studentId])
   @@index([status, programLevel])
   @@index([signalColour])
+  @@index([closerId])
   @@map("enrollment")
+}
+
+// ── Per-application placement tracking (spec Module I) ──────────────
+// Richer than the aggregate counts on Enrollment (applicationsSubmitted /
+// interviewsReceived), which stay as the tracker's headline numbers. One row per
+// real application, moving applied → interview → selected/rejected.
+enum JobApplicationStatus {
+  APPLIED
+  INTERVIEW
+  SELECTED
+  REJECTED
+}
+
+model JobApplication {
+  id           String               @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment           @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  company      String
+  role         String
+  jobUrl       String?
+  location     String?
+  status       JobApplicationStatus @default(APPLIED)
+  appliedAt    DateTime             @db.Date
+  statusAt     DateTime             @default(now()) // when it last changed status
+  notes        String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([enrollmentId, status])
+  @@index([status, statusAt])
+  @@map("job_application")
 }
 
 // ── Sprint tracker (client notes): week-wise targets after course completion ──
@@ -782,9 +1562,9 @@ model Enrollment {
 // the at-risk radar. The WhatsApp nudge on a miss is Wave-2 (gated) — here it's data.
 
 enum SprintStatus {
-  PENDING  // week not reviewed yet
+  PENDING // week not reviewed yet
   ACHIEVED // target met — no disturbance
-  MISSED   // target missed — ask why / take action
+  MISSED // target missed — ask why / take action
 }
 
 model SprintWeek {
@@ -892,13 +1672,13 @@ model WeeklyFunnelSnapshot {
 
 // Weekly bank-balance log (PRD3 §4.1). Kept as history for the 12-week line chart.
 model CashPosition {
-  id                       String   @id @default(cuid())
-  date                     DateTime @unique @db.Date // should be a Monday
-  bankBalanceInrMinor      BigInt   @default(0)
-  personalSavingsInrMinor  BigInt? // optional, planning only — excluded from runway
-  notes                    String?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                      String   @id @default(cuid())
+  date                    DateTime @unique @db.Date // should be a Monday
+  bankBalanceInrMinor     BigInt   @default(0)
+  personalSavingsInrMinor BigInt? // optional, planning only — excluded from runway
+  notes                   String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   @@map("cash_position")
 }
@@ -958,10 +1738,11 @@ model GnBatch {
   level     ProgramLevel // GN_A1..GN_B2 only (service-validated, like B2_LEVELS)
   tutorId   String?
   tutor     User?         @relation("GnBatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
-  status    GnBatchStatus @default(ACTIVE)
-  notes     String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  status         GnBatchStatus @default(ACTIVE)
+  targetStrength Int           @default(8) // target class size (spec: ~8 per batch)
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   members    GnBatchMember[]
   recordings GnRecording[]
@@ -991,21 +1772,34 @@ model GnModule {
   @@map("gn_module")
 }
 
+// The kind of session a calendar event represents (spec: kickoff / coaching /
+// LinkedIn / Q&A / open-market strategy). LIVE_CLASS is the German-Note default.
+enum GnEventType {
+  KICKOFF
+  COACHING
+  LINKEDIN
+  QA
+  OPEN_MARKET
+  LIVE_CLASS
+  OTHER
+}
+
 // Scheduled live classes (calendar). Students see upcoming + a join link;
 // the recording gets posted afterwards as a GnRecording.
 model GnEvent {
-  id           String    @id @default(cuid())
+  id           String      @id @default(cuid())
   batchId      String
-  batch        GnBatch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch        GnBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
   title        String
+  type         GnEventType @default(LIVE_CLASS)
   startsAt     DateTime
   durationMins Int?
   joinUrl      String?
   notes        String?
   createdById  String?
-  createdBy    User?     @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdBy    User?    @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([batchId, startsAt])
   @@map("gn_event")
@@ -1139,6 +1933,122 @@ model GnCommentLike {
   @@map("gn_comment_like")
 }
 
+// ── German Note — Workshops → conversions by level ─────────────
+// A workshop is a paid-ad intake (e.g. "May 2026"): people attend a free
+// German taster, and a share convert into a level course (A1 / A2 / B1 or a
+// bundle). Reverse-engineered from the founders' monthly workshop workbooks —
+// the conversions table, the ad-performance block and the P&L rollup.
+// Admin-only, like the rest of German Note management. Money = INR paise.
+
+enum GnWorkshopStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+// The "Product Chosen" dropdown: single levels + the discounted bundles.
+enum GnWorkshopProduct {
+  A1
+  A2
+  B1
+  A1_A2
+  A2_B1
+  A1_A2_B1
+}
+
+enum GnWorkshopDayType {
+  WEEKDAY
+  WEEKEND
+}
+
+// A confirmed sale still awaiting start/settlement shows as ON_HOLD in the sheet.
+enum GnConversionStatus {
+  CONFIRMED
+  ON_HOLD
+}
+
+// How the conversion reached us — drives ad-spend attribution. AD conversions
+// split the workshop's ad spend between them; ORGANIC ones carry no ad cost.
+enum GnWorkshopSource {
+  AD
+  ORGANIC
+}
+
+model GnWorkshop {
+  id        String           @id @default(cuid())
+  name      String // "May 2026"
+  month     DateTime         @db.Date // first of the intake month — drives ordering
+  status    GnWorkshopStatus @default(ACTIVE)
+  notes     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  conversions GnWorkshopConversion[]
+  adSets      GnWorkshopAdSet[]
+
+  @@index([status])
+  @@map("gn_workshop")
+}
+
+// One ad-set's performance for a workshop (May ran two, March one). Drives the
+// ad-performance panel: attendance %, CTR, CPC, conversion % and ROAS.
+model GnWorkshopAdSet {
+  id              String     @id @default(cuid())
+  workshopId      String
+  workshop        GnWorkshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  label           String? // "Set A", optional
+  adSpendInrMinor BigInt     @default(0) // paise
+  reach           Int        @default(0)
+  linkClicks      Int        @default(0)
+  attended        Int        @default(0) // registrations / attendees on the taster
+  conversions     Int        @default(0) // deals closed attributed to this set
+  orderIndex      Int        @default(0)
+  createdAt       DateTime   @default(now())
+
+  @@index([workshopId])
+  @@map("gn_workshop_adset")
+}
+
+// One client who converted from the workshop into a level course.
+// COGS = books + tutor; Gross = final − COGS; Total Exp = COGS + ads + referral;
+// Net = final − Total Exp; ROAS = final ÷ ads. (Verified against the sheet rollup.)
+model GnWorkshopConversion {
+  id                        String             @id @default(cuid())
+  workshopId                String
+  workshop                  GnWorkshop         @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  fullName                  String
+  email                     String?
+  phone                     String?
+  address                   String?
+  product                   GnWorkshopProduct
+  dayType                   GnWorkshopDayType  @default(WEEKDAY)
+  // per-level batch assignment (label + time), free-text like the sheet ("B26", "7:00 AM")
+  batchA1                   String?
+  timeA1                    String?
+  batchA2                   String?
+  timeA2                    String?
+  batchB1                   String?
+  timeB1                    String?
+  source                    GnWorkshopSource   @default(AD) // AD = from the workshop ad campaign; ORGANIC = referral / carry-over / free
+  status                    GnConversionStatus @default(CONFIRMED)
+  isFreeSeat                Boolean            @default(false) // B2-client / free-repeat seat (₹0 revenue; cost still applies)
+  finalPriceInrMinor        BigInt             @default(0) // billed price (paise) — an INPUT: varies per deal (EMI / negotiation)
+  paidAmountInrMinor        BigInt             @default(0) // cash collected (paise); balance = paid − final
+  paymentMethod             String? // "UPI", "Credit Card", "German Bank", "UPI · 6 EMI"…
+  nextDueDate               DateTime?          @db.Date
+  // Costs are DERIVED from the product via the level cost model (lib/gn-workshop-pricing).
+  // These override the model only for genuine exceptions (null → use the model). Ad spend
+  // is DERIVED at read time: workshop ad-set spend ÷ its AD conversions.
+  booksCostOverrideInrMinor BigInt?
+  tutorCostOverrideInrMinor BigInt?
+  referralInrMinor          BigInt             @default(0)
+  notes                     String?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+
+  @@index([workshopId])
+  @@map("gn_workshop_conversion")
+}
+
 // ───────────────────────────── Cross-cutting ─────────────────────────────
 
 // Daily ECB rate cache (frankfurter.app). One row per day; each money record
@@ -1186,7 +2096,7 @@ model UserInvite {
 
 enum GoalScope {
   COMPANY // judged on the whole team's combined total
-  USER    // judged on one person's total
+  USER // judged on one person's total
 }
 
 enum GoalPeriod {
@@ -1224,28 +2134,28 @@ enum RewardKind {
 }
 
 enum RewardGrantStatus {
-  PENDING  // auto-detected, waiting on the founder
+  PENDING // auto-detected, waiting on the founder
   APPROVED // founder said yes; not yet paid out
   DECLINED // founder said no — never re-offered
   PAID
 }
 
 model RewardRule {
-  id             String        @id @default(cuid())
+  id             String     @id @default(cuid())
   name           String
   description    String
-  kind           RewardKind    @default(BONUS)
-  active         Boolean       @default(true)
+  kind           RewardKind @default(BONUS)
+  active         Boolean    @default(true)
   // A RewardTrigger from src/lib/rewards.ts, validated by rewardTriggerSchema on write.
   trigger        Json
   roles          Role[] // empty = every role plays
-  amountInrMinor BigInt        @default(0) // paise
-  amountEurMinor BigInt        @default(0) // cents
+  amountInrMinor BigInt     @default(0) // paise
+  amountEurMinor BigInt     @default(0) // cents
   perkLabel      String? // what they get when kind = PERK
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
-  grants         RewardGrant[]
+  grants RewardGrant[]
 
   @@index([active])
   @@map("reward_rule")
@@ -1310,61 +2220,79 @@ enum WhatsAppDirection {
 // One value per lifecycle touchpoint (§ "all touchpoints"). MANUAL = a one-off send a human
 // triggered from a section row; the rest are the automatic reminder cadence.
 enum WhatsAppKind {
-  DISCO_REMINDER        // funnel: nudge an un-booked lead to book the discovery call
-  BOOKING_CONFIRMATION  // a slot was just booked
-  BOOKING_REMINDER      // pre-call reminder (~24h / ~1h before the slot)
-  NO_SHOW_FOLLOWUP      // missed the call — rebook
-  PAYMENT_REMINDER      // overdue pending payment / receivable
-  CHECKIN_NUDGE         // student coaching check-in due
-  SPRINT_MISS_NUDGE     // student missed a sprint-week target
-  AGREEMENT_SEND        // coaching agreement is ready — carries the tokenized signing link
-  AGREEMENT_OTP         // 6-digit code binding the signature to control of this number
-  AGREEMENT_REMINDER    // an issued agreement is still unsigned
-  MANUAL                // free-form / manual send from a section
+  DISCO_REMINDER // funnel: nudge an un-booked lead to book the discovery call
+  BOOKING_CONFIRMATION // a slot was just booked
+  BOOKING_REMINDER // pre-call reminder (~24h / ~1h before the slot)
+  NO_SHOW_FOLLOWUP // missed the call — rebook
+  PAYMENT_REMINDER // overdue pending payment / receivable
+  EMI_PRE_DUE // instalment falls due in N days — the reminder that lands BEFORE the due date
+  CHECKIN_NUDGE // student coaching check-in due
+  SPRINT_MISS_NUDGE // student missed a sprint-week target
+  AGREEMENT_SEND // coaching agreement is ready — carries the tokenized signing link
+  AGREEMENT_OTP // 6-digit code binding the signature to control of this number
+  AGREEMENT_REMINDER // an issued agreement is still unsigned
+  MANUAL // free-form / manual send from a section
+  // ── Outreach Specialist SOP (Steps 3–21). One kind per SOP message, deliberately.
+  // The app binds exactly ONE WATI template per kind, so collapsing two SOP steps onto one kind
+  // would send the wrong text for one of them. Nine SOP messages → nine kinds → nine templates.
+  SOP_INTRO // Step 3  — WhatsApp introduction, immediately after opt-in
+  SOP_FOLLOWUP // Step 6  — call not booked at the 2-hour check
+  SOP_DISCO_WELCOME // Step 13 — qualified YES/MAYBE, disco call booked
+  SOP_DISCO_CONFIRM_1 // Step 14 — ≥36h before the disco call
+  SOP_DISCO_CONFIRM_2 // Step 15 — ≥24h before, no reply to Step 14
+  SOP_DISCO_CANCEL // Step 16 — ≥12h before, unconfirmed after two calls
+  SOP_SSS_CONFIRM_1 // Step 19 — ≥24h before the SSS, carries the personalized video
+  SOP_SSS_CONFIRM_2 // Step 20 — ≥12h before the SSS, no reply to Step 19
+  SOP_SSS_CANCEL // Step 21 — ≥10h before the SSS, still unconfirmed
+  // ── Bookings confirmation loop (Module E). The in-house Bookings section's own confirm-or-cancel
+  // cadence, independent of the Outreach SOP ladder above (which runs off a separate OutreachJourney).
+  BOOKING_CONFIRM_REQUEST // asks the prospect to reply YES to hold their upcoming slot
+  BOOKING_RESCHEDULED // their call was moved to a new time (manual postpone OR promoted-up)
+  BOOKING_AUTO_CANCELLED // no confirmation in time — slot released, invite to rebook
 }
 
 enum WhatsAppStatus {
-  SKIPPED   // flag off / unconfigured / opted-out / deduped — nothing left the app
+  SKIPPED // flag off / unconfigured / opted-out / deduped — nothing left the app
   QUEUED
-  SENT      // accepted by WATI
+  SENT // accepted by WATI
   DELIVERED // WATI delivery callback
-  READ      // WATI read callback
-  REPLIED   // prospect replied (inbound) — "WhatsApp confirmed" (SALES-LOGIC §2)
+  READ // WATI read callback
+  REPLIED // prospect replied (inbound) — "WhatsApp confirmed" (SALES-LOGIC §2)
   FAILED
 }
 
 // Append-only send/receive log. Doubles as the idempotency source (sentRecently checks the
 // last row for a kind+target) and the per-row status badge shown across the sections.
 model WhatsAppMessage {
-  id               String            @id @default(cuid())
-  direction        WhatsAppDirection @default(OUTBOUND)
-  kind             WhatsAppKind
-  status           WhatsAppStatus    @default(QUEUED)
-  toNumber         String            // normalized (digits incl. country code, no '+')
-  templateName     String?           // WATI approved template used (null for inbound / free text)
-  body             String?           // rendered summary (outbound) or message text (inbound)
-  params           Json?             // template variables sent, for audit/debug
-  watiMessageId    String?           // WATI id — matched by the status-callback webhook
-  error            String?           // failure reason when status = FAILED
+  id            String            @id @default(cuid())
+  direction     WhatsAppDirection @default(OUTBOUND)
+  kind          WhatsAppKind
+  status        WhatsAppStatus    @default(QUEUED)
+  toNumber      String // normalized (digits incl. country code, no '+')
+  templateName  String? // WATI approved template used (null for inbound / free text)
+  body          String? // rendered summary (outbound) or message text (inbound)
+  params        Json? // template variables sent, for audit/debug
+  watiMessageId String? // WATI id — matched by the status-callback webhook
+  error         String? // failure reason when status = FAILED
 
   // Optional links to whatever this message was about (all SetNull — a message row must
   // survive deletion of the lead/student it referenced, like the rest of the audit tables).
   leadId           String?
-  lead             Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  lead             Lead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
   studentId        String?
-  student          Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  student          Student?        @relation(fields: [studentId], references: [id], onDelete: SetNull)
   bookingRequestId String?
-  bookingRequest   BookingRequest?   @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
+  bookingRequest   BookingRequest? @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
   pendingPaymentId String?
-  pendingPayment   PendingPayment?   @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
+  pendingPayment   PendingPayment? @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
   agreementId      String?
-  agreement        Agreement?        @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  agreement        Agreement?      @relation(fields: [agreementId], references: [id], onDelete: SetNull)
 
-  sentById         String?           // the admin/user who triggered a manual send (null = automatic)
-  sentBy           User?             @relation("WhatsAppSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  sentById String? // the admin/user who triggered a manual send (null = automatic)
+  sentBy   User?   @relation("WhatsAppSentBy", fields: [sentById], references: [id], onDelete: SetNull)
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([kind, createdAt])
   @@index([leadId])
@@ -1405,20 +2333,20 @@ model WhatsAppOptOut {
 // of the schema has no home for: the student's postal address and the programme batch.
 
 enum AgreementStatus {
-  DRAFT     // founder is still editing; no token exists
-  SENT      // countersigned + link delivered; awaiting the student
-  VIEWED    // the student opened the link at least once
-  SIGNED    // sealed — pdfBytes + pdfSha256 are set and never change
-  DECLINED  // the student explicitly refused
-  VOIDED    // superseded or cancelled by the founder
-  EXPIRED   // the token's TTL elapsed unsigned
+  DRAFT // founder is still editing; no token exists
+  SENT // countersigned + link delivered; awaiting the student
+  VIEWED // the student opened the link at least once
+  SIGNED // sealed — pdfBytes + pdfSha256 are set and never change
+  DECLINED // the student explicitly refused
+  VOIDED // superseded or cancelled by the founder
+  EXPIRED // the token's TTL elapsed unsigned
 }
 
 // Append-only trail. This IS the audit certificate: without it a canvas squiggle proves nothing.
 enum AgreementEventType {
   CREATED
-  ISSUED           // founder countersigned and sent
-  DELIVERY_SENT    // handed to WATI
+  ISSUED // founder countersigned and sent
+  DELIVERY_SENT // handed to WATI
   DELIVERY_SKIPPED // WATI off / opted-out / no valid number — the founder must be told
   VIEWED
   OTP_SENT
@@ -1433,7 +2361,7 @@ enum AgreementEventType {
 model Agreement {
   id              String          @id @default(cuid())
   documentNo      String          @unique // human reference, printed on every page: B2-GM-2026-0001
-  templateVersion String                  // git-pinned renderer, e.g. "guided-v3"
+  templateVersion String // git-pinned renderer, e.g. "guided-v3"
   status          AgreementStatus @default(DRAFT)
 
   // Who it is for. SetNull like every other audit link: a signed agreement outlives its student row.
@@ -1442,8 +2370,8 @@ model Agreement {
   leadId    String?
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
-  data       Json    // frozen AgreementData — validated by agreementDataSchema, never re-joined
-  dataSha256 String  // canonical-JSON hash of (data + templateVersion)
+  data       Json // frozen AgreementData — validated by agreementDataSchema, never re-joined
+  dataSha256 String // canonical-JSON hash of (data + templateVersion)
 
   // Signing link. Same shape as UserInvite: only the SHA-256 lands in the database, so a leaked
   // row cannot be redeemed. `signedAt` doubles as the single-use burn marker (compare-and-set).
@@ -1508,4 +2436,411 @@ model AgreementEvent {
 
   @@index([agreementId, createdAt])
   @@map("agreement_event")
+}
+
+// ───────────────────────── Accounting engine (SPEC §10) ─────────────────────────
+//
+// The double-entry general ledger. Finance and Cash Health are the *face*; this is
+// the *engine*. Every money figure on every screen must trace to a balanced entry
+// here — the UI never writes a balance directly (SPEC §10.1, principle 3).
+//
+// WHY THE NAME `LedgerAccount` AND NOT `Account`: `Account` is Better Auth's OAuth /
+// credentials table (see `model Account`, @@map("account")). The chart of accounts is
+// a completely different thing that happens to want the same word.
+//
+// MULTI-CURRENCY RULE (SPEC §10.1): a line carries its own currency and the FX rate at
+// transaction time; the entry balances in the BASE currency (INR paise). We never
+// re-derive history from today's rate. `baseDebitMinor`/`baseCreditMinor` are the
+// INR-equivalent at `fxRate`, and Σbase-debits = Σbase-credits is enforced by a
+// deferred constraint trigger at COMMIT — not just in application code.
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+enum Currency {
+  INR
+  EUR
+}
+
+enum JournalEntryStatus {
+  POSTED
+  VOID
+}
+
+// Where an entry came from. `(sourceType, sourceId)` is unique, so a given Income row
+// can never be posted to the ledger twice — the guard against double-counting revenue.
+enum LedgerSourceType {
+  INCOME
+  EXPENSE
+  MANUAL
+  OPENING_BALANCE
+  FX_REVALUATION
+  // Added so Payments-module money (currently disconnected from the ledger — see
+  // docs/BUILD_CHECKLIST.md §7) has somewhere to post to. Adding these values is additive
+  // and safe: forbid_duplicate_live_source() keys off sourceType/sourceId generically and
+  // needs no change (see migrations/20260710143908_ledger_source_guard).
+  INVOICE
+  PAYMENT
+}
+
+// Chart of accounts, seeded for B2 in `prisma/chart-of-accounts.ts` (SPEC §10.1).
+// `code` is the stable key the posting engine resolves against — never the name,
+// which the founder may reword.
+model LedgerAccount {
+  id       String            @id @default(cuid())
+  code     String            @unique
+  name     String
+  type     LedgerAccountType
+  // null = accepts any currency (income/expense accounts); set = a real-world
+  // account denominated in one currency, e.g. Bank (EUR).
+  currency Currency?
+  // COGS is a *reporting* flag on the account, mirroring Expense.isCogs, so gross
+  // profit is a ledger slice rather than a second source of truth.
+  isCogs   Boolean           @default(false)
+  parentId String?
+  parent   LedgerAccount?    @relation("LedgerAccountTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children LedgerAccount[]   @relation("LedgerAccountTree")
+  archived Boolean           @default(false)
+  sortKey  Int               @default(0)
+
+  lines JournalLine[]
+
+  @@index([type, code])
+  @@map("ledger_account")
+}
+
+// A balanced journal entry. Append-only: corrections are made by VOIDing and posting a
+// reversal (`reversalOfId`), never by editing history (SPEC §10.1, §12 audit rule).
+model JournalEntry {
+  id           String             @id @default(cuid())
+  date         DateTime           @db.Date
+  narration    String
+  status       JournalEntryStatus @default(POSTED)
+  sourceType   LedgerSourceType
+  sourceId     String?
+  // A VOID entry points at the entry it reverses; the reversal mirrors every line.
+  reversalOfId String?            @unique
+  reversalOf   JournalEntry?      @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  reversedBy   JournalEntry?      @relation("JournalReversal")
+  postedById   String?
+  postedBy     User?              @relation("JournalEntryPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime           @default(now())
+
+  lines JournalLine[]
+
+  // At most one *live* (POSTED) entry per source row — enforced by the
+  // `forbid_duplicate_live_source` trigger, not by a unique index.
+  //
+  // A plain UNIQUE(sourceType, sourceId) would be wrong: editing an Income voids its
+  // entry and posts a restated one, and the voided original keeps its sourceId so the
+  // trail stays traceable. The correct constraint is "unique among POSTED rows", i.e. a
+  // partial index — which Prisma cannot express and would try to DROP on the next
+  // `migrate dev`. Prisma does not manage triggers, so the guard lives there instead.
+  @@index([sourceType, sourceId])
+  @@index([date])
+  @@index([status, date])
+  @@map("journal_entry")
+}
+
+// One side of one entry. Exactly one of debit/credit is non-zero (CHECK constraint).
+model JournalLine {
+  id        String        @id @default(cuid())
+  entryId   String
+  entry     JournalEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountId String
+  account   LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  // Amounts as transacted, in `currency`'s minor units (paise / cents).
+  debitMinor  BigInt   @default(0)
+  creditMinor BigInt   @default(0)
+  currency    Currency
+  // INR per 1 unit of `currency`, stamped at transaction time. Always 1.0 for INR.
+  fxRate      Decimal  @db.Decimal(14, 6)
+
+  // The same amounts in base currency (INR paise). These are what must balance.
+  baseDebitMinor  BigInt @default(0)
+  baseCreditMinor BigInt @default(0)
+
+  isCogs Boolean @default(false)
+
+  @@index([entryId])
+  @@index([accountId])
+  @@map("journal_line")
+}
+
+// Admin closes a month; the posting engine then refuses any entry dated inside it,
+// so a backdated edit can never silently restate a period Ameen has already read.
+model PeriodLock {
+  id         String   @id @default(cuid())
+  // "YYYY-MM" in IST — the same key the Finance month picker uses.
+  month      String   @unique
+  lockedAt   DateTime @default(now())
+  lockedById String?
+  lockedBy   User?    @relation("PeriodLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  note       String?
+
+  @@map("period_lock")
+}
+
+// Immutable, hash-chained audit log (SPEC §10.1, §3 "from day one").
+//
+// `hash = sha256(prevHash || canonicalJson(payload))`, so altering or deleting any
+// historical row breaks every hash after it. `seq` gives the chain its order.
+// Append-only at the DB level too — see the migration's forbid_mutation() trigger.
+model AuditEntry {
+  seq        BigInt   @id @default(autoincrement())
+  at         DateTime @default(now())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String
+  payload    Json
+  prevHash   String
+  hash       String   @unique
+
+  @@index([entityType, entityId])
+  @@index([at])
+  @@map("audit_entry")
+}
+
+// ───────────────────────────── Resume Studio ─────────────────────────────
+// Founder-configurable CV builder. A Resume stores its structured content as JSON
+// (shape = ResumeData in src/lib/resume-types.ts); the founder's template — which
+// sections show, in what order, styling and the ATS rubric — lives in
+// AppSetting("resumeTemplateConfig"). Each Resume renders to DOCX and PDF, and can
+// be reviewed against a target JD by the Claude API (keys-off seam in lib/anthropic.ts);
+// each review is kept so the coach can re-run it as often as they like and compare.
+// ownerUserId / leadId are soft references (no FK) to keep this module self-contained.
+
+model Resume {
+  id          String         @id @default(cuid())
+  title       String
+  language    String         @default("EN") // "EN" | "DE"
+  data        Json // ResumeData
+  ownerUserId String?
+  ownerName   String? // denormalised creator name for the list
+  leadId      String? // optional soft link to a CRM lead/contact
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  reviews     ResumeReview[]
+
+  @@index([ownerUserId])
+  @@index([leadId])
+  @@map("resume")
+}
+
+// One ATS review of a resume against a JD. provider = "ai" (Claude) or
+// "deterministic" (the offline analyser fallback). result = structured findings JSON.
+model ResumeReview {
+  id           String   @id @default(cuid())
+  resumeId     String
+  resume       Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  jdText       String
+  provider     String   @default("ai")
+  model        String?
+  scoreOverall Int      @default(0) // 0-100 ATS match
+  result       Json
+  createdAt    DateTime @default(now())
+
+  @@index([resumeId])
+  @@map("resume_review")
+}
+
+// ═══════════════ Outreach Specialist SOP (Script_for_Outreach_Specialist.docx, Steps 1–23) ═══════
+// The 23-step lead lifecycle: opt-in → WhatsApp intro → booking chase → BANT qualification →
+// Disco confirmation → handoff to the Discovery Specialist → SSS confirmation.
+//
+// Design: the SOP is a HUMAN-EXECUTED process, so the engine's job is to say WHAT to send, to
+// WHOM, WHEN — not to send behind the specialist's back. Every step materialises as an
+// OutreachStepLog row with a rendered body the specialist can read, copy and mark sent. Admin can
+// flip individual steps to auto-send (AppSetting "outreachConfig"); every step is manual by
+// default. See src/lib/outreach-sop.ts (templates) and src/lib/outreach-engine.ts (the ladder).
+
+/// One actionable SOP step. Each value is exactly one row per journey (see the @@unique on
+/// OutreachStepLog), which is what makes the ladder idempotent — re-running the engine can never
+/// double-send. Step 16's two required call attempts are separate values for the same reason.
+enum OutreachStep {
+  INTRO_WHATSAPP // Step 3  — immediately after opt-in (target <5 min)
+  FIRST_CALL // Step 4  — call right after the intro message
+  CHECK_1 // Step 5  — wait 2h, then run the Step 10 booking check
+  FOLLOWUP_WHATSAPP // Step 6  — not booked at check 1
+  CHECK_2 // Step 7  — wait 1h, then re-run the booking check
+  FOLLOWUP_CALL // Step 8  — not booked at check 2
+  FINAL_CHECK // Step 9  — wait 2h; not booked → IGNORE
+  BANT_QUALIFICATION // Step 11 — score the booking against the New BANT model
+  KEY_METRICS_TRANSFER // Step 12 — transfer 6 fields + assign Touchpoint/Disco owners
+  DISCO_WELCOME // Step 13 — immediately on Qualified = YES/MAYBE
+  DISCO_CONFIRM_1 // Step 14 — at least 36h before the disco call
+  DISCO_CONFIRM_2 // Step 15 — at least 24h before, only if Step 14 got no reply
+  DISCO_CONFIRM_CALL_1 // Step 16 — first of two required call attempts
+  DISCO_CONFIRM_CALL_2 // Step 16 — second required call attempt
+  DISCO_CANCEL_MSG // Step 16 — at least 12h before, only after both calls failed
+  DISCO_CANCEL // Step 17/18 — cancel the calendar appointment, mark the row RED
+  SSS_CONFIRM_1 // Step 19 — at least 24h before the SSS call (carries the personalized video)
+  SSS_CONFIRM_2 // Step 20 — at least 12h before, only if Step 19 got no reply
+  SSS_CANCEL_MSG // Step 21 — at least 10h before, still unconfirmed
+  SSS_CANCEL // Step 22/23 — cancel the SSS appointment, mark the row RED
+}
+
+/// Where a prospect sits in the SOP. Every branch in the SOP terminates in one of
+/// IGNORED / CANCELLED / CLOSED_NOT_HQ / COMPLETED — there are no dead ends (checklist §S).
+enum OutreachPhase {
+  OPT_IN // Step 1–2: captured, not yet contacted
+  BOOKING_CHASE // Steps 3–9: chasing the booking
+  QUALIFICATION // Steps 11–12: booked, awaiting BANT + Key Metrics transfer
+  DISCO_CONFIRMATION // Steps 13–16: qualified, chasing confirmation
+  AWAITING_DISCO // confirmed; the Discovery Specialist runs the call
+  HANDOFF // Step 18: disco done, awaiting the Highly Qualified verdict
+  SSS_CONFIRMATION // Steps 19–22: HQ = YES, chasing SSS confirmation
+  COMPLETED // SSS confirmed — the outreach process succeeded
+  IGNORED // Step 9: never booked. Dormant, NOT deleted — stays in records
+  CANCELLED // Step 17/22: appointment cancelled
+  CLOSED_NOT_HQ // Step 18: Highly Qualified = NO — the outreach process ends here
+}
+
+/// The SOP's "Qualified" column. Derived from the BANT score by qualifiedFromBant(), which is the
+/// single source of truth (src/lib/outreach-sop.ts) — YES → Step 13, MAYBE → Step 13, NO → Step 17.
+enum QualifiedVerdict {
+  YES // Qualified
+  MAYBE // Cannot judge
+  NO // Not qualified
+}
+
+enum OutreachStepStatus {
+  DUE // materialised and waiting on the specialist (or the auto-sender)
+  SENT // executed — renderedBody holds the exact text that went out
+  SKIPPED // deliberately passed over (specialist chose to, or the branch closed)
+  FAILED // auto-send attempted and the provider rejected it
+  SUPERSEDED // overtaken by events (e.g. prospect confirmed before this reminder was due)
+}
+
+enum OutreachChannel {
+  WHATSAPP
+  CALL
+  SYSTEM // internal checks (Step 5/7/9/10) and calendar actions (Step 17/22)
+}
+
+/// One prospect's walk through the SOP. Exactly one per Lead. Holds the SOP's own columns — the
+/// ones "Key Metrics Sales B2_2026.xlsx" carries and the CRM has no home for.
+model OutreachJourney {
+  id        String          @id @default(cuid())
+  leadId    String          @unique
+  lead      Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  // Set when the Step 10 cross-check matches this lead to a booking (by normalized email/phone).
+  bookingId String?         @unique
+  booking   BookingRequest? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  phase OutreachPhase @default(OPT_IN)
+
+  // Step 1–2. optInAt is the SLA baseline; it mirrors Lead.createdAt but is held here so the
+  // journey is self-contained and the clock can be corrected if a webhook replays late.
+  optInAt     DateTime
+  // Step 2's "Time Contacted" column. Stored as a UTC instant, entered and displayed in IST.
+  contactedAt DateTime?
+
+  // Step 11/12 — qualification. Auditable: who decided, when, and off which score (checklist §K).
+  qualified       QualifiedVerdict?
+  qualifiedAt     DateTime?
+  qualifiedById   String?
+  qualifiedBy     User?             @relation("OutreachQualifiedBy", fields: [qualifiedById], references: [id], onDelete: SetNull)
+  bantScoreAtQual Float? // the bantAvg the verdict was taken on — survives a later re-tune
+
+  // Step 12 — the two Key Metrics assignment dropdowns.
+  respTouchpointId String?
+  respTouchpoint   User?   @relation("OutreachRespTouchpoint", fields: [respTouchpointId], references: [id], onDelete: SetNull)
+  respDiscoId      String?
+  respDisco        User?   @relation("OutreachRespDisco", fields: [respDiscoId], references: [id], onDelete: SetNull)
+
+  // Step 14/15 — the Key Metrics "WhatsApp Sent" / "WhatsApp Confirmed" columns.
+  // sent flips on actual delivery, never on scheduling (checklist §N).
+  whatsappSent        Boolean   @default(false)
+  whatsappSentAt      DateTime?
+  whatsappConfirmed   Boolean   @default(false)
+  whatsappConfirmedAt DateTime?
+
+  // Step 19/20 — the Key Metrics "Sales Call Confirmed" column.
+  salesCallConfirmed   Boolean   @default(false)
+  salesCallConfirmedAt DateTime?
+
+  // Step 18 — written by the Discovery Specialist only (enforced in outreach-actions.ts).
+  highlyQualified   Boolean?
+  highlyQualifiedAt DateTime?
+
+  // Step 19 — the SSS appointment instant (UTC), set when the Discovery Specialist books it.
+  sssAt DateTime?
+
+  // Cross-cutting — the Zoom link pulled from the Discovery Specialist's calendar (§R).
+  zoomLink String?
+
+  // Steps 16/18/21/23 — the "mark the row RED" flag. A presentation flag on its own field so it
+  // can never silently overwrite a status column (checklist §N).
+  redFlag       Boolean @default(false)
+  redFlagReason String?
+
+  ignoredAt    DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  steps   OutreachStepLog[]
+  // The SSS slot this prospect is booked into (null unless an SSS is scheduled via the
+  // calendar). journey.sssAt is kept in sync with the slot's startsAt so the SSS confirmation
+  // ladder (steps 19–21, anchored on sssAt) keeps working through any reschedule.
+  sssSlot SssSlot?          @relation("SssSlotJourney")
+
+  @@index([phase])
+  @@index([contactedAt])
+  @@index([qualified])
+  @@map("outreach_journey")
+}
+
+/// One SOP step for one prospect. APPEND-ONLY in spirit: a row is created when the step becomes
+/// due and is only ever transitioned DUE → SENT/SKIPPED/FAILED/SUPERSEDED.
+///
+/// The @@unique([journeyId, step]) is the idempotency guarantee the checklist asks for repeatedly
+/// (§C "no duplicate sends", §F "doesn't resend if already sent once"). It is a DB constraint, not
+/// a read-then-write check, so concurrent cron runs cannot both materialise the same step.
+model OutreachStepLog {
+  id        String          @id @default(cuid())
+  journeyId String
+  journey   OutreachJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  step    OutreachStep
+  status  OutreachStepStatus @default(DUE)
+  channel OutreachChannel
+
+  /// When the SOP says this step should happen. For the Disco/SSS ladders this is computed
+  /// backward from the appointment instant (T-36h, T-24h, ...), not forward from enrollment.
+  dueAt   DateTime
+  actedAt DateTime?
+
+  actedById String?
+  actedBy   User?   @relation("OutreachStepActedBy", fields: [actedById], references: [id], onDelete: SetNull)
+
+  /// The exact message text that went out, variables already resolved. This is the audit record —
+  /// re-rendering later could differ if a template is edited, so we keep what was actually sent.
+  renderedBody String?
+
+  /// For CALL steps: the SOP's Yes/No branch outcome. For SYSTEM checks: the check result.
+  outcome String?
+
+  /// Set when a step auto-sends through WATI, so the log joins back to the delivery record.
+  whatsAppMessageId String?
+
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([journeyId, step])
+  @@index([status, dueAt])
+  @@index([journeyId])
+  @@map("outreach_step_log")
 }

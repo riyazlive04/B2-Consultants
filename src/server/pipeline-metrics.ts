@@ -2,7 +2,10 @@ import "server-only";
 import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { istMonthInstantRange, istMonthRange, istToday, istWeekRange } from "@/lib/dates";
+import {
+  istMonthInstantRange, istMonthRange, istToday, istWeekRange,
+  kpiInstantRange, type KpiRangeKey,
+} from "@/lib/dates";
 import { aggInrMinor, sumAgg } from "@/lib/money";
 
 /**
@@ -16,9 +19,18 @@ const INTERESTED_STAGES = [
   "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP", "DEPOSIT_PAID",
 ] as const;
 
-async function distinctLeadsReaching(stage: string, start: Date, end: Date): Promise<number> {
+async function distinctLeadsReaching(
+  stage: string,
+  start: Date,
+  end: Date,
+  leadFilter?: Prisma.LeadWhereInput,
+): Promise<number> {
   const rows = await prisma.leadStageHistory.findMany({
-    where: { toStage: stage as never, changedAt: { gte: start, lt: end } },
+    where: {
+      toStage: stage as never,
+      changedAt: { gte: start, lt: end },
+      ...(leadFilter ? { lead: leadFilter } : {}),
+    },
     select: { leadId: true },
     distinct: ["leadId"],
   });
@@ -39,7 +51,13 @@ type FeeIncomeRow = {
  * first — a fee paid in 4 instalments is one fee, not four small ones —
  * then average those per-student totals within each level.
  */
-function computeAvgProgramFeeInr(rows: FeeIncomeRow[]): { avgFeeInr: number; known: boolean } {
+type AvgFeeByLevel = { SOLO: number | null; GUIDED: number | null; ELITE: number | null };
+
+function computeAvgProgramFeeInr(rows: FeeIncomeRow[]): {
+  avgFeeInr: number;
+  known: boolean;
+  byLevel: AvgFeeByLevel;
+} {
   const perStudent = new Map<string, { level: string; total: number }>();
   for (const i of rows) {
     if (!["SOLO", "GUIDED", "ELITE"].includes(i.programLevel)) continue;
@@ -55,9 +73,83 @@ function computeAvgProgramFeeInr(rows: FeeIncomeRow[]): { avgFeeInr: number; kno
     const cur = levelTotals.get(level) ?? { total: 0, n: 0 };
     levelTotals.set(level, { total: cur.total + total, n: cur.n + 1 });
   }
+  const byLevel: AvgFeeByLevel = { SOLO: null, GUIDED: null, ELITE: null };
+  for (const [level, v] of levelTotals) {
+    if (level === "SOLO" || level === "GUIDED" || level === "ELITE") byLevel[level] = v.total / v.n;
+  }
   const levelAvgs = [...levelTotals.values()].map((v) => v.total / v.n);
   const avgFeeInr = levelAvgs.length ? levelAvgs.reduce((a, b) => a + b, 0) / levelAvgs.length : 0;
-  return { avgFeeInr, known: levelAvgs.length > 0 };
+  return { avgFeeInr, known: levelAvgs.length > 0, byLevel };
+}
+
+/** Founder-set fallback average fee (PRD1 §5.4) in INR minor units, or 0 if unset. */
+async function getFeeFallbackMinor(): Promise<number> {
+  const row = await prisma.appSetting.findUnique({ where: { key: "pipelineAvgFeeInr" } });
+  const major = row ? Number(row.value) : 0;
+  return Number.isFinite(major) && major > 0 ? Math.round(major * 100) : 0;
+}
+
+/** Only B2 levels define a program fee; German Note income never should. */
+const FEE_LEVELS = ["SOLO", "GUIDED", "ELITE"] as const;
+/** Two years of deals is plenty to learn a fee, and keeps old pricing out of it. */
+const FEE_WINDOW_MONTHS = 24;
+const FEE_TTL_MS = 60_000;
+
+let feeMemo: { at: number; value: EffectiveFee } | null = null;
+
+type EffectiveFee = {
+  avgFeeInr: number; // effective blended fee (minor units) used to value open leads
+  fromIncome: boolean; // true = learned from income, false = founder fallback / unset
+  known: boolean; // either source produced a usable fee
+  byLevel: AvgFeeByLevel;
+};
+
+/**
+ * The average program fee, resolved once and shared.
+ *
+ * This used to be `income.findMany()` with NO where clause — a full scan of every
+ * income row ever, run TWICE per page view (home snapshot + pipeline overview),
+ * purely to average a handful of deals. Now it is:
+ *   - filtered to B2 levels + a 24-month window, so it rides the [programLevel, date] index,
+ *   - React.cache'd, so the two callers in one request share a single query,
+ *   - memoised for 60s across requests, because the fee only moves when income is
+ *     written and a minute of staleness on an *estimate* is invisible.
+ */
+const getEffectiveAvgFee = cache(async (): Promise<EffectiveFee> => {
+  if (feeMemo && Date.now() - feeMemo.at < FEE_TTL_MS) return feeMemo.value;
+
+  const since = new Date();
+  since.setUTCMonth(since.getUTCMonth() - FEE_WINDOW_MONTHS);
+
+  const [rows, fallbackMinor] = await Promise.all([
+    prisma.income.findMany({
+      where: { programLevel: { in: FEE_LEVELS as unknown as never[] }, date: { gte: since } },
+      select: {
+        programLevel: true, studentId: true, studentName: true,
+        amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,
+      },
+    }),
+    getFeeFallbackMinor(),
+  ]);
+
+  const { avgFeeInr, known: fromIncome, byLevel } = computeAvgProgramFeeInr(rows);
+  const value: EffectiveFee = {
+    avgFeeInr: fromIncome ? avgFeeInr : fallbackMinor,
+    fromIncome,
+    known: fromIncome || fallbackMinor > 0,
+    byLevel,
+  };
+  feeMemo = { at: Date.now(), value };
+  return value;
+});
+
+/**
+ * Drop the cross-request fee memo. Income writes can ride out the 60s TTL (the fee
+ * is an estimate), but when the founder explicitly SETS the fallback fee they must
+ * see it take effect on the very next render — so that action busts this directly.
+ */
+export function invalidateAvgFeeCache(): void {
+  feeMemo = null;
 }
 
 /**
@@ -65,17 +157,18 @@ function computeAvgProgramFeeInr(rows: FeeIncomeRow[]): { avgFeeInr: number; kno
  * is converting. Same INTERESTED_STAGES + avg-fee logic as getPipelineOverview,
  * but none of that function's table payloads (500 leads/outcomes) — cheap enough
  * for the home page on every load.
+ *
+ * `range` (default "this-month") drives the home page's KPI date-range control —
+ * wins/completed-calls are counted within the selected window. `interestedLeads` and
+ * `pipelineValueInr` are a point-in-time snapshot of currently-open deals and are not
+ * range-scoped (there's no such thing as "open deals as of last month"). Every caller
+ * that doesn't pass `range` (FounderPulse) keeps today's exact "this month" behavior.
  */
-export const getPipelineSnapshot = cache(async () => {
-  const ts = istMonthInstantRange();
-  const [interestedLeads, feeIncomes, wonRows, completedRows] = await Promise.all([
+export const getPipelineSnapshot = cache(async (range: KpiRangeKey = "this-month") => {
+  const ts = kpiInstantRange(range);
+  const [interestedLeads, fee, wonRows, completedRows] = await Promise.all([
     prisma.lead.count({ where: { stage: { in: INTERESTED_STAGES as unknown as never[] } } }),
-    prisma.income.findMany({
-      select: {
-        programLevel: true, studentId: true, studentName: true,
-        amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,
-      },
-    }),
+    getEffectiveAvgFee(),
     prisma.leadStageHistory.findMany({
       where: { toStage: "WON", changedAt: { gte: ts.start, lt: ts.end } },
       select: { leadId: true },
@@ -88,15 +181,14 @@ export const getPipelineSnapshot = cache(async () => {
     }),
   ]);
 
-  const { avgFeeInr, known } = computeAvgProgramFeeInr(feeIncomes);
   const winsThisMonth = wonRows.length;
   const completed = completedRows.length;
   const closePct = completed > 0 ? (winsThisMonth / completed) * 100 : 0;
-  const pipelineValueInr = interestedLeads * avgFeeInr;
+  const pipelineValueInr = interestedLeads * fee.avgFeeInr;
 
   return {
     interestedLeads,
-    avgFeeKnown: known,
+    avgFeeKnown: fee.known,
     pipelineValueInr,
     forecast30Inr: pipelineValueInr * (closePct / 100),
     winsThisMonth,
@@ -116,35 +208,37 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   // otherwise 00:00–05:30 IST events on the 1st land in the wrong month.
   const ts = istMonthInstantRange(today);
 
+  // PRD §2: a User sees only their own data. Admin sees everything. Scope every
+  // dashboard number (and the priority lists below) to the viewer's own leads /
+  // outcomes for non-admins, so no team member's leads leak through the metrics.
+  const ownScope: Prisma.LeadWhereInput | undefined = isAdmin ? undefined : { enteredById: viewerId };
+  const ownLeadWhere = ownScope ?? {};
+  const ownOutcomeWhere = isAdmin ? {} : { enteredById: viewerId };
+
   const [
     leadsThisWeek, leadsThisMonth, booked, completed, noShows, wonRows,
-    hqOutcomes, monthOutcomes, interestedLeads, monthIncomes, allIncomes, targetRow,
+    hqOutcomes, monthOutcomes, interestedLeads, monthIncomes, fee, targetRow,
   ] = await Promise.all([
-    prisma.lead.count({ where: { dateIn: { gte: week.start, lt: week.end } } }),
-    prisma.lead.count({ where: { dateIn: { gte: mStart, lt: mEnd } } }),
-    distinctLeadsReaching("DISCO_BOOKED", ts.start, ts.end),
-    distinctLeadsReaching("DISCO_COMPLETED", ts.start, ts.end),
-    distinctLeadsReaching("NO_SHOW", ts.start, ts.end),
+    prisma.lead.count({ where: { dateIn: { gte: week.start, lt: week.end }, ...ownLeadWhere } }),
+    prisma.lead.count({ where: { dateIn: { gte: mStart, lt: mEnd }, ...ownLeadWhere } }),
+    distinctLeadsReaching("DISCO_BOOKED", ts.start, ts.end, ownScope),
+    distinctLeadsReaching("DISCO_COMPLETED", ts.start, ts.end, ownScope),
+    distinctLeadsReaching("NO_SHOW", ts.start, ts.end, ownScope),
     prisma.leadStageHistory.findMany({
-      where: { toStage: "WON", changedAt: { gte: ts.start, lt: ts.end } },
+      where: { toStage: "WON", changedAt: { gte: ts.start, lt: ts.end }, ...(ownScope ? { lead: ownScope } : {}) },
       select: { leadId: true },
       distinct: ["leadId"],
     }),
     prisma.discoveryOutcome.count({
-      where: { highlyQualified: true, callDate: { gte: mStart, lt: mEnd } },
+      where: { highlyQualified: true, callDate: { gte: mStart, lt: mEnd }, ...ownOutcomeWhere },
     }),
-    prisma.discoveryOutcome.count({ where: { callDate: { gte: mStart, lt: mEnd } } }),
-    prisma.lead.count({ where: { stage: { in: INTERESTED_STAGES as unknown as never[] } } }),
+    prisma.discoveryOutcome.count({ where: { callDate: { gte: mStart, lt: mEnd }, ...ownOutcomeWhere } }),
+    prisma.lead.count({ where: { stage: { in: INTERESTED_STAGES as unknown as never[] }, ...ownLeadWhere } }),
     prisma.income.findMany({
       where: { date: { gte: mStart, lt: mEnd } },
       select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
     }),
-    prisma.income.findMany({
-      select: {
-        programLevel: true, studentId: true, studentName: true,
-        amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,
-      },
-    }),
+    getEffectiveAvgFee(),
     prisma.monthlyTarget.findUnique({ where: { month: mStart } }),
   ]);
 
@@ -158,7 +252,10 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
     conversionsByLevel[k] += 1;
   }
 
-  const { avgFeeInr, known: avgFeeKnown } = computeAvgProgramFeeInr(allIncomes);
+  // Per-level averages come straight from income; the single blended figure used to
+  // value open leads (which carry no committed level yet) falls back to the founder's
+  // configured fee when there's no income history, so it's never a misleading ₹0.
+  const { avgFeeInr: effectiveFeeInr, fromIncome: avgFeeFromIncome, known: avgFeeKnown, byLevel: avgFeeByLevel } = fee;
 
   const showUpPct = booked > 0 ? (completed / booked) * 100 : 0;
   const closePct = completed > 0 ? (wonLeadIds.length / completed) * 100 : 0;
@@ -166,7 +263,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   // HQ ÷ disco conducted (SALES-LOGIC §3): numerator and denominator from the
   // SAME table + date column, so the ratio can never exceed 100%.
   const hqPct = monthOutcomes > 0 ? (hqOutcomes / monthOutcomes) * 100 : 0;
-  const pipelineValueInr = interestedLeads * avgFeeInr;
+  const pipelineValueInr = interestedLeads * effectiveFeeInr;
   const forecast30Inr = pipelineValueInr * (closePct / 100);
 
   const revenue = sumAgg(monthIncomes);
@@ -189,7 +286,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   // Open leads first (lean select), then history/outcomes scoped to just those
   // ids — the unscoped groupBy walked the entire stage history on every render.
   const openLeads = await prisma.lead.findMany({
-    where: { stage: { in: OPEN_STAGES as unknown as never[] } },
+    where: { stage: { in: OPEN_STAGES as unknown as never[] }, ...ownLeadWhere },
     select: { id: true, name: true, phone: true, stage: true, dateIn: true, createdAt: true },
   });
   const openLeadIds = openLeads.map((l) => l.id);
@@ -289,6 +386,9 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
       pipelineValueInr, forecast30Inr,
       conversionsByLevel,
       avgFeeKnown,
+      avgFeeFromIncome,
+      avgFeeByLevel, // per-level average program fee (₹ minor), null where no income
+      avgFeeInrMajor: Math.round(effectiveFeeInr / 100), // blended fee used for open leads
       monthOutcomes,
     },
     target: {

@@ -2,8 +2,8 @@ import Link from "next/link";
 import { FileSignature, Plus } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { requireSection } from "@/lib/rbac";
-import { formatDate } from "@/lib/format";
-import { formatInrPlain, type AgreementStatusKey } from "@/lib/agreement";
+import { formatDate, formatInrMinor } from "@/lib/format";
+import { type AgreementStatusKey } from "@/lib/agreement";
 import { getAgreementCounts, listAgreements } from "@/server/agreement-metrics";
 import { StatusBadge } from "./_components/StatusBadge";
 
@@ -14,7 +14,7 @@ export default async function AgreementsPage() {
   const [rows, counts] = await Promise.all([listAgreements(), getAgreementCounts()]);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-4 shadow-card">
         <div className="flex items-center gap-3">
           <span className="grid h-10 w-10 flex-none place-items-center rounded-field bg-accent-soft text-accent">
@@ -29,7 +29,7 @@ export default async function AgreementsPage() {
         </div>
         <Link
           href="/agreements/new"
-          className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-strong"
+          className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong"
         >
           <Plus size={16} /> New agreement
         </Link>
@@ -55,7 +55,7 @@ export default async function AgreementsPage() {
                   <th className="px-4 py-3 font-medium">Document</th>
                   <th className="px-4 py-3 font-medium">Student</th>
                   <th className="px-4 py-3 font-medium">Batch</th>
-                  <th className="px-4 py-3 font-medium">Fee</th>
+                  <th className="px-4 py-3 text-right font-medium">Fee</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Created</th>
                 </tr>
@@ -72,8 +72,8 @@ export default async function AgreementsPage() {
                       </td>
                       <td className="px-4 py-3">{d?.student.fullName ?? r.student?.fullName ?? "—"}</td>
                       <td className="px-4 py-3 text-muted">{d?.batch.number ?? "—"}</td>
-                      <td className="px-4 py-3 tabular-nums">
-                        {d ? formatInrPlain(d.payment.totalInrMinor) : "—"}
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {d ? formatInrMinor(BigInt(d.payment.totalInrMinor)) : "—"}
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={r.status as AgreementStatusKey} />

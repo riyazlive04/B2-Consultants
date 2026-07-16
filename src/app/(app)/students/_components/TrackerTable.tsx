@@ -6,6 +6,7 @@ import type { TrackerRow } from "@/server/students-metrics";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
 import { sendStudentNudge } from "@/server/whatsapp-actions";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { Select } from "@/components/ui/form";
 import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
 import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
 import { MomentumChip } from "@/components/ui/gamification";
@@ -107,28 +108,40 @@ export function TrackerTable({
     },
   ];
 
-  const selectCls =
-    "rounded-field border border-line bg-surface-2 px-2.5 py-1.5 text-sm outline-none focus:border-accent";
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <select value={sort} onChange={(e) => setSort(e.target.value as never)} className={selectCls} aria-label="Sort">
-          <option value="signal">Sort: Red first</option>
-          <option value="session">Sort: longest since session</option>
-          <option value="end">Sort: program ends soonest</option>
-        </select>
-        <select value={signalFilter} onChange={(e) => setSignalFilter(e.target.value)} className={selectCls} aria-label="Signal filter">
-          <option value="">All signals</option>
-          <option value="RED">Red only</option>
-          <option value="AMBER">Amber only</option>
-          <option value="GREEN">Green only</option>
-        </select>
-        <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)} className={selectCls} aria-label="Level filter">
-          <option value="">All levels</option>
-          <option value="GUIDED">Guided only</option>
-          <option value="ELITE">Elite only</option>
-        </select>
+        <Select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as never)}
+          aria-label="Sort"
+          options={[
+            { value: "signal", label: "Sort: Red first" },
+            { value: "session", label: "Sort: longest since session" },
+            { value: "end", label: "Sort: program ends soonest" },
+          ]}
+        />
+        <Select
+          value={signalFilter}
+          onChange={(e) => setSignalFilter(e.target.value)}
+          aria-label="Signal filter"
+          options={[
+            { value: "", label: "All signals" },
+            { value: "RED", label: "Red only" },
+            { value: "AMBER", label: "Amber only" },
+            { value: "GREEN", label: "Green only" },
+          ]}
+        />
+        <Select
+          value={levelFilter}
+          onChange={(e) => setLevelFilter(e.target.value)}
+          aria-label="Level filter"
+          options={[
+            { value: "", label: "All levels" },
+            { value: "GUIDED", label: "Guided only" },
+            { value: "ELITE", label: "Elite only" },
+          ]}
+        />
         <span className="text-xs text-muted">{visible.length} of {rows.length} active tracked students</span>
       </div>
       <DataTable

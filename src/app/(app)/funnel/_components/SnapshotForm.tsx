@@ -6,6 +6,7 @@ import { saveWeeklySnapshot } from "@/server/funnel-actions";
 import type { FunnelOverview } from "@/server/funnel-metrics";
 import { toast } from "@/components/ui/feedback";
 import { Field, FormError, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 /** Weekly snapshot entry (PRD3 §3.2): auto-pulled fields pre-filled, Admin can override. */
 export function SnapshotForm({ entry }: { entry: FunnelOverview["entry"] }) {
@@ -28,16 +29,16 @@ export function SnapshotForm({ entry }: { entry: FunnelOverview["entry"] }) {
   return (
     <form action={submit} key={entry.weekStart} className="rounded-card border border-line bg-surface p-5 shadow-card">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display text-lg font-semibold">
+        <h3 className="font-display text-h2 font-semibold">
           Weekly snapshot {e ? "(editing saved week)" : ""}
         </h3>
         <label className="flex items-center gap-2 text-sm">
           Week (Monday)
-          <input
-            type="date"
+          <DatePicker
+            size="sm"
+            aria-label="Week (Monday)"
             value={entry.weekStart}
             onChange={(ev) => router.push(`/funnel?week=${ev.target.value}`)}
-            className="rounded-field border border-line bg-surface-2 px-2 py-1.5 text-sm"
           />
         </label>
       </div>

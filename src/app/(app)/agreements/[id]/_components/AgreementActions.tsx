@@ -2,9 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Check, Copy, Loader2, PenLine, Send, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
-import { SignaturePad, type SignatureValue } from "@/components/ui/SignaturePad";
+import type { SignatureValue } from "@/components/ui/SignaturePad";
+
+// Canvas-drawing signature capture is client-only and not needed until the countersign modal
+// opens, so keep it out of this route's initial bundle (BUILD_CHECKLIST §12).
+const SignaturePad = dynamic(
+  () => import("@/components/ui/SignaturePad").then((m) => m.SignaturePad),
+  { ssr: false },
+);
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
 import {
   cloneAgreement,
@@ -109,7 +117,7 @@ export function AgreementActions({
           <button
             onClick={() => setSignOpen(true)}
             disabled={pending}
-            className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-strong disabled:opacity-60"
+            className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong disabled:opacity-60"
           >
             <PenLine size={15} /> Countersign &amp; send
           </button>
@@ -186,7 +194,7 @@ export function AgreementActions({
             <button
               onClick={doIssue}
               disabled={pending || !signature}
-              className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-strong disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent hover:bg-primary-strong disabled:opacity-60"
             >
               {pending && <Loader2 size={15} className="animate-spin" />}
               <Send size={15} /> Sign &amp; send

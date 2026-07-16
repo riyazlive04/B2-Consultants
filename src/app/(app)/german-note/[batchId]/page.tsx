@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Users } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
+import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
 import { getGnBatchDetail } from "@/server/german-note-metrics";
 import { ClassroomPanel } from "../_components/ClassroomPanel";
@@ -19,20 +20,21 @@ export default async function GnBatchPage({ params }: { params: { batchId: strin
   const isArchived = batch.status === "ARCHIVED";
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/german-note" className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
           <ArrowLeft size={13} /> German Note
         </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-2.5">
-          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">{batch.name}</h1>
-          <LevelChip level={batch.level} />
-          <StatusChip status={batch.status} />
-        </div>
-        <p className="mt-1 text-sm text-muted">
-          {batch.tutorName ? `Tutor: ${batch.tutorName}` : "No tutor assigned yet"}
-          {batch.notes ? ` · ${batch.notes}` : ""}
-        </p>
+        <PageHeader
+          title={batch.name}
+          subtitle={`${batch.tutorName ? `Tutor: ${batch.tutorName}` : "No tutor assigned yet"}${batch.notes ? ` · ${batch.notes}` : ""}`}
+          actions={
+            <>
+              <LevelChip level={batch.level} />
+              <StatusChip status={batch.status} />
+            </>
+          }
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_240px]">

@@ -22,6 +22,14 @@ import {
   Shield,
   LayoutGrid,
   FileSignature,
+  Scale,
+  Contact,
+  KanbanSquare,
+  FileText,
+  LayoutTemplate,
+  ReceiptText,
+  Inbox,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import type { SectionIconName } from "@/lib/sections";
@@ -55,6 +63,14 @@ export const SECTION_ICONS: Record<SectionIconName, LucideIcon> = {
   shield: Shield,
   "layout-grid": LayoutGrid,
   "file-signature": FileSignature,
+  scale: Scale,
+  contact: Contact,
+  kanban: KanbanSquare,
+  "file-text": FileText,
+  "layout-template": LayoutTemplate,
+  receipt: ReceiptText,
+  inbox: Inbox,
+  workflow: Workflow,
 };
 
 export const FallbackIcon = LayoutGrid;

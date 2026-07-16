@@ -13,7 +13,7 @@ export default async function StudentDetailPage({ params }: { params: { id: stri
   if (!student) notFound();
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <Link href="/students" className="text-sm text-accent hover:underline">
         ← All students
       </Link>

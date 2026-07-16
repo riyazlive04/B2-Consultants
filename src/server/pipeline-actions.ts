@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { capabilityCheck, requireSection } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
 import { majorStringToMinor } from "@/lib/format";
+import { invalidateAvgFeeCache } from "./pipeline-metrics";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -175,6 +176,25 @@ const outcomeSchema = z.object({
   notes: z.string().trim().optional(),
 });
 
+/**
+ * The Outreach SOP's role boundary (checklist §P: "'Highly Qualified' is writable only by the
+ * Discovery Specialist").
+ *
+ * `requireSection("pipeline")` admits every USER and HEAD — including the outreach specialist,
+ * whose own SOP says they may only READ this verdict to decide whether Step 19 runs. So the flag
+ * gets its own guard, checked only when someone actually tries to CHANGE it: entering an ordinary
+ * discovery outcome stays open to anyone with the pipeline screen, which is the existing
+ * behaviour and is not what the SOP restricts.
+ *
+ * Not cosmetic: `highlyQualified` drives priority scoring, the HQ-rate metric, gamification XP,
+ * and now the SSS confirmation ladder.
+ */
+async function guardHighlyQualified(current: boolean, next: boolean): Promise<ActionResult | null> {
+  if (current === next) return null; // not a change — nothing to guard
+  const { allowed, denied } = await capabilityCheck("outreach.qualify");
+  return allowed ? null : denied;
+}
+
 export async function createOutcome(form: FormData): Promise<ActionResult> {
   const session = await requireSection("pipeline");
   const parsed = outcomeSchema.safeParse(Object.fromEntries(form));
@@ -183,6 +203,10 @@ export async function createOutcome(form: FormData): Promise<ActionResult> {
 
   const lead = await prisma.lead.findUnique({ where: { id: d.leadId } });
   if (!lead) return { ok: false, error: "Lead not found" };
+
+  const hq = d.highlyQualified === "on";
+  const denied = await guardHighlyQualified(false, hq);
+  if (denied) return denied;
 
   await prisma.discoveryOutcome.create({
     data: {
@@ -214,6 +238,9 @@ export async function updateOutcome(id: string, form: FormData): Promise<ActionR
   if (session.role !== "ADMIN" && existing.enteredById !== session.user.id) {
     return { ok: false, error: "You can only edit outcomes you entered" };
   }
+
+  const denied = await guardHighlyQualified(existing.highlyQualified, d.highlyQualified === "on");
+  if (denied) return denied;
 
   await prisma.discoveryOutcome.update({
     where: { id },
@@ -257,6 +284,32 @@ export async function setMonthlyTarget(form: FormData): Promise<ActionResult> {
     update: { targetInrMinor: majorStringToMinor(raw) },
     create: { month: monthDate, targetInrMinor: majorStringToMinor(raw) },
   });
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+/**
+ * Admin sets the fallback average program fee (PRD1 §5.4). It's used to value the
+ * open pipeline only until real income history can define the fee per level.
+ * Stored in AppSetting as a plain INR-major string; blank clears it.
+ */
+export async function setPipelineAvgFee(form: FormData): Promise<ActionResult> {
+  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
+  const raw = String(form.get("avgFeeInr") ?? "").trim();
+  if (raw === "") {
+    await prisma.appSetting.deleteMany({ where: { key: "pipelineAvgFeeInr" } });
+    invalidateAvgFeeCache();
+    revalidatePath("/pipeline");
+    return { ok: true };
+  }
+  if (!/^\d{1,9}$/.test(raw)) return { ok: false, error: "Enter a plain amount like 75000, or leave blank to clear" };
+  await prisma.appSetting.upsert({
+    where: { key: "pipelineAvgFeeInr" },
+    update: { value: raw },
+    create: { key: "pipelineAvgFeeInr", value: raw },
+  });
+  invalidateAvgFeeCache();
   revalidatePath("/pipeline");
   return { ok: true };
 }

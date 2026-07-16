@@ -5,8 +5,20 @@ import { CalendarCheck, CheckCircle2 } from "lucide-react";
 import { submitBooking } from "@/server/booking-actions";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { INTAKE_OPTIONS } from "@/lib/booking-intake";
+import { slotTypeLabel } from "@/lib/labels";
 
-export type SlotOption = { id: string; day: string; time: string; cet: string };
+const IST_ZONE = "Asia/Kolkata";
+
+export type SlotOption = {
+  id: string;
+  day: string;
+  time: string;
+  cet: string;
+  durationMins: number;
+  /** UTC instant, ISO - the raw value the static IST/CET strings above were formatted from.
+   *  Needed client-side to convert to the visitor's own detected timezone. */
+  startsAtIso: string;
+};
 
 const withPlaceholder = (opts: readonly { value: string; label: string }[], placeholder: string) => [
   { value: "", label: placeholder },
@@ -29,6 +41,41 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
     }
     if (utmRef.current) utmRef.current.value = Object.keys(utm).length ? JSON.stringify(utm) : "";
   }, []);
+
+  // Visitor timezone, detected client-side only (browser API - unavailable during SSR).
+  // Shown ALONGSIDE the static IST/CET times, never replacing them.
+  const [visitorTz, setVisitorTz] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) setVisitorTz(tz);
+    } catch {
+      // Intl unavailable/blocked - fall back to the static IST/CET display only.
+    }
+  }, []);
+  const showLocalTz = !!visitorTz && visitorTz !== IST_ZONE;
+
+  const localTimeFmt = useMemo(() => {
+    if (!visitorTz) return null;
+    try {
+      return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: visitorTz });
+    } catch {
+      return null;
+    }
+  }, [visitorTz]);
+  const localFullFmt = useMemo(() => {
+    if (!visitorTz) return null;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true,
+        timeZone: visitorTz,
+      });
+    } catch {
+      return null;
+    }
+  }, [visitorTz]);
+  const localTime = (s: SlotOption) => (localTimeFmt ? localTimeFmt.format(new Date(s.startsAtIso)) : null);
+  const localFull = (s: SlotOption) => (localFullFmt ? localFullFmt.format(new Date(s.startsAtIso)) : null);
 
   const byDay = useMemo(() => {
     const map = new Map<string, SlotOption[]>();
@@ -56,9 +103,13 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
         <CheckCircle2 className="mx-auto text-ok" size={40} />
         <h2 className="mt-3 font-display text-xl font-semibold">You're booked in 🎉</h2>
         <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
-          Your discovery call is confirmed for <strong className="text-ink">{done.day}</strong> at{" "}
-          <strong className="text-ink">{done.time} IST</strong> ({done.cet} CET). Our team will be
-          in touch with the joining details.
+          Your {slotTypeLabel(done.durationMins).toLowerCase()} is confirmed for{" "}
+          <strong className="text-ink">{done.day}</strong> at{" "}
+          <strong className="text-ink">{done.time} IST</strong> ({done.cet} CET)
+          {showLocalTz && localTime(done) && (
+            <> · <strong className="text-ink">{localTime(done)}</strong> ({visitorTz})</>
+          )}
+          . Our team will be in touch with the joining details.
         </p>
       </div>
     );
@@ -80,8 +131,11 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
     <form action={submit} className="space-y-6">
       {/* ── Slot picker ── */}
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="font-display text-lg font-semibold">1. Pick a time</h2>
-        <p className="mt-0.5 text-xs text-muted">Times shown in IST. Your call is 30 minutes.</p>
+        <h2 className="font-display text-h2 font-semibold">1. Pick a time</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Times shown in IST.
+          {showLocalTz && ` Also shown in your detected timezone (${visitorTz}).`}
+        </p>
         <div className="mt-4 space-y-4">
           {byDay.map(([day, daySlots]) => (
             <div key={day}>
@@ -92,14 +146,18 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
                     type="button"
                     key={s.id}
                     onClick={() => setSlotId(s.id)}
+                    title={localFull(s) ? `${slotTypeLabel(s.durationMins)} · ${localFull(s)} your time` : slotTypeLabel(s.durationMins)}
                     className={`rounded-field border px-3 py-1.5 text-sm transition-colors ${
                       slotId === s.id
-                        ? "border-accent bg-accent text-white"
+                        ? "border-accent bg-accent text-on-accent"
                         : "border-line bg-surface-2 text-ink hover:border-accent"
                     }`}
                     aria-pressed={slotId === s.id}
                   >
-                    {s.time}
+                    <span className="block">{s.time}</span>
+                    {showLocalTz && localTime(s) && (
+                      <span className="mt-0.5 block text-[10px] font-normal opacity-75">{localTime(s)} your time</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -110,13 +168,17 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
         {chosen && (
           <p className="mt-3 text-xs text-muted">
             Selected: <strong className="text-ink">{chosen.day}, {chosen.time} IST</strong> · {chosen.cet} CET
+            {showLocalTz && localTime(chosen) && (
+              <> · <strong className="text-ink">{localTime(chosen)}</strong> ({visitorTz})</>
+            )}
+            {" · "}{slotTypeLabel(chosen.durationMins)}
           </p>
         )}
       </section>
 
       {/* ── Contact ── */}
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="font-display text-lg font-semibold">2. Your details</h2>
+        <h2 className="font-display text-h2 font-semibold">2. Your details</h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Full name"><TextInput name="name" required placeholder="Your name" /></Field>
           <Field label="Email"><TextInput type="email" name="email" required placeholder="you@email.com" /></Field>
@@ -137,7 +199,7 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
 
       {/* ── Qualification (drives BANT) ── */}
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="font-display text-lg font-semibold">3. About your goal</h2>
+        <h2 className="font-display text-h2 font-semibold">3. About your goal</h2>
         <p className="mt-0.5 text-xs text-muted">This helps us tailor the call to you.</p>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Current job title"><TextInput name="currentJobTitle" placeholder="e.g. Mechanical Engineer" /></Field>

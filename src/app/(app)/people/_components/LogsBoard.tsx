@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { addLogCorrection } from "@/server/people-actions";
 import type { PeopleOverview } from "@/server/people-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { Card, Pill } from "@/components/ui/kit";
+import { Btn } from "@/components/ui/controls";
 import { FormError, SubmitButton, TextInput } from "@/components/ui/form";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMonth } from "@/lib/format";
 import { LOG_FIELD_SHORT } from "@/lib/labels";
 
 type LogRow = PeopleOverview["logs"][number];
@@ -15,10 +17,12 @@ type LogRow = PeopleOverview["logs"][number];
 export function LogsBoard({
   members,
   weeklyRollup,
+  monthlyRollup,
   logs,
 }: {
   members: PeopleOverview["members"];
   weeklyRollup: PeopleOverview["weeklyRollup"];
+  monthlyRollup: PeopleOverview["monthlyRollup"];
   logs: LogRow[];
 }) {
   const router = useRouter();
@@ -49,9 +53,9 @@ export function LogsBoard({
         r.correctionNote ? (
           <span className="text-watch">{r.correctionNote}</span>
         ) : (
-          <button type="button" className="text-xs text-accent hover:underline" onClick={() => setCorrecting(r)}>
+          <Btn variant="ghost" size="sm" onClick={() => setCorrecting(r)}>
             Add note
-          </button>
+          </Btn>
         ),
       value: (r) => r.correctionNote ?? "",
     },
@@ -61,7 +65,7 @@ export function LogsBoard({
     <section className="space-y-6">
       {/* Today's submission status */}
       <div>
-        <h3 className="mb-3 font-display text-lg font-semibold">Today</h3>
+        <h3 className="mb-3 font-display text-h2 font-semibold">Today</h3>
         <div className="flex flex-wrap gap-3">
           {loggers.map((m) => (
             <div key={m.id} className="flex items-center gap-2 rounded-card border border-line bg-surface px-4 py-3 shadow-card">
@@ -72,13 +76,11 @@ export function LogsBoard({
                 </span>
               )}
               {m.submittedToday ? (
-                <span className="rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok">Logged ✓</span>
+                <Pill tone="good">Logged ✓</Pill>
               ) : m.missingLogBadge ? (
-                <span className="rounded-full bg-watch-soft px-2 py-0.5 text-xs font-medium text-watch" title="No log by 7:00 PM IST">
-                  ⚠ Missing log
-                </span>
+                <Pill tone="warn" title="No log by 7:00 PM IST">⚠ Missing log</Pill>
               ) : (
-                <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">Pending</span>
+                <Pill tone="neutral">Pending</Pill>
               )}
             </div>
           ))}
@@ -88,7 +90,7 @@ export function LogsBoard({
 
       {/* Weekly rollup */}
       <div>
-        <h3 className="mb-3 font-display text-lg font-semibold">Weekly totals</h3>
+        <h3 className="mb-3 font-display text-h2 font-semibold">Weekly totals</h3>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {weeklyRollup.map(({ user, weeks }) => {
             const metricKeys = [...new Set(weeks.flatMap((w) => Object.keys(w.sums)))];
@@ -135,8 +137,58 @@ export function LogsBoard({
         </div>
       </div>
 
+      {/* Monthly rollup (PRD2 §3.3) */}
+      <div>
+        <h3 className="mb-3 font-display text-h2 font-semibold">Monthly totals</h3>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {monthlyRollup.map(({ user, months }) => {
+            const metricKeys = [...new Set(months.flatMap((m) => Object.keys(m.sums)))];
+            const maxVal = Math.max(1, ...months.flatMap((m) => Object.values(m.sums)));
+            return (
+              <div key={user} className="rounded-card border border-line bg-surface p-4 shadow-card">
+                <p className="mb-3 font-semibold">{user}</p>
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[16rem] text-xs">
+                  <thead>
+                    <tr className="text-left text-muted">
+                      <th className="py-1 pr-2 font-medium">Month</th>
+                      {metricKeys.map((k) => (
+                        <th key={k} className="px-1 py-1 text-right font-medium">{LOG_FIELD_SHORT[k] ?? k}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {months.map((m) => (
+                      <tr key={m.month} className="border-t border-line">
+                        <td className="py-1.5 pr-2 tnum">{formatMonth(`${m.month}-01`)}</td>
+                        {metricKeys.map((k) => {
+                          const v = m.sums[k] ?? 0;
+                          return (
+                            <td key={k} className="px-1 py-1.5 text-right">
+                              <span className="tnum">{v}</span>
+                              <span
+                                className="ml-1 inline-block h-2 rounded-sm bg-accent-soft align-middle"
+                                style={{ width: `${Math.round((v / maxVal) * 28) + 2}px` }}
+                                aria-hidden
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              </div>
+            );
+          })}
+          {monthlyRollup.length === 0 && <p className="text-sm text-muted">No logs submitted yet.</p>}
+        </div>
+      </div>
+
       {/* Correction note (append-only guarantee: original numbers are immutable) */}
       {correcting && (
+        <Card>
         <form
           action={async (form) => {
             setError(null);
@@ -144,7 +196,6 @@ export function LogsBoard({
             if (!res.ok) return setError(res.error);
             setCorrecting(null);
           }}
-          className="rounded-card border border-line bg-surface p-5 shadow-card"
         >
           <p className="mb-3 text-sm">
             Correction note for <strong>{correcting.user}</strong> - {formatDate(correcting.date)}.
@@ -155,17 +206,18 @@ export function LogsBoard({
               <TextInput name="correctionNote" required placeholder="e.g. Actually 6 calls - one logged twice" />
             </div>
             <SubmitButton>Save note</SubmitButton>
-            <button type="button" className="text-sm text-muted hover:underline" onClick={() => setCorrecting(null)}>
+            <Btn variant="ghost" onClick={() => setCorrecting(null)}>
               Cancel
-            </button>
+            </Btn>
             <FormError message={error} />
           </div>
         </form>
+        </Card>
       )}
 
       {/* All logs */}
       <div>
-        <h3 className="mb-3 font-display text-lg font-semibold">All daily logs</h3>
+        <h3 className="mb-3 font-display text-h2 font-semibold">All daily logs</h3>
         <DataTable rows={logs} columns={columns} csvName="daily-logs" filterPlaceholder="Filter logs…" />
       </div>
     </section>

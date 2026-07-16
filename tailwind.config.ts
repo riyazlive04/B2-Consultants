@@ -9,13 +9,25 @@ const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
+      screens: {
+        // §7: "tables become stacked key-value cards below 720px"
+        tab: "720px",
+      },
       colors: {
         canvas: "var(--bg-app)",
         surface: { DEFAULT: "var(--bg-surface)", 2: "var(--bg-surface-2)" },
         sky: "var(--bg-sky)",
-        ink: { DEFAULT: "var(--ink)", 2: "var(--ink-2)", 3: "var(--ink-3)" },
+        ink: {
+          DEFAULT: "var(--ink)",
+          2: "var(--ink-2)",
+          3: "var(--ink-3)",
+          // inactive controls only — WCAG 1.4.3 exempts them. Never for text.
+          disabled: "var(--ink-disabled)",
+        },
         muted: "var(--ink-2)",
         faint: "var(--ink-3)",
+        // text/icon that sits ON a saturated fill; re-themes, unlike `text-white`
+        "on-accent": "var(--on-accent)",
         line: { DEFAULT: "var(--border)", strong: "var(--border-strong)" },
         primary: {
           DEFAULT: "var(--primary)",
@@ -45,10 +57,18 @@ const config: Config = {
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
       fontSize: {
-        // Daylight type scale (§2.1)
+        // Daylight type scale (§2.1) — the COMPLETE scale. Nothing outside it ships.
         "display-xl": ["40px", { lineHeight: "46px", fontWeight: "800" }],
         "display-l": ["30px", { lineHeight: "38px", fontWeight: "700" }],
+        h1: ["24px", { lineHeight: "32px", fontWeight: "700" }],
+        h2: ["19px", { lineHeight: "28px", fontWeight: "600" }],
+        h3: ["16px", { lineHeight: "24px", fontWeight: "600" }],
         metric: ["28px", { lineHeight: "34px", fontWeight: "700" }],
+        body: ["14px", { lineHeight: "22px", fontWeight: "400" }],
+        "body-strong": ["14px", { lineHeight: "22px", fontWeight: "600" }],
+        label: ["13px", { lineHeight: "18px", fontWeight: "500", letterSpacing: "0.04em" }],
+        caption: ["12px", { lineHeight: "16px", fontWeight: "400" }],
+        "mono-data": ["14px", { lineHeight: "20px", fontWeight: "400" }],
       },
       borderRadius: {
         card: "var(--r-lg)", // 18px — cards, panels, modals

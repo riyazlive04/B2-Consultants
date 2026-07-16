@@ -2,7 +2,9 @@ import "server-only";
 import { Prisma, type LeadSource, type Source, type Lead } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
+import { normalizeWhatsappNumber } from "@/lib/phone";
 import { pickFirstCaller } from "./assignment";
+import { notifyNewOptIn } from "./outreach-notify";
 
 /**
  * Single entry point for every non-manual lead that lands in the system - the two
@@ -51,6 +53,43 @@ function bound(input: IntakeLead): IntakeLead {
   };
 }
 
+/**
+ * Find an existing lead whose phone is the SAME NUMBER, however it happens to be punctuated.
+ *
+ * Two passes, cheapest first:
+ *   1. Exact string on the indexed column — the overwhelmingly common case (same channel, same
+ *      formatting), and it costs one index lookup.
+ *   2. Digits-only comparison. Postgres can't run libphonenumber, so we narrow with a
+ *      digits-only LIKE on the last 9 significant digits (selective enough to return a handful of
+ *      rows, short enough to survive any country-code/trunk-prefix variation), then confirm each
+ *      candidate on the fully normalized E.164 form in JS. The LIKE can't use the btree index, but
+ *      it only runs when the exact match missed, and the lead table is small.
+ */
+async function findLeadByNormalizedPhone(normalized: string, raw: string): Promise<Lead | null> {
+  const exact = await prisma.lead.findFirst({ where: { phone: raw } });
+  if (exact) return exact;
+
+  const tail = normalized.slice(-9);
+  if (tail.length < 9) return null; // too short to be selective — don't risk a false positive
+
+  // '[^0-9]' rather than '\D' ON PURPOSE: this is a template literal, so `\D` would be cooked to
+  // a bare `D` before Postgres ever sees it — the query would then strip literal "D" characters
+  // instead of non-digits, match nothing, and silently duplicate the lead. A character class
+  // needs no backslash and cannot be mangled by the JS lexer.
+  const hits = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "lead"
+    WHERE regexp_replace(phone, '[^0-9]', '', 'g') LIKE ${`%${tail}`}
+    ORDER BY "createdAt" ASC
+    LIMIT 50
+  `;
+  if (!hits.length) return null;
+
+  const candidates = await prisma.lead.findMany({ where: { id: { in: hits.map((h) => h.id) } } });
+  // Confirm on the full normalized form: matching tails is a prefilter, not a decision. Two real
+  // numbers can share 9 trailing digits across countries.
+  return candidates.find((c) => normalizeWhatsappNumber(c.phone) === normalized) ?? null;
+}
+
 export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
   const input = bound(rawInput);
   const utm = input.utm && Object.keys(input.utm).length ? (input.utm as Prisma.InputJsonValue) : undefined;
@@ -75,8 +114,18 @@ export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResu
     }
   }
 
-  // 2. same human from another channel - link, don't duplicate
-  const byPhone = await prisma.lead.findFirst({ where: { phone: input.phone } });
+  // 2. same human from another channel - link, don't duplicate.
+  //
+  // Matched on the NORMALIZED number, not the raw string. An exact compare treats
+  // "+91 98765 43210", "+919876543210" and "09876543210" as three different people, which is how
+  // one human ends up as three Lead rows — and then the SOP's Step 10 booking cross-check reports
+  // "not booked" for a prospect who has booked, because the booking hangs off a different row.
+  // libphonenumber is already a dependency and already fails closed (null on anything it can't
+  // prove valid), so an unparseable number falls back to the exact compare rather than guessing.
+  const normalized = normalizeWhatsappNumber(input.phone);
+  const byPhone = normalized
+    ? await findLeadByNormalizedPhone(normalized, input.phone)
+    : await prisma.lead.findFirst({ where: { phone: input.phone } });
   if (byPhone) return { lead: byPhone, created: false, deduped: "phone" };
 
   // 3. brand-new lead. Auto-assign the first caller per the configured rotation
@@ -103,8 +152,20 @@ export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResu
     await tx.leadStageHistory.create({
       data: { leadId: created.id, fromStage: null, toStage: "NEW_LEAD" },
     });
+    // SOP Step 1 → the outreach journey starts here. Inside the transaction so a lead can never
+    // exist without one: a journey-less lead is invisible to the SOP queue, which is exactly the
+    // failure mode ("we never called them") the 5-minute SLA exists to prevent.
+    await tx.outreachJourney.create({
+      data: { leadId: created.id, optInAt: created.createdAt },
+    });
     return created;
   });
+
+  // SOP Step 1 → "the outreach specialist will be getting the required information also via
+  // E-Mail". Deliberately NOT awaited: capture is done and committed, and a slow or failing
+  // Resend call must never delay (or fail) the webhook response. notifyNewOptIn swallows its own
+  // errors, so this cannot produce an unhandled rejection.
+  void notifyNewOptIn(lead.id);
 
   return { lead, created: true, deduped: null };
 }

@@ -58,7 +58,7 @@ export function Columns({
             className="flex h-full flex-1 flex-col items-center justify-end gap-1"
             title={`${it.label}: ${it.display}`}
           >
-            <span className="text-[11px] font-semibold tnum">{it.display}</span>
+            <span className="text-caption font-semibold tnum">{it.display}</span>
             <div
               className="w-full max-w-[28px] rounded-t"
               style={{
@@ -72,7 +72,7 @@ export function Columns({
       </div>
       <div className="mt-1.5 flex gap-2 border-t border-line pt-1.5">
         {items.map((it) => (
-          <span key={it.label} className="flex-1 text-center text-[10px] font-medium leading-tight text-muted">
+          <span key={it.label} className="flex-1 text-center text-caption font-medium leading-tight text-muted">
             {it.label}
           </span>
         ))}
@@ -150,7 +150,7 @@ export function Donut({
         </svg>
         <div className="pointer-events-none absolute inset-0 grid place-items-center">
           <div className="text-center">
-            <p className="max-w-[110px] truncate text-[11px] font-medium text-muted">
+            <p className="max-w-[110px] truncate text-caption font-medium text-muted">
               {shown ? shown.label : centerLabel}
             </p>
             <p className="font-display text-lg font-bold tracking-tight">

@@ -5,6 +5,8 @@ import { createOutcome, deleteOutcome, updateOutcome } from "@/server/pipeline-a
 import type { OutcomeRow } from "@/server/pipeline-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { Card } from "@/components/ui/kit";
+import { Btn } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate } from "@/lib/format";
 import { CALL_OUTCOME_LABELS, optionsFrom } from "@/lib/labels";
@@ -67,9 +69,9 @@ export function OutcomeSection({
       key: "actions", header: "", sortable: false,
       cell: (r) => (
         <span className="flex gap-2 whitespace-nowrap">
-          <button type="button" className="py-1 text-accent hover:underline" onClick={() => setEditing(r)}>Edit</button>
+          <Btn variant="ghost" size="sm" onClick={() => setEditing(r)}>Edit</Btn>
           {isAdmin && (
-            <button type="button" className="py-1 text-risk hover:underline" onClick={() => remove(r)}>Delete</button>
+            <Btn variant="danger" size="sm" onClick={() => remove(r)}>Delete</Btn>
           )}
         </span>
       ),
@@ -79,22 +81,17 @@ export function OutcomeSection({
 
   return (
     <section className="space-y-4">
-      <form
-        ref={formRef}
-        action={submit}
-        key={editing?.id ?? "new"}
-        className="rounded-card border border-line bg-surface p-5 shadow-card"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-display text-lg font-semibold">
-            {editing ? `Edit outcome - ${editing.leadName}` : "Discovery call outcome"}
-          </h3>
-          {editing && (
-            <button type="button" className="text-sm text-muted hover:underline" onClick={() => setEditing(null)}>
+      <Card
+        title={editing ? `Edit outcome - ${editing.leadName}` : "Discovery call outcome"}
+        actions={
+          editing ? (
+            <Btn variant="ghost" size="sm" onClick={() => setEditing(null)}>
               Cancel edit
-            </button>
-          )}
-        </div>
+            </Btn>
+          ) : undefined
+        }
+      >
+        <form ref={formRef} action={submit} key={editing?.id ?? "new"}>
         {leadOptions.length === 0 ? (
           <p className="text-sm text-muted">Add a lead first - outcomes link to a lead record.</p>
         ) : (
@@ -136,7 +133,8 @@ export function OutcomeSection({
             </div>
           </>
         )}
-      </form>
+        </form>
+      </Card>
 
       <DataTable
         rows={rows}

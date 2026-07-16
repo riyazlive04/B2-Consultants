@@ -182,6 +182,22 @@ function parseLeadHours(raw: FormDataEntryValue | null): number[] {
   return list.length ? list : DEFAULT_CADENCE.bookingReminderLeadHours;
 }
 
+/**
+ * Days-before-due for the EMI reminder. Unlike parseLeadHours, `0` is meaningful here
+ * ("on the due day"), and a deliberately cleared box means OFF rather than "use defaults" —
+ * so an admin can actually switch this touchpoint off from the settings form.
+ */
+function parseLeadDays(raw: FormDataEntryValue | null): number[] {
+  if (typeof raw !== "string") return DEFAULT_CADENCE.emiPreDueLeadDays;
+  if (!raw.trim()) return []; // cleared on purpose → touchpoint disabled
+  const list = raw
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 60);
+  // Dedupe + sort descending so "3,0" always means "3 days out, then on the day".
+  return [...new Set(list)].sort((a, b) => b - a);
+}
+
 /** Save the editable (non-secret) WATI settings from the settings form. */
 export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionResult> {
   await requireAdmin();
@@ -207,6 +223,11 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
     bookingReminderLeadHours: parseLeadHours(form.get("bookingReminderLeadHours")),
     noShowDelayHours: num(form, "noShowDelayHours", DEFAULT_CADENCE.noShowDelayHours),
     paymentRepeatHours: num(form, "paymentRepeatHours", DEFAULT_CADENCE.paymentRepeatHours),
+    emiPreDueLeadDays: parseLeadDays(form.get("emiPreDueLeadDays")),
+    // Inverted on purpose. The form asks "send for REAL?" so that an unchecked box — or a
+    // form that never renders the field at all — resolves to a dry run. A `dryRun` checkbox
+    // would fail the other way: one missing input and every student gets a real message.
+    emiPreDueDryRun: !(form.get("emiPreDueLive") === "on" || form.get("emiPreDueLive") === "true"),
     studentRepeatHours: num(form, "studentRepeatHours", DEFAULT_CADENCE.studentRepeatHours),
     maxPerRun: num(form, "maxPerRun", DEFAULT_CADENCE.maxPerRun),
   };

@@ -8,6 +8,8 @@ import { STAGE_LABELS_SHORT } from "@/lib/gamification";
 import {
   BadgeChip, BadgeStrip, LevelRing, Podium, QuestCard, XpBar,
 } from "@/components/ui/gamification";
+import { Card, CardTitle } from "@/components/ui/kit";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { formatDate } from "@/lib/format";
 
 type Player = Omit<RankedPlayer, "events" | "counters" | "logDays" | "levelUps">;
@@ -42,8 +44,49 @@ export function ArenaClient({
   const me = players.find((p) => p.userId === meUserId) ?? null;
   const [galleryFor, setGalleryFor] = useState<string | null>(me?.userId ?? players[0]?.userId ?? null);
 
-  const ranked = [...players].sort((a, b) => xpFor(b, period) - xpFor(a, period) || b.xpTotal - a.xpTotal);
+  const ranked = [...players]
+    .sort((a, b) => xpFor(b, period) - xpFor(a, period) || b.xpTotal - a.xpTotal)
+    .map((p, i) => ({ ...p, rank: i + 1 }));
   const galleryPlayer = players.find((p) => p.userId === galleryFor) ?? null;
+
+  const leaderboardColumns: Column<(typeof ranked)[number]>[] = [
+    {
+      key: "rank", header: "#",
+      cell: (p) => ["🥇", "🥈", "🥉"][p.rank - 1] ?? p.rank,
+      value: (p) => p.rank,
+    },
+    {
+      key: "player", header: "Player",
+      cell: (p) => (
+        <>
+          {p.name}
+          {p.userId === meUserId && <span className="ml-1.5 text-xs text-accent">(you)</span>}
+          <span className="block text-xs font-normal text-muted">{p.roleTitle}</span>
+        </>
+      ),
+      value: (p) => p.name,
+    },
+    {
+      key: "level", header: "Level",
+      cell: (p) => <>Lv {p.level.level} <span className="text-xs text-muted">{p.level.title}</span></>,
+      value: (p) => p.level.level,
+    },
+    {
+      key: "xp", header: `XP (${PERIODS.find((p) => p.key === period)!.label.toLowerCase()})`, align: "right",
+      cell: (p) => xpFor(p, period).toLocaleString("en-IN"),
+      value: (p) => xpFor(p, period),
+    },
+    {
+      key: "streak", header: "Streak", align: "right",
+      cell: (p) => (p.streak > 0 ? `🔥 ${p.streak}d` : "—"),
+      value: (p) => p.streak,
+    },
+    {
+      key: "badges", header: "Badges", align: "right",
+      cell: (p) => p.unlockedCount,
+      value: (p) => p.unlockedCount,
+    },
+  ];
 
   if (players.length === 0) {
     return (
@@ -57,7 +100,7 @@ export function ArenaClient({
     <div className="space-y-8">
       {/* ── My card ── */}
       {me && (
-        <section className="rise-in rounded-card border border-line bg-surface p-5 shadow-card">
+        <Card className="rise-in">
           <div className="flex flex-wrap items-center gap-5">
             <LevelRing level={me.level} size={84} />
             <div className="min-w-56 flex-1">
@@ -81,15 +124,13 @@ export function ArenaClient({
               <BadgeStrip badges={me.badges} max={6} />
             </div>
           </div>
-        </section>
+        </Card>
       )}
 
       {/* ── Leaderboard ── */}
-      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
-            <ListOrdered size={18} /> Leaderboard
-          </h2>
+      <Card
+        title={<CardTitle icon={<ListOrdered size={18} />}>Leaderboard</CardTitle>}
+        actions={
           <div className="flex rounded-full border border-line bg-surface-2 p-0.5">
             {PERIODS.map((p) => (
               <button
@@ -97,68 +138,37 @@ export function ArenaClient({
                 type="button"
                 onClick={() => setPeriod(p.key)}
                 className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                  period === p.key ? "bg-ink text-white" : "text-muted hover:text-ink"
+                  period === p.key ? "bg-ink text-surface" : "text-muted hover:text-ink"
                 }`}
               >
                 {p.label}
               </button>
             ))}
           </div>
-        </div>
+        }
+      >
+        <Podium
+          entries={ranked.slice(0, 3).map((p) => ({
+            name: p.name.split(" ")[0],
+            detail: `Lv ${p.level.level} · ${p.level.title}`,
+            value: `${xpFor(p, period).toLocaleString("en-IN")} XP`,
+          }))}
+        />
 
-        <div className="mt-6">
-          <Podium
-            entries={ranked.slice(0, 3).map((p) => ({
-              name: p.name.split(" ")[0],
-              detail: `Lv ${p.level.level} · ${p.level.title}`,
-              value: `${xpFor(p, period).toLocaleString("en-IN")} XP`,
-            }))}
+        <div className="mt-5">
+          <DataTable
+            rows={ranked}
+            columns={leaderboardColumns}
+            rowClassName={(p) => `${p.rank === 1 ? "leader-row" : ""} ${p.userId === meUserId ? "font-semibold" : ""}`}
+            filterPlaceholder="Filter players…"
           />
         </div>
-
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                <th className="py-2 pr-2 font-semibold">#</th>
-                <th className="py-2 pr-2 font-semibold">Player</th>
-                <th className="py-2 pr-2 font-semibold">Level</th>
-                <th className="py-2 pr-2 text-right font-semibold">XP ({PERIODS.find((p) => p.key === period)!.label.toLowerCase()})</th>
-                <th className="py-2 pr-2 text-right font-semibold">Streak</th>
-                <th className="py-2 text-right font-semibold">Badges</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked.map((p, i) => (
-                <tr
-                  key={p.userId}
-                  className={`border-b border-line last:border-b-0 ${i === 0 ? "leader-row" : ""} ${
-                    p.userId === meUserId ? "font-semibold" : ""
-                  }`}
-                >
-                  <td className="py-2.5 pr-2 tnum">{["🥇", "🥈", "🥉"][i] ?? i + 1}</td>
-                  <td className="py-2.5 pr-2">
-                    {p.name}
-                    {p.userId === meUserId && <span className="ml-1.5 text-xs text-accent">(you)</span>}
-                    <span className="block text-xs font-normal text-muted">{p.roleTitle}</span>
-                  </td>
-                  <td className="py-2.5 pr-2">
-                    Lv {p.level.level} <span className="text-xs text-muted">{p.level.title}</span>
-                  </td>
-                  <td className="py-2.5 pr-2 text-right tnum">{xpFor(p, period).toLocaleString("en-IN")}</td>
-                  <td className="py-2.5 pr-2 text-right tnum">{p.streak > 0 ? `🔥 ${p.streak}d` : "—"}</td>
-                  <td className="py-2.5 text-right tnum">{p.unlockedCount}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-2 text-[11px] text-muted">Week starts Monday ({formatDate(weekStart)}).</p>
-      </section>
+        <p className="mt-2 text-caption text-muted">Week starts Monday ({formatDate(weekStart)}).</p>
+      </Card>
 
       {/* ── Weekly quests ── */}
       <section>
-        <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
+        <h2 className="mb-3 flex items-center gap-2 font-display text-h2 font-semibold">
           <Swords size={18} /> Weekly quests
         </h2>
         {me ? (
@@ -198,12 +208,10 @@ export function ArenaClient({
       </section>
 
       {/* ── Badge gallery ── */}
-      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
-            <Medal size={18} /> Badge gallery
-          </h2>
-          {(isAdmin || players.length > 1) && (
+      <Card
+        title={<CardTitle icon={<Medal size={18} />}>Badge gallery</CardTitle>}
+        actions={
+          isAdmin || players.length > 1 ? (
             <div className="flex flex-wrap gap-1.5">
               {players.map((p) => (
                 <button
@@ -211,29 +219,27 @@ export function ArenaClient({
                   type="button"
                   onClick={() => setGalleryFor(p.userId)}
                   className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                    galleryFor === p.userId ? "bg-ink text-white" : "bg-surface-2 text-muted hover:text-ink"
+                    galleryFor === p.userId ? "bg-ink text-surface" : "bg-surface-2 text-muted hover:text-ink"
                   }`}
                 >
                   {p.name.split(" ")[0]} · {p.unlockedCount}
                 </button>
               ))}
             </div>
-          )}
-        </div>
+          ) : undefined
+        }
+      >
         {galleryPlayer && (
-          <div className="mt-4 flex flex-wrap gap-x-3 gap-y-4">
+          <div className="flex flex-wrap gap-x-3 gap-y-4">
             {galleryPlayer.badges.map((b) => <BadgeChip key={b.key} badge={b} />)}
           </div>
         )}
-      </section>
+      </Card>
 
       {/* ── XP feed ── */}
-      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
-          <ScrollText size={18} /> Recent XP
-        </h2>
+      <Card title={<CardTitle icon={<ScrollText size={18} />}>Recent XP</CardTitle>}>
         {feed.length ? (
-          <ul className="mt-3 space-y-1.5 text-sm">
+          <ul className="space-y-1.5 text-sm">
             {feed.map((e, i) => (
               <li key={`${e.userId}-${e.dateKey}-${e.kind}-${i}`} className="flex items-baseline gap-2">
                 <span className="tnum flex-none text-xs text-muted">{formatDate(e.dateKey)}</span>
@@ -246,9 +252,9 @@ export function ArenaClient({
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-muted">No XP yet — it starts flowing with the first daily log.</p>
+          <p className="text-sm text-muted">No XP yet — it starts flowing with the first daily log.</p>
         )}
-      </section>
+      </Card>
 
       {/* ── How XP works — generated from the live ruleset, so it can never lie ── */}
       <XpRulesPanel ruleset={ruleset} />
@@ -307,7 +313,7 @@ function XpRulesPanel({ ruleset }: { ruleset: Ruleset }) {
 
       {stages.length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Pipeline moves</p>
+          <p className="text-caption font-semibold uppercase tracking-wide text-ink-3">Pipeline moves</p>
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
             {stages.map(([stage, xp]) => (
               <span key={stage}>
@@ -318,7 +324,7 @@ function XpRulesPanel({ ruleset }: { ruleset: Ruleset }) {
         </div>
       )}
 
-      <p className="mt-3 text-[11px] text-muted">
+      <p className="mt-3 text-caption text-muted">
         Everything is computed from the audited history — daily logs, pipeline stage changes,
         milestone logs, signal changes and OKRs. Corrections and backward moves earn nothing.
         Work is scored by the rules that were in force on the day it happened, so tuning a rule

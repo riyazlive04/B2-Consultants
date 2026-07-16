@@ -9,6 +9,8 @@ import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
 import { sendLeadReminder } from "@/server/whatsapp-actions";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { Card } from "@/components/ui/kit";
+import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate, formatDuration } from "@/lib/format";
 import { signalForSpeedToLead } from "@/lib/signals";
@@ -104,16 +106,13 @@ export function LeadSection({
       key: "assignedTo", header: "Assigned to",
       cell: (r) =>
         isAdmin ? (
-          <select
+          <Select
+            aria-label={`Assign ${r.name}`}
             defaultValue={r.assignedToId ?? ""}
             onChange={(e) => reassign(r, e.target.value)}
-            className="rounded-field border border-line bg-surface px-2 py-1 text-xs outline-none focus:border-accent"
-          >
-            <option value="">Unassigned</option>
-            {assignees.map((a) => (
-              <option key={a.value} value={a.value}>{a.label}</option>
-            ))}
-          </select>
+            size="sm"
+            options={[{ value: "", label: "Unassigned" }, ...assignees]}
+          />
         ) : (
           r.assignedTo ?? "-"
         ),
@@ -130,9 +129,9 @@ export function LeadSection({
             {formatDuration(r.speedMs)}
           </span>
         ) : (
-          <button type="button" onClick={() => contact(r)} className="text-xs text-accent hover:underline">
+          <Btn variant="ghost" size="sm" onClick={() => contact(r)}>
             Mark contacted
-          </button>
+          </Btn>
         ),
       value: (r) => r.speedMs ?? Number.MAX_SAFE_INTEGER,
     },
@@ -144,9 +143,9 @@ export function LeadSection({
         <span className="flex items-center gap-2 whitespace-nowrap">
           {waStatus[r.id] && <WhatsAppStatusBadge status={waStatus[r.id]!.status} kind={waStatus[r.id]!.kind} at={waStatus[r.id]!.at} />}
           <SendWhatsAppButton action={() => sendLeadReminder(r.id)} label="WhatsApp" />
-          <button type="button" className="py-1 text-accent hover:underline" onClick={() => startEdit(r)}>Edit</button>
+          <Btn variant="ghost" size="sm" onClick={() => startEdit(r)}>Edit</Btn>
           {isAdmin && (
-            <button type="button" className="py-1 text-risk hover:underline" onClick={() => remove(r)}>Delete</button>
+            <Btn variant="danger" size="sm" onClick={() => remove(r)}>Delete</Btn>
           )}
         </span>
       ),
@@ -156,26 +155,17 @@ export function LeadSection({
 
   return (
     <section className="space-y-4">
-      <form
-        ref={formRef}
-        action={submit}
-        key={editing?.id ?? "new"}
-        className="rounded-card border border-line bg-surface p-5 shadow-card"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-display text-lg font-semibold">
-            {editing ? `Edit lead - ${editing.name}` : "New lead"}
-          </h3>
-          {editing && (
-            <button
-              type="button"
-              className="text-sm text-muted hover:underline"
-              onClick={() => { setEditing(null); setStage("NEW_LEAD"); }}
-            >
+      <Card
+        title={editing ? `Edit lead - ${editing.name}` : "New lead"}
+        actions={
+          editing ? (
+            <Btn variant="ghost" size="sm" onClick={() => { setEditing(null); setStage("NEW_LEAD"); }}>
               Cancel edit
-            </button>
-          )}
-        </div>
+            </Btn>
+          ) : undefined
+        }
+      >
+        <form ref={formRef} action={submit} key={editing?.id ?? "new"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Lead name">
             <TextInput name="name" required placeholder="Full name" defaultValue={editing?.name ?? ""} />
@@ -221,7 +211,8 @@ export function LeadSection({
           <SubmitButton>{editing ? "Save changes" : "Add lead"}</SubmitButton>
           <FormError message={error} />
         </div>
-      </form>
+        </form>
+      </Card>
 
       <DataTable
         rows={rows}

@@ -57,7 +57,7 @@ export function SprintCheckIn({ weeks }: { weeks: PortalSprintWeek[] }) {
           <span
             key={w.id}
             title={`Week ${w.weekIndex} (${formatDate(w.weekStart)} - ${formatDate(w.weekEnd)})${w.target ? ` · Target: ${w.target}` : ""} · ${SPRINT_STATUS_LABELS[w.status]}`}
-            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_PILL[w.status]} ${
+            className={`rounded-full px-2 py-0.5 text-caption font-semibold ${STATUS_PILL[w.status]} ${
               w.isCurrent ? "ring-2 ring-[var(--accent)]" : ""
             }`}
           >

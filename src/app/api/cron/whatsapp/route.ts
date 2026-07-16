@@ -1,12 +1,14 @@
 import crypto from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { runDueReminders } from "@/server/whatsapp";
+import { runBookingConfirmations } from "@/server/booking-automation";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 
 /**
  * Scheduled reminder trigger. An external scheduler (Hostinger cron / crontab / Vercel Cron /
- * cron-job.org) hits this every ~15 min; it runs the due WhatsApp reminders and returns a summary.
- * The app deliberately has no long-running worker — this endpoint IS the scheduler seam. It's also
+ * cron-job.org) hits this every ~15 min; it runs the due WhatsApp reminders AND the bookings
+ * confirmation loop (confirm-or-cancel + promote-next), returning a summary of both. One cron
+ * entry drives all of the app's outbound cadence — there is no long-running worker. It's also
  * what the Admin "Run reminders now" button calls (via the server action).
  *
  * Auth: CRON_SECRET via `x-cron-secret` header, `Authorization: Bearer <secret>`, or `?key=`.
@@ -43,7 +45,10 @@ async function handle(req: NextRequest) {
   }
 
   const run = await runDueReminders();
-  return NextResponse.json({ ok: true, run });
+  // Same tick, same seam: drive the bookings confirmation loop. Independently guarded (it no-ops
+  // when the loop is off), and it never throws into this handler.
+  const bookings = await runBookingConfirmations().catch((e) => ({ error: String(e) }));
+  return NextResponse.json({ ok: true, run, bookings });
 }
 
 export async function POST(req: NextRequest) {

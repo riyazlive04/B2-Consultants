@@ -4,13 +4,15 @@ import { useRef, useState } from "react";
 import { createIncome, deleteIncome, updateIncome } from "@/server/finance-actions";
 import type { IncomeRow } from "@/server/finance-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { Card } from "@/components/ui/kit";
+import { Btn } from "@/components/ui/controls";
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import {
   optionsFrom, PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, PROGRAM_LEVEL_LABELS,
 } from "@/lib/labels";
-import { AmountPair } from "./AmountPair";
+import { AmountPair } from "@/components/ui/AmountPair";
 
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
@@ -82,8 +84,8 @@ export function IncomeSection({
       key: "actions", header: "", sortable: false,
       cell: (r) => (
         <span className="flex gap-2 whitespace-nowrap">
-          <button type="button" className="py-1 text-accent hover:underline" onClick={() => setEditing(r)}>Edit</button>
-          <button type="button" className="py-1 text-risk hover:underline" onClick={() => remove(r)}>Delete</button>
+          <Btn variant="ghost" size="sm" onClick={() => setEditing(r)}>Edit</Btn>
+          <Btn variant="danger" size="sm" onClick={() => remove(r)}>Delete</Btn>
         </span>
       ),
       value: () => null,
@@ -92,22 +94,17 @@ export function IncomeSection({
 
   return (
     <section className="space-y-4">
-      <form
-        ref={formRef}
-        action={submit}
-        key={editing?.id ?? "new"}
-        className="rounded-card border border-line bg-surface p-5 shadow-card"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-display text-lg font-semibold">
-            {editing ? `Edit income - ${editing.studentName}` : "Daily income entry"}
-          </h3>
-          {editing && (
-            <button type="button" className="text-sm text-muted hover:underline" onClick={() => setEditing(null)}>
+      <Card
+        title={editing ? `Edit income - ${editing.studentName}` : "Daily income entry"}
+        actions={
+          editing ? (
+            <Btn variant="ghost" size="sm" onClick={() => setEditing(null)}>
               Cancel edit
-            </button>
-          )}
-        </div>
+            </Btn>
+          ) : undefined
+        }
+      >
+        <form ref={formRef} action={submit} key={editing?.id ?? "new"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Date">
             <TextInput type="date" name="date" required defaultValue={editing ? editing.date.slice(0, 10) : today} />
@@ -152,7 +149,8 @@ export function IncomeSection({
           <SubmitButton>{editing ? "Save changes" : "Add income"}</SubmitButton>
           <FormError message={error} />
         </div>
-      </form>
+        </form>
+      </Card>
 
       <DataTable rows={rows} columns={columns} csvName="income" filterPlaceholder="Filter income…" />
     </section>

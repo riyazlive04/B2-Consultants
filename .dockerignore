@@ -1,0 +1,40 @@
+# Keep the build context lean AND keep secrets/local state out of image layers.
+# Without this, `COPY . .` bakes the local .env (localhost DB URL, WATI token,
+# CRON_SECRET) into the image and points the build's `prisma migrate deploy`
+# at a database that isn't reachable from inside the container.
+
+# Dependencies — reinstalled via `npm ci` in the deps stage
+node_modules
+.pnp
+.pnp.js
+
+# Build output — regenerated inside the image
+.next
+.next-prod
+out
+build
+tsconfig.tsbuildinfo
+
+# Secrets & local environment — never ship these
+.env
+.env.*
+!.env.example
+!.env.supabase.example
+
+# Supabase migration working dir — plaintext PII dump
+.migration
+
+# VCS & tooling
+.git
+.gitignore
+.vscode
+.idea
+
+# Local scratch / captures not needed at build
+.playwright-mcp
+*.log
+
+# Docker & compose files — not needed inside the image
+Dockerfile
+.dockerignore
+docker-compose*.yml

@@ -46,7 +46,7 @@ export default async function InvitePage({ params }: { params: { token: string }
         <p className="mt-2 text-sm text-muted">{body}</p>
         <Link
           href="/login"
-          className="mt-6 inline-flex h-10 items-center rounded-btn bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-strong"
+          className="mt-6 inline-flex h-10 items-center rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent hover:bg-primary-strong"
         >
           Go to sign in
         </Link>
@@ -72,7 +72,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="grid min-h-screen place-items-center bg-canvas px-4">
       <div className="w-full max-w-md rounded-card border border-line bg-surface p-8 shadow-card">
-        <span className="mb-6 grid h-11 w-11 place-items-center rounded-btn bg-primary text-sm font-bold text-white">
+        <span className="mb-6 grid h-11 w-11 place-items-center rounded-btn bg-primary text-sm font-bold text-on-accent">
           B2
         </span>
         {children}

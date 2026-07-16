@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Check, Loader2, Lock, Phone, ShieldCheck, Users } from "lucide-react";
@@ -29,7 +30,11 @@ export default function LoginForm() {
   const router = useRouter();
   // requireSession() bounces a suspended account here rather than leaving them
   // staring at a login form that silently refuses them.
-  const suspended = useSearchParams().get("error") === "suspended";
+  const searchParams = useSearchParams();
+  const suspended = searchParams.get("error") === "suspended";
+  // ResetPasswordForm sends people back here (never auto-signed-in — resetting a
+  // password doesn't mint a session) with this flag so they know it worked.
+  const resetDone = searchParams.get("reset") === "success";
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,7 +44,9 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(
     suspended ? "This account has been suspended. Contact your admin." : null,
   );
-  const [info, setInfo] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(
+    resetDone ? "Password updated — sign in with your new password." : null,
+  );
   const [busy, setBusy] = useState(false);
 
   const switchMode = (m: Mode) => {
@@ -93,12 +100,12 @@ export default function LoginForm() {
       <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-10 w-10 flex-none place-items-center rounded-btn bg-primary text-sm font-bold text-white">
+            <span className="grid h-10 w-10 flex-none place-items-center rounded-btn bg-primary text-sm font-bold text-on-accent">
               B2
             </span>
             <span className="flex flex-col leading-tight">
               <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
-              <span className="text-[11px] text-ink-2">Founder cockpit</span>
+              <span className="text-caption text-ink-2">Founder cockpit</span>
             </span>
           </div>
           <ThemeToggle frosted />
@@ -122,7 +129,7 @@ export default function LoginForm() {
           </div>
         </div>
 
-        <p className="text-[11px] text-ink-3">Internal tool · access by invitation</p>
+        <p className="text-caption text-ink-3">Internal tool · access by invitation</p>
       </div>
 
       {/* form pane */}
@@ -131,12 +138,12 @@ export default function LoginForm() {
           {/* mobile brand row (brand panel is hidden below lg) */}
           <div className="mb-6 flex items-center justify-between lg:hidden">
             <div className="flex items-center gap-2.5">
-              <span className="grid h-9 w-9 flex-none place-items-center rounded-btn bg-primary text-xs font-bold text-white">
+              <span className="grid h-9 w-9 flex-none place-items-center rounded-btn bg-primary text-xs font-bold text-on-accent">
                 B2
               </span>
               <span className="flex flex-col leading-tight">
                 <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-                <span className="text-[11px] text-ink-3">Founder cockpit</span>
+                <span className="text-caption text-ink-3">Founder cockpit</span>
               </span>
             </div>
             <ThemeToggle />
@@ -163,7 +170,7 @@ export default function LoginForm() {
           <form onSubmit={submit} className="mt-5 flex flex-col gap-4">
             {isSignup && (
               <div>
-                <p className="text-label mb-2.5 mt-1 !text-[11px] font-semibold text-ink-3">
+                <p className="text-label mb-2.5 mt-1 !text-caption font-semibold text-ink-3">
                   Access you need
                 </p>
                 <div className="flex flex-col gap-2">
@@ -184,14 +191,14 @@ export default function LoginForm() {
                       >
                         <span
                           className={`grid h-[34px] w-[34px] flex-none place-items-center rounded-[9px] ${
-                            active ? "bg-primary text-white" : "bg-surface-2 text-ink-3"
+                            active ? "bg-primary text-on-accent" : "bg-surface-2 text-ink-3"
                           }`}
                         >
                           <Icon size={18} strokeWidth={1.8} />
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block text-[13px] font-semibold text-ink">{r.label}</span>
-                          <span className="mt-px block text-[11px] text-ink-3">{r.desc}</span>
+                          <span className="mt-px block text-caption text-ink-3">{r.desc}</span>
                         </span>
                         {active && <Check size={18} strokeWidth={2.4} className="flex-none text-primary" />}
                       </button>
@@ -230,7 +237,12 @@ export default function LoginForm() {
 
             {!isSignup && (
               <label className="block text-xs font-semibold text-ink-2">
-                Password
+                <span className="flex items-center justify-between gap-2">
+                  Password
+                  <Link href="/forgot-password" className="font-semibold text-primary-strong hover:underline">
+                    Forgot password?
+                  </Link>
+                </span>
                 <input
                   type="password"
                   required
@@ -269,7 +281,7 @@ export default function LoginForm() {
             <button
               type="submit"
               disabled={busy}
-              className="mt-1 inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-btn bg-primary text-[15px] font-semibold text-white shadow-soft transition-colors hover:bg-primary-strong disabled:opacity-60"
+              className="mt-1 inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-btn bg-primary text-[15px] font-semibold text-on-accent shadow-soft transition-colors hover:bg-primary-strong disabled:opacity-60"
             >
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Lock size={15} />}
               {busy

@@ -1,12 +1,13 @@
 import { PROGRAM_LEVEL_LABELS } from "@/lib/labels";
 
-/** Program chip in the fixed German Note teal (design system §program colours). */
+/**
+ * Program chip in the fixed German Note teal (design system §program colours).
+ * The teal is an identity TINT only — used as text on white it measures 2.23:1
+ * and fails AA (§8), so it is the background and the label stays `--ink`.
+ */
 export function LevelChip({ level }: { level: string }) {
   return (
-    <span
-      className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-      style={{ color: "var(--lvl-gn)", background: "#3fc0b722" }}
-    >
+    <span className="rounded-full bg-lvl-gn/10 px-2.5 py-0.5 text-caption font-semibold text-ink">
       {PROGRAM_LEVEL_LABELS[level] ?? level}
     </span>
   );
@@ -15,7 +16,7 @@ export function LevelChip({ level }: { level: string }) {
 export function StatusChip({ status }: { status: "ACTIVE" | "ARCHIVED" }) {
   if (status === "ACTIVE") return null;
   return (
-    <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-[11px] font-semibold text-muted">
+    <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-caption font-semibold text-muted">
       Archived
     </span>
   );

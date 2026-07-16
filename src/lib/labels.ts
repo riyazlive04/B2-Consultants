@@ -81,6 +81,23 @@ export const SLOT_STATUS_LABELS: Record<string, string> = {
   BLOCKED: "Blocked",
 };
 
+// A bookable slot "type" is pure display layer - AppointmentSlot has no type/category
+// field, just durationMins. Map the two durations the admin can choose between when
+// generating slots to a human name; anything else (legacy data) falls back gracefully.
+export const SLOT_TYPE_LABELS: Record<number, string> = {
+  30: "Discovery Call (30 min)",
+  60: "Strategy Session (60 min)",
+};
+
+export function slotTypeLabel(durationMins: number): string {
+  return SLOT_TYPE_LABELS[durationMins] ?? `${durationMins} min call`;
+}
+
+export const SLOT_DURATION_OPTIONS = Object.entries(SLOT_TYPE_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}));
+
 // Where a lead physically originated (the `source` provenance column, distinct from
 // the marketing channel in LEAD_SOURCE_LABELS). Used on the lead inbox + bookings view.
 export const SOURCE_LABELS: Record<string, string> = {

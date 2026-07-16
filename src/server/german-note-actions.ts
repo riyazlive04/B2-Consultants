@@ -91,6 +91,7 @@ const batchSchema = z.object({
   name: z.string().trim().min(1, "Batch name is required").max(120),
   level: z.enum(GN_LEVELS, { message: "Pick a level (A1–B2)" }),
   tutorId: z.string().trim().optional(),
+  targetStrength: z.coerce.number().int().min(1).max(100).optional(), // target class size (~8)
   notes: z.string().trim().max(2000).optional(),
 });
 
@@ -112,6 +113,7 @@ export async function createBatch(form: FormData): Promise<ActionResult> {
       name: parsed.data.name,
       level: parsed.data.level,
       tutorId,
+      targetStrength: parsed.data.targetStrength ?? 8,
       notes: parsed.data.notes || null,
     },
   });
@@ -134,6 +136,8 @@ export async function updateBatch(batchId: string, form: FormData): Promise<Acti
       name: parsed.data.name,
       level: parsed.data.level,
       tutorId,
+      // undefined = form didn't carry it → leave the existing target untouched.
+      targetStrength: parsed.data.targetStrength,
       status: parsed.data.status,
       notes: parsed.data.notes || null,
     },
@@ -420,8 +424,11 @@ export async function reorderGnModule(moduleId: string, direction: "up" | "down"
 
 // ── Calendar: scheduled live classes (Admin or the batch's tutor) ──
 
+const GN_EVENT_TYPES = ["KICKOFF", "COACHING", "LINKEDIN", "QA", "OPEN_MARKET", "LIVE_CLASS", "OTHER"] as const;
+
 const eventSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(160),
+  type: z.enum(GN_EVENT_TYPES).optional(), // session kind; DB default LIVE_CLASS
   startsAt: z.string().min(10, "Start time is required"),
   durationMins: z.string().trim().regex(/^\d{0,4}$/).optional(),
   joinUrl: z.string().trim().max(500).optional(),
@@ -433,6 +440,8 @@ function parseEventFields(d: z.infer<typeof eventSchema>) {
   if (isNaN(startsAt.getTime())) return null;
   return {
     title: d.title,
+    // undefined → create uses the DB default (LIVE_CLASS); update leaves it unchanged.
+    type: d.type || undefined,
     startsAt,
     durationMins: d.durationMins?.trim() ? parseInt(d.durationMins, 10) : null,
     joinUrl: d.joinUrl?.trim() || null,

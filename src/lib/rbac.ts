@@ -68,17 +68,26 @@ export const requireSession = cache(async () => {
   return { ...session, role, overrides, capabilities };
 });
 
-/** Page/action guard - redirect home if this user has no access. */
+/**
+ * Page/action guard - redirect home if this user has no access.
+ *
+ * The reason rides along in the query string. A silent bounce to "/" leaves the
+ * person staring at the dashboard wondering whether they mis-clicked or the app
+ * broke (Nielsen: visibility of system status). `?denied=` is the same shape the
+ * suspension path above already uses.
+ */
 export async function requireSection(key: SectionKey) {
   const session = await requireSession();
   const section = resolveSections(await getSectionsConfig()).find((s) => s.key === key);
-  if (!section || !sectionAllowed(section, session.role, session.overrides)) redirect("/");
+  if (!section || !sectionAllowed(section, session.role, session.overrides)) {
+    redirect(`/?denied=${encodeURIComponent(key)}`);
+  }
   return session;
 }
 
 export async function requireAdmin() {
   const session = await requireSession();
-  if (session.role !== "ADMIN") redirect("/");
+  if (session.role !== "ADMIN") redirect("/?denied=admin");
   return session;
 }
 
@@ -108,6 +117,8 @@ export async function capabilityCheck(key: CapabilityKey): Promise<{
 /** The capability guard for PAGES — no page to stay on, so bounce home. */
 export async function requireCapability(key: CapabilityKey) {
   const session = await requireSession();
-  if (!hasCapability(session.role, session.capabilities, key)) redirect("/");
+  if (!hasCapability(session.role, session.capabilities, key)) {
+    redirect(`/?denied=${encodeURIComponent(key)}`);
+  }
   return session;
 }

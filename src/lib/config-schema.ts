@@ -244,6 +244,195 @@ export function parseRewardTrigger(value: unknown): RewardTrigger | null {
   return parsed.success ? (parsed.data as RewardTrigger) : null;
 }
 
+// ───────────────────────────── booking rules ─────────────────────────────
+
+/**
+ * §9/§13 Bookings: buffer / min-notice / max-advance window, founder-configurable via
+ * AppSetting (no schema field for it - same lazy-default pattern as gamification/sections
+ * above). Applied when generating slots (buffer) and on the public booking page (notice +
+ * advance window).
+ */
+/**
+ * Auto-disqualify: a BANT "CANCEL" verdict at intake (weighted avg < 2) blocks the booking and
+ * emails the prospect this template. Founder-editable; {{name}} / {{first_name}} tokens resolve
+ * against the lead (see messaging.renderTokens).
+ */
+export const DEFAULT_REJECTION_SUBJECT = "Your B2 Consultants application";
+export const DEFAULT_REJECTION_BODY =
+  "Hi {{first_name}},\n\n" +
+  "Thank you for your interest in B2 Consultants and for taking the time to share your details.\n\n" +
+  "After reviewing your responses, we don't think our program is the right fit for you at this stage, " +
+  "so we won't be scheduling a call at this time.\n\n" +
+  "Your goals and circumstances may change over time — you're very welcome to reach out again in the " +
+  "future. We wish you all the best on your journey.\n\n" +
+  "Warm regards,\nThe B2 Consultants Team";
+
+export const bookingRulesConfigSchema = z
+  .object({
+    bufferMinutes: z.number().int().min(0).max(240),
+    minNoticeHours: z.number().int().min(0).max(240),
+    maxAdvanceDays: z.number().int().min(1).max(365),
+    // Optional-with-default: an existing stored row (only the three window fields) still parses,
+    // and the new keys fall back to these defaults rather than resetting the whole config.
+    autoDisqualify: z.boolean().default(true),
+    rejectionSubject: z.string().trim().min(1).max(200).default(DEFAULT_REJECTION_SUBJECT),
+    rejectionBody: z.string().trim().min(1).max(4000).default(DEFAULT_REJECTION_BODY),
+    // ── Confirmation loop (Module E) — confirm-or-cancel + promote-next.
+    // autoCancelEnabled is the destructive master switch (default OFF): only when it is on does the
+    // engine release an unconfirmed slot. The two window fields drive the cadence; promoteNext
+    // governs whether the next same-caller/same-day call is moved up into a freed slot.
+    autoCancelEnabled: z.boolean().default(false),
+    // Send the "please reply YES" request once the slot is within this many hours (0 disables asking).
+    confirmRequestLeadHours: z.number().int().min(0).max(240).default(24),
+    // Release the slot if it is still unconfirmed within this many hours of the call. Kept < the
+    // request lead so there is always a window between "asked" and "cancelled".
+    autoCancelHours: z.number().int().min(0).max(240).default(3),
+    // On any cancel (auto or manual), move the next booked call for the same caller on the same day
+    // up into the freed slot and notify them. Independent of autoCancelEnabled.
+    promoteNext: z.boolean().default(true),
+  })
+  .refine((c) => c.confirmRequestLeadHours === 0 || c.confirmRequestLeadHours > c.autoCancelHours, {
+    message: "Ask-to-confirm lead time must be greater than the auto-cancel window",
+    path: ["confirmRequestLeadHours"],
+  });
+
+export type BookingRulesConfig = z.infer<typeof bookingRulesConfigSchema>;
+
+export const DEFAULT_BOOKING_RULES_CONFIG: BookingRulesConfig = {
+  bufferMinutes: 15,
+  minNoticeHours: 2,
+  maxAdvanceDays: 30,
+  autoDisqualify: true,
+  rejectionSubject: DEFAULT_REJECTION_SUBJECT,
+  rejectionBody: DEFAULT_REJECTION_BODY,
+  autoCancelEnabled: false,
+  confirmRequestLeadHours: 24,
+  autoCancelHours: 3,
+  promoteNext: true,
+};
+
+export function coerceBookingRulesConfig(value: unknown): BookingRulesConfig {
+  const parsed = bookingRulesConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_BOOKING_RULES_CONFIG;
+}
+
+// ──────────────────── global workflow settings (Automation) ────────────────────
+
+/**
+ * Synamate's "Global Workflow Settings", stored in AppSetting with the same lazy-default
+ * pattern as the configs above: no row = the defaults below, which reproduce the engine's
+ * behaviour exactly as it was before this document existed.
+ *
+ * Every field here is READ BY THE ENGINE (src/server/automation.ts) — see the call sites
+ * named in each comment. Nothing in this document is decorative.
+ */
+export const workflowSettingsSchema = z.object({
+  /** Master kill switch. false = no new enrollments and no resumes. `emitTrigger` + `runDueWorkflows`. */
+  engineEnabled: z.boolean(),
+  /**
+   * false = a contact who has *ever* been enrolled in a workflow will not enroll in it again.
+   * true (default) keeps the original rule: only a currently-ACTIVE enrollment blocks re-entry.
+   * `emitTrigger`.
+   */
+  allowReEnrollment: z.boolean(),
+  /**
+   * Don't deliver SEND_EMAIL / SEND_SMS inside this IST window — the enrollment parks and
+   * resumes when the window closes. Hours are IST (the app's business timezone, fixed +5:30).
+   * A window may wrap midnight (start 21, end 9). start === end means "no quiet window".
+   * `advanceEnrollment`.
+   */
+  quietHours: z.object({
+    enabled: z.boolean(),
+    startHour: z.number().int().min(0).max(23),
+    endHour: z.number().int().min(0).max(23),
+  }),
+  /** Max enrollments resumed per cron tick / "Run due now". `runDueWorkflows`. */
+  batchSize: z.number().int().min(1).max(1000),
+});
+
+export type WorkflowSettings = z.infer<typeof workflowSettingsSchema>;
+
+export const DEFAULT_WORKFLOW_SETTINGS: WorkflowSettings = {
+  engineEnabled: true,
+  allowReEnrollment: true,
+  quietHours: { enabled: false, startHour: 21, endHour: 9 },
+  batchSize: 200,
+};
+
+export function coerceWorkflowSettings(value: unknown): WorkflowSettings {
+  const parsed = workflowSettingsSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_WORKFLOW_SETTINGS;
+}
+
+// ───────────────────────────── commission rates ─────────────────────────────
+
+/**
+ * The deal-team commission rates (Finance → Commission), founder-editable via AppSetting
+ * with the same lazy-default pattern as the configs above. Read by
+ * `server/commission-metrics.ts` on every report; a missing/invalid row falls back to the
+ * shipped defaults (the rates that were hardcoded before this was configurable).
+ *
+ *   - bothCallsPct — one person did BOTH the first call and the discovery call.
+ *   - splitPct     — first call and discovery split between two people (each earns this),
+ *                    and also the rate for a lone first-call or lone discovery leg.
+ *   - closerPct    — the L3 closer who ran the SSS/sales call, on top of any earlier leg.
+ *
+ * Decimals are allowed (e.g. 2.5%). All three are a percentage of the payment actually
+ * received — the split is a cut of real cash in, calculated per payment.
+ */
+export const commissionRulesConfigSchema = z.object({
+  bothCallsPct: z.number().min(0).max(100),
+  splitPct: z.number().min(0).max(100),
+  closerPct: z.number().min(0).max(100),
+});
+
+export type CommissionRulesConfig = z.infer<typeof commissionRulesConfigSchema>;
+
+export const DEFAULT_COMMISSION_RULES_CONFIG: CommissionRulesConfig = {
+  bothCallsPct: 5,
+  splitPct: 3,
+  closerPct: 4,
+};
+
+export function coerceCommissionRulesConfig(value: unknown): CommissionRulesConfig {
+  const parsed = commissionRulesConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_COMMISSION_RULES_CONFIG;
+}
+
+// ───────────────────────────── SSS (sales) call ─────────────────────────────
+
+/**
+ * Success Strategy Session config — the founder-run sales/closing call. Founder-editable via
+ * AppSetting("sssConfig"), same lazy-default pattern as the configs above. Read by the SSS slot
+ * engine (`server/sss-slots.ts`).
+ *
+ *   - ownerId              — the User who runs the SSS by default (e.g. Ameen). New slots default
+ *                            to this owner; null = unset (the founder must pick one before slots
+ *                            can be generated). Set on the Founder Console → SSS Calendar.
+ *   - slotDurationMins     — default length of a generated SSS slot.
+ *   - rescheduleWithinDays — when a booked slot/day is blocked, how far ahead to search for the
+ *                            next OPEN slot to auto-move the prospect into. Past this window they're
+ *                            flagged for manual rebooking rather than moved.
+ */
+export const sssConfigSchema = z.object({
+  ownerId: z.string().min(1).nullable(),
+  slotDurationMins: z.number().int().min(5).max(240),
+  rescheduleWithinDays: z.number().int().min(1).max(90),
+});
+
+export type SssConfig = z.infer<typeof sssConfigSchema>;
+
+export const DEFAULT_SSS_CONFIG: SssConfig = {
+  ownerId: null,
+  slotDurationMins: 45,
+  rescheduleWithinDays: 7,
+};
+
+export function coerceSssConfig(value: unknown): SssConfig {
+  const parsed = sssConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_SSS_CONFIG;
+}
+
 // ───────────────────────────── goals ─────────────────────────────
 
 export const goalMetricSchema = z.enum(GOAL_METRICS as unknown as [string, ...string[]]);

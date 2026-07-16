@@ -18,13 +18,16 @@ export async function getBookingsOverview() {
   // createdAt is a timestamp - use IST instants, not @db.Date midnight boundaries
   const month = istMonthInstantRange(istToday());
 
-  const [openSlots, upcomingSlots, monthBookings, bookings] = await Promise.all([
+  const [openSlots, upcomingSlots, monthBookings, bookings, openSlotList] = await Promise.all([
     prisma.appointmentSlot.count({ where: { status: "OPEN", startsAt: { gt: now } } }),
     prisma.appointmentSlot.findMany({
       where: { startsAt: { gt: now } },
       orderBy: { startsAt: "asc" },
       take: 60,
-      include: { booking: { select: { id: true, name: true } } },
+      include: {
+        booking: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
+      },
     }),
     prisma.bookingRequest.findMany({
       where: { createdAt: { gte: month.start, lt: month.end } },
@@ -33,7 +36,17 @@ export async function getBookingsOverview() {
     prisma.bookingRequest.findMany({
       orderBy: { createdAt: "desc" },
       take: 300,
-      include: { slot: { select: { startsAt: true } }, lead: { select: { id: true } } },
+      include: {
+        slot: { select: { startsAt: true, durationMins: true, assignedTo: { select: { id: true, name: true } } } },
+        lead: { select: { id: true } },
+      },
+    }),
+    // Upcoming OPEN slots — the pool the "Postpone to…" picker draws from.
+    prisma.appointmentSlot.findMany({
+      where: { status: "OPEN", startsAt: { gt: now } },
+      orderBy: { startsAt: "asc" },
+      take: 200,
+      include: { assignedTo: { select: { id: true, name: true } } },
     }),
   ]);
 
@@ -63,8 +76,11 @@ export async function getBookingsOverview() {
       day: istDay.format(s.startsAt),
       time: istTime.format(s.startsAt),
       cet: formatDateTimeInZone(s.startsAt, "Europe/Berlin"),
+      durationMins: s.durationMins,
       status: s.status,
       bookedName: s.booking?.name ?? null,
+      assignedToId: s.assignedTo?.id ?? null,
+      assignedToName: s.assignedTo?.name ?? null,
     })),
     bookings: bookings.map((b) => ({
       id: b.id,
@@ -75,9 +91,17 @@ export async function getBookingsOverview() {
       city: b.city ?? "",
       jobTitle: b.currentJobTitle ?? "",
       industry: b.prospectIndustry ?? "",
+      slotId: b.slotId,
       slotDay: b.slot ? istDay.format(b.slot.startsAt) : "-",
       slotTime: b.slot ? istTime.format(b.slot.startsAt) : "",
       slotCet: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Europe/Berlin") : "",
+      slotDurationMins: b.slot?.durationMins ?? null,
+      slotStartsAt: b.slot ? b.slot.startsAt.toISOString() : null,
+      assignedToId: b.slot?.assignedTo?.id ?? null,
+      assignedToName: b.slot?.assignedTo?.name ?? null,
+      // Confirmation loop (Module E): confirmed = the prospect said YES (WhatsApp) or was marked so.
+      confirmed: b.confirmedAt !== null,
+      confirmSent: b.confirmSentAt !== null,
       bantScore: b.bantScore,
       bantAvg: b.bantAvg,
       bantVerdict: b.bantVerdict,
@@ -91,6 +115,15 @@ export async function getBookingsOverview() {
       status: b.status,
       createdAt: b.createdAt.toISOString(),
     })),
+    openSlots: openSlotList.map((s) => ({
+      id: s.id,
+      day: istDay.format(s.startsAt),
+      time: istTime.format(s.startsAt),
+      cet: formatDateTimeInZone(s.startsAt, "Europe/Berlin"),
+      durationMins: s.durationMins,
+      assignedToId: s.assignedTo?.id ?? null,
+      assignedToName: s.assignedTo?.name ?? null,
+    })),
   };
 }
 
@@ -103,7 +136,10 @@ export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
   const slots = await prisma.appointmentSlot.findMany({
     where: { startsAt: { gte: weekStartUtc, lt: weekEndUtc } },
     orderBy: { startsAt: "asc" },
-    include: { booking: { select: { name: true, bantScore: true, status: true } } },
+    include: {
+      booking: { select: { name: true, bantScore: true, status: true, confirmedAt: true } },
+      assignedTo: { select: { name: true } },
+    },
   });
   return slots.map((s) => ({
     id: s.id,
@@ -111,8 +147,14 @@ export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
     time: istTime.format(s.startsAt),
     durationMins: s.durationMins,
     status: s.status,
+    assignedToName: s.assignedTo?.name ?? null,
     booking: s.booking
-      ? { name: s.booking.name, bantScore: s.booking.bantScore, status: s.booking.status }
+      ? {
+          name: s.booking.name,
+          bantScore: s.booking.bantScore,
+          status: s.booking.status,
+          confirmed: s.booking.confirmedAt !== null,
+        }
       : null,
   }));
 }
@@ -122,3 +164,16 @@ export type WeekSlot = Awaited<ReturnType<typeof getWeekSlots>>[number];
 export type BookingsOverview = Awaited<ReturnType<typeof getBookingsOverview>>;
 export type BookingRow = BookingsOverview["bookings"][number];
 export type SlotRow = BookingsOverview["slots"][number];
+export type OpenSlotOption = BookingsOverview["openSlots"][number];
+
+/** Active users, for the "assign slots to a team member" picker and the bookings/slots
+ *  filter dropdown (AppointmentSlot.assignedToId - previously written/read nowhere). */
+export async function getBookableTeamMembers() {
+  return prisma.user.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+export type TeamMemberOption = Awaited<ReturnType<typeof getBookableTeamMembers>>[number];

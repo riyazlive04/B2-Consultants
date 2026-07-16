@@ -33,7 +33,7 @@ export function ThemeToggle({ frosted = false }: { frosted?: boolean }) {
       onClick={toggle}
       title={dark ? "Switch to light mode" : "Switch to dark mode"}
       aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-      className={`grid h-9 w-9 flex-none place-items-center rounded-btn border border-line text-ink-2 transition-colors hover:bg-surface-2 ${
+      className={`grid h-10 w-10 flex-none place-items-center rounded-btn border border-line text-ink-2 transition-colors hover:bg-surface-2 ${
         frosted ? "bg-[var(--bg-frost)]" : "bg-transparent"
       }`}
     >

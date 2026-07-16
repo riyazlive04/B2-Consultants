@@ -5,8 +5,10 @@ import {
 import { requireSection } from "@/lib/rbac";
 import { getMyStudentPortal, type PortalEnrollment } from "@/server/student-portal";
 import { BadgeChip, JourneyRing, MomentumChip } from "@/components/ui/gamification";
+import { Card, PageHeader } from "@/components/ui/kit";
+import { OnboardingWalkthrough } from "@/components/onboarding/OnboardingWalkthrough";
 import { MILESTONE_ORDER } from "@/lib/gamification";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatPct } from "@/lib/format";
 import { MILESTONE_LABELS, PROGRAM_LEVEL_LABELS, STUDENT_STATUS_LABELS } from "@/lib/labels";
 import { SprintCheckIn } from "./_components/SprintCheckIn";
 
@@ -17,17 +19,33 @@ export const dynamic = "force-dynamic";
  * student-portal.ts exposes (journey, badges, milestones, next steps); money,
  * signals and internal notes never reach this page.
  */
-export default async function MyJourneyPage() {
+export default async function MyJourneyPage({
+  searchParams,
+}: {
+  searchParams?: { onboarding?: string };
+}) {
   const session = await requireSection("my-journey");
   const portal = await getMyStudentPortal(session.user.id);
+  // Home forwards ?onboarding=1 here for STUDENT before it can redirect this far.
+  const onboarding = (
+    <OnboardingWalkthrough
+      userId={session.user.id}
+      role={session.role}
+      firstName={session.user.name.split(" ")[0]}
+      initialOpen={searchParams?.onboarding === "1"}
+    />
+  );
 
   if (!portal) {
     return (
-      <div className="mx-auto max-w-3xl">
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">My Journey</h1>
-        <div className="mt-8 rounded-card border border-line bg-surface p-6 text-sm text-muted shadow-card">
-          Your login isn&apos;t linked to a student record yet — ask your coach to connect it.
-        </div>
+      <div className="w-full space-y-6">
+        {onboarding}
+        <PageHeader icon={<Rocket size={20} />} title="My Journey" />
+        <Card>
+          <p className="text-sm text-muted">
+            Your login isn&apos;t linked to a student record yet — ask your coach to connect it.
+          </p>
+        </Card>
       </div>
     );
   }
@@ -38,27 +56,29 @@ export default async function MyJourneyPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
-      <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
-          My Journey
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          {portal.fullName}
-          {portal.targetRole ? ` · aiming for ${portal.targetRole} in Germany` : " · your road to Germany"} —
-          every session, application and interview moves the bar.
-        </p>
-      </div>
+    <div className="w-full space-y-8">
+      {onboarding}
+      <PageHeader
+        icon={<Rocket size={20} />}
+        title="My Journey"
+        subtitle={
+          <>
+            {portal.fullName}
+            {portal.targetRole ? ` · aiming for ${portal.targetRole} in Germany` : " · your road to Germany"} —
+            every session, application and interview moves the bar.
+          </>
+        }
+      />
 
       {ordered.map((e, idx) => (
         <EnrollmentJourney key={e.id} e={e} lead={idx === 0} />
       ))}
 
       {/* CV diagnostic — the self-serve tool students can use any time */}
-      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
+      <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
+            <h2 className="flex items-center gap-2 font-display text-h2 font-semibold">
               <FileSearch size={18} /> CV Diagnostic
             </h2>
             <p className="mt-1 text-sm text-muted">
@@ -68,12 +88,12 @@ export default async function MyJourneyPage() {
           </div>
           <Link
             href="/cv-check"
-            className="rounded-field bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
+            className="rounded-field bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:opacity-95"
           >
             Run a check
           </Link>
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -91,8 +111,8 @@ function MilestonePath({ current }: { current: string }) {
           <li key={m} className="flex items-center">
             <span
               title={MILESTONE_LABELS[m]}
-              className={`flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold ${
-                active || done ? "border-transparent text-white" : "border-line bg-surface text-muted"
+              className={`flex h-7 w-7 items-center justify-center rounded-full border text-caption font-bold ${
+                active || done ? "border-transparent text-on-accent" : "border-line bg-surface text-muted"
               }`}
               style={{
                 background: active ? "var(--accent)" : done ? "var(--ok)" : undefined,
@@ -116,7 +136,7 @@ function MilestonePath({ current }: { current: string }) {
 
 function EnrollmentJourney({ e, lead }: { e: PortalEnrollment; lead: boolean }) {
   return (
-    <section className="rounded-card border border-line bg-surface p-5 shadow-card">
+    <Card>
       {/* hero: ring + stage + momentum + program clock */}
       <div className="flex flex-wrap items-center gap-5">
         <JourneyRing pct={e.journey.journeyPct} stageIndex={e.journey.stageIndex} size={lead ? 88 : 64} />
@@ -133,7 +153,7 @@ function EnrollmentJourney({ e, lead }: { e: PortalEnrollment; lead: boolean }) 
               <p className="tnum text-xs font-semibold text-muted">
                 {e.journey.xp.toLocaleString("en-IN")} journey XP
               </p>
-              <p className="tnum text-xs text-muted">{Math.round(e.journey.journeyPct)}% of the path</p>
+              <p className="tnum text-xs text-muted">{formatPct(e.journey.journeyPct)} of the path</p>
             </div>
             <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-surface-2">
               <div className="xp-fill h-full rounded-full" style={{ width: `${Math.max(2, e.journey.journeyPct)}%` }} />
@@ -169,7 +189,7 @@ function EnrollmentJourney({ e, lead }: { e: PortalEnrollment; lead: boolean }) 
           { icon: <Mic2 size={15} />, label: "Interviews", value: String(e.interviewsReceived) },
         ].map((s) => (
           <div key={s.label} className="rounded-field border border-line bg-surface-2 px-3 py-2.5 text-center">
-            <p className="flex items-center justify-center gap-1 text-[11px] font-medium text-muted">
+            <p className="flex items-center justify-center gap-1 text-caption font-medium text-muted">
               {s.icon} {s.label}
             </p>
             <p className="mt-0.5 font-display text-xl font-bold tabular-nums">{s.value}</p>
@@ -229,6 +249,6 @@ function EnrollmentJourney({ e, lead }: { e: PortalEnrollment; lead: boolean }) 
           </ul>
         </div>
       )}
-    </section>
+    </Card>
   );
 }

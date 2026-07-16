@@ -5,6 +5,8 @@ import { deletePayable, saveCashPosition, savePayable, setGrowthOverride } from 
 import type { CashOverview, PayableRow } from "@/server/cash-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { Card, Pill } from "@/components/ui/kit";
+import { Btn } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { EXPENSE_CATEGORY_LABELS, optionsFrom } from "@/lib/labels";
@@ -46,6 +48,10 @@ export function CashPositionSection({
 
   return (
     <section className="space-y-4">
+      <Card
+        title="Weekly cash position (every Monday)"
+        actions={stale ? <Pill tone="warn">⚠ Last entry is more than 7 days old</Pill> : undefined}
+      >
       <form
         action={async (form) => {
           setError(null);
@@ -53,17 +59,8 @@ export function CashPositionSection({
           if (!res.ok) return setError(res.error);
           toast("Cash position saved");
         }}
-        className="rounded-card border border-line bg-surface p-5 shadow-card"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-display text-lg font-semibold">Weekly cash position (every Monday)</h3>
-          {stale && (
-            <span className="rounded-full bg-watch-soft px-2.5 py-1 text-xs font-medium text-watch">
-              ⚠ Last entry is more than 7 days old
-            </span>
-          )}
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Date of entry">
             <TextInput type="date" name="date" required defaultValue={today} />
           </Field>
@@ -82,6 +79,7 @@ export function CashPositionSection({
           <FormError message={error} />
         </div>
       </form>
+      </Card>
       <DataTable rows={positions} columns={columns} csvName="cash-positions" emptyMessage="No entries yet - add the first Monday balance above." />
     </section>
   );
@@ -106,10 +104,10 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
       key: "actions", header: "", sortable: false,
       cell: (r) => (
         <span className="flex gap-2 whitespace-nowrap">
-          <button type="button" className="text-accent hover:underline" onClick={() => { setEditing(r); setAdding(false); }}>Edit</button>
-          <button
-            type="button"
-            className="text-risk hover:underline"
+          <Btn variant="ghost" size="sm" onClick={() => { setEditing(r); setAdding(false); }}>Edit</Btn>
+          <Btn
+            variant="danger"
+            size="sm"
             onClick={async () => {
               const ok = await askConfirm({ title: `Delete payable ${r.name}?`, confirmLabel: "Delete", danger: true });
               if (ok) {
@@ -119,7 +117,7 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
             }}
           >
             Delete
-          </button>
+          </Btn>
         </span>
       ),
       value: () => null,
@@ -129,15 +127,12 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
   return (
     <section className="space-y-4">
       <div className="flex justify-end">
-        <button
-          type="button"
-          className="rounded-field border border-line bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-2"
-          onClick={() => { setAdding((v) => !v); setEditing(null); }}
-        >
+        <Btn variant="soft" onClick={() => { setAdding((v) => !v); setEditing(null); }}>
           {showForm ? "Close" : "Add payable"}
-        </button>
+        </Btn>
       </div>
       {showForm && (
+        <Card title={editing ? `Edit - ${editing.name}` : "New payable"}>
         <form
           action={async (form) => {
             setError(null);
@@ -148,11 +143,7 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
             setAdding(false);
           }}
           key={editing?.id ?? "new"}
-          className="rounded-card border border-line bg-surface p-5 shadow-card"
         >
-          <h3 className="mb-4 font-display text-lg font-semibold">
-            {editing ? `Edit - ${editing.name}` : "New payable"}
-          </h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Payable name" hint="e.g. WATI subscription, Karthick salary">
               <TextInput name="name" required defaultValue={editing?.name ?? ""} />
@@ -181,6 +172,7 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
             <FormError message={error} />
           </div>
         </form>
+        </Card>
       )}
       <DataTable
         rows={payables}

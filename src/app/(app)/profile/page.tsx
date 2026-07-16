@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { CircleUser } from "lucide-react";
 import { requireSession } from "@/lib/rbac";
 import { getMyGame } from "@/server/gamification";
 import { BadgeStrip, LevelRing, XpBar } from "@/components/ui/gamification";
+import { Card, PageHeader } from "@/components/ui/kit";
 import { ProfileClient } from "./_components/ProfileClient";
 
 export const dynamic = "force-dynamic";
@@ -18,13 +20,16 @@ export default async function ProfilePage() {
   const session = await requireSession();
   const game = await getMyGame(session.user.id);
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Your profile</h1>
-      <p className="mt-2 text-muted">Update your photo and display name. This is how you appear across the dashboard.</p>
+    <div className="mx-auto max-w-2xl space-y-6">
+      <PageHeader
+        icon={<CircleUser size={20} />}
+        title="Your profile"
+        subtitle="Update your photo and display name. This is how you appear across the dashboard."
+      />
 
       {/* Player card — level, XP and badges from the Arena */}
       {game && (
-        <div className="mt-8 rounded-card border border-line bg-surface p-5 shadow-card">
+        <Card>
           <div className="flex flex-wrap items-center gap-5">
             <LevelRing level={game.me.level} size={72} />
             <div className="min-w-52 flex-1">
@@ -41,7 +46,7 @@ export default async function ProfilePage() {
           <div className="mt-4 border-t border-line pt-4">
             <BadgeStrip badges={game.me.badges} max={12} />
           </div>
-        </div>
+        </Card>
       )}
 
       <ProfileClient

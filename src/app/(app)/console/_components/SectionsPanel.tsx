@@ -15,7 +15,7 @@ import {
   type SectionsConfig,
 } from "@/lib/sections";
 import { FallbackIcon, SECTION_ICONS } from "@/components/shell/section-icons";
-import { Card, Hint, Picker, SaveBar, TextIn, Toggle } from "./kit";
+import { Card, ColHead, ColRow, Hint, Picker, SaveBar, TextIn, Toggle, type Cols } from "./kit";
 
 /**
  * Every nav section: rename it, re-icon it, move it, group it, switch it off, and
@@ -36,6 +36,13 @@ const ROLE_LABELS: Record<AppRole, string> = {
   STUDENT: "Student",
   TUTOR: "Tutor",
 };
+
+/**
+ * Shared by the header and every row — see the note in kit.tsx. The path column takes
+ * the slack rather than the label: a section name is two words, and letting the label
+ * absorb it left a 400px input holding "Finance".
+ */
+const SECTION_COLS: Cols = "1.25rem 1.25rem minmax(7rem,16rem) minmax(7rem,9.5rem) minmax(6rem,8rem) minmax(5rem,1fr) 5.5rem";
 
 export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
   const [rows, setRows] = useState<ResolvedSection[]>(sections);
@@ -101,98 +108,95 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
       title="Sections"
       subtitle="Rename, reorder, regroup, switch off, and set which roles see each section by default."
     >
-      <div className="space-y-2">
+      <ColHead cols={SECTION_COLS} labels={["", "", "Label", "Icon", "Group", "Path", "Status"]} />
+      <div className="space-y-1.5">
         {rows.map((s, i) => {
           const Icon = SECTION_ICONS[s.icon] ?? FallbackIcon;
           return (
-            <div
+            <ColRow
               key={s.key}
-              className={`rounded-field border border-line p-3 ${s.enabled ? "bg-surface-2" : "bg-surface opacity-70"}`}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex flex-none flex-col">
-                  <button
-                    type="button"
-                    aria-label={`Move ${s.label} up`}
-                    disabled={i === 0}
-                    onClick={() => move(i, -1)}
-                    className="rounded text-ink-3 hover:text-ink disabled:opacity-30"
-                  >
-                    <ChevronUp size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Move ${s.label} down`}
-                    disabled={i === rows.length - 1}
-                    onClick={() => move(i, 1)}
-                    className="rounded text-ink-3 hover:text-ink disabled:opacity-30"
-                  >
-                    <ChevronDown size={15} />
-                  </button>
-                </div>
-
-                <Icon size={18} className="flex-none text-ink-2" />
-
-                <TextIn
-                  ariaLabel={`Label for ${s.key}`}
-                  value={s.label}
-                  onChange={(label) => update(s.key, { label })}
-                  className="w-44"
-                />
-                <Picker
-                  ariaLabel={`Icon for ${s.label}`}
-                  value={s.icon}
-                  onChange={(icon) => update(s.key, { icon: icon as SectionIconName })}
-                  options={ICON_OPTIONS}
-                  className="w-36"
-                />
-                <Picker
-                  ariaLabel={`Group for ${s.label}`}
-                  value={s.group}
-                  onChange={(group) => update(s.key, { group: group as SectionGroup })}
-                  options={GROUP_OPTIONS}
-                  className="w-32"
-                />
-
-                <span className="font-mono text-[11px] text-ink-3">{s.href}</span>
-
-                <div className="ml-auto flex items-center gap-3">
-                  {s.locked ? (
-                    <span className="flex items-center gap-1 text-xs text-muted" title="Always on, always Admin-only">
-                      <Lock size={13} /> Locked
-                    </span>
-                  ) : (
+              cols={SECTION_COLS}
+              index={i}
+              dim={!s.enabled}
+              sub={
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="text-label font-semibold uppercase text-ink-3">Default access</span>
+                  {APP_ROLES.map((role) => (
                     <Toggle
-                      checked={s.enabled}
-                      onChange={(enabled) => update(s.key, { enabled })}
-                      label={s.enabled ? "On" : "Off"}
+                      key={role}
+                      checked={s.roles.includes(role)}
+                      disabled={s.locked || !s.enabled}
+                      onChange={() => toggleRole(s.key, role)}
+                      label={ROLE_LABELS[role]}
+                      title={
+                        s.locked
+                          ? "Locked to Admin"
+                          : !s.enabled
+                            ? "Switch the section on to change its roles"
+                            : undefined
+                      }
                     />
-                  )}
+                  ))}
                 </div>
+              }
+            >
+              <div className="flex flex-col">
+                <button
+                  type="button"
+                  aria-label={`Move ${s.label} up`}
+                  disabled={i === 0}
+                  onClick={() => move(i, -1)}
+                  className="rounded text-ink-3 transition-colors hover:text-ink disabled:opacity-30"
+                >
+                  <ChevronUp size={15} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Move ${s.label} down`}
+                  disabled={i === rows.length - 1}
+                  onClick={() => move(i, 1)}
+                  className="rounded text-ink-3 transition-colors hover:text-ink disabled:opacity-30"
+                >
+                  <ChevronDown size={15} />
+                </button>
               </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 pl-7">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                  Default access
+              <Icon size={17} className="text-ink-2" />
+
+              <TextIn
+                ariaLabel={`Label for ${s.key}`}
+                value={s.label}
+                onChange={(label) => update(s.key, { label })}
+              />
+              <Picker
+                ariaLabel={`Icon for ${s.label}`}
+                value={s.icon}
+                onChange={(icon) => update(s.key, { icon: icon as SectionIconName })}
+                options={ICON_OPTIONS}
+              />
+              <Picker
+                ariaLabel={`Group for ${s.label}`}
+                value={s.group}
+                onChange={(group) => update(s.key, { group: group as SectionGroup })}
+                options={GROUP_OPTIONS}
+              />
+
+              <span className="truncate font-mono text-caption text-ink-3" title={s.href}>
+                {s.href}
+              </span>
+
+              {s.locked ? (
+                <span className="flex items-center gap-1 text-caption text-muted" title="Always on, always Admin-only">
+                  <Lock size={13} /> Locked
                 </span>
-                {APP_ROLES.map((role) => (
-                  <Toggle
-                    key={role}
-                    checked={s.roles.includes(role)}
-                    disabled={s.locked || !s.enabled}
-                    onChange={() => toggleRole(s.key, role)}
-                    label={ROLE_LABELS[role]}
-                    title={
-                      s.locked
-                        ? "Locked to Admin"
-                        : !s.enabled
-                          ? "Switch the section on to change its roles"
-                          : undefined
-                    }
-                  />
-                ))}
-              </div>
-            </div>
+              ) : (
+                <Toggle
+                  checked={s.enabled}
+                  onChange={(enabled) => update(s.key, { enabled })}
+                  label={s.enabled ? "On" : "Off"}
+                />
+              )}
+            </ColRow>
           );
         })}
       </div>

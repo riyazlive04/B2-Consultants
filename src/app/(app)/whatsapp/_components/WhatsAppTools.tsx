@@ -3,13 +3,16 @@
 import { useState } from "react";
 import { Trash2, Send } from "lucide-react";
 import { toast, askConfirm } from "@/components/ui/feedback";
+import { Select } from "@/components/ui/form";
 import { sendTestWhatsApp, setWhatsAppOptOut, sendFreeFormWhatsApp } from "@/server/whatsapp-actions";
 import { WHATSAPP_KINDS, WHATSAPP_KIND_LABELS, type WatiTemplateMap } from "@/lib/whatsapp";
+import { formatDate } from "@/lib/format";
 
 const inputCls =
   "w-full rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm outline-none transition-colors focus:border-accent focus:bg-surface";
 
-const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+// DD/MM/YYYY in IST, per DESIGN_SYSTEM §3.
+const fmt = (iso: string) => formatDate(iso);
 
 export function WhatsAppTools({
   optOuts,
@@ -71,17 +74,19 @@ export function WhatsAppTools({
         <form action={sendTest} className="mt-4 space-y-3">
           <label className="block">
             <span className="text-xs font-medium text-muted">Touchpoint (which template to send)</span>
-            <select name="kind" defaultValue={mapped[0] ?? "MANUAL"} className={`mt-1 ${inputCls}`}>
-              {WHATSAPP_KINDS.map((k) => {
+            <Select
+              name="kind"
+              defaultValue={mapped[0] ?? "MANUAL"}
+              className="mt-1"
+              options={WHATSAPP_KINDS.map((k) => {
                 const t = templates[k];
-                return (
-                  <option key={k} value={k} disabled={!t?.name}>
-                    {WHATSAPP_KIND_LABELS[k]}
-                    {t?.name ? ` → ${t.name}` : " → not mapped"}
-                  </option>
-                );
+                return {
+                  value: k,
+                  label: `${WHATSAPP_KIND_LABELS[k]}${t?.name ? ` → ${t.name}` : " → not mapped"}`,
+                  disabled: !t?.name, // unmapped touchpoints can't be sent — keep them unselectable
+                };
               })}
-            </select>
+            />
           </label>
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex-1">
@@ -91,14 +96,14 @@ export function WhatsAppTools({
             <button
               type="submit"
               disabled={testing || mapped.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-btn bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-btn bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:opacity-90 disabled:opacity-50"
             >
               <Send size={14} />
               {testing ? "Sending…" : "Send test"}
             </button>
           </div>
           {mapped.length === 0 && (
-            <p className="text-[11px]" style={{ color: "var(--bad)" }}>
+            <p className="text-caption" style={{ color: "var(--bad)" }}>
               No touchpoint has a template mapped yet — set one in the Settings tab first.
             </p>
           )}
@@ -155,7 +160,7 @@ export function WhatsAppTools({
               <li key={o.phone} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">+{o.phone}</p>
-                  <p className="truncate text-[11px] text-muted">{o.reason ?? "Opted out"} · {fmt(o.createdAt)}</p>
+                  <p className="truncate text-caption text-muted">{o.reason ?? "Opted out"} · {fmt(o.createdAt)}</p>
                 </div>
                 <button
                   type="button"

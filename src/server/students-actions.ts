@@ -51,6 +51,7 @@ const enrollmentSchema = z.object({
   enrollmentDate: z.string().min(10),
   totalSessionsPlanned: z.string().trim().regex(/^\d{0,4}$/).optional(),
   assignedCoach: z.string().trim().optional(),
+  closerId: z.string().trim().optional(), // L3 closer (User id) for the commission split
 });
 
 /** Duration + end date derive from level (PRD2 §4.1): Guided 90d, Elite 120d, Solo lifetime. */
@@ -91,6 +92,7 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
             ? parseInt(e.data.totalSessionsPlanned, 10)
             : null,
           assignedCoach: e.data.assignedCoach || "Karthick",
+          closerId: e.data.closerId || null,
           milestoneLogs: { create: { newMilestone: "ONBOARDING" } },
         },
       },
@@ -154,9 +156,25 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
         ? parseInt(e.data.totalSessionsPlanned, 10)
         : null,
       assignedCoach: e.data.assignedCoach || "Karthick",
+      closerId: e.data.closerId || null,
       milestoneLogs: { create: { newMilestone: "ONBOARDING" } },
     },
   });
+  revalidatePath("/students");
+  return { ok: true };
+}
+
+/** Set / change the L3 closer (sales-call rep) on an enrollment — the third leg of the
+ *  commission split. An empty id clears it. */
+export async function setEnrollmentCloser(enrollmentId: string, closerId: string): Promise<ActionResult> {
+  await requireAdmin();
+  const enrollment = await prisma.enrollment.findUnique({ where: { id: enrollmentId }, select: { id: true } });
+  if (!enrollment) return { ok: false, error: "Enrollment not found" };
+  if (closerId) {
+    const user = await prisma.user.findUnique({ where: { id: closerId }, select: { id: true } });
+    if (!user) return { ok: false, error: "Closer not found" };
+  }
+  await prisma.enrollment.update({ where: { id: enrollmentId }, data: { closerId: closerId || null } });
   revalidatePath("/students");
   return { ok: true };
 }

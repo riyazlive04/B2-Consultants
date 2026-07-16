@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { BookOpen } from "lucide-react";
 import { GUIDES } from "@/lib/guide-content";
+import { PageHeader } from "@/components/ui/kit";
 import { requireSection, visibleSections } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
@@ -11,14 +13,12 @@ export default async function GuidePage() {
   const visible = GUIDES.filter((g) => g.section === "general" || accessible.has(g.section));
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">App Guide</h1>
-        <p className="mt-1 text-sm text-muted">
-          How to use each feature, in thirty seconds. You only see guides for features you have
-          access to.
-        </p>
-      </div>
+    <div className="w-full space-y-6">
+      <PageHeader
+        icon={<BookOpen size={20} />}
+        title="App Guide"
+        subtitle="How to use each feature, in thirty seconds. You only see guides for features you have access to."
+      />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {visible.map((g) => (

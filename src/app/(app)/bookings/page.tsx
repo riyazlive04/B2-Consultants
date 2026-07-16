@@ -12,9 +12,11 @@ import {
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { istToday, istWeekRange, istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
-import { BOOKING_STATUS_LABELS } from "@/lib/labels";
+import { formatDate } from "@/lib/format";
+import { BOOKING_STATUS_LABELS, slotTypeLabel } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
-import { getBookingsOverview, getWeekSlots, type WeekSlot } from "@/server/booking-metrics";
+import { getBookableTeamMembers, getBookingsOverview, getWeekSlots, type WeekSlot } from "@/server/booking-metrics";
+import { getBookingRulesConfig } from "@/server/founder-config";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { SlotManager } from "./_components/SlotManager";
 import { BookingsTable } from "./_components/BookingsTable";
@@ -40,9 +42,11 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
   const weekStartUtc = istWallToUtc(toDateInputValue(week.start), "00:00");
   const weekEndUtc = istWallToUtc(toDateInputValue(week.end), "00:00");
 
-  const [{ kpis, slots, bookings }, weekSlots] = await Promise.all([
+  const [{ kpis, slots, bookings, openSlots }, weekSlots, teamMembers, rules] = await Promise.all([
     getBookingsOverview(),
     getWeekSlots(weekStartUtc, weekEndUtc),
+    getBookableTeamMembers(),
+    getBookingRulesConfig(),
   ]);
   const waByBooking = await getWhatsAppStatusMap("bookingRequestId", bookings.map((b) => b.id));
   const bookingUrl = `${process.env.BETTER_AUTH_URL ?? ""}/book`;
@@ -62,11 +66,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
     d.setUTCDate(week.start.getUTCDate() + offsetDays);
     return `/bookings?week=${toDateInputValue(d)}`;
   };
-  const weekLabel = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(week.start) +
-    " - " +
-    new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(
-      new Date(weekEndUtc.getTime() - 86400000),
-    );
+  const weekLabel = `${formatDate(week.start)} - ${formatDate(new Date(weekEndUtc.getTime() - 86400000))}`;
 
   const weekCounts = {
     booked: weekSlots.filter((s) => s.status === "BOOKED").length,
@@ -76,7 +76,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
   const nextBooked = slots.find((s) => s.status === "BOOKED" && s.bookedName);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="w-full space-y-6">
       {/* Header strip */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-4 shadow-card">
         <div className="flex items-center gap-3">
@@ -139,6 +139,9 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
             {nextBooked ? (
               <div className="mt-3 rounded-field p-3" style={{ background: "color-mix(in srgb, var(--chart-1) 10%, white)", borderLeft: "3px solid var(--chart-1)" }}>
                 <p className="text-sm font-semibold">{nextBooked.bookedName}</p>
+                {nextBooked.assignedToName && (
+                  <p className="mt-0.5 text-xs text-muted">with {nextBooked.assignedToName}</p>
+                )}
                 <p className="mt-0.5 text-xs text-muted">{nextBooked.day} · {nextBooked.time} IST</p>
                 <p className="text-xs text-muted">{nextBooked.cet} CET</p>
               </div>
@@ -176,7 +179,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
 
         <div className="rounded-card border border-line bg-surface p-5 shadow-card lg:col-span-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-display text-lg font-semibold">{weekLabel}</h3>
+            <h3 className="font-display text-h2 font-semibold">{weekLabel}</h3>
             <div className="flex items-center gap-1">
               <Link href={weekNav(-7)} className="grid h-8 w-8 place-items-center rounded-field border border-line text-muted transition-colors hover:bg-surface-2 hover:text-ink" aria-label="Previous week">
                 <ChevronLeft size={16} />
@@ -213,25 +216,37 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                             style={{ background: st.bg, borderLeft: `3px solid ${st.edge}` }}
                             title={
                               s.booking
-                                ? `${s.booking.name} · ${s.time} IST · BANT ${s.booking.bantScore}/4 · ${BOOKING_STATUS_LABELS[s.booking.status] ?? s.booking.status}`
-                                : `${s.status === "OPEN" ? "Open slot" : "Blocked"} · ${s.time} IST`
+                                ? `${s.booking.name}${s.assignedToName ? ` · with ${s.assignedToName}` : ""} · ${s.time} IST · ${slotTypeLabel(s.durationMins)} · BANT ${s.booking.bantScore}/4 · ${s.booking.confirmed ? "Confirmed" : "Awaiting confirmation"} · ${BOOKING_STATUS_LABELS[s.booking.status] ?? s.booking.status}`
+                                : `${s.status === "OPEN" ? "Open slot" : "Blocked"}${s.assignedToName ? ` · ${s.assignedToName}` : ""} · ${s.time} IST · ${slotTypeLabel(s.durationMins)}`
                             }
                           >
-                            <p className="text-[11px] font-medium text-muted">
+                            <p className="text-caption font-medium text-muted">
                               {s.time} · {s.durationMins}m
                             </p>
-                            <p className="truncate text-xs font-semibold">
-                              {s.booking ? s.booking.name : s.status === "OPEN" ? "Open slot" : "Blocked"}
+                            <p className="flex items-center gap-1 truncate text-xs font-semibold">
+                              {s.booking && (
+                                <span
+                                  aria-hidden
+                                  className="h-1.5 w-1.5 flex-none rounded-full"
+                                  title={s.booking.confirmed ? "Confirmed" : "Awaiting confirmation"}
+                                  style={{ background: s.booking.confirmed ? "var(--ok)" : "var(--watch)" }}
+                                />
+                              )}
+                              <span className="truncate">
+                                {s.booking ? s.booking.name : s.status === "OPEN" ? "Open slot" : "Blocked"}
+                              </span>
                             </p>
-                            {s.booking && (
-                              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-muted">
-                                <span className="rounded-full bg-white/70 px-1.5 py-px font-medium">
+                            {s.booking ? (
+                              <p className="mt-0.5 flex items-center gap-1 text-caption text-muted">
+                                {s.assignedToName && <span className="truncate">with {s.assignedToName}</span>}
+                                <span className="ml-auto rounded-full bg-white/70 px-1.5 py-px font-medium">
                                   BANT {s.booking.bantScore}/4
                                 </span>
-                                {s.booking.status !== "BOOKED" && (
-                                  <span className="truncate">{BOOKING_STATUS_LABELS[s.booking.status] ?? s.booking.status}</span>
-                                )}
                               </p>
+                            ) : (
+                              s.assignedToName && (
+                                <p className="mt-0.5 truncate text-caption text-muted">{s.assignedToName}</p>
+                              )
                             )}
                           </div>
                         );
@@ -251,8 +266,8 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
 
       <Tabs
         tabs={[
-          { label: "Bookings", content: <BookingsTable rows={bookings} waStatus={waByBooking} /> },
-          { label: "Availability", content: <SlotManager slots={slots} /> },
+          { label: "Bookings", content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} /> },
+          { label: "Availability", content: <SlotManager slots={slots} teamMembers={teamMembers} rules={rules} /> },
         ]}
       />
     </div>

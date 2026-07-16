@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/feedback";
+import { Select } from "@/components/ui/form";
 import { saveWatiSettings, refreshWatiTemplates } from "@/server/whatsapp-actions";
 import {
   WHATSAPP_KINDS,
@@ -23,7 +24,7 @@ function NumField({ name, label, defaultValue, hint }: { name: string; label: st
     <label className="block">
       <span className="text-xs font-medium text-muted">{label}</span>
       <input name={name} type="number" min={0} step="any" defaultValue={defaultValue} className={`mt-1 ${inputCls}`} />
-      {hint && <span className="mt-0.5 block text-[11px] text-muted">{hint}</span>}
+      {hint && <span className="mt-0.5 block text-caption text-muted">{hint}</span>}
     </label>
   );
 }
@@ -79,12 +80,13 @@ export function WhatsAppSettingsForm({
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <label className="block sm:col-span-2">
             <span className="text-xs font-medium text-muted">Default country</span>
-            <select name="defaultCountry" defaultValue={settings.defaultCountry} className={`mt-1 ${inputCls}`}>
-              {COUNTRY_OPTIONS.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-            <span className="mt-0.5 block text-[11px] text-muted">
+            <Select
+              name="defaultCountry"
+              defaultValue={settings.defaultCountry}
+              className="mt-1"
+              options={COUNTRY_OPTIONS.map((c) => ({ value: c.value, label: c.label }))}
+            />
+            <span className="mt-0.5 block text-caption text-muted">
               Only used for numbers saved <em>without</em> a country code. Contacts abroad (German students)
               must be saved as <code className="rounded bg-surface-2 px-1">+49…</code> — an ambiguous number is
               skipped, never guessed.
@@ -113,6 +115,44 @@ export function WhatsAppSettingsForm({
           <NumField name="paymentRepeatHours" label="Payment: repeat gap (hrs)" defaultValue={c.paymentRepeatHours} />
           <NumField name="studentRepeatHours" label="Student nudge: repeat gap (hrs)" defaultValue={c.studentRepeatHours} />
           <NumField name="maxPerRun" label="Max messages per run" defaultValue={c.maxPerRun} hint="Safety cap for a single reminder run." />
+        </div>
+
+        {/* EMI pre-due — separated out because this is the one touchpoint that fans out to
+            every paying student at once, and the one with a live/rehearse switch. */}
+        <div className="mt-5 rounded-field border border-line bg-surface-2 p-4">
+          <h4 className="text-sm font-semibold">EMI reminder (before the due date)</h4>
+          <p className="mt-1 text-xs text-muted">
+            Reminds a student their instalment is coming up. Separate from “Payment reminder”, which chases money
+            that is already overdue.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-xs font-medium text-muted">Days before due (comma-separated, 0 = on the day)</span>
+              <input
+                name="emiPreDueLeadDays"
+                defaultValue={c.emiPreDueLeadDays.join(", ")}
+                className={`mt-1 ${inputCls}`}
+                placeholder="3, 0"
+              />
+              <span className="mt-1 block text-xs text-muted">Leave empty to switch this reminder off.</span>
+            </label>
+            <label className="flex flex-col justify-center gap-1.5">
+              <span className="flex items-center gap-2">
+                <input
+                  name="emiPreDueLive"
+                  type="checkbox"
+                  defaultChecked={!c.emiPreDueDryRun}
+                  className="h-4 w-4 rounded border-line"
+                />
+                <span className="text-sm font-medium">Send for real</span>
+              </span>
+              <span className="text-xs text-muted">
+                Unticked (default) = <strong>rehearsal</strong>: every reminder is logged to WhatsApp history as
+                “DRY RUN”, naming the recipient and template, but nothing is sent. Tick this only once the dry-run
+                list looks right — it sends to real students.
+              </span>
+            </label>
+          </div>
         </div>
       </section>
 
@@ -149,29 +189,26 @@ export function WhatsAppSettingsForm({
               <div key={kind} className="rounded-field border border-line p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <p className="text-sm font-semibold">{WHATSAPP_KIND_LABELS[kind]}</p>
-                  <p className="text-[11px] text-muted">
+                  <p className="text-caption text-muted">
                     can supply: {available.map((v) => `{{${v}}}`).join(" ") || "—"}
                   </p>
                 </div>
-                <p className="mt-0.5 text-[11px] text-muted">{WHATSAPP_KIND_HINTS[kind]}</p>
+                <p className="mt-0.5 text-caption text-muted">{WHATSAPP_KIND_HINTS[kind]}</p>
 
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {catalog.length > 0 ? (
-                    <select
+                    <Select
                       name={`tpl_${kind}_name`}
                       defaultValue={t?.name ?? ""}
                       onChange={(e) => onPick(kind, e.target.value)}
-                      className={inputCls}
-                    >
-                      <option value="">— not mapped (never sends) —</option>
-                      {sorted.map((tpl) => (
-                        <option key={`${tpl.name}-${tpl.language}`} value={tpl.name}>
-                          {tpl.name}
-                          {tpl.status !== "APPROVED" ? ` (${tpl.status})` : ""} · {tpl.category}
-                          {tpl.params.length ? ` · {{${tpl.params.join("}} {{")}}}` : " · no vars"}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "— not mapped (never sends) —" },
+                        ...sorted.map((tpl) => ({
+                          value: tpl.name,
+                          label: `${tpl.name}${tpl.status !== "APPROVED" ? ` (${tpl.status})` : ""} · ${tpl.category}${tpl.params.length ? ` · {{${tpl.params.join("}} {{")}}}` : " · no vars"}`,
+                        })),
+                      ]}
+                    />
                   ) : (
                     <input name={`tpl_${kind}_name`} defaultValue={t?.name ?? ""} className={inputCls} placeholder="Template name (e.g. calendly_qualification)" />
                   )}
@@ -186,18 +223,18 @@ export function WhatsAppSettingsForm({
                 </div>
 
                 {picked && picked.status !== "APPROVED" && (
-                  <p className="mt-2 text-[11px]" style={{ color: "var(--bad)" }}>
+                  <p className="mt-2 text-caption" style={{ color: "var(--bad)" }}>
                     {picked.name} is {picked.status} in WATI — WhatsApp will reject sends until it is approved.
                   </p>
                 )}
                 {picked && picked.category === "MARKETING" && (
-                  <p className="mt-2 text-[11px] text-muted">
+                  <p className="mt-2 text-caption text-muted">
                     MARKETING category: subject to marketing opt-in and per-user frequency caps. A UTILITY template
                     delivers reminders more reliably.
                   </p>
                 )}
                 {unsupported.length > 0 && (
-                  <p className="mt-2 text-[11px]" style={{ color: "var(--bad)" }}>
+                  <p className="mt-2 text-caption" style={{ color: "var(--bad)" }}>
                     This template asks for {unsupported.map((p) => `{{${p}}}`).join(", ")}, which this touchpoint
                     cannot supply — sends will be skipped.
                   </p>
@@ -212,7 +249,7 @@ export function WhatsAppSettingsForm({
         <button
           type="submit"
           disabled={saving}
-          className="rounded-btn bg-accent px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="rounded-btn bg-accent px-5 py-2 text-sm font-semibold text-on-accent transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save settings"}
         </button>

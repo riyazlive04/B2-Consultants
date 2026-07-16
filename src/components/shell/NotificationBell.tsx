@@ -60,12 +60,12 @@ export function NotificationBell({ items: initialItems }: { items: Notification[
         type="button"
         aria-label={`Notifications (${items.length})`}
         onClick={() => setOpen((v) => !v)}
-        className="relative grid h-9 w-9 place-items-center rounded-field border border-line bg-surface text-muted hover:bg-surface-2 hover:text-ink"
+        className="relative grid h-10 w-10 place-items-center rounded-btn border border-line bg-surface text-muted hover:bg-surface-2 hover:text-ink"
       >
         <Bell size={17} />
         {items.length > 0 && (
           <span
-            className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold text-white"
+            className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-caption font-bold text-on-accent"
             style={{ background: hasRisk ? "var(--risk)" : "var(--accent)" }}
           >
             {items.length}
@@ -100,7 +100,7 @@ export function NotificationBell({ items: initialItems }: { items: Notification[
                         <span className="min-w-0 truncate text-sm font-medium">{n.title}</span>
                         {/* severity in words, not colour alone (§7) */}
                         <span
-                          className="flex-none text-[10px] font-semibold uppercase tracking-wide"
+                          className="flex-none text-caption font-semibold uppercase tracking-wide"
                           style={{ color: SEVERITY_STYLE[n.severity].dot }}
                         >
                           {SEVERITY_STYLE[n.severity].label}

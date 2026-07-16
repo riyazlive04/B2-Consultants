@@ -1,25 +1,32 @@
+import { FileSearch } from "lucide-react";
+import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
-import { CvCheckClient } from "./_components/CvCheckClient";
+import { listResumes, getResumeTemplate, getAiStatus } from "@/server/resume-metrics";
+import { CvStudio } from "./_components/CvStudio";
 
 export const dynamic = "force-dynamic";
 
 /**
- * CV ↔ JD diagnostic (report §3.C) - internal coaching aid for Admin/Head.
- * Deterministic scoring in the browser; nothing is stored, nothing is rewritten.
- * Guardrail (report §6): diagnose and coach, never do-it-for-them.
+ * CV Studio (report §3.C). Three things in one place:
+ *   • Builder — enter or import a CV into the founder's template, preview it live, and
+ *     export a formatted PDF or an ATS-ready DOCX.
+ *   • AI Review — score a CV against a target JD with Claude (keys-off → offline analyser).
+ *   • Instant check — the original deterministic CV↔JD diagnostic (stores nothing).
+ * Admins also get a Template & AI tab to set "how the resume should be" + the AI seam.
  */
 export default async function CvCheckPage() {
-  await requireSection("cv-check");
+  const session = await requireSection("cv-check");
+  const isAdmin = session.role === "ADMIN";
+  const [resumes, template, aiStatus] = await Promise.all([listResumes(), getResumeTemplate(), getAiStatus()]);
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">CV Diagnostic</h1>
-        <p className="mt-1 text-sm text-muted">
-          Paste a student’s CV and the target JD - get the match score, missing keywords and weak
-          bullets. A coaching aid: it names what’s broken, the student fixes it. Nothing is saved.
-        </p>
-      </div>
-      <CvCheckClient />
+    <div className="mx-auto w-full max-w-[1500px] space-y-6">
+      <PageHeader
+        icon={<FileSearch size={20} />}
+        title="CV Studio"
+        subtitle="Build a CV in the B2 template, export it as PDF or an ATS-ready Word document, and review it against a job description — with Claude when it's switched on, or the offline analyser when it isn't. Uploaded files are read in-memory; saved CVs live in your workspace."
+      />
+      <CvStudio resumes={resumes} template={template} aiStatus={aiStatus} isAdmin={isAdmin} />
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Search, Download, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from "lucide-react";
+import { Search, Download, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Inbox } from "lucide-react";
+import { EmptyState } from "./kit";
 
 export type Column<T> = {
   key: string;
@@ -15,9 +16,25 @@ export type Column<T> = {
 };
 
 /**
+ * Optional multi-select. Pass all four and the table grows a checkbox column plus a
+ * header checkbox; the selection itself is owned by the caller (it drives a bulk-action
+ * bar that lives outside the table). Header checkbox scope is the *filtered* rows, not
+ * the current page — "select all" after a search means the search, which is what the
+ * count next to it says.
+ */
+export type Selection<T> = {
+  rowKey: (row: T) => string;
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+  /** Rows the caller won't allow selecting (omit = all selectable). */
+  selectable?: (row: T) => boolean;
+};
+
+/**
  * Shared table (CONTEXT §6): client-side sort + text filter, CSV export button
  * (Admin-only - pass `csvName` only when the viewer may export), signal-aware
- * row highlighting via `rowClassName` (e.g. overdue rows in risk-soft).
+ * row highlighting via `rowClassName` (e.g. overdue rows in risk-soft), and
+ * optional multi-select via `selection`.
  */
 export function DataTable<T>({
   rows,
@@ -26,6 +43,8 @@ export function DataTable<T>({
   rowClassName,
   emptyMessage = "No records yet.",
   filterPlaceholder = "Filter…",
+  selection,
+  toolbarExtra,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -33,6 +52,9 @@ export function DataTable<T>({
   rowClassName?: (row: T) => string | undefined;
   emptyMessage?: string;
   filterPlaceholder?: string;
+  selection?: Selection<T>;
+  /** Rendered in the toolbar, left of Export CSV (e.g. a bulk-action bar). */
+  toolbarExtra?: ReactNode;
 }) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -77,6 +99,38 @@ export function DataTable<T>({
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const paged = visible.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  // Select-all spans every filtered row, not just this page — see Selection's doc.
+  const selectableVisible = useMemo(
+    () => (selection ? visible.filter((r) => selection.selectable?.(r) ?? true) : []),
+    [visible, selection],
+  );
+  const isSelected = (row: T) => !!selection && selection.selected.has(selection.rowKey(row));
+  const allSelected = selectableVisible.length > 0 && selectableVisible.every(isSelected);
+  const someSelected = selectableVisible.some(isSelected);
+
+  const toggleAll = () => {
+    if (!selection) return;
+    const next = new Set(selection.selected);
+    for (const row of selectableVisible) {
+      const key = selection.rowKey(row);
+      if (allSelected) next.delete(key);
+      else next.add(key);
+    }
+    selection.onChange(next);
+  };
+
+  const toggleRow = (row: T) => {
+    if (!selection) return;
+    const key = selection.rowKey(row);
+    const next = new Set(selection.selected);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    selection.onChange(next);
+  };
+
+  const checkboxCls = "h-4 w-4 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40";
+  const colCount = columns.length + (selection ? 1 : 0);
 
   const toggleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -123,7 +177,7 @@ export function DataTable<T>({
               onChange={(e) => { setFilter(e.target.value); setPage(0); }}
               placeholder={filterPlaceholder}
               aria-label={filterPlaceholder}
-              className="w-full rounded-field border border-line bg-surface-2 py-1.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary-soft"
+              className="h-10 w-full rounded-field border border-line-strong bg-surface-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary-soft"
             />
           </div>
           <span className="whitespace-nowrap text-xs text-muted tnum">
@@ -132,23 +186,40 @@ export function DataTable<T>({
               : `${visible.length} of ${rows.length}`}
           </span>
         </div>
+        {toolbarExtra}
         {csvName && (
           <button
             type="button"
             onClick={exportCsv}
-            className="inline-flex items-center gap-1.5 rounded-field border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-2"
+            className="inline-flex h-10 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-sm font-medium text-ink hover:bg-surface-2"
           >
             <Download size={14} />
             Export CSV
           </button>
         )}
       </div>
-      <div className="overflow-x-auto">
+      {/* Below 720px a wide table becomes a horizontal-scroll trap, so §7 replaces it
+          with stacked key-value cards. The <table> is hidden there, not shrunk. */}
+      <div className="hidden overflow-x-auto tab:block">
         <table className="w-full text-sm">
           {/* header typography matches kit.tsx <Th> so a DataTable and a hand-built
               TableShell read as the same component on screen */}
           <thead className="sticky top-0 z-10 bg-surface-2">
-            <tr className="border-b border-line text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+            <tr className="border-b border-line text-left text-label font-semibold uppercase text-ink-2">
+              {selection && (
+                <th className="w-10 px-5 py-3">
+                  <input
+                    type="checkbox"
+                    className={checkboxCls}
+                    checked={allSelected}
+                    // Mixed state can't be expressed declaratively in React — it's a DOM property.
+                    ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                    disabled={selectableVisible.length === 0}
+                    onChange={toggleAll}
+                    aria-label={allSelected ? "Clear selection" : `Select all ${selectableVisible.length}`}
+                  />
+                </th>
+              )}
               {columns.map((col) => (
                 <th
                   key={col.key}
@@ -182,15 +253,31 @@ export function DataTable<T>({
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-10 text-center text-muted">
-                  {emptyMessage}
+                <td colSpan={colCount} className="p-6">
+                  <EmptyState icon={<Inbox size={22} />} title={emptyMessage} />
                 </td>
               </tr>
             ) : (
               paged.map((row, i) => (
-                <tr key={i} className={`border-b border-line last:border-b-0 ${rowClassName?.(row) ?? ""}`}>
+                <tr
+                  key={selection ? selection.rowKey(row) : i}
+                  className={`border-b border-line last:border-b-0 ${isSelected(row) ? "bg-primary-soft/40" : ""} ${rowClassName?.(row) ?? ""}`}
+                >
+                  {selection && (
+                    <td className="px-5 py-4">
+                      <input
+                        type="checkbox"
+                        className={checkboxCls}
+                        checked={isSelected(row)}
+                        disabled={!(selection.selectable?.(row) ?? true)}
+                        onChange={() => toggleRow(row)}
+                        aria-label="Select row"
+                      />
+                    </td>
+                  )}
                   {columns.map((col) => (
-                    <td key={col.key} className={`px-5 py-3.5 ${col.align === "right" ? "tnum text-right" : ""}`}>
+                    // §5.6: 52px rows (py-4), not 48 (py-3.5)
+                    <td key={col.key} className={`px-5 py-4 ${col.align === "right" ? "tnum text-right" : ""}`}>
                       {col.cell(row)}
                     </td>
                   ))}
@@ -200,13 +287,52 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
+
+      {/* <720px: one card per record, each cell a labelled key-value row (§7) */}
+      <div className="tab:hidden">
+        {visible.length === 0 ? (
+          <div className="p-4">
+            <EmptyState icon={<Inbox size={22} />} title={emptyMessage} />
+          </div>
+        ) : (
+          <ul className="divide-y divide-line">
+            {paged.map((row, i) => (
+              <li
+                key={selection ? selection.rowKey(row) : i}
+                className={`space-y-2 p-4 ${isSelected(row) ? "bg-primary-soft/40" : ""} ${rowClassName?.(row) ?? ""}`}
+              >
+                {selection && (
+                  <label className="flex items-center gap-2 text-label uppercase text-ink-2">
+                    <input
+                      type="checkbox"
+                      className={checkboxCls}
+                      checked={isSelected(row)}
+                      disabled={!(selection.selectable?.(row) ?? true)}
+                      onChange={() => toggleRow(row)}
+                    />
+                    Select
+                  </label>
+                )}
+                {columns.map((col) => (
+                  <div key={col.key} className="flex items-baseline justify-between gap-4">
+                    <span className="flex-none text-label uppercase text-ink-2">{col.header}</span>
+                    <span className={`min-w-0 text-sm ${col.align === "right" ? "tnum text-right" : ""}`}>
+                      {col.cell(row)}
+                    </span>
+                  </div>
+                ))}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {pageCount > 1 && (
         <div className="flex items-center justify-between border-t border-line px-4 py-2.5 text-sm">
           <button
             type="button"
             disabled={safePage === 0}
             onClick={() => setPage(safePage - 1)}
-            className="inline-flex items-center gap-1 rounded-field border border-line px-3 py-1.5 text-sm hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-transparent"
+            className="inline-flex h-10 items-center gap-1 rounded-btn border border-line px-3 text-sm hover:bg-surface-2 disabled:bg-surface-2 disabled:text-ink-disabled disabled:hover:bg-surface-2"
           >
             <ChevronLeft size={15} /> Prev
           </button>
@@ -217,7 +343,7 @@ export function DataTable<T>({
             type="button"
             disabled={safePage >= pageCount - 1}
             onClick={() => setPage(safePage + 1)}
-            className="inline-flex items-center gap-1 rounded-field border border-line px-3 py-1.5 text-sm hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-transparent"
+            className="inline-flex h-10 items-center gap-1 rounded-btn border border-line px-3 text-sm hover:bg-surface-2 disabled:bg-surface-2 disabled:text-ink-disabled disabled:hover:bg-surface-2"
           >
             Next <ChevronRight size={15} />
           </button>

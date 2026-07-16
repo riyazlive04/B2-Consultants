@@ -42,6 +42,10 @@ next-env.d.ts
 # no-Docker local Postgres (scripts/local-db.mjs)
 /.pgdata/
 
+# Supabase migration working dir (scripts/migrate-to-supabase.mjs).
+# data.sql is a full plaintext dump: lead PII, student records, the ledger. Never commit.
+/.migration/
+
 # local dev noise
 dev-server.log
 scripts/tmp/

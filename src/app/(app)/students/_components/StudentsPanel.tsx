@@ -7,8 +7,9 @@ import type { StudentListRow } from "@/server/students-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
+import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
-import { Plus } from "lucide-react";
+import { Plus, Download } from "lucide-react";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { LEAD_SOURCE_LABELS, optionsFrom } from "@/lib/labels";
 
@@ -18,8 +19,21 @@ const B2_LEVEL_OPTIONS = [
   { value: "ELITE", label: "Elite (120 days)" },
 ];
 
+// PRD2 §4.1: assigned coach is a dropdown (currently Karthick).
+const COACH_OPTIONS = [
+  { value: "Karthick", label: "Karthick" },
+  { value: "Ameen", label: "Ameen" },
+];
+
+// CSV formula-injection guard (mirrors DataTable): a cell starting with = + - @
+// or a tab/CR is executed by Excel/Sheets — neutralise with a leading apostrophe.
+const csvSafe = (v: string | number | null | undefined): string | number => {
+  if (typeof v !== "string") return v ?? "";
+  return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+};
+
 /** Student list + add form (Admin) - one row per person; LTV column sortable (PRD2 §4.6). */
-export function StudentsPanel({ rows, isAdmin }: { rows: StudentListRow[]; isAdmin: boolean }) {
+export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]; isAdmin: boolean; today: string }) {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -32,6 +46,35 @@ export function StudentsPanel({ rows, isAdmin }: { rows: StudentListRow[]; isAdm
     formRef.current?.reset();
     toast("Student created - past payments auto-linked by name");
     celebrate(); // a new enrollment is a win worth confetti
+  };
+
+  // PRD2 §4.1/§6: export the FULL student list with all fields (not just the
+  // visible columns). Runs over every row, ignoring the table filter.
+  const exportAllFields = async () => {
+    const Papa = (await import("papaparse")).default;
+    const data = rows.map((r) => ({
+      Name: csvSafe(r.fullName),
+      Email: csvSafe(r.email),
+      Phone: csvSafe(r.phone),
+      "Program(s)": csvSafe(r.levels),
+      Status: csvSafe(r.statuses),
+      "Enrollment date": r.firstEnrollment ? r.firstEnrollment.slice(0, 10) : "",
+      "Program end date": r.programEndDate ? r.programEndDate.slice(0, 10) : "",
+      "Assigned coach": csvSafe(r.assignedCoach),
+      "Lead source": r.leadSource ? LEAD_SOURCE_LABELS[r.leadSource] : "",
+      Industry: csvSafe(r.industry),
+      "Target role": csvSafe(r.targetRole),
+      "LTV (INR)": r.ltvInr / 100,
+      "Internal notes": csvSafe(r.internalNotes),
+    }));
+    const csv = Papa.unparse(data);
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "students-full.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const remove = async (row: StudentListRow) => {
@@ -74,9 +117,9 @@ export function StudentsPanel({ rows, isAdmin }: { rows: StudentListRow[]; isAdm
       ? [{
           key: "actions", header: "", sortable: false,
           cell: (r: StudentListRow) => (
-            <button type="button" className="py-1 text-risk hover:underline" onClick={() => remove(r)}>
+            <Btn variant="danger" size="sm" onClick={() => remove(r)}>
               Delete
-            </button>
+            </Btn>
           ),
           value: () => null,
         } satisfies Column<StudentListRow>]
@@ -86,14 +129,13 @@ export function StudentsPanel({ rows, isAdmin }: { rows: StudentListRow[]; isAdm
   return (
     <div className="space-y-4">
       {isAdmin && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3.5 py-2 text-sm font-semibold text-white hover:bg-primary-strong"
-            onClick={() => setAdding(true)}
-          >
-            <Plus size={16} /> Add student
-          </button>
+        <div className="flex justify-end gap-2">
+          <Btn variant="ghost" icon={<Download size={16} />} onClick={exportAllFields}>
+            Export all fields
+          </Btn>
+          <Btn variant="primary" icon={<Plus size={16} />} onClick={() => setAdding(true)}>
+            Add student
+          </Btn>
         </div>
       )}
 
@@ -118,13 +160,13 @@ export function StudentsPanel({ rows, isAdmin }: { rows: StudentListRow[]; isAdm
               <Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" />
             </Field>
             <Field label="Enrollment date" hint="Date they paid and started">
-              <TextInput type="date" name="enrollmentDate" required />
+              <TextInput type="date" name="enrollmentDate" required defaultValue={today} />
             </Field>
             <Field label="Sessions planned" hint="e.g. 12 for Guided">
               <TextInput name="totalSessionsPlanned" inputMode="numeric" />
             </Field>
             <Field label="Assigned coach">
-              <TextInput name="assignedCoach" defaultValue="Karthick" />
+              <Select name="assignedCoach" options={COACH_OPTIONS} defaultValue="Karthick" />
             </Field>
             <Field label="Lead source" hint="Ghosted Blueprint tag drives Phase 3 attribution">
               <Select name="leadSource" options={[{ value: "", label: "-" }, ...optionsFrom(LEAD_SOURCE_LABELS)]} defaultValue="" />
@@ -143,9 +185,9 @@ export function StudentsPanel({ rows, isAdmin }: { rows: StudentListRow[]; isAdm
           </div>
           <div className="mt-5 flex items-center gap-3">
             <SubmitButton>Create student</SubmitButton>
-            <button type="button" className="text-sm text-muted hover:underline" onClick={() => setAdding(false)}>
+            <Btn variant="ghost" onClick={() => setAdding(false)}>
               Cancel
-            </button>
+            </Btn>
             <FormError message={error} />
           </div>
         </form>

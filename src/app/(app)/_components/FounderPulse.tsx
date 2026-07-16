@@ -44,12 +44,12 @@ function inrShort(minor: number): string {
 function DeltaChip({ now, prev }: { now: number; prev: number }) {
   const diff = now - prev;
   if (diff === 0) {
-    return <span className="text-[11px] font-medium text-ink-3">same as prior wk</span>;
+    return <span className="text-caption font-medium text-ink-3">same as prior wk</span>;
   }
   const up = diff > 0;
   return (
     <span
-      className="tnum inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-[11px] font-semibold"
+      className="tnum inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-caption font-semibold"
       style={{
         background: up ? "var(--good-bg)" : "var(--bad-bg)",
         color: up ? "var(--good)" : "var(--bad)",
@@ -65,6 +65,15 @@ const SEVERITY_DOT: Record<Notification["severity"], string> = {
   watch: "var(--warn)",
   info: "var(--primary)",
   win: "var(--good)",
+};
+
+// §7 / WCAG 1.4.1: severity is never carried by the dot colour alone — every row
+// wears the plain-English word too (mirrors NotificationBell).
+const SEVERITY_LABEL: Record<Notification["severity"], string> = {
+  risk: "Act now",
+  watch: "Watch",
+  info: "FYI",
+  win: "Win",
 };
 
 /**
@@ -298,11 +307,15 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    /* Splits to 3 columns at `xl`, not `lg`. At `lg` (1024px) the side column was squeezed
+       to ~300px once the sidebar and gutters were taken out, which collapsed its own 2-up
+       stat grid into a single stack and made the panel read as broken. Below `xl` the hero
+       takes the full width and the side column sits underneath it at a usable size. */
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
       {/* Month so far — the sky hero strip (the one allowed gradient) */}
       <Link
         href="/finance"
-        className="hero-sky rise-in card-hover relative flex flex-col self-start overflow-hidden rounded-hero p-6 lg:col-span-2"
+        className="hero-sky rise-in card-hover relative flex flex-col self-start overflow-hidden rounded-hero p-6 xl:col-span-2"
       >
         <div className="relative flex items-start justify-between gap-3">
           <div>
@@ -354,7 +367,7 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
             style={{ left: `calc(${monthFrac * 100}% - 1px)`, background: "var(--ink-2)" }}
             title={`Expected by today: ${formatInrMinor(expectedMinor, { compact: true })}`}
           />
-          <div className="tnum mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] font-medium text-ink-2">
+          <div className="tnum mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-caption font-medium text-ink-2">
             <span>
               Day {dayOfMonth} of {daysInMonth} · ▎expected by today {formatInrMinor(expectedMinor, { compact: true })}
             </span>
@@ -373,12 +386,12 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
             month's path — trajectory, not backward-looking monthly noise */}
         <div className="relative mt-5">
           <PaceChart cur={curCum} prev={prevCum} targetMinor={targetMinor} daysInMonth={daysInMonth} height={140} />
-          <div className="tnum mt-1 flex justify-between px-1 text-[11px] font-medium text-ink-2" aria-hidden>
+          <div className="tnum mt-1 flex justify-between px-1 text-caption font-medium text-ink-2" aria-hidden>
             <span>1 {monthShort}</span>
             <span>{Math.round(daysInMonth / 2)} {monthShort}</span>
             <span>{daysInMonth} {monthShort}</span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-medium text-ink-2">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-caption font-medium text-ink-2">
             <span className="flex items-center gap-1.5">
               <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} />
               {monthShort} so far · {inrShort(collectedMinor)}
@@ -397,9 +410,9 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
         <div className="relative mt-5 grid grid-cols-3 gap-3 border-t border-primary-tint pt-4">
           {heroTiles.map((t) => (
             <div key={t.label}>
-              <p className="text-[11px] font-medium text-ink-2">{t.label}</p>
+              <p className="text-caption font-medium text-ink-2">{t.label}</p>
               <p
-                className="tnum mt-0.5 font-display text-lg font-bold tracking-tight sm:text-xl"
+                className="tnum mt-0.5 font-display text-h2 font-bold tracking-tight sm:text-xl"
                 style={t.color ? { color: t.color } : undefined}
               >
                 {t.value}
@@ -409,8 +422,11 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
         </div>
       </Link>
 
-      {/* right column: weekly motion with deltas + the attention feed */}
-      <div className="flex flex-col gap-4">
+      {/* Side column: weekly motion with deltas + the attention feed. Below `xl` this sits
+          under the hero at full width, so the two cards go side by side from `md` rather
+          than stacking into one very tall strip. At `xl` it becomes the true right column
+          and they stack again. */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
         {/* Last 7 days — every count carries its week-over-week movement */}
         <div className="glass-card rise-in relative overflow-hidden rounded-card p-5">
           <div className="relative flex items-center justify-between">
@@ -419,7 +435,7 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
             </p>
             <Link
               href="/pipeline"
-              className="grid h-8 w-8 place-items-center rounded-full bg-primary text-white transition-colors hover:bg-primary-strong"
+              className="grid h-10 w-10 place-items-center rounded-full bg-primary text-on-accent transition-colors hover:bg-primary-strong"
               aria-label="Open pipeline"
             >
               <ArrowRight size={16} />
@@ -432,7 +448,7 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
                 href="/pipeline"
                 className="rounded-field -mx-2 px-2 py-1 transition-colors hover:bg-surface-2"
               >
-                <p className="flex items-center gap-1.5 text-[11px] font-medium text-ink-2">
+                <p className="flex items-center gap-1.5 text-caption font-medium text-ink-2">
                   {s.icon} {s.label}
                 </p>
                 <p className="mt-0.5 font-display text-2xl font-bold tabular-nums">{s.now}</p>
@@ -441,7 +457,7 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
             ))}
           </div>
           {/* benchmark from the 2026 sales sheets (SALES-LOGIC §4) */}
-          <p className="relative mt-3 border-t border-line pt-2.5 text-[11px] text-ink-3">
+          <p className="relative mt-3 border-t border-line pt-2.5 text-caption text-ink-3">
             Typical 2026 week: ~150 leads · ~1 win
           </p>
         </div>
@@ -467,10 +483,16 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
                     className="flex items-start gap-2.5 rounded-field px-2 py-1.5 transition-colors hover:bg-surface-2"
                   >
                     <span
-                      aria-hidden
-                      className="mt-1.5 h-2.5 w-2.5 flex-none rounded-full"
-                      style={{ background: SEVERITY_DOT[n.severity] }}
-                    />
+                      className="mt-0.5 inline-flex flex-none items-center gap-1 text-caption font-semibold"
+                      style={{ color: SEVERITY_DOT[n.severity] }}
+                    >
+                      <span
+                        aria-hidden
+                        className="h-2 w-2 flex-none rounded-full"
+                        style={{ background: SEVERITY_DOT[n.severity] }}
+                      />
+                      {SEVERITY_LABEL[n.severity]}
+                    </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{n.title}</span>
                       <span className="block truncate text-xs text-muted">{n.body}</span>
@@ -479,7 +501,7 @@ export async function FounderPulse({ notifications }: { notifications: Notificat
                 </li>
               ))}
               {moreCount > 0 && (
-                <li className="px-2 pt-1 text-[11px] text-ink-3">+{moreCount} more in the bell</li>
+                <li className="px-2 pt-1 text-caption text-ink-3">+{moreCount} more in the bell</li>
               )}
             </ul>
           )}

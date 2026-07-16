@@ -7,6 +7,7 @@ import { capabilityCheck, requireAdmin } from "@/lib/rbac";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
 import {
+  commissionRulesConfigSchema,
   gamificationConfigSchema,
   goalPeriodSchema,
   goalScopeSchema,
@@ -17,7 +18,7 @@ import {
 } from "@/lib/config-schema";
 import type { GamificationConfig } from "@/lib/gamification";
 import type { SectionsConfig } from "@/lib/sections";
-import { writeGamificationConfig, writeSectionsConfig } from "./founder-config";
+import { writeCommissionRulesConfig, writeGamificationConfig, writeSectionsConfig } from "./founder-config";
 import { syncRewardGrants } from "./rewards";
 
 /**
@@ -51,6 +52,23 @@ function parseJson(raw: FormDataEntryValue | null): unknown {
 /** Nav layout changes the sidebar for everyone, so the whole app tree revalidates. */
 function revalidateShell() {
   revalidatePath("/", "layout");
+}
+
+// ───────────────────────────── commission rates ─────────────────────────────
+
+/**
+ * Retune the deal-team commission rates. Admin-only and re-validated with the same schema
+ * that guards the read, so nothing invalid can reach the store. Finance revalidates so the
+ * commission report reflects the new rates on the next view.
+ */
+export async function saveCommissionRules(input: unknown): Promise<ActionResult> {
+  await requireAdmin();
+  const parsed = commissionRulesConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  await writeCommissionRulesConfig(parsed.data);
+  revalidatePath("/finance");
+  revalidatePath("/console");
+  return { ok: true };
 }
 
 // ───────────────────────────── sections ─────────────────────────────

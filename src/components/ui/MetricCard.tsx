@@ -5,6 +5,37 @@ import { SIGNAL_META, type SignalLevel } from "@/lib/signals";
 import { Sparkline } from "./Sparkline";
 
 /**
+ * §5.3's delta chip. `positiveIsGood` exists because a rise is not always a win:
+ * revenue up is green, expenses up is red. Colour must follow the *decision*, not
+ * the arithmetic sign (§1.2).
+ */
+export type Delta = {
+  pct: number;
+  caption?: string; // e.g. "vs last month"
+  positiveIsGood?: boolean;
+};
+
+function DeltaChip({ pct, caption, positiveIsGood = true }: Delta) {
+  const up = pct >= 0;
+  const good = up === positiveIsGood;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span
+        className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-caption font-semibold ${
+          good ? "bg-ok-soft text-ok" : "bg-risk-soft text-risk"
+        }`}
+      >
+        {/* the arrow is decorative; the direction is spoken instead (§7: never colour alone) */}
+        <span aria-hidden>{up ? "▲" : "▼"}</span>
+        <span className="sr-only">{up ? "up" : "down"} </span>
+        <span className="tnum">{Math.abs(pct).toFixed(1)}%</span>
+      </span>
+      {caption && <span className="text-caption text-ink-3">{caption}</span>}
+    </div>
+  );
+}
+
+/**
  * Signal-aware metric card (calories/weight style): a header with an optional
  * tinted icon chip, a label and an optional right-aligned `target`, a big tabular
  * number, an optional `progress` bar and/or mini sparkline, plus an optional
@@ -22,6 +53,7 @@ export function MetricCard({
   href,
   target,
   progress,
+  delta,
 }: {
   label: string;
   value: ReactNode;
@@ -34,11 +66,12 @@ export function MetricCard({
   href?: string; // when set, the whole card links here
   target?: ReactNode; // right-aligned goal / secondary figure in the header
   progress?: number; // 0-1 → renders a progress bar coloured by the signal/accent
+  delta?: Delta; // §5.3 change-vs-previous chip
 }) {
   const tint = signal ? SIGNAL_META[signal] : undefined;
   const barColor = tint ? tint.color : "var(--primary)";
   const className =
-    "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-line bg-surface p-5 shadow-card";
+    "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-line bg-surface p-6 shadow-card";
 
   const inner = (
     <>
@@ -57,7 +90,7 @@ export function MetricCard({
               {icon}
             </span>
           )}
-          <span className="flex items-center gap-1.5 truncate text-xs font-medium uppercase tracking-[0.04em] text-ink-3">
+          <span className="flex items-center gap-1.5 truncate text-label uppercase text-ink-3">
             <span className="truncate">{label}</span>
             {tooltip && (
               // keyboard- and touch-reachable (§5.9): the definition shows on
@@ -65,13 +98,15 @@ export function MetricCard({
               <span className="group/tip relative inline-flex" tabIndex={0} aria-label={tooltip}>
                 <span
                   aria-hidden
-                  className="inline-flex h-4 w-4 flex-none cursor-help items-center justify-center rounded-full border border-line bg-surface-2 text-[11px] leading-none text-muted"
+                  className="inline-flex h-4 w-4 flex-none cursor-help items-center justify-center rounded-full border border-line bg-surface-2 text-caption leading-none text-muted"
                 >
                   i
                 </span>
                 <span
                   role="tooltip"
-                  className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 w-56 -translate-x-1/2 whitespace-normal rounded-field bg-ink px-2.5 py-1.5 text-left text-[11px] font-normal normal-case leading-snug tracking-normal text-white opacity-0 shadow-soft transition-opacity group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
+                  // `text-surface`, not `text-white`: --ink is near-white in the dark
+                  // theme, so a hardcoded white label rendered white-on-white there.
+                  className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 w-56 -translate-x-1/2 whitespace-normal rounded-field bg-ink px-2.5 py-1.5 text-left text-caption font-normal normal-case leading-snug tracking-normal text-surface opacity-0 shadow-soft transition-opacity group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
                 >
                   {tooltip}
                 </span>
@@ -89,10 +124,10 @@ export function MetricCard({
         )}
       </div>
 
-      <div className="font-display truncate text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
-        {value}
-      </div>
+      {/* §2.1 `metric` (28/34, Jakarta 700, tabular) — the token existed but was never used */}
+      <div className="font-display tnum truncate text-metric tracking-tight">{value}</div>
       {secondary && <div className="tnum truncate text-sm text-muted">{secondary}</div>}
+      {delta && <DeltaChip {...delta} />}
 
       {typeof progress === "number" && (
         <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-2">

@@ -4,15 +4,19 @@ import { useRef, useState } from "react";
 import {
   createPendingPayment, deletePendingPayment, updatePendingPayment,
 } from "@/server/finance-actions";
+import { clearInstalmentPlan, generateInstalmentPlan, setInstalmentStatus } from "@/server/emi-actions";
 import type { PendingRow } from "@/server/finance-metrics";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
 import { sendPaymentReminderMsg } from "@/server/whatsapp-actions";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { Card } from "@/components/ui/kit";
+import { Btn } from "@/components/ui/controls";
+import { Modal } from "@/components/ui/Modal";
 import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
 import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
-import { AmountPair } from "./AmountPair";
+import { AmountPair } from "@/components/ui/AmountPair";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import { optionsFrom, PENDING_STATUS_LABELS, PROGRAM_LEVEL_LABELS } from "@/lib/labels";
@@ -24,6 +28,111 @@ const minorToInput = (raw: string) => {
 
 const money2 = (m: { inr: number; eur: number }) =>
   `${formatInrMinor(m.inr, { compact: true })} · ${formatEurMinor(m.eur, { compact: true })}`;
+
+const INSTALMENT_STATUS_OPTIONS = [
+  { value: "DUE", label: "Due" },
+  { value: "PAID", label: "Paid" },
+  { value: "OVERDUE", label: "Overdue" },
+];
+
+/** Structured EMI schedule (spec Module G): generate an N-instalment plan, mark each paid, or clear it. */
+function EmiScheduleModal({
+  row,
+  onClose,
+  onError,
+}: {
+  row: PendingRow;
+  onClose: () => void;
+  onError: (m: string | null) => void;
+}) {
+  const has = row.instalments.length > 0;
+  const paidCount = row.instalments.filter((i) => i.status === "PAID").length;
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`EMI schedule — ${row.studentName}`}
+      subtitle={has ? `${paidCount}/${row.instalments.length} paid` : "No schedule yet"}
+    >
+      {has ? (
+        <div className="space-y-2">
+          {row.instalments.map((it) => (
+            <div
+              key={it.id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm"
+            >
+              <span className="font-medium">#{it.seq}</span>
+              <span className="tnum">{formatInrMinor(it.inr, { compact: true })}</span>
+              <span className="text-xs text-muted">
+                due {formatDate(it.dueDate)}
+                {it.paidDate ? ` · paid ${formatDate(it.paidDate)}` : ""}
+              </span>
+              <div className="ml-auto">
+                <Select
+                  value={it.status}
+                  aria-label={`Instalment ${it.seq} status`}
+                  onChange={async (ev) => {
+                    onError(null);
+                    const res = await setInstalmentStatus(it.id, ev.target.value);
+                    if (!res.ok) onError(res.error);
+                    else toast("Instalment updated");
+                  }}
+                  options={INSTALMENT_STATUS_OPTIONS}
+                />
+              </div>
+            </div>
+          ))}
+          <div className="pt-2">
+            <Btn
+              variant="danger"
+              size="sm"
+              onClick={async () => {
+                const ok = await askConfirm({
+                  title: "Clear this EMI schedule?",
+                  body: "All instalment rows are deleted. The receivable itself stays.",
+                  confirmLabel: "Clear schedule",
+                  danger: true,
+                });
+                if (!ok) return;
+                onError(null);
+                const res = await clearInstalmentPlan(row.id);
+                if (!res.ok) return onError(res.error);
+                toast("Schedule cleared");
+                onClose();
+              }}
+            >
+              Clear schedule
+            </Btn>
+          </div>
+        </div>
+      ) : (
+        <form
+          action={async (form) => {
+            onError(null);
+            const res = await generateInstalmentPlan(row.id, form);
+            if (!res.ok) return onError(res.error);
+            toast("EMI schedule generated");
+            onClose();
+          }}
+          className="space-y-4"
+        >
+          <p className="text-sm text-muted">
+            Split {money2(row.totalFee)} into equal instalments — 2 per level, 6 for a 3-level bundle. The last
+            instalment absorbs any rounding.
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field label="Number of instalments"><TextInput name="count" inputMode="numeric" required defaultValue="2" /></Field>
+            <Field label="First due date">
+              <TextInput type="date" name="firstDueDate" required defaultValue={row.nextDueDate?.slice(0, 10) ?? ""} />
+            </Field>
+            <Field label="Days between"><TextInput name="intervalDays" inputMode="numeric" defaultValue="30" /></Field>
+          </div>
+          <SubmitButton>Generate schedule</SubmitButton>
+        </form>
+      )}
+    </Modal>
+  );
+}
 
 export function PendingSection({
   rows,
@@ -37,8 +146,11 @@ export function PendingSection({
   fxStale?: boolean;
 }) {
   const [editing, setEditing] = useState<PendingRow | null>(null);
+  const [emiRowId, setEmiRowId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Derive by id (not a captured row) so the modal reflects fresh instalments after a revalidate.
+  const emiRow = emiRowId ? rows.find((r) => r.id === emiRowId) ?? null : null;
 
   const submit = async (form: FormData) => {
     setError(null);
@@ -107,8 +219,11 @@ export function PendingSection({
       key: "actions", header: "", sortable: false,
       cell: (r) => (
         <span className="flex gap-2 whitespace-nowrap">
-          <button type="button" className="py-1 text-accent hover:underline" onClick={() => setEditing(r)}>Edit</button>
-          <button type="button" className="py-1 text-risk hover:underline" onClick={() => remove(r)}>Delete</button>
+          <Btn variant="ghost" size="sm" onClick={() => setEmiRowId(r.id)}>
+            EMI{r.instalments.length ? ` ${r.instalments.filter((i) => i.status === "PAID").length}/${r.instalments.length}` : ""}
+          </Btn>
+          <Btn variant="ghost" size="sm" onClick={() => setEditing(r)}>Edit</Btn>
+          <Btn variant="danger" size="sm" onClick={() => remove(r)}>Delete</Btn>
         </span>
       ),
       value: () => null,
@@ -117,26 +232,18 @@ export function PendingSection({
 
   return (
     <section className="space-y-4">
-      <form
-        ref={formRef}
-        action={submit}
-        key={editing?.id ?? "new"}
-        className="rounded-card border border-line bg-surface p-5 shadow-card"
-      >
-        <div className="mb-1 flex items-center justify-between">
-          <h3 className="font-display text-lg font-semibold">
-            {editing ? `Edit pending payment - ${editing.studentName}` : "Pending payment (instalments)"}
-          </h3>
-          {editing && (
-            <button type="button" className="text-sm text-muted hover:underline" onClick={() => setEditing(null)}>
+      <Card
+        title={editing ? `Edit pending payment - ${editing.studentName}` : "Pending payment (instalments)"}
+        subtitle="“Paid so far” is summed automatically from income entries with the same student name - enter the agreed total fee only."
+        actions={
+          editing ? (
+            <Btn variant="ghost" size="sm" onClick={() => setEditing(null)}>
               Cancel edit
-            </button>
-          )}
-        </div>
-        <p className="mb-4 text-xs text-muted">
-          “Paid so far” is summed automatically from income entries with the same student name - enter the
-          agreed total fee only.
-        </p>
+            </Btn>
+          ) : undefined
+        }
+      >
+        <form ref={formRef} action={submit} key={editing?.id ?? "new"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Student name">
             <TextInput name="studentName" required defaultValue={editing?.studentName ?? ""} />
@@ -169,7 +276,8 @@ export function PendingSection({
           <SubmitButton>{editing ? "Save changes" : "Add pending payment"}</SubmitButton>
           <FormError message={error} />
         </div>
-      </form>
+        </form>
+      </Card>
 
       <DataTable
         rows={rows}
@@ -178,6 +286,8 @@ export function PendingSection({
         filterPlaceholder="Filter pending payments…"
         rowClassName={(r) => (r.overdue ? "bg-risk-soft" : undefined)}
       />
+
+      {emiRow && <EmiScheduleModal row={emiRow} onClose={() => setEmiRowId(null)} onError={setError} />}
     </section>
   );
 }

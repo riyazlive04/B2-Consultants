@@ -1,7 +1,9 @@
 # B2 Founder Dashboard — Design System
 
 **Design language: "Daylight"** — light blue on half-white. Calm, confident, money-grade.
-**Version 1.0 — June 2026**
+**Version 1.2 — July 2026** — §6 Motion rewritten with a real scale (chrome moves, data doesn't);
+§5.5 controls de-nativised. Reference implementation: the Founder Console.
+*v1.1 — palette re-tuned to meet the §7 contrast floor; dark mode shipped.*
 
 This is the single source of truth for every colour, font, spacing value, and component in
 the app. Both Claude Design and Claude Code read from this file. If a value is not in here,
@@ -38,13 +40,15 @@ Three rules the whole system obeys:
 | `--bg-surface-2` | `#F4F8FE` | Insets: table header rows, input wells, secondary panels. |
 | `--bg-sky` | `#E4EFFE` | Soft blue tint panels (hero strip, highlight boxes, empty states). |
 | `--bg-sky-grad` | `linear-gradient(135deg,#E8F1FE 0%,#D9E9FF 100%)` | The one place a gradient is allowed: the top welcome/hero strip and the runway hero box. |
-| `--primary` | `#4B93F7` | Primary action, active nav, brand blue, focused field ring. |
-| `--primary-strong` | `#2F6FE0` | Primary hover / pressed. |
+| `--primary` | `#0A64E2` | Primary action, active nav, brand blue, focused field ring. Carries white text (5.34:1) **and** reads as text on `--primary-soft` (4.64:1). |
+| `--primary-strong` | `#0855C0` | Primary hover / pressed; all blue *text* (soft button, info badge). |
 | `--primary-soft` | `#E6F0FE` | Selected row, active chip, soft button bg, primary badge bg. |
 | `--primary-tint` | `#BBD6FF` | Borders on blue elements, sparkline fills, progress track fill (light). |
 | `--ink` | `#16203A` | Primary text, headings, key figures (near-navy, never pure black). |
 | `--ink-2` | `#4A566E` | Secondary text, labels, table body. |
-| `--ink-3` | `#8A95A8` | Muted text, placeholders, captions, disabled. |
+| `--ink-3` | `#636F85` | Muted text, placeholders, captions. Passes 4.5:1 on every surface **except `--bg-sky`**. |
+| `--ink-disabled` | `#8A95A8` | Inactive controls ONLY (WCAG 1.4.3 exempts them). Never text. |
+| `--on-accent` | `#FFFFFF` (dark: `#0E1626`) | Text/icon sitting on a saturated fill. Never hardcode `text-white` — it cannot re-theme. |
 | `--border` | `#E2E9F3` | Default hairline borders, dividers, card edges. |
 | `--border-strong` | `#CBD6E6` | Input borders, table outer edge, segmented controls. |
 
@@ -55,10 +59,14 @@ profit positive/negative, overdue receivables, target-bar bands.
 
 | Meaning | Text/Icon | Fill (bg) | Hex (text) | Hex (bg) |
 |---|---|---|---|---|
-| **Good / Safe / Paid / On-track** | green | green-soft | `#1F9D63` | `#E4F7EE` |
-| **Watch / Amber / Due soon** | amber | amber-soft | `#C97E12` | `#FBEFD7` |
-| **Bad / Urgent / Overdue / Loss** | red | red-soft | `#D63A40` | `#FCE7E8` |
-| **Neutral / Info** | blue | primary-soft | `#2F6FE0` | `#E6F0FE` |
+| **Good / Safe / Paid / On-track** | green | green-soft | `#197E50` | `#E4F7EE` |
+| **Watch / Amber / Due soon** | amber | amber-soft | `#9A610E` | `#FBEFD7` |
+| **Bad / Urgent / Overdue / Loss** | red | red-soft | `#CB2A31` | `#FCE7E8` |
+| **Neutral / Info** | blue | primary-soft | `#0855C0` | `#E6F0FE` |
+
+Each text tone is tuned to clear **4.5:1 against its own soft fill** — badges render at
+12px, which is small text. The soft fills are unchanged, so the palette's temperature is
+identical to v1.0; only the glyph darkened.
 
 Tokens: `--good`, `--good-bg`, `--warn`, `--warn-bg`, `--bad`, `--bad-bg`.
 
@@ -86,8 +94,15 @@ Program-level colours are **fixed** across the whole app so the eye learns them:
 
 ### 1.4 Dark mode
 
-Out of scope for v1 (founder uses this in daylight, internal tool). Tokens are structured so a
-dark theme can be added later by remapping the 13 core tokens only. Do not hardcode hex anywhere.
+**Shipped.** `[data-theme="dark"]` in `globals.css` remaps the core tokens; everything else
+follows. Two rules that only bite in dark mode:
+
+- Dark fills are *light*, so on-fill text must be near-black. That is what `--on-accent` is
+  for. A hardcoded `text-white` on `--primary` measures **2.72:1** in dark mode.
+- `--ink` is near-white in dark mode. Anything that used `bg-ink` + `text-white` (tooltips)
+  must use `text-surface` instead.
+
+Do not hardcode hex anywhere.
 
 ---
 
@@ -122,6 +137,9 @@ violet. Inter is the dense-data workhorse (great tabular figures). Mono is reser
 | `mono-data` | 14 / 20 | 400 | JetBrains | Ledger amounts, IDs |
 
 **Always** use `font-variant-numeric: tabular-nums` on any column of figures so decimals line up.
+
+Every step above is a Tailwind token (`text-display-l`, `text-h2`, `text-metric`, `text-label`,
+`text-caption`, …). If you are typing `text-lg` or `text-[15px]`, you are off the scale.
 
 ---
 
@@ -177,8 +195,24 @@ Each component lists its anatomy and states. Build them once, reuse everywhere.
 - **Top bar** (`64px`, sticky, `--bg-surface`, bottom border): page title (left); on the right,
   **the always-visible metric strip** — `Runway: 4.2 months` with its signal colour, current
   month, logged-in user avatar + name, logout. The runway pill is the most important top-bar
-  element (Phase 3 requirement: visible on every screen).
-- **Content** sits on `--bg-app` with `32px` gutters, max content width `1280px`.
+  element for Admin (Phase 3 requirement: visible on every screen Admin can reach). Cash Health
+  is Admin-only per the access matrix (§2.1 BUILD_SPEC — Head: No, User: No), so Head and User
+  never see this pill; it is not rendered for them, by design.
+- **Content** sits on `--bg-app` with `32px` gutters and is **fluid — there is no max content
+  width.** Page roots are `w-full`; the only horizontal bound is the shell's own padding
+  (`px-4` mobile / `md:px-7`).
+  *Changed 15 Jul 2026 — was `1280px`, briefly `1600px`, now uncapped.* Any fixed cap left a
+  dead strip on the right of a wide window, because the top bar is uncapped and spans the full
+  shell: at `1280px` on a 1920 window the content stopped **195px** short of the logout button.
+  Rather than cap the top bar to match, the decision was that screens use the window they're
+  given.
+  **What this means when you build a page:** you no longer get a free measure. Responsibility
+  moves to the grid — use responsive column counts (`sm:grid-cols-2 lg:grid-cols-4`) so cards
+  spread rather than stretch, and keep prose in its own bounded column. Measured at 2560 the
+  longest subtitle reaches ~85ch, which is the ceiling of comfortable reading; anything
+  longer needs its own `max-w`.
+  **Utility `max-w` is unaffected** — `max-w-sm` on muted text, `mx-auto max-w-lg` on centred
+  empty states, and narrow error cards are reading-measure widths, not layout caps. Don't strip them.
 
 ### 5.2 Nav item
 - Resting: `--ink-2`, icon + label, `r-md`, transparent bg.
@@ -213,7 +247,16 @@ The workhorse of every dashboard.
 
 ### 5.5 Inputs & forms
 - Field: `--bg-surface`, `1px` `--border-strong`, `r-sm`, height `40`, padding `12`.
-  Focus → border `--primary` + soft ring. Error → border `--bad` + helper text in `--bad`.
+  Hover → border `--primary-tint`. Focus → border `--primary` + soft ring (`--dur-fast`).
+  Error → border `--bad` + helper text in `--bad`.
+  **Height 40 is not a suggestion** — it is the §7 hit-target floor. A `py-1.5` field measures 32
+  and reads as cramped; the Founder Console shipped that way and it was the single loudest "old"
+  tell after the native chrome below.
+- **Never ship OS control chrome.** A bare `<select>` renders the platform's grey arrow, which
+  ignores every token here and stays light-grey on a dark surface. Use `appearance-none` + our own
+  `ChevronDown` in `--ink-3`, and keep the real `<select>` underneath (keyboard, type-ahead and the
+  mobile picker are all free). Same for `<input type=checkbox>`: the box is a styled `<span>`, the
+  input is `sr-only` — **`sr-only`, never `display:none`**, or it leaves the tab order.
 - Label above (`label` style), helper/error below (`caption`).
 - **Date** pickers default to today (PRD), DD/MM/YYYY. **Dropdowns** match PRD option lists exactly.
 - **Toggle** (Yes/No, e.g. "Is this COGS?"): pill track, `--good` when on.
@@ -267,18 +310,67 @@ The workhorse of every dashboard.
 ---
 
 ## 6. Motion
-Minimal and functional. Respect `prefers-reduced-motion`.
-- Hover lifts: `120ms ease-out`. Modal/scrim: `160ms ease`. Toast slide: `200ms`.
-- Number count-up on dashboard load: **off by default** (founder wants the truth instantly, not a
-  show). Allowed only on the runway hero, once, `400ms`.
-- No parallax, no looping ambient animation. The reference's floating cards are a *marketing*
-  device; this is an operations tool.
+**Version 1.2 — July 2026.** Rewritten: v1.1 said only "minimal and functional", which in practice
+meant screens shipped with *no* motion at all and read as dated. Motion is now specified, with a
+scale — but it is still earned, never decorative.
+
+**The one rule: motion answers a gesture. Chrome may move; data never does.**
+A tab you clicked, a row you pointed at, a button you pressed — those may move, because the
+movement *is* the feedback. A figure, a chart, a KPI, a money column: never. A number that slides
+or bounces reads as a number that isn't sure. This is the operational half of §0's "the data is
+the hero".
+
+### 6.1 The scale
+Tokens live in `globals.css`. Don't invent a duration at a call site.
+
+| Token | Value | Use |
+|---|---|---|
+| `--dur-fast` | `120ms` | Hover, colour, focus ring, press |
+| `--dur-base` | `200ms` | The default — entrances, cross-fades, toasts |
+| `--dur-slow` | `320ms` | A single element *travelling* (the tab indicator) |
+| `--ease-out` | `cubic-bezier(.2,.7,.3,1)` | Default. Everything, unless it was pushed. |
+| `--ease-spring` | `cubic-bezier(.34,1.4,.64,1)` | Overshoots — only for things the user pushed |
+
+`--ease-spring` is for a *direct manipulation* (tab, press, tick). The overshoot reads as
+responsiveness there. On anything else it reads as noise, and on data it reads as a lie.
+
+### 6.2 The vocabulary
+| Class | What it does | Where |
+|---|---|---|
+| `.tab-indicator` | The active marker **travels** between tabs | `Tabs` (both variants) |
+| `.panel-in` | Tab panel cross-fades up `4px` on swap | `Tabs` |
+| `.row-lift` | Row hover/focus-within → `e-2` + `primary-tint` edge + `-1px` | List editors |
+| `.row-in` | Staggered entry, `22ms × --i`, capped at 14 | List editors |
+| `.press` | `scale(.96)` spring on `:active` | All buttons |
+| `.rise-in` | Staggered card entry, `30ms` apart, capped at 12 | Dashboards |
+| `.card-hover` | Lift to `e-2` + blue edge | Clickable cards |
+
+**Why the tab indicator travels:** one object moving from A to B says "these are the same control,
+and you moved it". A marker that blinks off one tab and on to another says nothing — it reads as a
+page reload. It is the cheapest way to make a screen feel built rather than assembled.
+
+### 6.3 Still forbidden
+- **No looping/ambient animation.** Nothing moves unless a person caused it. (`.skeleton` is the
+  one exception — it must read as pending, and it stops under reduced-motion.)
+- **No parallax.** The reference's floating cards are a *marketing* device; this is an ops tool.
+- **Number count-up: off.** The founder wants the truth instantly, not a show. Allowed only on the
+  runway hero, once, `400ms`.
+- **Charts don't animate in.** §5.8 already says the funnel is static. That still holds.
+
+### 6.4 `prefers-reduced-motion`
+Non-negotiable, and it is a **kill switch for travel, not for state**: under reduce, the end state
+must still be reachable and legible. Hover still recolours and still lifts its shadow; the tab
+indicator still lands on the right tab. Only the *travel* and the *entrances* are removed. Every
+class above is listed in the reduce block in `globals.css` — if you add a class here, add it there.
 
 ---
 
 ## 7. Accessibility & quality floor
-- Contrast: body text ≥ 4.5:1, large ≥ 3:1. `--ink` on `--bg-surface` passes; never put
-  `--ink-3` on `--bg-sky` for body text.
+- Contrast: body text ≥ 4.5:1, large ≥ 3:1, non-text (focus ring, control boundary) ≥ 3:1.
+  Every token pair the system prescribes is verified against this — see the palette notes in
+  §1.1/§1.2. Still forbidden: `--ink-3` on `--bg-sky` (4.36:1).
+- The type scale bottoms out at `caption` (12px). Nothing renders below it — not avatar
+  initials, not badges, not counters.
 - Every interactive element has a visible keyboard focus ring (`--primary`, 2px).
 - Signal **never** carried by colour alone — always pair the dot/fill with a label or icon
   (colour-blind safe; also a compliance nicety for a money tool).
@@ -297,15 +389,16 @@ Minimal and functional. Respect `prefers-reduced-motion`.
   --bg-sky:#E4EFFE;
   --bg-sky-grad:linear-gradient(135deg,#E8F1FE 0%,#D9E9FF 100%);
   /* brand */
-  --primary:#4B93F7; --primary-strong:#2F6FE0; --primary-soft:#E6F0FE; --primary-tint:#BBD6FF;
+  --primary:#0A64E2; --primary-strong:#0855C0; --primary-soft:#E6F0FE; --primary-tint:#BBD6FF;
+  --on-accent:#FFFFFF;
   /* ink */
-  --ink:#16203A; --ink-2:#4A566E; --ink-3:#8A95A8;
+  --ink:#16203A; --ink-2:#4A566E; --ink-3:#636F85; --ink-disabled:#8A95A8;
   /* lines */
   --border:#E2E9F3; --border-strong:#CBD6E6;
   /* signal */
-  --good:#1F9D63; --good-bg:#E4F7EE;
-  --warn:#C97E12; --warn-bg:#FBEFD7;
-  --bad:#D63A40;  --bad-bg:#FCE7E8;
+  --good:#197E50; --good-bg:#E4F7EE;
+  --warn:#9A610E; --warn-bg:#FBEFD7;
+  --bad:#CB2A31;  --bad-bg:#FCE7E8;
   /* viz */
   --viz-1:#4B93F7; --viz-2:#3FC0B7; --viz-3:#9B8CFF; --viz-4:#F2A93B; --viz-5:#F4799E;
   --viz-grid:#EAF0F8; --viz-ink:#8A95A8;
@@ -330,8 +423,15 @@ Minimal and functional. Respect `prefers-reduced-motion`.
 
 **Do** — keep the canvas half-white and quiet · spend blue on actions only · let signal colours
 carry meaning · right-align and tabular-align every money column · show the live FX timestamp ·
-keep the runway pill visible on every screen.
+keep the runway pill visible on every screen Admin can reach (it is Admin-only — Cash Health is
+not part of Head's or User's access).
 
 **Don't** — gradient-fill data cards · colour revenue green for being revenue · use pure black or
-pure red-flat fills on whole tables (only overdue rows tint) · animate the dashboard like a landing
-page · introduce a second accent hue · mix INR and EUR grouping rules.
+pure red-flat fills on whole tables (only overdue rows tint) · **animate a figure, a chart or a KPI
+— ever** (chrome may move, data may not; §6) · introduce a second accent hue · mix INR and EUR
+grouping rules · ship a native `<select>` or `<input type=checkbox>` with its OS chrome showing
+(§5.5 — the grey native arrow ignores the theme and is the most dated pixel available).
+
+*Amended 15 Jul 2026 — "animate the dashboard like a landing page" was the v1.1 wording. It was
+read as "no motion anywhere" and screens shipped inert, which is its own kind of cheap. The line
+is not dashboard-vs-elsewhere, it is **data-vs-chrome**: see §6.*

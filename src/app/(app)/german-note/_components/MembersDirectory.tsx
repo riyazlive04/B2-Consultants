@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { formatDate } from "@/lib/format";
 
 function roleChip(role: string) {
-  if (role === "TUTOR") return { label: "Tutor", fg: "var(--lvl-gn)", bg: "#3fc0b722" };
+  if (role === "TUTOR") return { label: "Tutor", fg: "var(--ink)", bg: "color-mix(in srgb, var(--lvl-gn) 14%, transparent)" };
   if (role === "ADMIN") return { label: "Admin", fg: "var(--primary-strong)", bg: "var(--primary-soft)" };
   return { label: "Student", fg: "var(--ink-3)", bg: "var(--surface-2)" };
 }
@@ -24,11 +24,11 @@ function LevelAvatar({ name, image, level, size = 44 }: { name: string; image: s
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image} alt="" className="h-full w-full rounded-full object-cover" />
       ) : (
-        <span className="grid h-full w-full place-items-center rounded-full bg-[#3fc0b722] text-sm font-bold text-[var(--lvl-gn)]">
+        <span className="grid h-full w-full place-items-center rounded-full bg-lvl-gn/10 text-sm font-bold text-ink">
           {initialsOf(name)}
         </span>
       )}
-      <span className="absolute -bottom-1 -right-1 grid h-[18px] w-[18px] place-items-center rounded-full bg-primary text-[10px] font-bold leading-none text-white ring-2 ring-[var(--surface)]">
+      <span className="absolute -bottom-1 -right-1 grid h-[18px] w-[18px] place-items-center rounded-full bg-primary text-caption font-bold leading-none text-on-accent ring-2 ring-[var(--surface)]">
         {level}
       </span>
     </span>
@@ -80,7 +80,7 @@ export function MembersDirectory({ members }: { members: GnMemberRow[] }) {
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
                   <span className="truncate text-sm font-semibold">{m.name}</span>
-                  <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ color: chip.fg, background: chip.bg }}>
+                  <span className="rounded-full px-1.5 py-0.5 text-caption font-semibold" style={{ color: chip.fg, background: chip.bg }}>
                     {chip.label}
                   </span>
                 </span>
@@ -105,7 +105,7 @@ export function MembersDirectory({ members }: { members: GnMemberRow[] }) {
             <div className="flex items-center gap-4">
               <LevelAvatar name={profile.name} image={profile.image} level={profile.level} size={64} />
               <div>
-                <p className="font-display text-lg font-semibold">{profile.name}</p>
+                <p className="font-display text-h2 font-semibold">{profile.name}</p>
                 <p className="text-sm text-muted">
                   {roleChip(profile.role).label} · Level {profile.level} · {profile.points} points
                 </p>
@@ -118,7 +118,7 @@ export function MembersDirectory({ members }: { members: GnMemberRow[] }) {
             {profile.batchNames.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {profile.batchNames.map((b) => (
-                  <span key={b} className="rounded-full bg-[#3fc0b722] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--lvl-gn)]">{b}</span>
+                  <span key={b} className="rounded-full bg-lvl-gn/10 px-2.5 py-0.5 text-caption font-semibold text-ink">{b}</span>
                 ))}
               </div>
             )}
@@ -126,15 +126,15 @@ export function MembersDirectory({ members }: { members: GnMemberRow[] }) {
             <div className="mt-4 grid grid-cols-3 gap-3 text-center">
               <div className="rounded-field bg-surface-2 py-2.5">
                 <p className="flex items-center justify-center gap-1 text-sm font-bold"><MessageSquare size={13} /> {profile.postCount}</p>
-                <p className="text-[11px] text-muted">posts</p>
+                <p className="text-caption text-muted">posts</p>
               </div>
               <div className="rounded-field bg-surface-2 py-2.5">
                 <p className="flex items-center justify-center gap-1 text-sm font-bold"><MessageSquare size={13} /> {profile.commentCount}</p>
-                <p className="text-[11px] text-muted">comments</p>
+                <p className="text-caption text-muted">comments</p>
               </div>
               <div className="rounded-field bg-surface-2 py-2.5">
                 <p className="flex items-center justify-center gap-1 text-sm font-bold"><Heart size={13} /> {profile.likesReceived}</p>
-                <p className="text-[11px] text-muted">likes received</p>
+                <p className="text-caption text-muted">likes received</p>
               </div>
             </div>
 

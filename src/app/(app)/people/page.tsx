@@ -1,4 +1,6 @@
+import { Users } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
+import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
 import { listAccessRequests } from "@/server/access-requests";
 import { getPeopleOverview } from "@/server/people-metrics";
@@ -13,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PeoplePage() {
   const session = await requireSection("people"); // Admin-only (PRD2 §2)
-  const [{ members, month, weeklyRollup, logs }, users, accessRequests, sections] = await Promise.all([
+  const [{ members, month, weeklyRollup, monthlyRollup, logs }, users, accessRequests, sections] = await Promise.all([
     getPeopleOverview(),
     listUsers(),
     listAccessRequests(),
@@ -26,19 +28,18 @@ export default async function PeoplePage() {
   const actor = { id: session.user.id, role: session.role, capabilities: session.capabilities };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Users</h1>
-        <p className="mt-1 text-sm text-muted">
-          Team profiles, OKRs and daily activity - what everyone did today without asking on WhatsApp.
-        </p>
-      </div>
+    <div className="w-full space-y-6">
+      <PageHeader
+        icon={<Users size={20} />}
+        title="Users"
+        subtitle="Team profiles, OKRs and daily activity - what everyone did today without asking on WhatsApp."
+      />
 
       <Tabs
         tabs={[
           {
             label: `Daily logs${anyMissing ? " ⚠" : ""}`,
-            content: <LogsBoard members={members} weeklyRollup={weeklyRollup} logs={logs} />,
+            content: <LogsBoard members={members} weeklyRollup={weeklyRollup} monthlyRollup={monthlyRollup} logs={logs} />,
           },
           { label: "OKRs", content: <OkrBoard members={members} month={month} /> },
           { label: "Team & org chart", content: <OrgChart members={members} /> },

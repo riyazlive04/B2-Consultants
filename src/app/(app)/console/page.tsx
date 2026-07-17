@@ -5,7 +5,14 @@ import { istToday } from "@/lib/dates";
 import { currentRuleset } from "@/lib/gamification";
 import { Tabs } from "@/components/ui/Tabs";
 import { PageHeader } from "@/components/ui/kit";
-import { getCommissionRulesConfig, getGamificationConfig, getResolvedSections } from "@/server/founder-config";
+import {
+  getAgreementWorkflow,
+  getCommissionRulesConfig,
+  getDailyLogEod,
+  getDailyLogTargets,
+  getGamificationConfig,
+  getResolvedSections,
+} from "@/server/founder-config";
 import { getGoalsWithProgress } from "@/server/goals";
 import { listRewardGrants, listRewardRules } from "@/server/rewards";
 import { SectionsPanel } from "./_components/SectionsPanel";
@@ -13,6 +20,9 @@ import { GamificationPanel } from "./_components/GamificationPanel";
 import { GoalsPanel } from "./_components/GoalsPanel";
 import { RewardsPanel, type GrantView, type RuleRow } from "./_components/RewardsPanel";
 import { CommissionPanel } from "./_components/CommissionPanel";
+import { DailyTargetsPanel } from "./_components/DailyTargetsPanel";
+import { DailyLogEodPanel } from "./_components/DailyLogEodPanel";
+import { AgreementWorkflowPanel } from "./_components/AgreementWorkflowPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -27,19 +37,37 @@ export const dynamic = "force-dynamic";
 export default async function ConsolePage() {
   await requireSection("console");
 
-  const [sections, config, goals, rules, grants, people, commissionRules] = await Promise.all([
-    getResolvedSections(),
-    getGamificationConfig(),
-    getGoalsWithProgress(),
-    listRewardRules(),
-    listRewardGrants(),
-    prisma.teamProfile.findMany({
-      where: { status: "ACTIVE" },
-      select: { id: true, fullName: true },
-      orderBy: { orderIndex: "asc" },
-    }),
-    getCommissionRulesConfig(),
-  ]);
+  const [
+    sections,
+    config,
+    goals,
+    rules,
+    grants,
+    people,
+    commissionRules,
+    dailyTargets,
+    agreementWorkflow,
+    dailyLogEod,
+  ] = await Promise.all([
+      getResolvedSections(),
+      getGamificationConfig(),
+      getGoalsWithProgress(),
+      listRewardRules(),
+      listRewardGrants(),
+      prisma.teamProfile.findMany({
+        where: { status: "ACTIVE" },
+        select: { id: true, fullName: true },
+        orderBy: { orderIndex: "asc" },
+      }),
+      getCommissionRulesConfig(),
+      getDailyLogTargets(),
+      getAgreementWorkflow(),
+      getDailyLogEod(),
+    ]);
+
+  // Auto-save is the only rule here that needs an external clock. Read the seam's real
+  // precondition so the panel can warn instead of claiming a rule that can never fire.
+  const cronArmed = !!process.env.CRON_SECRET;
 
   // Reward triggers point at badges and quests by key — offer today's, not the code defaults.
   const live = currentRuleset(config, istToday().toISOString().slice(0, 10));
@@ -103,6 +131,16 @@ export default async function ConsolePage() {
             ),
           },
           { label: "Commission", content: <CommissionPanel rules={commissionRules} /> },
+          {
+            label: "Daily Targets",
+            content: (
+              <div className="space-y-6">
+                <DailyTargetsPanel targets={dailyTargets} />
+                <DailyLogEodPanel config={dailyLogEod} cronArmed={cronArmed} />
+              </div>
+            ),
+          },
+          { label: "Agreements", content: <AgreementWorkflowPanel config={agreementWorkflow} /> },
         ]}
       />
     </div>

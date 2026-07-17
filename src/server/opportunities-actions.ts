@@ -8,6 +8,7 @@ import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
 import { parseMentions } from "@/lib/gn-mentions";
 import { emitTrigger } from "./automation";
+import { logActivity, diffFields } from "./activity-log";
 import type { OpportunityStatus, LeadStage } from "@prisma/client";
 import type { ActionResult } from "./finance-actions";
 
@@ -44,7 +45,7 @@ export async function moveOpportunity(
   const session = await requireSection("opportunities");
   const opp = await prisma.opportunity.findUnique({
     where: { id: oppId },
-    include: { pipeline: { select: { id: true, isDefault: true } } },
+    include: { pipeline: { select: { id: true, isDefault: true } }, stage: { select: { name: true } } },
   });
   if (!opp) return { ok: false, error: "Opportunity not found" };
   const toStage = await prisma.pipelineStage.findUnique({ where: { id: toStageId } });
@@ -99,6 +100,22 @@ export async function moveOpportunity(
       }
     }
   });
+
+  const diff = diffFields(
+    { stageId: opp.stageId, status: opp.status },
+    { stageId: toStageId, status: newStatus },
+  );
+  // A drop back into the same column only reshuffles positions — not a feed row.
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "opportunity.move",
+      section: "opportunities",
+      entityType: "Opportunity",
+      entityId: oppId,
+      summary: `Moved ${opp.name} from ${opp.stage.name} to ${toStage.name}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
 
   if (stageChangedTo) await emitTrigger("STAGE_CHANGED", { leadId: opp.leadId, stage: stageChangedTo });
 
@@ -177,7 +194,7 @@ export async function createOpportunity(form: FormData): Promise<ActionResult> {
         position: (max._max.position ?? -1) + 1,
       },
     });
-    return { leadId, oppId: opp.id };
+    return { leadId, oppId: opp.id, oppName: opp.name, leadName: lead.name, newContact: !d.leadId?.trim() };
   }).catch((e: Error) => {
     if (e.message === "MISSING_CONTACT") return "MISSING_CONTACT" as const;
     throw e;
@@ -186,6 +203,20 @@ export async function createOpportunity(form: FormData): Promise<ActionResult> {
   if (result === "MISSING_CONTACT") {
     return { ok: false, error: "Pick an existing contact or enter a new name + phone" };
   }
+  await logActivity(session, {
+    action: "opportunity.create",
+    section: "opportunities",
+    entityType: "Opportunity",
+    entityId: result.oppId,
+    summary: `Created opportunity ${result.oppName} for ${result.leadName} in ${stage.name}`,
+    meta: {
+      leadId: result.leadId,
+      stageId: d.stageId,
+      valueInr: valueInrMinor.toString(),
+      source: d.source || null,
+      newContact: result.newContact,
+    },
+  });
   revalidatePath("/opportunities");
   revalidatePath(`/contacts/${result.leadId}`);
   return { ok: true };
@@ -204,11 +235,17 @@ const updateOppSchema = z.object({
 });
 
 export async function updateOpportunity(id: string, form: FormData): Promise<ActionResult> {
-  await requireSection("opportunities");
+  const session = await requireSection("opportunities");
   const parsed = updateOppSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
-  const opp = await prisma.opportunity.findUnique({ where: { id }, select: { leadId: true, wonAt: true, stageId: true } });
+  const opp = await prisma.opportunity.findUnique({
+    where: { id },
+    select: {
+      leadId: true, wonAt: true, stageId: true, name: true, valueInrMinor: true,
+      source: true, assignedToId: true, status: true, lead: { select: { name: true } },
+    },
+  });
   if (!opp) return { ok: false, error: "Opportunity not found" };
 
   const fx = await getTodayInrPerEur();
@@ -230,6 +267,34 @@ export async function updateOpportunity(id: string, form: FormData): Promise<Act
     },
   });
 
+  // Money is BigInt: stringify it before diffing, or JSON.stringify blows up inside diffFields.
+  const diff = diffFields(
+    {
+      name: opp.name,
+      valueInrMinor: opp.valueInrMinor.toString(),
+      source: opp.source,
+      assignedToId: opp.assignedToId,
+      status: opp.status,
+    },
+    {
+      name: d.name,
+      valueInrMinor: valueInrMinor.toString(),
+      source: d.source || null,
+      assignedToId: d.assignedToId || null,
+      status,
+    },
+  );
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "opportunity.update",
+      section: "opportunities",
+      entityType: "Opportunity",
+      entityId: id,
+      summary: `Updated opportunity ${d.name} for ${opp.lead.name} — changed ${diff.changed.join(", ")}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+
   // A stage change from the modal reuses the exact same move (reindex + legacy write-through)
   // logic the Kanban drag-and-drop uses, so there is only ever one path that moves a card.
   if (d.stageId && d.stageId !== opp.stageId) {
@@ -243,10 +308,21 @@ export async function updateOpportunity(id: string, form: FormData): Promise<Act
 }
 
 export async function deleteOpportunity(id: string): Promise<ActionResult> {
-  await requireSection("opportunities");
-  const opp = await prisma.opportunity.findUnique({ where: { id }, select: { leadId: true } });
+  const session = await requireSection("opportunities");
+  const opp = await prisma.opportunity.findUnique({
+    where: { id },
+    select: { leadId: true, name: true, lead: { select: { name: true } } },
+  });
   if (!opp) return { ok: false, error: "Opportunity not found" };
   await prisma.opportunity.delete({ where: { id } });
+  await logActivity(session, {
+    action: "opportunity.delete",
+    section: "opportunities",
+    entityType: "Opportunity",
+    entityId: id,
+    summary: `Deleted opportunity ${opp.name} for ${opp.lead.name}`,
+    meta: { leadId: opp.leadId },
+  });
   revalidatePath("/opportunities");
   revalidatePath(`/contacts/${opp.leadId}`);
   return { ok: true };
@@ -255,7 +331,7 @@ export async function deleteOpportunity(id: string): Promise<ActionResult> {
 // ─────────────────────────── Pipeline & stage editing (capability) ───────────────────────────
 
 export async function createPipeline(form: FormData): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   const name = String(form.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Pipeline name is required" };
@@ -265,60 +341,112 @@ export async function createPipeline(form: FormData): Promise<ActionResult> {
   });
   // A pipeline needs at least one stage to be usable.
   await prisma.pipelineStage.create({ data: { pipelineId: pipeline.id, name: "New Stage", position: 0 } });
+  await logActivity(session, {
+    action: "pipeline.create",
+    section: "opportunities",
+    entityType: "Pipeline",
+    entityId: pipeline.id,
+    summary: `Created the ${name} pipeline`,
+  });
   revalidatePath("/opportunities");
   return { ok: true };
 }
 
 export async function renamePipeline(id: string, name: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   if (!name.trim()) return { ok: false, error: "Pipeline name is required" };
+  const before = await prisma.pipeline.findUnique({ where: { id }, select: { name: true } });
   await prisma.pipeline.update({ where: { id }, data: { name: name.trim() } });
+  if (before) {
+    const diff = diffFields(before, { name: name.trim() });
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "pipeline.update",
+        section: "opportunities",
+        entityType: "Pipeline",
+        entityId: id,
+        summary: `Renamed the ${before.name} pipeline to ${name.trim()}`,
+        meta: { changed: diff.changed, before: diff.before, after: diff.after },
+      });
+    }
+  }
   revalidatePath("/opportunities");
   return { ok: true };
 }
 
 export async function deletePipeline(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
-  const p = await prisma.pipeline.findUnique({ where: { id }, select: { isDefault: true } });
+  const p = await prisma.pipeline.findUnique({ where: { id }, select: { isDefault: true, name: true } });
   if (!p) return { ok: false, error: "Pipeline not found" };
   if (p.isDefault) return { ok: false, error: "The default Sales pipeline can't be deleted" };
   // Soft delete: the pipeline (and, since getBoard only ever loads stages for an undeleted
   // pipeline, its stages and opportunities too) drops out of the switcher immediately but stays
   // recoverable — a confirm dialog is not undo. BUILD_CHECKLIST.md §4.
   await prisma.pipeline.update({ where: { id }, data: { deletedAt: new Date() } });
+  await logActivity(session, {
+    action: "pipeline.delete",
+    section: "opportunities",
+    entityType: "Pipeline",
+    entityId: id,
+    summary: `Deleted the ${p.name} pipeline`,
+    meta: { soft: true },
+  });
   revalidatePath("/opportunities");
   return { ok: true };
 }
 
 export async function addStage(pipelineId: string, name: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   if (!name.trim()) return { ok: false, error: "Stage name is required" };
   const max = await prisma.pipelineStage.aggregate({ where: { pipelineId }, _max: { position: true } });
-  await prisma.pipelineStage.create({
+  const stage = await prisma.pipelineStage.create({
     data: { pipelineId, name: name.trim(), position: (max._max.position ?? -1) + 1 },
+    include: { pipeline: { select: { name: true } } },
+  });
+  await logActivity(session, {
+    action: "stage.create",
+    section: "opportunities",
+    entityType: "PipelineStage",
+    entityId: stage.id,
+    summary: `Added the ${name.trim()} stage to the ${stage.pipeline.name} pipeline`,
+    meta: { pipelineId },
   });
   revalidatePath("/opportunities");
   return { ok: true };
 }
 
 export async function renameStage(id: string, name: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   if (!name.trim()) return { ok: false, error: "Stage name is required" };
+  const before = await prisma.pipelineStage.findUnique({ where: { id }, select: { name: true } });
   await prisma.pipelineStage.update({ where: { id }, data: { name: name.trim() } });
+  if (before) {
+    const diff = diffFields(before, { name: name.trim() });
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "stage.update",
+        section: "opportunities",
+        entityType: "PipelineStage",
+        entityId: id,
+        summary: `Renamed the ${before.name} stage to ${name.trim()}`,
+        meta: { changed: diff.changed, before: diff.before, after: diff.after },
+      });
+    }
+  }
   revalidatePath("/opportunities");
   return { ok: true };
 }
 
 export async function deleteStage(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   const stage = await prisma.pipelineStage.findUnique({
     where: { id },
-    select: { legacyStage: true, _count: { select: { opps: true } } },
+    select: { legacyStage: true, name: true, _count: { select: { opps: true } } },
   });
   if (!stage) return { ok: false, error: "Stage not found" };
   if (stage.legacyStage) {
@@ -329,18 +457,35 @@ export async function deleteStage(id: string): Promise<ActionResult> {
   }
   // Soft delete (BUILD_CHECKLIST.md §4/§5) — recoverable, matches deletePipeline above.
   await prisma.pipelineStage.update({ where: { id }, data: { deletedAt: new Date() } });
+  await logActivity(session, {
+    action: "stage.delete",
+    section: "opportunities",
+    entityType: "PipelineStage",
+    entityId: id,
+    summary: `Deleted the ${stage.name} stage`,
+    meta: { soft: true },
+  });
   revalidatePath("/opportunities");
   return { ok: true };
 }
 
 export async function reorderStages(pipelineId: string, orderedIds: string[]): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   await prisma.$transaction(
     orderedIds.map((id, i) =>
       prisma.pipelineStage.update({ where: { id }, data: { position: i } }),
     ),
   );
+  const pipeline = await prisma.pipeline.findUnique({ where: { id: pipelineId }, select: { name: true } });
+  await logActivity(session, {
+    action: "stage.move",
+    section: "opportunities",
+    entityType: "Pipeline",
+    entityId: pipelineId,
+    summary: `Reordered the stages in the ${pipeline?.name ?? "pipeline"} pipeline`,
+    meta: { orderedIds },
+  });
   revalidatePath("/opportunities");
   return { ok: true };
 }
@@ -388,7 +533,10 @@ export async function createOpportunityNote(
   const session = await requireSection("opportunities");
   const parsed = oppNoteSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  const opp = await prisma.opportunity.findUnique({ where: { id: opportunityId }, select: { leadId: true } });
+  const opp = await prisma.opportunity.findUnique({
+    where: { id: opportunityId },
+    select: { leadId: true, name: true },
+  });
   if (!opp) return { ok: false, error: "Opportunity not found" };
 
   // Same @mention parse as ContactNote (contacts-actions.ts) — see the comment there for why
@@ -397,8 +545,21 @@ export async function createOpportunityNote(
   const candidates = await prisma.user.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } });
   const mentionedUserIds = parseMentions(parsed.data.body, candidates);
 
-  await prisma.contactNote.create({
+  const note = await prisma.contactNote.create({
     data: { leadId: opp.leadId, opportunityId, body: parsed.data.body, createdById: session.user.id },
+  });
+  await logActivity(session, {
+    action: "opportunity.note.create",
+    section: "opportunities",
+    entityType: "ContactNote",
+    entityId: note.id,
+    summary: `Added a note on opportunity ${opp.name}`,
+    meta: {
+      opportunityId,
+      leadId: opp.leadId,
+      mentioned: mentionedUserIds.length,
+      body: parsed.data.body.slice(0, 200),
+    },
   });
   revalidatePath("/opportunities");
   revalidatePath(`/contacts/${opp.leadId}`);
@@ -406,19 +567,42 @@ export async function createOpportunityNote(
 }
 
 export async function toggleOpportunityNotePin(id: string): Promise<ActionResult> {
-  await requireSection("opportunities");
-  const note = await prisma.contactNote.findUnique({ where: { id }, select: { pinned: true, opportunityId: true } });
+  const session = await requireSection("opportunities");
+  const note = await prisma.contactNote.findUnique({
+    where: { id },
+    select: { pinned: true, opportunityId: true, opportunity: { select: { name: true } } },
+  });
   if (!note) return { ok: false, error: "Note not found" };
   await prisma.contactNote.update({ where: { id }, data: { pinned: !note.pinned } });
+  const diff = diffFields({ pinned: note.pinned }, { pinned: !note.pinned });
+  await logActivity(session, {
+    action: "opportunity.note.update",
+    section: "opportunities",
+    entityType: "ContactNote",
+    entityId: id,
+    summary: `${note.pinned ? "Unpinned" : "Pinned"} a note on opportunity ${note.opportunity?.name ?? "—"}`,
+    meta: { changed: diff.changed, before: diff.before, after: diff.after, opportunityId: note.opportunityId },
+  });
   if (note.opportunityId) revalidatePath("/opportunities");
   return { ok: true };
 }
 
 export async function deleteOpportunityNote(id: string): Promise<ActionResult> {
-  await requireSection("opportunities");
-  const note = await prisma.contactNote.findUnique({ where: { id }, select: { opportunityId: true, leadId: true } });
+  const session = await requireSection("opportunities");
+  const note = await prisma.contactNote.findUnique({
+    where: { id },
+    select: { opportunityId: true, leadId: true, opportunity: { select: { name: true } } },
+  });
   if (!note) return { ok: false, error: "Note not found" };
   await prisma.contactNote.delete({ where: { id } });
+  await logActivity(session, {
+    action: "opportunity.note.delete",
+    section: "opportunities",
+    entityType: "ContactNote",
+    entityId: id,
+    summary: `Deleted a note on opportunity ${note.opportunity?.name ?? "—"}`,
+    meta: { opportunityId: note.opportunityId, leadId: note.leadId },
+  });
   if (note.opportunityId) revalidatePath("/opportunities");
   revalidatePath(`/contacts/${note.leadId}`);
   return { ok: true };

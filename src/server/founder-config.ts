@@ -3,18 +3,29 @@ import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  coerceAgreementWorkflow,
   coerceBookingRulesConfig,
   coerceCommissionRulesConfig,
+  coerceDailyLogEod,
+  coerceDailyLogTargets,
   coerceGamificationConfig,
+  coerceSavedSignature,
   coerceSectionsConfig,
   coerceSssConfig,
   coerceWorkflowSettings,
+  DEFAULT_AGREEMENT_WORKFLOW,
   DEFAULT_BOOKING_RULES_CONFIG,
   DEFAULT_COMMISSION_RULES_CONFIG,
+  DEFAULT_DAILY_LOG_EOD,
+  DEFAULT_DAILY_LOG_TARGETS,
   DEFAULT_SSS_CONFIG,
   DEFAULT_WORKFLOW_SETTINGS,
+  type AgreementWorkflowConfig,
   type BookingRulesConfig,
   type CommissionRulesConfig,
+  type DailyLogEodConfig,
+  type DailyLogTargets,
+  type SavedSignature,
   type SssConfig,
   type WorkflowSettings,
 } from "@/lib/config-schema";
@@ -39,6 +50,9 @@ export const BOOKING_RULES_KEY = "bookingRulesConfig";
 export const WORKFLOW_SETTINGS_KEY = "workflowSettings";
 export const COMMISSION_RULES_KEY = "commissionRules";
 export const SSS_CONFIG_KEY = "sssConfig";
+export const DAILY_LOG_TARGETS_KEY = "dailyLogTargets";
+export const DAILY_LOG_EOD_KEY = "dailyLogEod";
+export const AGREEMENT_WORKFLOW_KEY = "agreementWorkflow";
 
 export const getSectionsConfig = cache(async (): Promise<SectionsConfig | null> => {
   const row = await prisma.appSetting.findUnique({ where: { key: SECTIONS_KEY } });
@@ -77,6 +91,58 @@ export const getSssConfig = cache(async (): Promise<SssConfig> => {
   const row = await prisma.appSetting.findUnique({ where: { key: SSS_CONFIG_KEY } });
   return row ? coerceSssConfig(row.value) : DEFAULT_SSS_CONFIG;
 });
+
+/** Daily-log per-variant targets — read by the Daily Log timeline to grade each entry. */
+export const getDailyLogTargets = cache(async (): Promise<DailyLogTargets> => {
+  const row = await prisma.appSetting.findUnique({ where: { key: DAILY_LOG_TARGETS_KEY } });
+  return row ? coerceDailyLogTargets(row.value) : DEFAULT_DAILY_LOG_TARGETS;
+});
+
+/**
+ * The founder's stored countersignature, per user. Not a `cache()` read: it is only ever fetched
+ * inside an issue action, and caching a ~500 KB data URL across a request buys nothing.
+ */
+export const savedSignatureKey = (userId: string) => `agreement.signature.${userId}`;
+
+export async function getSavedSignature(userId: string): Promise<SavedSignature | null> {
+  const row = await prisma.appSetting.findUnique({ where: { key: savedSignatureKey(userId) } });
+  return row ? coerceSavedSignature(row.value) : null;
+}
+
+export async function writeSavedSignature(userId: string, sig: SavedSignature): Promise<void> {
+  const key = savedSignatureKey(userId);
+  const value = sig as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+}
+
+export async function clearSavedSignature(userId: string): Promise<void> {
+  await prisma.appSetting.deleteMany({ where: { key: savedSignatureKey(userId) } });
+}
+
+/**
+ * Daily-log EOD rules — read by the submit action (cutoff + amend window), the EOD job and
+ * the notification centre. Ships disabled, so an install with no row behaves exactly as it
+ * did before this engine existed.
+ */
+export const getDailyLogEod = cache(async (): Promise<DailyLogEodConfig> => {
+  const row = await prisma.appSetting.findUnique({ where: { key: DAILY_LOG_EOD_KEY } });
+  return row ? coerceDailyLogEod(row.value) : DEFAULT_DAILY_LOG_EOD;
+});
+
+/** Agreement readiness prompt threshold — read by the agreement-state derivation. */
+export const getAgreementWorkflow = cache(async (): Promise<AgreementWorkflowConfig> => {
+  const row = await prisma.appSetting.findUnique({ where: { key: AGREEMENT_WORKFLOW_KEY } });
+  return row ? coerceAgreementWorkflow(row.value) : DEFAULT_AGREEMENT_WORKFLOW;
+});
+
+export async function writeAgreementWorkflow(config: AgreementWorkflowConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: AGREEMENT_WORKFLOW_KEY },
+    create: { key: AGREEMENT_WORKFLOW_KEY, value },
+    update: { value },
+  });
+}
 
 export async function writeSectionsConfig(config: SectionsConfig): Promise<void> {
   const value = config as unknown as Prisma.InputJsonValue;
@@ -128,6 +194,24 @@ export async function writeSssConfig(config: SssConfig): Promise<void> {
   await prisma.appSetting.upsert({
     where: { key: SSS_CONFIG_KEY },
     create: { key: SSS_CONFIG_KEY, value },
+    update: { value },
+  });
+}
+
+export async function writeDailyLogTargets(config: DailyLogTargets): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: DAILY_LOG_TARGETS_KEY },
+    create: { key: DAILY_LOG_TARGETS_KEY, value },
+    update: { value },
+  });
+}
+
+export async function writeDailyLogEod(config: DailyLogEodConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: DAILY_LOG_EOD_KEY },
+    create: { key: DAILY_LOG_EOD_KEY, value },
     update: { value },
   });
 }

@@ -399,6 +399,182 @@ export function coerceCommissionRulesConfig(value: unknown): CommissionRulesConf
   return parsed.success ? parsed.data : DEFAULT_COMMISSION_RULES_CONFIG;
 }
 
+// ───────────────────────────── saved countersignature ─────────────────────────────
+
+/**
+ * The founder's stored countersignature, so issuing an agreement is one tap instead of redrawing
+ * the same squiggle every time. Kept per-user in AppSetting("agreement.signature.<userId>").
+ *
+ * WHAT IS AND ISN'T REUSED: only the ink. The device our server OBSERVES (IP + User-Agent) is
+ * captured fresh on every issue, and the ISSUED event records `signature: "saved"` plus this
+ * `savedAt` — so the audit trail states plainly that stored ink was stamped at issue time rather
+ * than implying a live draw. `savedDevice` records the session the signature was originally
+ * captured in, which is the other half of that sentence.
+ *
+ * The cap mirrors MAX_SIGNATURE_BYTES (400 KB) in agreement-core.ts, inflated by base64's ~4/3.
+ */
+export const savedSignatureSchema = z.object({
+  dataUrl: z
+    .string()
+    .max(600_000)
+    .refine((v) => v.startsWith("data:image/png;base64,"), "Signature must be a PNG data URL"),
+  savedAt: z.string().min(1),
+  /** StoredDevice from the capture session; re-parsed by readStoredDevice on read. */
+  savedDevice: z.unknown().nullable().optional(),
+});
+
+export type SavedSignature = z.infer<typeof savedSignatureSchema>;
+
+export function coerceSavedSignature(value: unknown): SavedSignature | null {
+  const parsed = savedSignatureSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+// ───────────────────────────── agreement workflow ─────────────────────────────
+
+/**
+ * When the Agreement module should start PROMPTING "Ready to send" for a client. Founder-editable
+ * via AppSetting("agreementWorkflow"), same lazy-default pattern as the configs above. Read by the
+ * agreement-state derivation (`lib/agreement-state.ts` via `server/agreement-state.ts`).
+ *
+ * This is a nudge threshold, NOT a gate: the founder can always draft an agreement for anyone from
+ * the picker regardless of this setting. It only decides which clients get the "Agreement pending"
+ * card / dashboard task before a draft exists.
+ *
+ *   - DEPOSIT — prompt once the deposit is paid (stage DEPOSIT_PAID) or the deal is won.
+ *   - WON     — prompt only when the deal is fully won.
+ *   - EITHER  — prompt at deposit, won, OR "agreed but no deposit yet" (confirmed intention). Default.
+ */
+export const agreementWorkflowSchema = z.object({
+  readiness: z.enum(["DEPOSIT", "WON", "EITHER"]),
+});
+
+export type AgreementWorkflowConfig = z.infer<typeof agreementWorkflowSchema>;
+
+export const DEFAULT_AGREEMENT_WORKFLOW: AgreementWorkflowConfig = {
+  readiness: "EITHER",
+};
+
+export function coerceAgreementWorkflow(value: unknown): AgreementWorkflowConfig {
+  const parsed = agreementWorkflowSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_AGREEMENT_WORKFLOW;
+}
+
+// ───────────────────────────── daily-log targets ─────────────────────────────
+
+/**
+ * Founder-set daily targets for each log variant's HEADLINE metric (calls / appointments /
+ * sessions). Read by the Daily Log timeline to colour each entry's status badge:
+ * hit the target → "On target", well over → "Standout", well under → "Below par".
+ *
+ * A target of 0 means "no target set" — the timeline then falls back to the person's own
+ * rolling average, so the feature works out of the box and only gets sharper once set.
+ */
+const dailyTarget = z.number().int().min(0).max(999);
+
+export const dailyLogTargetsSchema = z.object({
+  DISCOVERY_SPECIALIST: dailyTarget, // discovery calls / day
+  APPOINTMENT_SETTER: dailyTarget, // appointments set / day
+  DELIVERY_COACH: dailyTarget, // sessions delivered / day
+});
+
+export type DailyLogTargets = z.infer<typeof dailyLogTargetsSchema>;
+
+export const DEFAULT_DAILY_LOG_TARGETS: DailyLogTargets = {
+  DISCOVERY_SPECIALIST: 5,
+  APPOINTMENT_SETTER: 3,
+  DELIVERY_COACH: 4,
+};
+
+export function coerceDailyLogTargets(value: unknown): DailyLogTargets {
+  const parsed = dailyLogTargetsSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_DAILY_LOG_TARGETS;
+}
+
+// ───────────────────────── daily-log EOD (end of day) ─────────────────────────
+
+/**
+ * "Every telecaller's log is saved by EOD." Founder-editable via AppSetting("dailyLogEod").
+ * Read by the submit action, the EOD job (`server/daily-log-eod.ts`) and the notification centre.
+ *
+ * Times are MINUTES since IST midnight (0..1439), matching `istMinutesOfDay` in lib/dates.ts —
+ * an hour-only field couldn't express 9:30pm, and IST is a fixed +05:30 with no DST, so the
+ * arithmetic is exact.
+ *
+ * The day already hard-locked at IST midnight before this existed (submitDailyLog stamps
+ * `istToday()`, so a missed day can never be logged late). What this adds is making the deadline
+ * EXPLICIT and making the rule actually happen:
+ *
+ *   nudgeMinutes  — from here, an unlogged member sees a "log before cutoff" notification.
+ *   cutoffMinutes — the deadline. After it, no NEW log for today (see submitDailyLog).
+ *   autoSave      — at cutoff, write what activity we can derive for anyone who didn't log,
+ *                   stamped EOD_AUTO, so no day is ever blank. Needs the cron to tick.
+ *   amendWindowDays — how long an EOD_AUTO row stays amendable by its owner. This is the
+ *                   counterweight to autoSave: auto-capture cannot see every field, so an
+ *                   unamended EOD_AUTO row reads LOW on the Telecaller Pay board. 1 = the
+ *                   member can still fix it the next morning. 0 = auto rows are final.
+ *   founderSummary — after cutoff, Admin's notification centre reports who logged and who didn't.
+ *
+ * `enabled` gates ALL of the above and ships FALSE, like every other engine in this app: it
+ * both writes rows and refuses submissions, so it should never switch itself on at install.
+ */
+const istMinuteOfDay = z.number().int().min(0).max(1439);
+
+export const dailyLogEodSchema = z
+  .object({
+    enabled: z.boolean(),
+    nudgeMinutes: istMinuteOfDay,
+    cutoffMinutes: istMinuteOfDay,
+    autoSave: z.boolean(),
+    amendWindowDays: z.number().int().min(0).max(7),
+    founderSummary: z.boolean(),
+  })
+  // A nudge at or after the cutoff could never fire — the window it belongs to is already shut.
+  .refine((c) => c.nudgeMinutes < c.cutoffMinutes, {
+    message: "The nudge time must be before the cutoff",
+    path: ["nudgeMinutes"],
+  });
+
+export type DailyLogEodConfig = z.infer<typeof dailyLogEodSchema>;
+
+export const DEFAULT_DAILY_LOG_EOD: DailyLogEodConfig = {
+  enabled: false,
+  nudgeMinutes: 18 * 60, // 6:00 PM IST
+  cutoffMinutes: 21 * 60, // 9:00 PM IST
+  autoSave: true,
+  amendWindowDays: 1,
+  founderSummary: true,
+};
+
+export function coerceDailyLogEod(value: unknown): DailyLogEodConfig {
+  const parsed = dailyLogEodSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_DAILY_LOG_EOD;
+}
+
+/** "9:00 PM" for an IST minute-of-day — used by the config UI and the deadline copy. */
+export function formatIstMinutes(minutes: number): string {
+  const h24 = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const suffix = h24 < 12 ? "AM" : "PM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
+}
+
+/** "21:00" — the <input type="time"> encoding for an IST minute-of-day. */
+export function istMinutesToTimeInput(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** Parse an <input type="time"> value back to an IST minute-of-day; null if unparseable. */
+export function timeInputToIstMinutes(value: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
 // ───────────────────────────── SSS (sales) call ─────────────────────────────
 
 /**

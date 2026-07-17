@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
-import { parseDateInput } from "@/lib/dates";
+import { parseDateInput, toDateInputValue } from "@/lib/dates";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /** Weekly funnel snapshot (PRD3 §3.2) - Admin-only, one row per week (Monday). */
@@ -30,7 +31,7 @@ const snapshotSchema = z.object({
 });
 
 export async function saveWeeklySnapshot(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const parsed = snapshotSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
@@ -52,11 +53,35 @@ export async function saveWeeklySnapshot(form: FormData): Promise<ActionResult> 
     workshopAttendees: d.workshopAttendees,
     notes: d.notes || null,
   };
-  await prisma.weeklyFunnelSnapshot.upsert({
+  const before = await prisma.weeklyFunnelSnapshot.findUnique({ where: { weekStart: week } });
+  const row = await prisma.weeklyFunnelSnapshot.upsert({
     where: { weekStart: week },
     update: data,
     create: { weekStart: week, ...data },
   });
+  const label = `week of ${toDateInputValue(week)}`;
+  if (!before) {
+    await logActivity(session, {
+      action: "funnel.snapshot.record",
+      section: "funnel",
+      entityType: "WeeklyFunnelSnapshot",
+      entityId: row.id,
+      summary: `Recorded the funnel snapshot for the ${label}`,
+      meta: { weekStart: toDateInputValue(week), ...data },
+    });
+  } else {
+    const diff = diffFields(before as unknown as Record<string, unknown>, data);
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "funnel.snapshot.update",
+        section: "funnel",
+        entityType: "WeeklyFunnelSnapshot",
+        entityId: row.id,
+        summary: `Updated the funnel snapshot for the ${label}`,
+        meta: { weekStart: toDateInputValue(week), changed: diff.changed, before: diff.before, after: diff.after },
+      });
+    }
+  }
   revalidatePath("/funnel");
   return { ok: true };
 }

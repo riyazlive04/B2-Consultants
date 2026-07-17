@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck, requireCapability } from "@/lib/rbac";
+import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -95,10 +96,21 @@ export async function listAccessRequests(): Promise<AccessRequest[]> {
 }
 
 export async function declineAccessRequest(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("users.manage");
+  const { allowed, denied, session } = await capabilityCheck("users.manage");
   if (!allowed) return denied;
   const queue = await readQueue();
+  const request = queue.find((r) => r.id === id);
   await writeQueue(queue.filter((r) => r.id !== id));
+  if (request) {
+    await logActivity(session, {
+      action: "access.request.reject",
+      section: "people",
+      entityType: "AccessRequest",
+      entityId: id,
+      summary: `Declined ${request.name}'s access request`,
+      meta: { email: request.email, role: request.role },
+    });
+  }
   revalidatePath("/people");
   return { ok: true };
 }

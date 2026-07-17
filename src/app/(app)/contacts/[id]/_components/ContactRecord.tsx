@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import type { CustomFieldDefinition } from "@prisma/client";
 import type { ContactDetail } from "@/server/contacts-metrics";
+import type { AgreementSummary } from "@/lib/agreement-state";
+import { AgreementTaskCard } from "@/app/(app)/agreements/_components/AgreementTaskCard";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Modal } from "@/components/ui/Modal";
 import { Field, TextInput, Select, TextArea, SubmitButton, FormError } from "@/components/ui/form";
@@ -49,12 +51,14 @@ export default function ContactRecord({
   companies,
   allTags,
   customFields,
+  agreement,
 }: {
   contact: ContactDetail;
   owners: { id: string; name: string }[];
   companies: { id: string; name: string }[];
   allTags: string[];
   customFields: CustomFieldDefinition[];
+  agreement: AgreementSummary;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -133,6 +137,9 @@ export default function ContactRecord({
               <Row label="Created"><DateText date={contact.createdAt} /></Row>
             </div>
           </Card>
+
+          {/* Agreement — the next action on this contract, wherever it currently stands. */}
+          <AgreementTaskCard summary={agreement} />
 
           {/* Tags */}
           <Card title="Tags">

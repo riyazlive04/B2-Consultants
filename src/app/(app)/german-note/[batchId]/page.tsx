@@ -69,7 +69,7 @@ export default async function GnBatchPage({ params }: { params: { batchId: strin
                   <CommunityFeed
                     batchId={batch.id}
                     posts={batch.feed}
-                    canPost={!isArchived}
+                    canPost={!isArchived && batch.canPost}
                     candidates={batch.mentionCandidates}
                     placeholder="Ask your batch or tutor something…"
                   />

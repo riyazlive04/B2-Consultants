@@ -7,6 +7,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireSession } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -64,7 +65,7 @@ function derivedDuration(level: (typeof B2_LEVELS)[number], start: Date) {
 }
 
 export async function createStudent(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const s = studentSchema.safeParse(Object.fromEntries(form));
   const e = enrollmentSchema.safeParse(Object.fromEntries(form));
   if (!s.success) return { ok: false, error: firstError(s.error) };
@@ -105,47 +106,80 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
   if (ids.length) {
     await prisma.income.updateMany({ where: { id: { in: ids } }, data: { studentId: student.id } });
   }
+  await logActivity(session, {
+    action: "student.create",
+    section: "students",
+    entityType: "Student",
+    entityId: student.id,
+    summary: `Enrolled ${student.fullName} — ${e.data.programLevel}`,
+    meta: {
+      programLevel: e.data.programLevel,
+      enrollmentDate: e.data.enrollmentDate,
+      assignedCoach: e.data.assignedCoach || "Karthick",
+      incomeEntriesLinked: ids.length,
+    },
+  });
   revalidatePath("/students");
   revalidatePath("/finance");
   return { ok: true };
 }
 
 export async function updateStudent(id: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const s = studentSchema.safeParse(Object.fromEntries(form));
   if (!s.success) return { ok: false, error: firstError(s.error) };
-  await prisma.student.update({
-    where: { id },
-    data: {
-      fullName: s.data.fullName,
-      email: s.data.email || null,
-      phone: s.data.phone || null,
-      industry: s.data.industry || null,
-      targetRole: s.data.targetRole || null,
-      leadSource: s.data.leadSource || null,
-      internalNotes: s.data.internalNotes || null,
-    },
-  });
+  const data = {
+    fullName: s.data.fullName,
+    email: s.data.email || null,
+    phone: s.data.phone || null,
+    industry: s.data.industry || null,
+    targetRole: s.data.targetRole || null,
+    leadSource: s.data.leadSource || null,
+    internalNotes: s.data.internalNotes || null,
+  };
+  const before = await prisma.student.findUnique({ where: { id } });
+  await prisma.student.update({ where: { id }, data });
+  const diff = before
+    ? diffFields<Record<string, unknown>>(before, data)
+    : { changed: [], before: {}, after: {} };
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "student.update",
+      section: "students",
+      entityType: "Student",
+      entityId: id,
+      summary: `Updated ${data.fullName} — changed ${diff.changed.join(", ")}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   revalidatePath("/students");
   return { ok: true };
 }
 
 export async function deleteStudent(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   await prisma.income.updateMany({ where: { studentId: id }, data: { studentId: null } });
-  await prisma.student.delete({ where: { id } });
+  const student = await prisma.student.delete({ where: { id } });
+  await logActivity(session, {
+    action: "student.delete",
+    section: "students",
+    entityType: "Student",
+    entityId: id,
+    summary: `Deleted ${student.fullName}'s student record`,
+    meta: { email: student.email, phone: student.phone },
+  });
   revalidatePath("/students");
   return { ok: true };
 }
 
 /** Upgrade path (Solo → Guided etc.): SAME student, NEW enrollment (CONTEXT §7). */
 export async function addEnrollment(studentId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const e = enrollmentSchema.safeParse(Object.fromEntries(form));
   if (!e.success) return { ok: false, error: firstError(e.error) };
   const start = parseDateInput(e.data.enrollmentDate);
   const { duration, programEndDate } = derivedDuration(e.data.programLevel, start);
-  await prisma.enrollment.create({
+  const enrollment = await prisma.enrollment.create({
     data: {
       studentId,
       programLevel: e.data.programLevel,
@@ -159,6 +193,19 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
       closerId: e.data.closerId || null,
       milestoneLogs: { create: { newMilestone: "ONBOARDING" } },
     },
+    include: { student: { select: { fullName: true } } },
+  });
+  await logActivity(session, {
+    action: "enrollment.create",
+    section: "students",
+    entityType: "Enrollment",
+    entityId: enrollment.id,
+    summary: `Added a ${e.data.programLevel} enrollment for ${enrollment.student.fullName}`,
+    meta: {
+      programLevel: e.data.programLevel,
+      enrollmentDate: e.data.enrollmentDate,
+      assignedCoach: e.data.assignedCoach || "Karthick",
+    },
   });
   revalidatePath("/students");
   return { ok: true };
@@ -167,14 +214,32 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
 /** Set / change the L3 closer (sales-call rep) on an enrollment — the third leg of the
  *  commission split. An empty id clears it. */
 export async function setEnrollmentCloser(enrollmentId: string, closerId: string): Promise<ActionResult> {
-  await requireAdmin();
-  const enrollment = await prisma.enrollment.findUnique({ where: { id: enrollmentId }, select: { id: true } });
+  const session = await requireAdmin();
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { id: true, closerId: true, student: { select: { fullName: true } } },
+  });
   if (!enrollment) return { ok: false, error: "Enrollment not found" };
+  let closerName: string | null = null;
   if (closerId) {
-    const user = await prisma.user.findUnique({ where: { id: closerId }, select: { id: true } });
+    const user = await prisma.user.findUnique({ where: { id: closerId }, select: { id: true, name: true } });
     if (!user) return { ok: false, error: "Closer not found" };
+    closerName = user.name;
   }
   await prisma.enrollment.update({ where: { id: enrollmentId }, data: { closerId: closerId || null } });
+  const diff = diffFields<Record<string, unknown>>({ closerId: enrollment.closerId }, { closerId: closerId || null });
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "enrollment.assign",
+      section: "students",
+      entityType: "Enrollment",
+      entityId: enrollmentId,
+      summary: closerName
+        ? `Set ${closerName} as the closer on ${enrollment.student.fullName}'s enrollment`
+        : `Cleared the closer on ${enrollment.student.fullName}'s enrollment`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after, closerName },
+    });
+  }
   revalidatePath("/students");
   return { ok: true };
 }
@@ -182,15 +247,26 @@ export async function setEnrollmentCloser(enrollmentId: string, closerId: string
 const statusSchema = z.enum(["ACTIVE", "COMPLETED", "DROPPED", "PAUSED"]);
 
 export async function setEnrollmentStatus(id: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const status = statusSchema.safeParse(form.get("status"));
   if (!status.success) return { ok: false, error: "Invalid status" };
-  const existing = await prisma.enrollment.findUnique({ where: { id } });
+  const existing = await prisma.enrollment.findUnique({
+    where: { id },
+    include: { student: { select: { fullName: true } } },
+  });
   if (!existing) return { ok: false, error: "Enrollment not found" };
   if (existing.status !== status.data) {
     await prisma.enrollment.update({
       where: { id },
       data: { status: status.data, statusChangedAt: new Date() },
+    });
+    await logActivity(session, {
+      action: "enrollment.update",
+      section: "students",
+      entityType: "Enrollment",
+      entityId: id,
+      summary: `Marked ${existing.student.fullName}'s ${existing.programLevel} enrollment ${status.data}`,
+      meta: { changed: ["status"], before: { status: existing.status }, after: { status: status.data } },
     });
   }
   revalidatePath("/students");
@@ -222,28 +298,30 @@ export async function updateTracker(enrollmentId: string, form: FormData): Promi
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
 
-  const existing = await prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+  const existing = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    include: { student: { select: { fullName: true } } },
+  });
   if (!existing) return { ok: false, error: "Enrollment not found" };
 
+  const data = {
+    lastSessionDate: d.lastSessionDate?.trim() ? parseDateInput(d.lastSessionDate) : null,
+    // A blank counter box means "leave it" — never silently reset audited
+    // progress to 0 (these feed journey XP and the at-risk radar).
+    totalSessionsCompleted: d.totalSessionsCompleted?.trim() ? parseInt(d.totalSessionsCompleted, 10) : existing.totalSessionsCompleted,
+    totalSessionsPlanned: d.totalSessionsPlanned?.trim() ? parseInt(d.totalSessionsPlanned, 10) : existing.totalSessionsPlanned,
+    lastTaskAssigned: d.lastTaskAssigned || null,
+    lastTaskCompleted: d.lastTaskCompleted || null,
+    applicationsSubmitted: d.applicationsSubmitted?.trim() ? parseInt(d.applicationsSubmitted, 10) : existing.applicationsSubmitted,
+    interviewsReceived: d.interviewsReceived?.trim() ? parseInt(d.interviewsReceived, 10) : existing.interviewsReceived,
+    currentMilestone: d.currentMilestone,
+    signalColour: d.signalColour || null,
+    signalNotes: d.signalNotes || null,
+    nextCheckInDate: d.nextCheckInDate?.trim() ? parseDateInput(d.nextCheckInDate) : null,
+  };
+
   await prisma.$transaction(async (tx) => {
-    await tx.enrollment.update({
-      where: { id: enrollmentId },
-      data: {
-        lastSessionDate: d.lastSessionDate?.trim() ? parseDateInput(d.lastSessionDate) : null,
-        // A blank counter box means "leave it" — never silently reset audited
-        // progress to 0 (these feed journey XP and the at-risk radar).
-        totalSessionsCompleted: d.totalSessionsCompleted?.trim() ? parseInt(d.totalSessionsCompleted, 10) : existing.totalSessionsCompleted,
-        totalSessionsPlanned: d.totalSessionsPlanned?.trim() ? parseInt(d.totalSessionsPlanned, 10) : existing.totalSessionsPlanned,
-        lastTaskAssigned: d.lastTaskAssigned || null,
-        lastTaskCompleted: d.lastTaskCompleted || null,
-        applicationsSubmitted: d.applicationsSubmitted?.trim() ? parseInt(d.applicationsSubmitted, 10) : existing.applicationsSubmitted,
-        interviewsReceived: d.interviewsReceived?.trim() ? parseInt(d.interviewsReceived, 10) : existing.interviewsReceived,
-        currentMilestone: d.currentMilestone,
-        signalColour: d.signalColour || null,
-        signalNotes: d.signalNotes || null,
-        nextCheckInDate: d.nextCheckInDate?.trim() ? parseDateInput(d.nextCheckInDate) : null,
-      },
-    });
+    await tx.enrollment.update({ where: { id: enrollmentId }, data });
 
     // Milestone changed → append immutable history (PRD2 §4.4)
     if (existing.currentMilestone !== d.currentMilestone) {
@@ -272,6 +350,18 @@ export async function updateTracker(enrollmentId: string, form: FormData): Promi
       });
     }
   });
+
+  const diff = diffFields<Record<string, unknown>>(existing, data);
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "tracker.update",
+      section: "students",
+      entityType: "Enrollment",
+      entityId: enrollmentId,
+      summary: `Updated ${existing.student.fullName}'s tracker — changed ${diff.changed.join(", ")}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after, milestoneNote: d.milestoneNote || null },
+    });
+  }
   revalidatePath("/students");
   return { ok: true };
 }
@@ -289,10 +379,15 @@ const parseSprintNumber = (s: string | undefined | null): number | null => {
 
 /** Create the empty week plan for a Guided/Elite enrollment (idempotent). */
 export async function generateSprintPlan(enrollmentId: string): Promise<ActionResult> {
-  await requireAdminOrHead();
+  const session = await requireAdminOrHead();
   const e = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
-    select: { programLevel: true, enrollmentDate: true, sprintWeeks: { select: { id: true }, take: 1 } },
+    select: {
+      programLevel: true,
+      enrollmentDate: true,
+      student: { select: { fullName: true } },
+      sprintWeeks: { select: { id: true }, take: 1 },
+    },
   });
   if (!e) return { ok: false, error: "Enrollment not found" };
   if (e.programLevel !== "GUIDED" && e.programLevel !== "ELITE") {
@@ -310,6 +405,16 @@ export async function generateSprintPlan(enrollmentId: string): Promise<ActionRe
       weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
       return { enrollmentId, weekIndex: i + 1, weekStart, weekEnd };
     }),
+  });
+  // The weeks have no id worth pointing at individually — the enrollment is the entity
+  // the founder would click through to.
+  await logActivity(session, {
+    action: "sprintplan.create",
+    section: "students",
+    entityType: "Enrollment",
+    entityId: enrollmentId,
+    summary: `Generated a ${weeks}-week sprint plan for ${e.student.fullName}`,
+    meta: { programLevel: e.programLevel, weeks },
   });
   revalidatePath("/students");
   return { ok: true };
@@ -329,21 +434,33 @@ export async function saveSprintWeek(weekId: string, form: FormData): Promise<Ac
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
 
-  const week = await prisma.sprintWeek.findUnique({ where: { id: weekId }, select: { id: true } });
+  const week = await prisma.sprintWeek.findUnique({
+    where: { id: weekId },
+    include: { enrollment: { select: { student: { select: { fullName: true } } } } },
+  });
   if (!week) return { ok: false, error: "Sprint week not found" };
 
-  await prisma.sprintWeek.update({
-    where: { id: weekId },
-    data: {
-      target: d.target || null,
-      targetNumeric: parseSprintNumber(d.target),
-      actual: d.actual || null,
-      actualNumeric: parseSprintNumber(d.actual),
-      status: d.status,
-      note: d.note || null,
-      enteredById: session.user.id,
-    },
-  });
+  const data = {
+    target: d.target || null,
+    targetNumeric: parseSprintNumber(d.target),
+    actual: d.actual || null,
+    actualNumeric: parseSprintNumber(d.actual),
+    status: d.status,
+    note: d.note || null,
+    enteredById: session.user.id,
+  };
+  await prisma.sprintWeek.update({ where: { id: weekId }, data });
+  const diff = diffFields<Record<string, unknown>>(week, data);
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "sprintweek.update",
+      section: "students",
+      entityType: "SprintWeek",
+      entityId: weekId,
+      summary: `Saved week ${week.weekIndex} of ${week.enrollment.student.fullName}'s sprint plan — ${d.status}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   revalidatePath("/students");
   return { ok: true };
 }
@@ -360,11 +477,11 @@ const satisfactionSchema = z.object({
 });
 
 export async function addSatisfactionScore(studentId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const parsed = satisfactionSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
-  await prisma.satisfactionScore.create({
+  const score = await prisma.satisfactionScore.create({
     data: {
       studentId,
       date: parseDateInput(d.date),
@@ -374,6 +491,20 @@ export async function addSatisfactionScore(studentId: string, form: FormData): P
       outcomeAchieved: d.outcomeAchieved,
       notes: d.notes || null,
     },
+    include: { student: { select: { fullName: true } } },
+  });
+  await logActivity(session, {
+    action: "satisfaction.create",
+    section: "students",
+    entityType: "SatisfactionScore",
+    entityId: score.id,
+    summary: `Recorded ${score.student.fullName}'s satisfaction ${d.satisfactionScore}/10, NPS ${d.npsScore}/10`,
+    meta: {
+      satisfactionScore: d.satisfactionScore,
+      npsScore: d.npsScore,
+      outcomeAchieved: d.outcomeAchieved,
+      testimonialReceived: d.testimonialReceived === "on",
+    },
   });
   revalidatePath("/students");
   return { ok: true };
@@ -382,11 +513,22 @@ export async function addSatisfactionScore(studentId: string, form: FormData): P
 // ── Income ↔ student link (CONTEXT §7 manual link picker) ──────
 
 export async function linkIncomeToStudent(incomeId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const studentId = String(form.get("studentId") ?? "");
-  await prisma.income.update({
+  const income = await prisma.income.update({
     where: { id: incomeId },
     data: { studentId: studentId || null },
+    include: { student: { select: { fullName: true } } },
+  });
+  await logActivity(session, {
+    action: "income.assign",
+    section: "students",
+    entityType: "Income",
+    entityId: incomeId,
+    summary: income.student
+      ? `Linked the income entry for ${income.studentName} to ${income.student.fullName}`
+      : `Unlinked the income entry for ${income.studentName} from its student`,
+    meta: { studentId: studentId || null, studentName: income.studentName },
   });
   revalidatePath("/students");
   revalidatePath("/finance");
@@ -417,7 +559,7 @@ const studentLoginSchema = z.object({
 
 /** Create a portal login for a student and link it. The account sees ONLY /my-journey + CV check. */
 export async function createStudentLogin(studentId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const parsed = studentLoginSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -445,6 +587,15 @@ export async function createStudentLogin(studentId: string, form: FormData): Pro
       }),
       prisma.student.update({ where: { id: studentId }, data: { userId: res.user.id } }),
     ]);
+    // The chosen password is never recorded — only that access now exists, and for whom.
+    await logActivity(session, {
+      action: "student.login.create",
+      section: "students",
+      entityType: "User",
+      entityId: res.user.id,
+      summary: `Created a portal login for ${student.fullName} (${d.email})`,
+      meta: { email: d.email, studentId },
+    });
   } catch (e) {
     if (createdUserId) {
       await prisma.user.delete({ where: { id: createdUserId } }).catch(() => {});
@@ -459,11 +610,19 @@ export async function createStudentLogin(studentId: string, form: FormData): Pro
 
 /** Remove a student's portal access entirely (account + sessions). The student record stays. */
 export async function revokeStudentLogin(studentId: string): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const student = await prisma.student.findUnique({ where: { id: studentId } });
   if (!student?.userId) return { ok: false, error: "This student has no portal login" };
   // Cascades sessions/accounts; Student.userId is ON DELETE SET NULL.
   await prisma.user.delete({ where: { id: student.userId } });
+  await logActivity(session, {
+    action: "student.login.revoke",
+    section: "students",
+    entityType: "User",
+    entityId: student.userId,
+    summary: `Revoked ${student.fullName}'s portal login`,
+    meta: { studentId },
+  });
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/people");
   return { ok: true };

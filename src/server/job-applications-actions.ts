@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -37,15 +38,18 @@ const applicationSchema = z.object({
 });
 
 export async function createJobApplication(enrollmentId: string, form: FormData): Promise<ActionResult> {
-  await requireAdminOrHead();
+  const session = await requireAdminOrHead();
   const parsed = applicationSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
 
-  const enrollment = await prisma.enrollment.findUnique({ where: { id: enrollmentId }, select: { id: true } });
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { id: true, student: { select: { fullName: true } } },
+  });
   if (!enrollment) return { ok: false, error: "Enrollment not found" };
 
-  await prisma.jobApplication.create({
+  const application = await prisma.jobApplication.create({
     data: {
       enrollmentId,
       company: d.company,
@@ -57,26 +61,61 @@ export async function createJobApplication(enrollmentId: string, form: FormData)
       notes: d.notes || null,
     },
   });
-  revalidatePath("/students");
-  return { ok: true };
-}
-
-export async function updateJobApplicationStatus(id: string, status: string): Promise<ActionResult> {
-  await requireAdminOrHead();
-  if (!(STATUSES as readonly string[]).includes(status)) return { ok: false, error: "Invalid status" };
-  const app = await prisma.jobApplication.findUnique({ where: { id }, select: { id: true } });
-  if (!app) return { ok: false, error: "Application not found" };
-  await prisma.jobApplication.update({
-    where: { id },
-    data: { status: status as (typeof STATUSES)[number], statusAt: new Date() },
+  await logActivity(session, {
+    action: "job-application.create",
+    section: "students",
+    entityType: "JobApplication",
+    entityId: application.id,
+    summary: `Added a ${application.role} application to ${application.company} for ${enrollment.student.fullName}`,
+    meta: { enrollmentId, status: application.status, appliedAt: d.appliedAt },
   });
   revalidatePath("/students");
   return { ok: true };
 }
 
+export async function updateJobApplicationStatus(id: string, status: string): Promise<ActionResult> {
+  const session = await requireAdminOrHead();
+  if (!(STATUSES as readonly string[]).includes(status)) return { ok: false, error: "Invalid status" };
+  const app = await prisma.jobApplication.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      company: true,
+      enrollment: { select: { student: { select: { fullName: true } } } },
+    },
+  });
+  if (!app) return { ok: false, error: "Application not found" };
+  await prisma.jobApplication.update({
+    where: { id },
+    data: { status: status as (typeof STATUSES)[number], statusAt: new Date() },
+  });
+  const diff = diffFields({ status: app.status }, { status: status as (typeof STATUSES)[number] });
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "job-application.update",
+      section: "students",
+      entityType: "JobApplication",
+      entityId: id,
+      summary: `Moved ${app.enrollment.student.fullName}'s ${app.company} application to ${status.toLowerCase()}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  revalidatePath("/students");
+  return { ok: true };
+}
+
 export async function deleteJobApplication(id: string): Promise<ActionResult> {
-  await requireAdminOrHead();
-  await prisma.jobApplication.delete({ where: { id } });
+  const session = await requireAdminOrHead();
+  const application = await prisma.jobApplication.delete({ where: { id } });
+  await logActivity(session, {
+    action: "job-application.delete",
+    section: "students",
+    entityType: "JobApplication",
+    entityId: id,
+    summary: `Deleted the ${application.role} application to ${application.company}`,
+    meta: { enrollmentId: application.enrollmentId, status: application.status },
+  });
   revalidatePath("/students");
   return { ok: true };
 }

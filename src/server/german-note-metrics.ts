@@ -17,6 +17,10 @@ import type { AppRole } from "@/lib/rbac";
 export type GnAccess = {
   isAdmin: boolean;
   isTutor: boolean;
+  /** HEAD: sees every batch and the community, but writes nothing. `isParticipant`
+   *  is true so the feed loads, so it can no longer stand in for "may post" — the
+   *  post/comment/like paths must check `!isViewer` alongside it. */
+  isViewer: boolean;
   isParticipant: boolean;
   memberBatchIds: string[];
   tutorBatchIds: string[];
@@ -170,6 +174,8 @@ export type GnBatchDetail = {
   notes: string | null;
   tutorName: string | null;
   canManage: boolean;
+  /** false for a read-only viewer (HEAD), who can open any batch but writes nothing */
+  canPost: boolean;
   members: { id: string; fullName: string }[];
   mentionCandidates: GnMentionCandidate[];
   classroom: GnSection[];
@@ -180,15 +186,41 @@ export type GnBatchDetail = {
   feed: GnFeedPost[];
 };
 
+/**
+ * The LMS at a glance, for the ADMIN/HEAD home tile.
+ *
+ * Deliberately unscoped — this is an oversight read, so it counts every ACTIVE batch
+ * rather than the viewer's own. Callers must gate it by role; it does no checking.
+ */
+export const getGnHomeSnapshot = cache(async () => {
+  const [activeBatches, learners, nextEvent] = await Promise.all([
+    prisma.gnBatch.count({ where: { status: "ACTIVE" } }),
+    prisma.gnBatchMember.count({ where: { batch: { status: "ACTIVE" } } }),
+    prisma.gnEvent.findFirst({
+      where: { startsAt: { gte: new Date() }, batch: { status: "ACTIVE" } },
+      orderBy: { startsAt: "asc" },
+      select: { title: true, startsAt: true, batch: { select: { name: true } } },
+    }),
+  ]);
+  return { activeBatches, learners, nextEvent };
+});
+
 export const getGnAccess = cache(async (role: AppRole, userId: string): Promise<GnAccess> => {
   if (role === "ADMIN") {
-    return { isAdmin: true, isTutor: false, isParticipant: true, memberBatchIds: [], tutorBatchIds: [] };
+    return { isAdmin: true, isTutor: false, isViewer: false, isParticipant: true, memberBatchIds: [], tutorBatchIds: [] };
+  }
+  // HEAD oversees the LMS without being in it: every batch, read-only. No `isAdmin`,
+  // because that flag also carries manage + moderate rights (canManage, canPin,
+  // canModerate) — a Head must not be able to delete a student's post.
+  if (role === "HEAD") {
+    return { isAdmin: false, isTutor: false, isViewer: true, isParticipant: true, memberBatchIds: [], tutorBatchIds: [] };
   }
   if (role === "TUTOR") {
     const batches = await prisma.gnBatch.findMany({ where: { tutorId: userId }, select: { id: true } });
     return {
       isAdmin: false,
       isTutor: true,
+      isViewer: false,
       isParticipant: true,
       memberBatchIds: [],
       tutorBatchIds: batches.map((b) => b.id),
@@ -202,13 +234,14 @@ export const getGnAccess = cache(async (role: AppRole, userId: string): Promise<
     return {
       isAdmin: false,
       isTutor: false,
+      isViewer: false,
       // global feed needs a live cohort; archived-batch alumni keep batch access only
       isParticipant: memberships.some((m) => m.batch.status === "ACTIVE"),
       memberBatchIds: memberships.map((m) => m.batchId),
       tutorBatchIds: [],
     };
   }
-  return { isAdmin: false, isTutor: false, isParticipant: false, memberBatchIds: [], tutorBatchIds: [] };
+  return { isAdmin: false, isTutor: false, isViewer: false, isParticipant: false, memberBatchIds: [], tutorBatchIds: [] };
 });
 
 /** Can this viewer delete the given post/comment? Author, Admin, or tutor of the post's batch. */
@@ -448,7 +481,7 @@ export const getGnLeaderboard = cache(async (viewerId: string): Promise<GnLeader
 /** Overview page: the viewer's batches + the global community feed + leaderboard. */
 export const getGnOverview = cache(async (role: AppRole, userId: string) => {
   const access = await getGnAccess(role, userId);
-  if (!access.isAdmin && !access.isTutor && access.memberBatchIds.length === 0) {
+  if (!access.isAdmin && !access.isViewer && !access.isTutor && access.memberBatchIds.length === 0) {
     return {
       access,
       batches: [] as GnBatchCard[],
@@ -459,12 +492,12 @@ export const getGnOverview = cache(async (role: AppRole, userId: string) => {
       mentionCandidates: [] as GnMentionCandidate[],
     };
   }
-  const where = access.isAdmin
+  const where = access.isAdmin || access.isViewer
     ? {}
     : access.isTutor
       ? { tutorId: userId }
       : { id: { in: access.memberBatchIds } };
-  const isLearner = !access.isAdmin && !access.isTutor;
+  const isLearner = !access.isAdmin && !access.isViewer && !access.isTutor;
   const [batches, feed, leaderboard, mentionCandidates, myWatches, upcoming] = await Promise.all([
     prisma.gnBatch.findMany({
       where,
@@ -495,7 +528,8 @@ export const getGnOverview = cache(async (role: AppRole, userId: string) => {
     batches: batches.map((b) => batchToCard(b, isLearner ? (watchedByBatch.get(b.id) ?? 0) : null)),
     feed,
     leaderboard,
-    levelProgress: access.isParticipant ? gnLevelProgress(mePoints) : null,
+    // A viewer has no cohort of their own, so a personal level bar would read 0/…
+    levelProgress: access.isParticipant && !access.isViewer ? gnLevelProgress(mePoints) : null,
     upcomingEvents: upcoming.map((e): GnEventRow => ({
       id: e.id,
       batchId: e.batchId,
@@ -540,7 +574,7 @@ export const getGnBatchDetail = cache(
     if (!batch) return null;
     const isTutorOfBatch = batch.tutorId === userId;
     const isMember = access.memberBatchIds.includes(batchId);
-    if (!access.isAdmin && !isTutorOfBatch && !isMember) return null;
+    if (!access.isAdmin && !access.isViewer && !isTutorOfBatch && !isMember) return null;
 
     const [feed, mentionCandidates] = await Promise.all([
       loadFeed({ batchId, batchTutorId: batch.tutorId }, userId, access),
@@ -592,6 +626,8 @@ export const getGnBatchDetail = cache(
       notes: batch.notes,
       tutorName: batch.tutor?.name ?? null,
       canManage: access.isAdmin || isTutorOfBatch,
+      // reaching here already proves admin / viewer / tutor-of-batch / member
+      canPost: !access.isViewer,
       members: batch.members.map((m) => ({ id: m.id, fullName: m.student.fullName })),
       mentionCandidates,
       classroom: classroom.filter((s) => s.recordings.length > 0 || s.id !== null),

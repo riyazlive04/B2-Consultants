@@ -213,6 +213,25 @@ export const AGREEMENT_STATUS_LABELS = {
 
 export type AgreementStatusKey = keyof typeof AGREEMENT_STATUS_LABELS;
 
+/**
+ * The status as it actually stands, not as it was last written.
+ *
+ * `EXPIRED` is never stored: nothing writes it, because a TTL elapsing is not an event anyone is
+ * around to record. It was only ever computed on the public token path (`loadAgreementByToken`),
+ * which meant the founder's own list happily showed "Awaiting signature" for a link that had been
+ * dead for a week. Every founder-facing surface reads the status through this.
+ */
+export function effectiveAgreementStatus(row: {
+  status: string;
+  expiresAt: Date | string | null;
+}): AgreementStatusKey {
+  const s = row.status as AgreementStatusKey;
+  if (s !== "SENT" && s !== "VIEWED") return s;
+  if (!row.expiresAt) return s;
+  const at = typeof row.expiresAt === "string" ? Date.parse(row.expiresAt) : row.expiresAt.getTime();
+  return Number.isFinite(at) && at <= Date.now() ? "EXPIRED" : s;
+}
+
 export function agreementStatusTone(s: AgreementStatusKey): "good" | "warn" | "bad" | "muted" {
   switch (s) {
     case "SIGNED":

@@ -5,7 +5,15 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
 import { getTodayInrPerEur } from "@/lib/fx";
-import { majorStringToMinor } from "@/lib/format";
+import {
+  majorStringToMinor,
+  minorToMajorString,
+  formatInrMinor,
+  formatEurMinor,
+  formatMonth,
+} from "@/lib/format";
+import { PAYOUT_STATUS_LABELS } from "@/lib/labels";
+import { logActivity, diffFields } from "./activity-log";
 
 /** Telecaller Pay is Admin-only (Ameen). Every action re-checks. */
 
@@ -48,6 +56,49 @@ function requireSomeAmount(d: z.infer<typeof payoutSchema>): string | null {
   return null;
 }
 
+type PayoutAmounts = {
+  teamProfileId: string;
+  month: Date;
+  bonusInrMinor: bigint;
+  bonusEurMinor: bigint;
+  commInrMinor: bigint;
+  commEurMinor: bigint;
+  reason: string;
+  status: string;
+};
+
+/** "bonus ₹5,000, commission €120" — what was actually paid, for the feed sentence. */
+function amountPhrase(p: PayoutAmounts): string {
+  const money = (inr: bigint, eur: bigint) =>
+    [inr ? formatInrMinor(inr) : null, eur ? formatEurMinor(eur) : null].filter(Boolean).join(" + ");
+  const bonus = money(p.bonusInrMinor, p.bonusEurMinor);
+  const comm = money(p.commInrMinor, p.commEurMinor);
+  return [bonus ? `bonus ${bonus}` : null, comm ? `commission ${comm}` : null].filter(Boolean).join(", ");
+}
+
+/** BigInt and Date have no JSON representation — the diff and meta compare plain strings instead. */
+function payoutShape(p: PayoutAmounts) {
+  return {
+    teamProfileId: p.teamProfileId,
+    month: p.month.toISOString().slice(0, 10),
+    bonusInr: minorToMajorString(p.bonusInrMinor),
+    bonusEur: minorToMajorString(p.bonusEurMinor),
+    commInr: minorToMajorString(p.commInrMinor),
+    commEur: minorToMajorString(p.commEurMinor),
+    reason: p.reason,
+    status: p.status,
+  };
+}
+
+const PAYOUT_FIELD_LABELS: Record<string, string> = {
+  teamProfileId: "Telecaller", month: "Month", bonusInr: "Bonus (INR)", bonusEur: "Bonus (EUR)",
+  commInr: "Commission (INR)", commEur: "Commission (EUR)", reason: "Reason", status: "Status",
+};
+
+function fieldList(changed: string[]): string {
+  return changed.map((k) => PAYOUT_FIELD_LABELS[k] ?? k).join(", ");
+}
+
 export async function createPayout(form: FormData): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("rewards.approve");
   if (!allowed) return denied;
@@ -62,7 +113,7 @@ export async function createPayout(form: FormData): Promise<ActionResult> {
   if (!profile) return { ok: false, error: "That telecaller no longer exists" };
 
   const fx = await getTodayInrPerEur();
-  await prisma.telecallerPayout.create({
+  const row = await prisma.telecallerPayout.create({
     data: {
       teamProfileId: d.teamProfileId,
       month: monthToDate(d.month),
@@ -76,12 +127,22 @@ export async function createPayout(form: FormData): Promise<ActionResult> {
       enteredById: session.user.id,
     },
   });
+
+  await logActivity(session, {
+    action: "payout.create",
+    section: "telecaller",
+    entityType: "TelecallerPayout",
+    entityId: row.id,
+    summary: `Recorded a ${PAYOUT_STATUS_LABELS[d.status].toLowerCase()} ${formatMonth(row.month)} payout for ${profile.fullName} — ${amountPhrase(row)}`,
+    meta: { ...payoutShape(row), teamProfile: profile.fullName, fxRateUsed: String(fx.rate) },
+  });
+
   revalidatePath("/telecaller");
   return { ok: true };
 }
 
 export async function updatePayout(id: string, form: FormData): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("rewards.approve");
+  const { allowed, denied, session } = await capabilityCheck("rewards.approve");
   if (!allowed) return denied;
   const parsed = payoutSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -89,39 +150,83 @@ export async function updatePayout(id: string, form: FormData): Promise<ActionRe
   const amountError = requireSomeAmount(d);
   if (amountError) return { ok: false, error: amountError };
 
-  const existing = await prisma.telecallerPayout.findUnique({ where: { id } });
+  const existing = await prisma.telecallerPayout.findUnique({
+    where: { id },
+    include: { teamProfile: { select: { fullName: true } } },
+  });
   if (!existing) return { ok: false, error: "Payout not found" };
 
-  await prisma.telecallerPayout.update({
-    where: { id },
-    data: {
-      teamProfileId: d.teamProfileId,
-      month: monthToDate(d.month),
-      bonusInrMinor: minor(d.bonusInr),
-      bonusEurMinor: minor(d.bonusEur),
-      commInrMinor: minor(d.commInr),
-      commEurMinor: minor(d.commEur),
-      // keep the original stamped rate: edits fix typos, they don't re-price history
-      reason: d.reason,
-      status: d.status,
-    },
-  });
+  const data = {
+    teamProfileId: d.teamProfileId,
+    month: monthToDate(d.month),
+    bonusInrMinor: minor(d.bonusInr),
+    bonusEurMinor: minor(d.bonusEur),
+    commInrMinor: minor(d.commInr),
+    commEurMinor: minor(d.commEur),
+    // keep the original stamped rate: edits fix typos, they don't re-price history
+    reason: d.reason,
+    status: d.status,
+  };
+
+  await prisma.telecallerPayout.update({ where: { id }, data });
+
+  const diff = diffFields(payoutShape(existing), payoutShape(data));
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "payout.update",
+      section: "telecaller",
+      entityType: "TelecallerPayout",
+      entityId: id,
+      summary: `Edited ${existing.teamProfile.fullName}'s ${formatMonth(existing.month)} payout — changed ${fieldList(diff.changed)}`,
+      meta: diff,
+    });
+  }
+
   revalidatePath("/telecaller");
   return { ok: true };
 }
 
 export async function setPayoutStatus(id: string, status: "PENDING" | "PAID"): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("rewards.approve");
+  const { allowed, denied, session } = await capabilityCheck("rewards.approve");
   if (!allowed) return denied;
-  await prisma.telecallerPayout.update({ where: { id }, data: { status } });
+  const before = await prisma.telecallerPayout.findUnique({ where: { id }, select: { status: true } });
+  const row = await prisma.telecallerPayout.update({
+    where: { id },
+    data: { status },
+    include: { teamProfile: { select: { fullName: true } } },
+  });
+
+  const diff = diffFields({ status: before?.status ?? null }, { status: row.status });
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "payout.update",
+      section: "telecaller",
+      entityType: "TelecallerPayout",
+      entityId: row.id,
+      summary: `Marked ${row.teamProfile.fullName}'s ${formatMonth(row.month)} payout as ${PAYOUT_STATUS_LABELS[status]}`,
+      meta: { ...diff, amounts: amountPhrase(row) },
+    });
+  }
+
   revalidatePath("/telecaller");
   return { ok: true };
 }
 
 export async function deletePayout(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("rewards.approve");
+  const { allowed, denied, session } = await capabilityCheck("rewards.approve");
   if (!allowed) return denied;
-  await prisma.telecallerPayout.delete({ where: { id } });
+  const row = await prisma.telecallerPayout.delete({
+    where: { id },
+    include: { teamProfile: { select: { fullName: true } } },
+  });
+  await logActivity(session, {
+    action: "payout.delete",
+    section: "telecaller",
+    entityType: "TelecallerPayout",
+    entityId: row.id,
+    summary: `Deleted ${row.teamProfile.fullName}'s ${formatMonth(row.month)} payout — ${amountPhrase(row)}`,
+    meta: payoutShape(row),
+  });
   revalidatePath("/telecaller");
   return { ok: true };
 }

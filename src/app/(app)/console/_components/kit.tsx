@@ -94,6 +94,33 @@ export function TextIn({
 }
 
 /**
+ * A wall-clock time box (HH:MM). Native on purpose: per §5.5 the app wraps selects and dates in
+ * custom popovers, but time/month/datetime stay native and are corrected via `color-scheme` —
+ * the same call the Telecaller Pay month picker makes. Value is the 24h "21:00" encoding.
+ */
+export function TimeIn({
+  value,
+  onChange,
+  ariaLabel,
+  className = "",
+}: {
+  value: string;
+  onChange: (s: string) => void;
+  ariaLabel?: string;
+  className?: string;
+}) {
+  return (
+    <input
+      type="time"
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${fieldCls} ${className}`}
+    />
+  );
+}
+
+/**
  * The Founder Console's controlled dropdown. Delegates to the app-wide {@link SelectMenu}
  * so the console's option lists are the SAME custom popover as every other picker (§5.5),
  * not a second look. Kept as a thin wrapper because callers pass `onChange(v)` not an event.

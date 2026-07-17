@@ -11,6 +11,7 @@ import { parseDateInput } from "@/lib/dates";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { parseMentions } from "@/lib/gn-mentions";
 import { getGnAccess, getGnMemberProfile, loadMentionCandidates, type GnMemberProfile } from "./german-note-metrics";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /** Post images are stored inline as resized data URLs (same as avatars — no object store). */
@@ -103,12 +104,12 @@ async function validTutorId(tutorId: string | undefined): Promise<string | null 
 }
 
 export async function createBatch(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const parsed = batchSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const tutorId = await validTutorId(parsed.data.tutorId);
   if (tutorId === undefined) return { ok: false, error: "Selected tutor account not found" };
-  await prisma.gnBatch.create({
+  const batch = await prisma.gnBatch.create({
     data: {
       name: parsed.data.name,
       level: parsed.data.level,
@@ -117,20 +118,32 @@ export async function createBatch(form: FormData): Promise<ActionResult> {
       notes: parsed.data.notes || null,
     },
   });
+  await logActivity(session, {
+    action: "gn.batch.create",
+    section: "german-note",
+    entityType: "GnBatch",
+    entityId: batch.id,
+    summary: `Created the German Note batch "${batch.name}"`,
+    meta: { level: batch.level, tutorId, targetStrength: batch.targetStrength },
+  });
   revalidatePath("/german-note");
   revalidatePath("/german-note/manage");
   return { ok: true };
 }
 
 export async function updateBatch(batchId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const parsed = batchSchema
     .extend({ status: z.enum(["ACTIVE", "ARCHIVED"]) })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const tutorId = await validTutorId(parsed.data.tutorId);
   if (tutorId === undefined) return { ok: false, error: "Selected tutor account not found" };
-  await prisma.gnBatch.update({
+  const before = await prisma.gnBatch.findUnique({
+    where: { id: batchId },
+    select: { name: true, level: true, tutorId: true, targetStrength: true, status: true, notes: true },
+  });
+  const batch = await prisma.gnBatch.update({
     where: { id: batchId },
     data: {
       name: parsed.data.name,
@@ -142,14 +155,44 @@ export async function updateBatch(batchId: string, form: FormData): Promise<Acti
       notes: parsed.data.notes || null,
     },
   });
+  // Diff the stored row rather than the form: an omitted `targetStrength` means "leave it"
+  // to Prisma, but a bare undefined would read as "cleared" to diffFields.
+  const d = before
+    ? diffFields(before as Record<string, unknown>, {
+        name: batch.name,
+        level: batch.level,
+        tutorId: batch.tutorId,
+        targetStrength: batch.targetStrength,
+        status: batch.status,
+        notes: batch.notes,
+      })
+    : null;
+  if (d && d.changed.length > 0) {
+    await logActivity(session, {
+      action: "gn.batch.update",
+      section: "german-note",
+      entityType: "GnBatch",
+      entityId: batchId,
+      summary: `Edited the German Note batch "${batch.name}"`,
+      meta: { changed: d.changed, before: d.before, after: d.after },
+    });
+  }
   revalidateBatch(batchId);
   return { ok: true };
 }
 
 /** Hard delete — cascades members, recordings and the batch discussion. Archive is the normal path. */
 export async function deleteBatch(batchId: string): Promise<ActionResult> {
-  await requireAdmin();
-  await prisma.gnBatch.delete({ where: { id: batchId } });
+  const session = await requireAdmin();
+  const batch = await prisma.gnBatch.delete({ where: { id: batchId } });
+  await logActivity(session, {
+    action: "gn.batch.delete",
+    section: "german-note",
+    entityType: "GnBatch",
+    entityId: batchId,
+    summary: `Deleted the German Note batch "${batch.name}"`,
+    meta: { level: batch.level, status: batch.status },
+  });
   revalidatePath("/german-note");
   revalidatePath("/german-note/manage");
   return { ok: true };
@@ -158,13 +201,22 @@ export async function deleteBatch(batchId: string): Promise<ActionResult> {
 // ── Members (Admin) ────────────────────────────────────────────
 
 export async function addExistingMember(batchId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const studentId = String(form.get("studentId") ?? "");
   if (!studentId) return { ok: false, error: "Pick a student" };
-  const student = await prisma.student.findUnique({ where: { id: studentId }, select: { id: true } });
+  const student = await prisma.student.findUnique({ where: { id: studentId }, select: { id: true, fullName: true } });
   if (!student) return { ok: false, error: "Student not found" };
+  const batch = await prisma.gnBatch.findUnique({ where: { id: batchId }, select: { name: true } });
   try {
-    await prisma.gnBatchMember.create({ data: { batchId, studentId } });
+    const member = await prisma.gnBatchMember.create({ data: { batchId, studentId } });
+    await logActivity(session, {
+      action: "gn.member.create",
+      section: "german-note",
+      entityType: "GnBatchMember",
+      entityId: member.id,
+      summary: `Added ${student.fullName} to the batch "${batch?.name ?? "German Note"}"`,
+      meta: { batchId, studentId },
+    });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { ok: false, error: "Already in this batch" };
@@ -185,7 +237,7 @@ const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
 /** Quick-create a German Note learner: Student WITHOUT enrollment + membership in one go. */
 export async function addNewMember(batchId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const parsed = newMemberSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -204,15 +256,35 @@ export async function addNewMember(batchId: string, form: FormData): Promise<Act
   if (ids.length) {
     await prisma.income.updateMany({ where: { id: { in: ids } }, data: { studentId: student.id } });
   }
+  const batch = await prisma.gnBatch.findUnique({ where: { id: batchId }, select: { name: true } });
+  await logActivity(session, {
+    action: "gn.member.create",
+    section: "german-note",
+    entityType: "Student",
+    entityId: student.id,
+    summary: `Added ${student.fullName} to the batch "${batch?.name ?? "German Note"}" as a new learner`,
+    meta: { batchId, linkedIncomeRows: ids.length },
+  });
   revalidateBatch(batchId);
   return { ok: true };
 }
 
 export async function removeBatchMember(memberId: string): Promise<ActionResult> {
-  await requireAdmin();
-  const member = await prisma.gnBatchMember.findUnique({ where: { id: memberId }, select: { batchId: true } });
+  const session = await requireAdmin();
+  const member = await prisma.gnBatchMember.findUnique({
+    where: { id: memberId },
+    select: { batchId: true, student: { select: { fullName: true } }, batch: { select: { name: true } } },
+  });
   if (!member) return { ok: false, error: "Member not found" };
   await prisma.gnBatchMember.delete({ where: { id: memberId } });
+  await logActivity(session, {
+    action: "gn.member.delete",
+    section: "german-note",
+    entityType: "GnBatchMember",
+    entityId: memberId,
+    summary: `Removed ${member.student.fullName} from the batch "${member.batch.name}"`,
+    meta: { batchId: member.batchId },
+  });
   revalidateBatch(member.batchId);
   return { ok: true };
 }
@@ -242,7 +314,7 @@ const tutorLoginSchema = z.object({
 });
 
 export async function createTutorLogin(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const parsed = tutorLoginSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -260,6 +332,14 @@ export async function createTutorLogin(form: FormData): Promise<ActionResult> {
       where: { id: res.user.id },
       data: { role: "TUTOR", emailVerified: true },
     });
+    await logActivity(session, {
+      action: "gn.tutor.grant",
+      section: "german-note",
+      entityType: "User",
+      entityId: res.user.id,
+      summary: `Created a tutor login for ${d.name}`,
+      meta: { email: d.email },
+    });
   } catch (e) {
     if (createdUserId) {
       await prisma.user.delete({ where: { id: createdUserId } }).catch(() => {});
@@ -274,10 +354,17 @@ export async function createTutorLogin(form: FormData): Promise<ActionResult> {
 
 /** Delete the tutor's account. Their batches stay (tutor unassigned); their posts stay ("Former member"). */
 export async function revokeTutorLogin(userId: string): Promise<ActionResult> {
-  await requireAdmin();
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  const session = await requireAdmin();
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, name: true } });
   if (!user || user.role !== "TUTOR") return { ok: false, error: "Not a tutor account" };
   await prisma.user.delete({ where: { id: userId } });
+  await logActivity(session, {
+    action: "gn.tutor.revoke",
+    section: "german-note",
+    entityType: "User",
+    entityId: userId,
+    summary: `Deleted the tutor login for ${user.name}`,
+  });
   revalidatePath("/german-note");
   revalidatePath("/german-note/manage");
   revalidatePath("/people");
@@ -313,7 +400,7 @@ export async function postRecording(batchId: string, form: FormData): Promise<Ac
   const moduleId = await resolveModuleId(batchId, d.moduleId);
   if (moduleId === undefined) return { ok: false, error: "That module doesn't belong to this batch" };
 
-  await prisma.gnRecording.create({
+  const recording = await prisma.gnRecording.create({
     data: {
       batchId,
       moduleId,
@@ -326,6 +413,14 @@ export async function postRecording(batchId: string, form: FormData): Promise<Ac
       postedById: session.user.id,
     },
   });
+  await logActivity(session, {
+    action: "gn.recording.post",
+    section: "german-note",
+    entityType: "GnRecording",
+    entityId: recording.id,
+    summary: `Posted the class recording "${recording.title}"`,
+    meta: { batchId, moduleId, provider: recording.provider, classDate: d.classDate },
+  });
   revalidateBatch(batchId);
   return { ok: true };
 }
@@ -334,7 +429,7 @@ export async function updateRecording(recordingId: string, form: FormData): Prom
   const session = await requireGn();
   const recording = await prisma.gnRecording.findUnique({
     where: { id: recordingId },
-    select: { batchId: true },
+    select: { batchId: true, moduleId: true, title: true, classDate: true, videoUrl: true, notes: true },
   });
   if (!recording) return { ok: false, error: "Recording not found" };
   if (!(await canManageBatch(session, recording.batchId))) return { ok: false, error: "Not allowed" };
@@ -346,7 +441,7 @@ export async function updateRecording(recordingId: string, form: FormData): Prom
   const moduleId = await resolveModuleId(recording.batchId, d.moduleId);
   if (moduleId === undefined) return { ok: false, error: "That module doesn't belong to this batch" };
 
-  await prisma.gnRecording.update({
+  const updated = await prisma.gnRecording.update({
     where: { id: recordingId },
     data: {
       moduleId,
@@ -358,6 +453,23 @@ export async function updateRecording(recordingId: string, form: FormData): Prom
       notes: d.notes || null,
     },
   });
+  const diff = diffFields(recording as Record<string, unknown>, {
+    moduleId: updated.moduleId,
+    title: updated.title,
+    classDate: updated.classDate,
+    videoUrl: updated.videoUrl,
+    notes: updated.notes,
+  });
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "gn.recording.update",
+      section: "german-note",
+      entityType: "GnRecording",
+      entityId: recordingId,
+      summary: `Edited the class recording "${updated.title}"`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   revalidateBatch(recording.batchId);
   return { ok: true };
 }
@@ -372,19 +484,38 @@ export async function createGnModule(batchId: string, form: FormData): Promise<A
   const parsed = moduleSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const last = await prisma.gnModule.findFirst({ where: { batchId }, orderBy: { orderIndex: "desc" }, select: { orderIndex: true } });
-  await prisma.gnModule.create({ data: { batchId, title: parsed.data.title, orderIndex: (last?.orderIndex ?? -1) + 1 } });
+  const created = await prisma.gnModule.create({ data: { batchId, title: parsed.data.title, orderIndex: (last?.orderIndex ?? -1) + 1 } });
+  await logActivity(session, {
+    action: "gn.module.create",
+    section: "german-note",
+    entityType: "GnModule",
+    entityId: created.id,
+    summary: `Created the classroom module "${created.title}"`,
+    meta: { batchId },
+  });
   revalidateBatch(batchId);
   return { ok: true };
 }
 
 export async function renameGnModule(moduleId: string, form: FormData): Promise<ActionResult> {
   const session = await requireGn();
-  const mod = await prisma.gnModule.findUnique({ where: { id: moduleId }, select: { batchId: true } });
+  const mod = await prisma.gnModule.findUnique({ where: { id: moduleId }, select: { batchId: true, title: true } });
   if (!mod) return { ok: false, error: "Module not found" };
   if (!(await canManageBatch(session, mod.batchId))) return { ok: false, error: "Not allowed" };
   const parsed = moduleSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   await prisma.gnModule.update({ where: { id: moduleId }, data: { title: parsed.data.title } });
+  const diff = diffFields({ title: mod.title }, { title: parsed.data.title });
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "gn.module.update",
+      section: "german-note",
+      entityType: "GnModule",
+      entityId: moduleId,
+      summary: `Renamed the classroom module "${mod.title}" to "${parsed.data.title}"`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after, batchId: mod.batchId },
+    });
+  }
   revalidateBatch(mod.batchId);
   return { ok: true };
 }
@@ -392,17 +523,25 @@ export async function renameGnModule(moduleId: string, form: FormData): Promise<
 /** Delete a module — its recordings drop to the default "Class recordings" section (SetNull). */
 export async function deleteGnModule(moduleId: string): Promise<ActionResult> {
   const session = await requireGn();
-  const mod = await prisma.gnModule.findUnique({ where: { id: moduleId }, select: { batchId: true } });
+  const mod = await prisma.gnModule.findUnique({ where: { id: moduleId }, select: { batchId: true, title: true } });
   if (!mod) return { ok: false, error: "Module not found" };
   if (!(await canManageBatch(session, mod.batchId))) return { ok: false, error: "Not allowed" };
   await prisma.gnModule.delete({ where: { id: moduleId } });
+  await logActivity(session, {
+    action: "gn.module.delete",
+    section: "german-note",
+    entityType: "GnModule",
+    entityId: moduleId,
+    summary: `Deleted the classroom module "${mod.title}"`,
+    meta: { batchId: mod.batchId },
+  });
   revalidateBatch(mod.batchId);
   return { ok: true };
 }
 
 export async function reorderGnModule(moduleId: string, direction: "up" | "down"): Promise<ActionResult> {
   const session = await requireGn();
-  const mod = await prisma.gnModule.findUnique({ where: { id: moduleId }, select: { batchId: true, orderIndex: true } });
+  const mod = await prisma.gnModule.findUnique({ where: { id: moduleId }, select: { batchId: true, orderIndex: true, title: true } });
   if (!mod) return { ok: false, error: "Module not found" };
   if (!(await canManageBatch(session, mod.batchId))) return { ok: false, error: "Not allowed" };
   const neighbour = await prisma.gnModule.findFirst({
@@ -418,6 +557,14 @@ export async function reorderGnModule(moduleId: string, direction: "up" | "down"
     prisma.gnModule.update({ where: { id: moduleId }, data: { orderIndex: neighbour.orderIndex } }),
     prisma.gnModule.update({ where: { id: neighbour.id }, data: { orderIndex: mod.orderIndex } }),
   ]);
+  await logActivity(session, {
+    action: "gn.module.reorder",
+    section: "german-note",
+    entityType: "GnModule",
+    entityId: moduleId,
+    summary: `Moved the classroom module "${mod.title}" ${direction}`,
+    meta: { batchId: mod.batchId, direction, before: { orderIndex: mod.orderIndex }, after: { orderIndex: neighbour.orderIndex } },
+  });
   revalidateBatch(mod.batchId);
   return { ok: true };
 }
@@ -456,31 +603,68 @@ export async function scheduleGnEvent(batchId: string, form: FormData): Promise<
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const fields = parseEventFields(parsed.data);
   if (!fields) return { ok: false, error: "Invalid start time" };
-  await prisma.gnEvent.create({ data: { batchId, createdById: session.user.id, ...fields } });
+  const event = await prisma.gnEvent.create({ data: { batchId, createdById: session.user.id, ...fields } });
+  await logActivity(session, {
+    action: "gn.event.create",
+    section: "german-note",
+    entityType: "GnEvent",
+    entityId: event.id,
+    summary: `Scheduled "${event.title}" on the German Note calendar`,
+    meta: { batchId, type: event.type, startsAt: parsed.data.startsAt, durationMins: event.durationMins },
+  });
   revalidateBatch(batchId);
   return { ok: true };
 }
 
 export async function updateGnEvent(eventId: string, form: FormData): Promise<ActionResult> {
   const session = await requireGn();
-  const event = await prisma.gnEvent.findUnique({ where: { id: eventId }, select: { batchId: true } });
+  const event = await prisma.gnEvent.findUnique({
+    where: { id: eventId },
+    select: { batchId: true, title: true, type: true, startsAt: true, durationMins: true, joinUrl: true, notes: true },
+  });
   if (!event) return { ok: false, error: "Event not found" };
   if (!(await canManageBatch(session, event.batchId))) return { ok: false, error: "Not allowed" };
   const parsed = eventSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const fields = parseEventFields(parsed.data);
   if (!fields) return { ok: false, error: "Invalid start time" };
-  await prisma.gnEvent.update({ where: { id: eventId }, data: fields });
+  const updated = await prisma.gnEvent.update({ where: { id: eventId }, data: fields });
+  const diff = diffFields(event as Record<string, unknown>, {
+    title: updated.title,
+    type: updated.type,
+    startsAt: updated.startsAt,
+    durationMins: updated.durationMins,
+    joinUrl: updated.joinUrl,
+    notes: updated.notes,
+  });
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "gn.event.update",
+      section: "german-note",
+      entityType: "GnEvent",
+      entityId: eventId,
+      summary: `Edited the calendar event "${updated.title}"`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after, batchId: event.batchId },
+    });
+  }
   revalidateBatch(event.batchId);
   return { ok: true };
 }
 
 export async function deleteGnEvent(eventId: string): Promise<ActionResult> {
   const session = await requireGn();
-  const event = await prisma.gnEvent.findUnique({ where: { id: eventId }, select: { batchId: true } });
+  const event = await prisma.gnEvent.findUnique({ where: { id: eventId }, select: { batchId: true, title: true } });
   if (!event) return { ok: false, error: "Event not found" };
   if (!(await canManageBatch(session, event.batchId))) return { ok: false, error: "Not allowed" };
   await prisma.gnEvent.delete({ where: { id: eventId } });
+  await logActivity(session, {
+    action: "gn.event.delete",
+    section: "german-note",
+    entityType: "GnEvent",
+    entityId: eventId,
+    summary: `Deleted the calendar event "${event.title}"`,
+    meta: { batchId: event.batchId },
+  });
   revalidateBatch(event.batchId);
   return { ok: true };
 }
@@ -489,11 +673,19 @@ export async function deleteRecording(recordingId: string): Promise<ActionResult
   const session = await requireGn();
   const recording = await prisma.gnRecording.findUnique({
     where: { id: recordingId },
-    select: { batchId: true },
+    select: { batchId: true, title: true },
   });
   if (!recording) return { ok: false, error: "Recording not found" };
   if (!(await canManageBatch(session, recording.batchId))) return { ok: false, error: "Not allowed" };
   await prisma.gnRecording.delete({ where: { id: recordingId } });
+  await logActivity(session, {
+    action: "gn.recording.delete",
+    section: "german-note",
+    entityType: "GnRecording",
+    entityId: recordingId,
+    summary: `Deleted the class recording "${recording.title}"`,
+    meta: { batchId: recording.batchId },
+  });
   revalidateBatch(recording.batchId);
   return { ok: true };
 }
@@ -514,11 +706,13 @@ export async function createGnPost(form: FormData): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const batchId = parsed.data.batchId || null;
 
+  let batchName: string | null = null;
   if (batchId) {
-    const batch = await prisma.gnBatch.findUnique({ where: { id: batchId }, select: { status: true } });
+    const batch = await prisma.gnBatch.findUnique({ where: { id: batchId }, select: { status: true, name: true } });
     if (!batch) return { ok: false, error: "Batch not found" };
     if (batch.status !== "ACTIVE") return { ok: false, error: "This batch is archived" };
     if (!(await isBatchParticipant(session, batchId))) return { ok: false, error: "Not allowed" };
+    batchName = batch.name;
   } else if (!(await isGnParticipant(session))) {
     return { ok: false, error: "Not allowed" };
   }
@@ -528,7 +722,7 @@ export async function createGnPost(form: FormData): Promise<ActionResult> {
   const candidates = await loadMentionCandidates(batchId);
   const mentionedUserIds = parseMentions(parsed.data.body, candidates);
 
-  await prisma.gnPost.create({
+  const post = await prisma.gnPost.create({
     data: {
       batchId,
       authorId: session.user.id,
@@ -538,6 +732,16 @@ export async function createGnPost(form: FormData): Promise<ActionResult> {
       imageUrl: image.value,
       mentionedUserIds,
     },
+  });
+  await logActivity(session, {
+    action: "gn.post.create",
+    section: "german-note",
+    entityType: "GnPost",
+    entityId: post.id,
+    summary: `Posted ${post.title ? `"${post.title}"` : "a message"} to ${
+      batchName ? `the batch "${batchName}"` : "the German Note community"
+    }`,
+    meta: { batchId, category: post.category, mentions: mentionedUserIds.length, hasImage: image.value !== null },
   });
   if (batchId) revalidatePath(`/german-note/${batchId}`);
   revalidatePath("/german-note");
@@ -549,7 +753,7 @@ export async function toggleGnPin(postId: string): Promise<ActionResult> {
   const session = await requireGn();
   const post = await prisma.gnPost.findUnique({
     where: { id: postId },
-    select: { pinned: true, batchId: true, batch: { select: { tutorId: true } } },
+    select: { pinned: true, title: true, batchId: true, batch: { select: { tutorId: true } } },
   });
   if (!post) return { ok: false, error: "Post not found" };
   const allowed =
@@ -557,7 +761,17 @@ export async function toggleGnPin(postId: string): Promise<ActionResult> {
     (post.batch?.tutorId != null && post.batch.tutorId === session.user.id);
   if (!allowed) return { ok: false, error: "Not allowed" };
 
-  await prisma.gnPost.update({ where: { id: postId }, data: { pinned: !post.pinned } });
+  const updated = await prisma.gnPost.update({ where: { id: postId }, data: { pinned: !post.pinned } });
+  await logActivity(session, {
+    action: "gn.post.update",
+    section: "german-note",
+    entityType: "GnPost",
+    entityId: postId,
+    summary: `${updated.pinned ? "Pinned" : "Unpinned"} the post ${
+      post.title ? `"${post.title}"` : "in the German Note community"
+    }`,
+    meta: { changed: ["pinned"], before: { pinned: post.pinned }, after: { pinned: updated.pinned } },
+  });
   revalidatePath(post.batchId ? `/german-note/${post.batchId}` : "/german-note");
   return { ok: true };
 }
@@ -578,15 +792,23 @@ export async function createGnComment(postId: string, form: FormData): Promise<A
   const session = await requireGn();
   const parsed = commentSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  const post = await prisma.gnPost.findUnique({ where: { id: postId }, select: { batchId: true } });
+  const post = await prisma.gnPost.findUnique({ where: { id: postId }, select: { batchId: true, title: true } });
   if (!post) return { ok: false, error: "Post not found" };
   if (!(await canParticipateInPostScope(session, post))) return { ok: false, error: "Not allowed" };
 
   const candidates = await loadMentionCandidates(post.batchId);
   const mentionedUserIds = parseMentions(parsed.data.body, candidates);
 
-  await prisma.gnComment.create({
+  const comment = await prisma.gnComment.create({
     data: { postId, authorId: session.user.id, body: parsed.data.body, mentionedUserIds },
+  });
+  await logActivity(session, {
+    action: "gn.post.comment",
+    section: "german-note",
+    entityType: "GnComment",
+    entityId: comment.id,
+    summary: `Commented on the post ${post.title ? `"${post.title}"` : "in the German Note community"}`,
+    meta: { postId, batchId: post.batchId, mentions: mentionedUserIds.length },
   });
   revalidatePath(post.batchId ? `/german-note/${post.batchId}` : "/german-note");
   return { ok: true };
@@ -659,7 +881,7 @@ export async function deleteGnPost(postId: string): Promise<ActionResult> {
   const session = await requireGn();
   const post = await prisma.gnPost.findUnique({
     where: { id: postId },
-    select: { authorId: true, batchId: true, batch: { select: { tutorId: true } } },
+    select: { authorId: true, title: true, batchId: true, batch: { select: { tutorId: true } } },
   });
   if (!post) return { ok: false, error: "Post not found" };
   const allowed =
@@ -669,6 +891,14 @@ export async function deleteGnPost(postId: string): Promise<ActionResult> {
   if (!allowed) return { ok: false, error: "Not allowed" };
 
   await prisma.gnPost.delete({ where: { id: postId } });
+  await logActivity(session, {
+    action: "gn.post.delete",
+    section: "german-note",
+    entityType: "GnPost",
+    entityId: postId,
+    summary: `Deleted the post ${post.title ? `"${post.title}"` : "in the German Note community"}`,
+    meta: { batchId: post.batchId, authorId: post.authorId },
+  });
   revalidatePath(post.batchId ? `/german-note/${post.batchId}` : "/german-note");
   return { ok: true };
 }
@@ -679,7 +909,7 @@ export async function deleteGnComment(commentId: string): Promise<ActionResult> 
     where: { id: commentId },
     select: {
       authorId: true,
-      post: { select: { batchId: true, batch: { select: { tutorId: true } } } },
+      post: { select: { batchId: true, title: true, batch: { select: { tutorId: true } } } },
     },
   });
   if (!comment) return { ok: false, error: "Comment not found" };
@@ -690,6 +920,16 @@ export async function deleteGnComment(commentId: string): Promise<ActionResult> 
   if (!allowed) return { ok: false, error: "Not allowed" };
 
   await prisma.gnComment.delete({ where: { id: commentId } });
+  await logActivity(session, {
+    action: "gn.comment.delete",
+    section: "german-note",
+    entityType: "GnComment",
+    entityId: commentId,
+    summary: `Deleted a comment on the post ${
+      comment.post.title ? `"${comment.post.title}"` : "in the German Note community"
+    }`,
+    meta: { batchId: comment.post.batchId, authorId: comment.authorId },
+  });
   revalidatePath(comment.post.batchId ? `/german-note/${comment.post.batchId}` : "/german-note");
   return { ok: true };
 }

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
 import { majorStringToMinor } from "@/lib/format";
 import { parseDateInput } from "@/lib/dates";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -41,6 +42,18 @@ function count(v: string | undefined): number {
 
 const optionalText = z.string().trim().max(2000).optional();
 
+/**
+ * Paise are BigInt, and every money field on a conversion or ad-set is one. Both diffFields
+ * and the activity log's Json column go through JSON.stringify, which throws on a BigInt —
+ * and diffFields runs at the call site, outside logActivity's catch, so an unconverted
+ * amount would take the whole action down rather than just lose a log row.
+ */
+function jsonSafe(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(row).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v]),
+  );
+}
+
 function revalidateWorkshop(workshopId?: string) {
   revalidatePath("/german-note/manage");
   if (workshopId) revalidatePath(`/german-note/workshops/${workshopId}`);
@@ -63,27 +76,39 @@ function parseMonth(value: string): Date | null {
 }
 
 export async function createWorkshop(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const parsed = workshopSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const month = parseMonth(parsed.data.month);
   if (!month) return { ok: false, error: "Invalid month" };
-  await prisma.gnWorkshop.create({
+  const workshop = await prisma.gnWorkshop.create({
     data: { name: parsed.data.name, month, notes: parsed.data.notes || null },
+  });
+  await logActivity(session, {
+    action: "gn.workshop.create",
+    section: "german-note",
+    entityType: "GnWorkshop",
+    entityId: workshop.id,
+    summary: `Created the workshop "${workshop.name}"`,
+    meta: { month: parsed.data.month },
   });
   revalidateWorkshop();
   return { ok: true };
 }
 
 export async function updateWorkshop(workshopId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const parsed = workshopSchema
     .extend({ status: z.enum(["ACTIVE", "ARCHIVED"]) })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const month = parseMonth(parsed.data.month);
   if (!month) return { ok: false, error: "Invalid month" };
-  await prisma.gnWorkshop.update({
+  const before = await prisma.gnWorkshop.findUnique({
+    where: { id: workshopId },
+    select: { name: true, month: true, status: true, notes: true },
+  });
+  const workshop = await prisma.gnWorkshop.update({
     where: { id: workshopId },
     data: {
       name: parsed.data.name,
@@ -92,14 +117,40 @@ export async function updateWorkshop(workshopId: string, form: FormData): Promis
       notes: parsed.data.notes || null,
     },
   });
+  const diff = before
+    ? diffFields(before as Record<string, unknown>, {
+        name: workshop.name,
+        month: workshop.month,
+        status: workshop.status,
+        notes: workshop.notes,
+      })
+    : null;
+  if (diff && diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "gn.workshop.update",
+      section: "german-note",
+      entityType: "GnWorkshop",
+      entityId: workshopId,
+      summary: `Edited the workshop "${workshop.name}"`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   revalidateWorkshop(workshopId);
   return { ok: true };
 }
 
 /** Hard delete — cascades the workshop's conversions and ad-sets. */
 export async function deleteWorkshop(workshopId: string): Promise<ActionResult> {
-  await requireAdmin();
-  await prisma.gnWorkshop.delete({ where: { id: workshopId } });
+  const session = await requireAdmin();
+  const workshop = await prisma.gnWorkshop.delete({ where: { id: workshopId } });
+  await logActivity(session, {
+    action: "gn.workshop.delete",
+    section: "german-note",
+    entityType: "GnWorkshop",
+    entityId: workshopId,
+    summary: `Deleted the workshop "${workshop.name}" and everything recorded against it`,
+    meta: { status: workshop.status },
+  });
   revalidateWorkshop();
   return { ok: true };
 }
@@ -167,38 +218,70 @@ function conversionData(form: FormData) {
 }
 
 export async function createConversion(workshopId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const workshop = await prisma.gnWorkshop.findUnique({ where: { id: workshopId }, select: { id: true } });
+  const session = await requireAdmin();
+  const workshop = await prisma.gnWorkshop.findUnique({ where: { id: workshopId }, select: { id: true, name: true } });
   if (!workshop) return { ok: false, error: "Workshop not found" };
   const res = conversionData(form);
   if (!res.ok) return { ok: false, error: res.error };
-  await prisma.gnWorkshopConversion.create({ data: { workshopId, ...res.data } });
+  const conversion = await prisma.gnWorkshopConversion.create({ data: { workshopId, ...res.data } });
+  await logActivity(session, {
+    action: "gn.conversion.create",
+    section: "german-note",
+    entityType: "GnWorkshopConversion",
+    entityId: conversion.id,
+    summary: `Recorded ${conversion.fullName} as a conversion on the workshop "${workshop.name}"`,
+    meta: {
+      workshopId,
+      product: conversion.product,
+      status: conversion.status,
+      source: conversion.source,
+      isFreeSeat: conversion.isFreeSeat,
+      finalPriceInrMinor: conversion.finalPriceInrMinor.toString(),
+      paidAmountInrMinor: conversion.paidAmountInrMinor.toString(),
+    },
+  });
   revalidateWorkshop(workshopId);
   return { ok: true };
 }
 
 export async function updateConversion(conversionId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const existing = await prisma.gnWorkshopConversion.findUnique({
-    where: { id: conversionId },
-    select: { workshopId: true },
-  });
+  const session = await requireAdmin();
+  const existing = await prisma.gnWorkshopConversion.findUnique({ where: { id: conversionId } });
   if (!existing) return { ok: false, error: "Conversion not found" };
   const res = conversionData(form);
   if (!res.ok) return { ok: false, error: res.error };
   await prisma.gnWorkshopConversion.update({ where: { id: conversionId }, data: res.data });
+  const diff = diffFields(jsonSafe(existing), jsonSafe(res.data));
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "gn.conversion.update",
+      section: "german-note",
+      entityType: "GnWorkshopConversion",
+      entityId: conversionId,
+      summary: `Edited the conversion for ${res.data.fullName}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after, workshopId: existing.workshopId },
+    });
+  }
   revalidateWorkshop(existing.workshopId);
   return { ok: true };
 }
 
 export async function deleteConversion(conversionId: string): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const existing = await prisma.gnWorkshopConversion.findUnique({
     where: { id: conversionId },
-    select: { workshopId: true },
+    select: { workshopId: true, fullName: true },
   });
   if (!existing) return { ok: false, error: "Conversion not found" };
   await prisma.gnWorkshopConversion.delete({ where: { id: conversionId } });
+  await logActivity(session, {
+    action: "gn.conversion.delete",
+    section: "german-note",
+    entityType: "GnWorkshopConversion",
+    entityId: conversionId,
+    summary: `Deleted the conversion for ${existing.fullName}`,
+    meta: { workshopId: existing.workshopId },
+  });
   revalidateWorkshop(existing.workshopId);
   return { ok: true };
 }
@@ -232,8 +315,8 @@ function adSetData(form: FormData) {
 }
 
 export async function createAdSet(workshopId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const workshop = await prisma.gnWorkshop.findUnique({ where: { id: workshopId }, select: { id: true } });
+  const session = await requireAdmin();
+  const workshop = await prisma.gnWorkshop.findUnique({ where: { id: workshopId }, select: { id: true, name: true } });
   if (!workshop) return { ok: false, error: "Workshop not found" };
   const res = adSetData(form);
   if (!res.ok) return { ok: false, error: res.error };
@@ -242,35 +325,59 @@ export async function createAdSet(workshopId: string, form: FormData): Promise<A
     orderBy: { orderIndex: "desc" },
     select: { orderIndex: true },
   });
-  await prisma.gnWorkshopAdSet.create({
+  const adSet = await prisma.gnWorkshopAdSet.create({
     data: { workshopId, orderIndex: (last?.orderIndex ?? -1) + 1, ...res.data },
+  });
+  await logActivity(session, {
+    action: "gn.ad-set.create",
+    section: "german-note",
+    entityType: "GnWorkshopAdSet",
+    entityId: adSet.id,
+    summary: `Added the ad-set ${adSet.label ? `"${adSet.label}"` : "(unlabelled)"} to the workshop "${workshop.name}"`,
+    meta: { workshopId, adSpendInrMinor: adSet.adSpendInrMinor.toString(), conversions: adSet.conversions },
   });
   revalidateWorkshop(workshopId);
   return { ok: true };
 }
 
 export async function updateAdSet(adSetId: string, form: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const existing = await prisma.gnWorkshopAdSet.findUnique({
-    where: { id: adSetId },
-    select: { workshopId: true },
-  });
+  const session = await requireAdmin();
+  const existing = await prisma.gnWorkshopAdSet.findUnique({ where: { id: adSetId } });
   if (!existing) return { ok: false, error: "Ad-set not found" };
   const res = adSetData(form);
   if (!res.ok) return { ok: false, error: res.error };
-  await prisma.gnWorkshopAdSet.update({ where: { id: adSetId }, data: res.data });
+  const adSet = await prisma.gnWorkshopAdSet.update({ where: { id: adSetId }, data: res.data });
+  const diff = diffFields(jsonSafe(existing), jsonSafe(res.data));
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "gn.ad-set.update",
+      section: "german-note",
+      entityType: "GnWorkshopAdSet",
+      entityId: adSetId,
+      summary: `Edited the ad-set ${adSet.label ? `"${adSet.label}"` : "(unlabelled)"}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after, workshopId: existing.workshopId },
+    });
+  }
   revalidateWorkshop(existing.workshopId);
   return { ok: true };
 }
 
 export async function deleteAdSet(adSetId: string): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const existing = await prisma.gnWorkshopAdSet.findUnique({
     where: { id: adSetId },
-    select: { workshopId: true },
+    select: { workshopId: true, label: true },
   });
   if (!existing) return { ok: false, error: "Ad-set not found" };
   await prisma.gnWorkshopAdSet.delete({ where: { id: adSetId } });
+  await logActivity(session, {
+    action: "gn.ad-set.delete",
+    section: "german-note",
+    entityType: "GnWorkshopAdSet",
+    entityId: adSetId,
+    summary: `Deleted the ad-set ${existing.label ? `"${existing.label}"` : "(unlabelled)"}`,
+    meta: { workshopId: existing.workshopId },
+  });
   revalidateWorkshop(existing.workshopId);
   return { ok: true };
 }

@@ -98,8 +98,9 @@ export function SignCeremony({
         <CheckCircle2 size={44} className="mx-auto text-good" />
         <h2 className="mt-3 font-display text-h1 text-ink">Agreement signed</h2>
         <p className="mx-auto mt-2 max-w-sm text-body text-ink-2">
-          Thank you, {studentName.split(" ")[0]}. {documentNo} is now executed. B2 Consultants will send your
-          countersigned copy on WhatsApp.
+          Thank you, {studentName.split(" ")[0]}. {documentNo} is now executed. Your countersigned copy is on
+          its way to you on WhatsApp — if it doesn&apos;t arrive, contact B2 Consultants and they&apos;ll send
+          it over.
         </p>
       </div>
     );

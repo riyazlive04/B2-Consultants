@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { Payable } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
-import { majorStringToMinor } from "@/lib/format";
+import { formatDate, formatInrMinor, majorStringToMinor } from "@/lib/format";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /** Cash Health (PRD3 §4) - Admin-only. */
@@ -20,7 +22,7 @@ const cashSchema = z.object({
 });
 
 export async function saveCashPosition(form: FormData): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
   const parsed = cashSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -28,7 +30,7 @@ export async function saveCashPosition(form: FormData): Promise<ActionResult> {
   if (!d.bankBalance) return { ok: false, error: "Bank balance is required" };
 
   const date = parseDateInput(d.date);
-  await prisma.cashPosition.upsert({
+  const row = await prisma.cashPosition.upsert({
     where: { date },
     update: {
       bankBalanceInrMinor: majorStringToMinor(d.bankBalance),
@@ -42,6 +44,19 @@ export async function saveCashPosition(form: FormData): Promise<ActionResult> {
       notes: d.notes || null,
     },
   });
+
+  await logActivity(session, {
+    action: "cash.position.record",
+    section: "cash",
+    entityType: "CashPosition",
+    entityId: row.id,
+    summary: `Recorded the cash position for ${formatDate(row.date)} — bank ${formatInrMinor(row.bankBalanceInrMinor)}`,
+    meta: {
+      bankBalanceInrMinor: row.bankBalanceInrMinor.toString(),
+      personalSavingsInrMinor: row.personalSavingsInrMinor?.toString() ?? null,
+    },
+  });
+
   revalidatePath("/cash");
   revalidatePath("/", "layout"); // top-bar runway badge
   return { ok: true };
@@ -60,8 +75,21 @@ const payableSchema = z.object({
   status: z.enum(["ACTIVE", "PAUSED", "CANCELLED"]),
 });
 
+/** Amount as a string: diffFields JSON-compares, and BigInt has no JSON representation. */
+function payableDiffShape(row: Payable) {
+  return {
+    name: row.name,
+    category: row.category as string,
+    amountInrMinor: row.amountInrMinor.toString(),
+    frequency: row.frequency as string,
+    nextDueDate: row.nextDueDate,
+    isCogs: row.isCogs,
+    status: row.status as string,
+  };
+}
+
 export async function savePayable(id: string | null, form: FormData): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
   const parsed = payableSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -77,27 +105,69 @@ export async function savePayable(id: string | null, form: FormData): Promise<Ac
     isCogs: d.isCogs === "on",
     status: d.status,
   };
-  if (id) await prisma.payable.update({ where: { id }, data });
-  else await prisma.payable.create({ data });
+  const existing = id ? await prisma.payable.findUnique({ where: { id } }) : null;
+  const row = id ? await prisma.payable.update({ where: { id }, data }) : await prisma.payable.create({ data });
+
+  if (existing) {
+    const diff = diffFields(payableDiffShape(existing), payableDiffShape(row));
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "cash.payable.update",
+        section: "cash",
+        entityType: "Payable",
+        entityId: row.id,
+        summary: `Edited the payable "${row.name}" — ${formatInrMinor(row.amountInrMinor)} ${row.frequency.toLowerCase().replace(/_/g, " ")}`,
+        meta: diff,
+      });
+    }
+  } else if (!id) {
+    await logActivity(session, {
+      action: "cash.payable.create",
+      section: "cash",
+      entityType: "Payable",
+      entityId: row.id,
+      summary: `Added the payable "${row.name}" — ${formatInrMinor(row.amountInrMinor)} ${row.frequency.toLowerCase().replace(/_/g, " ")}`,
+      meta: {
+        amountInrMinor: row.amountInrMinor.toString(),
+        category: row.category,
+        frequency: row.frequency,
+        status: row.status,
+      },
+    });
+  }
+
   revalidatePath("/cash");
   return { ok: true };
 }
 
 export async function deletePayable(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
-  await prisma.payable.delete({ where: { id } });
+  const row = await prisma.payable.delete({ where: { id } });
+
+  await logActivity(session, {
+    action: "cash.payable.delete",
+    section: "cash",
+    entityType: "Payable",
+    entityId: row.id,
+    summary: `Deleted the payable "${row.name}" — ${formatInrMinor(row.amountInrMinor)} ${row.frequency.toLowerCase().replace(/_/g, " ")}`,
+    meta: { amountInrMinor: row.amountInrMinor.toString(), category: row.category },
+  });
+
   revalidatePath("/cash");
   return { ok: true };
 }
 
 /** Admin override for the revenue growth-rate assumption in "months to ₹8L" (PRD3 §4.4). */
 export async function setGrowthOverride(form: FormData): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
   const raw = String(form.get("growthPct") ?? "").trim();
+  let summary: string | null = null;
   if (raw === "") {
-    await prisma.appSetting.deleteMany({ where: { key: "runwayGrowthRatePct" } });
+    // deleteMany on an absent key succeeds silently — only log an override that was really there.
+    const { count } = await prisma.appSetting.deleteMany({ where: { key: "runwayGrowthRatePct" } });
+    if (count) summary = "Cleared the revenue growth-rate override — runway is back on the measured rate";
   } else {
     const v = parseFloat(raw);
     if (Number.isNaN(v) || v < -50 || v > 200) return { ok: false, error: "Growth % must be between -50 and 200" };
@@ -106,7 +176,20 @@ export async function setGrowthOverride(form: FormData): Promise<ActionResult> {
       update: { value: v },
       create: { key: "runwayGrowthRatePct", value: v },
     });
+    summary = `Set the revenue growth-rate assumption to ${v}% for the runway forecast`;
   }
+
+  if (summary) {
+    await logActivity(session, {
+      action: "cash.growthOverride.update",
+      section: "cash",
+      entityType: "AppSetting",
+      entityId: "runwayGrowthRatePct",
+      summary,
+      meta: { growthPct: raw === "" ? null : parseFloat(raw) },
+    });
+  }
+
   revalidatePath("/cash");
   return { ok: true };
 }

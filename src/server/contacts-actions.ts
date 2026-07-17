@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { capabilityCheck, requireSection } from "@/lib/rbac";
 import { parseMentions } from "@/lib/gn-mentions";
 import { emitTrigger } from "./automation";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -67,46 +68,94 @@ export async function createContact(form: FormData): Promise<ActionResult> {
     });
     return lead.id;
   });
+  await logActivity(session, {
+    action: "contact.create",
+    section: "contacts",
+    entityType: "Lead",
+    entityId: newLeadId,
+    summary: `Added contact ${d.name}`,
+    meta: { phone: d.phone, leadSource: d.leadSource },
+  });
   await emitTrigger("CONTACT_CREATED", { leadId: newLeadId });
   reval();
   return { ok: true };
 }
 
 export async function updateContact(id: string, form: FormData): Promise<ActionResult> {
-  await requireSection("contacts");
+  const session = await requireSection("contacts");
   const parsed = contactSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
-  const lead = await prisma.lead.findUnique({ where: { id }, select: { id: true } });
-  if (!lead) return { ok: false, error: "Contact not found" };
-
-  await prisma.lead.update({
+  const lead = await prisma.lead.findUnique({
     where: { id },
-    data: {
-      name: d.name,
-      phone: d.phone,
-      email: d.email || null,
-      city: d.city || null,
-      industry: d.industry || null,
-      leadSource: d.leadSource,
-      companyId: d.companyId || null,
+    select: {
+      id: true, name: true, phone: true, email: true, city: true, industry: true,
+      leadSource: true, companyId: true,
     },
   });
+  if (!lead) return { ok: false, error: "Contact not found" };
+
+  const data = {
+    name: d.name,
+    phone: d.phone,
+    email: d.email || null,
+    city: d.city || null,
+    industry: d.industry || null,
+    leadSource: d.leadSource,
+    companyId: d.companyId || null,
+  };
+  await prisma.lead.update({ where: { id }, data });
+  const diff = diffFields(lead, data);
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "contact.update",
+      section: "contacts",
+      entityType: "Lead",
+      entityId: id,
+      summary: `Updated contact ${d.name} — changed ${diff.changed.join(", ")}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   reval(id);
   return { ok: true };
 }
 
 export async function deleteContact(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
+  const lead = await prisma.lead.findUnique({ where: { id }, select: { name: true } });
   await prisma.lead.delete({ where: { id } }); // cascades notes/tasks/opps/history
+  if (lead) {
+    await logActivity(session, {
+      action: "contact.delete",
+      section: "contacts",
+      entityType: "Lead",
+      entityId: id,
+      summary: `Deleted contact ${lead.name}`,
+    });
+  }
   reval();
   return { ok: true };
 }
 
 export async function setContactOwner(id: string, userId: string): Promise<ActionResult> {
-  await requireSection("contacts");
-  await prisma.lead.update({ where: { id }, data: { assignedToId: userId || null } });
+  const session = await requireSection("contacts");
+  const before = await prisma.lead.findUnique({ where: { id }, select: { assignedToId: true } });
+  const lead = await prisma.lead.update({ where: { id }, data: { assignedToId: userId || null } });
+  const diff = diffFields({ assignedToId: before?.assignedToId ?? null }, { assignedToId: userId || null });
+  if (diff.changed.length) {
+    const owner = userId
+      ? await prisma.user.findUnique({ where: { id: userId }, select: { name: true } })
+      : null;
+    await logActivity(session, {
+      action: "contact.assign",
+      section: "contacts",
+      entityType: "Lead",
+      entityId: id,
+      summary: owner ? `Assigned ${lead.name} to ${owner.name}` : `Removed the owner from ${lead.name}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   reval(id);
   return { ok: true };
 }
@@ -123,25 +172,48 @@ async function upsertTag(name: string) {
 }
 
 export async function addContactTag(leadId: string, name: string): Promise<ActionResult> {
-  await requireSection("contacts");
+  const session = await requireSection("contacts");
   const clean = normTag(name);
   if (!clean) return { ok: false, error: "Tag name is required" };
   const tag = await upsertTag(clean);
-  await prisma.lead.update({ where: { id: leadId }, data: { tags: { connect: { id: tag.id } } } });
+  const lead = await prisma.lead.update({
+    where: { id: leadId },
+    data: { tags: { connect: { id: tag.id } } },
+  });
+  await logActivity(session, {
+    action: "contact.tag.create",
+    section: "contacts",
+    entityType: "Lead",
+    entityId: leadId,
+    summary: `Tagged ${lead.name} "${clean}"`,
+    meta: { tag: clean, tagId: tag.id },
+  });
   await emitTrigger("TAG_ADDED", { leadId, tag: clean });
   reval(leadId);
   return { ok: true };
 }
 
 export async function removeContactTag(leadId: string, tagId: string): Promise<ActionResult> {
-  await requireSection("contacts");
-  await prisma.lead.update({ where: { id: leadId }, data: { tags: { disconnect: { id: tagId } } } });
+  const session = await requireSection("contacts");
+  const tag = await prisma.tag.findUnique({ where: { id: tagId }, select: { name: true } });
+  const lead = await prisma.lead.update({
+    where: { id: leadId },
+    data: { tags: { disconnect: { id: tagId } } },
+  });
+  await logActivity(session, {
+    action: "contact.tag.delete",
+    section: "contacts",
+    entityType: "Lead",
+    entityId: leadId,
+    summary: `Removed the "${tag?.name ?? "unknown"}" tag from ${lead.name}`,
+    meta: { tag: tag?.name ?? null, tagId },
+  });
   reval(leadId);
   return { ok: true };
 }
 
 export async function bulkAddTag(leadIds: string[], name: string): Promise<ActionResult> {
-  await requireSection("contacts");
+  const session = await requireSection("contacts");
   const clean = normTag(name);
   if (!clean) return { ok: false, error: "Tag name is required" };
   if (leadIds.length === 0) return { ok: false, error: "Select at least one contact" };
@@ -151,19 +223,36 @@ export async function bulkAddTag(leadIds: string[], name: string): Promise<Actio
       prisma.lead.update({ where: { id }, data: { tags: { connect: { id: tag.id } } } }),
     ),
   );
+  await logActivity(session, {
+    action: "contact.tag.create",
+    section: "contacts",
+    entityType: "Tag",
+    entityId: tag.id,
+    summary: `Tagged ${leadIds.length} contact${leadIds.length === 1 ? "" : "s"} "${clean}"`,
+    meta: { tag: clean, leadIds },
+  });
   for (const id of leadIds) await emitTrigger("TAG_ADDED", { leadId: id, tag: clean });
   reval();
   return { ok: true };
 }
 
 export async function bulkRemoveTag(leadIds: string[], tagId: string): Promise<ActionResult> {
-  await requireSection("contacts");
+  const session = await requireSection("contacts");
   if (leadIds.length === 0) return { ok: false, error: "Select at least one contact" };
+  const tag = await prisma.tag.findUnique({ where: { id: tagId }, select: { name: true } });
   await prisma.$transaction(
     leadIds.map((id) =>
       prisma.lead.update({ where: { id }, data: { tags: { disconnect: { id: tagId } } } }),
     ),
   );
+  await logActivity(session, {
+    action: "contact.tag.delete",
+    section: "contacts",
+    entityType: "Tag",
+    entityId: tagId,
+    summary: `Removed the "${tag?.name ?? "unknown"}" tag from ${leadIds.length} contact${leadIds.length === 1 ? "" : "s"}`,
+    meta: { tag: tag?.name ?? null, leadIds },
+  });
   reval();
   return { ok: true };
 }
@@ -175,8 +264,11 @@ export async function setContactCustomField(
   key: string,
   value: string,
 ): Promise<ActionResult> {
-  await requireSection("contacts");
-  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { customFields: true } });
+  const session = await requireSection("contacts");
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { name: true, customFields: true },
+  });
   if (!lead) return { ok: false, error: "Contact not found" };
   const current = (lead.customFields as Record<string, string> | null) ?? {};
   const next: Record<string, string> = { ...current };
@@ -186,6 +278,17 @@ export async function setContactCustomField(
     where: { id: leadId },
     data: { customFields: next as Prisma.InputJsonObject },
   });
+  const diff = diffFields({ [key]: current[key] ?? null }, { [key]: next[key] ?? null });
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "contact.field.update",
+      section: "contacts",
+      entityType: "Lead",
+      entityId: leadId,
+      summary: `Updated the ${key} field on ${lead.name}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   reval(leadId);
   return { ok: true };
 }
@@ -218,27 +321,59 @@ export async function createNote(leadId: string, form: FormData): Promise<Action
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const candidates = await loadActiveUserCandidates();
   const mentionedUserIds = parseMentions(parsed.data.body, candidates);
-  await prisma.contactNote.create({
+  const note = await prisma.contactNote.create({
     data: { leadId, body: parsed.data.body, createdById: session.user.id },
+    include: { lead: { select: { name: true } } },
+  });
+  await logActivity(session, {
+    action: "contact.note.create",
+    section: "contacts",
+    entityType: "ContactNote",
+    entityId: note.id,
+    summary: `Added a note on ${note.lead.name}`,
+    meta: { leadId, mentioned: mentionedUserIds.length, body: parsed.data.body.slice(0, 200) },
   });
   reval(leadId);
   return { ok: true, mentionedCount: mentionedUserIds.length };
 }
 
 export async function deleteNote(id: string): Promise<ActionResult> {
-  await requireSection("contacts");
-  const note = await prisma.contactNote.findUnique({ where: { id }, select: { leadId: true } });
+  const session = await requireSection("contacts");
+  const note = await prisma.contactNote.findUnique({
+    where: { id },
+    select: { leadId: true, lead: { select: { name: true } } },
+  });
   if (!note) return { ok: false, error: "Note not found" };
   await prisma.contactNote.delete({ where: { id } });
+  await logActivity(session, {
+    action: "contact.note.delete",
+    section: "contacts",
+    entityType: "ContactNote",
+    entityId: id,
+    summary: `Deleted a note on ${note.lead.name}`,
+    meta: { leadId: note.leadId },
+  });
   reval(note.leadId);
   return { ok: true };
 }
 
 export async function toggleNotePin(id: string): Promise<ActionResult> {
-  await requireSection("contacts");
-  const note = await prisma.contactNote.findUnique({ where: { id }, select: { leadId: true, pinned: true } });
+  const session = await requireSection("contacts");
+  const note = await prisma.contactNote.findUnique({
+    where: { id },
+    select: { leadId: true, pinned: true, lead: { select: { name: true } } },
+  });
   if (!note) return { ok: false, error: "Note not found" };
   await prisma.contactNote.update({ where: { id }, data: { pinned: !note.pinned } });
+  const diff = diffFields({ pinned: note.pinned }, { pinned: !note.pinned });
+  await logActivity(session, {
+    action: "contact.note.update",
+    section: "contacts",
+    entityType: "ContactNote",
+    entityId: id,
+    summary: `${note.pinned ? "Unpinned" : "Pinned"} a note on ${note.lead.name}`,
+    meta: { changed: diff.changed, before: diff.before, after: diff.after },
+  });
   reval(note.leadId);
   return { ok: true };
 }
@@ -260,7 +395,7 @@ export async function createTask(form: FormData): Promise<ActionResult> {
   const d = parsed.data;
   const due = d.dueAt?.trim() ? new Date(d.dueAt) : null;
   if (due && isNaN(due.getTime())) return { ok: false, error: "Invalid due date" };
-  await prisma.contactTask.create({
+  const task = await prisma.contactTask.create({
     data: {
       title: d.title,
       body: d.body || null,
@@ -269,29 +404,65 @@ export async function createTask(form: FormData): Promise<ActionResult> {
       leadId: d.leadId || null,
       createdById: session.user.id,
     },
+    include: { assignedTo: { select: { name: true } }, lead: { select: { name: true } } },
+  });
+  await logActivity(session, {
+    action: "task.create",
+    section: "contacts",
+    entityType: "ContactTask",
+    entityId: task.id,
+    summary: [
+      `Created task "${d.title}"`,
+      task.assignedTo ? ` for ${task.assignedTo.name}` : "",
+      task.lead ? ` on ${task.lead.name}` : "",
+    ].join(""),
+    meta: { leadId: d.leadId || null, assignedToId: d.assignedToId || null, dueAt: due },
   });
   reval(d.leadId);
   return { ok: true };
 }
 
 export async function toggleTask(id: string): Promise<ActionResult> {
-  await requireSection("contacts");
-  const task = await prisma.contactTask.findUnique({ where: { id }, select: { status: true, leadId: true } });
+  const session = await requireSection("contacts");
+  const task = await prisma.contactTask.findUnique({
+    where: { id },
+    select: { status: true, leadId: true, title: true },
+  });
   if (!task) return { ok: false, error: "Task not found" };
   const nowOpen = task.status === "COMPLETED";
   await prisma.contactTask.update({
     where: { id },
     data: { status: nowOpen ? "OPEN" : "COMPLETED", completedAt: nowOpen ? null : new Date() },
   });
+  const diff = diffFields({ status: task.status }, { status: nowOpen ? "OPEN" : "COMPLETED" });
+  await logActivity(session, {
+    action: "task.update",
+    section: "contacts",
+    entityType: "ContactTask",
+    entityId: id,
+    summary: `${nowOpen ? "Reopened" : "Completed"} task "${task.title}"`,
+    meta: { changed: diff.changed, before: diff.before, after: diff.after },
+  });
   reval(task.leadId ?? undefined);
   return { ok: true };
 }
 
 export async function deleteTask(id: string): Promise<ActionResult> {
-  await requireSection("contacts");
-  const task = await prisma.contactTask.findUnique({ where: { id }, select: { leadId: true } });
+  const session = await requireSection("contacts");
+  const task = await prisma.contactTask.findUnique({
+    where: { id },
+    select: { leadId: true, title: true },
+  });
   if (!task) return { ok: false, error: "Task not found" };
   await prisma.contactTask.delete({ where: { id } });
+  await logActivity(session, {
+    action: "task.delete",
+    section: "contacts",
+    entityType: "ContactTask",
+    entityId: id,
+    summary: `Deleted task "${task.title}"`,
+    meta: { leadId: task.leadId },
+  });
   reval(task.leadId ?? undefined);
   return { ok: true };
 }
@@ -309,11 +480,11 @@ const companySchema = z.object({
 });
 
 export async function createCompany(form: FormData): Promise<ActionResult> {
-  await requireSection("contacts");
+  const session = await requireSection("contacts");
   const parsed = companySchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
-  await prisma.company.create({
+  const company = await prisma.company.create({
     data: {
       name: d.name,
       domain: d.domain || null,
@@ -323,36 +494,69 @@ export async function createCompany(form: FormData): Promise<ActionResult> {
       country: d.country || null,
       ownerId: d.ownerId || null,
     },
+  });
+  await logActivity(session, {
+    action: "company.create",
+    section: "contacts",
+    entityType: "Company",
+    entityId: company.id,
+    summary: `Added company ${d.name}`,
+    meta: { domain: d.domain || null, city: d.city || null },
   });
   revalidatePath("/contacts");
   return { ok: true };
 }
 
 export async function updateCompany(id: string, form: FormData): Promise<ActionResult> {
-  await requireSection("contacts");
+  const session = await requireSection("contacts");
   const parsed = companySchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
-  await prisma.company.update({
+  const before = await prisma.company.findUnique({
     where: { id },
-    data: {
-      name: d.name,
-      domain: d.domain || null,
-      phone: d.phone || null,
-      email: d.email || null,
-      city: d.city || null,
-      country: d.country || null,
-      ownerId: d.ownerId || null,
-    },
+    select: { name: true, domain: true, phone: true, email: true, city: true, country: true, ownerId: true },
   });
+  const data = {
+    name: d.name,
+    domain: d.domain || null,
+    phone: d.phone || null,
+    email: d.email || null,
+    city: d.city || null,
+    country: d.country || null,
+    ownerId: d.ownerId || null,
+  };
+  await prisma.company.update({ where: { id }, data });
+  if (before) {
+    const diff = diffFields(before, data);
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "company.update",
+        section: "contacts",
+        entityType: "Company",
+        entityId: id,
+        summary: `Updated company ${d.name} — changed ${diff.changed.join(", ")}`,
+        meta: { changed: diff.changed, before: diff.before, after: diff.after },
+      });
+    }
+  }
   revalidatePath("/contacts");
   return { ok: true };
 }
 
 export async function deleteCompany(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
+  const company = await prisma.company.findUnique({ where: { id }, select: { name: true } });
   await prisma.company.delete({ where: { id } }); // Lead.companyId → null (SetNull)
+  if (company) {
+    await logActivity(session, {
+      action: "company.delete",
+      section: "contacts",
+      entityType: "Company",
+      entityId: id,
+      summary: `Deleted company ${company.name}`,
+    });
+  }
   revalidatePath("/contacts");
   return { ok: true };
 }
@@ -375,7 +579,7 @@ function slugify(name: string): string {
 }
 
 export async function createCustomField(form: FormData): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   const parsed = customFieldSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -394,7 +598,7 @@ export async function createCustomField(form: FormData): Promise<ActionResult> {
     where: { object: "CONTACT" },
     _max: { position: true },
   });
-  await prisma.customFieldDefinition.create({
+  const field = await prisma.customFieldDefinition.create({
     data: {
       object: "CONTACT",
       name: d.name,
@@ -404,14 +608,36 @@ export async function createCustomField(form: FormData): Promise<ActionResult> {
       position: (max._max.position ?? -1) + 1,
     },
   });
+  await logActivity(session, {
+    action: "contact.field.create",
+    section: "contacts",
+    entityType: "CustomFieldDefinition",
+    entityId: field.id,
+    summary: `Created the "${d.name}" contact field`,
+    meta: { key, fieldType: d.fieldType, options: options ?? null },
+  });
   revalidatePath("/contacts");
   return { ok: true };
 }
 
 export async function deleteCustomField(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
+  const field = await prisma.customFieldDefinition.findUnique({
+    where: { id },
+    select: { name: true, key: true },
+  });
   await prisma.customFieldDefinition.delete({ where: { id } });
+  if (field) {
+    await logActivity(session, {
+      action: "contact.field.delete",
+      section: "contacts",
+      entityType: "CustomFieldDefinition",
+      entityId: id,
+      summary: `Deleted the "${field.name}" contact field`,
+      meta: { key: field.key },
+    });
+  }
   revalidatePath("/contacts");
   return { ok: true };
 }

@@ -5,12 +5,13 @@ import { z } from "zod";
 import type { WhatsAppKind, WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection, requireAdmin } from "@/lib/rbac";
-import { writeEmailSettings } from "@/lib/email";
-import { writeSmsSettings } from "@/lib/sms";
-import { WHATSAPP_KINDS } from "@/lib/whatsapp";
+import { readEmailSettings, writeEmailSettings } from "@/lib/email";
+import { readSmsSettings, writeSmsSettings } from "@/lib/sms";
+import { WHATSAPP_KINDS, WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
 import { getWatiRuntime } from "@/lib/wati";
 import { sendEmailMessage, sendSmsMessage, type SendOutcome } from "./messaging";
 import { sendWhatsApp, sendFreeFormMessage, type SendOutcome as WaSendOutcome } from "./whatsapp";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /** Conversations mutations: send email/SMS/WhatsApp, thread read/assign, template CRUD, channel settings. Gated to `conversations`. */
@@ -41,9 +42,19 @@ export async function sendWhatsAppFreeTextAction(leadId: string, form: FormData)
   const session = await requireSection("conversations");
   const text = String(form.get("body") ?? "").trim();
   if (!text) return { ok: false, message: "Message is required" };
-  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { phone: true } });
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true, phone: true } });
   if (!lead?.phone) return { ok: false, message: "No phone number for this contact" };
   const out = await sendFreeFormMessage(lead.phone, text, session.user.id);
+  if (out.sent && out.messageId) {
+    await logActivity(session, {
+      action: "whatsapp.send",
+      section: "conversations",
+      entityType: "WhatsAppMessage",
+      entityId: out.messageId,
+      summary: `Sent ${lead.name} a free-form WhatsApp reply`,
+      meta: { leadId, status: out.status, body: text.slice(0, 200) },
+    });
+  }
   revalidatePath("/conversations");
   revalidatePath(`/contacts/${leadId}`);
   return toWaResult(out, "WhatsApp message sent");
@@ -62,7 +73,7 @@ export async function sendWhatsAppTemplateAction(leadId: string, form: FormData)
   if (!(WHATSAPP_KINDS as readonly string[]).includes(raw)) return { ok: false, message: "Pick a template" };
   const kind = raw as WhatsAppKind;
 
-  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { phone: true } });
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true, phone: true } });
   if (!lead?.phone) return { ok: false, message: "No phone number for this contact" };
 
   const runtime = await getWatiRuntime();
@@ -76,6 +87,16 @@ export async function sendWhatsAppTemplateAction(leadId: string, form: FormData)
   });
 
   const out = await sendWhatsApp({ kind, to: lead.phone, leadId, vars, sentById: session.user.id, runtime });
+  if (out.sent && out.messageId) {
+    await logActivity(session, {
+      action: "whatsapp.send",
+      section: "conversations",
+      entityType: "WhatsAppMessage",
+      entityId: out.messageId,
+      summary: `Sent ${lead.name} the "${WHATSAPP_KIND_LABELS[kind]}" WhatsApp template`,
+      meta: { leadId, kind, template: template.name, status: out.status, vars },
+    });
+  }
   revalidatePath("/conversations");
   revalidatePath(`/contacts/${leadId}`);
   return toWaResult(out, "WhatsApp template sent");
@@ -94,13 +115,26 @@ export async function markThreadRead(leadId: string): Promise<ActionResult> {
 /** Assign (or unassign) a whole thread — writes assignedToId onto every Message row for the lead,
  *  so any row (and therefore getInboxThreads' "latest row" read) agrees on who owns it. */
 export async function assignThread(leadId: string, form: FormData): Promise<ActionResult> {
-  await requireSection("conversations");
+  const session = await requireSection("conversations");
   const userId = String(form.get("userId") ?? "").trim();
+  let assigneeName: string | null = null;
   if (userId) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true } });
     if (!user) return { ok: false, error: "User not found" };
+    assigneeName = user.name;
   }
   await prisma.message.updateMany({ where: { leadId }, data: { assignedToId: userId || null } });
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true } });
+  await logActivity(session, {
+    action: "conversation.assign",
+    section: "conversations",
+    entityType: "Lead",
+    entityId: leadId,
+    summary: assigneeName
+      ? `Assigned ${lead?.name ?? "a contact"}'s conversation to ${assigneeName}`
+      : `Unassigned ${lead?.name ?? "a contact"}'s conversation`,
+    meta: { assignedToId: userId || null },
+  });
   revalidatePath("/conversations");
   return { ok: true };
 }
@@ -112,6 +146,18 @@ export async function sendEmailAction(leadId: string, form: FormData): Promise<S
   if (!subject) return { ok: false, status: "FAILED", message: "Subject is required" };
   if (!body) return { ok: false, status: "FAILED", message: "Message is required" };
   const res = await sendEmailMessage({ leadId, subject, body, sentById: session.user.id });
+  // SENT only: `ok` is also true for a SKIPPED row (channel off), which nobody received.
+  if (res.status === "SENT") {
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true } });
+    await logActivity(session, {
+      action: "email.send",
+      section: "conversations",
+      entityType: "Lead",
+      entityId: leadId,
+      summary: `Emailed ${lead?.name ?? "a contact"} — "${subject}"`,
+      meta: { channel: "EMAIL", subject, body: body.slice(0, 200) },
+    });
+  }
   revalidatePath("/conversations");
   revalidatePath(`/contacts/${leadId}`);
   return res;
@@ -122,6 +168,17 @@ export async function sendSmsAction(leadId: string, form: FormData): Promise<Sen
   const body = String(form.get("body") ?? "").trim();
   if (!body) return { ok: false, status: "FAILED", message: "Message is required" };
   const res = await sendSmsMessage({ leadId, body, sentById: session.user.id });
+  if (res.status === "SENT") {
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true } });
+    await logActivity(session, {
+      action: "sms.send",
+      section: "conversations",
+      entityType: "Lead",
+      entityId: leadId,
+      summary: `Sent ${lead?.name ?? "a contact"} an SMS`,
+      meta: { channel: "SMS", body: body.slice(0, 200) },
+    });
+  }
   revalidatePath("/conversations");
   revalidatePath(`/contacts/${leadId}`);
   return res;
@@ -137,33 +194,74 @@ const templateSchema = z.object({
 });
 
 export async function createTemplate(form: FormData): Promise<ActionResult> {
-  await requireSection("conversations");
+  const session = await requireSection("conversations");
   const parsed = templateSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
-  await prisma.messageTemplate.create({
+  const template = await prisma.messageTemplate.create({
     data: { channel: d.channel, name: d.name, subject: d.channel === "EMAIL" ? d.subject || null : null, body: d.body },
+  });
+  await logActivity(session, {
+    action: "template.create",
+    section: "conversations",
+    entityType: "MessageTemplate",
+    entityId: template.id,
+    summary: `Created the ${d.channel} template "${d.name}"`,
+    meta: { channel: d.channel },
   });
   revalidatePath("/conversations");
   return { ok: true };
 }
 
 export async function updateTemplate(id: string, form: FormData): Promise<ActionResult> {
-  await requireSection("conversations");
+  const session = await requireSection("conversations");
   const parsed = templateSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
-  await prisma.messageTemplate.update({
+  const before = await prisma.messageTemplate.findUnique({
     where: { id },
-    data: { channel: d.channel, name: d.name, subject: d.channel === "EMAIL" ? d.subject || null : null, body: d.body },
+    select: { channel: true, name: true, subject: true, body: true },
   });
+  const data = {
+    channel: d.channel,
+    name: d.name,
+    subject: d.channel === "EMAIL" ? d.subject || null : null,
+    body: d.body,
+  };
+  await prisma.messageTemplate.update({ where: { id }, data });
+  if (before) {
+    const diff = diffFields(before, data);
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "template.update",
+        section: "conversations",
+        entityType: "MessageTemplate",
+        entityId: id,
+        summary: `Updated the ${d.channel} template "${d.name}" — changed ${diff.changed.join(", ")}`,
+        meta: { changed: diff.changed, before: diff.before, after: diff.after },
+      });
+    }
+  }
   revalidatePath("/conversations");
   return { ok: true };
 }
 
 export async function deleteTemplate(id: string): Promise<ActionResult> {
-  await requireSection("conversations");
+  const session = await requireSection("conversations");
+  const template = await prisma.messageTemplate.findUnique({
+    where: { id },
+    select: { channel: true, name: true },
+  });
   await prisma.messageTemplate.delete({ where: { id } });
+  if (template) {
+    await logActivity(session, {
+      action: "template.delete",
+      section: "conversations",
+      entityType: "MessageTemplate",
+      entityId: id,
+      summary: `Deleted the ${template.channel} template "${template.name}"`,
+    });
+  }
   revalidatePath("/conversations");
   return { ok: true };
 }
@@ -171,22 +269,48 @@ export async function deleteTemplate(id: string): Promise<ActionResult> {
 // ─────────────────────────── Channel settings (admin) ───────────────────────────
 
 export async function saveEmailSettings(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  await writeEmailSettings({
+  const session = await requireAdmin();
+  const before = await readEmailSettings();
+  const settings = {
     paused: String(form.get("paused") ?? "") === "on",
     fromName: String(form.get("fromName") ?? "").trim() || "B2 Consultants",
     fromEmail: String(form.get("fromEmail") ?? "").trim(),
-  });
+  };
+  await writeEmailSettings(settings);
+  const diff = diffFields(before, settings);
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "email.settings.update",
+      section: "conversations",
+      entityType: "AppSetting",
+      entityId: "emailConfig",
+      summary: `Updated the email channel settings — changed ${diff.changed.join(", ")}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   revalidatePath("/conversations");
   return { ok: true };
 }
 
 export async function saveSmsSettings(form: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  await writeSmsSettings({
+  const session = await requireAdmin();
+  const before = await readSmsSettings();
+  const settings = {
     paused: String(form.get("paused") ?? "") === "on",
     fromNumber: String(form.get("fromNumber") ?? "").trim(),
-  });
+  };
+  await writeSmsSettings(settings);
+  const diff = diffFields(before, settings);
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "sms.settings.update",
+      section: "conversations",
+      entityType: "AppSetting",
+      entityId: "smsConfig",
+      summary: `Updated the SMS channel settings — changed ${diff.changed.join(", ")}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   revalidatePath("/conversations");
   return { ok: true };
 }

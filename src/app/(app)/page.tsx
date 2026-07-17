@@ -1,22 +1,27 @@
 import { redirect } from "next/navigation";
 import {
-  BellRing, ClipboardList, Gauge, GraduationCap, IndianRupee, Medal, ReceiptText, Trophy, Waypoints,
+  ClipboardList, Gauge, GraduationCap, IndianRupee, Languages, LayoutGrid, Medal, ReceiptText,
+  Timer, Trophy, Wallet, Waypoints,
 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { PageHeader } from "@/components/ui/kit";
+import { PageHeader, SectionHeading, ViewAll } from "@/components/ui/kit";
 import { OnboardingWalkthrough } from "@/components/onboarding/OnboardingWalkthrough";
 import { WorkTracker } from "./_components/WorkTracker";
-import { FounderPulse } from "./_components/FounderPulse";
+import { MonthHero } from "./_components/MonthHero";
+import { WeekMomentum } from "./_components/WeekMomentum";
+import { RecentWins } from "./_components/RecentWins";
+import { NeedsAttention } from "./_components/NeedsAttention";
 import { KpiRangeSwitch } from "./_components/KpiRangeSwitch";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { signalForRunway } from "@/lib/signals";
-import { parseKpiRange } from "@/lib/dates";
+import { parseKpiRange, istToday } from "@/lib/dates";
 import { requireSession } from "@/lib/rbac";
 import { getRunwaySnapshot } from "@/server/cash-metrics";
 import { getPendingRows } from "@/server/finance-metrics";
 import { getPipelineSnapshot } from "@/server/pipeline-metrics";
 import { getMyGame, getTeamGame } from "@/server/gamification";
+import { getGnHomeSnapshot } from "@/server/german-note-metrics";
 import { computeNotifications } from "@/server/notifications";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +49,7 @@ export default async function Home({
   const range = parseKpiRange(searchParams.range);
   const rangeLabel = range === "last-month" ? "Last Month" : range === "qtd" ? "QTD" : "This Month";
 
-  const [fx, runway, notifications, game, teamGame, pipeline, pendingRows] = await Promise.all([
+  const [fx, runway, notifications, game, teamGame, pipeline, pendingRows, gn] = await Promise.all([
     getTodayInrPerEur(),
     isAdmin ? getRunwaySnapshot(range) : Promise.resolve(null),
     computeNotifications(session.role, session.user.id),
@@ -54,13 +59,9 @@ export default async function Home({
     // NOT cash/finance data, which stays Admin-only below.
     isAdmin || isHead ? getPipelineSnapshot(range) : Promise.resolve(null),
     isAdmin ? getPendingRows() : Promise.resolve(null),
+    // Head oversees the LMS read-only (getGnAccess `isViewer`), so both roles get the tile.
+    isAdmin || isHead ? getGnHomeSnapshot() : Promise.resolve(null),
   ]);
-
-  // Attention card colour follows the most severe pending notification.
-  const hasRisk = notifications.some((n) => n.severity === "risk");
-  const hasWatch = notifications.some((n) => n.severity === "watch");
-  const attnSignal = notifications.length === 0 ? "ok" : hasRisk ? "risk" : hasWatch ? "watch" : undefined;
-  const top = notifications[0];
 
   const months = runway?.runwayMonths ?? null;
 
@@ -70,10 +71,10 @@ export default async function Home({
   );
   const overdueInr = overdueRows.reduce((a, p) => a + p.balance.inr, 0);
   const oldestOverdueDays = overdueRows.reduce((a, p) => Math.max(a, p.daysOverdue), 0);
+  const firstName = session.user.name.split(" ")[0];
 
-  // Pipeline value / Wins — shared between Admin's "At a glance" grid and Head's home
-  // hero (Head now has /pipeline access; hiding this on the dashboard while allowing it
-  // on /pipeline itself would be inconsistent). Never shown to User.
+  // Pipeline value / Wins — shared between Admin's momentum grid and Head's pipeline
+  // section (Head now has /pipeline access). Never shown to User.
   const pipelineValueCard = pipeline && (
     <MetricCard
       label="Pipeline value"
@@ -109,153 +110,196 @@ export default async function Home({
     />
   );
 
+  // Arena tile — my level + rank (Head/User) or the weekly champion (Admin).
+  const arenaMeCard = game && (
+    <MetricCard
+      label="Arena"
+      value={`Lv ${game.me.level.level} · ${game.me.level.title}`}
+      secondary={`#${game.me.rankWeek} this week · ${game.me.xpTotal.toLocaleString("en-IN")} XP · 🔥 ${game.me.streak}d`}
+      icon={<Trophy size={18} />}
+      href="/arena"
+    />
+  );
+  const dailyLogCard = (
+    <MetricCard
+      label="Your daily log"
+      value="Log today"
+      secondary="Add your numbers for today"
+      icon={<ClipboardList size={18} />}
+      href="/daily-log"
+    />
+  );
+
+  // German Note tile — Admin and Head only. Tutors/students are redirected to
+  // /german-note above and never see this page.
+  const germanNoteCard = gn && (
+    <MetricCard
+      label="German Note"
+      value={`${gn.activeBatches} active batch${gn.activeBatches === 1 ? "" : "es"}`}
+      secondary={
+        gn.nextEvent
+          ? `Next: ${gn.nextEvent.title} · ${gn.nextEvent.batch.name} · ${formatDate(gn.nextEvent.startsAt)}`
+          : gn.learners > 0
+            ? `${gn.learners} learner${gn.learners === 1 ? "" : "s"} · nothing scheduled`
+            : "No learners enrolled yet"
+      }
+      tooltip="Live German Note batches, with the next scheduled class across all of them. Archived batches are excluded — their recordings stay available to students for lifetime."
+      icon={<Languages size={18} />}
+      href="/german-note"
+    />
+  );
+
   return (
     <div className="w-full space-y-8">
       <OnboardingWalkthrough
         userId={session.user.id}
         role={session.role}
-        firstName={session.user.name.split(" ")[0]}
+        firstName={firstName}
         initialOpen={searchParams.onboarding === "1"}
       />
       <PageHeader
-        eyebrow="Primary"
-        title={`Welcome back, ${session.user.name.split(" ")[0]}`}
-        subtitle="Here is where things stand today."
+        eyebrow="Dashboard"
+        title={`Welcome back, ${firstName}`}
+        subtitle={`Here is where things stand — ${formatDate(istToday())}.`}
+        actions={(isAdmin || isHead) && <KpiRangeSwitch active={range} />}
       />
 
-      {/* Admin sees business outcomes (pace + motion + alerts); Head sees the pipeline
-          numbers their new /pipeline access already grants — never Cash/Finance; everyone
-          else keeps the personal work-time tracker for their own day. */}
+      {/* 1 — Actionable first: everything that needs a decision, lifted to the top. */}
+      <NeedsAttention notifications={notifications} showWins={!isAdmin} />
+
       {isAdmin ? (
-        <FounderPulse notifications={notifications} />
-      ) : isHead ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {pipelineValueCard}
-          {pipelineWinsCard}
-        </div>
-      ) : (
-        <WorkTracker />
-      )}
+        <>
+          {/* 2 — Money: the pace-to-target question that leads the day. */}
+          <section className="space-y-4">
+            <SectionHeading
+              icon={<Wallet size={18} />}
+              title="This month"
+              description="Collections against target, and where the rest comes from"
+              action={<ViewAll href="/finance">View finance</ViewAll>}
+            />
+            <MonthHero />
+          </section>
 
-      {/* At a glance: live, clickable KPIs */}
-      <section>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-h2 font-semibold">At a glance</h2>
-          {/* Date-range control only matters where a figure below is actually range-scoped
-              (Admin's runway/pipeline cards, Head's hero above) — User's tiles never change
-              with it, so it stays hidden for User rather than offering a control that does
-              nothing. */}
-          {(isAdmin || isHead) && <KpiRangeSwitch active={range} />}
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {isAdmin && (
-            <MetricCard
-              label="Cash runway"
-              value={months == null ? "Not set" : `${months} mo`}
-              target={months == null ? undefined : "goal 6 mo"}
-              signal={months == null ? undefined : signalForRunway(months)}
-              progress={months == null ? undefined : Math.min(1, months / 6)}
-              tooltip="Months the bank balance lasts at the current burn: cash ÷ average monthly expenses over the last 3 months. Green ≥ 6, amber 3–6, red < 3."
+          {/* 3 — Momentum: deals in motion and what they're worth. */}
+          <section className="space-y-4">
+            <SectionHeading
+              icon={<Waypoints size={18} />}
+              title="Pipeline momentum"
+              description="This week's motion and the value of what's open"
+              action={<ViewAll href="/pipeline">View pipeline</ViewAll>}
+            />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <WeekMomentum />
+              {pipelineValueCard}
+              {pipelineWinsCard}
+            </div>
+          </section>
+
+          {/* 4 — At a glance: the standing figures you scan, not act on. */}
+          <section className="space-y-4">
+            <SectionHeading
               icon={<Gauge size={18} />}
-              href="/cash"
+              title="At a glance"
+              description="Cash, receivables and today's rate"
             />
-          )}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricCard
+                label="Cash runway"
+                value={months == null ? "Not set" : `${months} mo`}
+                target={months == null ? undefined : "goal 6 mo"}
+                signal={months == null ? undefined : signalForRunway(months)}
+                progress={months == null ? undefined : Math.min(1, months / 6)}
+                tooltip="Months the bank balance lasts at the current burn: cash ÷ average monthly expenses over the last 3 months. Green ≥ 6, amber 3–6, red < 3."
+                icon={<Gauge size={18} />}
+                href="/cash"
+              />
+              <MetricCard
+                label="Overdue receivables"
+                value={overdueRows.length === 0 ? "None" : formatInrMinor(overdueInr, { compact: true })}
+                signal={overdueRows.length === 0 ? "ok" : "risk"}
+                secondary={
+                  overdueRows.length === 0
+                    ? "All payments on schedule"
+                    : `${overdueRows.length} payment${overdueRows.length > 1 ? "s" : ""} past due · oldest ${oldestOverdueDays}d`
+                }
+                tooltip="Money already earned that hasn't arrived. Collecting it costs nothing in ad spend or sales calls — chase this before chasing new leads."
+                icon={<ReceiptText size={18} />}
+                href="/finance"
+              />
+              <MetricCard
+                label="Live FX (ECB)"
+                value={`₹${fx.rate.toFixed(2)}`}
+                secondary={`per €1 · ${formatDate(fx.date)}${fx.stale ? " · cached" : ""}`}
+                icon={<IndianRupee size={18} />}
+                href="/finance"
+              />
+              {teamGame && teamGame.players.length > 0 && (
+                <MetricCard
+                  label="Arena — weekly leader"
+                  value={teamGame.players[0].name.split(" ")[0]}
+                  secondary={`${teamGame.players[0].xpWeek.toLocaleString("en-IN")} XP this week · Lv ${teamGame.players[0].level.level}`}
+                  icon={<Trophy size={18} />}
+                  href="/arena"
+                />
+              )}
+              {germanNoteCard}
+            </div>
+          </section>
 
-          {isAdmin && pipelineValueCard}
-
-          {isAdmin && pipelineWinsCard}
-
-          {isAdmin && (
-            <MetricCard
-              label="Overdue receivables"
-              value={overdueRows.length === 0 ? "None" : formatInrMinor(overdueInr, { compact: true })}
-              signal={overdueRows.length === 0 ? "ok" : "risk"}
-              secondary={
-                overdueRows.length === 0
-                  ? "All payments on schedule"
-                  : `${overdueRows.length} payment${overdueRows.length > 1 ? "s" : ""} past due · oldest ${oldestOverdueDays}d`
-              }
-              tooltip="Money already earned that hasn't arrived. Collecting it costs nothing in ad spend or sales calls — chase this before chasing new leads."
-              icon={<ReceiptText size={18} />}
-              href="/finance"
+          {/* 5 — Recent wins: the celebratory timeline (renders only when there's news). */}
+          <RecentWins />
+        </>
+      ) : isHead ? (
+        <>
+          <section className="space-y-4">
+            <SectionHeading
+              icon={<Waypoints size={18} />}
+              title="Your pipeline"
+              description="Open deals and wins for the selected range"
+              action={<ViewAll href="/pipeline">View pipeline</ViewAll>}
             />
-          )}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {pipelineValueCard}
+              {pipelineWinsCard}
+            </div>
+          </section>
 
-          {/* Head and User lead with the log: it is the only thing either role must
-              do every day (§6.3 badges a missing log at 19:00 IST), so it takes the
-              first slot rather than sitting third. */}
-          {!isAdmin && (
-            <MetricCard
-              label="Your daily log"
-              value="Log today"
-              secondary="Add your numbers for today"
-              icon={<ClipboardList size={18} />}
-              href="/daily-log"
+          <section className="space-y-4">
+            <SectionHeading icon={<LayoutGrid size={18} />} title="At a glance" description="Your day and standings" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {dailyLogCard}
+              <MetricCard
+                label="Students"
+                value="Open board"
+                secondary="Journeys, signals and check-ins"
+                icon={<GraduationCap size={18} />}
+                href="/students"
+              />
+              {germanNoteCard}
+              {arenaMeCard}
+            </div>
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="space-y-4">
+            <SectionHeading
+              icon={<Timer size={18} />}
+              title="Your day"
+              description="Time tracked automatically while you work"
             />
-          )}
+            <WorkTracker />
+          </section>
 
-          {/* FX is a finance tile, so it is Admin-only: §2.1 gives Head a home with
-              "no finance tiles" and User no finance at all. Neither can act on a
-              EUR rate, and for them it had no href either — a dead tile in the
-              grid's first slot. */}
-          {isAdmin && (
-            <MetricCard
-              label="Live FX (ECB)"
-              value={`₹${fx.rate.toFixed(2)}`}
-              secondary={`per €1 · ${formatDate(fx.date)}${fx.stale ? " · cached" : ""}`}
-              icon={<IndianRupee size={18} />}
-              href="/finance"
-            />
-          )}
-
-          {/* Non-admins keep the attention card here; the founder gets the full
-              list inside the pulse above instead of a count behind a click. */}
-          {!isAdmin && (
-            <MetricCard
-              label="Needs attention"
-              value={
-                notifications.length === 0
-                  ? "All clear"
-                  : `${notifications.length} item${notifications.length > 1 ? "s" : ""}`
-              }
-              secondary={top ? top.title : "Nothing needs you right now"}
-              signal={attnSignal}
-              icon={<BellRing size={18} />}
-              href={top ? top.href : undefined}
-            />
-          )}
-
-          {/* Arena: my level + rank, or (Admin) the current weekly champion */}
-          {!isAdmin && game && (
-            <MetricCard
-              label="Arena"
-              value={`Lv ${game.me.level.level} · ${game.me.level.title}`}
-              secondary={`#${game.me.rankWeek} this week · ${game.me.xpTotal.toLocaleString("en-IN")} XP · 🔥 ${game.me.streak}d`}
-              icon={<Trophy size={18} />}
-              href="/arena"
-            />
-          )}
-          {isAdmin && teamGame && teamGame.players.length > 0 && (
-            <MetricCard
-              label="Arena — weekly leader"
-              value={teamGame.players[0].name.split(" ")[0]}
-              secondary={`${teamGame.players[0].xpWeek.toLocaleString("en-IN")} XP this week · Lv ${teamGame.players[0].level.level}`}
-              icon={<Trophy size={18} />}
-              href="/arena"
-            />
-          )}
-
-          {session.role === "HEAD" && (
-            <MetricCard
-              label="Students"
-              value="Open board"
-              secondary="Journeys, signals and check-ins"
-              icon={<GraduationCap size={18} />}
-              href="/students"
-            />
-          )}
-        </div>
-      </section>
+          <section className="space-y-4">
+            <SectionHeading icon={<LayoutGrid size={18} />} title="At a glance" description="Today's task and your standing" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {dailyLogCard}
+              {arenaMeCard}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

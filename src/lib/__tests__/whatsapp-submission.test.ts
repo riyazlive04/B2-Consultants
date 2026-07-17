@@ -178,17 +178,32 @@ describe("Submission pack — Meta's mechanical rules", () => {
 });
 
 describe("Submission pack — categories", () => {
-  test("the two promotional messages are MARKETING, the rest UTILITY", () => {
-    // Category mismatch is the single most common rejection. The intro and the chase promote a
-    // free call to a form-filler; everything from Step 13 references an appointment the prospect
-    // booked themselves.
-    const byStep = Object.fromEntries(SUBMISSION_TEMPLATES.map((t) => [t.step, t.category]));
-    assert.equal(byStep.INTRO_WHATSAPP, "MARKETING");
-    assert.equal(byStep.FOLLOWUP_WHATSAPP, "MARKETING");
+  test("all nine are MARKETING", () => {
+    // Meta allows UTILITY only for a template that is non-promotional and carries no persuasive
+    // intent; mixed content defaults to MARKETING. Every body here sells while it informs, so
+    // none of them clears that bar — see the rationale on SUBMISSION_TEMPLATES.
+    //
+    // This is not a rubber stamp on the current values: to make any of these UTILITY the
+    // promotional copy has to come OUT of the body, which is a proposedFix and a business
+    // decision. Flipping the category alone would earn a silent re-categorisation from Meta and
+    // an abuse flag, which is exactly the mistake this test exists to catch.
     for (const t of SUBMISSION_TEMPLATES) {
-      if (t.step !== "INTRO_WHATSAPP" && t.step !== "FOLLOWUP_WHATSAPP") {
-        assert.equal(t.category, "UTILITY", `${t.name} should be UTILITY`);
-      }
+      assert.equal(t.category, "MARKETING", `${t.name} should be MARKETING`);
+    }
+  });
+
+  test("a template stays MARKETING on its copy, not on whether it asks for a YES", () => {
+    // Guards the reasoning, not just the values. A "reply YES to confirm" is the textbook UTILITY
+    // case and is NOT what disqualifies these. The proof is the two cancellations: they ask for
+    // nothing, and they are still MARKETING, because they carry a re-booking CTA. If someone ever
+    // strips the promo copy to win UTILITY back, the YES must not be what they remove.
+    const cancels = SUBMISSION_TEMPLATES.filter(
+      (t) => t.step === "DISCO_CANCEL_MSG" || t.step === "SSS_CANCEL_MSG",
+    );
+    assert.equal(cancels.length, 2);
+    for (const t of cancels) {
+      assert.doesNotMatch(submissionBody(t), /reply \*?YES/i, `${t.name} asks for no confirmation…`);
+      assert.equal(t.category, "MARKETING", `…yet ${t.name} is still MARKETING`);
     }
   });
 

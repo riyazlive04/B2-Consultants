@@ -42,6 +42,8 @@ type SectionCatalogueEntry = {
   readonly roles: readonly AppRole[];
   /** always enabled, always ADMIN-only — the founder can't lock themselves out */
   readonly locked?: boolean;
+  /** hidden in code: ships disabled by default (nav + route), but the console can still re-enable it */
+  readonly hidden?: boolean;
 };
 
 export const SECTION_CATALOGUE = [
@@ -76,7 +78,7 @@ export const SECTION_CATALOGUE = [
   // STUDENT portal: their own journey only + the CV diagnostic (stores nothing).
   { key: "my-journey", label: "My Journey", href: "/my-journey", phase: 2, icon: "map", group: "People", roles: ["STUDENT"] },
   // German Note LMS: batches + class recordings + community (Phase 4).
-  { key: "german-note", label: "German Note", href: "/german-note", phase: 4, icon: "languages", group: "People", roles: ["ADMIN", "TUTOR", "STUDENT"] },
+  { key: "german-note", label: "German Note", href: "/german-note", phase: 4, icon: "languages", group: "People", roles: ["ADMIN", "HEAD", "TUTOR", "STUDENT"] },
   { key: "funnel", label: "Conversion Funnel", href: "/funnel", phase: 3, icon: "filter", group: "Insights", roles: ["ADMIN"] },
   // Synamate Sites parity (Phase 2): native form + funnel/landing-page builders with public hosting.
   { key: "forms", label: "Forms", href: "/forms", phase: 2, icon: "file-text", group: "Insights", roles: ["ADMIN", "USER"] },
@@ -90,8 +92,14 @@ export const SECTION_CATALOGUE = [
   // schema. Admin-only, like the rest of Insights' cross-cutting views.
   { key: "reports", label: "Reports", href: "/reports", phase: 6, icon: "bar-chart", group: "Insights", roles: ["ADMIN"] },
   { key: "console", label: "Founder Console", href: "/console", phase: 1, icon: "sliders", group: "Workspace", roles: ["ADMIN"], locked: true },
+  // Who did what, when — every write in the app, with an exact IST timestamp.
+  // `locked`, for the same reason `console` is: this is the screen that shows whether the
+  // access rules are being respected, so it must not be switchable-off or grantable to the
+  // people it reports on. A telecaller who could hide the log, or read it, would defeat it.
+  { key: "activity", label: "Activity Log", href: "/activity", phase: 1, icon: "shield", group: "Workspace", roles: ["ADMIN"], locked: true },
   // Synamate Automation parity (Phase 5): trigger → action workflow engine.
-  { key: "automation", label: "Automation", href: "/automation", phase: 5, icon: "workflow", group: "Workspace", roles: ["ADMIN"] },
+  // Hidden in code for now — off in the nav and unreachable by route until re-enabled.
+  { key: "automation", label: "Automation", href: "/automation", phase: 5, icon: "workflow", group: "Workspace", roles: ["ADMIN"], hidden: true },
   { key: "guide", label: "App Guide", href: "/guide", phase: 1, icon: "book-open", group: "Workspace", roles: ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR"] },
 ] as const satisfies readonly SectionCatalogueEntry[];
 
@@ -139,8 +147,9 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
   const saved = new Map((config?.entries ?? []).map((e) => [e.key, e]));
   return SECTION_CATALOGUE.map((base, i): ResolvedSection => {
     const s = saved.get(base.key);
-    // Only some catalogue entries carry `locked`, so the union type doesn't have the key.
+    // Only some catalogue entries carry `locked` / `hidden`, so the union type doesn't have the keys.
     const locked = "locked" in base && base.locked === true;
+    const hiddenByCode = "hidden" in base && base.hidden === true;
     return {
       key: base.key,
       href: base.href,
@@ -151,7 +160,8 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
       group: s?.group ?? base.group,
       order: s?.order ?? (i + 1) * ORDER_STEP,
       // A locked section is never off and never leaves ADMIN, whatever the JSON says.
-      enabled: locked ? true : (s?.enabled ?? true),
+      // A code-hidden section ships off by default, but an explicit config override still wins.
+      enabled: locked ? true : (s?.enabled ?? !hiddenByCode),
       roles: locked ? ["ADMIN"] : (s?.roles ?? [...base.roles]),
     };
   }).sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));

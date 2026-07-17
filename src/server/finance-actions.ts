@@ -2,13 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { Expense, Income, PendingPayment } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
 import { getTodayInrPerEur } from "@/lib/fx";
-import { majorStringToMinor } from "@/lib/format";
+import { formatDate, formatEurMinor, formatInrMinor, majorStringToMinor } from "@/lib/format";
 import { istToday, parseDateInput } from "@/lib/dates";
 import { appendAudit, LedgerError, postEntry, voidEntryForSource } from "./ledger";
 import { expenseEntryDraft, incomeEntryDraft } from "./finance-posting";
+import { logActivity, diffFields } from "./activity-log";
 
 /** Finance is Admin-only in every direction (PRD1 §4.1). All actions re-check. */
 
@@ -68,6 +70,54 @@ function requireSomeAmount(inr?: string, eur?: string): string | null {
   return null;
 }
 
+/** A row may carry INR, EUR, or both — the feed reads back exactly what was entered. */
+function amountDisplay(inrMinor: bigint, eurMinor: bigint): string {
+  const parts: string[] = [];
+  if (inrMinor > BigInt(0)) parts.push(formatInrMinor(inrMinor));
+  if (eurMinor > BigInt(0)) parts.push(formatEurMinor(eurMinor));
+  return parts.length ? parts.join(" + ") : formatInrMinor(BigInt(0));
+}
+
+/** Diff shape for money rows: amounts as strings, because diffFields JSON-compares and
+ *  BigInt has no JSON representation — a raw minor amount would throw on the way in. */
+function incomeDiffShape(row: Income) {
+  return {
+    date: row.date,
+    studentName: row.studentName,
+    amountInrMinor: row.amountInrMinor.toString(),
+    amountEurMinor: row.amountEurMinor.toString(),
+    programLevel: row.programLevel as string,
+    paymentType: row.paymentType as string,
+    paymentMethod: row.paymentMethod as string,
+    studentId: row.studentId,
+    notes: row.notes,
+  };
+}
+
+function expenseDiffShape(row: Expense) {
+  return {
+    date: row.date,
+    amountInrMinor: row.amountInrMinor.toString(),
+    amountEurMinor: row.amountEurMinor.toString(),
+    category: row.category as string,
+    isCogs: row.isCogs,
+    vendor: row.vendor,
+    notes: row.notes,
+  };
+}
+
+function pendingDiffShape(row: PendingPayment) {
+  return {
+    studentName: row.studentName,
+    programLevel: row.programLevel as string,
+    totalFeeInrMinor: row.totalFeeInrMinor.toString(),
+    totalFeeEurMinor: row.totalFeeEurMinor.toString(),
+    nextDueDate: row.nextDueDate,
+    status: row.status as string,
+    notes: row.notes,
+  };
+}
+
 export async function createIncome(form: FormData): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
@@ -78,6 +128,7 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
   if (amountError) return { ok: false, error: amountError };
 
   const fx = await getTodayInrPerEur();
+  let created: Income | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       const income = await tx.income.create({
@@ -103,9 +154,28 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
         entityId: income.id,
         payload: { entryId, studentName: income.studentName, programLevel: income.programLevel },
       });
+      created = income;
     });
   });
   if (!result.ok) return result;
+
+  if (created) {
+    const row: Income = created;
+    await logActivity(session, {
+      action: "finance.income.create",
+      section: "finance",
+      entityType: "Income",
+      entityId: row.id,
+      summary: `Recorded income of ${amountDisplay(row.amountInrMinor, row.amountEurMinor)} from ${row.studentName} (${row.programLevel})`,
+      meta: {
+        amountInrMinor: row.amountInrMinor.toString(),
+        amountEurMinor: row.amountEurMinor.toString(),
+        programLevel: row.programLevel,
+        paymentType: row.paymentType,
+        paymentMethod: row.paymentMethod,
+      },
+    });
+  }
 
   revalidatePath("/finance");
   revalidatePath("/students");
@@ -125,6 +195,7 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
   const existing = await prisma.income.findUnique({ where: { id } });
   if (!existing) return { ok: false, error: "Record not found" };
 
+  let updated: Income | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       const income = await tx.income.update({
@@ -158,9 +229,25 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
         entityId: id,
         payload: { reversalId, entryId, studentName: income.studentName },
       });
+      updated = income;
     });
   });
   if (!result.ok) return result;
+
+  if (updated) {
+    const row: Income = updated;
+    const diff = diffFields(incomeDiffShape(existing), incomeDiffShape(row));
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "finance.income.update",
+        section: "finance",
+        entityType: "Income",
+        entityId: row.id,
+        summary: `Edited the ${amountDisplay(row.amountInrMinor, row.amountEurMinor)} income from ${row.studentName}`,
+        meta: diff,
+      });
+    }
+  }
 
   revalidatePath("/finance");
   revalidatePath("/students");
@@ -172,6 +259,7 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
 
+  let removed: Income | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       // The entry and its reversal both stay: deleting the Income row removes the record,
@@ -181,7 +269,7 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
         actorId: session.user.id,
         on: istToday(),
       });
-      await tx.income.delete({ where: { id } });
+      const income = await tx.income.delete({ where: { id } });
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "income.delete",
@@ -189,9 +277,26 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
         entityId: id,
         payload: { reversalId },
       });
+      removed = income;
     });
   });
   if (!result.ok) return result;
+
+  if (removed) {
+    const row: Income = removed;
+    await logActivity(session, {
+      action: "finance.income.delete",
+      section: "finance",
+      entityType: "Income",
+      entityId: row.id,
+      summary: `Deleted the ${amountDisplay(row.amountInrMinor, row.amountEurMinor)} income from ${row.studentName} dated ${formatDate(row.date)}`,
+      meta: {
+        amountInrMinor: row.amountInrMinor.toString(),
+        amountEurMinor: row.amountEurMinor.toString(),
+        programLevel: row.programLevel,
+      },
+    });
+  }
 
   revalidatePath("/finance");
   revalidatePath("/students");
@@ -222,6 +327,7 @@ export async function createExpense(form: FormData): Promise<ActionResult> {
   if (amountError) return { ok: false, error: amountError };
 
   const fx = await getTodayInrPerEur();
+  let created: Expense | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       const expense = await tx.expense.create({
@@ -245,9 +351,27 @@ export async function createExpense(form: FormData): Promise<ActionResult> {
         entityId: expense.id,
         payload: { entryId, vendor: expense.vendor, category: expense.category, isCogs: expense.isCogs },
       });
+      created = expense;
     });
   });
   if (!result.ok) return result;
+
+  if (created) {
+    const row: Expense = created;
+    await logActivity(session, {
+      action: "finance.expense.create",
+      section: "finance",
+      entityType: "Expense",
+      entityId: row.id,
+      summary: `Recorded an expense of ${amountDisplay(row.amountInrMinor, row.amountEurMinor)} paid to ${row.vendor} (${row.category})`,
+      meta: {
+        amountInrMinor: row.amountInrMinor.toString(),
+        amountEurMinor: row.amountEurMinor.toString(),
+        category: row.category,
+        isCogs: row.isCogs,
+      },
+    });
+  }
 
   revalidatePath("/finance");
   revalidatePath("/ledger");
@@ -263,6 +387,8 @@ export async function updateExpense(id: string, form: FormData): Promise<ActionR
   const amountError = requireSomeAmount(d.amountInr, d.amountEur);
   if (amountError) return { ok: false, error: amountError };
 
+  const existing = await prisma.expense.findUnique({ where: { id } });
+  let updated: Expense | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       const expense = await tx.expense.update({
@@ -291,9 +417,25 @@ export async function updateExpense(id: string, form: FormData): Promise<ActionR
         entityId: id,
         payload: { reversalId, entryId, vendor: expense.vendor },
       });
+      updated = expense;
     });
   });
   if (!result.ok) return result;
+
+  if (existing && updated) {
+    const row: Expense = updated;
+    const diff = diffFields(expenseDiffShape(existing), expenseDiffShape(row));
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "finance.expense.update",
+        section: "finance",
+        entityType: "Expense",
+        entityId: row.id,
+        summary: `Edited the ${amountDisplay(row.amountInrMinor, row.amountEurMinor)} expense paid to ${row.vendor}`,
+        meta: diff,
+      });
+    }
+  }
 
   revalidatePath("/finance");
   revalidatePath("/ledger");
@@ -304,6 +446,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
 
+  let removed: Expense | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       const reversalId = await voidEntryForSource(tx, "EXPENSE", id, {
@@ -311,7 +454,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
         actorId: session.user.id,
         on: istToday(),
       });
-      await tx.expense.delete({ where: { id } });
+      const expense = await tx.expense.delete({ where: { id } });
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "expense.delete",
@@ -319,9 +462,26 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
         entityId: id,
         payload: { reversalId },
       });
+      removed = expense;
     });
   });
   if (!result.ok) return result;
+
+  if (removed) {
+    const row: Expense = removed;
+    await logActivity(session, {
+      action: "finance.expense.delete",
+      section: "finance",
+      entityType: "Expense",
+      entityId: row.id,
+      summary: `Deleted the ${amountDisplay(row.amountInrMinor, row.amountEurMinor)} expense paid to ${row.vendor} dated ${formatDate(row.date)}`,
+      meta: {
+        amountInrMinor: row.amountInrMinor.toString(),
+        amountEurMinor: row.amountEurMinor.toString(),
+        category: row.category,
+      },
+    });
+  }
 
   revalidatePath("/finance");
   revalidatePath("/ledger");
@@ -341,7 +501,7 @@ const pendingSchema = z.object({
 });
 
 export async function createPendingPayment(form: FormData): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
   const parsed = pendingSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -350,7 +510,7 @@ export async function createPendingPayment(form: FormData): Promise<ActionResult
   if (amountError) return { ok: false, error: "Enter the total fee in INR, EUR, or both" };
 
   const fx = await getTodayInrPerEur();
-  await prisma.pendingPayment.create({
+  const row = await prisma.pendingPayment.create({
     data: {
       studentName: d.studentName,
       programLevel: d.programLevel,
@@ -362,12 +522,27 @@ export async function createPendingPayment(form: FormData): Promise<ActionResult
       notes: d.notes || null,
     },
   });
+
+  await logActivity(session, {
+    action: "finance.pendingPayment.create",
+    section: "finance",
+    entityType: "PendingPayment",
+    entityId: row.id,
+    summary: `Added a receivable of ${amountDisplay(row.totalFeeInrMinor, row.totalFeeEurMinor)} for ${row.studentName} (${row.programLevel})`,
+    meta: {
+      totalFeeInrMinor: row.totalFeeInrMinor.toString(),
+      totalFeeEurMinor: row.totalFeeEurMinor.toString(),
+      programLevel: row.programLevel,
+      status: row.status,
+    },
+  });
+
   revalidatePath("/finance");
   return { ok: true };
 }
 
 export async function updatePendingPayment(id: string, form: FormData): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
   const parsed = pendingSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -375,7 +550,8 @@ export async function updatePendingPayment(id: string, form: FormData): Promise<
   const amountError = requireSomeAmount(d.totalFeeInr, d.totalFeeEur);
   if (amountError) return { ok: false, error: "Enter the total fee in INR, EUR, or both" };
 
-  await prisma.pendingPayment.update({
+  const existing = await prisma.pendingPayment.findUnique({ where: { id } });
+  const row = await prisma.pendingPayment.update({
     where: { id },
     data: {
       studentName: d.studentName,
@@ -387,14 +563,43 @@ export async function updatePendingPayment(id: string, form: FormData): Promise<
       notes: d.notes || null,
     },
   });
+
+  if (existing) {
+    const diff = diffFields(pendingDiffShape(existing), pendingDiffShape(row));
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "finance.pendingPayment.update",
+        section: "finance",
+        entityType: "PendingPayment",
+        entityId: row.id,
+        summary: `Edited ${row.studentName}'s receivable of ${amountDisplay(row.totalFeeInrMinor, row.totalFeeEurMinor)}`,
+        meta: diff,
+      });
+    }
+  }
+
   revalidatePath("/finance");
   return { ok: true };
 }
 
 export async function deletePendingPayment(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
-  await prisma.pendingPayment.delete({ where: { id } });
+  const row = await prisma.pendingPayment.delete({ where: { id } });
+
+  await logActivity(session, {
+    action: "finance.pendingPayment.delete",
+    section: "finance",
+    entityType: "PendingPayment",
+    entityId: row.id,
+    summary: `Deleted ${row.studentName}'s receivable of ${amountDisplay(row.totalFeeInrMinor, row.totalFeeEurMinor)}`,
+    meta: {
+      totalFeeInrMinor: row.totalFeeInrMinor.toString(),
+      totalFeeEurMinor: row.totalFeeEurMinor.toString(),
+      programLevel: row.programLevel,
+    },
+  });
+
   revalidatePath("/finance");
   return { ok: true };
 }

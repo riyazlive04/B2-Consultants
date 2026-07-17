@@ -1,7 +1,9 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { istMonthRange, istToday } from "@/lib/dates";
+import { istMinutesOfDay, istMonthRange, istToday } from "@/lib/dates";
+import { formatIstMinutes } from "@/lib/config-schema";
+import { getDailyLogEod } from "./founder-config";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import type { AppRole } from "@/lib/rbac";
 import { aggInrMinor } from "@/lib/money";
@@ -10,6 +12,7 @@ import { getPendingRows } from "./finance-metrics";
 import { getRunwaySnapshot } from "./cash-metrics";
 import { getTeamGame } from "./gamification";
 import { getMyStudentPortal } from "./student-portal";
+import { getAgreementTaskCounts } from "./agreement-state";
 import { MILESTONE_LABELS } from "@/lib/labels";
 
 /**
@@ -228,17 +231,61 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
 
   // ── Everyone with a daily-log duty: own log reminder ──
   if (role !== "ADMIN") {
-    const [profile, todayLog] = await Promise.all([
+    const [profile, todayLog, eod] = await Promise.all([
       prisma.teamProfile.findUnique({ where: { userId } }),
       prisma.dailyLog.findUnique({ where: { userId_date: { userId, date: today } } }),
+      getDailyLogEod(),
     ]);
+    const cutoffLabel = formatIstMinutes(eod.cutoffMinutes);
+    const nowMinutes = istMinutesOfDay(new Date());
+
     if (profile && profile.status === "ACTIVE" && !todayLog) {
-      const late = istHourNow() >= 19;
+      if (eod.enabled) {
+        // The founder's cutoff is the deadline, and the nudge time is when we start saying so.
+        const pastCutoff = nowMinutes >= eod.cutoffMinutes;
+        const nudging = nowMinutes >= eod.nudgeMinutes;
+        items.push({
+          id: "own-log",
+          severity: nudging ? "watch" : "info",
+          title: pastCutoff
+            ? "Daily log missed"
+            : nudging
+              ? "Daily log overdue"
+              : "Daily log not submitted yet",
+          body: pastCutoff
+            ? eod.autoSave
+              ? `The ${cutoffLabel} cutoff has passed. Your numbers will be auto-saved from your activity — amend them to add what activity can't see.`
+              : `The ${cutoffLabel} cutoff has passed — today's log is closed. Contact Admin to make changes.`
+            : `Log today's numbers before the ${cutoffLabel} cutoff.`,
+          href: "/daily-log",
+        });
+      } else {
+        // Pre-EOD-engine behaviour, unchanged: a 7PM convention, no deadline.
+        const late = istHourNow() >= 19;
+        items.push({
+          id: "own-log",
+          severity: late ? "watch" : "info",
+          title: late ? "Daily log overdue" : "Daily log not submitted yet",
+          body: late ? "The 7:00 PM mark has passed - log today's numbers now." : "Log today's numbers before 7:00 PM.",
+          href: "/daily-log",
+        });
+      }
+    }
+
+    // Auto-saved on their behalf → ask them to amend it while they still can. This matters for
+    // money: auto-capture can't see followUpMessagesSent, so an unamended row reads LOW on the
+    // Telecaller Pay board. The window is short, so this is a "watch", not an "info".
+    if (
+      profile?.status === "ACTIVE" &&
+      todayLog?.source === "EOD_AUTO" &&
+      eod.enabled &&
+      eod.amendWindowDays > 0
+    ) {
       items.push({
-        id: "own-log",
-        severity: late ? "watch" : "info",
-        title: late ? "Daily log overdue" : "Daily log not submitted yet",
-        body: late ? "The 7:00 PM mark has passed - log today's numbers now." : "Log today's numbers before 7:00 PM.",
+        id: "auto-log-amend",
+        severity: "watch",
+        title: "Today's log was auto-saved",
+        body: "It only has what your activity showed. Check it and add the rest before the amend window closes.",
         href: "/daily-log",
       });
     }
@@ -339,13 +386,28 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       getPendingRows(),
       getRunwaySnapshot(),
       (async () => {
-        if (istHourNow() < 19) return [] as string[];
+        // The founder's EOD summary. When EOD rules are on, the cutoff is the moment this
+        // becomes news; otherwise keep the 7PM convention the app shipped with.
+        const eod = await getDailyLogEod();
+        const due = eod.enabled
+          ? istMinutesOfDay(new Date()) >= eod.cutoffMinutes
+          : istHourNow() >= 19;
+        if (!due || (eod.enabled && !eod.founderSummary)) {
+          return { missing: [] as string[], auto: [] as string[], cutoffLabel: "", enabled: eod.enabled };
+        }
         const [profiles, todayLogs] = await Promise.all([
           prisma.teamProfile.findMany({ where: { status: "ACTIVE", dashboardRole: { not: "ADMIN" }, userId: { not: null } } }),
-          prisma.dailyLog.findMany({ where: { date: today }, select: { userId: true } }),
+          prisma.dailyLog.findMany({ where: { date: today }, select: { userId: true, source: true } }),
         ]);
-        const submitted = new Set(todayLogs.map((l) => l.userId));
-        return profiles.filter((p) => !submitted.has(p.userId!)).map((p) => p.fullName);
+        const sourceByUser = new Map(todayLogs.map((l) => [l.userId, l.source]));
+        return {
+          // Nobody logged AND the job didn't cover them (auto-save off, or cron not ticking).
+          missing: profiles.filter((p) => !sourceByUser.has(p.userId!)).map((p) => p.fullName),
+          // Covered by the job — a row exists, but no human stood behind these numbers yet.
+          auto: profiles.filter((p) => sourceByUser.get(p.userId!) === "EOD_AUTO").map((p) => p.fullName),
+          cutoffLabel: formatIstMinutes(eod.cutoffMinutes),
+          enabled: eod.enabled,
+        };
       })(),
       prisma.income.findMany({
         where: { date: { gte: month.start, lt: month.end } },
@@ -394,12 +456,28 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
     });
   }
 
-  if (missingLoggers.length > 0) {
+  if (missingLoggers.missing.length > 0) {
     items.push({
       id: "missing-logs",
       severity: "watch",
-      title: `Missing daily logs: ${missingLoggers.join(", ")}`,
-      body: "No log submitted by 7:00 PM IST.",
+      title: `Missing daily logs: ${missingLoggers.missing.join(", ")}`,
+      body: missingLoggers.enabled
+        ? `No log submitted by the ${missingLoggers.cutoffLabel} IST cutoff, and nothing auto-saved for them.`
+        : "No log submitted by 7:00 PM IST.",
+      href: "/people",
+    });
+  }
+
+  // Auto-saved days are reported SEPARATELY from missing ones, and never as a win: a row exists,
+  // but it's the machine's account of the day, not the person's, and it's incomplete by
+  // construction. Folding these into "logged" would let unamended numbers reach the pay board
+  // looking like someone had reported them.
+  if (missingLoggers.auto.length > 0) {
+    items.push({
+      id: "auto-saved-logs",
+      severity: "info",
+      title: `Auto-saved at cutoff: ${missingLoggers.auto.join(", ")}`,
+      body: "Derived from activity because no log was submitted — incomplete until they amend it. Don't judge pay on these yet.",
       href: "/people",
     });
   }
@@ -460,6 +538,47 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       title: `${stalledDeals} deal${stalledDeals > 1 ? "s" : ""} stalled in the pipeline`,
       body: "No movement in 10+ days - see “Deals at risk” on the Pipeline page.",
       href: "/pipeline",
+    });
+  }
+
+  // ── Agreements: the founder should never have to remember who is waiting on a contract.
+  // Every one of these is derived (see lib/agreement-state.ts) — it appears while the condition
+  // holds and disappears the moment it's acted on, exactly like the rest of this feed.
+  const agreements = await getAgreementTaskCounts();
+  if (agreements.readyToSend > 0) {
+    items.push({
+      id: "agreements-ready",
+      severity: "watch",
+      title: `${agreements.readyToSend} agreement${agreements.readyToSend > 1 ? "s" : ""} ready to send`,
+      body: "These clients are past the point where the agreement should go out — generate and send.",
+      href: "/agreements/new",
+    });
+  }
+  if (agreements.expired > 0) {
+    items.push({
+      id: "agreements-expired",
+      severity: "watch",
+      title: `${agreements.expired} signing link${agreements.expired > 1 ? "s" : ""} expired unsigned`,
+      body: "The 14-day window lapsed. Void and re-issue so the deal isn't lost to a dead link.",
+      href: "/agreements",
+    });
+  }
+  if (agreements.signedNoCopy > 0) {
+    items.push({
+      id: "agreements-copy",
+      severity: "watch",
+      title: `${agreements.signedNoCopy} signed agreement${agreements.signedNoCopy > 1 ? "s" : ""} without a delivered copy`,
+      body: "The student signed but never received their countersigned copy.",
+      href: "/agreements",
+    });
+  }
+  if (agreements.awaitingSignature > 0) {
+    items.push({
+      id: "agreements-awaiting",
+      severity: "info",
+      title: `${agreements.awaitingSignature} agreement${agreements.awaitingSignature > 1 ? "s" : ""} awaiting signature`,
+      body: "Issued and still unsigned — a reminder is one click away.",
+      href: "/agreements",
     });
   }
 

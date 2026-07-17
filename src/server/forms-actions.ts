@@ -10,6 +10,7 @@ import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
 import { upsertIntakeLead } from "./lead-intake";
 import { emitTrigger } from "./automation";
+import { logActivity, diffFields } from "./activity-log";
 import {
   defaultFormFields, defaultFormSettings, slugify, CONTACT_FIELD_KEYS,
   type FormField, type FormSettings,
@@ -48,7 +49,7 @@ export async function createForm(form: FormData): Promise<ActionResult> {
   const name = String(form.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Form name is required" };
   const slug = await uniqueFormSlug(name);
-  await prisma.form.create({
+  const row = await prisma.form.create({
     data: {
       name,
       slug,
@@ -56,6 +57,14 @@ export async function createForm(form: FormData): Promise<ActionResult> {
       settings: defaultFormSettings() as unknown as Prisma.InputJsonValue,
       createdById: session.user.id,
     },
+  });
+  await logActivity(session, {
+    action: "form.create",
+    section: "forms",
+    entityType: "Form",
+    entityId: row.id,
+    summary: `Created the form "${name}"`,
+    meta: { slug },
   });
   revalidatePath("/forms");
   return { ok: true };
@@ -65,7 +74,7 @@ export async function saveForm(
   id: string,
   payload: { name: string; fields: FormField[]; settings: FormSettings },
 ): Promise<ActionResult> {
-  await requireSection("forms");
+  const session = await requireSection("forms");
   if (!payload.name.trim()) return { ok: false, error: "Form name is required" };
   if (!payload.fields.length) return { ok: false, error: "Add at least one field" };
   // keys must be unique + non-empty
@@ -73,6 +82,7 @@ export async function saveForm(
   if (keys.some((k) => !k)) return { ok: false, error: "Every field needs a key" };
   if (new Set(keys).size !== keys.length) return { ok: false, error: "Field keys must be unique" };
 
+  const before = await prisma.form.findUnique({ where: { id }, select: { name: true, fields: true, settings: true } });
   await prisma.form.update({
     where: { id },
     data: {
@@ -81,14 +91,32 @@ export async function saveForm(
       settings: payload.settings as unknown as Prisma.InputJsonValue,
     },
   });
+  // The builder PUTs the whole form on every save, so the JSON columns are compared but never
+  // copied into the log — the founder wants "the fields changed", not a diff of every question.
+  const named = diffFields({ name: before?.name ?? "" }, { name: payload.name.trim() });
+  const changed = [
+    ...named.changed,
+    ...(JSON.stringify(before?.fields ?? null) !== JSON.stringify(payload.fields) ? ["fields"] : []),
+    ...(JSON.stringify(before?.settings ?? null) !== JSON.stringify(payload.settings) ? ["settings"] : []),
+  ];
+  if (changed.length) {
+    await logActivity(session, {
+      action: "form.update",
+      section: "forms",
+      entityType: "Form",
+      entityId: id,
+      summary: `Edited the form "${payload.name.trim()}"`,
+      meta: { changed, before: named.before, after: named.after, fieldCount: payload.fields.length },
+    });
+  }
   revalidatePath("/forms");
   revalidatePath(`/forms/${id}`);
   return { ok: true };
 }
 
 export async function togglePublishForm(id: string): Promise<ActionResult> {
-  await requireSection("forms");
-  const f = await prisma.form.findUnique({ where: { id }, select: { published: true, fields: true } });
+  const session = await requireSection("forms");
+  const f = await prisma.form.findUnique({ where: { id }, select: { name: true, published: true, fields: true } });
   if (!f) return { ok: false, error: "Form not found" };
   if (!f.published) {
     const fields = (f.fields as FormField[]) ?? [];
@@ -98,15 +126,30 @@ export async function togglePublishForm(id: string): Promise<ActionResult> {
     }
   }
   await prisma.form.update({ where: { id }, data: { published: !f.published } });
+  await logActivity(session, {
+    action: f.published ? "form.unpublish" : "form.publish",
+    section: "forms",
+    entityType: "Form",
+    entityId: id,
+    summary: `${f.published ? "Unpublished" : "Published"} the form "${f.name}"`,
+  });
   revalidatePath("/forms");
   revalidatePath(`/forms/${id}`);
   return { ok: true };
 }
 
 export async function deleteForm(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
-  await prisma.form.delete({ where: { id } });
+  const row = await prisma.form.delete({ where: { id } });
+  await logActivity(session, {
+    action: "form.delete",
+    section: "forms",
+    entityType: "Form",
+    entityId: id,
+    summary: `Deleted the form "${row.name}"`,
+    meta: { slug: row.slug, submissionCount: row.submissionCount },
+  });
   revalidatePath("/forms");
   return { ok: true };
 }

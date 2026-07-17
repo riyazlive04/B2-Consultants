@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "WhatsAppKind" ADD VALUE 'SSS_RESCHEDULED';

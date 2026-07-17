@@ -20,6 +20,7 @@ import {
 } from "@/lib/capabilities";
 import { INVITE_TTL_DAYS, mintInviteToken, unguessablePlaceholderPassword } from "@/lib/invite-token";
 import { consumeAccessRequest } from "./access-requests";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -186,6 +187,21 @@ export async function inviteUser(form: FormData): Promise<InviteResult> {
 
   const inviteUrl = await issueInvite(userId, session.user.id);
   await consumeAccessRequest(email); // clears a matching "request access" row, if any
+  // WHO was invited to WHAT, never the link: the token is a live credential and the
+  // founder's activity screen outlives the invite that minted it.
+  await logActivity(session, {
+    action: "user.invite",
+    section: "people",
+    entityType: "User",
+    entityId: userId,
+    summary: `Invited ${d.name} (${email}) as ${d.role}`,
+    meta: {
+      email,
+      role: d.role,
+      sectionAccess: d.role === "ADMIN" ? null : parseSectionAccess(form),
+      capabilities: d.role === "ADMIN" ? null : caps,
+    },
+  });
   revalidatePath("/people");
   return { ok: true, inviteUrl, expiresInDays: INVITE_TTL_DAYS };
 }
@@ -197,13 +213,21 @@ export async function resendInvite(userId: string): Promise<InviteResult> {
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, capabilities: true },
+    select: { id: true, name: true, email: true, role: true, capabilities: true },
   });
   if (!target) return { ok: false, error: "That user no longer exists" };
   const rail = privilegeError(session, target, target.role, {});
   if (rail) return { ok: false, error: rail };
 
   const inviteUrl = await issueInvite(userId, session.user.id);
+  await logActivity(session, {
+    action: "user.invite",
+    section: "people",
+    entityType: "User",
+    entityId: userId,
+    summary: `Re-issued the invite link for ${target.name} — any earlier link stopped working`,
+    meta: { email: target.email, role: target.role, resend: true },
+  });
   revalidatePath("/people");
   return { ok: true, inviteUrl, expiresInDays: INVITE_TTL_DAYS };
 }
@@ -221,7 +245,7 @@ export async function updateUserAccess(userId: string, form: FormData): Promise<
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, capabilities: true },
+    select: { id: true, name: true, role: true, sectionAccess: true, capabilities: true },
   });
   if (!target) return { ok: false, error: "That user no longer exists" };
 
@@ -244,6 +268,28 @@ export async function updateUserAccess(userId: string, form: FormData): Promise<
   });
   // keep any linked team profile's dashboard role in sync
   await prisma.teamProfile.updateMany({ where: { userId }, data: { dashboardRole: role.data } });
+
+  // Diffed against the plain values rather than `overridesFor`'s Prisma.JsonNull sentinel,
+  // which carries no meaning outside a write.
+  const diff = diffFields<Record<string, unknown>>(
+    { name: target.name, role: target.role, sectionAccess: target.sectionAccess, capabilities: target.capabilities },
+    {
+      name: name.data,
+      role: role.data,
+      sectionAccess: role.data === "ADMIN" ? null : parseSectionAccess(form),
+      capabilities: role.data === "ADMIN" ? null : caps,
+    },
+  );
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "user.access.update",
+      section: "people",
+      entityType: "User",
+      entityId: userId,
+      summary: `Updated ${target.name}'s access — changed ${diff.changed.join(", ")}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   revalidatePath("/people");
   revalidatePath("/", "layout");
   return { ok: true };
@@ -256,7 +302,7 @@ export async function resetUserAccess(userId: string): Promise<ActionResult> {
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, capabilities: true },
+    select: { id: true, name: true, role: true, sectionAccess: true, capabilities: true },
   });
   if (!target) return { ok: false, error: "That user no longer exists" };
   const rail = privilegeError(session, target, target.role, {});
@@ -266,6 +312,20 @@ export async function resetUserAccess(userId: string): Promise<ActionResult> {
     where: { id: userId },
     data: { sectionAccess: Prisma.JsonNull, capabilities: Prisma.JsonNull },
   });
+  const diff = diffFields<Record<string, unknown>>(
+    { sectionAccess: target.sectionAccess, capabilities: target.capabilities },
+    { sectionAccess: null, capabilities: null },
+  );
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "user.access.update",
+      section: "people",
+      entityType: "User",
+      entityId: userId,
+      summary: `Reset ${target.name}'s access to the ${target.role} defaults`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   revalidatePath("/people");
   revalidatePath("/", "layout");
   return { ok: true };
@@ -280,7 +340,7 @@ export async function suspendUser(userId: string): Promise<ActionResult> {
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, capabilities: true },
+    select: { id: true, name: true, role: true, capabilities: true },
   });
   if (!target) return { ok: false, error: "That user no longer exists" };
   const rail = privilegeError(session, target, target.role, {});
@@ -293,6 +353,14 @@ export async function suspendUser(userId: string): Promise<ActionResult> {
     prisma.user.update({ where: { id: userId }, data: { status: "SUSPENDED" } }),
     prisma.session.deleteMany({ where: { userId } }),
   ]);
+  await logActivity(session, {
+    action: "user.suspend",
+    section: "people",
+    entityType: "User",
+    entityId: userId,
+    summary: `Suspended ${target.name}`,
+    meta: { role: target.role },
+  });
   revalidatePath("/people");
   return { ok: true };
 }
@@ -303,13 +371,21 @@ export async function reactivateUser(userId: string): Promise<ActionResult> {
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, capabilities: true },
+    select: { id: true, name: true, role: true, capabilities: true },
   });
   if (!target) return { ok: false, error: "That user no longer exists" };
   const rail = privilegeError(session, target, target.role, {});
   if (rail) return { ok: false, error: rail };
 
   await prisma.user.update({ where: { id: userId }, data: { status: "ACTIVE" } });
+  await logActivity(session, {
+    action: "user.reinstate",
+    section: "people",
+    entityType: "User",
+    entityId: userId,
+    summary: `Reinstated ${target.name}`,
+    meta: { role: target.role },
+  });
   revalidatePath("/people");
   return { ok: true };
 }
@@ -321,7 +397,7 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, capabilities: true },
+    select: { id: true, name: true, email: true, role: true, capabilities: true },
   });
   if (!target) return { ok: false, error: "That user no longer exists" };
   const rail = privilegeError(session, target, target.role, {});
@@ -334,6 +410,14 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
   // Sessions, accounts and the invite cascade. The team profile and student record
   // survive with a null userId — their history is not this person's login.
   await prisma.user.delete({ where: { id: userId } });
+  await logActivity(session, {
+    action: "user.delete",
+    section: "people",
+    entityType: "User",
+    entityId: userId,
+    summary: `Deleted ${target.name}'s account (${target.email})`,
+    meta: { email: target.email, role: target.role },
+  });
   revalidatePath("/people");
   return { ok: true };
 }
@@ -345,7 +429,7 @@ export async function setUserPassword(userId: string, form: FormData): Promise<A
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, capabilities: true },
+    select: { id: true, name: true, role: true, capabilities: true },
   });
   if (!target) return { ok: false, error: "That user no longer exists" };
   const rail = privilegeError(session, target, target.role, {});
@@ -360,6 +444,15 @@ export async function setUserPassword(userId: string, form: FormData): Promise<A
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not update password" };
   }
+  // That it happened and who did it — never the password or its hash.
+  await logActivity(session, {
+    action: "user.password.update",
+    section: "people",
+    entityType: "User",
+    entityId: userId,
+    summary: `Set a new password for ${target.name}`,
+    meta: { role: target.role },
+  });
   revalidatePath("/people");
   return { ok: true };
 }

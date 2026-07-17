@@ -3,7 +3,7 @@ import { FileSignature, Plus } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { requireSection } from "@/lib/rbac";
 import { formatDate, formatInrMinor } from "@/lib/format";
-import { type AgreementStatusKey } from "@/lib/agreement";
+import { effectiveAgreementStatus } from "@/lib/agreement";
 import { getAgreementCounts, listAgreements } from "@/server/agreement-metrics";
 import { StatusBadge } from "./_components/StatusBadge";
 
@@ -76,7 +76,8 @@ export default async function AgreementsPage() {
                         {d ? formatInrMinor(BigInt(d.payment.totalInrMinor)) : "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={r.status as AgreementStatusKey} />
+                        {/* Derived, not raw: an elapsed TTL is never written back to the row. */}
+                        <StatusBadge status={effectiveAgreementStatus(r)} />
                       </td>
                       <td className="px-4 py-3 text-muted">{formatDate(r.createdAt)}</td>
                     </tr>

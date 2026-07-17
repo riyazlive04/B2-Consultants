@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/rbac";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -37,6 +38,14 @@ const schema = z.object({
     .optional(),
 });
 
+/**
+ * The diff is taken over the real values so a photo swapped for a different photo still counts as
+ * a change - but a 250 KB data URL would cost more to store than the log row describing it, so
+ * only its presence survives into `meta`.
+ */
+const withoutPhotoBytes = (v: Record<string, unknown>) =>
+  "image" in v ? { ...v, image: v.image ? "photo" : null } : v;
+
 export async function updateMyProfile(form: FormData): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = schema.safeParse({
@@ -47,6 +56,11 @@ export async function updateMyProfile(form: FormData): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
   const { name, image } = parsed.data;
+
+  const before = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true, image: true },
+  });
 
   try {
     await prisma.user.update({
@@ -61,6 +75,23 @@ export async function updateMyProfile(form: FormData): Promise<ActionResult> {
     await prisma.teamProfile.updateMany({ where: { userId: session.user.id }, data: { fullName: name } });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not save profile" };
+  }
+
+  const d = diffFields(
+    { name: before?.name ?? null, image: before?.image ?? null },
+    // `image` absent means the form left the photo alone — diffFields only compares keys it is
+    // given, so omitting it is what keeps an untouched photo out of the diff.
+    { name, ...(image === undefined ? {} : { image: image || null }) },
+  );
+  if (d.changed.length > 0) {
+    await logActivity(session, {
+      action: "profile.update",
+      section: "people",
+      entityType: "User",
+      entityId: session.user.id,
+      summary: `Updated their own profile (${d.changed.join(", ")})`,
+      meta: { changed: d.changed, before: withoutPhotoBytes(d.before), after: withoutPhotoBytes(d.after) },
+    });
   }
 
   revalidatePath("/profile");

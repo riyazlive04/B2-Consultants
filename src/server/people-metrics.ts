@@ -1,6 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { istToday } from "@/lib/dates";
+import { istMinutesOfDay, istToday } from "@/lib/dates";
+import { formatIstMinutes } from "@/lib/config-schema";
+import { getDailyLogEod, getDailyLogTargets } from "./founder-config";
+import { computeAutoCapture } from "./daily-log-capture";
+import { buildLogEntries, PRIMARY_METRIC, type LogVariant } from "@/lib/daily-log";
 
 /** People dashboards (PRD2 §3): OKR circles, daily-log status + 7PM badge, rollups. */
 
@@ -35,7 +39,7 @@ export async function getPeopleOverview(monthStr?: string) {
     ? new Date(`${monthStr}-01T00:00:00Z`)
     : new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
 
-  const [profiles, okrs, todayLogs, recentLogs] = await Promise.all([
+  const [profiles, okrs, todayLogs, recentLogs, targets] = await Promise.all([
     prisma.teamProfile.findMany({ orderBy: { orderIndex: "asc" } }),
     prisma.oKR.findMany({ where: { month }, orderBy: { createdAt: "asc" } }),
     prisma.dailyLog.findMany({ where: { date: today } }),
@@ -44,6 +48,7 @@ export async function getPeopleOverview(monthStr?: string) {
       take: 400,
       include: { user: { select: { name: true } } },
     }),
+    getDailyLogTargets(),
   ]);
 
   const submittedUserIds = new Set(todayLogs.map((l) => l.userId));
@@ -156,11 +161,33 @@ export async function getPeopleOverview(monthStr?: string) {
       .map(([month, sums]) => ({ month, sums })),
   }));
 
+  // The activity timeline: every log, graded and humanised, newest first.
+  const entries = buildLogEntries(
+    recentLogs.map((l) => ({
+      id: l.id,
+      userId: l.userId,
+      userName: l.user.name,
+      date: l.date,
+      createdAt: l.createdAt,
+      variant: l.variant,
+      values: Object.fromEntries(
+        LOG_FIELDS.map((f) => [f, l[f]]).filter(([, v]) => v !== null && v !== undefined),
+      ) as Record<string, number>,
+      notes: l.notes,
+      correctionNote: l.correctionNote,
+      autoCapturedKeys: l.autoCapturedKeys,
+    })),
+    targets,
+    today,
+    true,
+  );
+
   return {
     month: month.toISOString().slice(0, 7),
     members,
     weeklyRollup,
     monthlyRollup,
+    entries,
     logs: recentLogs.map((l) => ({
       id: l.id,
       user: l.user.name,
@@ -178,10 +205,12 @@ export async function getPeopleOverview(monthStr?: string) {
 /** Data for /daily-log - the member's own form, submissions, streak and OKRs. */
 export async function getMyDailyLogView(userId: string) {
   const today = istToday();
-  const [profile, todayLog, myLogs] = await Promise.all([
+  const [profile, todayLog, myLogs, targets, eodCfg] = await Promise.all([
     prisma.teamProfile.findUnique({ where: { userId } }),
     prisma.dailyLog.findUnique({ where: { userId_date: { userId, date: today } } }),
     prisma.dailyLog.findMany({ where: { userId }, orderBy: { date: "desc" }, take: 120 }),
+    getDailyLogTargets(),
+    getDailyLogEod(),
   ]);
 
   // streak: consecutive days ending today (or yesterday while today is pending)
@@ -198,66 +227,81 @@ export async function getMyDailyLogView(userId: string) {
     ? await prisma.oKR.findMany({ where: { teamProfileId: profile.id, month }, orderBy: { createdAt: "asc" } })
     : [];
 
-  // Auto activity-capture (report §3.A P1): pre-fill today's numbers from what this
-  // user ACTUALLY entered in the pipeline today - kills re-keying, keeps data honest.
-  // The member can still adjust before submitting; the log stays the human record.
-  const istDayStartUtc = new Date(today.getTime() - 5.5 * 3600000); // IST midnight in UTC
-  const istDayEndUtc = new Date(istDayStartUtc.getTime() + 86400000);
-  const tsRange = { gte: istDayStartUtc, lt: istDayEndUtc };
-  const autoCaptured: Record<string, number> = {};
-  if (profile?.logVariant === "DISCOVERY_SPECIALIST") {
-    const [outcomes, proposals, followUps] = await Promise.all([
-      prisma.discoveryOutcome.findMany({ where: { enteredById: userId, callDate: today } }),
-      prisma.leadStageHistory.count({
-        where: { changedById: userId, toStage: "PROPOSAL_SENT", changedAt: tsRange },
-      }),
-      // follow-ups done today = outcomes this user marked "follow up needed" today
-      prisma.discoveryOutcome.count({
-        where: { enteredById: userId, outcome: "FOLLOW_UP_NEEDED", callDate: today },
-      }),
-    ]);
-    autoCaptured.discoveryCallsCompleted = outcomes.length;
-    autoCaptured.highlyQualifiedCalls = outcomes.filter((o) => o.highlyQualified).length;
-    autoCaptured.noShows = outcomes.filter((o) => o.outcome === "NO_SHOW").length;
-    autoCaptured.proposalsSent = proposals;
-    autoCaptured.followUpsDone = followUps;
-  } else if (profile?.logVariant === "APPOINTMENT_SETTER") {
-    const [leadsAdded, appointments, contacted] = await Promise.all([
-      prisma.lead.count({ where: { enteredById: userId, createdAt: tsRange } }),
-      prisma.leadStageHistory.count({
-        where: { changedById: userId, toStage: "DISCO_BOOKED", changedAt: tsRange },
-      }),
-      // new leads contacted today = leads this setter owns whose first-contact was stamped
-      // today (speed-to-lead: markLeadContacted). Follow-up MESSAGES have no source until
-      // the Wave-2 WhatsApp channel - that field stays manual.
-      prisma.lead.count({
-        where: {
-          OR: [{ assignedToId: userId }, { enteredById: userId }],
-          contactedAt: tsRange,
-        },
-      }),
-    ]);
-    autoCaptured.leadsAddedToPipeline = leadsAdded;
-    autoCaptured.appointmentsSet = appointments;
-    autoCaptured.newLeadsContacted = contacted;
-  } else if (profile?.logVariant === "DELIVERY_COACH") {
-    // Karthick is the sole coach, so student-level activity today attributes to him.
-    const [sessions, atRisk] = await Promise.all([
-      prisma.enrollment.count({ where: { lastSessionDate: today } }),
-      prisma.signalChangeLog.count({ where: { changedById: userId, newSignal: "RED", date: tsRange } }),
-    ]);
-    autoCaptured.sessionsDelivered = sessions;
-    autoCaptured.studentsFlaggedAtRisk = atRisk;
-    // check-ins + assignments reviewed have no clean per-event source yet - manual.
-  }
+  // Pre-fill today's numbers from what this user ACTUALLY entered in the pipeline today —
+  // kills re-keying, keeps data honest. The member can still adjust before submitting; the
+  // log stays the human record. Shared with the EOD job (server/daily-log-eod.ts), which
+  // writes rows from the SAME function so an auto-saved row can never disagree with what the
+  // member saw on this form.
+  const autoCaptured = await computeAutoCapture(userId, profile?.logVariant ?? null, today);
+
+  // Graded activity entries for the timeline. Baselines are computed over the full fetched
+  // history, then we hand the client the most recent 60 (it paginates from there).
+  const entries = buildLogEntries(
+    myLogs.map((l) => ({
+      id: l.id,
+      userId,
+      userName: profile?.fullName ?? null,
+      date: l.date,
+      createdAt: l.createdAt,
+      variant: l.variant,
+      values: Object.fromEntries(
+        LOG_FIELDS.map((f) => [f, l[f]]).filter(([, v]) => v !== null && v !== undefined),
+      ) as Record<string, number>,
+      notes: l.notes,
+      correctionNote: l.correctionNote,
+      autoCapturedKeys: l.autoCapturedKeys,
+    })),
+    targets,
+    today,
+    false,
+  ).slice(0, 60);
+
+  const primaryKey = profile?.logVariant ? PRIMARY_METRIC[profile.logVariant as LogVariant] : null;
+
+  // ── EOD state: the deadline, and any auto-saved row this member may still amend ──
+  // The amendable row is the counterweight to auto-save: the EOD job could only write what
+  // activity exposed, so until the member amends it, their pay-board numbers read low.
+  // Ordered date-desc already, so the first match is the most recent.
+  const amendableLog = eodCfg.enabled
+    ? myLogs.find(
+        (l) =>
+          l.source === "EOD_AUTO" &&
+          Math.round((today.getTime() - l.date.getTime()) / 86400000) <= eodCfg.amendWindowDays,
+      )
+    : undefined;
 
   return {
     autoCaptured,
     variant: profile?.logVariant ?? null,
     fullName: profile?.fullName ?? "",
     submittedToday: !!todayLog,
+    /** A row exists for today, but the EOD job wrote it — nobody has stood behind it yet. */
+    todayIsAuto: todayLog?.source === "EOD_AUTO",
+    eod: {
+      enabled: eodCfg.enabled,
+      autoSave: eodCfg.autoSave,
+      cutoffLabel: formatIstMinutes(eodCfg.cutoffMinutes),
+      pastCutoff: istMinutesOfDay(new Date()) >= eodCfg.cutoffMinutes,
+      amendWindowDays: eodCfg.amendWindowDays,
+    },
+    amendable: amendableLog
+      ? {
+          id: amendableLog.id,
+          date: amendableLog.date.toISOString(),
+          isToday: amendableLog.date.getTime() === today.getTime(),
+          // Prefill from the STORED row, not from live auto-capture: for a prior day, today's
+          // activity numbers would be a different day's work entirely.
+          values: Object.fromEntries(
+            LOG_FIELDS.map((f) => [f, amendableLog[f]]).filter(([, v]) => v !== null && v !== undefined),
+          ) as Record<string, number>,
+        }
+      : null,
     streak,
     today: today.toISOString(),
+    logCount: myLogs.length,
+    /** target for the headline metric, 0 = none set (timeline falls back to the average) */
+    dailyTarget: profile?.logVariant ? (targets[profile.logVariant as LogVariant] ?? 0) : 0,
+    primaryMetricKey: primaryKey,
     okrs: okrs.map((o) => ({
       id: o.id,
       title: o.title,
@@ -266,15 +310,7 @@ export async function getMyDailyLogView(userId: string) {
       completionPct: okrCompletionPct(o),
       notes: o.notes,
     })),
-    myLogs: myLogs.slice(0, 30).map((l) => ({
-      id: l.id,
-      date: l.date.toISOString(),
-      values: Object.fromEntries(
-        LOG_FIELDS.map((f) => [f, l[f]]).filter(([, v]) => v !== null && v !== undefined),
-      ) as Record<string, number>,
-      notes: l.notes,
-      correctionNote: l.correctionNote,
-    })),
+    entries,
   };
 }
 

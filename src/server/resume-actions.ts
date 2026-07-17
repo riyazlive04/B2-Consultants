@@ -14,9 +14,10 @@ import {
   type ResumeTemplateConfig,
 } from "@/lib/resume-template";
 import { coerceReviewResult, type AiReviewResult } from "@/lib/resume-review-types";
-import { getAiRuntime, callClaude, extractJson, writeAiSettings, type AiSettings } from "@/lib/anthropic";
+import { getAiRuntime, callClaude, extractJson, readAiSettings, writeAiSettings, type AiSettings } from "@/lib/anthropic";
 import { getResumeTemplate, getResume, type ResumeDetail } from "@/server/resume-metrics";
 import { analyseCv } from "@/lib/cv-analysis";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 const TEMPLATE_KEY = "resumeTemplateConfig";
@@ -45,6 +46,14 @@ export async function createResume(input: {
     },
     select: { id: true },
   });
+  await logActivity(session, {
+    action: "resume.create",
+    section: "cv-check",
+    entityType: "Resume",
+    entityId: row.id,
+    summary: `Created the CV "${title}"`,
+    meta: { language },
+  });
   revalidatePath("/cv-check");
   return { ok: true, id: row.id };
 }
@@ -55,23 +64,52 @@ export async function updateResume(input: {
   language: string;
   data: ResumeData;
 }): Promise<ActionResult> {
-  await requireSection("cv-check");
+  const session = await requireSection("cv-check");
   const title = input.title.trim();
   if (!title) return { ok: false, error: "Give the CV a title." };
-  const exists = await prisma.resume.findUnique({ where: { id: input.id }, select: { id: true } });
+  const exists = await prisma.resume.findUnique({ where: { id: input.id }, select: { id: true, title: true, language: true, data: true } });
   if (!exists) return { ok: false, error: "That CV no longer exists." };
 
+  const language = input.language === "DE" ? "DE" : "EN";
+  const data = coerceResumeData(input.data);
   await prisma.resume.update({
     where: { id: input.id },
-    data: { title, language: input.language === "DE" ? "DE" : "EN", data: asJson(coerceResumeData(input.data)) },
+    data: { title, language, data: asJson(data) },
   });
+  // The editor autosaves the whole CV; `data` is compared but never logged — the founder's feed
+  // is not the place for a candidate's employment history.
+  const d = diffFields({ title: exists.title, language: exists.language }, { title, language });
+  const changed = [
+    ...d.changed,
+    ...(JSON.stringify(exists.data ?? null) !== JSON.stringify(data) ? ["data"] : []),
+  ];
+  if (changed.length) {
+    await logActivity(session, {
+      action: "resume.update",
+      section: "cv-check",
+      entityType: "Resume",
+      entityId: input.id,
+      summary: `Edited the CV "${title}"`,
+      meta: { changed, before: d.before, after: d.after },
+    });
+  }
   revalidatePath("/cv-check");
   return { ok: true };
 }
 
 export async function deleteResume(id: string): Promise<ActionResult> {
-  await requireSection("cv-check");
-  await prisma.resume.delete({ where: { id } }).catch(() => null);
+  const session = await requireSection("cv-check");
+  const row = await prisma.resume.delete({ where: { id } }).catch(() => null);
+  if (row) {
+    await logActivity(session, {
+      action: "resume.delete",
+      section: "cv-check",
+      entityType: "Resume",
+      entityId: id,
+      summary: `Deleted the CV "${row.title}"`,
+      meta: { language: row.language },
+    });
+  }
   revalidatePath("/cv-check");
   return { ok: true };
 }
@@ -96,6 +134,14 @@ export async function duplicateResume(id: string): Promise<ActionResult & { id?:
     },
     select: { id: true },
   });
+  await logActivity(session, {
+    action: "resume.duplicate",
+    section: "cv-check",
+    entityType: "Resume",
+    entityId: row.id,
+    summary: `Duplicated the CV "${src.title}"`,
+    meta: { sourceId: id },
+  });
   revalidatePath("/cv-check");
   return { ok: true, id: row.id };
 }
@@ -103,32 +149,71 @@ export async function duplicateResume(id: string): Promise<ActionResult & { id?:
 // ───────────────────── founder template + AI settings ─────────────────────
 
 export async function saveResumeTemplate(config: ResumeTemplateConfig): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const clean = coerceResumeTemplate(config);
   const value = asJson(clean);
+  const before = await getResumeTemplate();
   await prisma.appSetting.upsert({
     where: { key: TEMPLATE_KEY },
     create: { key: TEMPLATE_KEY, value },
     update: { value },
   });
+  // Section lists, ATS rules and keyword libraries are all nested config — the changed key names
+  // are the useful signal; the rulebook itself belongs on the settings screen, not in the feed.
+  const d = diffFields(
+    before as unknown as Record<string, unknown>,
+    clean as unknown as Record<string, unknown>,
+  );
+  if (d.changed.length) {
+    await logActivity(session, {
+      action: "resume.template.update",
+      section: "cv-check",
+      entityType: "AppSetting",
+      entityId: TEMPLATE_KEY,
+      summary: `Updated the CV template (${d.changed.join(", ")})`,
+      meta: { changed: d.changed },
+    });
+  }
   revalidatePath("/cv-check");
   return { ok: true };
 }
 
 export async function resetResumeTemplate(): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   await prisma.appSetting.upsert({
     where: { key: TEMPLATE_KEY },
     create: { key: TEMPLATE_KEY, value: asJson(DEFAULT_RESUME_TEMPLATE) },
     update: { value: asJson(DEFAULT_RESUME_TEMPLATE) },
+  });
+  await logActivity(session, {
+    action: "resume.template.restore",
+    section: "cv-check",
+    entityType: "AppSetting",
+    entityId: TEMPLATE_KEY,
+    summary: "Reset the CV template back to the B2 defaults",
   });
   revalidatePath("/cv-check");
   return { ok: true };
 }
 
 export async function saveAiSettings(settings: AiSettings): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
+  const before = await readAiSettings();
   await writeAiSettings(settings);
+  // Read back rather than diffing the input: writeAiSettings coerces (maxTokens is clamped), so
+  // the raw input would report changes the stored row never took.
+  const after = await readAiSettings();
+  const d = diffFields(before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>);
+  if (d.changed.length) {
+    await logActivity(session, {
+      action: "resume.ai-settings.update",
+      section: "cv-check",
+      entityType: "AppSetting",
+      entityId: "aiConfig",
+      summary: `Updated the CV review AI settings — ${after.paused ? "paused" : "live"}, model ${after.model}`,
+      meta: { changed: d.changed, before: d.before, after: d.after },
+    });
+  }
   revalidatePath("/cv-check");
   return { ok: true };
 }
@@ -149,13 +234,13 @@ export type RunReviewResult = ActionResult & {
  * run is stored as a ResumeReview so it can be re-run "unlimited" times and compared.
  */
 export async function runReview(input: { resumeId: string; jdText: string }): Promise<RunReviewResult> {
-  await requireSection("cv-check");
+  const session = await requireSection("cv-check");
   const jd = input.jdText.trim();
   if (jd.length < 40) return { ok: false, error: "Paste the full job description (at least a few lines)." };
 
   const row = await prisma.resume.findUnique({
     where: { id: input.resumeId },
-    select: { language: true, data: true },
+    select: { title: true, language: true, data: true },
   });
   if (!row) return { ok: false, error: "That CV no longer exists." };
 
@@ -213,13 +298,32 @@ export async function runReview(input: { resumeId: string; jdText: string }): Pr
   });
   // touch the resume so its list row sorts to the top and shows the fresh score
   await prisma.resume.update({ where: { id: input.resumeId }, data: { updatedAt: new Date() } }).catch(() => null);
+  await logActivity(session, {
+    action: "resume.review.generate",
+    section: "cv-check",
+    entityType: "ResumeReview",
+    entityId: saved.id,
+    summary: `Ran an ATS review of the CV "${row.title}" — scored ${result.atsScore}/100 (${provider === "ai" ? "Claude" : "offline analyser"})`,
+    meta: { resumeId: input.resumeId, provider, model, scoreOverall: result.atsScore },
+  });
   revalidatePath("/cv-check");
   return { ok: true, reviewId: saved.id, result, provider, note };
 }
 
 export async function deleteReview(id: string): Promise<ActionResult> {
-  await requireSection("cv-check");
-  await prisma.resumeReview.delete({ where: { id } }).catch(() => null);
+  const session = await requireSection("cv-check");
+  const row = await prisma.resumeReview.delete({ where: { id } }).catch(() => null);
+  if (row) {
+    const resume = await prisma.resume.findUnique({ where: { id: row.resumeId }, select: { title: true } });
+    await logActivity(session, {
+      action: "resume.review.delete",
+      section: "cv-check",
+      entityType: "ResumeReview",
+      entityId: id,
+      summary: `Deleted an ATS review of the CV "${resume?.title ?? ""}"`,
+      meta: { resumeId: row.resumeId, provider: row.provider, scoreOverall: row.scoreOverall },
+    });
+  }
   revalidatePath("/cv-check");
   return { ok: true };
 }

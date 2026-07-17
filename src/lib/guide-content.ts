@@ -29,6 +29,19 @@ export const GUIDES: GuideEntry[] = [
     tip: "Editing the live ruleset re-scores work done since that ruleset began. To change only what happens next, create a new version instead.",
   },
   {
+    section: "activity", icon: "🛡️", title: "Activity Log", href: "/activity",
+    what: "Every action anyone takes in the app, stamped with the exact time it happened. Admin-only.",
+    steps: [
+      "Feed answers “what's been happening” — every action grouped by day, newest first. Table answers “what exactly did Asma do at 3pm” — one row per action, timed to the second.",
+      "Filter by who, section, action type or date range, or search for a person or record by name. Every filter lives in the address bar, so you can bookmark a view or paste the link to someone.",
+      "The engines log their own work under their own name — “Reminder engine”, “Booking engine” — with a cog instead of a face. If the automation messaged 40 leads overnight, that is what you will see; it is never filed under whoever last pressed “Run now”. Pick an engine in the Who filter to read only what ran on its own.",
+      "Every time is IST, and always exact. The “12m ago” next to it is only a convenience — the real timestamp never moves.",
+      "“Details” on a row opens what actually changed: the value before and the value after.",
+      "The log only holds what happened after it was switched on. It cannot reconstruct history from before that.",
+    ],
+    tip: "Nothing here can be edited or deleted — not by a telecaller, not by you, not from the database. That is the point: a log its subjects could tidy up would be worth nothing.",
+  },
+  {
     section: "finance", icon: "💰", title: "Finance", href: "/finance",
     what: "Daily money picture - income, expenses, profit, receivables. Admin-only.",
     steps: [

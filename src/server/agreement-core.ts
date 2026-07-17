@@ -1,10 +1,12 @@
 import "server-only";
+import { revalidatePath } from "next/cache";
 import { Prisma, type AgreementEventType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { agreementDataSchema, type AgreementData } from "@/lib/agreement";
-import { hashAgreementToken, toOwnedBytes } from "@/lib/agreement-token";
+import { hashAgreementToken, mintAgreementToken, toOwnedBytes } from "@/lib/agreement-token";
 import { signingDeviceSchema, storedDeviceSchema, type StoredDevice } from "@/lib/device";
 import { displayWhatsappNumber, normalizeWhatsappNumber } from "@/lib/phone";
+import { sendWhatsApp } from "./whatsapp";
 
 /**
  * Shared internals for the agreement modules.
@@ -67,6 +69,109 @@ export async function recordAgreementEvent(
   });
 }
 
+// ───────────────────────────── Issue (countersign + send) ─────────────────────────────
+
+export type SignatureSource = { source: "drawn" } | { source: "saved"; savedAt: string | null };
+
+/**
+ * Countersign and send — the body shared by BOTH issue paths (draw-now and reuse-saved).
+ *
+ * It lives here, without "use server", precisely so it is NOT an RPC endpoint: the two exported
+ * actions in agreement-actions.ts each run their own capability check and then call this. If this
+ * were exported from a "use server" file, anyone could issue an agreement by posting an id.
+ *
+ * THE HONESTY RULE for a reused signature: only the *ink* is reused. `founderDevice.observed` (the
+ * IP and User-Agent our server saw) is captured fresh on every issue, and the ISSUED event records
+ * which source was used — so the certificate can never imply a live draw that didn't happen.
+ *
+ * No PDF is rendered here. The student reads a live render, and the one authoritative render
+ * happens at the moment they sign.
+ */
+export async function issueAgreementCore(input: {
+  id: string;
+  png: NonNullable<ReturnType<typeof decodeSignaturePng>>;
+  founderDevice: StoredDevice | null;
+  session: { user: { id: string; email: string } };
+  signature: SignatureSource;
+}): Promise<ActionResult<{ signingUrl: string; delivery: string; sent: boolean }>> {
+  const { id, png, founderDevice, session, signature } = input;
+
+  const row = await prisma.agreement.findUnique({
+    where: { id },
+    select: { id: true, status: true, data: true, documentNo: true, leadId: true, studentId: true },
+  });
+  if (!row) return { ok: false, error: "Agreement not found." };
+  if (row.status !== "DRAFT") return { ok: false, error: "Only a draft can be issued." };
+
+  const parsed = parseAgreementData(row.data);
+  if (!parsed.ok) return { ok: false, error: `Stored fields are invalid: ${parsed.error}` };
+
+  const { token, tokenHash, expiresAt } = mintAgreementToken();
+  const now = new Date();
+
+  const issued = await prisma.agreement.updateMany({
+    where: { id, status: "DRAFT" },
+    data: {
+      status: "SENT",
+      tokenHash,
+      expiresAt,
+      issuedAt: now,
+      issuedById: session.user.id,
+      founderSignedAt: now,
+      founderSignaturePng: png,
+      founderDevice: founderDevice ?? Prisma.JsonNull,
+    },
+  });
+  if (issued.count === 0) return { ok: false, error: "This agreement was issued by someone else." };
+
+  await recordAgreementEvent(id, "ISSUED", {
+    meta: {
+      by: session.user.email,
+      // Never let the trail imply a live draw when stored ink was stamped.
+      signature: signature.source,
+      savedAt: signature.source === "saved" ? signature.savedAt : null,
+    },
+  });
+
+  const url = signingUrl(token);
+  const outcome = await sendWhatsApp({
+    kind: "AGREEMENT_SEND",
+    to: parsed.data.student.phone,
+    vars: {
+      name: firstName(parsed.data.student.fullName),
+      sign_url: url,
+      sign_token: token,
+      document_no: row.documentNo,
+    },
+    sentById: session.user.id,
+    bodySummary: `Agreement ${row.documentNo} — signing link`,
+    agreementId: id,
+    leadId: row.leadId,
+    studentId: row.studentId,
+  });
+
+  await recordAgreementEvent(id, outcome.sent ? "DELIVERY_SENT" : "DELIVERY_SKIPPED", {
+    meta: { status: outcome.status, error: outcome.error ?? null },
+  });
+
+  revalidatePath(AGREEMENTS_PATH);
+  revalidatePath(`${AGREEMENTS_PATH}/${id}`);
+
+  // The link comes back WHATEVER happened to the WhatsApp send. With WATI off, the number opted
+  // out, or the template unmapped, this response is the only place this token will ever exist —
+  // the database holds nothing but its hash.
+  return {
+    ok: true,
+    data: {
+      signingUrl: url,
+      sent: outcome.sent,
+      delivery: outcome.sent
+        ? "Signing link sent on WhatsApp."
+        : `WhatsApp did not send: ${outcome.error ?? "unknown reason"}. Copy the link below and share it yourself.`,
+    },
+  };
+}
+
 // ───────────────────────────── Misc ─────────────────────────────
 
 /**
@@ -106,6 +211,15 @@ export function parseAgreementData(
 export function signingUrl(token: string): string {
   const origin = (process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "");
   return `${origin}/agreement/${token}`;
+}
+
+/**
+ * Where the student fetches their executed copy. Same token as the signing link — signing burns the
+ * OTP and the ceremony, but never `tokenHash`, so the link already in their chat keeps working for
+ * the one thing they still need it for.
+ */
+export function signedCopyUrl(token: string): string {
+  return `${signingUrl(token)}/copy`;
 }
 
 export function firstName(full: string): string {
@@ -227,6 +341,38 @@ export async function loadAgreementByToken(
   if (row.status === "VOIDED") return { ok: false, reason: "voided" };
   if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return { ok: false, reason: "expired" };
   return { ok: true, row };
+}
+
+/**
+ * Resolve a token for SIGNED-COPY DOWNLOAD ONLY — the mirror image of `loadAgreementByToken`.
+ *
+ * That one refuses a signed row ("used"), and must: its job is to guard the signing ceremony, and a
+ * burnt token can never re-open it. But the student still has to be able to fetch the contract they
+ * signed, and `signAgreement` clears only `otpHash` — `tokenHash` survives — so the link already in
+ * their chat is the natural credential for it.
+ *
+ * The checks are inverted on purpose: signedAt + sealed bytes are REQUIRED, and `expiresAt` is
+ * ignored, because a contract you have executed does not stop being yours after fourteen days.
+ * Voided/declined rows can never reach here — both paths null out `tokenHash`.
+ *
+ * This is one of the two places `pdfBytes` may be selected. Never widen it to a list query.
+ */
+export async function loadSignedAgreementByToken(token: string) {
+  if (!token || token.length < 10 || token.length > 200) return null;
+  const row = await prisma.agreement.findUnique({
+    where: { tokenHash: hashAgreementToken(token) },
+    select: {
+      id: true,
+      documentNo: true,
+      status: true,
+      signedAt: true,
+      pdfBytes: true,
+      pdfSize: true,
+      pdfSha256: true,
+    },
+  });
+  if (!row?.signedAt || row.status !== "SIGNED" || !row.pdfBytes) return null;
+  return row;
 }
 
 /** First open flips SENT → VIEWED. Idempotent: the compare-and-set means one VIEWED event, not one per refresh. */

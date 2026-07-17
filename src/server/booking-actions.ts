@@ -10,7 +10,9 @@ import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 import { computeBant, INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
-import { getBookingRulesConfig, writeBookingRulesConfig } from "./founder-config";
+import { activityStamp } from "@/lib/activity-actions";
+import { BOOKING_RULES_KEY, getBookingRulesConfig, writeBookingRulesConfig } from "./founder-config";
+import { logActivity, diffFields } from "./activity-log";
 import { emitTrigger } from "./automation";
 import { upsertIntakeLead } from "./lead-intake";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
@@ -299,7 +301,7 @@ const slotGenSchema = z.object({
  * batch expansion of the original single-date generator (§9), not a persisted recurring rule.
  */
 export async function generateSlots(form: FormData): Promise<ActionResult> {
-  await requireSection("bookings");
+  const session = await requireSection("bookings");
   // FormData can carry multiple "weekdays" entries (one per checked checkbox);
   // Object.fromEntries would silently keep only the last one, so pull it separately.
   const weekdays = form.getAll("weekdays").map(String);
@@ -359,6 +361,26 @@ export async function generateSlots(form: FormData): Promise<ActionResult> {
         assignedToId: d.assignedToId || null,
       })),
     });
+    // createMany returns no ids and a re-run is idempotent, so the batch itself is the
+    // entity here — "batch" can never collide with a real slot's cuid.
+    await logActivity(session, {
+      action: "slot.create",
+      section: "bookings",
+      entityType: "AppointmentSlot",
+      entityId: "batch",
+      summary: `Generated ${fresh.length} ${d.durationMins}-minute slots from ${d.startDate} to ${d.endDate}`,
+      meta: {
+        created: fresh.length,
+        skippedExisting: starts.length - fresh.length,
+        startDate: d.startDate,
+        endDate: d.endDate,
+        weekdays: d.weekdays,
+        startTime: d.startTime,
+        endTime: d.endTime,
+        durationMins: d.durationMins,
+        assignedToId: d.assignedToId || null,
+      },
+    });
   }
 
   revalidatePath("/bookings");
@@ -377,7 +399,7 @@ const bookingRulesFormSchema = z.object({
 
 /** Admin edits the slot window + the confirmation-loop cadence/toggles (AppSetting). */
 export async function updateBookingRules(form: FormData): Promise<ActionResult> {
-  await requireSection("bookings");
+  const session = await requireSection("bookings");
   const parsed = bookingRulesFormSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   // Merge over the current config so saving never resets the auto-disqualify toggle or the
@@ -394,6 +416,17 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
   const valid = bookingRulesConfigSchema.safeParse(next);
   if (!valid.success) return { ok: false, error: firstError(valid.error) };
   await writeBookingRulesConfig(valid.data);
+  const diff = diffFields<Record<string, unknown>>(current, valid.data);
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "booking.rules.update",
+      section: "bookings",
+      entityType: "AppSetting",
+      entityId: BOOKING_RULES_KEY,
+      summary: `Updated the booking rules — changed ${diff.changed.join(", ")}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
   revalidatePath("/bookings");
   revalidatePath("/book");
   return { ok: true };
@@ -401,11 +434,19 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
 
 /** Delete an OPEN or BLOCKED slot (a BOOKED slot must be cancelled via the booking first). */
 export async function deleteSlot(id: string): Promise<ActionResult> {
-  await requireSection("bookings");
-  const slot = await prisma.appointmentSlot.findUnique({ where: { id }, select: { status: true } });
+  const session = await requireSection("bookings");
+  const slot = await prisma.appointmentSlot.findUnique({ where: { id }, select: { status: true, startsAt: true } });
   if (!slot) return { ok: false, error: "Slot not found" };
   if (slot.status === "BOOKED") return { ok: false, error: "Cancel the booking before removing this slot" };
   await prisma.appointmentSlot.delete({ where: { id } });
+  await logActivity(session, {
+    action: "slot.delete",
+    section: "bookings",
+    entityType: "AppointmentSlot",
+    entityId: id,
+    summary: `Removed the ${activityStamp(slot.startsAt)} slot`,
+    meta: { startsAt: slot.startsAt, status: slot.status },
+  });
   revalidatePath("/bookings");
   return { ok: true };
 }
@@ -426,7 +467,7 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
   }
   const booking = await prisma.bookingRequest.findUnique({
     where: { id },
-    select: { slotId: true, leadId: true },
+    select: { slotId: true, leadId: true, name: true, status: true },
   });
   if (!booking) return { ok: false, error: "Booking not found" };
 
@@ -455,6 +496,18 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
     }
   });
 
+  const diff = diffFields<Record<string, unknown>>({ status: booking.status }, { status });
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "booking.update",
+      section: "bookings",
+      entityType: "BookingRequest",
+      entityId: id,
+      summary: `Marked ${booking.name}'s booking ${status}`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after, slotFreed: freesSlot },
+    });
+  }
+
   // Fill the freed slot with the next waiting call for the same caller on the same day.
   if (status === "CANCELLED" && booking.slotId) {
     const rules = await getBookingRulesConfig();
@@ -470,8 +523,8 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
 
 /** Manually take a slot out of (or back into) availability. A BOOKED slot can't be blocked. */
 export async function setSlotBlocked(id: string, blocked: boolean): Promise<ActionResult> {
-  await requireSection("bookings");
-  const slot = await prisma.appointmentSlot.findUnique({ where: { id }, select: { status: true } });
+  const session = await requireSection("bookings");
+  const slot = await prisma.appointmentSlot.findUnique({ where: { id }, select: { status: true, startsAt: true } });
   if (!slot) return { ok: false, error: "Slot not found" };
   if (slot.status === "BOOKED") return { ok: false, error: "Cancel the booking before blocking this slot" };
   const next = blocked ? "BLOCKED" : "OPEN";
@@ -482,6 +535,14 @@ export async function setSlotBlocked(id: string, blocked: boolean): Promise<Acti
     data: { status: next },
   });
   if (res.count === 0) return { ok: false, error: "Slot changed — refresh and try again" };
+  await logActivity(session, {
+    action: blocked ? "slot.block" : "slot.unblock",
+    section: "bookings",
+    entityType: "AppointmentSlot",
+    entityId: id,
+    summary: `${blocked ? "Blocked" : "Unblocked"} the ${activityStamp(slot.startsAt)} slot`,
+    meta: { changed: ["status"], before: { status: slot.status }, after: { status: next } },
+  });
   revalidatePath("/bookings");
   return { ok: true };
 }
@@ -495,7 +556,7 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
   const session = await requireSection("bookings");
   const booking = await prisma.bookingRequest.findUnique({
     where: { id: bookingId },
-    select: { slotId: true, status: true },
+    select: { slotId: true, status: true, name: true },
   });
   if (!booking) return { ok: false, error: "Booking not found" };
   if (booking.status === "CANCELLED") return { ok: false, error: "This booking is cancelled — it can't be moved" };
@@ -530,6 +591,15 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
     throw e;
   }
 
+  await logActivity(session, {
+    action: "booking.reschedule",
+    section: "bookings",
+    entityType: "BookingRequest",
+    entityId: bookingId,
+    summary: `Moved ${booking.name}'s call to ${activityStamp(target.startsAt)}`,
+    meta: { changed: ["slotId"], before: { slotId: booking.slotId }, after: { slotId: newSlotId } },
+  });
+
   // Intimate the prospect their call moved (best-effort; silent when WhatsApp is off).
   await sendBookingRescheduled(bookingId, session.user.id);
   revalidatePath("/bookings");
@@ -538,12 +608,22 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
 
 /** Manually mark a booking confirmed (or clear it). The auto-cancel engine reads confirmedAt. */
 export async function setBookingConfirmed(id: string, confirmed: boolean): Promise<ActionResult> {
-  await requireSection("bookings");
-  const booking = await prisma.bookingRequest.findUnique({ where: { id }, select: { id: true } });
+  const session = await requireSection("bookings");
+  const booking = await prisma.bookingRequest.findUnique({ where: { id }, select: { id: true, name: true } });
   if (!booking) return { ok: false, error: "Booking not found" };
   await prisma.bookingRequest.update({
     where: { id },
     data: { confirmedAt: confirmed ? new Date() : null },
+  });
+  await logActivity(session, {
+    action: "booking.confirm",
+    section: "bookings",
+    entityType: "BookingRequest",
+    entityId: id,
+    summary: confirmed
+      ? `Marked ${booking.name}'s call confirmed`
+      : `Cleared the confirmation on ${booking.name}'s call`,
+    meta: { confirmed },
   });
   revalidatePath("/bookings");
   return { ok: true };

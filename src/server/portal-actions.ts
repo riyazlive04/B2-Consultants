@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/rbac";
+import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -57,6 +58,14 @@ export async function submitMySprintCheckIn(weekId: string, form: FormData): Pro
   await prisma.sprintWeek.update({
     where: { id: weekId },
     data: { actual: d.actual, actualNumeric, note: d.note || null, status },
+  });
+  await logActivity(session, {
+    action: "sprint.submit",
+    section: "my-journey",
+    entityType: "SprintWeek",
+    entityId: weekId,
+    summary: `Submitted their weekend sprint check-in`,
+    meta: { status, actualNumeric },
   });
   revalidatePath("/my-journey");
   revalidatePath("/students");

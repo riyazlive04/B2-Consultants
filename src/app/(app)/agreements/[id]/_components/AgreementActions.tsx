@@ -14,10 +14,13 @@ const SignaturePad = dynamic(
   { ssr: false },
 );
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
+import { collectReportedDevice } from "@/lib/device";
 import {
   cloneAgreement,
   issueAgreement,
+  issueAgreementWithSavedSignature,
   resendAgreementLink,
+  saveFounderSignature,
   voidAgreement,
 } from "@/server/agreement-actions";
 
@@ -39,7 +42,8 @@ export function AgreementActions({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [signOpen, setSignOpen] = useState(false);
+  /** "save" = first ever send, store the ink; "once" = deliberately sign this one by hand. */
+  const [signOpen, setSignOpen] = useState<null | "save" | "once">(null);
   const [signature, setSignature] = useState<SignatureValue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<{ url: string; delivery: string; sent: boolean } | null>(null);
@@ -48,24 +52,46 @@ export function AgreementActions({
   const isDraft = status === "DRAFT";
   const isPending = status === "SENT" || status === "VIEWED";
 
-  function doIssue() {
+  function applyIssued(data: { signingUrl: string; delivery: string; sent: boolean }) {
+    setIssued({ url: data.signingUrl, delivery: data.delivery, sent: data.sent });
+    setSignOpen(null);
+    if (data.sent) celebrate();
+    router.refresh();
+  }
+
+  /** One tap: stamp the stored signature. Falls back to the pad the first time. */
+  function doIssueSaved() {
+    setError(null);
+    startTransition(async () => {
+      const res = await issueAgreementWithSavedSignature(id, collectReportedDevice());
+      if (!res.ok) return toast(res.error, "error");
+      if (res.data!.kind === "needsSignature") {
+        setSignOpen("save"); // nothing stored yet — draw once, then this sends
+        return;
+      }
+      applyIssued(res.data as { signingUrl: string; delivery: string; sent: boolean });
+    });
+  }
+
+  function doIssueDrawn() {
     if (!signature) {
       setError("Draw your signature before sending.");
       return;
     }
     setError(null);
     startTransition(async () => {
+      if (signOpen === "save") {
+        const saved = await saveFounderSignature(signature.dataUrl, signature.device);
+        if (!saved.ok) return setError(saved.error);
+        toast("Signature saved — next time this is one tap.");
+      }
       // The founder's own device is captured too: the certificate names both signatories.
       const res = await issueAgreement(id, signature.dataUrl, signature.device);
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      const data = res.data!;
-      setIssued({ url: data.signingUrl, delivery: data.delivery, sent: data.sent });
-      setSignOpen(false);
-      if (data.sent) celebrate();
-      router.refresh();
+      applyIssued(res.data!);
     });
   }
 
@@ -114,13 +140,23 @@ export function AgreementActions({
     <>
       <div className="flex flex-wrap items-center gap-2">
         {isDraft && (
-          <button
-            onClick={() => setSignOpen(true)}
-            disabled={pending}
-            className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong disabled:opacity-60"
-          >
-            <PenLine size={15} /> Countersign &amp; send
-          </button>
+          <>
+            <button
+              onClick={doIssueSaved}
+              disabled={pending}
+              className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong disabled:opacity-60"
+            >
+              {pending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Countersign &amp; send
+            </button>
+            {/* The escape hatch: sign this one by hand without touching the stored signature. */}
+            <button
+              onClick={() => setSignOpen("once")}
+              disabled={pending}
+              className="inline-flex h-10 items-center gap-1.5 rounded-btn border border-line px-4 text-sm font-medium transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+            >
+              <PenLine size={15} /> Sign this one by hand
+            </button>
+          </>
         )}
         {isPending && (
           <button
@@ -172,13 +208,24 @@ export function AgreementActions({
       )}
 
       <Modal
-        open={signOpen}
-        onClose={() => setSignOpen(false)}
-        title="Countersign the agreement"
-        subtitle={`You sign first, then ${studentName} receives the link on WhatsApp.`}
+        open={signOpen !== null}
+        onClose={() => setSignOpen(null)}
+        title={signOpen === "save" ? "Save your countersignature" : "Countersign the agreement"}
+        subtitle={
+          signOpen === "save"
+            ? `Draw it once — every agreement after this one sends in a single tap. ${studentName} then receives the link on WhatsApp.`
+            : `You sign first, then ${studentName} receives the link on WhatsApp.`
+        }
       >
         <div className="space-y-4">
           <SignaturePad onChange={(v) => setSignature(v)} disabled={pending} allowFullScreen={false} />
+          {signOpen === "save" && (
+            <p className="text-caption text-muted">
+              Only the signature image is stored and reused. The device and IP recorded on each
+              agreement are captured fresh at the moment you issue it, and the audit trail always
+              says when stored ink was used.
+            </p>
+          )}
           {error && (
             <p role="alert" className="rounded-field bg-risk-soft px-3 py-2 text-sm font-medium text-risk">
               {error}
@@ -186,18 +233,18 @@ export function AgreementActions({
           )}
           <div className="flex items-center justify-end gap-2">
             <button
-              onClick={() => setSignOpen(false)}
+              onClick={() => setSignOpen(null)}
               className="h-10 rounded-btn border border-line px-4 text-sm font-medium"
             >
               Cancel
             </button>
             <button
-              onClick={doIssue}
+              onClick={doIssueDrawn}
               disabled={pending || !signature}
               className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent hover:bg-primary-strong disabled:opacity-60"
             >
               {pending && <Loader2 size={15} className="animate-spin" />}
-              <Send size={15} /> Sign &amp; send
+              <Send size={15} /> {signOpen === "save" ? "Save & send" : "Sign & send"}
             </button>
           </div>
         </div>

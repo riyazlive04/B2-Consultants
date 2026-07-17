@@ -16,10 +16,12 @@ import { formatDate } from "@/lib/format";
 import { BOOKING_STATUS_LABELS, slotTypeLabel } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { getBookableTeamMembers, getBookingsOverview, getWeekSlots, type WeekSlot } from "@/server/booking-metrics";
-import { getBookingRulesConfig } from "@/server/founder-config";
+import { getBookingRulesConfig, getSssConfig } from "@/server/founder-config";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
+import { listSssSlots, listSssNeedsScheduling } from "@/server/sss-slots";
 import { SlotManager } from "./_components/SlotManager";
 import { BookingsTable } from "./_components/BookingsTable";
+import { SssCalendar } from "./_components/SssCalendar";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +36,8 @@ const slotStyle = (s: WeekSlot) => {
 };
 
 export default async function BookingsPage({ searchParams }: { searchParams: { week?: string } }) {
-  await requireSection("bookings");
+  const session = await requireSection("bookings");
+  const canConfigure = session.role === "ADMIN";
 
   // Week selection - ?week=YYYY-MM-DD (any day inside the wanted week), default today
   const ref = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.week ?? "") ? parseDateInput(searchParams.week!) : istToday();
@@ -42,11 +45,14 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
   const weekStartUtc = istWallToUtc(toDateInputValue(week.start), "00:00");
   const weekEndUtc = istWallToUtc(toDateInputValue(week.end), "00:00");
 
-  const [{ kpis, slots, bookings, openSlots }, weekSlots, teamMembers, rules] = await Promise.all([
+  const [{ kpis, slots, bookings, openSlots }, weekSlots, teamMembers, rules, sssSlots, sssNeeds, sssConfig] = await Promise.all([
     getBookingsOverview(),
     getWeekSlots(weekStartUtc, weekEndUtc),
     getBookableTeamMembers(),
     getBookingRulesConfig(),
+    listSssSlots(weekStartUtc, weekEndUtc),
+    listSssNeedsScheduling(),
+    getSssConfig(),
   ]);
   const waByBooking = await getWhatsAppStatusMap("bookingRequestId", bookings.map((b) => b.id));
   const bookingUrl = `${process.env.BETTER_AUTH_URL ?? ""}/book`;
@@ -268,6 +274,21 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
         tabs={[
           { label: "Bookings", content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} /> },
           { label: "Availability", content: <SlotManager slots={slots} teamMembers={teamMembers} rules={rules} /> },
+          {
+            label: "SSS Calendar",
+            content: (
+              <SssCalendar
+                slots={sssSlots}
+                needsScheduling={sssNeeds}
+                config={sssConfig}
+                teamMembers={teamMembers}
+                days={days}
+                weekLabel={weekLabel}
+                nav={{ prev: weekNav(-7), next: weekNav(7), today: "/bookings" }}
+                canConfigure={canConfigure}
+              />
+            ),
+          },
         ]}
       />
     </div>

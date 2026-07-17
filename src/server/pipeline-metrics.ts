@@ -162,7 +162,7 @@ export function invalidateAvgFeeCache(): void {
  * wins/completed-calls are counted within the selected window. `interestedLeads` and
  * `pipelineValueInr` are a point-in-time snapshot of currently-open deals and are not
  * range-scoped (there's no such thing as "open deals as of last month"). Every caller
- * that doesn't pass `range` (FounderPulse) keeps today's exact "this month" behavior.
+ * that doesn't pass `range` (MonthHero) keeps today's exact "this month" behavior.
  */
 export const getPipelineSnapshot = cache(async (range: KpiRangeKey = "this-month") => {
   const ts = kpiInstantRange(range);

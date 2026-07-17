@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 /**
  * The app's presentational vocabulary, extracted from the Users & access screen.
@@ -67,6 +69,55 @@ export function PageHeader({
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
+  );
+}
+
+/**
+ * A section heading inside a page: a soft icon chip, the section title, an optional
+ * one-line purpose, and an optional right-aligned action (usually a `ViewAll` link).
+ * Where `PageHeader` opens a whole page, this opens a *band* within it — it is what
+ * turns a long dashboard into a handful of scannable, clearly-labelled groups.
+ */
+export function SectionHeading({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon?: ReactNode;
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {icon && (
+          <span aria-hidden className="grid h-9 w-9 flex-none place-items-center rounded-field bg-primary-soft text-primary">
+            {icon}
+          </span>
+        )}
+        <div className="min-w-0">
+          <h2 className="font-display text-h2 font-semibold text-ink">{title}</h2>
+          {description && <p className="text-caption text-ink-3">{description}</p>}
+        </div>
+      </div>
+      {action && <div className="flex flex-none items-center gap-2">{action}</div>}
+    </div>
+  );
+}
+
+/** The section-header "View all →" affordance — one styled link, so every section
+ *  drills down the same way. Reads as a quiet text link that tints on hover. */
+export function ViewAll({ href, children = "View all" }: { href: string; children?: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 rounded-field px-2.5 py-1.5 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft"
+    >
+      {children}
+      <ArrowRight size={15} className="flex-none" />
+    </Link>
   );
 }
 

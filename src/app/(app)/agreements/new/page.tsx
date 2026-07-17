@@ -1,7 +1,10 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, UserSearch } from "lucide-react";
 import { requireCapability, requireSection } from "@/lib/rbac";
-import { getAgreementCandidates, getAgreementPrefill } from "@/server/agreement-metrics";
+import { getAgreementPrefill } from "@/server/agreement-metrics";
+import { getAgreementCandidatesGrouped } from "@/server/agreement-state";
+import { getAgreementWorkflow } from "@/server/founder-config";
+import { AgreementClientPicker } from "../_components/AgreementClientPicker";
 import { AgreementForm } from "../_components/AgreementForm";
 
 export const dynamic = "force-dynamic";
@@ -15,12 +18,15 @@ export default async function NewAgreementPage({
   await requireSection("agreements");
   await requireCapability("agreements.issue");
 
-  const prefill = await getAgreementPrefill({
-    leadId: searchParams.leadId ?? null,
-    studentId: searchParams.studentId ?? null,
-  });
-  const { leads, students } = await getAgreementCandidates();
-  const picked = searchParams.leadId || searchParams.studentId;
+  const [prefill, candidates, config] = await Promise.all([
+    getAgreementPrefill({
+      leadId: searchParams.leadId ?? null,
+      studentId: searchParams.studentId ?? null,
+    }),
+    getAgreementCandidatesGrouped(),
+    getAgreementWorkflow(),
+  ]);
+  const picked = !!(searchParams.leadId || searchParams.studentId);
 
   return (
     <div className="w-full space-y-6">
@@ -34,39 +40,32 @@ export default async function NewAgreementPage({
         </div>
       </div>
 
-      {!picked && (leads.length > 0 || students.length > 0) && (
-        <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <h2 className="mb-3 font-display text-sm font-bold">Start from an existing record</h2>
-          <div className="flex flex-wrap gap-2">
-            {leads.map((l) => (
-              <Link
-                key={l.id}
-                href={`/agreements/new?leadId=${l.id}`}
-                className="rounded-full border border-line px-3 py-1.5 text-xs transition-colors hover:border-primary hover:text-primary"
-              >
-                {l.name} <span className="text-muted">· won lead</span>
-              </Link>
-            ))}
-            {students.map((st) => (
-              <Link
-                key={st.id}
-                href={`/agreements/new?studentId=${st.id}`}
-                className="rounded-full border border-line px-3 py-1.5 text-xs transition-colors hover:border-primary hover:text-primary"
-              >
-                {st.fullName} <span className="text-muted">· student</span>
-              </Link>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-muted">
-            Or fill the form below by hand. The postal address and batch always need typing — nothing in the
-            database holds them.
-          </p>
-        </div>
-      )}
+      {/* The picker stays visible after a pick, so switching client is one click — not a back-button
+          hunt. It lists every live deal and every student, not just won leads: the founder decides
+          when an agreement goes out, the state badge only advises. */}
+      <div className="rounded-card border border-line bg-surface p-5 shadow-card">
+        <h2 className="mb-1 flex items-center gap-2 font-display text-sm font-bold">
+          <UserSearch size={16} className="text-accent" /> Start from an existing record
+        </h2>
+        <p className="mb-3 text-xs text-muted">
+          {picked
+            ? "Everything below is filled from this client's record. Switch client any time."
+            : "Search by name, phone, email or stage. Picking a client fills the form from the CRM."}
+        </p>
+        <AgreementClientPicker candidates={candidates} config={config} />
+      </div>
 
+      {/* The key is load-bearing. AgreementForm seeds its inputs from `initial` with useState, and a
+          useState initializer never re-runs — so picking a client would re-render this page with a
+          fresh prefill while React kept the previous (empty) field state, silently showing a form
+          that disagreed with its own "filled from the record" banner. Keying on the selected client
+          remounts the form, which is the supported way to reset an uncontrolled component. */}
       <AgreementForm
+        key={prefill.studentId ?? prefill.leadId ?? "blank"}
         initial={prefill.data}
         notes={prefill.notes}
+        missing={prefill.missing}
+        filled={prefill.filled}
         mode={{ kind: "create", leadId: prefill.leadId, studentId: prefill.studentId }}
       />
     </div>

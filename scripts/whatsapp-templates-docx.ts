@@ -217,12 +217,17 @@ function summaryTable(): (Paragraph | Table)[] {
       [1, 4],
     ),
     spacer(100),
-    p("Category matters more than anything else in this pack — a mismatch is the most common rejection. MARKETING messages promote; UTILITY messages are about a specific thing the prospect already did. The two intro/chase messages promote a free call to someone who filled in a form, so they are MARKETING. Everything from Step 13 onward refers to an appointment the prospect booked themselves, so it is UTILITY.", {
+    p("All nine are MARKETING. Meta only allows UTILITY for a template that is non-promotional and carries no persuasive intent — anything with mixed content defaults to MARKETING. Every message in this pack sells something while it informs: the case studies link, the “*FREE*” framing, the “personalized game plan”, the re-booking CTAs on the two cancellations. That the prospect booked the appointment themselves is not enough on its own, and the call being a free sales call rather than a paid booking weakens the claim further.", {
       size: 19,
       color: MUTED,
     }),
     spacer(60),
-    p("MARKETING templates are subject to Meta’s per-user marketing limits and require opt-in. B2 has that opt-in via the website form — keep the form’s consent wording, it is the evidence.", {
+    p("Note that a “reply YES to confirm” is NOT what makes these MARKETING — a confirmation request for a booked appointment is the textbook UTILITY case. It is the promotional copy around it that decides. The clearest proof is Steps 16 and 21: they ask for nothing at all, and they are still MARKETING, because they carry a re-booking link.", {
+      size: 19,
+      color: MUTED,
+    }),
+    spacer(60),
+    p("Two consequences. Since April 2025 Meta approves a template as MARKETING whenever it judges it to be MARKETING, whatever you declared — and flags accounts that game the category, so declaring UTILITY here would buy a flag, not a cheaper message. And MARKETING templates are subject to Meta’s per-user marketing limits and require opt-in: B2 has that opt-in via the website form, so keep the form’s consent wording, it is the evidence. The cost B2 is accepting is that a time-critical confirmation reminder can be throttled for a prospect near their marketing cap — worth rechecking against real delivery rates once these are live.", {
       size: 19,
       color: MUTED,
     }),
@@ -337,7 +342,7 @@ function checklist(): (Paragraph | Table)[] {
 
     h2("Part B — Submit in WATI (per template)"),
     checkbox("Create the template with the EXACT name given — the app is mapped to these names."),
-    checkbox("Set the category exactly as specified. Do not let WATI default it to MARKETING for the UTILITY ones."),
+    checkbox("Set the category to MARKETING on all nine. This is deliberate — see “The nine templates at a glance”. Do not re-declare any of them UTILITY to save on send cost: Meta re-categorises them anyway and flags the account for it."),
     checkbox("Paste the body exactly. No trimming of blank lines — the spacing is part of the message."),
     checkbox("Declare the variables in the order shown and give each the sample value listed. Meta rejects submissions with missing or unrealistic samples."),
     checkbox("Language: en. If WATI insists on a locale, use en_GB and record which you chose."),

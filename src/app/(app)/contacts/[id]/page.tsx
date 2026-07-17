@@ -2,16 +2,19 @@ import { notFound } from "next/navigation";
 import { requireSection } from "@/lib/rbac";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { getContactDetail, getContactListFilters, getContactCustomFields } from "@/server/contacts-metrics";
+import { getAgreementSummaryFor } from "@/server/agreement-state";
 import ContactRecord from "./_components/ContactRecord";
 
 export const dynamic = "force-dynamic";
 
 export default async function ContactPage({ params }: { params: { id: string } }) {
   await requireSection("contacts");
-  const [contact, filters, customFields] = await Promise.all([
+  // The Lead IS the contact, so its id is the leadId every agreement hangs off.
+  const [contact, filters, customFields, agreement] = await Promise.all([
     getContactDetail(params.id),
     getContactListFilters(),
     getContactCustomFields(),
+    getAgreementSummaryFor({ leadId: params.id }),
   ]);
   if (!contact) notFound();
 
@@ -24,6 +27,7 @@ export default async function ContactPage({ params }: { params: { id: string } }
         companies={filters.companies}
         allTags={filters.tags.map((t) => t.name)}
         customFields={customFields}
+        agreement={agreement}
       />
     </div>
   );

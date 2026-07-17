@@ -5,6 +5,8 @@ import { istToday } from "@/lib/dates";
 import { formatDate, formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import { WHATSAPP_KIND_LABELS, type WatiTemplateConfig } from "@/lib/whatsapp";
 import { normalizeWhatsappNumber } from "@/lib/phone";
+import type { SectionKey } from "@/lib/sections";
+import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import {
   getWatiRuntime,
   sendTemplateMessage,
@@ -458,11 +460,37 @@ export async function runDueReminders(): Promise<ReminderRun> {
   const now = Date.now();
   const today = istToday();
 
-  const record = (kind: WhatsAppKind, out: SendOutcome) => {
+  /**
+   * Tally the outcome and, when a message actually went out, put it on the founder's
+   * activity feed under the engine's own name.
+   *
+   * Only `sent` is logged. A SKIPPED row means nobody received anything (the channel was
+   * paused, or it was a dry run), and a feed claiming "Sent Priya the reminder" when no
+   * message left the building is worse than silence. FAILED is left off for the same reason —
+   * the WhatsApp screen already shows failures with their error, which the feed can't.
+   *
+   * `subject` is what makes the row readable: the engine knows the recipient's name at every
+   * call site, so the founder never sees an id.
+   */
+  const record = async (
+    kind: WhatsAppKind,
+    out: SendOutcome,
+    subject: { name: string; section: SectionKey; entityType: string; entityId: string },
+  ) => {
     const t = (perKind[kind] ??= { sent: 0, skipped: 0, failed: 0 });
     if (out.sent) { t.sent++; total.sent++; budget--; }
     else if (out.status === "FAILED") { t.failed++; total.failed++; budget--; }
     else { t.skipped++; total.skipped++; }
+
+    if (!out.sent) return;
+    await logSystemActivity(SYSTEM_ACTORS.reminders, {
+      action: "whatsapp.send",
+      section: subject.section,
+      entityType: subject.entityType,
+      entityId: subject.entityId,
+      summary: `Sent ${subject.name} the ${WHATSAPP_KIND_LABELS[kind]} reminder`,
+      meta: { kind, messageId: out.messageId },
+    });
   };
   // A touchpoint only runs when its template exists — avoids per-candidate SKIPPED spam every run.
   const hasTemplate = (kind: WhatsAppKind) => !!runtime.settings.templates[kind]?.name;
@@ -479,10 +507,10 @@ export async function runDueReminders(): Promise<ReminderRun> {
     for (const l of leads) {
       if (budget <= 0) break;
       if (!(await throttleOk("DISCO_REMINDER", { leadId: l.id }, { minSpacingMs: cadence.discoRepeatHours * HR, maxCount: cadence.discoMaxReminders }))) continue;
-      record("DISCO_REMINDER", await sendWhatsApp({
+      await record("DISCO_REMINDER", await sendWhatsApp({
         kind: "DISCO_REMINDER", to: l.phone, leadId: l.id, runtime,
         vars: { name: firstName(l.name), booking_url: bookingUrl() },
-      }));
+      }), { name: l.name, section: "pipeline", entityType: "Lead", entityId: l.id });
     }
   }
 
@@ -499,14 +527,14 @@ export async function runDueReminders(): Promise<ReminderRun> {
     for (const b of bookings) {
       if (budget <= 0) break;
       if (!(await throttleOk("BOOKING_REMINDER", { bookingRequestId: b.id }, { minSpacingMs: minLead * HR, maxCount: leadHours.length }))) continue;
-      record("BOOKING_REMINDER", await sendWhatsApp({
+      await record("BOOKING_REMINDER", await sendWhatsApp({
         kind: "BOOKING_REMINDER", to: b.whatsapp || b.phone, bookingRequestId: b.id, leadId: b.leadId ?? undefined, runtime,
         vars: {
           name: firstName(b.name),
           slot_time: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Asia/Kolkata") : "",
           booking_url: bookingUrl(),
         },
-      }));
+      }), { name: b.name, section: "bookings", entityType: "BookingRequest", entityId: b.id });
     }
   }
 
@@ -524,10 +552,10 @@ export async function runDueReminders(): Promise<ReminderRun> {
     for (const l of leads) {
       if (budget <= 0) break;
       if (!(await throttleOk("NO_SHOW_FOLLOWUP", { leadId: l.id }, { minSpacingMs: 7 * 24 * HR, maxCount: 1 }))) continue;
-      record("NO_SHOW_FOLLOWUP", await sendWhatsApp({
+      await record("NO_SHOW_FOLLOWUP", await sendWhatsApp({
         kind: "NO_SHOW_FOLLOWUP", to: l.phone, leadId: l.id, runtime,
         vars: { name: firstName(l.name), booking_url: bookingUrl() },
-      }));
+      }), { name: l.name, section: "pipeline", entityType: "Lead", entityId: l.id });
     }
   }
 
@@ -550,10 +578,10 @@ export async function runDueReminders(): Promise<ReminderRun> {
       if (row && row.balance.inr <= 0) continue; // already settled
       if (!(await throttleOk("PAYMENT_REMINDER", { pendingPaymentId: p.id }, { minSpacingMs: cadence.paymentRepeatHours * HR }))) continue;
       const amount = row ? formatInrMinor(row.balance.inr) : formatInrMinor(p.totalFeeInrMinor);
-      record("PAYMENT_REMINDER", await sendWhatsApp({
+      await record("PAYMENT_REMINDER", await sendWhatsApp({
         kind: "PAYMENT_REMINDER", to: phone, pendingPaymentId: p.id, studentId: p.studentId ?? undefined, runtime,
         vars: { name: firstName(p.studentName), amount },
-      }));
+      }), { name: p.studentName, section: "finance", entityType: "PendingPayment", entityId: p.id });
     }
   }
 
@@ -597,7 +625,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
       // all day cannot double-send. (maxCount would also miscount in dry run, where rows
       // are SKIPPED and therefore never "successful".)
       if (!(await throttleOk("EMI_PRE_DUE", { pendingPaymentId: p.id }, { minSpacingMs: 20 * HR }))) continue;
-      record("EMI_PRE_DUE", await sendWhatsApp({
+      await record("EMI_PRE_DUE", await sendWhatsApp({
         kind: "EMI_PRE_DUE",
         to: phone,
         pendingPaymentId: p.id,
@@ -612,7 +640,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
           seq: String(it.seq),
           total: String(p._count.instalments),
         },
-      }));
+      }), { name: p.studentName, section: "finance", entityType: "PendingPayment", entityId: p.id });
     }
   }
 
@@ -627,10 +655,10 @@ export async function runDueReminders(): Promise<ReminderRun> {
       if (budget <= 0) break;
       if (!e.student.phone) continue;
       if (!(await throttleOk("CHECKIN_NUDGE", { studentId: e.student.id }, { minSpacingMs: cadence.studentRepeatHours * HR }))) continue;
-      record("CHECKIN_NUDGE", await sendWhatsApp({
+      await record("CHECKIN_NUDGE", await sendWhatsApp({
         kind: "CHECKIN_NUDGE", to: e.student.phone, studentId: e.student.id, runtime,
         vars: { name: firstName(e.student.fullName) },
-      }));
+      }), { name: e.student.fullName, section: "students", entityType: "Student", entityId: e.student.id });
     }
   }
 
@@ -651,10 +679,10 @@ export async function runDueReminders(): Promise<ReminderRun> {
       const s = m.enrollment.student;
       if (!s.phone) continue;
       if (!(await throttleOk("SPRINT_MISS_NUDGE", { studentId: s.id }, { minSpacingMs: cadence.studentRepeatHours * HR }))) continue;
-      record("SPRINT_MISS_NUDGE", await sendWhatsApp({
+      await record("SPRINT_MISS_NUDGE", await sendWhatsApp({
         kind: "SPRINT_MISS_NUDGE", to: s.phone, studentId: s.id, runtime,
         vars: { name: firstName(s.fullName) },
-      }));
+      }), { name: s.fullName, section: "students", entityType: "Student", entityId: s.id });
     }
   }
 
@@ -768,6 +796,31 @@ export async function sendBookingAutoCancelled(bookingRequestId: string, sentByI
     sentById: sentById ?? null,
     logSkips: !!sentById,
     vars: { name: firstName(b.name), booking_url: bookingUrl() },
+  });
+}
+
+// ── SSS (sales) call calendar ──
+/**
+ * "Your Success Strategy Session has been moved to <new time>." Sent by the SSS calendar
+ * (server/sss-slots.ts) when the founder blocks a booked slot/day (prospect auto-moved to the next
+ * open slot) or a prospect is manually/dragged onto a different slot. Reads the prospect off the
+ * journey's lead; `slot_time` is the journey's already-updated sssAt (the NEW time).
+ */
+export async function sendSssRescheduled(journeyId: string, sentById?: string | null): Promise<SendOutcome> {
+  const j = await prisma.outreachJourney.findUnique({
+    where: { id: journeyId },
+    select: { leadId: true, sssAt: true, lead: { select: { name: true, phone: true } } },
+  });
+  if (!j?.lead) return notFound("Journey");
+  return sendWhatsApp({
+    kind: "SSS_RESCHEDULED", to: j.lead.phone, leadId: j.leadId,
+    sentById: sentById ?? null,
+    logSkips: !!sentById,
+    vars: {
+      name: firstName(j.lead.name),
+      slot_time: j.sssAt ? formatDateTimeInZone(j.sssAt, "Asia/Kolkata") : "",
+      sss_url: "https://optin.b2consultants.de/sss",
+    },
   });
 }
 

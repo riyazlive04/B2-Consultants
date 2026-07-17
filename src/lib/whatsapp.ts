@@ -23,6 +23,7 @@ export const WHATSAPP_KINDS = [
   "AGREEMENT_SEND",
   "AGREEMENT_OTP",
   "AGREEMENT_REMINDER",
+  "AGREEMENT_COPY",
   "MANUAL",
   "SOP_INTRO",
   "SOP_FOLLOWUP",
@@ -36,6 +37,7 @@ export const WHATSAPP_KINDS = [
   "BOOKING_CONFIRM_REQUEST",
   "BOOKING_RESCHEDULED",
   "BOOKING_AUTO_CANCELLED",
+  "SSS_RESCHEDULED",
 ] as const satisfies readonly WhatsAppKind[];
 
 export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
@@ -50,6 +52,7 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   AGREEMENT_SEND: "Agreement signing link",
   AGREEMENT_OTP: "Agreement signing code",
   AGREEMENT_REMINDER: "Unsigned agreement reminder",
+  AGREEMENT_COPY: "Countersigned copy",
   MANUAL: "Manual message",
   SOP_INTRO: "SOP 3 · WhatsApp intro",
   SOP_FOLLOWUP: "SOP 6 · Follow-up, not booked",
@@ -63,6 +66,7 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   BOOKING_CONFIRM_REQUEST: "Booking · confirm request",
   BOOKING_RESCHEDULED: "Booking · rescheduled notice",
   BOOKING_AUTO_CANCELLED: "Booking · auto-cancelled",
+  SSS_RESCHEDULED: "SSS · rescheduled notice",
 };
 
 /** One-line description of when each touchpoint fires — shown in the settings UI. */
@@ -78,6 +82,8 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   AGREEMENT_SEND: "The founder countersigned an agreement — carries the tokenized signing link.",
   AGREEMENT_OTP: "The one-time code that binds the signature to control of this number.",
   AGREEMENT_REMINDER: "An issued agreement is still unsigned and the link has not expired.",
+  AGREEMENT_COPY:
+    "The student just signed — carries the link to their sealed, countersigned copy. Delivering this is what marks an agreement Completed.",
   MANUAL: "Free-form one-off send triggered by a human from a section row.",
   SOP_INTRO: "Outreach SOP Step 3 — sent immediately after opt-in (target <5 min).",
   SOP_FOLLOWUP: "Outreach SOP Step 6 — still not booked at the 2-hour check.",
@@ -91,6 +97,7 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   BOOKING_CONFIRM_REQUEST: "Bookings confirmation loop — asks the prospect to reply YES to hold an upcoming booked slot.",
   BOOKING_RESCHEDULED: "Bookings confirmation loop — the call was moved to a new time (manual postpone or promoted into a freed earlier slot).",
   BOOKING_AUTO_CANCELLED: "Bookings confirmation loop — no confirmation before the cut-off, so the slot was released; invites them to rebook.",
+  SSS_RESCHEDULED: "SSS calendar — the Success Strategy Session was moved to a new time (founder blocked the slot/day, or a manual/drag reschedule).",
 };
 
 /**
@@ -121,6 +128,9 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   AGREEMENT_SEND: ["name", "sign_url", "sign_token", "document_no"],
   AGREEMENT_OTP: ["name", "code"],
   AGREEMENT_REMINDER: ["name", "sign_url", "sign_token", "document_no"],
+  // `copy_url` is the tokenized link to the SEALED pdf — the same token the signing link carried
+  // (signing never clears it), resolved by a loader that only serves signed rows.
+  AGREEMENT_COPY: ["name", "copy_url", "document_no"],
   MANUAL: ["name"],
   // ── Outreach SOP. These names are the CONTRACT with the approved WATI templates: whatever the
   // template declares must be a subset of what the touchpoint offers here, or the send is skipped
@@ -144,6 +154,8 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   BOOKING_CONFIRM_REQUEST: ["name", "slot_time", "booking_url"],
   BOOKING_RESCHEDULED: ["name", "slot_time", "booking_url"],
   BOOKING_AUTO_CANCELLED: ["name", "booking_url"],
+  // SSS calendar. `slot_time` is the NEW SSS time (IST); `sss_url` is the /sss rebook link.
+  SSS_RESCHEDULED: ["name", "slot_time", "sss_url"],
 };
 
 export const WHATSAPP_STATUS_LABELS: Record<WhatsAppStatus, string> = {

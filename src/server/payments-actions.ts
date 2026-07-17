@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { Prisma, type InvoiceKind, type InvoiceStatus, type ProductInterval } from "@prisma/client";
+import { Prisma, type Invoice, type InvoiceKind, type InvoiceStatus, type Product, type ProductInterval } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection, capabilityCheck } from "@/lib/rbac";
 import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
-import { formatInrMinor, majorStringToMinor } from "@/lib/format";
+import { formatEurMinor, formatInrMinor, majorStringToMinor } from "@/lib/format";
 import { parseDateInput } from "@/lib/dates";
 import { emitTrigger } from "./automation";
 import { appendAudit, LedgerError, postEntry } from "./ledger";
@@ -14,6 +14,7 @@ import { paymentEntryDraft } from "./finance-posting";
 import { getInvoicePdfData } from "./payments-metrics";
 import { renderInvoicePdf } from "@/documents/invoice-pdf";
 import { getEmailRuntime, sendResendEmail } from "@/lib/email";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /** Payments (Synamate "Payments"): products, invoices/estimates, manual payments, subscriptions.
@@ -41,6 +42,42 @@ const INTERVALS = ["ONE_TIME", "MONTHLY", "QUARTERLY", "YEARLY"] as const;
 
 type TxClient = Prisma.TransactionClient;
 
+/** A price may be set in INR, EUR, or both — the feed reads back exactly what was entered. */
+function priceDisplay(inrMinor: bigint, eurMinor: bigint): string {
+  const parts: string[] = [];
+  if (inrMinor > 0n) parts.push(formatInrMinor(inrMinor));
+  if (eurMinor > 0n) parts.push(formatEurMinor(eurMinor));
+  return parts.length ? parts.join(" + ") : formatInrMinor(0n);
+}
+
+/** Money as strings: diffFields JSON-compares, and BigInt has no JSON representation. */
+function productDiffShape(row: Product) {
+  return {
+    name: row.name,
+    description: row.description,
+    priceInrMinor: row.priceInrMinor.toString(),
+    priceEurMinor: row.priceEurMinor.toString(),
+    interval: row.interval as string,
+    active: row.active,
+  };
+}
+
+function invoiceDiffShape(row: Invoice) {
+  return {
+    customerName: row.customerName,
+    customerEmail: row.customerEmail,
+    customerPhone: row.customerPhone,
+    issueDate: row.issueDate,
+    dueDate: row.dueDate,
+    subtotalInrMinor: row.subtotalInrMinor.toString(),
+    discountInrMinor: row.discountInrMinor.toString(),
+    taxPercent: row.taxPercent,
+    totalInrMinor: row.totalInrMinor.toString(),
+    leadId: row.leadId,
+    notes: row.notes,
+  };
+}
+
 // ─────────────────────────── Products ───────────────────────────
 
 const productSchema = z.object({
@@ -53,12 +90,12 @@ const productSchema = z.object({
 });
 
 export async function createProduct(form: FormData): Promise<ActionResult> {
-  await requireSection("payments");
+  const session = await requireSection("payments");
   const parsed = productSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
   const fx = await getTodayInrPerEur();
-  await prisma.product.create({
+  const row = await prisma.product.create({
     data: {
       name: d.name,
       description: d.description || null,
@@ -69,17 +106,33 @@ export async function createProduct(form: FormData): Promise<ActionResult> {
       active: d.active !== "off",
     },
   });
+
+  await logActivity(session, {
+    action: "payments.product.create",
+    section: "payments",
+    entityType: "Product",
+    entityId: row.id,
+    summary: `Added the product "${row.name}" at ${priceDisplay(row.priceInrMinor, row.priceEurMinor)} (${row.interval.toLowerCase().replace(/_/g, " ")})`,
+    meta: {
+      priceInrMinor: row.priceInrMinor.toString(),
+      priceEurMinor: row.priceEurMinor.toString(),
+      interval: row.interval,
+      active: row.active,
+    },
+  });
+
   revalidatePath("/payments");
   return { ok: true };
 }
 
 export async function updateProduct(id: string, form: FormData): Promise<ActionResult> {
-  await requireSection("payments");
+  const session = await requireSection("payments");
   const parsed = productSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
   const fx = await getTodayInrPerEur();
-  await prisma.product.update({
+  const existing = await prisma.product.findUnique({ where: { id } });
+  const row = await prisma.product.update({
     where: { id },
     data: {
       name: d.name,
@@ -91,14 +144,39 @@ export async function updateProduct(id: string, form: FormData): Promise<ActionR
       active: d.active !== "off",
     },
   });
+
+  if (existing) {
+    const diff = diffFields(productDiffShape(existing), productDiffShape(row));
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "payments.product.update",
+        section: "payments",
+        entityType: "Product",
+        entityId: row.id,
+        summary: `Edited the product "${row.name}" — now ${priceDisplay(row.priceInrMinor, row.priceEurMinor)}`,
+        meta: diff,
+      });
+    }
+  }
+
   revalidatePath("/payments");
   return { ok: true };
 }
 
 export async function deleteProduct(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
-  await prisma.product.delete({ where: { id } });
+  const row = await prisma.product.delete({ where: { id } });
+
+  await logActivity(session, {
+    action: "payments.product.delete",
+    section: "payments",
+    entityType: "Product",
+    entityId: row.id,
+    summary: `Deleted the product "${row.name}"`,
+    meta: { priceInrMinor: row.priceInrMinor.toString(), interval: row.interval },
+  });
+
   revalidatePath("/payments");
   return { ok: true };
 }
@@ -160,9 +238,10 @@ export async function createInvoice(payload: InvoicePayload): Promise<ActionResu
   const discount = payload.discountInr?.trim() ? majorStringToMinor(payload.discountInr) : 0n;
   const t = computeTotals(payload.items, discount, payload.taxPercent ?? 0, fx.rate);
 
+  let created: Invoice | null = null;
   await prisma.$transaction(async (tx) => {
     const number = await nextNumber(tx, payload.kind as InvoiceKind);
-    await tx.invoice.create({
+    created = await tx.invoice.create({
       data: {
         kind: payload.kind as InvoiceKind,
         number,
@@ -193,21 +272,41 @@ export async function createInvoice(payload: InvoicePayload): Promise<ActionResu
       },
     });
   });
+
+  if (created) {
+    const row: Invoice = created;
+    await logActivity(session, {
+      action: row.kind === "ESTIMATE" ? "payments.estimate.create" : "payments.invoice.create",
+      section: "payments",
+      entityType: "Invoice",
+      entityId: row.id,
+      summary: `Created ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} — ${formatInrMinor(row.totalInrMinor)}`,
+      meta: {
+        kind: row.kind,
+        number: row.number,
+        totalInrMinor: row.totalInrMinor.toString(),
+        items: payload.items.length,
+      },
+    });
+  }
+
   revalidatePath("/payments");
   return { ok: true };
 }
 
 export async function updateInvoice(id: string, payload: InvoicePayload): Promise<ActionResult> {
-  await requireSection("payments");
+  const session = await requireSection("payments");
   const err = validatePayload(payload);
   if (err) return { ok: false, error: err };
   const fx = await getTodayInrPerEur();
   const discount = payload.discountInr?.trim() ? majorStringToMinor(payload.discountInr) : 0n;
   const t = computeTotals(payload.items, discount, payload.taxPercent ?? 0, fx.rate);
 
+  const existing = await prisma.invoice.findUnique({ where: { id } });
+  let updated: Invoice | null = null;
   await prisma.$transaction(async (tx) => {
     await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
-    await tx.invoice.update({
+    updated = await tx.invoice.update({
       where: { id },
       data: {
         leadId: payload.leadId || null,
@@ -235,6 +334,24 @@ export async function updateInvoice(id: string, payload: InvoicePayload): Promis
       },
     });
   });
+
+  if (existing && updated) {
+    const row: Invoice = updated;
+    const diff = diffFields(invoiceDiffShape(existing), invoiceDiffShape(row));
+    // Line items are replaced wholesale on every save, so they never show up in the diff —
+    // an amount change surfaces through the totals instead.
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: row.kind === "ESTIMATE" ? "payments.estimate.update" : "payments.invoice.update",
+        section: "payments",
+        entityType: "Invoice",
+        entityId: row.id,
+        summary: `Edited ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} — now ${formatInrMinor(row.totalInrMinor)}`,
+        meta: diff,
+      });
+    }
+  }
+
   revalidatePath("/payments");
   revalidatePath(`/payments/${id}`);
   return { ok: true };
@@ -243,9 +360,10 @@ export async function updateInvoice(id: string, payload: InvoicePayload): Promis
 const STATUSES = ["DRAFT", "SENT", "PAID", "PARTIAL", "OVERDUE", "VOID", "ACCEPTED", "DECLINED"] as const;
 
 export async function setInvoiceStatus(id: string, status: string): Promise<ActionResult> {
-  await requireSection("payments");
+  const session = await requireSection("payments");
   if (!(STATUSES as readonly string[]).includes(status)) return { ok: false, error: "Invalid status" };
-  await prisma.invoice.update({
+  const existing = await prisma.invoice.findUnique({ where: { id } });
+  const row = await prisma.invoice.update({
     where: { id },
     data: {
       status: status as InvoiceStatus,
@@ -253,15 +371,40 @@ export async function setInvoiceStatus(id: string, status: string): Promise<Acti
       ...(status === "PAID" ? { paidAt: new Date() } : {}),
     },
   });
+
+  if (existing) {
+    const diff = diffFields({ status: existing.status as string }, { status: row.status as string });
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: row.kind === "ESTIMATE" ? "payments.estimate.update" : "payments.invoice.update",
+        section: "payments",
+        entityType: "Invoice",
+        entityId: row.id,
+        summary: `Marked ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} as ${row.status.toLowerCase()}`,
+        meta: { ...diff, number: row.number, totalInrMinor: row.totalInrMinor.toString() },
+      });
+    }
+  }
+
   revalidatePath("/payments");
   revalidatePath(`/payments/${id}`);
   return { ok: true };
 }
 
 export async function deleteInvoice(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
-  await prisma.invoice.delete({ where: { id } });
+  const row = await prisma.invoice.delete({ where: { id } });
+
+  await logActivity(session, {
+    action: row.kind === "ESTIMATE" ? "payments.estimate.delete" : "payments.invoice.delete",
+    section: "payments",
+    entityType: "Invoice",
+    entityId: row.id,
+    summary: `Deleted ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} — ${formatInrMinor(row.totalInrMinor)}`,
+    meta: { kind: row.kind, number: row.number, totalInrMinor: row.totalInrMinor.toString(), status: row.status },
+  });
+
   revalidatePath("/payments");
   return { ok: true };
 }
@@ -298,7 +441,7 @@ export type SendInvoiceResult = { ok: true; message: string } | { ok: false; err
  * happened.
  */
 export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
-  await requireSection("payments");
+  const session = await requireSection("payments");
   const inv = await prisma.invoice.findUnique({
     where: { id },
     select: {
@@ -342,6 +485,18 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
   }
 
   await prisma.invoice.update({ where: { id }, data: { status: "SENT", sentAt: new Date() } });
+
+  // The summary carries `message` because the status flip and actual delivery can disagree —
+  // the founder needs to see which one happened.
+  await logActivity(session, {
+    action: "payments.invoice.send",
+    section: "payments",
+    entityType: "Invoice",
+    entityId: inv.id,
+    summary: `Sent ${noun.toLowerCase()} ${inv.number} (${formatInrMinor(inv.totalInrMinor)}) to ${inv.customerName} — ${message}`,
+    meta: { number: inv.number, to: to ?? null, totalInrMinor: inv.totalInrMinor.toString(), message },
+  });
+
   revalidatePath("/payments");
   revalidatePath(`/payments/${id}`);
   return { ok: true, message };
@@ -363,6 +518,7 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
   const amountInrMinor = majorStringToMinor(amountRaw);
 
   let paidLeadId: string | null = null;
+  let recorded: { paymentId: string; number: string; customerName: string; status: InvoiceStatus } | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       const inv = await tx.invoice.findUnique({
@@ -402,9 +558,29 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
         data: { status, ...(status === "PAID" ? { paidAt: new Date() } : {}) },
       });
       if (status === "PAID" && inv.leadId) paidLeadId = inv.leadId;
+      recorded = { paymentId: payment.id, number: inv.number, customerName: inv.customerName, status };
     });
   });
   if (!result.ok) return result;
+
+  if (recorded) {
+    const r: { paymentId: string; number: string; customerName: string; status: InvoiceStatus } = recorded;
+    await logActivity(session, {
+      action: "payments.payment.record",
+      section: "payments",
+      entityType: "InvoicePayment",
+      entityId: r.paymentId,
+      summary: `Recorded a ${formatInrMinor(amountInrMinor)} payment from ${r.customerName} against invoice ${r.number} — now ${r.status.toLowerCase()}`,
+      meta: {
+        invoiceId,
+        number: r.number,
+        amountInrMinor: amountInrMinor.toString(),
+        method,
+        reference,
+        invoiceStatus: r.status,
+      },
+    });
+  }
 
   if (paidLeadId) await emitTrigger("INVOICE_PAID", { leadId: paidLeadId });
   revalidatePath("/payments");
@@ -420,9 +596,10 @@ export async function convertEstimate(id: string): Promise<ActionResult> {
   if (!est) return { ok: false, error: "Estimate not found" };
   if (est.kind !== "ESTIMATE") return { ok: false, error: "Not an estimate" };
 
+  let converted: Invoice | null = null;
   await prisma.$transaction(async (tx) => {
     const number = await nextNumber(tx, "INVOICE");
-    await tx.invoice.create({
+    converted = await tx.invoice.create({
       data: {
         kind: "INVOICE",
         number,
@@ -446,6 +623,25 @@ export async function convertEstimate(id: string): Promise<ActionResult> {
     });
     await tx.invoice.update({ where: { id }, data: { status: "ACCEPTED" } });
   });
+
+  // One action, one row: accepting the estimate is part of converting it, not a second event.
+  if (converted) {
+    const row: Invoice = converted;
+    await logActivity(session, {
+      action: "payments.invoice.create",
+      section: "payments",
+      entityType: "Invoice",
+      entityId: row.id,
+      summary: `Converted estimate ${est.number} into invoice ${row.number} for ${row.customerName} — ${formatInrMinor(row.totalInrMinor)}`,
+      meta: {
+        number: row.number,
+        fromEstimate: est.number,
+        estimateId: est.id,
+        totalInrMinor: row.totalInrMinor.toString(),
+      },
+    });
+  }
+
   revalidatePath("/payments");
   return { ok: true };
 }
@@ -463,12 +659,12 @@ const subSchema = z.object({
 });
 
 export async function createSubscription(form: FormData): Promise<ActionResult> {
-  await requireSection("payments");
+  const session = await requireSection("payments");
   const parsed = subSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
   const fx = await getTodayInrPerEur();
-  await prisma.subscription.create({
+  const row = await prisma.subscription.create({
     data: {
       leadId: d.leadId || null,
       customerName: d.customerName,
@@ -480,22 +676,62 @@ export async function createSubscription(form: FormData): Promise<ActionResult> 
       nextBillingDate: d.nextBillingDate?.trim() ? parseDateInput(d.nextBillingDate) : null,
     },
   });
+
+  await logActivity(session, {
+    action: "payments.subscription.create",
+    section: "payments",
+    entityType: "Subscription",
+    entityId: row.id,
+    summary: `Started a ${priceDisplay(row.amountInrMinor, row.amountEurMinor)} ${row.interval.toLowerCase().replace(/_/g, " ")} subscription for ${row.customerName}`,
+    meta: {
+      amountInrMinor: row.amountInrMinor.toString(),
+      amountEurMinor: row.amountEurMinor.toString(),
+      interval: row.interval,
+    },
+  });
+
   revalidatePath("/payments");
   return { ok: true };
 }
 
 export async function setSubscriptionStatus(id: string, status: string): Promise<ActionResult> {
-  await requireSection("payments");
+  const session = await requireSection("payments");
   if (!["ACTIVE", "PAUSED", "CANCELLED"].includes(status)) return { ok: false, error: "Invalid status" };
-  await prisma.subscription.update({ where: { id }, data: { status: status as "ACTIVE" | "PAUSED" | "CANCELLED" } });
+  const existing = await prisma.subscription.findUnique({ where: { id } });
+  const row = await prisma.subscription.update({ where: { id }, data: { status: status as "ACTIVE" | "PAUSED" | "CANCELLED" } });
+
+  if (existing) {
+    const diff = diffFields({ status: existing.status as string }, { status: row.status as string });
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "payments.subscription.update",
+        section: "payments",
+        entityType: "Subscription",
+        entityId: row.id,
+        summary: `Marked ${row.customerName}'s ${priceDisplay(row.amountInrMinor, row.amountEurMinor)} subscription as ${row.status.toLowerCase()}`,
+        meta: diff,
+      });
+    }
+  }
+
   revalidatePath("/payments");
   return { ok: true };
 }
 
 export async function deleteSubscription(id: string): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("finance.write");
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
-  await prisma.subscription.delete({ where: { id } });
+  const row = await prisma.subscription.delete({ where: { id } });
+
+  await logActivity(session, {
+    action: "payments.subscription.delete",
+    section: "payments",
+    entityType: "Subscription",
+    entityId: row.id,
+    summary: `Deleted ${row.customerName}'s ${priceDisplay(row.amountInrMinor, row.amountEurMinor)} subscription`,
+    meta: { amountInrMinor: row.amountInrMinor.toString(), interval: row.interval },
+  });
+
   revalidatePath("/payments");
   return { ok: true };
 }

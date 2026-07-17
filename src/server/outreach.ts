@@ -8,6 +8,7 @@ import {
   unresolvedVars,
   qualifiedFromBant,
   STEP_BY_KEY,
+  QUALIFIED_LABELS,
   type OutreachConfig,
   type OutreachVars,
 } from "@/lib/outreach-sop";
@@ -20,6 +21,7 @@ import {
 } from "@/lib/outreach-engine";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { sendWhatsApp } from "./whatsapp";
+import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 
 /**
  * Outreach SOP — the DB shell around `lib/outreach-engine.ts`.
@@ -276,14 +278,17 @@ export async function runDueOutreach(): Promise<OutreachRun> {
 
   const active = await prisma.outreachJourney.findMany({
     where: { phase: { notIn: ["IGNORED", "CANCELLED", "CLOSED_NOT_HQ", "COMPLETED"] } },
-    select: { id: true },
+    // `lead.name` and `bookingId` ride along for the activity log: the founder's feed names the
+    // prospect, and the pre-loop link state is what tells a check that FOUND a booking apart from
+    // one that merely re-confirmed a link an earlier check already made.
+    select: { id: true, bookingId: true, lead: { select: { name: true } } },
     take: cfg.maxPerRun,
     orderBy: { updatedAt: "asc" },
   });
 
   const now = new Date();
 
-  for (const { id } of active) {
+  for (const { id, bookingId, lead } of active) {
     run.scanned++;
 
     // ── Step 10 first: any actionable SYSTEM check materialised for this journey.
@@ -295,6 +300,10 @@ export async function runDueOutreach(): Promise<OutreachRun> {
         dueAt: { lte: now },
       },
     });
+    // runBookingCheck reports "is it booked", not "did I link it just now" — it returns true
+    // forever once the link exists. Tracking it here keeps CHECK_2 and FINAL_CHECK from each
+    // re-announcing a booking CHECK_1 already found.
+    let linked = bookingId !== null;
     for (const check of pendingChecks) {
       const booked = await runBookingCheck(id);
       run.checked++;
@@ -302,6 +311,17 @@ export async function runDueOutreach(): Promise<OutreachRun> {
         where: { id: check.id },
         data: { status: "SENT", actedAt: now, outcome: booked ? "BOOKED" : "NOT_BOOKED" },
       });
+      if (booked && !linked) {
+        linked = true;
+        await logSystemActivity(SYSTEM_ACTORS.outreach, {
+          action: "outreach.booking.match",
+          section: "outreach",
+          entityType: "OutreachJourney",
+          entityId: id,
+          summary: `Matched ${lead.name} to their booked discovery call — ${STEP_BY_KEY[check.step].label}`,
+          meta: { step: check.step },
+        });
+      }
     }
 
     const row = await getJourney(id);
@@ -315,6 +335,14 @@ export async function runDueOutreach(): Promise<OutreachRun> {
         await prisma.outreachJourney.update({
           where: { id },
           data: { qualified: verdict, qualifiedAt: now, bantScoreAtQual: row.booking.bantAvg },
+        });
+        await logSystemActivity(SYSTEM_ACTORS.outreach, {
+          action: "outreach.qualification.record",
+          section: "outreach",
+          entityType: "OutreachJourney",
+          entityId: id,
+          summary: `Scored ${row.lead.name} ${QUALIFIED_LABELS[verdict]} from a BANT average of ${row.booking.bantAvg.toFixed(1)}`,
+          meta: { verdict, bantAvg: row.booking.bantAvg },
         });
       }
     }
@@ -355,6 +383,19 @@ export async function runDueOutreach(): Promise<OutreachRun> {
         },
       });
       run.phaseChanges++;
+      // Only the give-up goes on the feed. The other transitions restate something the feed
+      // already carries (a step sent, a booking matched), whereas this one is the engine
+      // deciding on its own that a prospect is dormant — and nobody else will say so.
+      if (plan.phase === "IGNORED") {
+        await logSystemActivity(SYSTEM_ACTORS.outreach, {
+          action: "outreach.journey.ignore",
+          section: "outreach",
+          entityType: "OutreachJourney",
+          entityId: id,
+          summary: `Marked ${fresh.lead.name} dormant — no response through the follow-up ladder`,
+          meta: { from: fresh.phase },
+        });
+      }
     }
 
     // ── Auto-send anything the admin has opted in AND that is actually due.
@@ -424,6 +465,17 @@ async function autoSendDue(
     if (res.sent) {
       await markSent(s.id, body, null, res.messageId);
       out.ok++;
+      // Only a real send lands here — every gate above leaves the row DUE for a human, and a
+      // feed claiming a message that never left the building is worse than no feed at all.
+      const def = STEP_BY_KEY[s.step];
+      await logSystemActivity(SYSTEM_ACTORS.outreach, {
+        action: "outreach.step.send",
+        section: "outreach",
+        entityType: "OutreachJourney",
+        entityId: row.id,
+        summary: `Sent ${row.lead.name} ${def.sopStep} — ${def.label}`,
+        meta: { step: s.step, sopStep: def.sopStep, messageId: res.messageId },
+      });
     } else {
       // Not a failure of the SOP — usually the WATI layer being off or the touchpoint unmapped.
       // Leave the row DUE so the specialist sends it by hand; that is the designed fallback.

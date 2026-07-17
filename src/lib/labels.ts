@@ -245,6 +245,30 @@ export const LOG_FIELD_SHORT: Record<string, string> = {
   studentsFlaggedAtRisk: "At-risk flags",
 };
 
+/** Human units for the Daily Log activity chips, e.g. "6 calls", "2 highly qualified". */
+export const LOG_FIELD_UNIT: Record<string, string> = {
+  discoveryCallsCompleted: "calls",
+  highlyQualifiedCalls: "highly qualified",
+  followUpsDone: "follow-ups",
+  proposalsSent: "proposals",
+  noShows: "no-shows",
+  newLeadsContacted: "leads",
+  appointmentsSet: "appointments",
+  followUpMessagesSent: "follow-up messages",
+  leadsAddedToPipeline: "pipeline adds",
+  sessionsDelivered: "sessions",
+  studentsCheckedInOn: "check-ins",
+  assignmentsReviewed: "assignments",
+  studentsFlaggedAtRisk: "at-risk flags",
+};
+
+/** Readable role name per log variant — used to label the person in the team feed. */
+export const LOG_VARIANT_LABEL: Record<string, string> = {
+  DISCOVERY_SPECIALIST: "Discovery Specialist",
+  APPOINTMENT_SETTER: "Appointment Setter",
+  DELIVERY_COACH: "Delivery Coach",
+};
+
 export function optionsFrom(labels: Record<string, string>) {
   return Object.entries(labels).map(([value, label]) => ({ value, label }));
 }

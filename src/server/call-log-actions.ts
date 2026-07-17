@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
+import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -32,6 +33,19 @@ const callSchema = z.object({
   notes: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
+const OUTCOME_LABELS: Record<string, string> = {
+  SPOKE: "spoke to them",
+  NO_ANSWER: "no answer",
+  BUSY: "busy",
+  CALLBACK: "asked to call back",
+  WRONG_NUMBER: "wrong number",
+  NOT_INTERESTED: "not interested",
+};
+
+function outcomeLabel(outcome: string): string {
+  return OUTCOME_LABELS[outcome] ?? outcome;
+}
+
 function firstError(e: z.ZodError): string {
   return e.issues[0]?.message ?? "Invalid input";
 }
@@ -43,11 +57,11 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
 
-  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true } });
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, name: true } });
   if (!lead) return { ok: false, error: "Lead not found" };
 
-  await prisma.$transaction(async (tx) => {
-    await tx.callLog.create({
+  const row = await prisma.$transaction(async (tx) => {
+    const created = await tx.callLog.create({
       data: {
         leadId,
         userId: session.user.id,
@@ -64,6 +78,16 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
         data: { contactedAt: new Date() },
       });
     }
+    return created;
+  });
+
+  await logActivity(session, {
+    action: "call.log",
+    section: "pipeline",
+    entityType: "CallLog",
+    entityId: row.id,
+    summary: `Logged a call with ${lead.name} — ${outcomeLabel(d.outcome)}`,
+    meta: { outcome: d.outcome, leadId },
   });
 
   revalidatePath("/my-desk");
@@ -77,7 +101,19 @@ export async function deleteCallLog(id: string): Promise<ActionResult> {
   if (session.role !== "ADMIN") {
     return { ok: false, error: "Only an admin can remove a logged call — log a correcting call instead." };
   }
-  await prisma.callLog.delete({ where: { id } }).catch(() => undefined);
+  const removed = await prisma.callLog
+    .delete({ where: { id }, include: { lead: { select: { name: true } } } })
+    .catch(() => undefined);
+  if (removed) {
+    await logActivity(session, {
+      action: "call.delete",
+      section: "pipeline",
+      entityType: "CallLog",
+      entityId: removed.id,
+      summary: `Removed a logged call with ${removed.lead.name} — ${outcomeLabel(removed.outcome)}`,
+      meta: { outcome: removed.outcome, leadId: removed.leadId },
+    });
+  }
   revalidatePath("/my-desk");
   revalidatePath("/pipeline");
   return { ok: true };

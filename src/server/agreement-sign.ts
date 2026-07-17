@@ -15,11 +15,13 @@ import {
   maskPhone,
   otpDevEchoEnabled,
   recordAgreementEvent,
+  signedCopyUrl,
   type ActionResult,
   type TokenFailure,
 } from "./agreement-core";
 import { sealAgreementPdf } from "./agreement-render";
 import { sendWhatsApp } from "./whatsapp";
+import { logPublicActivity } from "./activity-log";
 
 /**
  * The public signing surface. PUBLIC by necessity — the student has no session — so the token is
@@ -255,6 +257,50 @@ export async function signAgreement(input: {
     },
   });
 
+  // The student has no session, but the token plus the one-time code just proved who they
+  // are — so this is a named action, not an anonymous one, and it belongs on the founder's
+  // feed next to the staff action that issued it. The AgreementEvent trail above stays the
+  // legal record; this is the human-readable line.
+  await logPublicActivity(
+    { name: data.student.fullName, role: "STUDENT" },
+    {
+      action: "agreement.sign",
+      section: "agreements",
+      entityType: "Agreement",
+      entityId: row.id,
+      summary: `${data.student.fullName} signed agreement ${row.documentNo}`,
+      meta: { documentNo: row.documentNo, pdfSha256: sealed.sha256 },
+    },
+  );
+
+  /**
+   * Send the countersigned copy back.
+   *
+   * This runs AFTER the burn, never before: a failed WhatsApp send must not cost the student a
+   * signature they already made. The row is fail-safe (it resolves an outcome, never throws), so
+   * the worst case is a SKIPPED row and the agreement resting at "Signed — deliver copy" on the
+   * founder's dashboard until it goes out. That's also the line between SIGNED and COMPLETED:
+   * `deriveAgreementState` only reads a SUCCESSFUL send as delivered.
+   *
+   * The link carries the same token: signing clears `otpHash`, never `tokenHash`.
+   */
+  const copy = await sendWhatsApp({
+    kind: "AGREEMENT_COPY",
+    to: data.student.phone,
+    vars: {
+      name: firstName(data.student.fullName),
+      copy_url: signedCopyUrl(token),
+      document_no: row.documentNo,
+    },
+    bodySummary: `Agreement ${row.documentNo} — countersigned copy`,
+    agreementId: row.id,
+    leadId: row.leadId,
+    studentId: row.studentId,
+  });
+  await recordAgreementEvent(row.id, copy.sent ? "DELIVERY_SENT" : "DELIVERY_SKIPPED", {
+    meta: { kind: "AGREEMENT_COPY", status: copy.status, error: copy.error ?? null },
+  });
+
   return { ok: true, data: { documentNo: row.documentNo } };
 }
 
@@ -283,5 +329,21 @@ export async function declineAgreement(token: string, reason: string): Promise<A
     userAgent,
     meta: { reason: reason.slice(0, 500) },
   });
+
+  // Only the token backs this one — declining asks for no code — but the link went to their
+  // number, and a decline the founder never sees is a deal that goes quiet for no visible
+  // reason. The name comes from the agreement row, never from the request.
+  const declinedBy = (found.row.data as unknown as AgreementData).student.fullName;
+  await logPublicActivity(
+    { name: declinedBy, role: "STUDENT" },
+    {
+      action: "agreement.decline",
+      section: "agreements",
+      entityType: "Agreement",
+      entityId: found.row.id,
+      summary: `${declinedBy} declined agreement ${found.row.documentNo}`,
+      meta: { documentNo: found.row.documentNo, reason: reason.slice(0, 200) || null },
+    },
+  );
   return { ok: true };
 }

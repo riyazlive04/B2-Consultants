@@ -74,7 +74,7 @@ export function istMinutesOfDay(instant: Date): number {
  * Home-page KPI date-range control (BUILD_CHECKLIST §2). Three presets threaded into the
  * metrics functions that used to hardcode "this month" (`getPipelineSnapshot`,
  * `getRunwaySnapshot`). Default is always "this-month" so every other caller of those
- * functions (the top-bar runway badge, the notification centre, FounderPulse, Cash Health)
+ * functions (the top-bar runway badge, the notification centre, MonthHero, Cash Health)
  * keeps its exact current behavior with no argument passed.
  */
 export type KpiRangeKey = "this-month" | "last-month" | "qtd";

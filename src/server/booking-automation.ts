@@ -1,7 +1,9 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { istWallToUtc } from "@/lib/dates";
+import { activityStamp } from "@/lib/activity-actions";
 import { getBookingRulesConfig } from "./founder-config";
+import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import {
   sendBookingConfirmRequest,
   sendBookingRescheduled,
@@ -104,7 +106,17 @@ export async function promoteIntoFreedSlot(freedSlotId: string, sentById?: strin
   });
   if (!moved) return null;
 
-  await sendBookingRescheduled(candidate.booking.id, sentById);
+  const out = await sendBookingRescheduled(candidate.booking.id, sentById);
+  // The engine owns this row even on the manual path: a person cancelled a booking, but choosing
+  // this prospect and moving them up is the promote rule's doing, and nothing else logs it.
+  await logSystemActivity(SYSTEM_ACTORS.bookings, {
+    action: "booking.promote",
+    section: "bookings",
+    entityType: "BookingRequest",
+    entityId: candidate.booking.id,
+    summary: `Moved ${candidate.booking.name}'s call up into the freed ${activityStamp(freed.startsAt)} slot`,
+    meta: { fromSlotId: candidate.id, toSlotId: freed.id, notified: out.sent },
+  });
   return { bookingId: candidate.booking.id, name: candidate.booking.name, toSlotId: freed.id };
 }
 
@@ -147,13 +159,25 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
       },
       orderBy: { createdAt: "asc" },
       take: MAX_PER_RUN,
-      select: { id: true },
+      select: { id: true, name: true, slot: { select: { startsAt: true } } },
     });
     for (const b of toAsk) {
       // Stamp first so a failed/again-skipped send can't cause us to re-ask every tick.
       await prisma.bookingRequest.update({ where: { id: b.id }, data: { confirmSentAt: new Date() } });
-      await sendBookingConfirmRequest(b.id);
+      const out = await sendBookingConfirmRequest(b.id);
       asked++;
+      // `asked` counts the ask attempt (that's what the stamp records); the feed only claims a
+      // message the prospect actually received — a SKIPPED send means WhatsApp is off or paused.
+      if (out.sent && b.slot) {
+        await logSystemActivity(SYSTEM_ACTORS.bookings, {
+          action: "whatsapp.send",
+          section: "bookings",
+          entityType: "BookingRequest",
+          entityId: b.id,
+          summary: `Asked ${b.name} to confirm their ${activityStamp(b.slot.startsAt)} call`,
+          meta: { kind: "BOOKING_CONFIRM_REQUEST", messageId: out.messageId },
+        });
+      }
     }
   }
 
@@ -178,7 +202,7 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
       const b = await prisma.bookingRequest.findUnique({
         where: { id: c.id },
         select: {
-          id: true, status: true, confirmedAt: true, confirmSentAt: true, slotId: true, leadId: true,
+          id: true, name: true, status: true, confirmedAt: true, confirmSentAt: true, slotId: true, leadId: true,
           slot: { select: { id: true, startsAt: true } },
         },
       });
@@ -203,7 +227,17 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
         }
       });
       cancelled++;
-      await sendBookingAutoCancelled(b.id);
+      const out = await sendBookingAutoCancelled(b.id);
+      // One row for the release itself — that happened whether or not the notice got out, so
+      // `notified` carries the part that didn't.
+      await logSystemActivity(SYSTEM_ACTORS.bookings, {
+        action: "booking.cancel",
+        section: "bookings",
+        entityType: "BookingRequest",
+        entityId: b.id,
+        summary: `Auto-cancelled ${b.name}'s ${activityStamp(b.slot.startsAt)} call — no confirmation`,
+        meta: { reason: "no-confirmation", slotId: freedSlotId, notified: out.sent },
+      });
 
       if (rules.promoteNext) {
         const res = await promoteIntoFreedSlot(freedSlotId);

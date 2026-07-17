@@ -4,10 +4,9 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { capabilityCheck } from "@/lib/rbac";
+import { capabilityCheck, type AppSession } from "@/lib/rbac";
 import { clientIpFrom } from "@/lib/rate-limit";
 import { AGREEMENT_TEMPLATE_VERSION } from "@/lib/agreement";
-import { mintAgreementToken } from "@/lib/agreement-token";
 import { contentHash } from "./agreement-render";
 import {
   AGREEMENTS_PATH,
@@ -15,12 +14,18 @@ import {
   decodeSignaturePng,
   firstName,
   isUniqueViolation,
+  issueAgreementCore,
   nextDocumentNo,
   parseAgreementData,
+  readStoredDevice,
   recordAgreementEvent,
-  signingUrl,
   type ActionResult,
+  type SignatureSource,
 } from "./agreement-core";
+import { logActivity, diffFields } from "./activity-log";
+import { getAgreementPrefill } from "./agreement-metrics";
+import { clearSavedSignature, getSavedSignature, savedSignatureKey, writeSavedSignature } from "./founder-config";
+import type { SavedSignature } from "@/lib/config-schema";
 import { sendWhatsApp } from "./whatsapp";
 
 /**
@@ -39,7 +44,7 @@ export async function createAgreement(input: {
   leadId?: string | null;
   studentId?: string | null;
 }): Promise<ActionResult<{ id: string }>> {
-  const { allowed, denied } = await capabilityCheck("agreements.issue");
+  const { allowed, denied, session } = await capabilityCheck("agreements.issue");
   if (!allowed) return denied;
 
   const parsed = parseAgreementData(input.data);
@@ -59,6 +64,14 @@ export async function createAgreement(input: {
         select: { id: true },
       });
       await recordAgreementEvent(row.id, "CREATED");
+      await logActivity(session, {
+        action: "agreement.create",
+        section: "agreements",
+        entityType: "Agreement",
+        entityId: row.id,
+        summary: `Created a draft agreement for ${parsed.data.student.fullName}`,
+        meta: { leadId: input.leadId ?? null, studentId: input.studentId ?? null },
+      });
       revalidatePath(AGREEMENTS_PATH);
       return { ok: true, data: { id: row.id } };
     } catch (e) {
@@ -69,11 +82,13 @@ export async function createAgreement(input: {
 }
 
 export async function updateAgreement(id: string, data: unknown): Promise<ActionResult> {
-  const { allowed, denied } = await capabilityCheck("agreements.issue");
+  const { allowed, denied, session } = await capabilityCheck("agreements.issue");
   if (!allowed) return denied;
 
   const parsed = parseAgreementData(data);
   if (!parsed.ok) return parsed;
+
+  const before = await prisma.agreement.findUnique({ where: { id }, select: { data: true } });
 
   // Compare-and-set on status: an agreement that went out while this form sat open must not
   // silently absorb the founder's edits.
@@ -87,17 +102,29 @@ export async function updateAgreement(id: string, data: unknown): Promise<Action
   if (updated.count === 0) {
     return { ok: false, error: "This agreement has already been issued. Void it and clone instead." };
   }
+
+  const d = diffFields(
+    (before?.data ?? {}) as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (d.changed.length > 0) {
+    await logActivity(session, {
+      action: "agreement.update",
+      section: "agreements",
+      entityType: "Agreement",
+      entityId: id,
+      summary: `Edited the draft agreement for ${parsed.data.student.fullName}`,
+      meta: { changed: d.changed, before: d.before, after: d.after },
+    });
+  }
   revalidatePath(AGREEMENTS_PATH);
   revalidatePath(`${AGREEMENTS_PATH}/${id}`);
   return { ok: true };
 }
 
 /**
- * Countersign and send. The founder signs first, exactly as the master document reads.
- *
- * Note what does NOT happen here: no PDF is rendered. The student reads a live render of the same
- * component, and the one authoritative render happens at the moment they sign. Producing an
- * "unsigned PDF" now would only create a second artifact nobody should ever be holding.
+ * Countersign and send with a freshly drawn signature. The founder signs first, exactly as the
+ * master document reads. The body lives in `issueAgreementCore` — see the note there on why.
  */
 export async function issueAgreement(
   id: string,
@@ -110,78 +137,223 @@ export async function issueAgreement(
   const png = decodeSignaturePng(founderSignatureDataUrl);
   if (!png) return { ok: false, error: "Your signature didn't come through. Draw it again." };
 
-  const h = await Promise.resolve(headers());
-  const founderDevice = buildSigningDevice(device, {
-    ip: clientIpFrom(h),
-    userAgent: h.get("user-agent"),
+  const issued = await issueAgreementCore({
+    id,
+    png,
+    founderDevice: await founderDeviceFrom(device),
+    session,
+    signature: { source: "drawn" },
   });
+  if (issued.ok) await logIssued(session, id, "drawn");
+  return issued;
+}
 
+/** The browser's claims about this session, stapled to the IP + UA our server actually observed. */
+async function founderDeviceFrom(device: unknown) {
+  const h = await Promise.resolve(headers());
+  return buildSigningDevice(device, { ip: clientIpFrom(h), userAgent: h.get("user-agent") });
+}
+
+/**
+ * The device record for an issue that STAMPED STORED INK rather than drawing it.
+ *
+ * Each half is taken from the moment it actually happened, because a contract's device record is
+ * only worth anything if every field is true:
+ *   reported — THIS session's browser (the founder is issuing from here, now)
+ *   capture  — how the ink was really drawn, back at `savedAt`. Never synthesised: a `capture`
+ *              invented at issue time would be a fabricated claim about a signature's provenance.
+ *   observed — the IP/UA our server sees on THIS request (added by founderDeviceFrom).
+ */
+async function savedSignatureDevice(reported: unknown, saved: SavedSignature) {
+  const savedDevice = readStoredDevice(saved.savedDevice);
+  return founderDeviceFrom({
+    reported: reported ?? savedDevice?.reported,
+    capture: savedDevice?.capture,
+  });
+}
+
+/**
+ * Who this agreement is for, for the activity feed's sentence. Read fresh rather than threaded
+ * through: the founder reads a name, and the row is the only place one is stored.
+ */
+async function agreementParty(id: string) {
   const row = await prisma.agreement.findUnique({
     where: { id },
-    select: { id: true, status: true, data: true, documentNo: true, leadId: true, studentId: true },
+    select: { data: true, documentNo: true },
   });
-  if (!row) return { ok: false, error: "Agreement not found." };
-  if (row.status !== "DRAFT") return { ok: false, error: "Only a draft can be issued." };
-
-  const parsed = parseAgreementData(row.data);
-  if (!parsed.ok) return { ok: false, error: `Stored fields are invalid: ${parsed.error}` };
-
-  const { token, tokenHash, expiresAt } = mintAgreementToken();
-  const now = new Date();
-
-  const issued = await prisma.agreement.updateMany({
-    where: { id, status: "DRAFT" },
-    data: {
-      status: "SENT",
-      tokenHash,
-      expiresAt,
-      issuedAt: now,
-      issuedById: session.user.id,
-      founderSignedAt: now,
-      founderSignaturePng: png,
-      founderDevice: founderDevice ?? Prisma.JsonNull,
-    },
-  });
-  if (issued.count === 0) return { ok: false, error: "This agreement was issued by someone else." };
-  await recordAgreementEvent(id, "ISSUED", { meta: { by: session.user.email } });
-
-  const url = signingUrl(token);
-  const outcome = await sendWhatsApp({
-    kind: "AGREEMENT_SEND",
-    to: parsed.data.student.phone,
-    vars: {
-      name: firstName(parsed.data.student.fullName),
-      sign_url: url,
-      sign_token: token,
-      document_no: row.documentNo,
-    },
-    sentById: session.user.id,
-    bodySummary: `Agreement ${row.documentNo} — signing link`,
-    agreementId: id,
-    leadId: row.leadId,
-    studentId: row.studentId,
-  });
-
-  await recordAgreementEvent(id, outcome.sent ? "DELIVERY_SENT" : "DELIVERY_SKIPPED", {
-    meta: { status: outcome.status, error: outcome.error ?? null },
-  });
-
-  revalidatePath(AGREEMENTS_PATH);
-  revalidatePath(`${AGREEMENTS_PATH}/${id}`);
-
-  // The link comes back WHATEVER happened to the WhatsApp send. With WATI off, the number opted
-  // out, or the template unmapped, this response is the only place this token will ever exist —
-  // the database holds nothing but its hash.
+  const parsed = row ? parseAgreementData(row.data) : null;
   return {
-    ok: true,
-    data: {
-      signingUrl: url,
-      sent: outcome.sent,
-      delivery: outcome.sent
-        ? "Signing link sent on WhatsApp."
-        : `WhatsApp did not send: ${outcome.error ?? "unknown reason"}. Copy the link below and share it yourself.`,
-    },
+    documentNo: row?.documentNo ?? null,
+    name: parsed?.ok ? parsed.data.student.fullName : "a client",
   };
+}
+
+/**
+ * The feed entry shared by all three issue paths.
+ *
+ * `issueAgreementCore` hands back a signing URL with the raw token in it — the one place that token
+ * ever exists. It stops here: `signature` records which ink was stamped, never the credential.
+ */
+async function logIssued(session: AppSession, id: string, source: SignatureSource["source"]) {
+  const party = await agreementParty(id);
+  await logActivity(session, {
+    action: "agreement.issue",
+    section: "agreements",
+    entityType: "Agreement",
+    entityId: id,
+    summary: `Issued an agreement to ${party.name}`,
+    meta: { documentNo: party.documentNo, signature: source },
+  });
+}
+
+// ───────────────────── Saved countersignature (one-tap issue) ─────────────────────
+
+/**
+ * Store the founder's countersignature once so issuing becomes one tap.
+ *
+ * The data URL is decoded and checked here (magic number + size) before it is stored, so a
+ * malformed blob can never sit in the settings row waiting to fail at issue time.
+ */
+export async function saveFounderSignature(dataUrl: string, device?: unknown): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("agreements.issue");
+  if (!allowed) return denied;
+
+  if (!decodeSignaturePng(dataUrl)) {
+    return { ok: false, error: "Your signature didn't come through. Draw it again." };
+  }
+  await writeSavedSignature(session.user.id, {
+    dataUrl,
+    savedAt: new Date().toISOString(),
+    savedDevice: (await founderDeviceFrom(device)) ?? null,
+  });
+  await logActivity(session, {
+    action: "agreement.signature.create",
+    section: "agreements",
+    entityType: "AppSetting",
+    entityId: savedSignatureKey(session.user.id),
+    summary: `Saved their countersignature for one-tap issuing`,
+  });
+  revalidatePath(AGREEMENTS_PATH);
+  return { ok: true };
+}
+
+export async function forgetFounderSignature(): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("agreements.issue");
+  if (!allowed) return denied;
+  await clearSavedSignature(session.user.id);
+  await logActivity(session, {
+    action: "agreement.signature.delete",
+    section: "agreements",
+    entityType: "AppSetting",
+    entityId: savedSignatureKey(session.user.id),
+    summary: `Removed their saved countersignature`,
+  });
+  revalidatePath(AGREEMENTS_PATH);
+  return { ok: true };
+}
+
+/** `needsSignature` = nothing stored yet; the caller should offer the draw-once pad. */
+export type IssueOutcome =
+  | { kind: "sent"; signingUrl: string; delivery: string; sent: boolean }
+  | { kind: "needsSignature" };
+
+/**
+ * Countersign an existing draft with the stored signature — no modal, no redraw.
+ * `reported` is this browser's own account of itself (collectReportedDevice), not the ink.
+ */
+export async function issueAgreementWithSavedSignature(
+  id: string,
+  reported?: unknown,
+): Promise<ActionResult<IssueOutcome>> {
+  const { allowed, denied, session } = await capabilityCheck("agreements.issue");
+  if (!allowed) return denied;
+
+  const saved = await getSavedSignature(session.user.id);
+  if (!saved) return { ok: true, data: { kind: "needsSignature" } };
+
+  const png = decodeSignaturePng(saved.dataUrl);
+  if (!png) return { ok: false, error: "Your saved signature is unreadable. Save it again." };
+
+  const issued = await issueAgreementCore({
+    id,
+    png,
+    founderDevice: await savedSignatureDevice(reported, saved),
+    session,
+    signature: { source: "saved", savedAt: saved.savedAt },
+  });
+  if (!issued.ok) return issued;
+  await logIssued(session, id, "saved");
+  return { ok: true, data: { kind: "sent", ...issued.data! } };
+}
+
+/** `needsForm` = the CRM cannot answer every field a contract needs; go type them. */
+export type GenerateOutcome =
+  | { kind: "sent"; id: string; signingUrl: string; delivery: string; sent: boolean }
+  | { kind: "needsForm"; href: string; missing: string[] }
+  | { kind: "needsSignature" };
+
+/**
+ * The one-click path: prefill → draft → countersign → send, in a single call.
+ *
+ * It refuses to guess. If the CRM has no postal address (nothing in the schema holds one, and no
+ * previous agreement exists to lift it from), this returns `needsForm` and the founder types the
+ * two fields — rather than issuing a contract with a blank §2 header. An existing draft for the
+ * same client is reused instead of stacking a second one.
+ */
+export async function generateAndSendAgreement(input: {
+  leadId?: string | null;
+  studentId?: string | null;
+  /** This browser's account of itself (collectReportedDevice) — not the signature. */
+  reported?: unknown;
+}): Promise<ActionResult<GenerateOutcome>> {
+  const { allowed, denied, session } = await capabilityCheck("agreements.issue");
+  if (!allowed) return denied;
+  if (!input.leadId && !input.studentId) return { ok: false, error: "No client selected." };
+
+  const href = `/agreements/new?${input.leadId ? `leadId=${input.leadId}` : `studentId=${input.studentId}`}`;
+  const prefill = await getAgreementPrefill({ leadId: input.leadId, studentId: input.studentId });
+  if (prefill.missing.length > 0) {
+    return { ok: true, data: { kind: "needsForm", href, missing: prefill.missing } };
+  }
+
+  const saved = await getSavedSignature(session.user.id);
+  if (!saved) return { ok: true, data: { kind: "needsSignature" } };
+  const png = decodeSignaturePng(saved.dataUrl);
+  if (!png) return { ok: false, error: "Your saved signature is unreadable. Save it again." };
+
+  // Reuse a draft the founder already started rather than stacking a second one on the client.
+  const existing = await prisma.agreement.findFirst({
+    where: {
+      status: "DRAFT",
+      ...(input.leadId
+        ? { OR: [{ leadId: input.leadId }, { student: { leadId: input.leadId } }] }
+        : { studentId: input.studentId! }),
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+
+  let id = existing?.id;
+  if (!id) {
+    const created = await createAgreement({
+      data: prefill.data,
+      leadId: prefill.leadId,
+      studentId: prefill.studentId,
+    });
+    if (!created.ok) return created;
+    id = created.data!.id;
+  }
+
+  const issued = await issueAgreementCore({
+    id,
+    png,
+    founderDevice: await savedSignatureDevice(input.reported, saved),
+    session,
+    signature: { source: "saved", savedAt: saved.savedAt },
+  });
+  if (!issued.ok) return issued;
+  await logIssued(session, id, "saved");
+  return { ok: true, data: { kind: "sent", id, ...issued.data! } };
 }
 
 /**
@@ -231,6 +403,14 @@ export async function resendAgreementLink(id: string): Promise<ActionResult<{ de
   await recordAgreementEvent(id, outcome.sent ? "DELIVERY_SENT" : "DELIVERY_SKIPPED", {
     meta: { kind: "AGREEMENT_REMINDER", error: outcome.error ?? null },
   });
+  await logActivity(session, {
+    action: "agreement.resend",
+    section: "agreements",
+    entityType: "Agreement",
+    entityId: id,
+    summary: `Sent a signing reminder to ${parsed.data.student.fullName}`,
+    meta: { documentNo: row.documentNo, sent: outcome.sent, error: outcome.error ?? null },
+  });
 
   revalidatePath(`${AGREEMENTS_PATH}/${id}`);
   return {
@@ -255,6 +435,15 @@ export async function voidAgreement(id: string, reason: string): Promise<ActionR
   if (updated.count === 0) return { ok: false, error: "A signed agreement cannot be voided." };
   await recordAgreementEvent(id, "VOIDED", {
     meta: { reason: reason.slice(0, 300), by: session.user.email },
+  });
+  const party = await agreementParty(id);
+  await logActivity(session, {
+    action: "agreement.void",
+    section: "agreements",
+    entityType: "Agreement",
+    entityId: id,
+    summary: `Voided the agreement for ${party.name}`,
+    meta: { documentNo: party.documentNo, reason: reason.slice(0, 300) },
   });
   revalidatePath(AGREEMENTS_PATH);
   revalidatePath(`${AGREEMENTS_PATH}/${id}`);

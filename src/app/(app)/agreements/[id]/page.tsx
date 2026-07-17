@@ -5,8 +5,8 @@ import { requireSection } from "@/lib/rbac";
 import { formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import {
   AGREEMENT_EVENT_LABELS,
+  effectiveAgreementStatus,
   formatGermanDate,
-  type AgreementStatusKey,
 } from "@/lib/agreement";
 import { WHATSAPP_KIND_LABELS, WHATSAPP_STATUS_LABELS } from "@/lib/whatsapp";
 import { getAgreementDetail } from "@/server/agreement-metrics";
@@ -34,8 +34,10 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
     );
   }
   const data = row.parsed.data;
-  const isDraft = row.status === "DRAFT";
-  const isSigned = row.status === "SIGNED";
+  // The elapsed-TTL correction: the row still says SENT, but the link is dead.
+  const status = effectiveAgreementStatus(row);
+  const isDraft = status === "DRAFT";
+  const isSigned = status === "SIGNED";
 
   return (
     <div className="w-full space-y-6">
@@ -47,7 +49,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
           <div>
             <div className="flex items-center gap-3">
               <h1 className="font-display text-2xl font-bold tracking-tight">{row.documentNo}</h1>
-              <StatusBadge status={row.status as AgreementStatusKey} />
+              <StatusBadge status={status} />
             </div>
             <p className="text-xs text-muted">
               {data.student.fullName} · {data.batch.number} · starts {formatGermanDate(data.batch.startDate)} ·
@@ -64,7 +66,9 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
       </div>
 
       <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <AgreementActions id={row.id} status={row.status} studentName={data.student.fullName} />
+        {/* Effective status, so an expired link offers "void & clone" rather than a "remind"
+            button the server would only reject. */}
+        <AgreementActions id={row.id} status={status} studentName={data.student.fullName} />
       </div>
 
       {/* Integrity — the two hashes, and why they are different things. */}

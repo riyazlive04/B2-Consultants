@@ -89,6 +89,7 @@ model User {
   journalEntriesPosted     JournalEntry[]     @relation("JournalEntryPostedBy")
   periodLocksSet           PeriodLock[]       @relation("PeriodLockedBy")
   auditEntries             AuditEntry[]       @relation("AuditActor")
+  activityLogged           ActivityLog[]      @relation("ActivityActor")
   // Synamate CRM (Phase 1)
   companiesOwned           Company[]          @relation("CompanyOwner")
   contactNotes             ContactNote[]      @relation("NoteAuthor")
@@ -1293,6 +1294,21 @@ enum DailyLogVariant {
   DELIVERY_COACH // Karthick: sessions, check-ins, assignments, at-risk flags
 }
 
+// Who wrote a DailyLog row. The Telecaller Pay board sums these numbers into the calls a
+// bonus/commission is judged on, so "a person said this" and "the EOD job derived this from
+// activity" must never look the same.
+//
+// HUMAN    — submitted by the member. One-shot and immutable (PRD2 §3.3).
+// EOD_AUTO — the member never logged, so the EOD job wrote what activity it could derive.
+//            Auto-capture cannot see every field (followUpMessagesSent has no event source),
+//            so these rows are INCOMPLETE by construction and read low on the pay board.
+//            That is why, unlike a HUMAN row, they stay amendable by their owner for a
+//            short window — the member fills in the rest and the row flips to HUMAN.
+enum DailyLogSource {
+  HUMAN
+  EOD_AUTO
+}
+
 model TeamProfile {
   id                  String          @id @default(cuid())
   userId              String?         @unique
@@ -1375,9 +1391,17 @@ model DailyLog {
   assignmentsReviewed   Int?
   studentsFlaggedAtRisk Int?
 
+  // HUMAN unless the EOD job wrote it. Defaulted, so every pre-existing row is correctly
+  // HUMAN — before this field existed, a row could only come from the submit form.
+  source DailyLogSource @default(HUMAN)
+
   notes          String? // notes / blockers
   correctionNote String? // Admin may append a correction — original stays intact
-  createdAt      DateTime @default(now())
+  // Which numeric fields were auto-filled from real activity at submit time (report §3.A).
+  // A JSON array of field keys — lets the timeline badge historical entries as auto-captured,
+  // not just today's (today's is recomputed live; history needs this record).
+  autoCapturedKeys Json?
+  createdAt        DateTime @default(now())
 
   @@unique([userId, date]) // one log per person per day (PRD2 §3.3)
   @@index([date])
@@ -2231,6 +2255,11 @@ enum WhatsAppKind {
   AGREEMENT_SEND // coaching agreement is ready — carries the tokenized signing link
   AGREEMENT_OTP // 6-digit code binding the signature to control of this number
   AGREEMENT_REMINDER // an issued agreement is still unsigned
+  // The countersigned copy, sent back the moment the student signs. Its OWN kind, not a reuse of
+  // AGREEMENT_SEND: one WATI template is bound per kind, and that template carries the *signing*
+  // link — the student would receive the wrong text and the section badges would misattribute the
+  // send. This is also the row COMPLETED is derived from (see lib/agreement-state.ts).
+  AGREEMENT_COPY // executed agreement — carries the link to the sealed, countersigned PDF
   MANUAL // free-form / manual send from a section
   // ── Outreach Specialist SOP (Steps 3–21). One kind per SOP message, deliberately.
   // The app binds exactly ONE WATI template per kind, so collapsing two SOP steps onto one kind
@@ -2249,6 +2278,8 @@ enum WhatsAppKind {
   BOOKING_CONFIRM_REQUEST // asks the prospect to reply YES to hold their upcoming slot
   BOOKING_RESCHEDULED // their call was moved to a new time (manual postpone OR promoted-up)
   BOOKING_AUTO_CANCELLED // no confirmation in time — slot released, invite to rebook
+  // ── SSS (sales) call calendar. The founder-run session; server/sss-slots.ts.
+  SSS_RESCHEDULED // their SSS was moved to a new time (founder blocked the slot/day, or a manual/drag move)
 }
 
 enum WhatsAppStatus {
@@ -2607,6 +2638,50 @@ model AuditEntry {
   @@index([entityType, entityId])
   @@index([at])
   @@map("audit_entry")
+}
+
+// Who did what, when — every write in the app, in one place.
+//
+// Deliberately NOT AuditEntry: that chain exists to prove the finance history hasn't been
+// tampered with, and it pays for that with a global advisory lock per append plus an O(n)
+// verify the Ledger page runs on load. Feeding it a row per dial would serialise every
+// writer on one lock and make that verify walk grow forever. This table is the plain
+// counterpart — a row per action, written outside the caller's transaction, indexed for
+// the founder's filters. Finance keeps writing to BOTH: the chain for proof, this for the feed.
+//
+// Append-only by the same forbid_mutation() trigger the other history tables use: the record
+// of what Asma did at 3pm is worth nothing if it can be edited at 4pm.
+//
+// actorName/actorRole are denormalised on purpose. `actor` is SetNull on delete, so without
+// the copy, removing a user would silently blank their entire history — the one moment the
+// log matters most. The copy is what was true AT THE TIME, which is also the honest answer
+// when someone's role changes later.
+model ActivityLog {
+  id         String   @id @default(cuid())
+  // Server-stamped instant, never from the client. Rendered in IST (CONTEXT §6).
+  at         DateTime @default(now())
+  actorId    String?
+  actor      User?    @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorName  String
+  actorRole  String
+  // Dotted verb: "call.log", "lead.update", "finance.income.create".
+  action     String
+  // Section key (sections.ts) — the founder's filter is "show me Pipeline", not "show me lead.*".
+  section    String
+  entityType String
+  entityId   String
+  // One human sentence, composed at the call site where the names are already loaded:
+  // "Logged a call with Priya Sharma — SPOKE". The feed reads it verbatim, so the founder
+  // never has to decode an id.
+  summary    String
+  // Optional structured detail: { before, after, changed: [...] } for edits, free shape otherwise.
+  meta       Json?
+
+  @@index([at])
+  @@index([actorId, at])
+  @@index([section, at])
+  @@index([entityType, entityId])
+  @@map("activity_log")
 }
 
 // ───────────────────────────── Resume Studio ─────────────────────────────

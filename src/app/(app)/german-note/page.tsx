@@ -151,7 +151,7 @@ export default async function GermanNotePage({
                 Shared by every German Note student and tutor. Questions about a specific class go in that
                 batch&apos;s Discussion tab.
               </p>
-              <CommunityFeed batchId={null} posts={feed} canPost={access.isParticipant} candidates={mentionCandidates} />
+              <CommunityFeed batchId={null} posts={feed} canPost={access.isParticipant && !access.isViewer} candidates={mentionCandidates} />
             </div>
             <aside className="space-y-4 lg:sticky lg:top-4 lg:h-fit">
               {levelProgress && (

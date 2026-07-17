@@ -3,7 +3,9 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { LeadStage } from "@prisma/client";
 import { inQuietWindow, quietWindowEndsAt } from "@/lib/automation-quiet-hours";
+import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { sendEmailMessage, sendSmsMessage } from "./messaging";
+import { logSystemActivity, SYSTEM_ACTORS, type ActivityInput } from "./activity-log";
 import type { WorkflowAction, TriggerType, TriggerConfig } from "@/lib/automation-types";
 import { getWorkflowSettings } from "./founder-config";
 import { scheduleWaitJob, drainDueWaitJobs } from "./automation-queue";
@@ -142,58 +144,144 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
   }
 }
 
+/**
+ * The engine's own row on the founder's feed.
+ *
+ * The actor is the ENGINE, never whoever's request happened to reach `emitTrigger` or press
+ * "Run now": the cron resumes these enrollments far more often than a human triggers one, and a
+ * feed saying a telecaller emailed forty contacts overnight is a lie nobody could spot.
+ *
+ * Steps only: the run itself is not an event ("resumed 12 enrollments" is cron noise, and the
+ * human's "Run now" click is already logged by its own action). `section` is "automation" for
+ * every row — the founder's question here is "what did my workflows do".
+ */
+async function record(input: Omit<ActivityInput, "section">): Promise<void> {
+  await logSystemActivity(SYSTEM_ACTORS.automation, { ...input, section: "automation" });
+}
+
+/** The founder reads names, never ids — and only a step that landed pays for the lookup. */
+async function leadName(leadId: string): Promise<string> {
+  const l = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true } });
+  return l?.name ?? "a contact";
+}
+
 async function executeAction(a: WorkflowAction, leadId: string): Promise<void> {
   switch (a.type) {
     case "SEND_EMAIL": {
       let subject = a.subject ?? "";
       let body = a.body ?? "";
+      let template: string | null = null;
       if (a.templateId) {
         const t = await prisma.messageTemplate.findUnique({ where: { id: a.templateId } });
-        if (t) { subject = t.subject ?? subject; body = t.body; }
+        if (t) { subject = t.subject ?? subject; body = t.body; template = t.name; }
       }
-      await sendEmailMessage({ leadId, subject: subject || "Message from B2 Consultants", body });
+      const out = await sendEmailMessage({ leadId, subject: subject || "Message from B2 Consultants", body });
+      // SENT only: `ok` is also true for a SKIPPED row (email off), which nobody received.
+      if (out.status === "SENT") {
+        const who = await leadName(leadId);
+        await record({
+          action: "email.send",
+          entityType: "Lead",
+          entityId: leadId,
+          summary: template ? `Emailed ${who} the "${template}" template` : `Emailed ${who} a workflow email`,
+          meta: { channel: "EMAIL", template },
+        });
+      }
       break;
     }
     case "SEND_SMS": {
       let body = a.body ?? "";
+      let template: string | null = null;
       if (a.templateId) {
         const t = await prisma.messageTemplate.findUnique({ where: { id: a.templateId } });
-        if (t) body = t.body;
+        if (t) { body = t.body; template = t.name; }
       }
-      if (body) await sendSmsMessage({ leadId, body });
+      if (body) {
+        const out = await sendSmsMessage({ leadId, body });
+        if (out.status === "SENT") {
+          const who = await leadName(leadId);
+          await record({
+            action: "sms.send",
+            entityType: "Lead",
+            entityId: leadId,
+            summary: template ? `Sent ${who} the "${template}" SMS template` : `Sent ${who} a workflow SMS`,
+            meta: { channel: "SMS", template },
+          });
+        }
+      }
       break;
     }
     case "ADD_TAG": {
       if (a.tag?.trim()) {
         const name = a.tag.trim().toLowerCase();
         const tag = await prisma.tag.upsert({ where: { name }, update: {}, create: { name } });
+        // `connect` is idempotent and reports nothing back, so ask first: re-adding a tag the
+        // contact already has changes nothing, and the feed must not claim that it did.
+        const had = await prisma.lead.findFirst({ where: { id: leadId, tags: { some: { id: tag.id } } }, select: { id: true } });
         await prisma.lead.update({ where: { id: leadId }, data: { tags: { connect: { id: tag.id } } } });
+        if (!had) {
+          await record({
+            action: "tag.add",
+            entityType: "Lead",
+            entityId: leadId,
+            summary: `Tagged ${await leadName(leadId)} "${name}"`,
+            meta: { tag: name },
+          });
+        }
       }
       break;
     }
     case "REMOVE_TAG": {
       if (a.tag?.trim()) {
         const tag = await prisma.tag.findUnique({ where: { name: a.tag.trim().toLowerCase() } });
-        if (tag) await prisma.lead.update({ where: { id: leadId }, data: { tags: { disconnect: { id: tag.id } } } });
+        if (tag) {
+          // Same as ADD_TAG: a disconnect of a tag the contact never had is a silent no-op.
+          const had = await prisma.lead.findFirst({ where: { id: leadId, tags: { some: { id: tag.id } } }, select: { id: true } });
+          await prisma.lead.update({ where: { id: leadId }, data: { tags: { disconnect: { id: tag.id } } } });
+          if (had) {
+            await record({
+              action: "tag.remove",
+              entityType: "Lead",
+              entityId: leadId,
+              summary: `Removed the "${tag.name}" tag from ${await leadName(leadId)}`,
+              meta: { tag: tag.name },
+            });
+          }
+        }
       }
       break;
     }
     case "MOVE_STAGE": {
       if (a.stage) {
-        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { stage: true } });
+        const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { stage: true, name: true } });
         if (lead && lead.stage !== a.stage) {
           const to = a.stage as LeadStage;
           await prisma.lead.update({ where: { id: leadId }, data: { stage: to } });
           await prisma.leadStageHistory.create({ data: { leadId, fromStage: lead.stage, toStage: to } });
           const stage = await prisma.pipelineStage.findFirst({ where: { legacyStage: to, pipeline: { isDefault: true } } });
           if (stage) await prisma.opportunity.updateMany({ where: { leadId, pipeline: { isDefault: true } }, data: { stageId: stage.id } });
+          await record({
+            action: "lead.stage.move",
+            entityType: "Lead",
+            entityId: leadId,
+            summary: `Moved ${lead.name} to ${LEAD_STAGE_LABELS[to] ?? to}`,
+            meta: { changed: ["stage"], before: { stage: lead.stage }, after: { stage: to } },
+          });
         }
       }
       break;
     }
     case "CREATE_TASK": {
       if (a.taskTitle?.trim()) {
-        await prisma.contactTask.create({ data: { leadId, title: a.taskTitle.trim(), assignedToId: a.taskAssigneeId || null } });
+        const title = a.taskTitle.trim();
+        const task = await prisma.contactTask.create({ data: { leadId, title, assignedToId: a.taskAssigneeId || null } });
+        await record({
+          action: "task.create",
+          entityType: "ContactTask",
+          entityId: task.id,
+          summary: `Created task "${title}" on ${await leadName(leadId)}`,
+          meta: { leadId, assignedToId: a.taskAssigneeId || null },
+        });
       }
       break;
     }

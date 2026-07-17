@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PeoplePage() {
   const session = await requireSection("people"); // Admin-only (PRD2 §2)
-  const [{ members, month, weeklyRollup, monthlyRollup, logs }, users, accessRequests, sections] = await Promise.all([
+  const [{ members, month, weeklyRollup, monthlyRollup, entries }, users, accessRequests, sections] = await Promise.all([
     getPeopleOverview(),
     listUsers(),
     listAccessRequests(),
@@ -39,7 +39,7 @@ export default async function PeoplePage() {
         tabs={[
           {
             label: `Daily logs${anyMissing ? " ⚠" : ""}`,
-            content: <LogsBoard members={members} weeklyRollup={weeklyRollup} monthlyRollup={monthlyRollup} logs={logs} />,
+            content: <LogsBoard members={members} weeklyRollup={weeklyRollup} monthlyRollup={monthlyRollup} entries={entries} />,
           },
           { label: "OKRs", content: <OkrBoard members={members} month={month} /> },
           { label: "Team & org chart", content: <OrgChart members={members} /> },

@@ -24,7 +24,32 @@ type Mode = { kind: "create"; leadId: string | null; studentId: string | null } 
 const toMajor = (minor: string) => minorToMajorString(BigInt(minor)).replace(/\.00$/, "");
 const toMinor = (major: string) => majorStringToMinor(major).toString();
 
-export function AgreementForm({ initial, mode, notes }: { initial: AgreementData; mode: Mode; notes?: string[] }) {
+/** Prefill field keys (server/agreement-metrics.ts) → what the founder calls them. */
+const PREFILL_FIELD_LABELS: Record<string, string> = {
+  fullName: "Full name",
+  email: "Email",
+  phone: "WhatsApp number",
+  address: "Postal address",
+  batchNumber: "Batch",
+  batchStartDate: "Start date",
+  payment: "Fee & plan",
+};
+
+export function AgreementForm({
+  initial,
+  mode,
+  notes,
+  missing,
+  filled,
+}: {
+  initial: AgreementData;
+  mode: Mode;
+  notes?: string[];
+  /** Fields the CRM had no answer for — the founder must type these. */
+  missing?: string[];
+  /** Field keys filled from the CRM, so we can say so instead of making them re-check everything. */
+  filled?: string[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -92,8 +117,30 @@ export function AgreementForm({ initial, mode, notes }: { initial: AgreementData
     });
   }
 
+  const filledLabels = [...new Set(filled ?? [])].map((k) => PREFILL_FIELD_LABELS[k] ?? k);
+
   return (
     <form onSubmit={submit} className="space-y-6">
+      {/* What the CRM answered, and what it couldn't. The founder should re-type only the second
+          list — everything else is already on the record and re-asking for it is the bug this
+          redesign exists to kill. */}
+      {(filledLabels.length > 0 || (missing && missing.length > 0)) && (
+        <div className="space-y-1.5 rounded-card border border-line bg-surface-2 px-4 py-3 text-sm">
+          {filledLabels.length > 0 && (
+            <p style={{ color: "var(--good)" }}>
+              <span className="font-semibold">Filled from the record:</span>{" "}
+              <span className="text-ink-2">{filledLabels.join(", ")}</span>
+            </p>
+          )}
+          {missing && missing.length > 0 && (
+            <p style={{ color: "var(--warn)" }}>
+              <span className="font-semibold">Needs you:</span>{" "}
+              <span className="text-ink-2">{missing.join(", ")}</span>
+            </p>
+          )}
+        </div>
+      )}
+
       {notes && notes.length > 0 && (
         <div className="rounded-field bg-warn-bg px-3 py-2 text-sm" style={{ color: "var(--warn)" }}>
           {notes.map((n) => (

@@ -5,6 +5,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
+import { formatDate, formatInrMinor } from "@/lib/format";
+import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -25,7 +27,7 @@ const generateSchema = z.object({
 });
 
 export async function generateInstalmentPlan(pendingPaymentId: string, form: FormData): Promise<ActionResult> {
-  await requireSection("finance");
+  const session = await requireSection("finance");
   const parsed = generateSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const { count, firstDueDate } = parsed.data;
@@ -35,6 +37,7 @@ export async function generateInstalmentPlan(pendingPaymentId: string, form: For
     where: { id: pendingPaymentId },
     select: {
       id: true,
+      studentName: true,
       totalFeeInrMinor: true,
       totalFeeEurMinor: true,
       fxRateUsed: true,
@@ -70,6 +73,21 @@ export async function generateInstalmentPlan(pendingPaymentId: string, form: For
     // Keep the receivable's headline "next due" in step with instalment #1.
     prisma.pendingPayment.update({ where: { id: pendingPaymentId }, data: { nextDueDate: start } }),
   ]);
+
+  await logActivity(session, {
+    action: "finance.instalmentPlan.create",
+    section: "finance",
+    entityType: "PendingPayment",
+    entityId: pendingPaymentId,
+    summary: `Generated a ${count}-instalment plan for ${pp.studentName} — ${formatInrMinor(pp.totalFeeInrMinor)} from ${formatDate(start)}, every ${intervalDays} days`,
+    meta: {
+      count,
+      intervalDays,
+      firstDueDate: start.toISOString(),
+      totalFeeInrMinor: pp.totalFeeInrMinor.toString(),
+    },
+  });
+
   revalidatePath("/finance");
   return { ok: true };
 }
@@ -77,13 +95,19 @@ export async function generateInstalmentPlan(pendingPaymentId: string, form: For
 const statusSchema = z.enum(["DUE", "PAID", "OVERDUE"]);
 
 export async function setInstalmentStatus(id: string, status: string): Promise<ActionResult> {
-  await requireSection("finance");
+  const session = await requireSection("finance");
   const parsed = statusSchema.safeParse(status);
   if (!parsed.success) return { ok: false, error: "Invalid status" };
 
   const inst = await prisma.instalment.findUnique({
     where: { id },
-    select: { pendingPaymentId: true },
+    select: {
+      pendingPaymentId: true,
+      seq: true,
+      status: true,
+      amountInrMinor: true,
+      pendingPayment: { select: { studentName: true } },
+    },
   });
   if (!inst) return { ok: false, error: "Instalment not found" };
 
@@ -103,13 +127,42 @@ export async function setInstalmentStatus(id: string, status: string): Promise<A
     data: { nextDueDate: nextDue?.dueDate ?? null },
   });
 
+  const diff = diffFields({ status: inst.status as string }, { status: parsed.data as string });
+  if (diff.changed.length) {
+    await logActivity(session, {
+      action: "finance.instalment.update",
+      section: "finance",
+      entityType: "Instalment",
+      entityId: id,
+      summary: `Marked instalment #${inst.seq} of ${formatInrMinor(inst.amountInrMinor)} for ${inst.pendingPayment.studentName} as ${parsed.data.toLowerCase()}`,
+      meta: { ...diff, seq: inst.seq, amountInrMinor: inst.amountInrMinor.toString() },
+    });
+  }
+
   revalidatePath("/finance");
   return { ok: true };
 }
 
 export async function clearInstalmentPlan(pendingPaymentId: string): Promise<ActionResult> {
-  await requireSection("finance");
-  await prisma.instalment.deleteMany({ where: { pendingPaymentId } });
+  const session = await requireSection("finance");
+  const pp = await prisma.pendingPayment.findUnique({
+    where: { id: pendingPaymentId },
+    select: { studentName: true },
+  });
+  const { count } = await prisma.instalment.deleteMany({ where: { pendingPaymentId } });
+
+  // deleteMany reports success on an empty schedule — only log a plan that actually existed.
+  if (count && pp) {
+    await logActivity(session, {
+      action: "finance.instalmentPlan.delete",
+      section: "finance",
+      entityType: "PendingPayment",
+      entityId: pendingPaymentId,
+      summary: `Cleared the ${count}-instalment plan for ${pp.studentName}`,
+      meta: { count },
+    });
+  }
+
   revalidatePath("/finance");
   return { ok: true };
 }

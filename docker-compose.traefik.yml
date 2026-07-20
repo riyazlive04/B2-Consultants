@@ -1,0 +1,126 @@
+# B2 Consultants — deploy onto a VPS that ALREADY runs Traefik as its reverse proxy.
+#
+# Use THIS file instead of docker-compose.prod.yml when the host already has a Traefik
+# holding :80/:443 (e.g. the sirahos box, where root-traefik-1 also fronts sirahos-web and
+# n8n). Two reverse proxies can't both bind 80/443, so we ship NO Caddy here — the B2 app
+# joins Traefik's network and opts in with routing labels, and Traefik terminates TLS via
+# its existing `mytlschallenge` ACME resolver, exactly like the other apps on the box.
+#
+# The database is Supabase (ap-southeast-1) — deliberately not in this stack.
+#
+# Usage:
+#   docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build
+#
+# Prereqs specific to this topology:
+#   - Traefik is running with the Docker provider and an external network named `root_default`.
+#   - Its HTTPS entrypoint is `websecure`, its cert resolver is `mytlschallenge`, and it
+#     redirects `web`→`websecure`. (Confirm with: docker inspect root-traefik-1)
+#   - DNS for ${APP_DOMAIN} points at this VPS.
+# If any of those names differ on your host, change the labels + the external network below.
+
+services:
+  migrate:
+    build:
+      context: .
+      target: build # the only stage with the prisma CLI, engines and prisma/migrations
+    command: npx prisma migrate deploy
+    environment:
+      # migrate MUST use the direct (session-mode, :5432) connection.
+      DATABASE_URL: ${DIRECT_URL:?set DIRECT_URL to the :5432 Supabase pooler URL}
+      DIRECT_URL: ${DIRECT_URL}
+    networks:
+      - internal
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: run
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    networks:
+      - internal # so `cron` reaches it as http://app:3000
+      - proxy    # Traefik's network — how the internet reaches it
+    labels:
+      traefik.enable: "true"
+      # The network Traefik uses to reach this container (it's on two).
+      traefik.docker.network: root_default
+      traefik.http.routers.b2app.rule: Host(`${APP_DOMAIN}`)
+      traefik.http.routers.b2app.entrypoints: web,websecure
+      traefik.http.routers.b2app.tls: "true"
+      traefik.http.routers.b2app.tls.certresolver: mytlschallenge
+      # The B2 app listens on 3000 (sirahos-web was 80 — this is the one line that differs).
+      traefik.http.services.b2app.loadbalancer.server.port: "3000"
+    environment:
+      # --- Required. The container refuses to boot without these (src/lib/env.ts) ---
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the :6543 pooler URL}
+      DIRECT_URL: ${DIRECT_URL:?set DIRECT_URL to the :5432 pooler URL}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?must be https://<your-domain>, no trailing slash}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?openssl rand -base64 32}
+      CRON_SECRET: ${CRON_SECRET:?openssl rand -base64 32}
+
+      # --- Optional. Every one fails CLOSED: the feature is simply off when unset ---
+      FX_API_URL: ${FX_API_URL:-https://api.frankfurter.app}
+
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+
+      WATI_ENABLED: ${WATI_ENABLED:-false}
+      WATI_API_ENDPOINT: ${WATI_API_ENDPOINT:-}
+      WATI_ACCESS_TOKEN: ${WATI_ACCESS_TOKEN:-}
+      WATI_WEBHOOK_SECRET: ${WATI_WEBHOOK_SECRET:-}
+
+      SMS_ENABLED: ${SMS_ENABLED:-false}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+
+      AI_REVIEW_ENABLED: ${AI_REVIEW_ENABLED:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+      PABBLY_WEBHOOK_SECRET: ${PABBLY_WEBHOOK_SECRET:-}
+      FLEXIFUNNELS_WEBHOOK_SECRET: ${FLEXIFUNNELS_WEBHOOK_SECRET:-}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_PAGE_ACCESS_TOKEN: ${META_PAGE_ACCESS_TOKEN:-}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-}
+
+  cron:
+    build:
+      context: .
+      dockerfile: docker/cron/Dockerfile
+    restart: unless-stopped
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?required — cron routes 503 without it}
+      APP_URL: http://app:3000
+      TZ: ${TZ:-Asia/Kolkata}
+    networks:
+      - internal
+    depends_on:
+      app:
+        condition: service_healthy
+
+networks:
+  # Private network for app↔migrate↔cron, isolated from the other apps on the box.
+  internal:
+  # Traefik's existing network. `external: true` means compose attaches to it rather than
+  # creating it. If your Traefik network is not literally `root_default`, change name: below
+  # AND traefik.docker.network above to match (docker network ls to find it).
+  proxy:
+    name: root_default
+    external: true

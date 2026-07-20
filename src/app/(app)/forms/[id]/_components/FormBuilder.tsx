@@ -7,6 +7,7 @@ import type { FormDetail } from "@/server/forms-metrics";
 import type { FormField, FormFieldType, FormSettings } from "@/lib/sites-types";
 import { Btn, IconButton, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/form";
+import { fieldKindProps } from "@/components/ui/field-base";
 import { Card } from "@/components/ui/kit";
 import { Tabs } from "@/components/ui/Tabs";
 import { toast } from "@/components/ui/feedback";
@@ -74,6 +75,12 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
 
   const activePipeline = pickers.pipelines.find((p) => p.id === settings.pipelineId);
 
+  // The only two Settings fields that carry a VALUE rather than builder copy: a link the public
+  // page will navigate to, and a rupee amount. Everything else on this screen (labels, keys,
+  // placeholders, button/success text) is free text by design and stays unfiltered.
+  const redirectProps = fieldKindProps<HTMLInputElement>("url", (e) => setS("redirectUrl", e.target.value));
+  const dealValueProps = fieldKindProps<HTMLInputElement>("money", (e) => setS("opportunityValueInr", e.target.value));
+
   const buildTab = (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
       {/* Fields */}
@@ -127,7 +134,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
             <input className={inputCls} value={settings.successMessage} onChange={(e) => setS("successMessage", e.target.value)} />
           </label>
           <label className="block text-caption font-semibold uppercase text-ink-3">Redirect URL (optional)
-            <input className={inputCls} value={settings.redirectUrl ?? ""} onChange={(e) => setS("redirectUrl", e.target.value)} placeholder="https://…" />
+            <input {...redirectProps.attrs} className={inputCls} value={settings.redirectUrl ?? ""} onChange={redirectProps.onChange} placeholder="https://…" />
           </label>
           <label className="block text-caption font-semibold uppercase text-ink-3">Tag on submit
             <input className={inputCls} list="tag-list" value={settings.tag ?? ""} onChange={(e) => setS("tag", e.target.value)} placeholder="e.g. webinar-lead" />
@@ -145,7 +152,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
               <div className="mt-2 space-y-2">
                 <Select placeholder="— pipeline —" value={settings.pipelineId ?? ""} onChange={(e) => setS("pipelineId", e.target.value)} options={pickers.pipelines.map((p) => ({ value: p.id, label: p.name }))} />
                 <Select placeholder="— stage —" value={settings.stageId ?? ""} onChange={(e) => setS("stageId", e.target.value)} options={(activePipeline?.stages ?? []).map((s) => ({ value: s.id, label: s.name }))} />
-                <input className={inputCls} value={settings.opportunityValueInr ?? ""} onChange={(e) => setS("opportunityValueInr", e.target.value)} placeholder="Deal value ₹ (optional)" inputMode="decimal" />
+                <input {...dealValueProps.attrs} className={inputCls} value={settings.opportunityValueInr ?? ""} onChange={dealValueProps.onChange} placeholder="Deal value ₹ (optional)" />
               </div>
             )}
           </div>

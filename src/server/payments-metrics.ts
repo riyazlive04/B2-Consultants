@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { formatInrMinor, formatEurMinor, formatDate, minorToMajorString } from "@/lib/format";
+import { ACTIVE } from "@/lib/soft-delete";
 import { toDateInputValue } from "@/lib/dates";
 import type { InvoiceKind } from "@prisma/client";
 import type { InvoicePdfData } from "@/documents/invoice-pdf";
@@ -18,7 +19,7 @@ export type PaymentsOverview = {
 
 export async function getPaymentsOverview(): Promise<PaymentsOverview> {
   const invoices = await prisma.invoice.findMany({
-    where: { kind: "INVOICE" },
+    where: { ...ACTIVE, kind: "INVOICE" },
     select: { status: true, totalInrMinor: true, dueDate: true, payments: { select: { amountInrMinor: true } } },
   });
   let draft = 0n, due = 0n, received = 0n, overdue = 0n;
@@ -59,7 +60,7 @@ export type InvoiceRow = {
 
 export async function getInvoicesList(kind: InvoiceKind): Promise<InvoiceRow[]> {
   const invoices = await prisma.invoice.findMany({
-    where: { kind },
+    where: { ...ACTIVE, kind },
     orderBy: { createdAt: "desc" },
     include: { payments: { select: { amountInrMinor: true } } },
   });
@@ -220,7 +221,7 @@ export async function getInvoicePdfData(id: string): Promise<InvoicePdfData | nu
 }
 
 export async function getProductsList() {
-  const products = await prisma.product.findMany({ orderBy: { name: "asc" } });
+  const products = await prisma.product.findMany({ where: ACTIVE, orderBy: { name: "asc" } });
   return products.map((p) => ({
     id: p.id,
     name: p.name,
@@ -255,8 +256,8 @@ export async function getSubscriptionsList() {
 /** Contacts + products for the invoice/subscription editors. */
 export async function getInvoicePickers() {
   const [contacts, products] = await Promise.all([
-    prisma.lead.findMany({ select: { id: true, name: true, email: true, phone: true }, orderBy: { createdAt: "desc" }, take: 1000 }),
-    prisma.product.findMany({ where: { active: true }, select: { id: true, name: true, priceInrMinor: true }, orderBy: { name: "asc" } }),
+    prisma.lead.findMany({ where: ACTIVE, select: { id: true, name: true, email: true, phone: true }, orderBy: { createdAt: "desc" }, take: 1000 }),
+    prisma.product.findMany({ where: { ...ACTIVE, active: true }, select: { id: true, name: true, priceInrMinor: true }, orderBy: { name: "asc" } }),
   ]);
   return {
     contacts,

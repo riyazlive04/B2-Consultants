@@ -12,6 +12,8 @@
 # next.js
 /.next/
 /.next-prod/
+# out-of-band verify builds (NEXT_DIST_DIR=.next-verify…) — throwaway, never committed
+/.next-verify*
 /out/
 
 # production
@@ -36,8 +38,15 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local env — real secrets live here, never commit
+# local env — real secrets live here, never commit.
+# Bare `.env` does NOT match `.env.production`, so list the whole family explicitly and
+# re-admit the value-less templates. Without this, a `.env.production` holding the live
+# Supabase password would be committable.
 .env
+.env.*
+!.env.example
+!.env.supabase.example
+!.env.production.example
 
 # no-Docker local Postgres (scripts/local-db.mjs)
 /.pgdata/
@@ -46,6 +55,6 @@ next-env.d.ts
 # data.sql is a full plaintext dump: lead PII, student records, the ledger. Never commit.
 /.migration/
 
-# local dev noise
-dev-server.log
+# local dev noise — runtime logs never belong in the repo (dev server, cron, verify runs)
+*.log
 scripts/tmp/

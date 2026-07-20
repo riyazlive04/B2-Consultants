@@ -1,0 +1,137 @@
+# B2 Consultants — VPS production stack.
+#
+#   caddy   → TLS termination + reverse proxy (auto Let's Encrypt cert)
+#   migrate → one-shot `prisma migrate deploy`, must succeed before app starts
+#   app     → the Next standalone server, private, never published to the host
+#   cron    → ticks /api/cron/* over the private network (the app has no clock)
+#
+# THE DATABASE IS NOT HERE. It is Supabase (ap-southeast-1). This file deliberately
+# ships no `db` service: the old bundled-Postgres volume is gone, and bringing one
+# back would silently create an EMPTY database while looking like it worked.
+#
+# Usage:  docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# See docs/DEPLOYMENT.md.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"    # required: Let's Encrypt HTTP-01 challenge + the →https redirect
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Named volumes, not bind mounts: caddy_data holds the issued certificates and
+      # the ACME account key. Lose it and every restart re-requests a cert, which hits
+      # Let's Encrypt's rate limit (5 identical certs/week) and then serves TLS errors.
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN to your domain, e.g. app.b2consultants.in}
+      TLS_EMAIL: ${TLS_EMAIL:?set TLS_EMAIL for Let's Encrypt expiry notices}
+    depends_on:
+      app:
+        condition: service_healthy
+
+  migrate:
+    build:
+      context: .
+      target: build # the only stage with the prisma CLI, engines and prisma/migrations
+    # Applies pending migrations, then exits 0. `app` gates on that exit code, so a
+    # failed migration aborts the deploy instead of booting code against an old schema.
+    command: npx prisma migrate deploy
+    environment:
+      # migrate MUST use the direct (session-mode, :5432) connection — the :6543
+      # pgbouncer pooler cannot hold the session-level advisory lock Prisma takes.
+      DATABASE_URL: ${DIRECT_URL:?set DIRECT_URL to the :5432 Supabase pooler URL}
+      DIRECT_URL: ${DIRECT_URL}
+    restart: "no" # a one-shot job; restarting it on exit 0 would loop forever
+
+  app:
+    build:
+      context: .
+      target: run
+    restart: unless-stopped
+    # NOT published to the host. Only caddy and cron reach it, over the compose network.
+    # Publishing 3000 here would expose the app on http://<vps-ip>:3000, bypassing TLS.
+    expose:
+      - "3000"
+    init: true # PID-1 reaper so SIGTERM from `compose down` is handled, not ignored
+    read_only: true # the app writes nothing to disk: CV parsing and PDF rendering are in-memory
+    tmpfs:
+      # App CODE writes nothing, but the Next runtime does: revalidatePath() and the
+      # full-route/fetch cache write under .next/cache, and the framework wants /tmp.
+      # Back both with tmpfs so read_only stays on without an EROFS at runtime.
+      - /tmp
+      - /app/.next/cache
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # /api/health does a real SELECT 1 — a container that is up but cannot reach
+      # Supabase reports unhealthy rather than serving 500s behind a green light.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    environment:
+      # --- Required. The container refuses to boot without these (src/lib/env.ts) ---
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the :6543 pooler URL}
+      DIRECT_URL: ${DIRECT_URL:?set DIRECT_URL to the :5432 pooler URL}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?must be https://<your-domain>, no trailing slash}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?openssl rand -base64 32}
+      CRON_SECRET: ${CRON_SECRET:?openssl rand -base64 32}
+
+      # --- Optional. Every one fails CLOSED: the feature is simply off when unset ---
+      FX_API_URL: ${FX_API_URL:-https://api.frankfurter.app}
+
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+
+      WATI_ENABLED: ${WATI_ENABLED:-false}
+      WATI_API_ENDPOINT: ${WATI_API_ENDPOINT:-}
+      WATI_ACCESS_TOKEN: ${WATI_ACCESS_TOKEN:-}
+      WATI_WEBHOOK_SECRET: ${WATI_WEBHOOK_SECRET:-}
+
+      SMS_ENABLED: ${SMS_ENABLED:-false}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+
+      AI_REVIEW_ENABLED: ${AI_REVIEW_ENABLED:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+      # Inbound lead webhooks (Pabbly is the live router today)
+      PABBLY_WEBHOOK_SECRET: ${PABBLY_WEBHOOK_SECRET:-}
+      FLEXIFUNNELS_WEBHOOK_SECRET: ${FLEXIFUNNELS_WEBHOOK_SECRET:-}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_PAGE_ACCESS_TOKEN: ${META_PAGE_ACCESS_TOKEN:-}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-}
+
+      # REDIS_URL is intentionally absent. automation-queue.ts returns null without it
+      # and falls back to Postgres polling, which is the source of truth anyway. Setting
+      # it without running a redis service would spam connection errors for no benefit.
+
+  cron:
+    build:
+      context: .
+      dockerfile: docker/cron/Dockerfile
+    restart: unless-stopped
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?required — cron routes 503 without it}
+      APP_URL: http://app:3000
+      # The daily-log cutoff and the SOP ladder are both reasoned about in IST; a UTC
+      # container would fire the EOD save 5.5h off.
+      TZ: ${TZ:-Asia/Kolkata}
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

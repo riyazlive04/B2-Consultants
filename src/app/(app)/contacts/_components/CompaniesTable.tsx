@@ -122,13 +122,13 @@ export default function CompaniesTable({
               <TextInput name="domain" defaultValue={editing?.domain ?? ""} placeholder="example.com" />
             </Field>
             <Field label="Phone">
-              <TextInput name="phone" defaultValue={editing?.phone ?? ""} />
+              <TextInput kind="phone" name="phone" defaultValue={editing?.phone ?? ""} />
             </Field>
             <Field label="Email">
-              <TextInput name="email" type="email" defaultValue={editing?.email ?? ""} />
+              <TextInput kind="email" name="email" defaultValue={editing?.email ?? ""} />
             </Field>
             <Field label="City">
-              <TextInput name="city" defaultValue={editing?.city ?? ""} />
+              <TextInput kind="city" name="city" defaultValue={editing?.city ?? ""} />
             </Field>
             <Field label="Country">
               <TextInput name="country" defaultValue={editing?.country ?? ""} />

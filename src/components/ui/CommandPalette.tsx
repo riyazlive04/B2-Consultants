@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, Contact, GitBranch, Receipt, CornerDownLeft } from "lucide-react";
+import { Search, Loader2, Contact, GitBranch, Receipt, CornerDownLeft, ArrowRight } from "lucide-react";
+import { useModKey } from "@/lib/use-mod-key";
 
 /**
  * Global ⌘K / Ctrl+K command palette (BUILD_CHECKLIST.md §3) across Contacts, Opportunities and
@@ -19,19 +20,24 @@ export function openCommandPalette() {
   window.dispatchEvent(new Event("app:command-palette-open"));
 }
 
-type ItemType = "contact" | "opportunity" | "invoice";
+type ItemType = "page" | "contact" | "opportunity" | "invoice";
 type PaletteItem = { id: string; label: string; sublabel: string | null; type: ItemType; href: string };
+export type PaletteSection = { label: string; href: string };
 
 const TYPE_LABEL: Record<ItemType, string> = {
+  page: "Go to",
   contact: "Contacts",
   opportunity: "Opportunities",
   invoice: "Invoices",
 };
 const TYPE_ICON: Record<ItemType, typeof Contact> = {
+  page: ArrowRight,
   contact: Contact,
   opportunity: GitBranch,
   invoice: Receipt,
 };
+// Fixed render order so the same categories always land in the same place.
+const TYPE_ORDER: ItemType[] = ["page", "contact", "opportunity", "invoice"];
 
 /** Cheap fuzzy score: prefix match beats substring beats subsequence beats no match (-1). */
 function score(item: PaletteItem, q: string): number {
@@ -46,9 +52,17 @@ function score(item: PaletteItem, q: string): number {
   return qi === q.length ? 20 : -1;
 }
 
-export function CommandPalette() {
+export function CommandPalette({ sections = [] }: { sections?: PaletteSection[] }) {
   const router = useRouter();
+  const { modLabel } = useModKey();
   const [open, setOpen] = useState(false);
+  // Navigable destinations — the sections this user can actually see. Local, so ⌘K can
+  // jump anywhere the instant it opens, even before the record index has loaded.
+  const sectionItems = useMemo<PaletteItem[]>(
+    () =>
+      sections.map((s) => ({ id: `page:${s.href}`, label: s.label, sublabel: null, type: "page", href: s.href })),
+    [sections],
+  );
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [items, setItems] = useState<PaletteItem[] | null>(null);
@@ -76,9 +90,13 @@ export function CommandPalette() {
     };
   }, []);
 
-  // Fetch the summary list on first open only — cached in state for the rest of the session.
+  // Refetch the summary list on EVERY open, not just the first: a rep who creates a
+  // contact at 9am must be able to find it at 11am without a full page reload. The
+  // previous `items` stay on screen during the refetch (no flash to empty), and the
+  // request is cancelled if the palette closes before it resolves.
   useEffect(() => {
-    if (!open || items !== null || loading) return;
+    if (!open) return;
+    let cancelled = false;
     setLoading(true);
     setError(null);
     fetch("/api/command-palette")
@@ -86,10 +104,19 @@ export function CommandPalette() {
         if (!r.ok) throw new Error("request failed");
         return r.json();
       })
-      .then((data: { items: PaletteItem[] }) => setItems(data.items))
-      .catch(() => setError("Couldn't load search results. Try again."))
-      .finally(() => setLoading(false));
-  }, [open, items, loading]);
+      .then((data: { items: PaletteItem[] }) => {
+        if (!cancelled) setItems(data.items);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Couldn't load search results. Try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -106,16 +133,17 @@ export function CommandPalette() {
   }, [open]);
 
   const results = useMemo(() => {
-    if (!items) return [];
+    // Nav sections are always available; record results merge in once fetched.
+    const all = [...sectionItems, ...(items ?? [])];
     const q = query.trim().toLowerCase();
-    if (!q) return items.slice(0, 50);
-    return items
+    if (!q) return all.slice(0, 50);
+    return all
       .map((item) => ({ item, s: score(item, q) }))
       .filter((x) => x.s >= 0)
       .sort((a, b) => b.s - a.s || a.item.label.localeCompare(b.item.label))
       .slice(0, 50)
       .map((x) => x.item);
-  }, [items, query]);
+  }, [sectionItems, items, query]);
 
   useEffect(() => setActiveIndex(0), [query]);
 
@@ -147,7 +175,7 @@ export function CommandPalette() {
   if (!open) return null;
 
   // Group by type, in a fixed, stable order — only render groups that have matches.
-  const groups = (["contact", "opportunity", "invoice"] as ItemType[])
+  const groups = TYPE_ORDER
     .map((type) => ({ type, rows: results.filter((r) => r.type === type) }))
     .filter((g) => g.rows.length > 0);
 
@@ -177,7 +205,7 @@ export function CommandPalette() {
         </div>
         <div id="cmdk-list" ref={listRef} className="flex-1 overflow-y-auto p-2">
           {error && <p className="px-3 py-4 text-sm text-risk">{error}</p>}
-          {!error && !loading && items !== null && results.length === 0 && (
+          {!error && !loading && results.length === 0 && query.trim() && (
             <p className="px-3 py-8 text-center text-sm text-muted">No matches for "{query}".</p>
           )}
           {groups.map((g) => {
@@ -216,7 +244,7 @@ export function CommandPalette() {
         </div>
         <div className="flex items-center justify-between border-t border-line px-4 py-2 text-caption text-ink-3">
           <span>↑↓ navigate · Enter open · Esc close</span>
-          <span>⌘K</span>
+          <span>{modLabel}</span>
         </div>
       </div>
     </div>

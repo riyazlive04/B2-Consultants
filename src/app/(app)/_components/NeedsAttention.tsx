@@ -70,6 +70,9 @@ export function NeedsAttention({
         <ul className="divide-y divide-line">
           {shown.map((n) => {
             const s = SEVERITY[n.severity];
+            // §2.8: a coach's escalation is labelled as such and sits at the top (the list is
+            // already sorted escalations-first server-side).
+            const label = n.escalated ? "Escalated" : s.label;
             return (
               <li key={n.id}>
                 <Link
@@ -81,7 +84,7 @@ export function NeedsAttention({
                     style={{ background: s.soft, color: s.dot }}
                   >
                     <span aria-hidden className="h-1.5 w-1.5 flex-none rounded-full" style={{ background: s.dot }} />
-                    {s.label}
+                    {label}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-ink">{n.title}</span>

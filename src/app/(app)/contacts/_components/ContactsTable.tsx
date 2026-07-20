@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Plus, Tag as TagIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Tag as TagIcon, ChevronLeft, ChevronRight, Phone, Mail, MessageCircle } from "lucide-react";
 import type { ContactRow, ContactListFilters, ContactsListResult } from "@/server/contacts-metrics";
 import { Btn } from "@/components/ui/controls";
 import { Modal } from "@/components/ui/Modal";
 import { Field, TextInput, Select, SubmitButton, FormError } from "@/components/ui/form";
+import { PhoneField } from "@/components/ui/PhoneField";
 import { toast } from "@/components/ui/feedback";
 import { Avatar, Chip, Pill } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -22,6 +23,45 @@ const SOURCE_OPTS = [
   { value: "WORKSHOP", label: "Workshop" }, { value: "GHOSTED_BLUEPRINT", label: "Ghosted Blueprint" },
   { value: "OTHER", label: "Other" },
 ];
+
+/**
+ * Functional quick-actions on a contact row (issue 7.9): call / mail / WhatsApp straight from the
+ * list, instead of the phone being dead text. Anchor-based so they use the OS handlers (tel:,
+ * mailto:) and open WhatsApp; stopPropagation so a click doesn't also open the contact.
+ */
+function QuickActions({ phone, email }: { phone: string | null; email: string | null }) {
+  const wa = phone ? phone.replace(/[^\d]/g, "") : "";
+  const cls =
+    "grid h-8 w-8 place-items-center rounded-btn border border-line text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink";
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      {phone ? (
+        <a href={`tel:${phone}`} onClick={stop} className={cls} title={`Call ${phone}`} aria-label="Call">
+          <Phone size={15} />
+        </a>
+      ) : null}
+      {email ? (
+        <a href={`mailto:${email}`} onClick={stop} className={cls} title={`Email ${email}`} aria-label="Email">
+          <Mail size={15} />
+        </a>
+      ) : null}
+      {wa ? (
+        <a
+          href={`https://wa.me/${wa}`}
+          target="_blank"
+          rel="noreferrer"
+          onClick={stop}
+          className={cls}
+          title="Open in WhatsApp"
+          aria-label="WhatsApp"
+        >
+          <MessageCircle size={15} />
+        </a>
+      ) : null}
+    </div>
+  );
+}
 
 function prettyStage(s: string) {
   return s.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -152,6 +192,11 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
       cell: (r) => <span className="text-sm text-ink-3"><DateText date={r.createdAt} /></span>,
       value: (r) => r.createdAt.getTime(),
     },
+    {
+      key: "quick", header: "", sortable: false, align: "right",
+      cell: (r) => <QuickActions phone={r.phone} email={r.email} />,
+      value: () => null,
+    },
   ];
 
   return (
@@ -183,11 +228,15 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
         </div>
       )}
 
+      {/* hideFilter: the real search is ContactsFilterBar above (server-side, whole dataset).
+          DataTable's own box only ever filtered this one loaded page, so two near-identical
+          search inputs sat on the same screen searching different scopes — users typed in the
+          wrong one and got "no results" on data that exists. One search box now. */}
       <DataTable
         rows={rows}
         columns={columns}
         csvName="contacts"
-        filterPlaceholder="Filter this page…"
+        hideFilter
         emptyMessage="No contacts match. Try a different search or filter combination."
       />
 
@@ -222,11 +271,11 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add contact" subtitle="Create a new CRM contact" size="md">
         <form action={addContact} ref={addForm} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Name"><TextInput name="name" required placeholder="Full name" /></Field>
-            <Field label="Phone / WhatsApp"><TextInput name="phone" required placeholder="+91…" /></Field>
-            <Field label="Email"><TextInput name="email" type="email" placeholder="name@example.com" /></Field>
+            <Field label="Name"><TextInput kind="name" name="name" required placeholder="Full name" /></Field>
+            <Field label="Phone / WhatsApp"><PhoneField name="phone" required /></Field>
+            <Field label="Email"><TextInput kind="email" name="email" placeholder="name@example.com" /></Field>
             <Field label="Lead source"><Select name="leadSource" options={SOURCE_OPTS} defaultValue="OTHER" /></Field>
-            <Field label="City"><TextInput name="city" placeholder="City" /></Field>
+            <Field label="City"><TextInput kind="city" name="city" placeholder="City" /></Field>
             <Field label="Industry"><TextInput name="industry" placeholder="Industry" /></Field>
             <Field label="Company">
               <Select name="companyId" options={[{ value: "", label: "— none —" }, ...filters.companies.map((c) => ({ value: c.id, label: c.name }))]} defaultValue="" />

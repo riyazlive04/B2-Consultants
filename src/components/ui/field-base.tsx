@@ -10,7 +10,8 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import type { ReactNode, RefObject } from "react";
+import type { ChangeEvent, ReactNode, RefObject } from "react";
+import { FIELD_RULES, type FieldKind } from "@/lib/field-rules";
 
 /**
  * Shared control base for the form kit. Lives in its own module so form.tsx,
@@ -47,6 +48,64 @@ export function useControlProps() {
     "aria-invalid": invalid || undefined,
     // height-agnostic surface; callers add sizeCls
     cls: `${baseCls} ${invalid ? errCls : okCls}`,
+  };
+}
+
+// ─────────────────── field kinds (character blocking) ───────────────────
+
+/**
+ * Strip characters the kind forbids, in place, keeping the caret where the typist expects it.
+ *
+ * Runs on the `input` event (React's onChange) rather than `beforeinput`: the value is already
+ * committed, so ONE code path covers typing, paste, drag-drop and IME commit, and it works for
+ * controlled and uncontrolled inputs alike. Rewriting `el.value` here is not a fight with React —
+ * the parent's onChange fires *after* this, so a controlled parent receives the cleaned string
+ * and its state never diverges from the DOM.
+ */
+function scrub(el: HTMLInputElement | HTMLTextAreaElement, filter: (s: string) => string) {
+  const before = el.value;
+  const clean = filter(before);
+  if (clean === before) return;
+  // `type="email"`/`"number"` don't support the selection API and throw on access — the caret
+  // simply lands at the end there, which is where it already is for a rejected keystroke.
+  let pos: number | null = null;
+  try {
+    pos = el.selectionStart;
+  } catch {
+    pos = null;
+  }
+  el.value = clean;
+  if (pos === null) return;
+  const next = Math.max(0, pos - (before.length - clean.length));
+  try {
+    el.setSelectionRange(next, next);
+  } catch {
+    /* selection unsupported for this input type — ignore */
+  }
+}
+
+/**
+ * Props that make an input accept only what `kind` allows. Spread BEFORE the caller's own props
+ * so a call site can still override e.g. `maxLength` or `placeholder`; `onChange` is merged, not
+ * replaced, so controlled fields keep working.
+ *
+ * This is a UX affordance only — every kind's rule is re-checked server-side (see lib/field-rules).
+ *
+ * NOT a hook despite taking props-shaped args — it calls none, so it is safe inside a `.map()`
+ * (which is exactly how the builder screens render their repeated rows). Hence no `use` prefix.
+ */
+export function fieldKindProps<T extends HTMLInputElement | HTMLTextAreaElement>(
+  kind: FieldKind | undefined,
+  onChange: ((e: ChangeEvent<T>) => void) | undefined,
+) {
+  if (!kind) return { attrs: {}, onChange };
+  const { filter, attrs } = FIELD_RULES[kind];
+  return {
+    attrs,
+    onChange: (e: ChangeEvent<T>) => {
+      scrub(e.currentTarget, filter);
+      onChange?.(e);
+    },
   };
 }
 

@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { z } from "zod";
 import { Prisma, type LeadSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection, capabilityCheck } from "@/lib/rbac";
+import { optionalRule } from "@/lib/field-rules";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
@@ -70,6 +72,21 @@ export async function createForm(form: FormData): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * The two settings the app later consumes as DATA rather than rendering as copy:
+ *
+ *   redirectUrl         — handed to `window.location.href` by PublicForm after a submit.
+ *   opportunityValueInr — parsed into paise by `majorStringToMinor` on the public submit path.
+ *
+ * Re-checked here because `saveForm` takes a typed payload rather than FormData: TypeScript is not
+ * a runtime gate, so the builder's character filter is UX only and this is the real one. The rest of
+ * FormSettings (submitText, successMessage, tag, field labels…) is free-text copy and stays so.
+ */
+const formValueSettingsSchema = z.object({
+  redirectUrl: optionalRule("url"),
+  opportunityValueInr: optionalRule("money"),
+});
+
 export async function saveForm(
   id: string,
   payload: { name: string; fields: FormField[]; settings: FormSettings },
@@ -82,13 +99,24 @@ export async function saveForm(
   if (keys.some((k) => !k)) return { ok: false, error: "Every field needs a key" };
   if (new Set(keys).size !== keys.length) return { ok: false, error: "Field keys must be unique" };
 
+  const values = formValueSettingsSchema.safeParse({
+    redirectUrl: payload.settings.redirectUrl ?? "",
+    opportunityValueInr: payload.settings.opportunityValueInr ?? "",
+  });
+  if (!values.success) {
+    return { ok: false, error: values.error.issues[0]?.message ?? "Check the form settings" };
+  }
+  // Store the NORMALISED values — `url` adds a missing scheme, so what the public page redirects to
+  // is the parsed link, not the raw typing.
+  const settings: FormSettings = { ...payload.settings, ...values.data };
+
   const before = await prisma.form.findUnique({ where: { id }, select: { name: true, fields: true, settings: true } });
   await prisma.form.update({
     where: { id },
     data: {
       name: payload.name.trim(),
       fields: payload.fields as unknown as Prisma.InputJsonValue,
-      settings: payload.settings as unknown as Prisma.InputJsonValue,
+      settings: settings as unknown as Prisma.InputJsonValue,
     },
   });
   // The builder PUTs the whole form on every save, so the JSON columns are compared but never
@@ -97,7 +125,7 @@ export async function saveForm(
   const changed = [
     ...named.changed,
     ...(JSON.stringify(before?.fields ?? null) !== JSON.stringify(payload.fields) ? ["fields"] : []),
-    ...(JSON.stringify(before?.settings ?? null) !== JSON.stringify(payload.settings) ? ["settings"] : []),
+    ...(JSON.stringify(before?.settings ?? null) !== JSON.stringify(settings) ? ["settings"] : []),
   ];
   if (changed.length) {
     await logActivity(session, {

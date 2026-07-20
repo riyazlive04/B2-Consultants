@@ -19,6 +19,7 @@ import {
   type UserStatus,
 } from "@/lib/capabilities";
 import { INVITE_TTL_DAYS, mintInviteToken, unguessablePlaceholderPassword } from "@/lib/invite-token";
+import { rule } from "@/lib/field-rules";
 import { consumeAccessRequest } from "./access-requests";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
@@ -50,8 +51,8 @@ const ROLES = ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR"] as const;
 const roleSchema = z.enum(ROLES);
 
 const inviteSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(120),
-  email: z.string().trim().email("Valid email required").max(200),
+  name: rule("name"),
+  email: rule("email"),
   role: roleSchema,
 });
 
@@ -240,8 +241,8 @@ export async function updateUserAccess(userId: string, form: FormData): Promise<
 
   const role = roleSchema.safeParse(form.get("role"));
   if (!role.success) return { ok: false, error: "Invalid role" };
-  const name = z.string().trim().min(1).max(120).safeParse(form.get("name"));
-  if (!name.success) return { ok: false, error: "Name is required" };
+  const name = rule("name").safeParse(form.get("name"));
+  if (!name.success) return { ok: false, error: name.error.issues[0]?.message ?? "Name is required" };
 
   const target = await prisma.user.findUnique({
     where: { id: userId },

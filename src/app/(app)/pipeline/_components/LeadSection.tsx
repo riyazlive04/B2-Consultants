@@ -1,17 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { assignLead, createLead, deleteLead, markLeadContacted, updateLead } from "@/server/pipeline-actions";
+import { restoreLead } from "@/server/contacts-actions";
 import type { LeadRow } from "@/server/pipeline-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
 import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
 import { sendLeadReminder } from "@/server/whatsapp-actions";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
-import { askConfirm, toast } from "@/components/ui/feedback";
+import { toast, toastUndo } from "@/components/ui/feedback";
 import { Card } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { PhoneField } from "@/components/ui/PhoneField";
 import { formatDate, formatDuration } from "@/lib/format";
 import { signalForSpeedToLead } from "@/lib/signals";
 import {
@@ -33,23 +35,41 @@ export function LeadSection({
   today,
   isAdmin,
   assignees,
+  levelOptions,
   waStatus = {},
 }: {
   rows: LeadRow[];
   today: string;
   isAdmin: boolean;
   assignees: { value: string; label: string }[];
+  levelOptions: { value: string; label: string }[];
   waStatus?: Record<string, WhatsAppStatusCell>;
 }) {
   const [editing, setEditing] = useState<LeadRow | null>(null);
   const [stage, setStage] = useState<string>("NEW_LEAD");
   const [error, setError] = useState<string | null>(null);
+  // Optimistic owner overrides, keyed by lead id: the assignee <Select> shows the new
+  // owner the instant it's picked, and reverts to the prior owner if the server rejects.
+  const [assignVal, setAssignVal] = useState<Record<string, string>>({});
   const formRef = useRef<HTMLFormElement>(null);
+
+  const ownerOf = (row: LeadRow) => assignVal[row.id] ?? row.assignedToId ?? "";
 
   const startEdit = (row: LeadRow) => {
     setEditing(row);
     setStage(row.stage);
   };
+
+  // The edit form lives at the top of the section, above the table. Editing a row far
+  // down the list used to silently repopulate a form off-screen — the click read as a
+  // no-op. Bring the form into view and focus its first field when an edit begins.
+  useEffect(() => {
+    if (!editing) return;
+    const form = formRef.current;
+    if (!form) return;
+    form.scrollIntoView({ behavior: "smooth", block: "center" });
+    form.querySelector<HTMLElement>("input, textarea, select")?.focus({ preventScroll: true });
+  }, [editing]);
 
   const submit = async (form: FormData) => {
     setError(null);
@@ -62,15 +82,15 @@ export function LeadSection({
   };
 
   const remove = async (row: LeadRow) => {
-    const ok = await askConfirm({
-      title: `Delete lead ${row.name}?`,
-      body: "Their call outcomes and stage history are removed too.",
-      confirmLabel: "Delete lead",
-      danger: true,
+    // Delete IS a soft-delete (archive) — reversible — so it follows the Gmail undo-send
+    // model instead of a blocking confirm: archive now, offer Undo for a grace window.
+    // askConfirm stays reserved for the truly irreversible (permanent purge).
+    const res = await deleteLead(row.id);
+    if (!res.ok) return toast(res.error, "error");
+    toastUndo(`Archived ${row.name}`, async () => {
+      const r = await restoreLead(row.id);
+      toast(r.ok ? `Restored ${row.name}` : r.error, r.ok ? "success" : "error");
     });
-    if (!ok) return;
-    await deleteLead(row.id);
-    toast("Lead deleted");
   };
 
   const contact = async (row: LeadRow) => {
@@ -80,9 +100,14 @@ export function LeadSection({
   };
 
   const reassign = async (row: LeadRow, userId: string) => {
-    if (userId === (row.assignedToId ?? "")) return;
+    const prev = ownerOf(row);
+    if (userId === prev) return;
+    setAssignVal((m) => ({ ...m, [row.id]: userId })); // optimistic
     const res = await assignLead(row.id, userId);
-    if (!res.ok) return toast(res.error, "error");
+    if (!res.ok) {
+      setAssignVal((m) => ({ ...m, [row.id]: prev })); // rollback the select
+      return toast(res.error, "error");
+    }
     toast(userId ? "Lead assigned" : "Lead unassigned");
   };
 
@@ -96,7 +121,7 @@ export function LeadSection({
       cell: (r) => (
         <span className={r.stage === "WON" ? "font-semibold text-ok" : r.stage === "LOST" ? "text-muted" : ""}>
           {LEAD_STAGE_LABELS[r.stage]}
-          {r.wonLevel ? ` · ${PROGRAM_LEVEL_LABELS[r.wonLevel]}` : ""}
+          {r.wonLevel ? ` · ${PROGRAM_LEVEL_LABELS[r.wonLevel] ?? r.wonLevel}` : ""}
           {r.paymentPlan ? ` · ${PAYMENT_PLAN_LABELS[r.paymentPlan]}` : ""}
         </span>
       ),
@@ -108,7 +133,7 @@ export function LeadSection({
         isAdmin ? (
           <Select
             aria-label={`Assign ${r.name}`}
-            defaultValue={r.assignedToId ?? ""}
+            value={ownerOf(r)}
             onChange={(e) => reassign(r, e.target.value)}
             size="sm"
             options={[{ value: "", label: "Unassigned" }, ...assignees]}
@@ -168,10 +193,10 @@ export function LeadSection({
         <form ref={formRef} action={submit} key={editing?.id ?? "new"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Lead name">
-            <TextInput name="name" required placeholder="Full name" defaultValue={editing?.name ?? ""} />
+            <TextInput kind="name" name="name" required placeholder="Full name" defaultValue={editing?.name ?? ""} />
           </Field>
-          <Field label="Phone / WhatsApp" hint="With country code">
-            <TextInput name="phone" required placeholder="+91…" defaultValue={editing?.phone ?? ""} />
+          <Field label="Phone / WhatsApp" hint="Pick country, then number">
+            <PhoneField name="phone" required defaultValue={editing?.phone ?? ""} />
           </Field>
           <Field label="Lead source">
             <Select name="leadSource" options={optionsFrom(LEAD_SOURCE_LABELS)} defaultValue={editing?.leadSource ?? "INSTAGRAM"} />
@@ -188,8 +213,8 @@ export function LeadSection({
             />
           </Field>
           {stage === "WON" && (
-            <Field label="Program level (Won)" hint="Which program did they enrol in?">
-              <Select name="wonLevel" options={optionsFrom(PROGRAM_LEVEL_LABELS)} defaultValue={editing?.wonLevel ?? "GUIDED"} />
+            <Field label="Programme level (Won)" hint="Which programme did they enrol in?">
+              <Select name="wonLevel" options={levelOptions} defaultValue={editing?.wonLevel ?? "GUIDED"} />
             </Field>
           )}
           {PAYMENT_PLAN_STAGES.has(stage) && (
@@ -203,7 +228,7 @@ export function LeadSection({
           )}
           <div className="sm:col-span-2">
             <Field label="Notes" hint="What was said, objections, situation">
-              <TextArea name="notes" defaultValue={editing?.notes ?? ""} />
+              <TextArea kind="text" name="notes" defaultValue={editing?.notes ?? ""} />
             </Field>
           </div>
         </div>

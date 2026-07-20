@@ -13,6 +13,7 @@ import {
 import type { GnModuleRow, GnRecordingRow, GnSection } from "@/server/german-note-metrics";
 import { parseVideoUrl, VIDEO_PROVIDER_LABELS } from "@/lib/video-embed";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { TrackedVideo } from "./TrackedVideo";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
@@ -35,7 +36,7 @@ function UrlField({ defaultValue }: { defaultValue?: string }) {
           : "Paste the Fathom share link from the recorded class. YouTube / Vimeo / Drive links work too."
       }
     >
-      <TextInput name="videoUrl" type="url" required placeholder="https://fathom.video/share/…" value={url} onChange={(e) => setUrl(e.target.value)} />
+      <TextInput kind="url" name="videoUrl" required placeholder="https://fathom.video/share/…" value={url} onChange={(e) => setUrl(e.target.value)} />
     </Field>
   );
 }
@@ -62,7 +63,7 @@ function RecordingFields({ recording, modules }: { recording?: GnRecordingRow; m
         </Field>
       )}
       <Field label="Notes (optional)" hint="Homework, chapter covered, links mentioned in class…">
-        <TextArea name="notes" maxLength={2000} defaultValue={recording?.notes ?? undefined} />
+        <TextArea kind="text" name="notes" maxLength={2000} defaultValue={recording?.notes ?? undefined} />
       </Field>
     </div>
   );
@@ -148,7 +149,7 @@ function LessonCard({ r, index, canManage, onEdit, onChanged }: {
   return (
     <article className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
       <div className="aspect-video w-full bg-ink/5">
-        <iframe src={r.embedUrl} title={r.title} loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-full w-full" />
+        <TrackedVideo recordingId={r.id} provider={r.provider} embedUrl={r.embedUrl} title={r.title} />
       </div>
       <div className="p-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -169,6 +170,23 @@ function LessonCard({ r, index, canManage, onEdit, onChanged }: {
               {r.watched ? <CheckCircle2 size={13} /> : <Circle size={13} />}
               {r.watched ? "Watched" : "Mark watched"}
             </button>
+            {/*
+              Tracked progress, when the provider reports any. Shown next to the tick rather
+              than instead of it: the founders' question is precisely "they said watched — did
+              they?", and answering it needs both numbers side by side.
+            */}
+            {r.watchedPct !== null && (
+              <span
+                className={`tnum text-xs font-medium ${r.disputed ? "text-warn" : "text-muted"}`}
+                title={
+                  r.disputed
+                    ? `Marked watched, but only ${r.watchedPct}% was actually played. Tracking is the source of truth.`
+                    : `${r.watchedPct}% played`
+                }
+              >
+                {r.watchedPct}%
+              </span>
+            )}
             <a href={r.videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
               <ExternalLink size={13} /> open original
             </a>

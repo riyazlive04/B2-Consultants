@@ -47,6 +47,12 @@ model User {
   image         String?
   role          Role       @default(USER)
   status        UserStatus @default(ACTIVE)
+  /// Part 2 §13: "dark and light per user" — the founder prefers dark, others may not.
+  /// SYSTEM defers to the OS setting, which is why it is the default rather than LIGHT:
+  /// a fresh account should follow the machine, not impose one person's taste.
+  themePreference ThemePreference @default(SYSTEM)
+  /// Slots this user owned that somebody else covered (Part 2 §7.1).
+  discoveriesCoveredForMe DiscoveryOutcome[] @relation("DiscoveryCoveredFor")
   // Per-user feature overrides (Admin-managed): { "finance": true, "students": false, … }.
   // Missing key → the role's default access applies. Admins always see everything.
   sectionAccess Json?
@@ -114,6 +120,16 @@ model User {
   outreachDiscos           OutreachJourney[]  @relation("OutreachRespDisco")
   enrollmentsClosed        Enrollment[]       @relation("EnrollmentCloser")
   sssSlotsOwned            SssSlot[]          @relation("SssSlotOwner")
+  // Soft-delete authorship: records this user archived (see src/lib/soft-delete.ts)
+  leadsArchived            Lead[]             @relation("LeadArchivedBy")
+  companiesArchived        Company[]          @relation("CompanyArchivedBy")
+  opportunitiesArchived    Opportunity[]      @relation("OpportunityArchivedBy")
+  tasksArchived            ContactTask[]      @relation("ContactTaskArchivedBy")
+  incomesArchived          Income[]           @relation("IncomeArchivedBy")
+  expensesArchived         Expense[]          @relation("ExpenseArchivedBy")
+  invoicesArchived         Invoice[]          @relation("InvoiceArchivedBy")
+  pendingPaymentsArchived  PendingPayment[]   @relation("PendingPaymentArchivedBy")
+  productsArchived         Product[]          @relation("ProductArchivedBy")
 
   @@map("user")
 }
@@ -187,16 +203,49 @@ enum Source {
   PABBLY // Pabbly Connect relay → /api/leads/pabbly (runs alongside Synamate)
 }
 
-enum ProgramLevel {
-  SOLO
-  GUIDED
-  ELITE
-  GN_A1
-  GN_A2
-  GN_B1
-  GN_B2
-  GN_BUNDLE
+// ── Program / course levels ────────────────────────────────────────────────
+// Was `enum ProgramLevel { SOLO GUIDED ELITE GN_A1..GN_B2 GN_BUNDLE OTHER }`. Now a
+// CONFIG TABLE (`Level`) so the founders can add German levels (C1, C2, …) and bundles from
+// the admin dashboard instead of shipping a migration each time (docs/CONFIGURABLE_LEVELS_PLAN.md).
+//
+// The level columns below (Income.programLevel, Enrollment.programLevel, Lead.wonLevel,
+// GnBatch.level, GnPendingJoiner.level, BookOrder.level, PendingPayment.programLevel) store the
+// `Level.code` as text — the SAME values the old enum held ("GN_A1", "SOLO"), so the migration is a
+// verbatim enum→text cast with no data change. `code` is treated as an immutable natural key;
+// server actions validate a submitted code against the active Level rows.
+enum LevelKind {
+  COACHING_TIER // SOLO / GUIDED / ELITE — B2 coaching tiers; seeded + locked, not user-editable
+  GERMAN_LEVEL // GN_A1 … GN_C2 — the German course levels the founders add
+  GERMAN_BUNDLE // GN_BUNDLE / A1_A2 … — composed of GERMAN_LEVELs
   OTHER
+}
+
+// The configurable level/tier catalogue. One row per sellable level or bundle.
+model Level {
+  id     String    @id @default(cuid())
+  code   String    @unique // stable key stored on every level column: "GN_A1", "SOLO", "GN_C1"
+  label  String // display: "GN A1"
+  kind   LevelKind
+  order  Int       @default(0) // display order within a kind
+  active Boolean   @default(true)
+  locked Boolean   @default(false) // coaching tiers: code/kind immutable, not deletable
+
+  /// Which GL income account this level's revenue posts to (chart-of-accounts code). German levels
+  /// default to "4030" (Income — German Note); overridable per level. Never null → posting is safe.
+  incomeAccountCode String @default("4030")
+
+  /// German-Note economics, integer paise. Null for coaching tiers / OTHER.
+  booksCostInrMinor BigInt?
+  tutorCostInrMinor BigInt?
+
+  /// Bundle composition — ordered member `code`s, only for kind = GERMAN_BUNDLE.
+  bundleMembers String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind, active, order])
+  @@map("level")
 }
 
 enum Signal {
@@ -241,6 +290,16 @@ enum PendingPaymentStatus {
   DROPPED
 }
 
+/// Which business a cost belongs to (§1.4). Income derives its line from the programme
+/// level, but a Meta Ads invoice or the office rent names no programme, so an expense has
+/// to be told. SHARED is the default and is apportioned across both lines by revenue share
+/// — only costs that genuinely belong to ONE business should be tagged B2 or GERMAN_NOTE.
+enum ExpenseBusinessLine {
+  B2
+  GERMAN_NOTE
+  SHARED
+}
+
 // Daily income entry (PRD1 §4.2). Admin-only.
 model Income {
   id             String        @id @default(cuid())
@@ -254,7 +313,7 @@ model Income {
   amountInrMinor BigInt        @default(0) // paise
   amountEurMinor BigInt        @default(0) // cents
   fxRateUsed     Decimal       @db.Decimal(14, 6) // INR per 1 EUR on entry date
-  programLevel   ProgramLevel
+  programLevel   String // Level.code (was ProgramLevel enum)
   paymentType    PaymentType
   paymentMethod  PaymentMethod
   notes          String?
@@ -265,11 +324,15 @@ model Income {
   enteredBy      User?         @relation("IncomeEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+  deletedById    String?
+  deletedBy      User?         @relation("IncomeArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@unique([source, externalRef])
   @@index([date])
   @@index([studentId])
   @@index([programLevel, date])
+  @@index([deletedAt])
   @@map("income")
 }
 
@@ -282,6 +345,10 @@ model Expense {
   fxRateUsed     Decimal         @db.Decimal(14, 6)
   category       ExpenseCategory
   isCogs         Boolean         @default(false)
+  /// Defaults to SHARED so every pre-existing row keeps behaving exactly as it did before
+  /// this column existed (apportioned by revenue share) — the split only sharpens as costs
+  /// are actually tagged, and never silently reattributes history.
+  businessLine   ExpenseBusinessLine @default(SHARED)
   vendor         String
   notes          String?
   source         Source          @default(MANUAL)
@@ -291,10 +358,14 @@ model Expense {
   enteredBy      User?           @relation("ExpenseEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+  deletedById    String?
+  deletedBy      User?           @relation("ExpenseArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@unique([source, externalRef])
   @@index([date])
   @@index([isCogs, date])
+  @@index([deletedAt])
   @@map("expense")
 }
 
@@ -305,7 +376,7 @@ model PendingPayment {
   studentName      String
   studentId        String?
   student          Student?             @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  programLevel     ProgramLevel
+  programLevel     String // Level.code (was ProgramLevel enum)
   totalFeeInrMinor BigInt               @default(0)
   totalFeeEurMinor BigInt               @default(0)
   fxRateUsed       Decimal              @db.Decimal(14, 6)
@@ -314,11 +385,15 @@ model PendingPayment {
   notes            String?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
+  deletedAt        DateTime?
+  deletedById      String?
+  deletedBy        User?                @relation("PendingPaymentArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   whatsappMessages WhatsAppMessage[]
   instalments      Instalment[]
 
   @@index([status, nextDueDate])
+  @@index([deletedAt])
   @@map("pending_payment")
 }
 
@@ -418,7 +493,7 @@ model Lead {
   leadSource     LeadSource
   dateIn         DateTime      @db.Date
   stage          LeadStage     @default(NEW_LEAD)
-  wonLevel       ProgramLevel? // set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
+  wonLevel       String? // Level.code; set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
   paymentPlan    PaymentPlan? // set from DEPOSIT_PAID onward — split pay vs full pay
   notes          String?
   source         Source        @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
@@ -434,6 +509,9 @@ model Lead {
   enteredBy      User?         @relation("LeadEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+  deletedById    String?
+  deletedBy      User?         @relation("LeadArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   outcomes            DiscoveryOutcome[]
   callLogs            CallLog[]
@@ -456,6 +534,7 @@ model Lead {
   subscriptions       Subscription[]
   messages            Message[]
   workflowEnrollments WorkflowEnrollment[]
+  consents            ConsentRecord[]
 
   @@unique([source, externalRef])
   @@index([stage])
@@ -463,6 +542,7 @@ model Lead {
   @@index([leadSource])
   @@index([assignedToId])
   @@index([companyId])
+  @@index([deletedAt])
   @@map("lead")
 }
 
@@ -505,6 +585,11 @@ model DiscoveryOutcome {
   bantNeed        Boolean     @default(false)
   bantTimeline    Boolean     @default(false)
   sssDate         DateTime?   @db.Date
+  /// Part 2 §7.1: a stand-in ran this call in someone else's slot. When set, THIS leg's
+  /// commission splits substitutePct to the stand-in (enteredById) and the rest to the slot's
+  /// owner (this user). Null = nobody covered; the leg pays whole, as it always has.
+  coveredForId    String?
+  coveredFor      User?       @relation("DiscoveryCoveredFor", fields: [coveredForId], references: [id], onDelete: SetNull)
   notes           String? // key notes to closer
   source          Source      @default(MANUAL)
   manualOverride  Boolean     @default(false)
@@ -627,6 +712,8 @@ model Company {
   owner        User?     @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   customFields Json?
   deletedAt    DateTime?
+  deletedById  String?
+  deletedBy    User?     @relation("CompanyArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -680,10 +767,14 @@ model ContactTask {
   createdBy    User?      @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+  deletedById  String?
+  deletedBy    User?      @relation("ContactTaskArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([status, dueAt])
   @@index([leadId])
   @@index([assignedToId, status])
+  @@index([deletedAt])
   @@map("contact_task")
 }
 
@@ -760,11 +851,15 @@ model Opportunity {
   lostReason    String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+  deletedById   String?
+  deletedBy     User?             @relation("OpportunityArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   notes         ContactNote[]
 
   @@index([pipelineId, stageId, position])
   @@index([leadId])
   @@index([assignedToId, status])
+  @@index([deletedAt])
   @@map("opportunity")
 }
 
@@ -863,10 +958,13 @@ model Product {
   interval      ProductInterval @default(ONE_TIME)
   active        Boolean         @default(true)
   deletedAt     DateTime?
+  deletedById   String?
+  deletedBy     User?           @relation("ProductArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   subscriptions Subscription[]
 
+  @@index([deletedAt])
   @@map("product")
 }
 
@@ -913,12 +1011,16 @@ model Invoice {
   createdBy        User?             @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+  deletedAt        DateTime?
+  deletedById      String?
+  deletedBy        User?             @relation("InvoiceArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   items            InvoiceLineItem[]
   payments         InvoicePayment[]
 
   @@index([status])
   @@index([kind, createdAt])
   @@index([leadId])
+  @@index([deletedAt])
   @@map("invoice")
 }
 
@@ -1476,9 +1578,18 @@ enum TaskCompletion {
 // LTV = sum of linked Income across all enrollments — computed, never stored.
 model Student {
   id            String      @id @default(cuid())
+  /// Human-readable student number shown beside the name EVERYWHERE (§6.1). Two students
+  /// called "Anna Smith" are indistinguishable on screen without it — that ambiguity has
+  /// already caused a real payment mix-up. The cuid `id` can't do this job: nobody can read
+  /// one aloud on a call. Nullable because it is backfilled, and unique so the generator can
+  /// rely on the database to reject a collision rather than a read-then-write race.
+  code          String?     @unique
   fullName      String
   email         String?
   phone         String?
+  /// Intake field 4 of 4 (spec Part 2 §1: name / email / phone / address). Also the ship-to
+  /// the book vendor couriers against, so BookOrder snapshots it rather than reading it live.
+  address       String?
   industry      String?
   targetRole    String? // target country role in Germany
   leadSource    LeadSource? // GHOSTED_BLUEPRINT here drives Phase 3 attribution
@@ -1497,6 +1608,8 @@ model Student {
   pendingPayments    PendingPayment[]
   satisfactionScores SatisfactionScore[]
   gnMemberships      GnBatchMember[]
+  pendingJoins       GnPendingJoiner[]
+  bookOrders         BookOrder[]
   whatsappMessages   WhatsAppMessage[]
   agreements         Agreement[]
 
@@ -1508,7 +1621,7 @@ model Enrollment {
   id              String          @id @default(cuid())
   studentId       String
   student         Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  programLevel    ProgramLevel // SOLO / GUIDED / ELITE only for B2 (service-validated)
+  programLevel    String // Level.code — SOLO / GUIDED / ELITE only for B2 (service-validated)
   enrollmentDate  DateTime        @db.Date
   duration        ProgramDuration
   programEndDate  DateTime?       @db.Date // enrollment + 90/120 days; null for LIFETIME
@@ -1759,7 +1872,7 @@ enum GnVideoProvider {
 model GnBatch {
   id        String        @id @default(cuid())
   name      String // "A1 Evening — July 2026"
-  level     ProgramLevel // GN_A1..GN_B2 only (service-validated, like B2_LEVELS)
+  level     String // Level.code — GN_A1..GN_B2 only (service-validated, like B2_LEVELS)
   tutorId   String?
   tutor     User?         @relation("GnBatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
   status         GnBatchStatus @default(ACTIVE)
@@ -1769,6 +1882,7 @@ model GnBatch {
   updatedAt      DateTime      @updatedAt
 
   members    GnBatchMember[]
+  pendingJoiners GnPendingJoiner[]
   recordings GnRecording[]
   posts      GnPost[]
   modules    GnModule[]
@@ -1876,7 +1990,23 @@ model GnRecordingWatch {
   recording   GnRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
   userId      String
   user        User        @relation("GnRecordingWatchUser", fields: [userId], references: [id], onDelete: Cascade)
+  /// When the student SAID they watched it (the tick). Kept, but no longer the truth.
   watchedAt   DateTime    @default(now())
+  /// Whether the student actually ticked "watched". Previously implied by the row existing —
+  /// but tracking now creates rows too, so the claim needs saying out loud. Defaults true so
+  /// every pre-existing row (which could only have come from a tick) keeps its meaning.
+  selfReported Boolean    @default(true)
+
+  /// Spec §10.3: "the tracked percentage is the source of truth" over a self-reported
+  /// 'watched'. 0–100, high-water mark — scrubbing backwards must not erase progress.
+  /// Null = never tracked (a legacy tick, or a host that reports no progress), which is
+  /// why this is nullable rather than 0: "unknown" and "watched none" are different claims.
+  watchedPct      Int?
+  /// Furthest position reached and the clip length, both in whole seconds — kept so a
+  /// percentage can be re-derived and audited rather than taken on faith.
+  positionSecs    Int?
+  durationSecs    Int?
+  lastHeartbeatAt DateTime?
 
   @@unique([recordingId, userId])
   @@index([userId])
@@ -2008,6 +2138,7 @@ model GnWorkshop {
 
   conversions GnWorkshopConversion[]
   adSets      GnWorkshopAdSet[]
+  pendingJoiners GnPendingJoiner[]
 
   @@index([status])
   @@map("gn_workshop")
@@ -2226,6 +2357,24 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 
   @@map("app_setting")
+}
+
+// A recorded commission payout run (audit §C #23). getCommissionReport computes the deal-team
+// split per payment at read time; this snapshots a month's per-person totals so a run is a durable
+// artefact, not a screen the founder eyeballs. Admin-triggered (finance.write) — never a cron.
+// `postedEntryId` links the optional Dr Team-salaries / Cr Accounts-payable accrual (an accrual,
+// not a cash payment) when financePosting.commissionAccrual is on. `createdById` is a bare scalar,
+// not an FK — the activity log is the durable record of who ran it. Unique per month = idempotent.
+model CommissionPayoutRun {
+  id            String   @id @default(cuid())
+  month         DateTime @unique @db.Date // first-of-month this run snapshots
+  totalInrMinor BigInt   @default(0)
+  lines         Json // [{ name, amountInrMinor, deals }] per person, snapshotted at run time
+  postedEntryId String? // journal entry id when accrued to the ledger (else null)
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  @@map("commission_payout_run")
 }
 
 // ───────────────────────────── Wave-2 — WhatsApp (WATI) ─────────────────────────────
@@ -2918,4 +3067,184 @@ model OutreachStepLog {
   @@index([status, dueAt])
   @@index([journeyId])
   @@map("outreach_step_log")
+}
+
+/// GDPR consent (spec §15 + §19.1-C1: "nothing is stored without the user's consent").
+///
+/// The gate lives in the intake path, not here: `submitBooking` refuses to persist a Lead,
+/// a BookingRequest or anything else until the prospect ticks the box, so a person who
+/// declines leaves NO row behind — including no row in this table. A ConsentRecord therefore
+/// only ever exists alongside the Lead it authorised, which is why `leadId` is required.
+///
+/// Recorded per spec: region (best-effort, from the form), timestamp, and the storage flag
+/// (`granted`). `revokedAt` is the withdrawal half — GDPR consent is retractable, and a
+/// withdrawal has to be provable after the fact, so it is stamped rather than deleted.
+///
+/// Distinct from WhatsAppOptOut, which is a post-hoc "stop messaging me" on a lead we already
+/// hold. This is the prior question: were we allowed to hold them at all?
+model ConsentRecord {
+  id     String @id @default(cuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  /// The storage flag. A row is only written on a grant, so this is true in practice; it stays
+  /// explicit so a future "declined but told us why" flow has somewhere honest to sit.
+  granted       Boolean @default(true)
+  /// What they agreed to, in the words shown on the form — the wording is the evidence.
+  purpose       String
+  /// Version of the privacy wording in force when they agreed, so a later policy change can
+  /// never be mistaken for what THIS person consented to.
+  policyVersion String?
+  /// Best-effort jurisdiction (DE / IN / …) taken from the form's country/city answer.
+  /// Nullable on purpose: a guessed region is worse than a missing one.
+  region        String?
+  source        Source  @default(BOOKING_FORM)
+
+  /// Observed at grant time — the same pair the agreement e-sign trail captures.
+  ipAddress String?
+  userAgent String?
+
+  grantedAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([leadId])
+  @@index([grantedAt])
+  @@map("consent_record")
+}
+
+/// Part 2 §13. SYSTEM follows the OS; the other two are a deliberate override.
+enum ThemePreference {
+  SYSTEM
+  LIGHT
+  DARK
+}
+
+/// Which timetable a joiner can actually attend (spec Part 2 §2.1: batches are keyed to the
+/// student's chosen date/time). EITHER is the useful default — most people say "whatever
+/// opens first", and pretending otherwise would strand them in the pool.
+enum GnSlotPreference {
+  WEEKDAY
+  WEEKEND
+  EITHER
+}
+
+/// The pending pool (spec Part 2 §2.2: "Hold unassigned single joiners in a pending pool
+/// until a batch can be opened").
+///
+/// THE POINT: a workshop that yields one joiner must NOT open a batch — the founders wait
+/// for the next workshop to accumulate enough people. That is why some workshops show no
+/// batch assigned, and why batch numbers legitimately have gaps (§2.1). Without somewhere to
+/// park that person they are simply forgotten, which is the manual process's actual failure.
+///
+/// A row here means "paid/committed, not yet seated". `assignedBatchId` is the exit: set when
+/// they finally get a seat, which keeps the history of how long they waited rather than
+/// deleting the evidence.
+model GnPendingJoiner {
+  id        String       @id @default(cuid())
+  studentId String
+  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  level     String // Level.code (was ProgramLevel enum)
+
+  preference    GnSlotPreference @default(EITHER)
+  /// Free text, as captured on the confirmation call ("evening", "after 7pm").
+  preferredTime String?
+  /// Which workshop they came out of, so "this workshop produced 1 joiner" stays answerable.
+  workshopId    String?
+  workshop      GnWorkshop?      @relation(fields: [workshopId], references: [id], onDelete: SetNull)
+  notes         String?
+
+  /// Exit fields. Null while waiting; stamped when seated.
+  assignedBatchId String?
+  assignedBatch   GnBatch?  @relation(fields: [assignedBatchId], references: [id], onDelete: SetNull)
+  assignedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One live wait per student per level. A student seated in A1 may later wait for A2, so
+  /// the uniqueness is per level rather than per student.
+  @@unique([studentId, level])
+  @@index([level, preference])
+  @@index([assignedBatchId])
+  @@map("gn_pending_joiner")
+}
+
+/// The book publisher (spec §9.2, Part 2 §4). Today the vendor is a free-text string on an
+/// Expense row, so "what did we order from whom, and did it ship" is unanswerable.
+model Vendor {
+  id      String  @id @default(cuid())
+  name    String
+  phone   String?
+  email   String?
+  address String?
+  notes   String?
+  active  Boolean @default(true)
+
+  orders    BookOrder[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@map("vendor")
+}
+
+/// Where a book order is in the publisher flow (spec §9.2 / Part 2 §4):
+/// token advance → confirm level → vendor quotation → pay → courier.
+enum BookOrderStatus {
+  /// Held back because the student hasn't paid enough yet (EMI). The spec's default for
+  /// anyone not paying a lump sum up front.
+  DEFERRED
+  /// Ready to order; we've asked the publisher for a price.
+  QUOTE_REQUESTED
+  QUOTED
+  ORDERED
+  PAID
+  COURIERED
+  CANCELLED
+}
+
+/// A physical book order for ONE level (spec §19.3: "BOOK_ORDER re-pointed to per-level
+/// quotations: A1 first, fresh quote for A2"). Per level, not per contract — the founders
+/// deliberately re-quote before each level rather than ordering a 3-level set up front.
+///
+/// Ordering trigger (Part 2 §4.4): a big up-front payment orders immediately; an EMI student
+/// defers until they've paid enough. The threshold is config, not a constant here — the
+/// spec's ₹30,000 is an example the founders gave, and §18.3 lists the precise figure as
+/// still open.
+model BookOrder {
+  id        String       @id @default(cuid())
+  studentId String
+  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  level     String // Level.code (was ProgramLevel enum)
+  vendorId  String?
+  vendor    Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  status BookOrderStatus @default(DEFERRED)
+
+  /// Money in integer paise, like every other amount in this schema.
+  quotedAmountInrMinor BigInt?
+  paidAmountInrMinor   BigInt?
+
+  /// Snapshotted at order time, NOT read live off the Student: the books ship to where the
+  /// student lived when we ordered, and a later address edit must not rewrite that history.
+  shipToAddress String?
+  shipToPhone   String?
+  courierRef    String?
+
+  /// Why we're holding — surfaced to the team so DEFERRED never reads as "forgotten".
+  deferReason String?
+  notes       String?
+
+  quotedAt    DateTime?
+  orderedAt   DateTime?
+  paidAt      DateTime?
+  courieredAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One order per student per level; a re-order after a cancellation reuses the row.
+  @@unique([studentId, level])
+  @@index([status])
+  @@index([vendorId])
+  @@map("book_order")
 }

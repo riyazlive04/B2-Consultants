@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Field, TextInput } from "@/components/ui/form";
-import { formatEurMinor, formatInrMinor } from "@/lib/format";
+import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 
 /**
  * The ₹ / € amount boxes shared by every money form (income, expense, pending fee).
@@ -15,7 +15,11 @@ import { formatEurMinor, formatInrMinor } from "@/lib/format";
  * what actually gets stored.
  */
 
-/** Major-unit input ("25,000.50") → number, or null when it isn't a usable amount. */
+/**
+ * Major-unit input ("25000.50") → number, or null when it isn't a usable amount.
+ * `kind="money"` already strips separators as they're typed, so the box only ever holds
+ * digits and one dot; the comma strip stays as a belt-and-braces for a programmatic default.
+ */
 function parseMajor(value: string): number | null {
   const n = Number(value.replace(/,/g, "").trim());
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -26,6 +30,7 @@ const toMinor = (major: number) => Math.round(major * 100);
 export function AmountPair({
   fxRate,
   fxStale = false,
+  fxDate,
   inrName,
   eurName,
   inrLabel,
@@ -37,6 +42,8 @@ export function AmountPair({
   /** INR per EUR, as the server will stamp it. */
   fxRate: number;
   fxStale?: boolean;
+  /** ISO date the rate was published — shown so the number is auditable (§4.2). */
+  fxDate?: string;
   inrName: string;
   eurName: string;
   inrLabel: string;
@@ -64,8 +71,13 @@ export function AmountPair({
   }, []);
 
   const usable = fxRate > 0;
+  // §4.2: the conversion preview used to assert a rate with no provenance, so there
+  // was no way to tell a live ECB rate from a cached or fallback one. Name the source
+  // and the publication date every time the number is shown.
   const rateNote = usable
-    ? `at ${formatInrMinor(toMinor(fxRate))}/€${fxStale ? " · rate may be stale" : ""}`
+    ? `at ${formatInrMinor(toMinor(fxRate))}/€ · ECB${fxDate ? ` ${formatDate(fxDate)}` : ""}${
+        fxStale ? " · cached, may be stale" : ""
+      }`
     : "";
 
   const inrAmount = parseMajor(inr);
@@ -87,7 +99,7 @@ export function AmountPair({
         <TextInput
           ref={inrRef}
           name={inrName}
-          inputMode="decimal"
+          kind="money"
           placeholder="0.00"
           defaultValue={defaultInr}
           onChange={(e) => setInr(e.currentTarget.value)}
@@ -96,7 +108,7 @@ export function AmountPair({
       <Field label={eurLabel} hint={eurHint}>
         <TextInput
           name={eurName}
-          inputMode="decimal"
+          kind="money"
           placeholder="0.00"
           defaultValue={defaultEur}
           onChange={(e) => setEur(e.currentTarget.value)}

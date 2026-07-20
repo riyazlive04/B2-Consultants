@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { ACTIVE } from "@/lib/soft-delete";
 import { formatInrMinor, formatMonth } from "@/lib/format";
 import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS } from "@/lib/labels";
 import {
@@ -104,6 +105,7 @@ function toReportResult(
 
 async function getContactsReport(groupBy: string): Promise<ReportResult> {
   const leads = await prisma.lead.findMany({
+    where: ACTIVE,
     select: {
       leadSource: true,
       stage: true,
@@ -140,6 +142,7 @@ async function getContactsReport(groupBy: string): Promise<ReportResult> {
 
 async function getOpportunitiesReport(groupBy: string): Promise<ReportResult> {
   const opps = await prisma.opportunity.findMany({
+    where: { deletedAt: null, lead: { deletedAt: null } },
     select: {
       status: true,
       source: true,
@@ -182,6 +185,7 @@ async function getOpportunitiesReport(groupBy: string): Promise<ReportResult> {
 
 async function getInvoicesReport(groupBy: string): Promise<ReportResult> {
   const invoices = await prisma.invoice.findMany({
+    where: ACTIVE,
     select: { status: true, kind: true, createdAt: true, totalInrMinor: true },
   });
 

@@ -18,17 +18,24 @@ import { saveOutreachConfig, runOutreachNow, backfillJourneys } from "@/server/o
  * explicit, separate act.
  */
 
-const SLA_FIELDS: { key: keyof OutreachConfig["sla"]; label: string; hint: string; unit: string }[] = [
-  { key: "reactionMinutes", label: "Reaction time", hint: "Step 2 — contact within this, or the SOP skips to Step 10", unit: "min" },
-  { key: "check1Hours", label: "Check 1 wait", hint: "Step 5 — after the intro / first call", unit: "h" },
-  { key: "check2Hours", label: "Check 2 wait", hint: "Step 7 — after the follow-up message", unit: "h" },
-  { key: "finalCheckHours", label: "Final check wait", hint: "Step 9 — after the follow-up call", unit: "h" },
-  { key: "discoConfirm1LeadHours", label: "Disco confirm 1", hint: "Step 14 — hours before the call", unit: "h" },
-  { key: "discoConfirm2LeadHours", label: "Disco confirm 2", hint: "Step 15 — hours before the call", unit: "h" },
-  { key: "discoCancelLeadHours", label: "Disco cancellation", hint: "Step 16 — hours before the call", unit: "h" },
-  { key: "sssConfirm1LeadHours", label: "SSS confirm 1", hint: "Step 19 — hours before the SSS", unit: "h" },
-  { key: "sssConfirm2LeadHours", label: "SSS confirm 2", hint: "Step 20 — hours before the SSS", unit: "h" },
-  { key: "sssCancelLeadHours", label: "SSS cancellation", hint: "Step 21 — hours before the SSS", unit: "h" },
+/**
+ * `max` mirrors the bound `saveOutreachConfig` enforces (1..720h, and 1..1440min for the reaction
+ * window). The server is the real gate — this is here so the two never disagree, which is the point
+ * of stating a rule once (see lib/field-rules).
+ */
+const SLA_HOURS_MAX = 720;
+
+const SLA_FIELDS: { key: keyof OutreachConfig["sla"]; label: string; hint: string; unit: string; max: number }[] = [
+  { key: "reactionMinutes", label: "Reaction time", hint: "Step 2 — contact within this, or the SOP skips to Step 10", unit: "min", max: 1440 },
+  { key: "check1Hours", label: "Check 1 wait", hint: "Step 5 — after the intro / first call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "check2Hours", label: "Check 2 wait", hint: "Step 7 — after the follow-up message", unit: "h", max: SLA_HOURS_MAX },
+  { key: "finalCheckHours", label: "Final check wait", hint: "Step 9 — after the follow-up call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "discoConfirm1LeadHours", label: "Disco confirm 1", hint: "Step 14 — hours before the call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "discoConfirm2LeadHours", label: "Disco confirm 2", hint: "Step 15 — hours before the call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "discoCancelLeadHours", label: "Disco cancellation", hint: "Step 16 — hours before the call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "sssConfirm1LeadHours", label: "SSS confirm 1", hint: "Step 19 — hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
+  { key: "sssConfirm2LeadHours", label: "SSS confirm 2", hint: "Step 20 — hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
+  { key: "sssCancelLeadHours", label: "SSS cancellation", hint: "Step 21 — hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
 ];
 
 export function OutreachSettings({ config, watiLive }: { config: OutreachConfig; watiLive: boolean }) {
@@ -135,6 +142,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
                     type="number"
                     name={f.key}
                     min={1}
+                    max={f.max}
                     step="1"
                     defaultValue={config.sla[f.key]}
                     className="w-20 rounded-field border border-line bg-surface px-2 py-1.5 tnum"
@@ -151,9 +159,13 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
         <div className="grid gap-3 border-t border-line pt-4 sm:grid-cols-2">
           <label className="text-xs">
             <span className="mb-1 block font-medium">Default sender name</span>
+            {/* NOT kind="name": this is a sender-name fallback that ships as the company name
+                "B2 Consultants" — the person-name rule forbids digits and would eat its own
+                default. Bounded free text, capped to match the server. */}
             <input
               name="defaultSpecialistName"
               defaultValue={config.defaultSpecialistName}
+              maxLength={80}
               className="w-full rounded-field border border-line bg-surface px-2 py-1.5"
             />
             <span className="mt-1 block text-caption text-muted">
@@ -166,6 +178,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
               type="number"
               name="maxPerRun"
               min={1}
+              max={1000}
               defaultValue={config.maxPerRun}
               className="w-24 rounded-field border border-line bg-surface px-2 py-1.5 tnum"
             />

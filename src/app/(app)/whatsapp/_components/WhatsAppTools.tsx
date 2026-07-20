@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Trash2, Send } from "lucide-react";
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { Select } from "@/components/ui/form";
+import { fieldKindProps } from "@/components/ui/field-base";
 import { sendTestWhatsApp, setWhatsAppOptOut, sendFreeFormWhatsApp } from "@/server/whatsapp-actions";
 import { WHATSAPP_KINDS, WHATSAPP_KIND_LABELS, type WatiTemplateMap } from "@/lib/whatsapp";
 import { formatDate } from "@/lib/format";
@@ -27,6 +28,12 @@ export function WhatsAppTools({
   const [busy, setBusy] = useState(false);
 
   const [freeSending, setFreeSending] = useState(false);
+
+  // The three number boxes. Shape only — lib/phone.ts still does the authoritative per-country
+  // normalization server-side (its metadata must not reach this bundle).
+  const testPhone = fieldKindProps<HTMLInputElement>("phone", undefined);
+  const freePhone = fieldKindProps<HTMLInputElement>("phone", undefined);
+  const optPhoneField = fieldKindProps<HTMLInputElement>("phone", (e) => setOptPhone(e.target.value));
 
   const sendTest = async (fd: FormData) => {
     setTesting(true);
@@ -91,7 +98,7 @@ export function WhatsAppTools({
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex-1">
               <span className="text-xs font-medium text-muted">Number (with country code)</span>
-              <input name="to" className={`mt-1 ${inputCls}`} placeholder="+91 98765 43210" />
+              <input {...testPhone.attrs} onChange={testPhone.onChange} name="to" className={`mt-1 ${inputCls}`} placeholder="+91 98765 43210" />
             </label>
             <button
               type="submit"
@@ -117,7 +124,7 @@ export function WhatsAppTools({
             so it&apos;s the reliable way to prove delivery.
           </p>
           <form action={sendFree} className="mt-3 space-y-2">
-            <input name="to" className={inputCls} placeholder="+91 98765 43210" />
+            <input {...freePhone.attrs} onChange={freePhone.onChange} name="to" className={inputCls} placeholder="+91 98765 43210" />
             <textarea name="text" rows={2} className={inputCls} placeholder="Hi! This is a test from the B2 dashboard." />
             <button
               type="submit"
@@ -140,7 +147,7 @@ export function WhatsAppTools({
         <div className="mt-4 flex flex-wrap items-end gap-2">
           <label className="flex-1">
             <span className="text-xs font-medium text-muted">Add a number</span>
-            <input value={optPhone} onChange={(e) => setOptPhone(e.target.value)} className={`mt-1 ${inputCls}`} placeholder="+91 98765 43210" />
+            <input {...optPhoneField.attrs} value={optPhone} onChange={optPhoneField.onChange} className={`mt-1 ${inputCls}`} placeholder="+91 98765 43210" />
           </label>
           <button
             type="button"

@@ -81,7 +81,7 @@ export function StageChart({ leads }: { leads: LeadRow[] }) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{l.name}</span>
                 <span className="tnum text-xs text-muted">{l.phone}</span>
-                {l.wonLevel && <Pill tone="good">{PROGRAM_LEVEL_LABELS[l.wonLevel]}</Pill>}
+                {l.wonLevel && <Pill tone="good">{PROGRAM_LEVEL_LABELS[l.wonLevel] ?? l.wonLevel}</Pill>}
                 <span className="ml-auto text-xs text-muted">{formatDate(l.dateIn)}</span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">

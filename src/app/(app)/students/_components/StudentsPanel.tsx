@@ -12,6 +12,7 @@ import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/c
 import { Plus, Download } from "lucide-react";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { LEAD_SOURCE_LABELS, optionsFrom } from "@/lib/labels";
+import { StudentName } from "@/components/ui/StudentName";
 
 const B2_LEVEL_OPTIONS = [
   { value: "SOLO", label: "Solo (lifetime, self-paced)" },
@@ -53,13 +54,14 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
   const exportAllFields = async () => {
     const Papa = (await import("papaparse")).default;
     const data = rows.map((r) => ({
+      "Student ID": csvSafe(r.code ?? ""),
       Name: csvSafe(r.fullName),
       Email: csvSafe(r.email),
       Phone: csvSafe(r.phone),
-      "Program(s)": csvSafe(r.levels),
+      "Programme(s)": csvSafe(r.levels),
       Status: csvSafe(r.statuses),
       "Enrollment date": r.firstEnrollment ? r.firstEnrollment.slice(0, 10) : "",
-      "Program end date": r.programEndDate ? r.programEndDate.slice(0, 10) : "",
+      "Programme end date": r.programEndDate ? r.programEndDate.slice(0, 10) : "",
       "Assigned coach": csvSafe(r.assignedCoach),
       "Lead source": r.leadSource ? LEAD_SOURCE_LABELS[r.leadSource] : "",
       Industry: csvSafe(r.industry),
@@ -94,12 +96,13 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
       key: "name", header: "Student",
       cell: (r) => (
         <Link href={`/students/${r.id}`} className="font-medium text-accent hover:underline">
-          {r.fullName}
+          <StudentName name={r.fullName} code={r.code} />
         </Link>
       ),
-      value: (r) => r.fullName,
+      // code included so the filter box finds a student by number as well as by name
+      value: (r) => (r.code ? `${r.fullName} ${r.code}` : r.fullName),
     },
-    { key: "levels", header: "Program(s)", cell: (r) => r.levels, value: (r) => r.levels },
+    { key: "levels", header: "Programme(s)", cell: (r) => r.levels, value: (r) => r.levels },
     { key: "status", header: "Status", cell: (r) => r.statuses, value: (r) => r.statuses },
     {
       key: "enrolled", header: "Enrolled",
@@ -143,27 +146,27 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
         open={adding}
         onClose={() => setAdding(false)}
         title="New student"
-        subtitle="Created when a student pays. Past Finance income entries with the same name link automatically; duration and end date derive from the program level."
+        subtitle="Created when a student pays. Past Finance income entries with the same name link automatically; duration and end date derive from the programme level."
       >
         <form ref={formRef} action={submit}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Full name">
-              <TextInput name="fullName" required />
+              <TextInput kind="name" name="fullName" required />
             </Field>
             <Field label="Email">
-              <TextInput type="email" name="email" />
+              <TextInput kind="email" name="email" />
             </Field>
             <Field label="Phone / WhatsApp" hint="With country code">
-              <TextInput name="phone" />
+              <TextInput kind="phone" name="phone" />
             </Field>
-            <Field label="Program level">
+            <Field label="Programme level">
               <Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" />
             </Field>
             <Field label="Enrollment date" hint="Date they paid and started">
               <TextInput type="date" name="enrollmentDate" required defaultValue={today} />
             </Field>
             <Field label="Sessions planned" hint="e.g. 12 for Guided">
-              <TextInput name="totalSessionsPlanned" inputMode="numeric" />
+              <TextInput kind="int" name="totalSessionsPlanned" />
             </Field>
             <Field label="Assigned coach">
               <Select name="assignedCoach" options={COACH_OPTIONS} defaultValue="Karthick" />

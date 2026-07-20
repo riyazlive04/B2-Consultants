@@ -7,16 +7,23 @@ import { capabilityCheck, requireSection } from "@/lib/rbac";
 import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
 import { parseMentions } from "@/lib/gn-mentions";
+import { optionalRule, rule } from "@/lib/field-rules";
+import { statusForLegacyStage } from "@/lib/opportunity-status";
+import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { emitTrigger } from "./automation";
 import { logActivity, diffFields } from "./activity-log";
 import type { OpportunityStatus, LeadStage } from "@prisma/client";
 import type { ActionResult } from "./finance-actions";
+import { archiveData, restoreData } from "@/lib/soft-delete";
 
 /**
- * Mutations for the Opportunities Kanban (Synamate "Pipelines"). Moving a card on the DEFAULT
- * pipeline write-throughs to Lead.stage + LeadStageHistory (via `legacyStage`), so the existing
- * pipeline-metrics / funnel / WhatsApp reminder logic stays correct. Pipeline & stage editing
- * requires the `pipeline.configure` capability.
+ * Mutations for the Opportunities Kanban (Synamate "Pipelines"). Moving a card into a stage that
+ * is MAPPED to a lead-lifecycle stage (`PipelineStage.legacyStage`) write-throughs to Lead.stage +
+ * LeadStageHistory, so pipeline-metrics / funnel / WhatsApp reminders stay correct — on ANY
+ * pipeline, not just the seeded default. The default Sales pipeline is mapped by the seed; custom
+ * pipelines opt in per-stage via the Manage-board picker (`setStageLegacyStage`). Unmapped stages
+ * (`legacyStage` null) never touch Lead.stage, so a board that's a separate process stays separate.
+ * Pipeline & stage editing requires the `pipeline.configure` capability.
  */
 
 function firstError(e: z.ZodError): string {
@@ -28,12 +35,9 @@ const OPP_SOURCES = [
   "META_ADS", "LANDING_PAGE", "GHOSTED_BLUEPRINT", "OTHER",
 ] as const;
 
-function statusForLegacy(legacy: LeadStage | null): OpportunityStatus {
-  if (legacy === "WON") return "WON";
-  if (legacy === "LOST") return "LOST";
-  if (legacy === "NO_SHOW") return "ABANDONED";
-  return "OPEN";
-}
+// The legacy-stage → OpportunityStatus mapping now lives in lib/opportunity-status.ts so the
+// Pipeline board's reverse write-through (issue 1.5) shares exactly one copy of the rule.
+const statusForLegacy = statusForLegacyStage;
 
 // ─────────────────────────── Move a card (drag-drop) ───────────────────────────
 
@@ -53,7 +57,11 @@ export async function moveOpportunity(
     return { ok: false, error: "Invalid target stage" };
   }
   const legacy = toStage.legacyStage;
-  const newStatus = statusForLegacy(legacy);
+  // A bridged (default-pipeline) stage dictates the status. A custom pipeline's columns carry no
+  // won/lost meaning (legacyStage is null), so a drag there must PRESERVE the card's current status
+  // — otherwise dragging a deal you'd marked Won into the next column silently resets it to Open and
+  // erases wonAt, losing the win.
+  const newStatus: OpportunityStatus = legacy ? statusForLegacy(legacy) : opp.status;
   let stageChangedTo: LeadStage | null = null;
 
   await prisma.$transaction(async (tx) => {
@@ -72,7 +80,9 @@ export async function moveOpportunity(
       data: {
         stageId: toStageId,
         status: newStatus,
-        wonAt: newStatus === "WON" ? opp.wonAt ?? new Date() : null,
+        // Clear wonAt only when a bridged stage moves the card OUT of Won; on a custom pipeline
+        // (legacy null) the status/date are preserved, so keep whatever was there.
+        wonAt: newStatus === "WON" ? opp.wonAt ?? new Date() : legacy ? null : opp.wonAt,
       },
     });
     for (let i = 0; i < targetIds.length; i++) {
@@ -88,8 +98,12 @@ export async function moveOpportunity(
         await tx.opportunity.update({ where: { id: sourceIds[i].id }, data: { position: i } });
       }
     }
-    // Write-through on the default sales pipeline only.
-    if (opp.pipeline.isDefault && legacy) {
+    // Write-through whenever the TARGET stage is mapped to a lifecycle stage — regardless of
+    // which pipeline it's on. The old `isDefault` gate meant a card moved on a second pipeline
+    // never updated Lead.stage, so the funnel / reminders / dashboard silently undercounted it
+    // (schema.prisma PipelineStage.legacyStage). An unmapped stage still has `legacy` null here,
+    // so custom boards that carry no lifecycle meaning are unaffected.
+    if (legacy) {
       const lead = await tx.lead.findUnique({ where: { id: opp.leadId }, select: { stage: true } });
       if (lead && lead.stage !== legacy) {
         await tx.lead.update({ where: { id: opp.leadId }, data: { stage: legacy } });
@@ -129,12 +143,14 @@ export async function moveOpportunity(
 
 const createOppSchema = z.object({
   leadId: z.string().trim().optional(),
-  newName: z.string().trim().optional(),
-  newPhone: z.string().trim().optional(),
+  // The inline "new contact" pair — a real person, unlike the deal name below.
+  newName: optionalRule("name"),
+  newPhone: optionalRule("phone"),
   pipelineId: z.string().min(1, "Pick a pipeline"),
   stageId: z.string().min(1, "Pick a stage"),
-  name: z.string().trim().optional(),
-  valueInr: z.string().trim().optional(),
+  // Deal name: free text, digits and all ("Level 2 — Q3 renewal").
+  name: optionalRule("text"),
+  valueInr: optionalRule("money"),
   source: z.enum(OPP_SOURCES).optional().or(z.literal("")),
   assignedToId: z.string().trim().optional(),
 });
@@ -223,8 +239,8 @@ export async function createOpportunity(form: FormData): Promise<ActionResult> {
 }
 
 const updateOppSchema = z.object({
-  name: z.string().trim().min(1, "Opportunity name is required"),
-  valueInr: z.string().trim().optional(),
+  name: rule("text").pipe(z.string().min(1, "Opportunity name is required")),
+  valueInr: optionalRule("money"),
   source: z.enum(OPP_SOURCES).optional().or(z.literal("")),
   assignedToId: z.string().trim().optional(),
   status: z.enum(["OPEN", "WON", "LOST", "ABANDONED"]).optional().or(z.literal("")),
@@ -249,7 +265,9 @@ export async function updateOpportunity(id: string, form: FormData): Promise<Act
   if (!opp) return { ok: false, error: "Opportunity not found" };
 
   const fx = await getTodayInrPerEur();
-  const valueInrMinor = d.valueInr?.trim() ? majorStringToMinor(d.valueInr) : 0n;
+  // Preserve the current value when the Value box is left blank, rather than zeroing the deal — an
+  // untouched/cleared field on the edit modal must not wipe a real amount (to set zero, type 0).
+  const valueInrMinor = d.valueInr?.trim() ? majorStringToMinor(d.valueInr) : opp.valueInrMinor;
   const valueEurMinor = inrMinorToEurMinor(valueInrMinor, fx.rate);
   const status = (d.status || "OPEN") as OpportunityStatus;
 
@@ -307,6 +325,7 @@ export async function updateOpportunity(id: string, form: FormData): Promise<Act
   return { ok: true };
 }
 
+/** Delete = ARCHIVE. Notes stay on the parent lead; restore from the Archived tab. */
 export async function deleteOpportunity(id: string): Promise<ActionResult> {
   const session = await requireSection("opportunities");
   const opp = await prisma.opportunity.findUnique({
@@ -314,14 +333,60 @@ export async function deleteOpportunity(id: string): Promise<ActionResult> {
     select: { leadId: true, name: true, lead: { select: { name: true } } },
   });
   if (!opp) return { ok: false, error: "Opportunity not found" };
-  await prisma.opportunity.delete({ where: { id } });
+  await prisma.opportunity.update({ where: { id }, data: archiveData(session.user.id) });
   await logActivity(session, {
-    action: "opportunity.delete",
+    action: "opportunity.archive",
     section: "opportunities",
     entityType: "Opportunity",
     entityId: id,
-    summary: `Deleted opportunity ${opp.name} for ${opp.lead.name}`,
+    summary: `Archived opportunity ${opp.name} for ${opp.lead.name}`,
     meta: { leadId: opp.leadId },
+  });
+  revalidatePath("/opportunities");
+  revalidatePath(`/contacts/${opp.leadId}`);
+  return { ok: true };
+}
+
+/** Restore an archived opportunity. */
+export async function restoreOpportunity(id: string): Promise<ActionResult> {
+  const session = await requireSection("opportunities");
+  const opp = await prisma.opportunity.findUnique({
+    where: { id },
+    select: { leadId: true, name: true, deletedAt: true, lead: { select: { name: true } } },
+  });
+  if (!opp) return { ok: false, error: "Opportunity not found" };
+  if (!opp.deletedAt) return { ok: false, error: "This opportunity is not archived" };
+  await prisma.opportunity.update({ where: { id }, data: restoreData });
+  await logActivity(session, {
+    action: "opportunity.restore",
+    section: "opportunities",
+    entityType: "Opportunity",
+    entityId: id,
+    summary: `Restored opportunity ${opp.name} for ${opp.lead.name}`,
+    meta: { leadId: opp.leadId },
+  });
+  revalidatePath("/opportunities");
+  revalidatePath(`/contacts/${opp.leadId}`);
+  return { ok: true };
+}
+
+/** Permanent delete — only from the Archived tab. Notes detach (SetNull) to the parent lead. */
+export async function purgeOpportunity(id: string): Promise<ActionResult> {
+  const session = await requireSection("opportunities");
+  const opp = await prisma.opportunity.findUnique({
+    where: { id },
+    select: { leadId: true, name: true, deletedAt: true, lead: { select: { name: true } } },
+  });
+  if (!opp) return { ok: false, error: "Opportunity not found" };
+  if (!opp.deletedAt) return { ok: false, error: "Archive it first" };
+  await prisma.opportunity.delete({ where: { id } });
+  await logActivity(session, {
+    action: "opportunity.purge",
+    section: "opportunities",
+    entityType: "Opportunity",
+    entityId: id,
+    summary: `Permanently deleted the archived opportunity ${opp.name}`,
+    meta: { leadId: opp.leadId, hard: true },
   });
   revalidatePath("/opportunities");
   revalidatePath(`/contacts/${opp.leadId}`);
@@ -441,6 +506,42 @@ export async function renameStage(id: string, name: string): Promise<ActionResul
   return { ok: true };
 }
 
+/**
+ * Map a CUSTOM pipeline's stage to a lead-lifecycle stage (or clear the mapping with null/"").
+ * This is how a second pipeline opts into the Lead.stage bridge: once a stage is mapped, moving a
+ * card into it write-throughs to Lead.stage exactly like the default Sales board (moveOpportunity).
+ * The default pipeline's mapping is seed-managed and load-bearing, so it can't be re-pointed here.
+ */
+export async function setStageLegacyStage(stageId: string, legacy: string | null): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
+  const value = legacy && legacy.trim() ? legacy.trim() : null;
+  if (value !== null && !(value in LEAD_STAGE_LABELS)) return { ok: false, error: "Unknown lifecycle stage" };
+  const stage = await prisma.pipelineStage.findUnique({
+    where: { id: stageId },
+    select: { name: true, legacyStage: true, pipeline: { select: { isDefault: true } } },
+  });
+  if (!stage) return { ok: false, error: "Stage not found" };
+  if (stage.pipeline.isDefault) {
+    return { ok: false, error: "The default Sales pipeline's stage mapping is managed by the system" };
+  }
+  if (stage.legacyStage === value) return { ok: true };
+  await prisma.pipelineStage.update({ where: { id: stageId }, data: { legacyStage: value as LeadStage | null } });
+  await logActivity(session, {
+    action: "stage.update",
+    section: "opportunities",
+    entityType: "PipelineStage",
+    entityId: stageId,
+    summary: value
+      ? `Mapped the ${stage.name} stage to lead stage "${LEAD_STAGE_LABELS[value]}"`
+      : `Cleared the lifecycle mapping on the ${stage.name} stage`,
+    meta: { legacyStage: value },
+  });
+  revalidatePath("/opportunities");
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
 export async function deleteStage(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
@@ -500,7 +601,9 @@ export async function reorderStages(pipelineId: string, orderedIds: string[]): P
 // in this file uses. `leadId` is still required on ContactNote (not nullable), so every
 // opportunity note is stamped with the deal's underlying contact too.
 
-const oppNoteSchema = z.object({ body: z.string().trim().min(1, "Note can't be empty") });
+const oppNoteSchema = z.object({
+  body: rule("text").pipe(z.string().min(1, "Note can't be empty")),
+});
 
 export type OpportunityNote = {
   id: string;

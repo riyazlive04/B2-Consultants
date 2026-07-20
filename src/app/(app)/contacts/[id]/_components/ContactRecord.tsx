@@ -2,9 +2,10 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Pencil, Plus, X, StickyNote, GitBranch, MessageCircle, PhoneCall,
-  CalendarCheck, CheckCircle2, Pin, Trash2, Clock,
+  CalendarCheck, CheckCircle2, Pin, Trash2, Clock, GraduationCap,
 } from "lucide-react";
 import type { CustomFieldDefinition } from "@prisma/client";
 import type { ContactDetail } from "@/server/contacts-metrics";
@@ -21,6 +22,7 @@ import {
   updateContact, setContactOwner, addContactTag, removeContactTag, setContactCustomField,
   createNote, deleteNote, toggleNotePin, createTask, toggleTask, deleteTask,
 } from "@/server/contacts-actions";
+import { convertLeadToStudent } from "@/server/students-actions";
 
 const SOURCE_OPTS = [
   { value: "INSTAGRAM", label: "Instagram" }, { value: "YOUTUBE", label: "YouTube" },
@@ -52,6 +54,7 @@ export default function ContactRecord({
   allTags,
   customFields,
   agreement,
+  canConvert,
 }: {
   contact: ContactDetail;
   owners: { id: string; name: string }[];
@@ -59,7 +62,9 @@ export default function ContactRecord({
   allTags: string[];
   customFields: CustomFieldDefinition[];
   agreement: AgreementSummary;
+  canConvert: boolean;
 }) {
+  const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [newTag, setNewTag] = useState("");
@@ -73,6 +78,20 @@ export default function ContactRecord({
     if (!res.ok) return setEditError(res.error);
     toast("Contact updated");
     setEditOpen(false);
+  }
+
+  // Convert this contact into a student record without re-keying (issue 2.1).
+  async function convertToStudent() {
+    const ok = await askConfirm({
+      title: `Convert ${contact.name} to a student?`,
+      body: "Creates a student record from this contact and carries their details over. You can set the programme level on the student next.",
+      confirmLabel: "Convert",
+    });
+    if (!ok) return;
+    const res = await convertLeadToStudent(contact.id);
+    if (!res.ok) return toast(res.error, "error");
+    toast("Converted to student");
+    router.push("/students");
   }
 
   async function addTag() {
@@ -136,6 +155,14 @@ export default function ContactRecord({
               <Row label="Industry">{contact.industry ?? <span className="text-ink-3">—</span>}</Row>
               <Row label="Created"><DateText date={contact.createdAt} /></Row>
             </div>
+
+            {canConvert && (
+              <div className="mt-4 border-t border-line pt-4">
+                <Btn variant="secondary" size="sm" className="w-full justify-center" onClick={convertToStudent}>
+                  <GraduationCap size={15} /> Convert to student
+                </Btn>
+              </div>
+            )}
           </Card>
 
           {/* Agreement — the next action on this contract, wherever it currently stands. */}
@@ -222,13 +249,13 @@ export default function ContactRecord({
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit contact" size="md">
         <form action={saveDetails} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Name"><TextInput name="name" required defaultValue={contact.name} /></Field>
-            <Field label="Phone / WhatsApp"><TextInput name="phone" required defaultValue={contact.phone ?? ""} /></Field>
-            <Field label="Email"><TextInput name="email" type="email" defaultValue={contact.email ?? ""} /></Field>
+            <Field label="Name"><TextInput kind="name" name="name" required defaultValue={contact.name} /></Field>
+            <Field label="Phone / WhatsApp"><TextInput kind="phone" name="phone" required defaultValue={contact.phone ?? ""} /></Field>
+            <Field label="Email"><TextInput kind="email" name="email" defaultValue={contact.email ?? ""} /></Field>
             <Field label="Lead source">
               <Select name="leadSource" options={SOURCE_OPTS} defaultValue={SOURCE_OPTS.some((s) => s.value === contact.leadSource) ? contact.leadSource : "OTHER"} />
             </Field>
-            <Field label="City"><TextInput name="city" defaultValue={contact.city ?? ""} /></Field>
+            <Field label="City"><TextInput kind="city" name="city" defaultValue={contact.city ?? ""} /></Field>
             <Field label="Industry"><TextInput name="industry" defaultValue={contact.industry ?? ""} /></Field>
             <Field label="Company">
               <Select name="companyId" options={[{ value: "", label: "— none —" }, ...companies.map((c) => ({ value: c.id, label: c.name }))]} defaultValue={contact.companyId ?? ""} />
@@ -295,7 +322,7 @@ function Notes({ contact }: { contact: ContactDetail }) {
   return (
     <div className="space-y-4">
       <form action={add} ref={ref} className="space-y-2">
-        <TextArea name="body" rows={3} placeholder="Write a note…" />
+        <TextArea kind="text" name="body" rows={3} placeholder="Write a note…" />
         <FormError message={error} />
         <div className="flex justify-end"><SubmitButton>Add note</SubmitButton></div>
       </form>

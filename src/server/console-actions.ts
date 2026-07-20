@@ -9,12 +9,18 @@ import { majorStringToMinor } from "@/lib/format";
 import {
   agreementWorkflowSchema,
   coerceAgreementWorkflow,
+  coerceBookOrderConfig,
   coerceCommissionRulesConfig,
+  coercePipelineConfig,
+  coerceTutorFeeConfig,
   coerceDailyLogEod,
   coerceDailyLogTargets,
   coerceGamificationConfig,
   coerceSectionsConfig,
+  bookOrderConfigSchema,
   commissionRulesConfigSchema,
+  pipelineConfigSchema,
+  tutorFeeConfigSchema,
   dailyLogEodSchema,
   dailyLogTargetsSchema,
   gamificationConfigSchema,
@@ -29,13 +35,19 @@ import type { GamificationConfig } from "@/lib/gamification";
 import type { SectionsConfig } from "@/lib/sections";
 import {
   AGREEMENT_WORKFLOW_KEY,
+  BOOK_ORDER_KEY,
   COMMISSION_RULES_KEY,
   DAILY_LOG_EOD_KEY,
   DAILY_LOG_TARGETS_KEY,
   GAMIFICATION_KEY,
+  PIPELINE_KEY,
   SECTIONS_KEY,
+  TUTOR_FEE_KEY,
   writeAgreementWorkflow,
+  writeBookOrderConfig,
   writeCommissionRulesConfig,
+  writePipelineConfig,
+  writeTutorFeeConfig,
   writeDailyLogEod,
   writeDailyLogTargets,
   writeGamificationConfig,
@@ -642,6 +654,87 @@ export async function setGrantStatus(id: string, status: string): Promise<Action
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+// ───────────────────────────── tutor fee / operations ─────────────────────────────
+
+/**
+ * Retune the trainer-fee bands (Part 2 §5, and the answer to §18.2's open per-level table).
+ * Same shape as saveCommissionRules: admin-only, re-validated with the read's schema, and
+ * the German Note pages revalidate so batch costs reflect the new bands immediately.
+ */
+export async function saveTutorFee(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = tutorFeeConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const before = coerceTutorFeeConfig(await settingValue(TUTOR_FEE_KEY));
+  await writeTutorFeeConfig(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "console.tutor-fee.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: TUTOR_FEE_KEY,
+      summary: `Changed the tutor fee bands`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  revalidatePath("/german-note");
+  revalidatePath("/german-note/manage");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+/** When a book order releases to the publisher (§9.2, Part 2 §4.4; threshold open per §18.3). */
+export async function saveBookOrderConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = bookOrderConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const before = coerceBookOrderConfig(await settingValue(BOOK_ORDER_KEY));
+  await writeBookOrderConfig(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "console.book-orders.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: BOOK_ORDER_KEY,
+      summary: `Changed the book-order rule`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  revalidatePath("/students");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+/** Rules-driven vs drag-and-drop pipeline (Part 2 §9, §18.6). */
+export async function savePipelineConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = pipelineConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const before = coercePipelineConfig(await settingValue(PIPELINE_KEY));
+  await writePipelineConfig(parsed.data);
+  if (before.mode !== parsed.data.mode) {
+    await logActivity(session, {
+      action: "console.pipeline.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: PIPELINE_KEY,
+      summary: `Switched the pipeline to ${parsed.data.mode === "rules" ? "rules-driven" : "drag and drop"}`,
+      meta: { before: before.mode, after: parsed.data.mode },
+    });
+  }
+  revalidatePath("/pipeline");
   revalidatePath("/console");
   return { ok: true };
 }

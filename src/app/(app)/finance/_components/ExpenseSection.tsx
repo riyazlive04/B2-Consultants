@@ -9,7 +9,7 @@ import { Btn } from "@/components/ui/controls";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
-import { EXPENSE_CATEGORY_LABELS, optionsFrom } from "@/lib/labels";
+import { EXPENSE_BUSINESS_LINE_LABELS, EXPENSE_CATEGORY_LABELS, optionsFrom } from "@/lib/labels";
 import { AmountPair } from "@/components/ui/AmountPair";
 
 const minorToInput = (raw: string) => {
@@ -22,15 +22,21 @@ export function ExpenseSection({
   today,
   fxRate,
   fxStale,
+  fxDate,
 }: {
   rows: ExpenseRow[];
   today: string;
   fxRate: number;
   fxStale?: boolean;
+  fxDate?: string;
 }) {
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Optimistic delete: hide the row immediately, put it back if the archive fails. Survives the
+  // server action's revalidatePath (the row is simply gone from `rows` by then).
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
+  const visibleRows = rows.filter((r) => !removedIds.has(r.id));
 
   const submit = async (form: FormData) => {
     setError(null);
@@ -43,14 +49,23 @@ export function ExpenseSection({
 
   const remove = async (row: ExpenseRow) => {
     const ok = await askConfirm({
-      title: `Delete expense to ${row.vendor}?`,
-      body: "This cannot be undone.",
-      confirmLabel: "Delete",
+      title: `Archive expense to ${row.vendor}?`,
+      body: "It moves to the Archived tab — you can restore it there.",
+      confirmLabel: "Archive",
       danger: true,
     });
     if (!ok) return;
-    await deleteExpense(row.id);
-    toast("Expense deleted");
+    setRemovedIds((s) => new Set(s).add(row.id)); // optimistic
+    const res = await deleteExpense(row.id);
+    if (!res.ok) {
+      setRemovedIds((s) => {
+        const n = new Set(s);
+        n.delete(row.id);
+        return n;
+      });
+      return toast(res.error, "error");
+    }
+    toast("Expense archived");
   };
 
   const columns: Column<ExpenseRow>[] = [
@@ -71,6 +86,11 @@ export function ExpenseSection({
       value: (r) => r.agg.inr / 100,
     },
     { key: "category", header: "Category", cell: (r) => EXPENSE_CATEGORY_LABELS[r.category], value: (r) => EXPENSE_CATEGORY_LABELS[r.category] },
+    {
+      key: "businessLine", header: "Business line",
+      cell: (r) => (r.businessLine === "SHARED" ? "Shared" : r.businessLine === "B2" ? "B2" : "German Note"),
+      value: (r) => r.businessLine,
+    },
     {
       key: "cogs", header: "COGS", cell: (r) => (r.isCogs ? "Yes" : "No"), value: (r) => (r.isCogs ? "Yes" : "No"),
     },
@@ -108,6 +128,7 @@ export function ExpenseSection({
           <AmountPair
             fxRate={fxRate}
             fxStale={fxStale}
+            fxDate={fxDate}
             inrName="amountInr"
             eurName="amountEur"
             inrLabel="Amount paid (₹)"
@@ -119,18 +140,34 @@ export function ExpenseSection({
           <Field label="Expense category">
             <Select name="category" options={optionsFrom(EXPENSE_CATEGORY_LABELS)} defaultValue={editing?.category ?? "TOOLS_SOFTWARE"} />
           </Field>
+          <Field
+            label="Business line"
+            hint="Tag a cost that belongs to ONE business. Leave Shared for rent, ads and tools — those get split across both by revenue share."
+          >
+            <Select
+              name="businessLine"
+              options={optionsFrom(EXPENSE_BUSINESS_LINE_LABELS)}
+              defaultValue={editing?.businessLine ?? "SHARED"}
+            />
+          </Field>
+          {/* Not kind="name": a vendor is a company ("3M", "Zoho One"), not a person. */}
           <Field label="Paid to (vendor)">
-            <TextInput name="vendor" required placeholder="Who received this payment" defaultValue={editing?.vendor ?? ""} />
+            <TextInput kind="text" name="vendor" required placeholder="Who received this payment" defaultValue={editing?.vendor ?? ""} />
           </Field>
           <Field label="Notes (optional)">
-            <TextInput name="notes" placeholder="Any extra info" defaultValue={editing?.notes ?? ""} />
+            <TextInput kind="text" name="notes" placeholder="Any extra info" defaultValue={editing?.notes ?? ""} />
           </Field>
           <div className="flex items-end pb-1">
             <CheckboxField
               name="isCogs"
               label="Is this COGS?"
               defaultChecked={editing?.isCogs ?? false}
-              hint="Direct cost to deliver the program (e.g. Karthick salary, Skool, delivery tools)"
+              // The COGS test is "would this cost exist if nobody enrolled?" — tutor
+              // salary, books and delivery tools scale with students, so they are COGS.
+              // A platform subscription (Skool, WATI) is paid whether or not anyone
+              // enrols, so it belongs in Tools & Software. The old hint listed Skool as
+              // a COGS example, which is exactly how it got misfiled.
+              hint="Direct cost of delivering the programme — a cost you'd avoid if nobody enrolled (e.g. tutor salary, books, delivery tools). Platform subscriptions like Skool are Tools & Software, not COGS."
             />
           </div>
         </div>
@@ -141,7 +178,7 @@ export function ExpenseSection({
         </form>
       </Card>
 
-      <DataTable rows={rows} columns={columns} csvName="expenses" filterPlaceholder="Filter expenses…" />
+      <DataTable rows={visibleRows} columns={columns} csvName="expenses" filterPlaceholder="Filter expenses…" />
     </section>
   );
 }

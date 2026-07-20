@@ -37,8 +37,8 @@ function MoneyField({ label, name, defaultValue, hint, placeholder = "0.00" }: {
   return (
     <Field label={label} hint={hint}>
       <TextInput
+        kind="money"
         name={name}
-        inputMode="decimal"
         placeholder={placeholder}
         defaultValue={defaultValue ? moneyInput(defaultValue) : undefined}
       />
@@ -58,15 +58,15 @@ function ConversionFields({ c }: { c?: GnConversionRow }) {
         <legend className="text-caption font-semibold uppercase tracking-wide text-muted">Client</legend>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Full name">
-            <TextInput name="fullName" required maxLength={160} defaultValue={c?.fullName} placeholder="Full name" />
+            <TextInput kind="name" name="fullName" required defaultValue={c?.fullName} placeholder="Full name" />
           </Field>
           <Field label="Phone">
-            <TextInput name="phone" maxLength={40} defaultValue={c?.phone ?? undefined} placeholder="Phone number" />
+            <TextInput kind="phone" name="phone" defaultValue={c?.phone ?? undefined} placeholder="Phone number" />
           </Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Email">
-            <TextInput name="email" maxLength={160} defaultValue={c?.email ?? undefined} placeholder="email@example.com" />
+            <TextInput kind="email" name="email" defaultValue={c?.email ?? undefined} placeholder="email@example.com" />
           </Field>
           <Field label="Address">
             <TextInput name="address" maxLength={300} defaultValue={c?.address ?? undefined} placeholder="City / address" />
@@ -141,7 +141,7 @@ function ConversionFields({ c }: { c?: GnConversionRow }) {
       </fieldset>
 
       <Field label="Notes (optional)">
-        <TextArea name="notes" maxLength={2000} defaultValue={c?.notes ?? undefined} placeholder="EMI plan, carry-over, anything worth remembering…" />
+        <TextArea kind="text" name="notes" maxLength={2000} defaultValue={c?.notes ?? undefined} placeholder="EMI plan, carry-over, anything worth remembering…" />
       </Field>
     </div>
   );

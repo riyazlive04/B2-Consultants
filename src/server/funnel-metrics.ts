@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { istMonthRange, istToday, istWeekRange } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
+import { ACTIVE } from "@/lib/soft-delete";
 
 /**
  * Conversion Funnel (PRD3 §3). Monthly numbers = sum of weekly snapshots whose
@@ -46,7 +47,7 @@ export async function getWeekAutoPulls(weekStart: Date) {
   weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
 
   const [leads, calls, proposals, enrollments] = await Promise.all([
-    prisma.lead.count({ where: { dateIn: { gte: weekStart, lt: weekEnd } } }),
+    prisma.lead.count({ where: { ...ACTIVE, dateIn: { gte: weekStart, lt: weekEnd } } }),
     prisma.leadStageHistory.findMany({
       where: { toStage: "DISCO_COMPLETED", changedAt: { gte: weekStart, lt: weekEnd } },
       select: { leadId: true }, distinct: ["leadId"],
@@ -91,7 +92,7 @@ export async function getFunnelOverview(selectedWeek?: string) {
       orderBy: { weekStart: "desc" },
     }),
     prisma.income.findMany({
-      where: { date: { gte: windowStart, lt: windowEnd } },
+      where: { ...ACTIVE, date: { gte: windowStart, lt: windowEnd } },
       select: { date: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
     }),
     prisma.leadStageHistory.findMany({
@@ -179,11 +180,11 @@ export async function getFunnelOverview(selectedWeek?: string) {
       where: { leadSource: "GHOSTED_BLUEPRINT" },
       include: {
         enrollments: { select: { programLevel: true } },
-        incomes: { select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true } },
+        incomes: { where: ACTIVE, select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true } },
       },
     }),
     prisma.lead.count({
-      where: { leadSource: "GHOSTED_BLUEPRINT", stageHistory: { some: { toStage: "DISCO_COMPLETED" } } },
+      where: { ...ACTIVE, leadSource: "GHOSTED_BLUEPRINT", stageHistory: { some: { toStage: "DISCO_COMPLETED" } } },
     }),
   ]);
   const totalDownloadsAllTime = allSnapshots.reduce((a, s) => a + s.ghostedDownloads, 0);
@@ -199,20 +200,20 @@ export async function getFunnelOverview(selectedWeek?: string) {
   // ── Source → enrollment attribution (report §3.D P1): which channel actually
   //    produces paying students, all time. Revenue via student.leadSource tag. ──
   const [allLeads, leadsWithCall, allStudents] = await Promise.all([
-    prisma.lead.groupBy({ by: ["leadSource"], _count: { _all: true } }),
+    prisma.lead.groupBy({ by: ["leadSource"], where: ACTIVE, _count: { _all: true } }),
     prisma.lead.groupBy({
       by: ["leadSource"],
-      where: { stageHistory: { some: { toStage: "DISCO_COMPLETED" } } },
+      where: { ...ACTIVE, stageHistory: { some: { toStage: "DISCO_COMPLETED" } } },
       _count: { _all: true },
     }),
     prisma.student.findMany({
       where: { leadSource: { not: null } },
-      include: { incomes: { select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true } } },
+      include: { incomes: { where: ACTIVE, select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true } } },
     }),
   ]);
   const wonBySource = await prisma.lead.groupBy({
     by: ["leadSource"],
-    where: { stage: "WON" },
+    where: { ...ACTIVE, stage: "WON" },
     _count: { _all: true },
   });
   const sourceKeys = new Set<string>([

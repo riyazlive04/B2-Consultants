@@ -18,6 +18,9 @@ const nextConfig = {
   // Run `npm run lint` separately for lint feedback.
   eslint: { ignoreDuringBuilds: true },
   experimental: {
+    // Required in Next 14 for src/instrumentation.ts to run at all — without this the
+    // file is silently ignored and the production env check never fires.
+    instrumentationHook: true,
     // Tree-shake barrel imports so pages only pull what they use. lucide-react is
     // the big win: its barrel re-exports ~1,600 icons, which makes dev-mode
     // on-demand compilation crawl. This rewrites `{ X } from "lucide-react"` into
@@ -83,7 +86,19 @@ const nextConfig = {
         ],
       },
       {
-        source: "/((?!.*/pdf$).*)",
+        // Public hosted forms (/f/*) and funnels (/p/*) are DESIGNED to be embedded on other sites
+        // (issue 1.10 — the Forms UI ships an iframe snippet). They carry no auth and no destructive
+        // action, so cross-site framing is the intended, low-risk behaviour: allow all ancestors and
+        // omit X-Frame-Options (which has no "allow any" value). These paths are excluded from the
+        // DENY catch-all below so a browser never sees a conflicting DENY.
+        source: "/:kind(f|p)/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+          ...baseline,
+        ],
+      },
+      {
+        source: "/((?!f/|p/|.*/pdf$).*)",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },

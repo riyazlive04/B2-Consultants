@@ -4,6 +4,7 @@ import { AccessDeniedToast } from "@/components/shell/AccessDeniedToast";
 import { NotificationBell } from "@/components/shell/NotificationBell";
 import { RunwayBadge } from "@/components/shell/RunwayBadge";
 import { AppShell } from "@/components/shell/AppShell";
+import { ThemeSync } from "@/components/shell/ThemeSync";
 import { SkeletonPill } from "@/components/ui/Skeleton";
 import { CallsTodayGreeting } from "@/components/shell/CallsTodayGreeting";
 import { formatMonth } from "@/lib/format";
@@ -69,6 +70,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="contents">
+      {/* The user's own theme wins over whatever this browser happens to have cached. */}
+      <ThemeSync preference={session.themePreference} />
       <AppShell
         items={items}
         user={{

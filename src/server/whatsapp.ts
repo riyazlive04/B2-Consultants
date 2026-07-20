@@ -16,6 +16,7 @@ import {
   type WatiParameter,
 } from "@/lib/wati";
 import { getPendingRows } from "./finance-metrics";
+import { ACTIVE } from "@/lib/soft-delete";
 
 /**
  * WhatsApp sending service + automatic reminder engine (WATI). Everything funnels through
@@ -499,7 +500,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
   if (budget > 0 && hasTemplate("DISCO_REMINDER")) {
     const cutoff = new Date(now - cadence.discoFirstDelayHours * HR);
     const leads = await prisma.lead.findMany({
-      where: { stage: { in: ["NEW_LEAD", "DISCO_NOT_BOOKED"] }, createdAt: { lte: cutoff }, phone: { not: "" } },
+      where: { ...ACTIVE, stage: { in: ["NEW_LEAD", "DISCO_NOT_BOOKED"] }, createdAt: { lte: cutoff }, phone: { not: "" } },
       orderBy: { createdAt: "asc" },
       take: Math.min(budget * 2 + 50, 500),
       select: { id: true, name: true, phone: true },
@@ -542,6 +543,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
   if (budget > 0 && hasTemplate("NO_SHOW_FOLLOWUP")) {
     const leads = await prisma.lead.findMany({
       where: {
+        ...ACTIVE,
         stage: "NO_SHOW",
         phone: { not: "" },
         updatedAt: { gte: new Date(now - 14 * 24 * HR), lte: new Date(now - cadence.noShowDelayHours * HR) },
@@ -564,7 +566,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
     const [pendingRows, overdue] = await Promise.all([
       getPendingRows(),
       prisma.pendingPayment.findMany({
-        where: { status: "ACTIVE", nextDueDate: { lt: today } },
+        where: { ...ACTIVE, status: "ACTIVE", nextDueDate: { lt: today } },
         include: { student: { select: { phone: true } } },
         take: Math.min(budget * 2 + 50, 300),
       }),

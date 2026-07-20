@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import { Search, Download, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Inbox } from "lucide-react";
+import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
+import { Search, Download, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Inbox, SearchX } from "lucide-react";
 import { EmptyState } from "./kit";
+import { Btn } from "./controls";
 
 export type Column<T> = {
   key: string;
@@ -45,6 +46,7 @@ export function DataTable<T>({
   filterPlaceholder = "Filter…",
   selection,
   toolbarExtra,
+  hideFilter = false,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -55,10 +57,20 @@ export function DataTable<T>({
   selection?: Selection<T>;
   /** Rendered in the toolbar, left of Export CSV (e.g. a bulk-action bar). */
   toolbarExtra?: ReactNode;
+  /**
+   * Hide the built-in per-page filter box. Pass when the caller already provides a
+   * server-side search (e.g. Contacts' filter bar) — otherwise the two search boxes
+   * on one screen search different scopes and users type in the wrong one.
+   */
+  hideFilter?: boolean;
 }) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filter, setFilter] = useState("");
+  // The heavy filter+sort runs on a DEFERRED copy of the query, so typing stays smooth
+  // even over a few thousand in-memory rows (INP): the input updates every keystroke
+  // while `visible` recomputes at React's leisure.
+  const deferredFilter = useDeferredValue(filter);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 25;
 
@@ -70,8 +82,8 @@ export function DataTable<T>({
 
   const visible = useMemo(() => {
     let out = rows;
-    if (filter.trim()) {
-      const q = filter.trim().toLowerCase();
+    if (deferredFilter.trim()) {
+      const q = deferredFilter.trim().toLowerCase();
       out = out.filter((row) =>
         columns.some((col) => String(raw(row, col) ?? "").toLowerCase().includes(q)),
       );
@@ -94,7 +106,7 @@ export function DataTable<T>({
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, columns, filter, sortKey, sortDir]);
+  }, [rows, columns, deferredFilter, sortKey, sortDir]);
 
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -166,20 +178,41 @@ export function DataTable<T>({
     URL.revokeObjectURL(url);
   };
 
+  // A filtered-to-nothing table is a different state from a truly-empty one: it needs
+  // the query echoed back and an escape hatch, not "No records yet." (which reads as a
+  // bug when the records plainly exist).
+  const isFiltered = !hideFilter && filter.trim().length > 0;
+  const emptyNode = isFiltered ? (
+    <EmptyState
+      icon={<SearchX size={22} />}
+      title="No matches"
+      body={<>Nothing matches “{filter.trim()}”.</>}
+      action={
+        <Btn variant="soft" size="sm" onClick={() => { setFilter(""); setPage(0); }}>
+          Clear filter
+        </Btn>
+      }
+    />
+  ) : (
+    <EmptyState icon={<Inbox size={22} />} title={emptyMessage} />
+  );
+
   return (
     <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="flex flex-1 items-center gap-3">
-          <div className="relative w-full max-w-64">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} />
-            <input
-              value={filter}
-              onChange={(e) => { setFilter(e.target.value); setPage(0); }}
-              placeholder={filterPlaceholder}
-              aria-label={filterPlaceholder}
-              className="h-10 w-full rounded-field border border-line-strong bg-surface-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary-soft"
-            />
-          </div>
+          {!hideFilter && (
+            <div className="relative w-full max-w-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} />
+              <input
+                value={filter}
+                onChange={(e) => { setFilter(e.target.value); setPage(0); }}
+                placeholder={filterPlaceholder}
+                aria-label={filterPlaceholder}
+                className="h-10 w-full rounded-field border border-line-strong bg-surface-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary-soft"
+              />
+            </div>
+          )}
           <span className="whitespace-nowrap text-xs text-muted tnum">
             {visible.length === rows.length
               ? `${rows.length} record${rows.length === 1 ? "" : "s"}`
@@ -254,7 +287,7 @@ export function DataTable<T>({
             {visible.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="p-6">
-                  <EmptyState icon={<Inbox size={22} />} title={emptyMessage} />
+                  {emptyNode}
                 </td>
               </tr>
             ) : (
@@ -291,9 +324,7 @@ export function DataTable<T>({
       {/* <720px: one card per record, each cell a labelled key-value row (§7) */}
       <div className="tab:hidden">
         {visible.length === 0 ? (
-          <div className="p-4">
-            <EmptyState icon={<Inbox size={22} />} title={emptyMessage} />
-          </div>
+          <div className="p-4">{emptyNode}</div>
         ) : (
           <ul className="divide-y divide-line">
             {paged.map((row, i) => (

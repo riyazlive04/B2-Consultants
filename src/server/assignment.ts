@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { ACTIVE } from "@/lib/soft-delete";
 
 /**
  * First-call assignment rules (client notes):
@@ -36,7 +37,7 @@ async function loadRotation(now: Date): Promise<RotationMember[]> {
   const since = new Date(now.getTime() - LOOKBACK_DAYS * 86400000);
   const counts = await prisma.lead.groupBy({
     by: ["assignedToId"],
-    where: { assignedToId: { in: profiles.map((p) => p.userId!) }, createdAt: { gte: since } },
+    where: { ...ACTIVE, assignedToId: { in: profiles.map((p) => p.userId!) }, createdAt: { gte: since } },
     _count: { _all: true },
   });
   const countOf = new Map(counts.map((c) => [c.assignedToId, c._count._all]));

@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { OutreachStep } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { blankToUndefined, intInRange, optionalRule } from "@/lib/field-rules";
 import { requireSection, requireAdmin, requireSession } from "@/lib/rbac";
 import { hasCapability, capabilityDeniedMessage } from "@/lib/capabilities";
 import { formatDateTimeInZone } from "@/lib/format";
@@ -514,7 +515,12 @@ export async function setHighlyQualified(form: FormData): Promise<ActionResult> 
   return { ok: true };
 }
 
-const zoomSchema = z.object({ journeyId: z.string().min(1), zoomLink: z.string().trim().max(500) });
+/**
+ * `optionalRule("url")` replaces a hand-rolled `^https?://` test: it ADDS the scheme rather than
+ * refusing the value, so pasting "zoom.us/j/123" out of a calendar entry saves instead of erroring.
+ * An empty box still means "clear the link" (blank → undefined → null below).
+ */
+const zoomSchema = z.object({ journeyId: z.string().min(1), zoomLink: optionalRule("url") });
 
 /** Cross-cutting §R — the Zoom link the confirmation templates need. */
 export async function setZoomLink(form: FormData): Promise<ActionResult> {
@@ -523,10 +529,9 @@ export async function setZoomLink(form: FormData): Promise<ActionResult> {
     journeyId: form.get("journeyId"),
     zoomLink: form.get("zoomLink"),
   });
-  if (!parsed.success) return fail("Missing link");
+  if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Missing link");
 
-  const link = parsed.data.zoomLink;
-  if (link && !/^https?:\/\//i.test(link)) return fail("A Zoom link must start with http(s)://");
+  const link = parsed.data.zoomLink ?? "";
 
   const before = await prisma.outreachJourney.findUnique({
     where: { id: parsed.data.journeyId },
@@ -591,14 +596,49 @@ const CONFIG_FIELD_LABELS: Record<string, string> = {
   defaultSpecialistName: "Default specialist", maxPerRun: "Max per run",
 };
 
+/**
+ * An SLA window, in hours. 720 (30 days) is far past anything the SOP asks for and still short of
+ * a number that would park a step effectively forever.
+ */
+const slaHours = (label: string) => blankToUndefined(intInRange(1, 720, label));
+
+/**
+ * The settings form, re-checked server-side.
+ *
+ * A BLANK box still means "leave this as it is" — the inputs are prefilled, so clearing one is how
+ * the founder says "don't touch it", and that behaviour predates this schema. What changed is the
+ * other half: a value that IS present must now be a bounded whole number instead of being silently
+ * swapped for the shipped default. A settings screen that saves a different number than the one on
+ * screen is worse than one that refuses, and nothing bounded these from above at all before.
+ *
+ * `defaultSpecialistName` is deliberately NOT `rule("name")`: it fills `[Your Name]` when no
+ * touchpoint owner is assigned, and it ships as the COMPANY name "B2 Consultants" — the person-name
+ * rule forbids digits and would reject its own default. It is bounded free text.
+ */
+const outreachConfigSchema = z.object({
+  reactionMinutes: blankToUndefined(intInRange(1, 1440, "Reaction time")),
+  check1Hours: slaHours("Check 1 wait"),
+  check2Hours: slaHours("Check 2 wait"),
+  finalCheckHours: slaHours("Final check wait"),
+  discoConfirm1LeadHours: slaHours("Disco confirm 1"),
+  discoConfirm2LeadHours: slaHours("Disco confirm 2"),
+  discoCancelLeadHours: slaHours("Disco cancellation"),
+  sssConfirm1LeadHours: slaHours("SSS confirm 1"),
+  sssConfirm2LeadHours: slaHours("SSS confirm 2"),
+  sssCancelLeadHours: slaHours("SSS cancellation"),
+  maxPerRun: blankToUndefined(intInRange(1, 1000, "Max journeys per run")),
+  defaultSpecialistName: blankToUndefined(z.string().trim().max(80, "Sender name is too long")),
+});
+
 export async function saveOutreachConfig(form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
 
-  const num = (k: string, fallback: number) => {
-    const raw = form.get(k);
-    const n = Number(raw);
-    return raw !== null && raw !== "" && Number.isFinite(n) && n > 0 ? n : fallback;
-  };
+  const parsed = outreachConfigSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the settings");
+  const d = parsed.data;
+
+  /** A field left blank keeps whatever was already stored. */
+  const num = (v: string | undefined, fallback: number) => (v === undefined ? fallback : Number(v));
 
   const current = await readOutreachConfig();
   const autoSend: Record<string, boolean> = {};
@@ -609,19 +649,19 @@ export async function saveOutreachConfig(form: FormData): Promise<ActionResult> 
   const cfg = coerceOutreachConfig({
     enabled: form.get("enabled") === "on",
     autoSend,
-    defaultSpecialistName: String(form.get("defaultSpecialistName") ?? current.defaultSpecialistName),
-    maxPerRun: num("maxPerRun", current.maxPerRun),
+    defaultSpecialistName: d.defaultSpecialistName ?? current.defaultSpecialistName,
+    maxPerRun: num(d.maxPerRun, current.maxPerRun),
     sla: {
-      reactionMinutes: num("reactionMinutes", DEFAULT_SLA.reactionMinutes),
-      check1Hours: num("check1Hours", DEFAULT_SLA.check1Hours),
-      check2Hours: num("check2Hours", DEFAULT_SLA.check2Hours),
-      finalCheckHours: num("finalCheckHours", DEFAULT_SLA.finalCheckHours),
-      discoConfirm1LeadHours: num("discoConfirm1LeadHours", DEFAULT_SLA.discoConfirm1LeadHours),
-      discoConfirm2LeadHours: num("discoConfirm2LeadHours", DEFAULT_SLA.discoConfirm2LeadHours),
-      discoCancelLeadHours: num("discoCancelLeadHours", DEFAULT_SLA.discoCancelLeadHours),
-      sssConfirm1LeadHours: num("sssConfirm1LeadHours", DEFAULT_SLA.sssConfirm1LeadHours),
-      sssConfirm2LeadHours: num("sssConfirm2LeadHours", DEFAULT_SLA.sssConfirm2LeadHours),
-      sssCancelLeadHours: num("sssCancelLeadHours", DEFAULT_SLA.sssCancelLeadHours),
+      reactionMinutes: num(d.reactionMinutes, DEFAULT_SLA.reactionMinutes),
+      check1Hours: num(d.check1Hours, DEFAULT_SLA.check1Hours),
+      check2Hours: num(d.check2Hours, DEFAULT_SLA.check2Hours),
+      finalCheckHours: num(d.finalCheckHours, DEFAULT_SLA.finalCheckHours),
+      discoConfirm1LeadHours: num(d.discoConfirm1LeadHours, DEFAULT_SLA.discoConfirm1LeadHours),
+      discoConfirm2LeadHours: num(d.discoConfirm2LeadHours, DEFAULT_SLA.discoConfirm2LeadHours),
+      discoCancelLeadHours: num(d.discoCancelLeadHours, DEFAULT_SLA.discoCancelLeadHours),
+      sssConfirm1LeadHours: num(d.sssConfirm1LeadHours, DEFAULT_SLA.sssConfirm1LeadHours),
+      sssConfirm2LeadHours: num(d.sssConfirm2LeadHours, DEFAULT_SLA.sssConfirm2LeadHours),
+      sssCancelLeadHours: num(d.sssCancelLeadHours, DEFAULT_SLA.sssCancelLeadHours),
     },
   });
 

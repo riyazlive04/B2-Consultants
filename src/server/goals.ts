@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { aggInrMinor } from "@/lib/money";
+import { ACTIVE } from "@/lib/soft-delete";
 import type { CountableMetric, Increment } from "@/lib/gamification";
 import {
   computeGoalActual,
@@ -54,7 +55,7 @@ export const getGoalsWithProgress = cache(async (): Promise<GoalProgress[]> => {
       .map((g) => goalWindow(g.period, dateKeyOf(g.periodStart)).start)
       .sort()[0];
     const incomes = await prisma.income.findMany({
-      where: { date: { gte: new Date(`${from}T00:00:00Z`) } },
+      where: { ...ACTIVE, date: { gte: new Date(`${from}T00:00:00Z`) } },
       select: { date: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
     });
     revenue = incomes.map((i) => ({

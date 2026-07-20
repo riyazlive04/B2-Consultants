@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { ACTIVE } from "@/lib/soft-delete";
 import type { LogVariant } from "@/lib/daily-log";
 
 /**
@@ -59,7 +60,7 @@ export async function computeAutoCapture(
     auto.followUpsDone = followUps;
   } else if (variant === "APPOINTMENT_SETTER") {
     const [leadsAdded, appointments, contacted] = await Promise.all([
-      prisma.lead.count({ where: { enteredById: userId, createdAt: tsRange } }),
+      prisma.lead.count({ where: { ...ACTIVE, enteredById: userId, createdAt: tsRange } }),
       prisma.leadStageHistory.count({
         where: { changedById: userId, toStage: "DISCO_BOOKED", changedAt: tsRange },
       }),
@@ -68,6 +69,7 @@ export async function computeAutoCapture(
       // the Wave-2 WhatsApp channel - that field stays manual.
       prisma.lead.count({
         where: {
+          ...ACTIVE,
           OR: [{ assignedToId: userId }, { enteredById: userId }],
           contactedAt: tsRange,
         },

@@ -7,6 +7,7 @@ import { getDailyLogEod } from "./founder-config";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import type { AppRole } from "@/lib/rbac";
 import { aggInrMinor } from "@/lib/money";
+import { ACTIVE } from "@/lib/soft-delete";
 import { parseMentions } from "@/lib/gn-mentions";
 import { getPendingRows } from "./finance-metrics";
 import { getRunwaySnapshot } from "./cash-metrics";
@@ -26,6 +27,12 @@ import { MILESTONE_LABELS } from "@/lib/labels";
 export type Notification = {
   id: string;
   severity: "risk" | "watch" | "info" | "win";
+  /**
+   * A person deliberately raised this for the founder — a head coach red-flagging a student
+   * with a note, not a threshold the system tripped on its own (§2.8). Escalations sort ABOVE
+   * everything else, because a human asking for attention outranks any automated alert.
+   */
+  escalated?: boolean;
   title: string;
   body: string;
   href: string;
@@ -155,7 +162,9 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
     if (!e) {
       items.push(...(await gnEngagementNotifications(userId, today)));
       const order = { risk: 0, watch: 1, win: 2, info: 3 };
-      return items.sort((a, b) => order[a.severity] - order[b.severity]);
+      return items.sort(
+        (a, b) => Number(!!b.escalated) - Number(!!a.escalated) || order[a.severity] - order[b.severity],
+      );
     }
 
     // milestone reached in the last 3 days → celebrate
@@ -213,14 +222,18 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
 
     items.push(...(await gnEngagementNotifications(userId, today)));
     const order = { risk: 0, watch: 1, win: 2, info: 3 };
-    return items.sort((a, b) => order[a.severity] - order[b.severity]);
+    return items.sort(
+      (a, b) => Number(!!b.escalated) - Number(!!a.escalated) || order[a.severity] - order[b.severity],
+    );
   }
 
   // ── TUTOR: German Note only — community engagement, no business notifications ──
   if (role === "TUTOR") {
     items.push(...(await gnEngagementNotifications(userId, today)));
     const order = { risk: 0, watch: 1, win: 2, info: 3 };
-    return items.sort((a, b) => order[a.severity] - order[b.severity]);
+    return items.sort(
+      (a, b) => Number(!!b.escalated) - Number(!!a.escalated) || order[a.severity] - order[b.severity],
+    );
   }
 
   // ── ADMIN/HEAD/USER: CRM @mentions on contact notes. Coarse role gate, matching every other
@@ -366,6 +379,28 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
         href: "/students",
       });
     }
+
+    // §2.8 — head-coach escalations to the very top. A red signal WITH a written note is a
+    // coach deliberately raising a case for the founder, not just a threshold tripping; each
+    // gets its own row that sorts above every automated alert. Capped so a bad week can't bury
+    // the rest of the band; the "+N more" pointer and the tracker carry the tail.
+    const escalated = await prisma.enrollment.findMany({
+      where: { status: "ACTIVE", signalColour: "RED", signalNotes: { not: null } },
+      orderBy: { statusChangedAt: "desc" },
+      take: 3,
+      select: { studentId: true, signalNotes: true, student: { select: { fullName: true, code: true } } },
+    });
+    for (const e of escalated) {
+      const note = (e.signalNotes ?? "").trim();
+      items.push({
+        id: `escalation-${e.studentId}`,
+        severity: "risk",
+        escalated: true,
+        title: `Coach flagged ${e.student.fullName}${e.student.code ? ` (${e.student.code})` : ""}`,
+        body: note.length > 90 ? `${note.slice(0, 90)}…` : note || "A coach marked this student red — review the note.",
+        href: `/students/${e.studentId}`,
+      });
+    }
     if (checkInsDue > 0) {
       items.push({
         id: "checkins-due",
@@ -410,7 +445,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
         };
       })(),
       prisma.income.findMany({
-        where: { date: { gte: month.start, lt: month.end } },
+        where: { ...ACTIVE, date: { gte: month.start, lt: month.end } },
         select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
       }),
       prisma.monthlyTarget.findUnique({ where: { month: month.start } }),
@@ -522,6 +557,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   const tenDaysAgo = new Date(Date.now() - 10 * 86400000);
   const stalledDeals = await prisma.lead.count({
     where: {
+      ...ACTIVE,
       stage: {
         in: [
           "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED", "SSS_BOOKED", "SSS_COMPLETED",
@@ -596,7 +632,10 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   items.push(...(await gnEngagementNotifications(userId, today)));
 
   const order = { risk: 0, watch: 1, win: 2, info: 3 };
-  return items.sort((a, b) => order[a.severity] - order[b.severity]);
+  // Escalations (a human raised it) always sort above the severity ladder (§2.8).
+  return items.sort(
+    (a, b) => Number(!!b.escalated) - Number(!!a.escalated) || order[a.severity] - order[b.severity],
+  );
 }
 
 /** Consecutive-day streak of daily logs ending today (or yesterday if today pending). */

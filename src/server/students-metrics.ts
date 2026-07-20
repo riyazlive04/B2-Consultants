@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { istMonthInstantRange, istToday } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
+import { ACTIVE } from "@/lib/soft-delete";
 import { computeStudentJourney, type GamificationConfig, type StudentJourney } from "@/lib/gamification";
 import { getGamificationConfig } from "./founder-config";
 
@@ -45,7 +46,7 @@ function journeyFor(
 
 async function ltvByStudent(): Promise<Map<string, number>> {
   const incomes = await prisma.income.findMany({
-    where: { studentId: { not: null } },
+    where: { ...ACTIVE, studentId: { not: null } },
     select: { studentId: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
   });
   const map = new Map<string, number>();
@@ -63,8 +64,14 @@ export async function getStudentsOverview() {
   const month = istMonthInstantRange(today);
 
   const [students, enrollments, trackerRows, satisfaction, ltv] = await Promise.all([
-    // enrollment-less students are German Note members — they belong to /german-note
-    prisma.student.findMany({ where: { enrollments: { some: {} } }, orderBy: { createdAt: "desc" } }),
+    // A student belongs on this coaching dashboard unless they are EXCLUSIVELY a German Note member
+    // (a GN membership but no B2 enrollment) — those live on /german-note. The old filter assumed
+    // "no enrollment ⟹ GN member", which silently hid every bulk-imported student (no enrollment,
+    // no GN membership yet). Show them: they are coaching students.
+    prisma.student.findMany({
+      where: { OR: [{ enrollments: { some: {} } }, { gnMemberships: { none: {} } }] },
+      orderBy: { createdAt: "desc" },
+    }),
     // Lean pass: every enrollment, scalars only. Powers the count tiles, the LTV
     // roll-ups and the list rows — none of which look at journey history.
     prisma.enrollment.findMany({
@@ -225,6 +232,7 @@ export async function getStudentsOverview() {
     const endDates = es.map((e) => e.programEndDate).filter((d): d is Date => !!d);
     return {
       id: s.id,
+      code: s.code,
       fullName: s.fullName,
       email: s.email,
       phone: s.phone,
@@ -279,7 +287,7 @@ export async function getStudentDetail(id: string) {
         },
       },
       satisfactionScores: { orderBy: { date: "desc" } },
-      incomes: { orderBy: { date: "desc" } },
+      incomes: { where: ACTIVE, orderBy: { date: "desc" } },
       user: { select: { email: true } }, // portal login, when provisioned
     },
   });

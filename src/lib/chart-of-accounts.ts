@@ -3,7 +3,6 @@ import type {
   ExpenseCategory,
   LedgerAccountType,
   PaymentMethod,
-  ProgramLevel,
 } from "@prisma/client";
 
 /**
@@ -74,12 +73,22 @@ export const ACCOUNT = {
   FX_GAIN_LOSS: "7000",
 } as const;
 
+/** The valid INCOME account codes, for validating a per-level override. */
+const INCOME_CODES = new Set<string>(CHART_OF_ACCOUNTS.filter((a) => a.type === "INCOME").map((a) => a.code));
+
 /**
- * Which income account a program level credits. Mirrors the `byLevel` bucketing in
- * finance-metrics.ts exactly — every German Note level rolls into one account, as the
- * "Revenue by level (Solo │ Guided │ Elite │ German Note)" tile expects.
+ * Which income account a program level credits.
+ *
+ * Levels are configurable rows now (the `Level` table), so the authority is each level's own
+ * `incomeAccountCode`: pass `accountByCode` (from server/levels.ts `levelIncomeAccounts()`) to honour
+ * a per-level override. Without the map — e.g. the seed script — it falls back to a prefix rule that
+ * reproduces the seeded defaults (every German level → the one German Note account, mirroring the
+ * `byLevel` tile in finance-metrics.ts). NEVER returns undefined, so a journal line always balances,
+ * even for a brand-new level that predates any mapping.
  */
-export function incomeAccountFor(level: ProgramLevel): AccountCode {
+export function incomeAccountFor(level: string, accountByCode?: Map<string, string>): AccountCode {
+  const override = accountByCode?.get(level);
+  if (override && INCOME_CODES.has(override)) return override as AccountCode;
   switch (level) {
     case "SOLO":
       return "4000";
@@ -87,14 +96,10 @@ export function incomeAccountFor(level: ProgramLevel): AccountCode {
       return "4010";
     case "ELITE":
       return "4020";
-    case "GN_A1":
-    case "GN_A2":
-    case "GN_B1":
-    case "GN_B2":
-    case "GN_BUNDLE":
-      return "4030";
     case "OTHER":
       return "4090";
+    default:
+      return level.startsWith("GN_") ? "4030" : "4090";
   }
 }
 

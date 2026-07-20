@@ -11,6 +11,7 @@ import type { Block, BlockType } from "@/lib/sites-types";
 import { blockLabel } from "@/lib/sites-types";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Select } from "@/components/ui/form";
+import { fieldKindProps } from "@/components/ui/field-base";
 import { Card } from "@/components/ui/kit";
 import { toast, askConfirm } from "@/components/ui/feedback";
 import {
@@ -251,11 +252,16 @@ function BlockListEditor({
 
 function AlignSelect({ b, i, update }: { b: Block; i: number; update: (i: number, p: Partial<Block>) => void }) {
   return (
-    <Select size="sm" value={b.align ?? "center"} onChange={(e) => update(i, { align: e.target.value as Block["align"] })} options={[{ value: "left", label: "Left" }, { value: "center", label: "Center" }, { value: "right", label: "Right" }]} />
+    <Select size="sm" value={b.align ?? "center"} onChange={(e) => update(i, { align: e.target.value as Block["align"] })} options={[{ value: "left", label: "Left" }, { value: "center", label: "Centre" }, { value: "right", label: "Right" }]} />
   );
 }
 
 function BlockFields({ b, i, update, forms }: { b: Block; i: number; update: (i: number, p: Partial<Block>) => void; forms: { id: string; name: string }[] }) {
+  // `src` on the image/video blocks is an absolute external address, so whitespace can only be a
+  // paste artefact. Not applied to the button block's `href`, which legitimately takes an internal
+  // path ("/p/thank-you") as well as a full URL — filtering both under one rule would be a lie.
+  const srcProps = fieldKindProps<HTMLInputElement>("url", (e) => update(i, { url: e.target.value }));
+
   switch (b.type) {
     case "heading":
     case "subheading":
@@ -269,12 +275,12 @@ function BlockFields({ b, i, update, forms }: { b: Block; i: number; update: (i:
     case "image":
       return (
         <div className="space-y-2">
-          <input className={inputCls} placeholder="Image URL (https://…)" value={b.url ?? ""} onChange={(e) => update(i, { url: e.target.value })} />
+          <input {...srcProps.attrs} className={inputCls} placeholder="Image URL (https://…)" value={b.url ?? ""} onChange={srcProps.onChange} />
           <input className={inputCls} placeholder="Alt text" value={b.alt ?? ""} onChange={(e) => update(i, { alt: e.target.value })} />
         </div>
       );
     case "video":
-      return <input className={inputCls} placeholder="Embed URL (YouTube/Vimeo embed src)" value={b.url ?? ""} onChange={(e) => update(i, { url: e.target.value })} />;
+      return <input {...srcProps.attrs} className={inputCls} placeholder="Embed URL (YouTube/Vimeo embed src)" value={b.url ?? ""} onChange={srcProps.onChange} />;
     case "button":
       return (
         <div className="grid grid-cols-2 gap-2">

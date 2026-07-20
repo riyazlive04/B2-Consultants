@@ -281,16 +281,16 @@ export function StudentDetailClient({
             }}
             className="mt-4 grid grid-cols-1 gap-4 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-3"
           >
-            <Field label="Full name"><TextInput name="fullName" required defaultValue={student.fullName} /></Field>
-            <Field label="Email"><TextInput type="email" name="email" defaultValue={student.email ?? ""} /></Field>
-            <Field label="Phone"><TextInput name="phone" defaultValue={student.phone ?? ""} /></Field>
+            <Field label="Full name"><TextInput kind="name" name="fullName" required defaultValue={student.fullName} /></Field>
+            <Field label="Email"><TextInput kind="email" name="email" defaultValue={student.email ?? ""} /></Field>
+            <Field label="Phone"><TextInput kind="phone" name="phone" defaultValue={student.phone ?? ""} /></Field>
             <Field label="Industry"><TextInput name="industry" defaultValue={student.industry ?? ""} /></Field>
             <Field label="Target role"><TextInput name="targetRole" defaultValue={student.targetRole ?? ""} /></Field>
             <Field label="Lead source">
               <Select name="leadSource" options={[{ value: "", label: "-" }, ...optionsFrom(LEAD_SOURCE_LABELS)]} defaultValue={student.leadSource ?? ""} />
             </Field>
             <div className="sm:col-span-2">
-              <Field label="Internal notes"><TextArea name="internalNotes" defaultValue={student.internalNotes ?? ""} /></Field>
+              <Field label="Internal notes"><TextArea kind="text" name="internalNotes" defaultValue={student.internalNotes ?? ""} /></Field>
             </div>
             <div className="flex items-end"><SubmitButton>Save profile</SubmitButton></div>
           </form>
@@ -428,8 +428,8 @@ export function StudentDetailClient({
                 </Field>
                 <Field label="Sessions completed / planned">
                   <div className="flex gap-2">
-                    <TextInput name="totalSessionsCompleted" inputMode="numeric" defaultValue={String(e.totalSessionsCompleted)} disabled={!canEditTracker} />
-                    <TextInput name="totalSessionsPlanned" inputMode="numeric" defaultValue={e.totalSessionsPlanned?.toString() ?? ""} disabled={!canEditTracker} />
+                    <TextInput kind="int" name="totalSessionsCompleted" defaultValue={String(e.totalSessionsCompleted)} disabled={!canEditTracker} />
+                    <TextInput kind="int" name="totalSessionsPlanned" defaultValue={e.totalSessionsPlanned?.toString() ?? ""} disabled={!canEditTracker} />
                   </div>
                 </Field>
                 <Field label="Last task assigned">
@@ -439,16 +439,16 @@ export function StudentDetailClient({
                   <Select name="lastTaskCompleted" options={[{ value: "", label: "-" }, ...optionsFrom(TASK_COMPLETION_LABELS)]} defaultValue={e.lastTaskCompleted ?? ""} disabled={!canEditTracker} />
                 </Field>
                 <Field label="Applications submitted">
-                  <TextInput name="applicationsSubmitted" inputMode="numeric" defaultValue={String(e.applicationsSubmitted)} disabled={!canEditTracker} />
+                  <TextInput kind="int" name="applicationsSubmitted" defaultValue={String(e.applicationsSubmitted)} disabled={!canEditTracker} />
                 </Field>
                 <Field label="Interviews received">
-                  <TextInput name="interviewsReceived" inputMode="numeric" defaultValue={String(e.interviewsReceived)} disabled={!canEditTracker} />
+                  <TextInput kind="int" name="interviewsReceived" defaultValue={String(e.interviewsReceived)} disabled={!canEditTracker} />
                 </Field>
                 <Field label="Current milestone" hint="Changing it logs the change permanently">
                   <Select name="currentMilestone" options={optionsFrom(MILESTONE_LABELS)} defaultValue={e.currentMilestone} disabled={!canEditTracker} />
                 </Field>
                 <Field label="Milestone change note (optional)">
-                  <TextInput name="milestoneNote" placeholder="What happened in the session" disabled={!canEditTracker} />
+                  <TextInput kind="text" name="milestoneNote" placeholder="What happened in the session" disabled={!canEditTracker} />
                 </Field>
                 <Field label="Signal colour" hint="Manual - every change is logged">
                   <Select name="signalColour" options={[{ value: "", label: "Not set" }, ...optionsFrom(SIGNAL_LABELS)]} defaultValue={e.signalColour ?? ""} disabled={!canEditTracker} />
@@ -458,7 +458,7 @@ export function StudentDetailClient({
                 </Field>
                 <div className="sm:col-span-2">
                   <Field label="Signal notes" hint="Why Green/Amber/Red? What action is being taken?">
-                    <TextArea name="signalNotes" defaultValue={e.signalNotes ?? ""} disabled={!canEditTracker} />
+                    <TextArea kind="text" name="signalNotes" defaultValue={e.signalNotes ?? ""} disabled={!canEditTracker} />
                   </Field>
                 </div>
               </div>
@@ -552,7 +552,7 @@ export function StudentDetailClient({
             >
               <div className="min-w-64 flex-1">
                 <Field label="Login email" hint="Defaults to the student's email">
-                  <TextInput type="email" name="email" required defaultValue={student.email ?? ""} />
+                  <TextInput kind="email" name="email" required defaultValue={student.email ?? ""} />
                 </Field>
               </div>
               <div className="w-56">
@@ -584,7 +584,7 @@ export function StudentDetailClient({
             >
               <Field label="Program level"><Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" /></Field>
               <Field label="Enrollment date"><TextInput type="date" name="enrollmentDate" required defaultValue={todayKey} /></Field>
-              <Field label="Sessions planned"><TextInput name="totalSessionsPlanned" inputMode="numeric" /></Field>
+              <Field label="Sessions planned"><TextInput kind="int" name="totalSessionsPlanned" /></Field>
               <Field label="Assigned coach"><Select name="assignedCoach" options={COACH_OPTIONS} defaultValue="Karthick" /></Field>
               <Field label="Closer (L3)" hint="For the commission split">
                 <Select
@@ -623,8 +623,8 @@ export function StudentDetailClient({
             className="mt-4 grid grid-cols-1 gap-4 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-4"
           >
             <Field label="Date of score"><TextInput type="date" name="date" required defaultValue={todayKey} /></Field>
-            <Field label="Satisfaction (1-10)"><TextInput name="satisfactionScore" inputMode="numeric" required /></Field>
-            <Field label="NPS (0-10)"><TextInput name="npsScore" inputMode="numeric" required /></Field>
+            <Field label="Satisfaction (1-10)"><TextInput kind="int" name="satisfactionScore" min={1} max={10} required /></Field>
+            <Field label="NPS (0-10)"><TextInput kind="int" name="npsScore" min={0} max={10} required /></Field>
             <Field label="Outcome achieved">
               <Select name="outcomeAchieved" options={optionsFrom(OUTCOME_ACHIEVED_LABELS)} defaultValue="NO_OUTCOME_YET" />
             </Field>
@@ -632,7 +632,7 @@ export function StudentDetailClient({
               <CheckboxField name="testimonialReceived" label="Testimonial received" />
             </div>
             <div className="sm:col-span-2">
-              <Field label="Notes" hint="What did the student say?"><TextArea name="notes" /></Field>
+              <Field label="Notes" hint="What did the student say?"><TextArea kind="text" name="notes" /></Field>
             </div>
             <div className="flex items-end"><SubmitButton>Record score</SubmitButton></div>
           </form>

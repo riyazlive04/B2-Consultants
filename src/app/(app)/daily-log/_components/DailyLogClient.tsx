@@ -291,9 +291,12 @@ export function DailyLogClient({
                   label={isAuto ? `${label}  ·  Auto` : label}
                   hint={isAuto ? "Derived from your activity - correct it if it's wrong" : "Never captured - enter it"}
                 >
+                  {/* maxLength 6 mirrors the action's `num` rule (/^\d{0,6}$/) — a 7th digit
+                      is a typo, and the field should refuse it rather than the form. */}
                   <TextInput
+                    kind="int"
+                    maxLength={6}
                     name={name}
-                    inputMode="numeric"
                     placeholder="0"
                     defaultValue={isAuto ? String(captured) : ""}
                   />
@@ -302,7 +305,7 @@ export function DailyLogClient({
             })}
             <div className="sm:col-span-2 lg:col-span-3">
               <Field label="Notes / blockers" hint="Anything that held the day back?">
-                <TextArea name="notes" />
+                <TextArea kind="text" name="notes" />
               </Field>
             </div>
           </div>
@@ -363,13 +366,13 @@ export function DailyLogClient({
                   label={isAuto ? `${label}  ·  Auto` : label}
                   hint={isAuto ? "Auto-filled from your activity today - edit if needed" : "Manual entry"}
                 >
-                  <TextInput name={name} inputMode="numeric" placeholder="0" defaultValue={isAuto ? String(auto) : ""} />
+                  <TextInput kind="int" maxLength={6} name={name} placeholder="0" defaultValue={isAuto ? String(auto) : ""} />
                 </Field>
               );
             })}
             <div className="sm:col-span-2 lg:col-span-3">
               <Field label="Notes / blockers" hint="What stopped you from doing more today?">
-                <TextArea name="notes" />
+                <TextArea kind="text" name="notes" />
               </Field>
             </div>
           </div>

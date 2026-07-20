@@ -90,6 +90,41 @@ async function findLeadByNormalizedPhone(normalized: string, raw: string): Promi
   return candidates.find((c) => normalizeWhatsappNumber(c.phone) === normalized) ?? null;
 }
 
+export type DuplicateMatch = { lead: Lead; on: "phone" | "email" };
+
+/**
+ * Detect an existing lead that a MANUAL entry would duplicate. The two interactive back-office
+ * creation paths (Contacts "Add contact", Pipeline "New lead") don't go through upsertIntakeLead,
+ * so without this a rep who types the same person twice silently gets two Lead rows — which then
+ * splits that person's calls, bookings, owner and commission across both records (the exact
+ * failure upsertIntakeLead's phone-dedup exists to prevent, just on the capture side).
+ *
+ * Phone is matched on the NORMALIZED E.164 form, so "+91 98765 43210", "+919876543210" and
+ * "09876543210" all resolve to one person; email is matched case-insensitively (the same key
+ * booking-actions.ts / field-rules email folding use). Phone takes precedence in the report.
+ */
+export async function findDuplicateLead(input: {
+  phone?: string | null;
+  email?: string | null;
+}): Promise<DuplicateMatch | null> {
+  const phone = input.phone?.trim();
+  if (phone) {
+    const normalized = normalizeWhatsappNumber(phone);
+    const byPhone = normalized
+      ? await findLeadByNormalizedPhone(normalized, phone)
+      : await prisma.lead.findFirst({ where: { phone } });
+    if (byPhone) return { lead: byPhone, on: "phone" };
+  }
+  const email = input.email?.trim();
+  if (email) {
+    const byEmail = await prisma.lead.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
+    if (byEmail) return { lead: byEmail, on: "email" };
+  }
+  return null;
+}
+
 export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
   const input = bound(rawInput);
   const utm = input.utm && Object.keys(input.utm).length ? (input.utm as Prisma.InputJsonValue) : undefined;

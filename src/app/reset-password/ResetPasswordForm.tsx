@@ -6,6 +6,7 @@ import { useState } from "react";
 import { KeyRound, Loader2 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
+import { BrandLogo } from "@/components/shell/BrandLogo";
 
 /**
  * Same two-pane shell as LoginForm (src/app/login/LoginForm.tsx). `token` comes from
@@ -55,12 +56,10 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
       <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-10 w-10 flex-none place-items-center rounded-btn bg-primary text-sm font-bold text-on-accent">
-              B2
-            </span>
+            <BrandLogo className="h-10 w-10 flex-none" />
             <span className="flex flex-col leading-tight">
               <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
-              <span className="text-caption text-ink-2">Founder cockpit</span>
+              <span className="text-caption text-ink-2">Business cockpit</span>
             </span>
           </div>
           <ThemeToggle frosted />
@@ -84,12 +83,10 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
           {/* mobile brand row (brand panel is hidden below lg) */}
           <div className="mb-6 flex items-center justify-between lg:hidden">
             <div className="flex items-center gap-2.5">
-              <span className="grid h-9 w-9 flex-none place-items-center rounded-btn bg-primary text-xs font-bold text-on-accent">
-                B2
-              </span>
+              <BrandLogo className="h-9 w-9 flex-none" />
               <span className="flex flex-col leading-tight">
                 <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-                <span className="text-caption text-ink-3">Founder cockpit</span>
+                <span className="text-caption text-ink-3">Business cockpit</span>
               </span>
             </div>
             <ThemeToggle />

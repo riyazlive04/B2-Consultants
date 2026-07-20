@@ -4,9 +4,10 @@ import { forwardRef, useId } from "react";
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { useFormStatus } from "react-dom";
 import { Check, Loader2 } from "lucide-react";
-import { FieldContext, useControlProps } from "./field-base";
+import { FieldContext, useControlProps, fieldKindProps } from "./field-base";
 import { DatePicker } from "./DatePicker";
 import { SelectMenu, type SelectOption } from "./SelectMenu";
+import type { FieldKind } from "@/lib/field-rules";
 
 /** Minimal form kit - every entry form in the app uses these so fields look identical. */
 
@@ -63,25 +64,61 @@ export function Field({
   );
 }
 
-/** Ref-forwarding so callers can reach the DOM node (e.g. to hook the form's reset event). */
-export const TextInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
-  function TextInput(props, ref) {
-    // A `type="date"` field gets the app's own calendar (§5.5) — same call site, no
-    // native OS popup. `time`/`month`/`datetime-local` stay native but theme-corrected.
-    if (props.type === "date") {
-      // drop native `type` and `size` (a number) — DatePicker owns both
-      const { type: _t, size: _s, ...rest } = props;
-      return <DatePicker {...rest} />;
-    }
-    const { cls, ...aria } = useControlProps();
-    const native = NATIVE_DATEISH.has(props.type ?? "") ? "dateish-native" : "";
-    return <input ref={ref} {...aria} {...props} className={`${cls} h-10 px-3 ${native}`} />;
-  },
-);
+/**
+ * Ref-forwarding so callers can reach the DOM node (e.g. to hook the form's reset event).
+ *
+ * `kind` is what makes a field accept only its own characters — `kind="name"` refuses digits,
+ * `kind="money"` refuses letters, etc. It also supplies inputMode/autoComplete/maxLength, so it
+ * replaces hand-set attributes rather than adding to them. See lib/field-rules.ts.
+ */
+export const TextInput = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement> & { kind?: FieldKind }
+>(function TextInput({ kind, ...props }, ref) {
+  // A `type="date"` field gets the app's own calendar (§5.5) — same call site, no
+  // native OS popup. `time`/`month`/`datetime-local` stay native but theme-corrected.
+  if (props.type === "date") {
+    // drop native `type` and `size` (a number) — DatePicker owns both
+    const { type: _t, size: _s, ...rest } = props;
+    return <DatePicker {...rest} />;
+  }
+  // Pull only the DOM-safe ARIA attrs. useControlProps also returns raw `describedBy`
+  // and `invalid` (consumed by the custom Select/DatePicker/PhoneField for styling) —
+  // spreading those onto a native <input> leaked them as junk `describedby`/`invalid`
+  // attributes and threw a React warning on every form in the app.
+  const { cls, "aria-describedby": ariaDescribedBy, "aria-invalid": ariaInvalid } = useControlProps();
+  const { attrs, onChange } = fieldKindProps<HTMLInputElement>(kind, props.onChange);
+  const native = NATIVE_DATEISH.has(props.type ?? "") ? "dateish-native" : "";
+  return (
+    <input
+      ref={ref}
+      aria-describedby={ariaDescribedBy}
+      aria-invalid={ariaInvalid}
+      {...attrs}
+      {...props}
+      onChange={onChange}
+      className={`${cls} h-10 px-3 ${native}`}
+    />
+  );
+});
 
-export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  const { cls, ...aria } = useControlProps();
-  return <textarea rows={2} {...aria} {...props} className={`${cls} min-h-10 px-3 py-2.5`} />;
+export function TextArea({
+  kind,
+  ...props
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & { kind?: FieldKind }) {
+  const { cls, "aria-describedby": ariaDescribedBy, "aria-invalid": ariaInvalid } = useControlProps();
+  const { attrs, onChange } = fieldKindProps<HTMLTextAreaElement>(kind, props.onChange);
+  return (
+    <textarea
+      rows={2}
+      aria-describedby={ariaDescribedBy}
+      aria-invalid={ariaInvalid}
+      {...attrs}
+      {...props}
+      onChange={onChange}
+      className={`${cls} min-h-10 px-3 py-2.5`}
+    />
+  );
 }
 
 /**

@@ -15,11 +15,14 @@ out
 build
 tsconfig.tsbuildinfo
 
-# Secrets & local environment — never ship these
+# Secrets & local environment — never ship these.
+# `.env.*` is what keeps the real .env.production (Supabase password, WATI token,
+# CRON_SECRET) out of the image layers; the negations re-admit the value-less templates.
 .env
 .env.*
 !.env.example
 !.env.supabase.example
+!.env.production.example
 
 # Supabase migration working dir — plaintext PII dump
 .migration
@@ -34,7 +37,11 @@ tsconfig.tsbuildinfo
 .playwright-mcp
 *.log
 
-# Docker & compose files — not needed inside the image
+# Docker & compose files — not needed inside the image.
+# NOTE: `Dockerfile` matches the ROOT one only, so docker/cron/Dockerfile and the
+# sidecar's *.sh stay in the build context (the cron service needs them). Caddyfile
+# is bind-mounted by compose rather than copied, so it is excluded too.
 Dockerfile
 .dockerignore
 docker-compose*.yml
+Caddyfile

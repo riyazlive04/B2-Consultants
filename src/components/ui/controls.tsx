@@ -14,11 +14,13 @@ import { useFormStatus } from "react-dom";
 // ───────────────────────────── buttons ─────────────────────────────
 
 /**
- * §5.4 defines exactly four variants: Primary / Soft / Ghost / Danger.
- * `secondary` is kept as a deprecated alias of `soft` so existing call sites
- * keep compiling; it renders the Soft style.
+ * §5.4 defines the core variants: Primary / Soft / Ghost / Danger.
+ * `outline` is the bordered secondary — added because ~50 call sites hand-rolled a
+ * `border … hover:border-primary` button for want of one, drifting on disabled/focus
+ * styling each time. `secondary` is a deprecated alias of `soft` so existing call
+ * sites keep compiling; it renders the Soft style.
  */
-export type BtnVariant = "primary" | "soft" | "secondary" | "ghost" | "danger";
+export type BtnVariant = "primary" | "soft" | "secondary" | "ghost" | "danger" | "outline";
 export type BtnSize = "sm" | "md";
 
 // `text-on-accent` (not `text-white`): the dark theme's fills are light, so a
@@ -31,6 +33,7 @@ const VARIANT: Record<BtnVariant, string> = {
   secondary: SOFT,
   ghost: "text-ink-2 hover:bg-surface-2 hover:text-ink",
   danger: "bg-bad text-on-accent hover:brightness-95",
+  outline: "border border-line-strong bg-surface text-ink hover:border-primary hover:text-primary",
 };
 
 // §5.4: height 40, or 36 compact.
@@ -150,7 +153,7 @@ export function Switch({
         disabled={disabled}
         aria-checked={checked}
         onChange={(e) => onChange?.(e.target.checked)}
-        className="peer my-1.5 h-7 w-12 cursor-pointer appearance-none rounded-full bg-line-strong transition-colors checked:bg-good disabled:cursor-not-allowed disabled:opacity-50"
+        className="peer my-1.5 h-7 w-12 cursor-pointer appearance-none rounded-full bg-line-strong transition-colors checked:bg-good focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
       />
       <span
         aria-hidden

@@ -24,8 +24,9 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "B2 Consultants - Founder Dashboard",
+  title: "B2 Consultants",
   description: "Private internal dashboard for B2 Consultants",
+  icons: { icon: "/icon.svg" },
   robots: { index: false, follow: false },
 };
 

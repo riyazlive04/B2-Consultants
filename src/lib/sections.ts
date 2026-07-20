@@ -28,8 +28,12 @@ export const SECTION_ICON_NAMES = [
 ] as const;
 export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];
 
-/** Sidebar groups the console offers. Free text would let a typo orphan a section. */
-export const SECTION_GROUPS = ["Money", "People", "Insights", "Workspace"] as const;
+/** Sidebar groups the console offers. Free text would let a typo orphan a section.
+ *  "Money" was one 10-item blob fusing accounting with the whole sales CRM; it's split
+ *  into "Sales" (the pipeline → contacts → deals flow a rep lives in) and "Finance" (the
+ *  founder's accounting screens). "Money" is kept last as a legacy-safe fallback so any
+ *  saved founder config that still references it resolves rather than orphaning a section. */
+export const SECTION_GROUPS = ["Sales", "Finance", "People", "Insights", "Workspace", "Money"] as const;
 export type SectionGroup = (typeof SECTION_GROUPS)[number];
 
 type SectionCatalogueEntry = {
@@ -47,33 +51,34 @@ type SectionCatalogueEntry = {
 };
 
 export const SECTION_CATALOGUE = [
-  { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Money", roles: ["ADMIN"] },
-  { key: "telecaller", label: "Telecaller Pay", href: "/telecaller", phase: 1, icon: "phone", group: "Money", roles: ["ADMIN"] },
-  // The telecaller's OWN numbers + today's call list. The counterpart to "Telecaller Pay":
-  // that board is Ameen looking at the team, this is Nilofer/Asma looking at themselves, so
-  // USER is in the default list. ADMIN is included to inspect it, but the page shows the
-  // signed-in person's desk — and renders an explainer for anyone with no telecaller profile,
-  // since "telecaller" is a TeamProfile.logVariant, not a role that could gate a section.
-  { key: "my-desk", label: "My Desk", href: "/my-desk", phase: 1, icon: "phone", group: "Money", roles: ["ADMIN", "USER"] },
-  { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Money", roles: ["ADMIN"] },
+  { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"] },
+  { key: "telecaller", label: "Telecaller Pay", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN"] },
+  { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"] },
   // Read-only journal + trial balance (SPEC §10.4, §12). Admin-only: it is the audit
-  // surface for every rupee the other Money screens summarise.
-  { key: "ledger", label: "Ledger", href: "/ledger", phase: 1, icon: "scale", group: "Money", roles: ["ADMIN"] },
-  { key: "pipeline", label: "Pipeline", href: "/pipeline", phase: 1, icon: "git-branch", group: "Money", roles: ["ADMIN", "HEAD", "USER"] },
+  // surface for every rupee the other Finance screens summarise.
+  { key: "ledger", label: "Ledger", href: "/ledger", phase: 1, icon: "scale", group: "Finance", roles: ["ADMIN"] },
+  { key: "pipeline", label: "Pipeline", href: "/pipeline", phase: 1, icon: "git-branch", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // Synamate CRM parity (Phase 1): Contacts (the CRM) + Opportunities (the drag-drop board).
-  { key: "opportunities", label: "Opportunities", href: "/opportunities", phase: 1, icon: "kanban", group: "Money", roles: ["ADMIN", "USER"] },
-  { key: "bookings", label: "Bookings", href: "/bookings", phase: 1, icon: "calendar-check", group: "Money", roles: ["ADMIN"] },
+  // Grouped with Pipeline under Sales so the whole lead → contact → deal flow sits together.
+  { key: "contacts", label: "Contacts", href: "/contacts", phase: 1, icon: "contact", group: "Sales", roles: ["ADMIN", "USER"] },
+  { key: "opportunities", label: "Opportunities", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "USER"] },
+  { key: "bookings", label: "Bookings", href: "/bookings", phase: 1, icon: "calendar-check", group: "Sales", roles: ["ADMIN"] },
   // The Outreach Specialist SOP queue (Script_for_Outreach_Specialist.docx, Steps 1–23) + the
   // Key Metrics sheet it feeds. USER is in the default list because the outreach specialist IS a
   // USER — this is their day's work, not an admin report.
-  { key: "outreach", label: "Outreach", href: "/outreach", phase: 1, icon: "message-circle", group: "Money", roles: ["ADMIN", "USER"] },
+  { key: "outreach", label: "Outreach", href: "/outreach", phase: 1, icon: "message-circle", group: "Sales", roles: ["ADMIN", "USER"] },
   // Synamate Payments parity (Phase 3): invoices, estimates, products, subscriptions.
-  { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Money", roles: ["ADMIN"] },
+  { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"] },
   { key: "people", label: "Users", href: "/people", phase: 2, icon: "users", group: "People", roles: ["ADMIN"] },
-  { key: "contacts", label: "Contacts", href: "/contacts", phase: 1, icon: "contact", group: "People", roles: ["ADMIN", "USER"] },
   { key: "students", label: "Students", href: "/students", phase: 2, icon: "graduation-cap", group: "People", roles: ["ADMIN", "HEAD"] },
   { key: "agreements", label: "Agreements", href: "/agreements", phase: 4, icon: "file-signature", group: "People", roles: ["ADMIN"] },
   { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "People", roles: ["HEAD", "USER"] },
+  // The telecaller's OWN numbers + today's call list — a personal work view (the counterpart to
+  // "Telecaller Pay": that board is Ameen looking at the team, this is Nilofer/Asma looking at
+  // themselves), so it sits under People. USER is in the default list; ADMIN can inspect it, and
+  // the page renders an explainer for anyone with no telecaller profile, since "telecaller" is a
+  // TeamProfile.logVariant, not a role that could gate a section.
+  { key: "my-desk", label: "My Desk", href: "/my-desk", phase: 1, icon: "phone", group: "People", roles: ["ADMIN", "USER"] },
   { key: "arena", label: "Arena", href: "/arena", phase: 2, icon: "trophy", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
   // STUDENT portal: their own journey only + the CV diagnostic (stores nothing).
   { key: "my-journey", label: "My Journey", href: "/my-journey", phase: 2, icon: "map", group: "People", roles: ["STUDENT"] },

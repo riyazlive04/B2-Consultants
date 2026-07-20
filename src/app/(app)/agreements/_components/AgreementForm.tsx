@@ -157,10 +157,10 @@ export function AgreementForm({
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Full name">
-            <TextInput value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={120} />
+            <TextInput kind="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={120} />
           </Field>
           <Field label="WhatsApp number" hint="With country code. The signing link and code both go here.">
-            <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+91 98765 43210" />
+            <TextInput kind="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+91 98765 43210" />
           </Field>
           <div className="sm:col-span-2">
             <Field label="Postal address" hint="Printed in the agreement header (§2).">
@@ -168,7 +168,9 @@ export function AgreementForm({
             </Field>
           </div>
           <Field label="Email (optional)">
-            <TextInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} />
+            {/* 200, not the kind's 254: agreementDataSchema caps it there, and that schema also
+                reads back already-signed agreements, so it isn't ours to loosen. */}
+            <TextInput kind="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} />
           </Field>
         </div>
       </section>
@@ -190,7 +192,7 @@ export function AgreementForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Total programme fee (INR)">
             <TextInput
-              inputMode="decimal"
+              kind="money"
               value={total}
               onChange={(e) => setTotal(e.target.value)}
               required
@@ -221,7 +223,7 @@ export function AgreementForm({
               <div key={i} className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                 <Field label={`Instalment ${i + 1} amount (INR)`}>
                   <TextInput
-                    inputMode="decimal"
+                    kind="money"
                     value={row.amount}
                     onChange={(e) =>
                       setInst((p) => p.map((r, j) => (j === i ? { ...r, amount: e.target.value } : r)))

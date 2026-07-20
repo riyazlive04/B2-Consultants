@@ -88,6 +88,8 @@ export async function getBoard(pipelineId?: string): Promise<BoardData> {
     orderBy: { position: "asc" },
     include: {
       opps: {
+        // Exclude archived opportunities and deals whose parent contact is archived.
+        where: { deletedAt: null, lead: { deletedAt: null } },
         orderBy: { position: "asc" },
         take: STAGE_CARD_LIMIT + 1, // fetch one extra to detect overflow without a second COUNT query
         include: {
@@ -98,39 +100,57 @@ export async function getBoard(pipelineId?: string): Promise<BoardData> {
     },
   });
 
+  // Stage/grand/forecast totals are computed over ALL opportunities in each stage (a groupBy), not
+  // just the display-capped `opps` slice above — otherwise a stage with more than STAGE_CARD_LIMIT
+  // cards would under-report its value. They are also split by status so WON/LOST/ABANDONED deals
+  // no longer inflate the live pipeline value or the weighted forecast: "pipeline value" means
+  // money still IN PLAY (issue 1.6). Each column header still shows that column's own full sum
+  // (all statuses) — which is what someone reading a Won/Lost column expects.
+  const sums = await prisma.opportunity.groupBy({
+    by: ["stageId", "status"],
+    where: { stageId: { in: stages.map((s) => s.id) }, deletedAt: null, lead: { deletedAt: null } },
+    _sum: { valueInrMinor: true },
+  });
+  const allByStage = new Map<string, bigint>();
+  const openByStage = new Map<string, bigint>();
+  for (const r of sums) {
+    const v = r._sum.valueInrMinor ?? 0n;
+    allByStage.set(r.stageId, (allByStage.get(r.stageId) ?? 0n) + v);
+    if (r.status === "OPEN") openByStage.set(r.stageId, (openByStage.get(r.stageId) ?? 0n) + v);
+  }
+
   let totalCount = 0;
-  let grandTotal = 0n;
-  let weightedGrandTotal = 0n;
+  let grandTotal = 0n; // OPEN only — the live pipeline value
+  let weightedGrandTotal = 0n; // OPEN only, probability-weighted
   let anyWeighted = false;
 
   const boardStages: BoardStage[] = stages.map((s) => {
     const hasMore = s.opps.length > STAGE_CARD_LIMIT;
     const oppsForDisplay = hasMore ? s.opps.slice(0, STAGE_CARD_LIMIT) : s.opps;
 
-    let stageTotal = 0n;
-    const cards: BoardCard[] = oppsForDisplay.map((o) => {
-      stageTotal += o.valueInrMinor;
-      return {
-        id: o.id,
-        name: o.name,
-        contactId: o.lead.id,
-        contactName: o.lead.name,
-        source: o.source,
-        valueInr: formatInrMinor(o.valueInrMinor),
-        ownerName: o.assignedTo?.name ?? null,
-        ownerId: o.assignedTo?.id ?? null,
-        status: o.status,
-        position: o.position,
-        stageId: o.stageId,
-      };
-    });
+    const cards: BoardCard[] = oppsForDisplay.map((o) => ({
+      id: o.id,
+      name: o.name,
+      contactId: o.lead.id,
+      contactName: o.lead.name,
+      source: o.source,
+      valueInr: formatInrMinor(o.valueInrMinor),
+      ownerName: o.assignedTo?.name ?? null,
+      ownerId: o.assignedTo?.id ?? null,
+      status: o.status,
+      position: o.position,
+      stageId: o.stageId,
+    }));
+
+    const stageAll = allByStage.get(s.id) ?? 0n; // column header: every card, any status
+    const stageOpen = openByStage.get(s.id) ?? 0n; // live pipeline: OPEN cards only
 
     totalCount += cards.length;
-    grandTotal += stageTotal;
+    grandTotal += stageOpen;
 
-    const weightedTotal =
-      s.probability != null ? (stageTotal * BigInt(s.probability)) / 100n : stageTotal;
-    weightedGrandTotal += weightedTotal;
+    const weightedOpen =
+      s.probability != null ? (stageOpen * BigInt(s.probability)) / 100n : stageOpen;
+    weightedGrandTotal += weightedOpen;
     if (s.probability != null) anyWeighted = true;
 
     return {
@@ -139,8 +159,8 @@ export async function getBoard(pipelineId?: string): Promise<BoardData> {
       legacyStage: s.legacyStage,
       probability: s.probability,
       count: cards.length,
-      totalInr: formatInrMinor(stageTotal),
-      weightedTotalInr: s.probability != null ? formatInrMinor(weightedTotal) : null,
+      totalInr: formatInrMinor(stageAll),
+      weightedTotalInr: s.probability != null ? formatInrMinor(weightedOpen) : null,
       cards,
       hasMore,
     };

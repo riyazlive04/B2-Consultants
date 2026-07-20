@@ -253,6 +253,10 @@ export function SignCeremony({
                 value={declineReason}
                 onChange={(e) => setDeclineReason(e.target.value)}
                 rows={2}
+                // Free text — nothing is filtered. 500 matches declineAgreement, which silently
+                // truncates there; without the cap the signer never learns half their reason went
+                // nowhere. The OTP boxes below get no kind: they already filter to digits.
+                maxLength={500}
                 placeholder="Tell B2 Consultants why (optional)"
                 className="w-full rounded-field border border-line-strong bg-surface px-3 py-2 text-body text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-soft"
               />

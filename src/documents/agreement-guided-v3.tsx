@@ -281,12 +281,15 @@ function stamp(d: Date): string {
 }
 
 function Brand() {
+  // The logo mark, in the brand periwinkle (matches the app's --brand-indigo and the
+  // invoice mark). "²" is WinAnsi-safe — see the glyph note at the top of this file.
+  const INDIGO = "#5B60C9";
   return (
     <View style={{ alignItems: "center", marginBottom: 10 }}>
-      <View style={{ borderWidth: 1.2, borderColor: INK, paddingHorizontal: 9, paddingTop: 2, paddingBottom: 0 }}>
-        <Text style={{ fontFamily: "Times-Bold", fontSize: 20 }}>B2</Text>
+      <View style={{ borderWidth: 1.3, borderColor: INDIGO, borderRadius: 4, paddingHorizontal: 9, paddingTop: 2, paddingBottom: 1 }}>
+        <Text style={{ fontFamily: "Times-Bold", fontSize: 20, color: INDIGO }}>B²</Text>
       </View>
-      <Text style={{ fontSize: 4.6, letterSpacing: 1.6, marginTop: 1.5 }}>CONSULTANTS</Text>
+      <Text style={{ fontSize: 4.6, letterSpacing: 1.6, marginTop: 1.5, color: INDIGO }}>CONSULTANTS</Text>
     </View>
   );
 }

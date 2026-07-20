@@ -7,12 +7,16 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireSection } from "@/lib/rbac";
+import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { parseDateInput } from "@/lib/dates";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { parseMentions } from "@/lib/gn-mentions";
+import { mergeWatchProgress } from "@/lib/video-progress";
 import { getGnAccess, getGnMemberProfile, loadMentionCandidates, type GnMemberProfile } from "./german-note-metrics";
 import { logActivity, diffFields } from "./activity-log";
+import { isKnownLevel } from "./levels";
 import type { ActionResult } from "./finance-actions";
+import { allocateStudentCode } from "./student-code";
 
 /** Post images are stored inline as resized data URLs (same as avatars — no object store). */
 const MAX_POST_IMAGE_CHARS = 900_000;
@@ -35,8 +39,6 @@ function validPostImage(raw: string | undefined): { ok: true; value: string | nu
 function firstError(e: z.ZodError): string {
   return e.issues[0]?.message ?? "Invalid input";
 }
-
-const GN_LEVELS = ["GN_A1", "GN_A2", "GN_B1", "GN_B2"] as const;
 
 // ── Guards ─────────────────────────────────────────────────────
 
@@ -90,10 +92,10 @@ function revalidateBatch(batchId: string) {
 
 const batchSchema = z.object({
   name: z.string().trim().min(1, "Batch name is required").max(120),
-  level: z.enum(GN_LEVELS, { message: "Pick a level (A1–B2)" }),
+  level: z.string().trim().min(1, "Pick a level (A1–B2)"), // validated vs the live catalogue in the action
   tutorId: z.string().trim().optional(),
   targetStrength: z.coerce.number().int().min(1).max(100).optional(), // target class size (~8)
-  notes: z.string().trim().max(2000).optional(),
+  notes: optionalRule("text"),
 });
 
 async function validTutorId(tutorId: string | undefined): Promise<string | null | undefined> {
@@ -107,6 +109,7 @@ export async function createBatch(form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
   const parsed = batchSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  if (!(await isKnownLevel(parsed.data.level, ["GERMAN_LEVEL"]))) return { ok: false, error: "Pick a German level (A1–B2)" };
   const tutorId = await validTutorId(parsed.data.tutorId);
   if (tutorId === undefined) return { ok: false, error: "Selected tutor account not found" };
   const batch = await prisma.gnBatch.create({
@@ -137,6 +140,7 @@ export async function updateBatch(batchId: string, form: FormData): Promise<Acti
     .extend({ status: z.enum(["ACTIVE", "ARCHIVED"]) })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  if (!(await isKnownLevel(parsed.data.level, ["GERMAN_LEVEL"]))) return { ok: false, error: "Pick a German level (A1–B2)" };
   const tutorId = await validTutorId(parsed.data.tutorId);
   if (tutorId === undefined) return { ok: false, error: "Selected tutor account not found" };
   const before = await prisma.gnBatch.findUnique({
@@ -200,6 +204,50 @@ export async function deleteBatch(batchId: string): Promise<ActionResult> {
 
 // ── Members (Admin) ────────────────────────────────────────────
 
+/**
+ * The class-strength cap (spec Part 2 §2.1: "If a batch is already full, no more people
+ * are assigned to it"). `targetStrength` — despite the name — is that cap; it defaults to
+ * the spec's 8 and stays per-batch editable.
+ *
+ * WHY THE ROW LOCK: two admins filling the last seat at the same moment would both read
+ * `filled = 7` under Postgres' default READ COMMITTED and both insert, landing 9 in an
+ * 8-seat batch. Locking the gn_batch row serialises seat checks for that batch, so the cap
+ * is a real constraint rather than a suggestion. The caller MUST already be in a
+ * transaction — otherwise the lock is released before the insert and the race is back.
+ *
+ * When a batch is full the error names the next batch of the same level with room, because
+ * "blocked" without "go here instead" just moves the puzzle to the admin (spec §2.2: the
+ * system suggests the next batch to fill).
+ */
+async function claimSeat(
+  tx: Prisma.TransactionClient,
+  batchId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await tx.$queryRaw`SELECT id FROM gn_batch WHERE id = ${batchId} FOR UPDATE`;
+  const batch = await tx.gnBatch.findUnique({
+    where: { id: batchId },
+    select: { name: true, level: true, targetStrength: true },
+  });
+  if (!batch) return { ok: false, error: "Batch not found" };
+
+  const filled = await tx.gnBatchMember.count({ where: { batchId } });
+  if (filled < batch.targetStrength) return { ok: true };
+
+  const alternatives = await tx.gnBatch.findMany({
+    where: { level: batch.level, status: "ACTIVE", id: { not: batchId } },
+    select: { name: true, targetStrength: true, _count: { select: { members: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const next = alternatives.find((b) => b._count.members < b.targetStrength);
+  const full = `"${batch.name}" is full (${filled}/${batch.targetStrength} seats).`;
+  return {
+    ok: false,
+    error: next
+      ? `${full} Next with room: "${next.name}" (${next._count.members}/${next.targetStrength}).`
+      : `${full} Every active ${batch.level} batch is full — open a new one for this student.`,
+  };
+}
+
 export async function addExistingMember(batchId: string, form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
   const studentId = String(form.get("studentId") ?? "");
@@ -208,12 +256,18 @@ export async function addExistingMember(batchId: string, form: FormData): Promis
   if (!student) return { ok: false, error: "Student not found" };
   const batch = await prisma.gnBatch.findUnique({ where: { id: batchId }, select: { name: true } });
   try {
-    const member = await prisma.gnBatchMember.create({ data: { batchId, studentId } });
+    const seated = await prisma.$transaction(async (tx) => {
+      const seat = await claimSeat(tx, batchId);
+      if (!seat.ok) return seat;
+      const member = await tx.gnBatchMember.create({ data: { batchId, studentId } });
+      return { ok: true as const, memberId: member.id };
+    });
+    if (!seated.ok) return seated;
     await logActivity(session, {
       action: "gn.member.create",
       section: "german-note",
       entityType: "GnBatchMember",
-      entityId: member.id,
+      entityId: seated.memberId,
       summary: `Added ${student.fullName} to the batch "${batch?.name ?? "German Note"}"`,
       meta: { batchId, studentId },
     });
@@ -228,9 +282,9 @@ export async function addExistingMember(batchId: string, form: FormData): Promis
 }
 
 const newMemberSchema = z.object({
-  fullName: z.string().trim().min(1, "Full name is required").max(120),
-  email: z.string().trim().email("Valid email required").optional().or(z.literal("")),
-  phone: z.string().trim().max(30).optional(),
+  fullName: rule("name"),
+  email: optionalRule("email"),
+  phone: optionalRule("phone"),
 });
 
 const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -242,13 +296,23 @@ export async function addNewMember(batchId: string, form: FormData): Promise<Act
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
 
-  const student = await prisma.$transaction(async (tx) => {
+  // Seat first, student second: a full batch must not leave a stranded Student row behind.
+  const seated = await prisma.$transaction(async (tx) => {
+    const seat = await claimSeat(tx, batchId);
+    if (!seat.ok) return seat;
     const s = await tx.student.create({
-      data: { fullName: d.fullName, email: d.email || null, phone: d.phone || null },
+      data: {
+        code: await allocateStudentCode(tx),
+        fullName: d.fullName,
+        email: d.email || null,
+        phone: d.phone || null,
+      },
     });
     await tx.gnBatchMember.create({ data: { batchId, studentId: s.id } });
-    return s;
+    return { ok: true as const, student: s };
   });
+  if (!seated.ok) return seated;
+  const student = seated.student;
 
   // Same auto-link as createStudent: attach past GN income rows entered by name.
   const candidates = await prisma.income.findMany({ where: { studentId: null } });
@@ -308,8 +372,8 @@ const tutorAuth = betterAuth({
 });
 
 const tutorLoginSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(120),
-  email: z.string().trim().email("Valid email required"),
+  name: rule("name"),
+  email: rule("email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
@@ -376,8 +440,9 @@ export async function revokeTutorLogin(userId: string): Promise<ActionResult> {
 const recordingSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(160),
   classDate: z.string().min(10, "Class date is required"),
-  videoUrl: z.string().trim().min(1, "Video link is required").max(500),
-  notes: z.string().trim().max(2000).optional(),
+  // rule("url") also adds a missing scheme, so a pasted "fathom.video/share/x" still parses.
+  videoUrl: rule("url"),
+  notes: optionalRule("text"),
   moduleId: z.string().trim().optional(),
 });
 
@@ -577,8 +642,11 @@ const eventSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(160),
   type: z.enum(GN_EVENT_TYPES).optional(), // session kind; DB default LIVE_CLASS
   startsAt: z.string().min(10, "Start time is required"),
-  durationMins: z.string().trim().regex(/^\d{0,4}$/).optional(),
-  joinUrl: z.string().trim().max(500).optional(),
+  // A live class is minutes-to-hours; 1440 (24h) is the outer bound that is still a "class".
+  durationMins: blankToUndefined(intInRange(1, 1440, "Duration")),
+  // optionalRule("url") adds a missing scheme — a bare "zoom.us/j/…" would otherwise
+  // render as a RELATIVE href on the Join button and 404 inside the app.
+  joinUrl: optionalRule("url"),
   notes: z.string().trim().max(1000).optional(),
 });
 
@@ -854,7 +922,14 @@ export async function toggleGnCommentLike(commentId: string): Promise<ActionResu
   return { ok: true };
 }
 
-/** Mark/unmark a class recording as watched (per viewer) — drives the batch progress bar. */
+/**
+ * Mark/unmark a class recording as watched (per viewer) — drives the batch progress bar.
+ *
+ * This is the SELF-REPORT. It no longer decides completion on its own: spec §10.3 makes the
+ * tracked percentage the source of truth, so un-ticking now clears the claim while KEEPING
+ * any tracked progress. Deleting the row on un-tick would throw away the evidence — exactly
+ * the thing the founders asked us to start keeping.
+ */
 export async function toggleRecordingWatched(recordingId: string): Promise<ActionResult> {
   const session = await requireGn();
   const recording = await prisma.gnRecording.findUnique({
@@ -868,12 +943,78 @@ export async function toggleRecordingWatched(recordingId: string): Promise<Actio
     where: { recordingId_userId: { recordingId, userId: session.user.id } },
   });
   if (existing) {
-    await prisma.gnRecordingWatch.delete({ where: { id: existing.id } });
+    // Un-ticking with tracked progress on the row: drop the claim, keep the measurement.
+    if (existing.watchedPct !== null) {
+      await prisma.gnRecordingWatch.update({
+        where: { id: existing.id },
+        data: { selfReported: false },
+      });
+    } else {
+      await prisma.gnRecordingWatch.delete({ where: { id: existing.id } });
+    }
   } else {
-    await prisma.gnRecordingWatch.create({ data: { recordingId, userId: session.user.id } });
+    await prisma.gnRecordingWatch.create({
+      data: { recordingId, userId: session.user.id, selfReported: true },
+    });
   }
   revalidatePath(`/german-note/${recording.batchId}`);
   revalidatePath("/german-note");
+  return { ok: true };
+}
+
+/**
+ * Player heartbeat: record how far this viewer actually got (spec §10.3).
+ *
+ * Called from the player as it plays, so it must be cheap and idempotent. Progress is folded
+ * as a high-water mark (see lib/video-progress.ts) — rewatching from the start must not undo
+ * a completed video.
+ */
+export async function recordWatchProgress(
+  recordingId: string,
+  positionSecs: number,
+  durationSecs: number,
+): Promise<ActionResult> {
+  const session = await requireGn();
+  if (!Number.isFinite(positionSecs) || !Number.isFinite(durationSecs) || durationSecs <= 0) {
+    return { ok: false, error: "Invalid progress" };
+  }
+  const recording = await prisma.gnRecording.findUnique({
+    where: { id: recordingId },
+    select: { batchId: true },
+  });
+  if (!recording) return { ok: false, error: "Recording not found" };
+  if (!(await isBatchParticipant(session, recording.batchId))) return { ok: false, error: "Not allowed" };
+
+  const existing = await prisma.gnRecordingWatch.findUnique({
+    where: { recordingId_userId: { recordingId, userId: session.user.id } },
+    select: { id: true, watchedPct: true },
+  });
+  const pct = mergeWatchProgress(existing?.watchedPct ?? null, positionSecs, durationSecs);
+  const pos = Math.max(0, Math.round(positionSecs));
+  const dur = Math.round(durationSecs);
+
+  if (existing) {
+    await prisma.gnRecordingWatch.update({
+      where: { id: existing.id },
+      data: { watchedPct: pct, positionSecs: pos, durationSecs: dur, lastHeartbeatAt: new Date() },
+    });
+  } else {
+    // Tracking alone creates the row — a student who just watches, without ticking anything,
+    // still gets credited. selfReported stays false: they never claimed anything.
+    await prisma.gnRecordingWatch.create({
+      data: {
+        recordingId,
+        userId: session.user.id,
+        selfReported: false,
+        watchedPct: pct,
+        positionSecs: pos,
+        durationSecs: dur,
+        lastHeartbeatAt: new Date(),
+      },
+    });
+  }
+  // No revalidate: this fires every few seconds during playback and re-rendering the batch
+  // page on each heartbeat would be a self-inflicted load test.
   return { ok: true };
 }
 

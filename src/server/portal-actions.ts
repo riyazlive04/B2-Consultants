@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/rbac";
+import { optionalRule, rule } from "@/lib/field-rules";
 import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
@@ -14,8 +15,9 @@ import type { ActionResult } from "./finance-actions";
  */
 
 const checkInSchema = z.object({
-  actual: z.string().trim().min(1, "Tell us what you got done this week"),
-  note: z.string().trim().optional(),
+  // Prose, so `text` (cap only) — the min(1) keeps the empty-box message the student sees.
+  actual: rule("text").pipe(z.string().min(1, "Tell us what you got done this week")),
+  note: optionalRule("text"),
 });
 
 const parseNumber = (s: string | undefined | null): number | null => {

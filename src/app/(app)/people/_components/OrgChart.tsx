@@ -95,7 +95,7 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
         <form action={submit} key={editing?.id ?? "new"}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Full name">
-              <TextInput name="fullName" required defaultValue={editing?.fullName ?? ""} />
+              <TextInput kind="name" name="fullName" required defaultValue={editing?.fullName ?? ""} />
             </Field>
             <Field label="Role title" hint="e.g. Discovery Call Specialist">
               <TextInput name="roleTitle" required defaultValue={editing?.roleTitle ?? ""} />
@@ -104,10 +104,10 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
               <Select name="dashboardRole" options={ROLE_OPTIONS} defaultValue={editing?.dashboardRole ?? "USER"} />
             </Field>
             <Field label="Email (login)">
-              <TextInput type="email" name="email" required defaultValue={editing?.email ?? ""} />
+              <TextInput kind="email" name="email" required defaultValue={editing?.email ?? ""} />
             </Field>
             <Field label="Phone / WhatsApp">
-              <TextInput name="phone" defaultValue={editing?.phone ?? ""} />
+              <TextInput kind="phone" name="phone" defaultValue={editing?.phone ?? ""} />
             </Field>
             <Field label="Date joined team">
               <TextInput type="date" name="dateJoined" defaultValue={editing?.dateJoined?.slice(0, 10) ?? ""} />
@@ -119,17 +119,17 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
               <Select name="logVariant" options={optionsFrom(LOG_VARIANT_LABELS)} defaultValue={editing?.logVariant ?? "APPOINTMENT_SETTER"} />
             </Field>
             <Field label="First-call share %" hint="Target share of new leads (0 = not in rotation)">
-              <TextInput name="firstCallSharePct" inputMode="numeric" defaultValue={String(editing?.firstCallSharePct ?? 0)} />
+              <TextInput kind="int" name="firstCallSharePct" min={0} max={100} defaultValue={String(editing?.firstCallSharePct ?? 0)} />
             </Field>
             <Field label="Daily call target" hint="Calls expected per day (0 = no target). Shows on their My Desk.">
-              <TextInput name="dailyCallTarget" inputMode="numeric" defaultValue={String(editing?.dailyCallTarget ?? 0)} />
+              <TextInput kind="int" name="dailyCallTarget" min={0} max={999} defaultValue={String(editing?.dailyCallTarget ?? 0)} />
             </Field>
             <div className="flex items-end pb-1">
               <CheckboxField name="worksSaturdays" label="Works Saturdays" defaultChecked={editing?.worksSaturdays ?? true} />
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <Field label="Key responsibilities" hint="Plain English - what this person owns every day">
-                <TextArea name="keyResponsibilities" defaultValue={editing?.keyResponsibilities ?? ""} />
+                <TextArea kind="text" name="keyResponsibilities" defaultValue={editing?.keyResponsibilities ?? ""} />
               </Field>
             </div>
           </div>

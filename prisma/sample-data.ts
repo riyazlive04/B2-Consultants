@@ -52,7 +52,7 @@ async function main() {
     data: [
       { date: d("2026-07-01"), amountInrMinor: inr(40000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "MARKETING", isCogs: false, vendor: "Meta Ads", notes: "July lead-gen campaign budget", enteredById: ameen },
       { date: d("2026-07-01"), amountInrMinor: inr(50000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "TEAM_SALARIES", isCogs: true, vendor: "Karthick", notes: "Delivery coach salary — July", enteredById: ameen },
-      { date: d("2026-07-02"), amountInrMinor: inr(4000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "TOOLS_SOFTWARE", isCogs: true, vendor: "Skool", notes: "Student community platform — monthly", enteredById: ameen },
+      { date: d("2026-07-02"), amountInrMinor: inr(4000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "TOOLS_SOFTWARE", isCogs: false, vendor: "Skool", notes: "Student community platform — monthly", enteredById: ameen },
       { date: d("2026-07-02"), amountInrMinor: inr(8000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "TOOLS_SOFTWARE", isCogs: false, vendor: "WATI", notes: "WhatsApp automation — monthly", enteredById: ameen },
     ],
   });

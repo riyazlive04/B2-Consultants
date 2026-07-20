@@ -90,6 +90,27 @@ export const CAPABILITIES = [
     actions: "outreach-actions (setHighlyQualified) · pipeline-actions (createOutcome, updateOutcome)",
     roles: ["ADMIN"],
   },
+  /**
+   * A READ key, unlike its neighbours — the exception the header's "privileged writes"
+   * rule earns here.
+   *
+   * German Note's money is a TAB, not a route, so `sections.ts` cannot gate it: a
+   * section needs an href. Without this key the only lever was the role itself, which
+   * meant "does the Head see revenue?" was a code edit and a redeploy. It is a
+   * business call the founder should make per person, so it is a capability.
+   *
+   * Guards it: the Financials tab on /german-note, and /german-note/workshops/[id],
+   * which the tab links to (via `requireCapability` — a read gate, so it bounces
+   * rather than returning an ActionResult). CREATING and editing workshops stays
+   * `requireAdmin()` regardless: this key buys sight of the money, never control of it.
+   */
+  {
+    key: "germanNote.finance",
+    name: "See German Note financials",
+    description: "Workshop revenue, outstanding payments and P&L",
+    actions: "german-note Financials tab · german-note/workshops/[id] — read-only; creating & editing workshops stays Admin-only",
+    roles: ["ADMIN"],
+  },
 ] as const satisfies readonly CapabilityDef[];
 
 export type CapabilityKey = (typeof CAPABILITIES)[number]["key"];

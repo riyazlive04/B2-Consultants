@@ -91,10 +91,10 @@ export function SprintCheckIn({ weeks }: { weeks: PortalSprintWeek[] }) {
           )}
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="What did you get done?">
-              <TextInput name="actual" required placeholder="e.g. 12 applications, 1 interview" />
+              <TextInput kind="text" name="actual" required placeholder="e.g. 12 applications, 1 interview" />
             </Field>
             <Field label="Anything in the way? (optional)">
-              <TextArea name="note" rows={1} placeholder="Blockers, questions for your coach…" />
+              <TextArea kind="text" name="note" rows={1} placeholder="Blockers, questions for your coach…" />
             </Field>
           </div>
           <div className="mt-3 flex items-center gap-3">

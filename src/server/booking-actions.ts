@@ -9,7 +9,10 @@ import { requireSection } from "@/lib/rbac";
 import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 import { computeBant, INTAKE_OPTIONS } from "@/lib/booking-intake";
+import { qualifiedFromBant } from "@/lib/outreach-sop";
+import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/consent";
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
+import { optionalRule, rule } from "@/lib/field-rules";
 import { activityStamp } from "@/lib/activity-actions";
 import { BOOKING_RULES_KEY, getBookingRulesConfig, writeBookingRulesConfig } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
@@ -46,19 +49,20 @@ const HOW_TO_CHANNEL: Record<string, LeadSource> = {
 
 const bookingSchema = z.object({
   slotId: z.string().min(1, "Please choose an available time").max(64),
-  // Length caps: this is a PUBLIC form writing into DB text columns.
-  name: z.string().trim().min(1, "Your name is required").max(160, "Name is too long"),
-  // Lowercased, not just trimmed: this email is the key the SOP's Step 10 cross-check matches a
-  // lead to their booking on, and "Ameen@X.com" vs "ameen@x.com" would report a booked prospect
-  // as "not booked". Mailbox names are case-insensitive in practice, and access-requests.ts
-  // already stores them folded — this brings the booking form in line.
-  email: z.string().trim().toLowerCase().email("A valid email is required").max(254),
-  phone: z.string().trim().min(5, "Phone / WhatsApp with country code is required").max(32),
-  whatsapp: z.string().trim().max(32).optional(),
-  city: z.string().trim().max(120).optional(),
+  // Character rules come from lib/field-rules so the browser filter and this parse can't drift.
+  // These are the PUBLIC form's fields — the filter is unreachable for a crafted POST, so the
+  // schema is the only real gate here.
+  name: rule("name"),
+  // The email rule folds to lowercase (not just trims): this address is the key the SOP's Step 10
+  // cross-check matches a lead to their booking on, and "Ameen@X.com" vs "ameen@x.com" would
+  // report a booked prospect as "not booked".
+  email: rule("email"),
+  phone: rule("phone"),
+  whatsapp: optionalRule("phone"),
+  city: optionalRule("city"),
   currentJobTitle: z.string().trim().max(160).optional(),
   prospectIndustry: z.string().trim().max(160).optional(),
-  linkedInProfile: z.string().trim().max(300).optional(),
+  linkedInProfile: optionalRule("url"),
   highestEducation: optional("highestEducation"),
   yearsExperience: optional("yearsExperience"),
   whyGermany: z.string().trim().max(2000, "Please keep this under 2000 characters").optional(),
@@ -74,6 +78,10 @@ const bookingSchema = z.object({
   decisionMaking: optional("decisionMaking"),
   commitment: optional("commitment"),
   howKnowUs: optional("howKnowUs"),
+  // GDPR consent (spec §15). Optional in the SCHEMA but mandatory in the ACTION: an unticked
+  // checkbox posts nothing at all, and a bare z.literal would fail with "Invalid literal
+  // value" — useless to a prospect. Parsed loosely, then refused explicitly below.
+  consent: z.string().optional(),
   // spam honeypot - real users never fill this hidden field
   company_website: z.string().optional(),
   utm: z.string().max(4000).optional(), // JSON blob captured client-side from the URL
@@ -109,19 +117,51 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   // Public endpoint: throttle per IP so one client can't exhaust the open slots
   // or flood the pipeline with junk leads. 5 attempts / 10 min is generous for a
   // human correcting form errors.
-  const ip = clientIpFrom(await Promise.resolve(headers()));
+  const hdrs = await Promise.resolve(headers());
+  const ip = clientIpFrom(hdrs);
   if (!rateLimitOk(`book:${ip}`, 5, 10 * 60_000)) {
     return { ok: false, error: "Too many booking attempts - please try again in a few minutes." };
   }
+  const userAgent = hdrs.get("user-agent");
 
   const parsed = bookingSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
   if (d.company_website) return { ok: true }; // honeypot tripped - silently drop
 
+  // ── Consent gate (spec §15, §19.1-C1) ────────────────────────────────────────
+  // "No lead/student data is stored without explicit consent" — GDPR, and our prospects are
+  // in Germany and India. This sits ABOVE every write below: both the auto-disqualify branch
+  // and the booked branch call upsertIntakeLead, so refusing here is what makes "no consent,
+  // no row" true of the whole action rather than of one path.
+  //
+  // Fails CLOSED. A tampered POST, or a stale page cached from before this field existed,
+  // posts no consent and is refused — the safe direction for a rule about not storing people.
+  if (d.consent !== CONSENT_VALUE) {
+    return { ok: false, error: "Please tick the consent box so we can store your details and contact you." };
+  }
+
   const rules = await getBookingRulesConfig();
   const bant = computeBant(d);
   const utm = d.utm ? sanitizeUtm(d.utm) : null;
+
+  // The evidence half of the gate above. Written inside whichever transaction ends up
+  // persisting this prospect, so a booking can never commit without its consent row: the
+  // proof and the data it authorises land together or not at all.
+  //
+  // `region` stays null deliberately. Spec §15 asks for it, but the form has no country
+  // field and `city` is free text — deriving "DE" from a typed city name would be a guess
+  // recorded as a fact, which is worse than an honest blank. Needs a country field to fill.
+  const consentFor = (leadId: string) => ({
+    leadId,
+    granted: true,
+    purpose: CONSENT_LABEL,
+    policyVersion: CONSENT_POLICY_VERSION,
+    region: null,
+    source: "BOOKING_FORM" as const,
+    ipAddress: ip,
+    userAgent: userAgent ? userAgent.slice(0, 500) : null,
+  });
 
   // BOOKING_FORM provenance; channel from "how did you hear about us", default LANDING_PAGE.
   const leadInput = {
@@ -173,6 +213,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   if (rules.autoDisqualify && bant.bantVerdict === "CANCEL") {
     const { lead } = await upsertIntakeLead(leadInput);
     await prisma.$transaction(async (tx) => {
+      await tx.consentRecord.create({ data: consentFor(lead.id) });
       await tx.bookingRequest.create({
         data: { leadId: lead.id, ...bookingFields, status: "CANCELLED" },
       });
@@ -188,6 +229,28 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
         });
         await tx.leadStageHistory.create({
           data: { leadId: lead.id, fromStage: fresh.stage, toStage: "LOST" },
+        });
+      }
+
+      // Close the SOP journey too (Step 17 — NO → terminal). A BANT CANCEL is a "Not Qualified"
+      // verdict, so record it and move the journey to IGNORED; otherwise a disqualified prospect
+      // would sit in the active outreach queue being chased forever. The CANCELLED booking is
+      // deliberately NOT linked (bookingId stays null): the engine's cross-check excludes CANCELLED
+      // bookings, and Key Metrics is a booked-prospects surface — a LOST lead doesn't belong there.
+      const journey = await tx.outreachJourney.findUnique({
+        where: { leadId: lead.id },
+        select: { id: true, qualified: true, phase: true },
+      });
+      if (journey && journey.qualified === null) {
+        await tx.outreachJourney.update({
+          where: { id: journey.id },
+          data: {
+            qualified: "NO",
+            qualifiedAt: new Date(),
+            bantScoreAtQual: bant.bantAvg,
+            phase: "IGNORED",
+            ignoredAt: new Date(),
+          },
         });
       }
     });
@@ -236,6 +299,8 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
       });
       if (claim.count === 0) throw new Error("SLOT_TAKEN");
 
+      await tx.consentRecord.create({ data: consentFor(lead.id) });
+
       const booking = await tx.bookingRequest.create({
         select: { id: true },
         data: { slotId: slot.id, leadId: lead.id, ...bookingFields },
@@ -248,6 +313,32 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
         await tx.lead.update({ where: { id: lead.id }, data: { stage: "DISCO_BOOKED" } });
         await tx.leadStageHistory.create({
           data: { leadId: lead.id, fromStage: "NEW_LEAD", toStage: "DISCO_BOOKED" },
+        });
+      }
+
+      // SOP Steps 10–11, synchronously. A prospect who books directly on the public form would
+      // otherwise stay unlinked from their booking — the ONLY thing that links the two is the
+      // async engine's Step 10 cross-check, and that engine is off by default. So without this,
+      // a booked prospect's BANT score never reaches the Qualified verdict (Step 11) or Key
+      // Metrics (Step 12): the outreach tab shows them as "not booked" while /bookings shows them
+      // booked. Link the journey here and derive Qualified from BANT — the same pure function the
+      // engine uses, so the two paths can never disagree. Guarded so it can't clobber a link or a
+      // human's prior verdict; a lead created outside intake (manual back-office entry) may have no
+      // journey, which is fine — updateMany-style tolerance via the null check.
+      const journey = await tx.outreachJourney.findUnique({
+        where: { leadId: lead.id },
+        select: { id: true, bookingId: true, qualified: true },
+      });
+      if (journey && journey.bookingId === null) {
+        const verdict = qualifiedFromBant(bant.bantAvg);
+        await tx.outreachJourney.update({
+          where: { id: journey.id },
+          data: {
+            bookingId: booking.id,
+            ...(journey.qualified === null && verdict
+              ? { qualified: verdict, qualifiedAt: new Date(), bantScoreAtQual: bant.bantAvg }
+              : {}),
+          },
         });
       }
       return booking.id;

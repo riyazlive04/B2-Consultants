@@ -49,36 +49,37 @@ export function SnapshotForm({ entry }: { entry: FunnelOverview["entry"] }) {
       </p>
       <input type="hidden" name="weekStart" value={entry.weekStart} />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        {/* Every count here is a whole number; maxLength 7 matches funnel-actions' `^\d{0,7}$`. */}
         <Field label="Awareness reach" hint="manual">
-          <TextInput name="awarenessReach" inputMode="numeric" defaultValue={e ? String(e.awarenessReach) : ""} placeholder="0" />
+          <TextInput kind="int" maxLength={7} name="awarenessReach" defaultValue={e ? String(e.awarenessReach) : ""} placeholder="0" />
         </Field>
         <Field label="Leads captured" hint={`auto: ${a.leadsCaptured}`}>
-          <TextInput name="leadsCaptured" inputMode="numeric" defaultValue={def(e?.leadsCaptured, a.leadsCaptured)} placeholder="0" />
+          <TextInput kind="int" maxLength={7} name="leadsCaptured" defaultValue={def(e?.leadsCaptured, a.leadsCaptured)} placeholder="0" />
         </Field>
         <Field label="Calls completed" hint={`auto: ${a.callsCompleted}`}>
-          <TextInput name="callsCompleted" inputMode="numeric" defaultValue={def(e?.callsCompleted, a.callsCompleted)} placeholder="0" />
+          <TextInput kind="int" maxLength={7} name="callsCompleted" defaultValue={def(e?.callsCompleted, a.callsCompleted)} placeholder="0" />
         </Field>
         <Field label="Proposals sent" hint={`auto: ${a.proposalsSent}`}>
-          <TextInput name="proposalsSent" inputMode="numeric" defaultValue={def(e?.proposalsSent, a.proposalsSent)} placeholder="0" />
+          <TextInput kind="int" maxLength={7} name="proposalsSent" defaultValue={def(e?.proposalsSent, a.proposalsSent)} placeholder="0" />
         </Field>
         <Field label="Ghosted Blueprint downloads" hint="manual">
-          <TextInput name="ghostedDownloads" inputMode="numeric" defaultValue={e ? String(e.ghostedDownloads) : ""} placeholder="0" />
+          <TextInput kind="int" maxLength={7} name="ghostedDownloads" defaultValue={e ? String(e.ghostedDownloads) : ""} placeholder="0" />
         </Field>
         <Field label="Enrollments - Solo" hint={`auto: ${a.enrollmentsSolo}`}>
-          <TextInput name="enrollmentsSolo" inputMode="numeric" defaultValue={def(e?.enrollmentsSolo, a.enrollmentsSolo)} placeholder="0" />
+          <TextInput kind="int" maxLength={7} name="enrollmentsSolo" defaultValue={def(e?.enrollmentsSolo, a.enrollmentsSolo)} placeholder="0" />
         </Field>
         <Field label="Enrollments - Guided" hint={`auto: ${a.enrollmentsGuided}`}>
-          <TextInput name="enrollmentsGuided" inputMode="numeric" defaultValue={def(e?.enrollmentsGuided, a.enrollmentsGuided)} placeholder="0" />
+          <TextInput kind="int" maxLength={7} name="enrollmentsGuided" defaultValue={def(e?.enrollmentsGuided, a.enrollmentsGuided)} placeholder="0" />
         </Field>
         <Field label="Enrollments - Elite" hint={`auto: ${a.enrollmentsElite}`}>
-          <TextInput name="enrollmentsElite" inputMode="numeric" defaultValue={def(e?.enrollmentsElite, a.enrollmentsElite)} placeholder="0" />
+          <TextInput kind="int" maxLength={7} name="enrollmentsElite" defaultValue={def(e?.enrollmentsElite, a.enrollmentsElite)} placeholder="0" />
         </Field>
         <Field label="Workshop / webinar attendees">
-          <TextInput name="workshopAttendees" inputMode="numeric" defaultValue={e ? String(e.workshopAttendees) : ""} placeholder="0" />
+          <TextInput kind="int" maxLength={7} name="workshopAttendees" defaultValue={e ? String(e.workshopAttendees) : ""} placeholder="0" />
         </Field>
         <div className="col-span-2 sm:col-span-3 lg:col-span-5">
           <Field label="Notes" hint="What ran this week - ads, content, event? Any unusual spike or drop?">
-            <TextArea name="notes" defaultValue={e?.notes ?? ""} />
+            <TextArea kind="text" name="notes" defaultValue={e?.notes ?? ""} />
           </Field>
         </div>
       </div>

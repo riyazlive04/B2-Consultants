@@ -7,8 +7,10 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireSession } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
+import { intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
+import { allocateStudentCode } from "./student-code";
 
 /**
  * Students (PRD2 §4). Profiles/enrollments/satisfaction/deletes = Admin.
@@ -35,16 +37,17 @@ const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 const B2_LEVELS = ["SOLO", "GUIDED", "ELITE"] as const; // German Note excluded (PRD2 §4)
 
 const studentSchema = z.object({
-  fullName: z.string().trim().min(1, "Full name is required"),
-  email: z.string().trim().email().optional().or(z.literal("")),
-  phone: z.string().trim().optional(),
+  fullName: rule("name"),
+  email: optionalRule("email"),
+  phone: optionalRule("phone"),
+  // Free text: "3D Printing" / "SAP S/4HANA Consultant" are real answers here.
   industry: z.string().trim().optional(),
   targetRole: z.string().trim().optional(),
   leadSource: z
     .enum(["INSTAGRAM", "YOUTUBE", "LINKEDIN", "WHATSAPP", "REFERRAL", "SUMMIT", "WORKSHOP", "GHOSTED_BLUEPRINT", "OTHER"])
     .optional()
     .or(z.literal("")),
-  internalNotes: z.string().trim().optional(),
+  internalNotes: optionalRule("text"),
 });
 
 const enrollmentSchema = z.object({
@@ -76,6 +79,7 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
 
   const student = await prisma.student.create({
     data: {
+      code: await allocateStudentCode(),
       fullName: s.data.fullName,
       email: s.data.email || null,
       phone: s.data.phone || null,
@@ -122,6 +126,60 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
   revalidatePath("/students");
   revalidatePath("/finance");
   return { ok: true };
+}
+
+/**
+ * Convert a qualified lead into a Student without re-keying anything (issue 2.1). Carries the
+ * lead's name/email/phone/industry/source forward and stamps Student.leadId so the two records
+ * stay joined. No enrollment is created — the program level isn't known at convert time; the
+ * founder adds it from the new student record (which is visible immediately even without one).
+ * Idempotent: a lead already converted returns its existing student instead of a duplicate.
+ */
+export async function convertLeadToStudent(
+  leadId: string,
+): Promise<ActionResult & { studentId?: string }> {
+  const session = await requireAdmin();
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true, name: true, email: true, phone: true, industry: true, leadSource: true },
+  });
+  if (!lead) return { ok: false, error: "Lead not found" };
+
+  const existing = await prisma.student.findFirst({ where: { leadId }, select: { id: true } });
+  if (existing) return { ok: true, studentId: existing.id };
+
+  const student = await prisma.student.create({
+    data: {
+      code: await allocateStudentCode(),
+      fullName: lead.name,
+      email: lead.email || null,
+      phone: lead.phone || null,
+      industry: lead.industry || null,
+      leadSource: lead.leadSource,
+      leadId: lead.id,
+    },
+  });
+
+  // Same name-match backfill createStudent does — a payment recorded before conversion links up.
+  const candidates = await prisma.income.findMany({ where: { studentId: null } });
+  const ids = candidates.filter((i) => nameKey(i.studentName) === nameKey(student.fullName)).map((i) => i.id);
+  if (ids.length) {
+    await prisma.income.updateMany({ where: { id: { in: ids } }, data: { studentId: student.id } });
+  }
+
+  await logActivity(session, {
+    action: "student.convert",
+    section: "students",
+    entityType: "Student",
+    entityId: student.id,
+    summary: `Converted lead ${lead.name} into a student`,
+    meta: { leadId: lead.id, incomeEntriesLinked: ids.length },
+  });
+  revalidatePath("/students");
+  revalidatePath("/contacts");
+  revalidatePath(`/contacts/${lead.id}`);
+  revalidatePath("/finance");
+  return { ok: true, studentId: student.id };
 }
 
 export async function updateStudent(id: string, form: FormData): Promise<ActionResult> {
@@ -287,9 +345,9 @@ const trackerSchema = z.object({
     "ONBOARDING", "RESUME_BUILD", "LINKEDIN_OPTIMISATION", "APPLICATIONS", "INTERVIEWS", "OFFER_RECEIVED", "COMPLETED",
   ]),
   signalColour: z.enum(["GREEN", "AMBER", "RED", ""]).optional(),
-  signalNotes: z.string().trim().optional(),
+  signalNotes: optionalRule("text"),
   nextCheckInDate: z.string().optional(),
-  milestoneNote: z.string().trim().optional(),
+  milestoneNote: optionalRule("text"),
 });
 
 export async function updateTracker(enrollmentId: string, form: FormData): Promise<ActionResult> {
@@ -421,10 +479,11 @@ export async function generateSprintPlan(enrollmentId: string): Promise<ActionRe
 }
 
 const sprintWeekSchema = z.object({
-  target: z.string().trim().optional(),
-  actual: z.string().trim().optional(),
+  // Prose, deliberately: "15 applications" / "2 interviews, 1 offer" are the real answers.
+  target: optionalRule("text"),
+  actual: optionalRule("text"),
   status: z.enum(["PENDING", "ACHIEVED", "MISSED"]),
-  note: z.string().trim().optional(),
+  note: optionalRule("text"),
 });
 
 /** Coach/Admin saves one sprint week: target, weekend actual, verdict, note. */
@@ -469,11 +528,13 @@ export async function saveSprintWeek(weekId: string, form: FormData): Promise<Ac
 
 const satisfactionSchema = z.object({
   date: z.string().min(10),
-  satisfactionScore: z.coerce.number().int().min(1).max(10),
-  npsScore: z.coerce.number().int().min(0).max(10),
+  // Digits-only + bounded, matching the form's `kind="int"` boxes. These stay STRING schemas
+  // (that's what intInRange returns) — the create below is what turns them into Ints.
+  satisfactionScore: intInRange(1, 10, "Satisfaction score must be"),
+  npsScore: intInRange(0, 10, "NPS score must be"),
   testimonialReceived: z.string().optional(),
   outcomeAchieved: z.enum(["JOB_OFFER_RECEIVED", "INTERVIEWS_ONLY", "APPLICATIONS_STAGE", "NO_OUTCOME_YET"]),
-  notes: z.string().trim().optional(),
+  notes: optionalRule("text"),
 });
 
 export async function addSatisfactionScore(studentId: string, form: FormData): Promise<ActionResult> {
@@ -481,12 +542,15 @@ export async function addSatisfactionScore(studentId: string, form: FormData): P
   const parsed = satisfactionSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
+  // Both are digits-only and range-checked by the schema, so Number() cannot produce NaN here.
+  const satisfactionScore = Number(d.satisfactionScore);
+  const npsScore = Number(d.npsScore);
   const score = await prisma.satisfactionScore.create({
     data: {
       studentId,
       date: parseDateInput(d.date),
-      satisfactionScore: d.satisfactionScore,
-      npsScore: d.npsScore,
+      satisfactionScore,
+      npsScore,
       testimonialReceived: d.testimonialReceived === "on",
       outcomeAchieved: d.outcomeAchieved,
       notes: d.notes || null,
@@ -498,10 +562,10 @@ export async function addSatisfactionScore(studentId: string, form: FormData): P
     section: "students",
     entityType: "SatisfactionScore",
     entityId: score.id,
-    summary: `Recorded ${score.student.fullName}'s satisfaction ${d.satisfactionScore}/10, NPS ${d.npsScore}/10`,
+    summary: `Recorded ${score.student.fullName}'s satisfaction ${satisfactionScore}/10, NPS ${npsScore}/10`,
     meta: {
-      satisfactionScore: d.satisfactionScore,
-      npsScore: d.npsScore,
+      satisfactionScore,
+      npsScore,
       outcomeAchieved: d.outcomeAchieved,
       testimonialReceived: d.testimonialReceived === "on",
     },
@@ -553,7 +617,7 @@ const portalAuth = betterAuth({
 });
 
 const studentLoginSchema = z.object({
-  email: z.string().trim().email("Valid email required"),
+  email: rule("email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 

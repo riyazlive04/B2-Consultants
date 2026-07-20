@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { PdfBrandMark } from "./pdf-brand";
 
 /** Invoice / estimate PDF (Synamate parity). Pure — takes pre-formatted display data. */
 
@@ -25,7 +26,7 @@ const s = StyleSheet.create({
   page: { padding: 40, fontSize: 10, fontFamily: "Helvetica", color: "#16203A" },
   row: { flexDirection: "row" },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  brand: { fontSize: 20, fontFamily: "Helvetica-Bold", color: "#0A64E2" },
+  brand: { fontSize: 20, fontFamily: "Helvetica-Bold", color: "#5B60C9" },
   h: { fontSize: 22, fontFamily: "Helvetica-Bold" },
   muted: { color: "#636F85" },
   label: { color: "#636F85", fontSize: 8, textTransform: "uppercase", marginBottom: 2 },
@@ -50,9 +51,12 @@ function InvoiceDoc({ inv }: { inv: InvoicePdfData }) {
     <Document>
       <Page size="A4" style={s.page}>
         <View style={s.between}>
-          <View>
-            <Text style={s.brand}>B2 Consultants</Text>
-            <Text style={s.muted}>Reichelsheim, Germany</Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <PdfBrandMark size={42} />
+            <View style={{ marginLeft: 11 }}>
+              <Text style={s.brand}>B2 Consultants</Text>
+              <Text style={s.muted}>Reichelsheim, Germany</Text>
+            </View>
           </View>
           <View style={{ alignItems: "flex-end" }}>
             <Text style={s.h}>{title}</Text>

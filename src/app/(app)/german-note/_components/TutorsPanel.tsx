@@ -47,10 +47,10 @@ export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
         >
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Name">
-              <TextInput name="name" required maxLength={120} />
+              <TextInput kind="name" name="name" required maxLength={120} />
             </Field>
             <Field label="Email">
-              <TextInput name="email" type="email" required />
+              <TextInput kind="email" name="email" required />
             </Field>
             <Field label="Password" hint="At least 8 characters.">
               <TextInput name="password" type="password" required minLength={8} />

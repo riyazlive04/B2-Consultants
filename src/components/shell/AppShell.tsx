@@ -11,11 +11,15 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  ChevronDown,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "./ThemeToggle";
+import { RecordButton } from "./RecordButton";
+import { BrandLogo } from "./BrandLogo";
 import { FallbackIcon, SECTION_ICONS } from "./section-icons";
 import { CommandPalette, openCommandPalette } from "@/components/ui/CommandPalette";
+import { useModKey } from "@/lib/use-mod-key";
 import type { SectionIconName } from "@/lib/sections";
 
 /** Label, icon, group and order all come from the founder's section config. */
@@ -45,19 +49,39 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { modLabel } = useModKey();
   const [collapsed, setCollapsed] = useState(false);
   const [drawer, setDrawer] = useState(false);
   // §5.1: the rail collapses to icons below 1100px, regardless of preference.
   const [narrow, setNarrow] = useState(false);
 
+  // Per-group collapse — the rail has ~27 items and used to overflow ~400px below the
+  // fold with no way to fold a section. Collapsed group labels persist per-device.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
   // restore collapsed preference
   useEffect(() => {
     try {
       setCollapsed(localStorage.getItem("b2-nav-collapsed") === "1");
+      const raw = localStorage.getItem("b2-nav-groups-collapsed");
+      if (raw) setCollapsedGroups(new Set(JSON.parse(raw) as string[]));
     } catch {
       /* ignore */
     }
   }, []);
+
+  const toggleGroup = (label: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      try {
+        localStorage.setItem("b2-nav-groups-collapsed", JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   // Track the 1100px breakpoint. The manual toggle can only ever collapse further,
   // never expand a rail the viewport is too narrow to hold.
@@ -114,6 +138,17 @@ export function AppShell({
   const roleLabel =
     { ADMIN: "Admin", HEAD: "Head coach", USER: "Telecaller", STUDENT: "Student", TUTOR: "Tutor" }[user.role] ??
     user.role;
+
+  // The brand subtitle names the seat you're actually in — it used to read
+  // "Founder Dashboard" for everyone, which was wrong for every non-Admin role.
+  const workspaceLabel =
+    {
+      ADMIN: "Founder Dashboard",
+      HEAD: "Head coach workspace",
+      USER: "Telecaller workspace",
+      STUDENT: "Student portal",
+      TUTOR: "Tutor portal",
+    }[user.role] ?? "Workspace";
 
   // `items` arrives pre-sorted in the founder's order. Group by its `group`, and let
   // each group land where its first item does — so reordering a section can move its
@@ -177,13 +212,11 @@ export function AppShell({
       {/* brand + collapse toggle */}
       <div className={`mb-5 flex items-center ${compact ? "justify-center" : "justify-between"} px-1`}>
         <Link href="/" prefetch className="flex items-center gap-2.5">
-          <span className="grid h-10 w-10 flex-none place-items-center rounded-btn bg-primary text-sm font-bold text-on-accent">
-            B2
-          </span>
+          <BrandLogo className="h-10 w-10 flex-none" />
           {!compact && (
             <span className="flex flex-col leading-tight">
               <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-              <span className="text-caption text-ink-3">Founder Dashboard</span>
+              <span className="text-caption text-ink-3">{workspaceLabel}</span>
             </span>
           )}
         </Link>
@@ -214,24 +247,41 @@ export function AppShell({
           at 1080p (Reports, Founder Console, Automation, App Guide, My Profile all sit
           below the fold), and with it hidden there was no signal those sections existed. */}
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto">
-        {groups.map((g) => (
-          <div key={g.label}>
-            {compact ? (
-              <div className="mx-2 mb-1 border-t border-line" />
-            ) : (
-              <p className="px-3 pb-1 text-label font-semibold uppercase text-ink-3">
-                {g.label}
-              </p>
-            )}
-            <ul className="flex flex-col gap-1">
-              {g.items.map((it) => (
-                <li key={it.key}>
-                  <NavRow item={it} compact={compact} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {groups.map((g) => {
+          // Collapse only applies to the labelled (expanded) rail — the icon rail has no
+          // labels to click, so its items always show.
+          const isCollapsed = !compact && collapsedGroups.has(g.label);
+          return (
+            <div key={g.label}>
+              {compact ? (
+                <div className="mx-2 mb-1 border-t border-line" />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(g.label)}
+                  aria-expanded={!isCollapsed}
+                  className="flex w-full items-center justify-between rounded-btn px-3 pb-1 pt-0.5 text-label font-semibold uppercase text-ink-3 transition-colors hover:text-ink-2"
+                >
+                  <span>{g.label}</span>
+                  <ChevronDown
+                    size={14}
+                    aria-hidden
+                    className={`transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`}
+                  />
+                </button>
+              )}
+              {!isCollapsed && (
+                <ul className="flex flex-col gap-1">
+                  {g.items.map((it) => (
+                    <li key={it.key}>
+                      <NavRow item={it} compact={compact} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
 
         {/* Account */}
         <div>
@@ -289,6 +339,15 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-canvas">
+      {/* Skip link (WCAG 2.4.1): the first focusable element, so a keyboard/SR user can
+          jump past the ~27-item rail straight to the page — the most-repeated interaction
+          in the app. Off-screen until focused, then it drops in at the top-left. */}
+      <a
+        href="#main"
+        className="sr-only rounded-btn bg-primary px-4 py-2 text-sm font-semibold text-on-accent shadow-pop focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[100]"
+      >
+        Skip to content
+      </a>
       {/* desktop rail — flat white sidebar on a hairline border (§5.1) */}
       <aside
         className={`sticky top-0 hidden h-screen flex-none border-r border-line bg-surface transition-[width] duration-200 md:block ${
@@ -311,7 +370,7 @@ export function AppShell({
             <Menu size={20} />
           </button>
           <Link href="/" className="flex items-center gap-2 md:hidden">
-            <span className="grid h-8 w-8 place-items-center rounded-field bg-primary text-xs font-bold text-on-accent">B2</span>
+            <BrandLogo className="h-8 w-8" />
           </Link>
 
           {/* The always-visible metric strip: search · month · runway · theme · alerts · user.
@@ -322,16 +381,18 @@ export function AppShell({
             <button
               type="button"
               onClick={openCommandPalette}
-              aria-label="Search contacts, opportunities, invoices (Ctrl K)"
-              title="Search (Ctrl K)"
+              aria-label={`Search contacts, opportunities, invoices (${modLabel})`}
+              title={`Search (${modLabel})`}
               className="flex h-10 items-center gap-2 rounded-full border border-line-strong bg-surface-2 px-3 text-sm text-ink-2 transition-colors hover:bg-surface hover:text-ink md:w-52"
             >
               <Search size={15} className="flex-none text-ink-3" />
               <span className="hidden truncate md:inline">Search…</span>
               <kbd className="ml-auto hidden flex-none rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-3 md:inline">
-                ⌘K
+                {modLabel}
               </kbd>
             </button>
+            {/* Record CTA — Finance is an Admin section, so only Admin gets the quick-add. */}
+            {user.role === "ADMIN" && <RecordButton />}
             <span className="hidden text-sm font-medium text-ink-2 lg:inline">{currentMonth}</span>
             {runwaySlot}
             {/* Theme falls back to the OS `prefers-color-scheme` when this is hidden, so a
@@ -361,7 +422,13 @@ export function AppShell({
 
         {/* Full-width content: pages set their own max-width. Synamate-parity list pages
             (Contacts, Opportunities, Payments, …) go edge-to-edge; classic pages stay centred. */}
-        <main className="w-full flex-1 px-4 py-6 md:px-7 md:py-7">{children}</main>
+        <main
+          id="main"
+          tabIndex={-1}
+          className="w-full flex-1 px-4 py-6 outline-none md:px-7 md:py-7"
+        >
+          {children}
+        </main>
       </div>
 
       {/* mobile drawer */}
@@ -383,8 +450,9 @@ export function AppShell({
       )}
 
       {/* Global ⌘K command palette (BUILD_CHECKLIST.md §3) — one instance for the whole shell,
-          so it's available from Contacts, Opportunities, Payments and everywhere else. */}
-      <CommandPalette />
+          so it's available from Contacts, Opportunities, Payments and everywhere else. Fed the
+          user's own visible sections so ⌘K can navigate anywhere, not just to the 3 record types. */}
+      <CommandPalette sections={items.map((it) => ({ label: it.label, href: it.href }))} />
     </div>
   );
 }

@@ -135,7 +135,7 @@ export default function TasksTable({ rows, owners }: { rows: Row[]; owners: { id
             <TextInput name="title" required placeholder="e.g. Follow up on proposal" />
           </Field>
           <Field label="Details">
-            <TextArea name="body" rows={2} placeholder="Optional notes" />
+            <TextArea kind="text" name="body" rows={2} placeholder="Optional notes" />
           </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Due">

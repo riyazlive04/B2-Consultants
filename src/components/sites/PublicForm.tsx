@@ -3,7 +3,28 @@
 import { useState } from "react";
 import { Loader2, CheckCircle2, ChevronDown } from "lucide-react";
 import type { PublicForm as PublicFormType } from "@/server/forms-metrics";
+import type { FormFieldType } from "@/lib/sites-types";
+import { fieldKindProps } from "@/components/ui/field-base";
+import type { FieldKind } from "@/lib/field-rules";
 import { submitPublicForm } from "@/server/forms-actions";
+
+/**
+ * Character rules keyed off the field's DECLARED type (sites-types.ts), never off its key — the
+ * founder names these fields, so guessing "this one is called `name`, so it takes no digits" would
+ * eventually filter a field that legitimately holds digits.
+ *
+ * Two types are deliberately absent, because this is a PUBLIC lead-capture surface where a dropped
+ * character costs a booking:
+ *   - `number` — the builder offers one numeric type for both "how many staff" (2) and "budget"
+ *     (2.5). `int` would silently rewrite 2.5 to 25, which is worse than not filtering at all.
+ *   - `text`   — free text by definition; the type tells us nothing about what belongs in it.
+ * `select` / `checkbox` aren't text inputs and are handled below.
+ */
+const KIND_BY_FIELD_TYPE: Partial<Record<FormFieldType, FieldKind>> = {
+  email: "email",
+  phone: "phone",
+  textarea: "text",
+};
 
 /** Renders a published form on a public page and posts to the public intake action. */
 export default function PublicForm({ form, utm }: { form: PublicFormType; utm?: Record<string, string> }) {
@@ -37,14 +58,19 @@ export default function PublicForm({ form, utm }: { form: PublicFormType; utm?: 
 
   return (
     <form onSubmit={onSubmit} className="space-y-4 rounded-card border border-line bg-surface p-6 shadow-card">
-      {form.fields.map((f) => (
+      {form.fields.map((f) => {
+        // Not a hook — safe inside .map(). Undefined kind = no filtering, attrs = {}.
+        const kind = KIND_BY_FIELD_TYPE[f.type];
+        const textarea = fieldKindProps<HTMLTextAreaElement>(kind, undefined);
+        const input = fieldKindProps<HTMLInputElement>(kind, undefined);
+        return (
         <div key={f.key}>
           <label className="mb-1.5 block text-sm font-medium text-ink">
             {f.label}
             {f.required && <span className="text-bad"> *</span>}
           </label>
           {f.type === "textarea" ? (
-            <textarea name={f.key} required={f.required} placeholder={f.placeholder} rows={3} className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
+            <textarea {...textarea.attrs} onChange={textarea.onChange} name={f.key} required={f.required} placeholder={f.placeholder} rows={3} className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
           ) : f.type === "select" ? (
             // Public lead-capture form: keep a REAL native <select> (max mobile/keyboard
             // compatibility, no popover-JS on the intake path) but strip the OS grey arrow
@@ -62,7 +88,11 @@ export default function PublicForm({ form, utm }: { form: PublicFormType; utm?: 
             </label>
           ) : (
             <input
+              {...input.attrs}
+              onChange={input.onChange}
               name={f.key}
+              // Still derived from the declared type: it matches what the kind sets for
+              // email/phone, and it's the only thing giving `number` its numeric keypad.
               type={f.type === "phone" ? "tel" : f.type}
               required={f.required}
               placeholder={f.placeholder}
@@ -70,7 +100,8 @@ export default function PublicForm({ form, utm }: { form: PublicFormType; utm?: 
             />
           )}
         </div>
-      ))}
+        );
+      })}
 
       {/* Honeypot (hidden from humans) */}
       <input type="text" name="company_website" tabIndex={-1} autoComplete="off" className="absolute left-[-9999px]" aria-hidden />

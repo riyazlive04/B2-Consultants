@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
+import { optionalRule, rule } from "@/lib/field-rules";
 import { majorStringToMinor } from "@/lib/format";
 import { parseDateInput } from "@/lib/dates";
 import { logActivity, diffFields } from "./activity-log";
@@ -40,7 +41,7 @@ function count(v: string | undefined): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-const optionalText = z.string().trim().max(2000).optional();
+const optionalText = optionalRule("text");
 
 /**
  * Paise are BigInt, and every money field on a conversion or ad-set is one. Both diffFields
@@ -158,9 +159,10 @@ export async function deleteWorkshop(workshopId: string): Promise<ActionResult> 
 // ── Conversions ────────────────────────────────────────────────
 
 const conversionSchema = z.object({
-  fullName: z.string().trim().min(1, "Full name is required").max(160),
-  email: z.string().trim().max(160).optional(),
-  phone: z.string().trim().max(40).optional(),
+  fullName: rule("name"),
+  email: optionalRule("email"),
+  phone: optionalRule("phone"),
+  // Free text on purpose: an address carries house/flat numbers, so it is NOT city-shaped.
   address: z.string().trim().max(300).optional(),
   product: z.enum(PRODUCTS, { message: "Pick the level / bundle they bought" }),
   dayType: z.enum(DAY_TYPES).default("WEEKDAY"),
@@ -172,13 +174,13 @@ const conversionSchema = z.object({
   timeA2: z.string().trim().max(40).optional(),
   batchB1: z.string().trim().max(40).optional(),
   timeB1: z.string().trim().max(40).optional(),
-  finalPrice: z.string().optional(),
-  paidAmount: z.string().optional(),
+  finalPrice: optionalRule("money"),
+  paidAmount: optionalRule("money"),
   paymentMethod: z.string().trim().max(60).optional(),
   nextDueDate: z.string().trim().optional(),
-  booksCostOverride: z.string().optional(),
-  tutorCostOverride: z.string().optional(),
-  referral: z.string().optional(),
+  booksCostOverride: optionalRule("money"),
+  tutorCostOverride: optionalRule("money"),
+  referral: optionalRule("money"),
   notes: optionalText,
 });
 
@@ -289,12 +291,13 @@ export async function deleteConversion(conversionId: string): Promise<ActionResu
 // ── Ad-sets ────────────────────────────────────────────────────
 
 const adSetSchema = z.object({
+  // Free text: an ad-set label is a campaign name ("Set A", "Reel 2") — digits belong in it.
   label: z.string().trim().max(60).optional(),
-  adSpend: z.string().optional(),
-  reach: z.string().optional(),
-  linkClicks: z.string().optional(),
-  attended: z.string().optional(),
-  conversions: z.string().optional(),
+  adSpend: optionalRule("money"),
+  reach: optionalRule("int"),
+  linkClicks: optionalRule("int"),
+  attended: optionalRule("int"),
+  conversions: optionalRule("int"),
 });
 
 function adSetData(form: FormData) {

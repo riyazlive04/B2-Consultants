@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Lock } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { FormError } from "@/components/ui/form";
+import { fieldKindProps } from "@/components/ui/field-base";
 import { toast } from "@/components/ui/feedback";
 import { Hint } from "@/components/ui/kit";
 import { Btn, CheckCard, SegmentedControl, SubmitBtn, SwitchRow } from "@/components/ui/controls";
@@ -90,6 +91,11 @@ export function AccessDialog({
 
   const isAdminRole = role === "ADMIN";
 
+  // Raw <input>s (this dialog predates the form kit), so the kind's attrs + character
+  // filter are wired by hand. Not hooks — safe to call here. See lib/field-rules.ts.
+  const nameField = fieldKindProps<HTMLInputElement>("name", (e) => setName(e.target.value));
+  const emailField = fieldKindProps<HTMLInputElement>("email", (e) => setEmail(e.target.value));
+
   /** Choosing a role refills both lists from that role's defaults. */
   const pickRole = (next: AppRole) => {
     setRole(next);
@@ -142,17 +148,17 @@ export function AccessDialog({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="block text-sm font-medium text-ink">
             Full name
-            <input name="name" required value={name} onChange={(e) => setName(e.target.value)} className={fieldCls} />
+            <input {...nameField.attrs} name="name" required value={name} onChange={nameField.onChange} className={fieldCls} />
           </label>
           <label className="block text-sm font-medium text-ink">
             Work email
             <input
-              type="email"
+              {...emailField.attrs}
               name="email"
               required
               value={email}
               disabled={mode === "edit"}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={emailField.onChange}
               className={fieldCls}
             />
             {mode === "edit" && (

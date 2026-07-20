@@ -11,6 +11,7 @@ import { Btn, IconButton } from "@/components/ui/controls";
 import { Card, Pill, type Tone } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/Modal";
 import { Field, TextInput, Select, SubmitButton, FormError } from "@/components/ui/form";
+import { fieldKindProps } from "@/components/ui/field-base";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { formatInrMinor } from "@/lib/format";
@@ -66,6 +67,15 @@ export default function InvoiceEditor({
   const [saving, setSaving] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+
+  // This screen hand-rolls its <input>s (they're denser than the form kit's), so each one picks up
+  // its character rule through fieldKindProps rather than a `kind` prop. Not hooks — safe to call
+  // here and, below, inside the line-item .map().
+  const nameField = fieldKindProps<HTMLInputElement>("name", (e) => setCustomerName(e.target.value));
+  const emailField = fieldKindProps<HTMLInputElement>("email", (e) => setCustomerEmail(e.target.value));
+  const phoneField = fieldKindProps<HTMLInputElement>("phone", (e) => setCustomerPhone(e.target.value));
+  const discountField = fieldKindProps<HTMLInputElement>("money", (e) => setDiscountInr(e.target.value));
+  const notesField = fieldKindProps<HTMLTextAreaElement>("text", (e) => setNotes(e.target.value));
 
   // client-side totals (server recomputes authoritatively)
   const subtotal = items.reduce((a, it) => a + toPaise(it.unitPriceInr) * Math.max(1, it.quantity), 0);
@@ -187,13 +197,13 @@ export default function InvoiceEditor({
                 </div>
               </label>
               <label className="text-caption font-semibold uppercase text-ink-3">Name
-                <input className={inputCls} value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                <input {...nameField.attrs} className={inputCls} value={customerName} onChange={nameField.onChange} />
               </label>
               <label className="text-caption font-semibold uppercase text-ink-3">Email
-                <input className={inputCls} value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+                <input {...emailField.attrs} className={inputCls} value={customerEmail} onChange={emailField.onChange} />
               </label>
               <label className="text-caption font-semibold uppercase text-ink-3">Phone
-                <input className={inputCls} value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                <input {...phoneField.attrs} className={inputCls} value={customerPhone} onChange={phoneField.onChange} />
               </label>
             </div>
           </Card>
@@ -214,21 +224,26 @@ export default function InvoiceEditor({
               <div className="flex gap-2 text-caption font-semibold uppercase text-ink-3">
                 <span className="flex-1">Description</span><span className="w-14 text-right">Qty</span><span className="w-28 text-right">Unit ₹</span><span className="w-28 text-right">Amount</span><span className="w-6" />
               </div>
-              {items.map((it, i) => (
+              {items.map((it, i) => {
+                // Per-row, inside the map: fieldKindProps calls no hooks, so this is safe.
+                const price = fieldKindProps<HTMLInputElement>("money", (e) => setItem(i, { unitPriceInr: e.target.value }));
+                return (
                 <div key={i} className="flex items-center gap-2">
+                  {/* Description stays free text — "Level 2 Bundle" is a legitimate line item. */}
                   <input className={`${inputCls} flex-1`} placeholder="Item description" value={it.description} onChange={(e) => setItem(i, { description: e.target.value })} />
                   <input className={`${inputCls} w-14 text-right`} type="number" min={1} value={it.quantity} onChange={(e) => setItem(i, { quantity: Number(e.target.value) || 1 })} />
-                  <input className={`${inputCls} w-28 text-right`} inputMode="decimal" value={it.unitPriceInr} onChange={(e) => setItem(i, { unitPriceInr: e.target.value })} />
+                  <input {...price.attrs} className={`${inputCls} w-28 text-right`} value={it.unitPriceInr} onChange={price.onChange} />
                   <span className="w-28 text-right text-sm text-ink-2">{formatInrMinor(toPaise(it.unitPriceInr) * Math.max(1, it.quantity))}</span>
                   <IconButton label="Remove line" onClick={() => setItems((its) => its.filter((_, idx) => idx !== i))}><Trash2 size={15} /></IconButton>
                 </div>
-              ))}
+                );
+              })}
               <Btn size="sm" variant="ghost" icon={<Plus size={14} />} onClick={() => setItems((its) => [...its, { description: "", quantity: 1, unitPriceInr: "" }])}>Add line</Btn>
             </div>
           </Card>
 
           <Card title="Notes">
-            <textarea className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Payment terms, bank details, thank-you note…" />
+            <textarea {...notesField.attrs} className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary" rows={3} value={notes} onChange={notesField.onChange} placeholder="Payment terms, bank details, thank-you note…" />
           </Card>
         </div>
 
@@ -247,7 +262,7 @@ export default function InvoiceEditor({
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-caption font-semibold uppercase text-ink-3">Discount ₹
-                  <input className={inputCls} inputMode="decimal" value={discountInr} onChange={(e) => setDiscountInr(e.target.value)} />
+                  <input {...discountField.attrs} className={inputCls} value={discountInr} onChange={discountField.onChange} />
                 </label>
                 <label className="text-caption font-semibold uppercase text-ink-3">Tax %
                   <input className={inputCls} type="number" min={0} value={taxPercent} onChange={(e) => setTaxPercent(Number(e.target.value) || 0)} />
@@ -285,9 +300,9 @@ export default function InvoiceEditor({
 
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" size="sm">
         <form action={pay} className="space-y-4">
-          <Field label="Amount (₹)"><TextInput name="amountInr" inputMode="decimal" required defaultValue={invoice ? invoice.balanceDisplay.replace(/[^\d.]/g, "") : ""} /></Field>
+          <Field label="Amount (₹)"><TextInput kind="money" name="amountInr" required defaultValue={invoice ? invoice.balanceDisplay.replace(/[^\d.]/g, "") : ""} /></Field>
           <Field label="Method"><Select name="method" options={[{ value: "cash", label: "Cash" }, { value: "upi", label: "UPI" }, { value: "bank", label: "Bank transfer" }, { value: "card", label: "Card" }, { value: "other", label: "Other" }]} defaultValue="upi" /></Field>
-          <Field label="Reference (optional)"><TextInput name="reference" placeholder="Txn id / note" /></Field>
+          <Field label="Reference (optional)"><TextInput kind="text" name="reference" placeholder="Txn id / note" /></Field>
           <FormError message={payError} />
           <div className="flex justify-end gap-2"><Btn variant="ghost" type="button" onClick={() => setPayOpen(false)}>Cancel</Btn><SubmitButton>Record</SubmitButton></div>
         </form>

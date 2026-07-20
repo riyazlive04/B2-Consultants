@@ -8,6 +8,7 @@ import { Pill } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Btn } from "@/components/ui/controls";
 import { Select } from "@/components/ui/form";
+import { fieldKindProps } from "@/components/ui/field-base";
 import { formatDate } from "@/lib/format";
 import { optionsFrom, SPRINT_STATUS_LABELS } from "@/lib/labels";
 
@@ -58,6 +59,11 @@ export function SprintTracker({
   const inputCls =
     "h-9 w-full rounded-field border border-line bg-surface px-2 text-xs outline-none focus:border-accent";
 
+  // Dense raw <input>s (they submit via `form=`, not the form kit). Target/actual/note are all
+  // prose — "15 applications", "Why missed" — so `text` is the right kind: cap only, no filtering.
+  // fieldKindProps is not a hook, so one instance shared across every row is fine.
+  const freeText = fieldKindProps<HTMLInputElement>("text", undefined);
+
   // Fixed-order week-by-week plan — sortable: false throughout so DataTable's
   // per-column click-sort can't scramble the sprint's natural sequence.
   const columns: Column<SprintWeekRow>[] = [
@@ -86,7 +92,7 @@ export function SprintTracker({
       key: "target", header: "Target", sortable: false,
       cell: (w) =>
         canEdit ? (
-          <input form={`sprint-${w.id}`} name="target" aria-label={`Week ${w.weekIndex} target`} defaultValue={w.target ?? ""} placeholder="e.g. 15 applications" className={inputCls} />
+          <input {...freeText.attrs} onChange={freeText.onChange} form={`sprint-${w.id}`} name="target" aria-label={`Week ${w.weekIndex} target`} defaultValue={w.target ?? ""} placeholder="e.g. 15 applications" className={inputCls} />
         ) : (
           w.target ?? "-"
         ),
@@ -95,7 +101,7 @@ export function SprintTracker({
       key: "actual", header: "Weekend check-in (actual)", sortable: false,
       cell: (w) =>
         canEdit ? (
-          <input form={`sprint-${w.id}`} name="actual" aria-label={`Week ${w.weekIndex} actual`} defaultValue={w.actual ?? ""} placeholder="What happened" className={inputCls} />
+          <input {...freeText.attrs} onChange={freeText.onChange} form={`sprint-${w.id}`} name="actual" aria-label={`Week ${w.weekIndex} actual`} defaultValue={w.actual ?? ""} placeholder="What happened" className={inputCls} />
         ) : (
           w.actual ?? "-"
         ),
@@ -113,7 +119,7 @@ export function SprintTracker({
       key: "note", header: "Note / why missed", sortable: false,
       cell: (w) =>
         canEdit ? (
-          <input form={`sprint-${w.id}`} name="note" aria-label={`Week ${w.weekIndex} note`} defaultValue={w.note ?? ""} placeholder="Why missed / action" className={inputCls} />
+          <input {...freeText.attrs} onChange={freeText.onChange} form={`sprint-${w.id}`} name="note" aria-label={`Week ${w.weekIndex} note`} defaultValue={w.note ?? ""} placeholder="Why missed / action" className={inputCls} />
         ) : (
           <span className="text-xs text-muted">{w.note ?? ""}</span>
         ),

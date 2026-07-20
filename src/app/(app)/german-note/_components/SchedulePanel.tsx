@@ -45,14 +45,14 @@ function EventFields({ event }: { event?: GnEventRow }) {
           <TextInput name="startsAt" type="datetime-local" required defaultValue={event ? toLocalInput(event.startsAt) : ""} />
         </Field>
         <Field label="Duration (minutes)" hint="Optional">
-          <TextInput name="durationMins" inputMode="numeric" pattern="\d*" maxLength={4} placeholder="90" defaultValue={event?.durationMins ?? undefined} />
+          <TextInput kind="int" name="durationMins" maxLength={4} placeholder="90" defaultValue={event?.durationMins ?? undefined} />
         </Field>
       </div>
       <Field label="Join link" hint="Zoom / Google Meet link students click to join the live class.">
-        <TextInput name="joinUrl" type="url" placeholder="https://zoom.us/j/…" defaultValue={event?.joinUrl ?? undefined} />
+        <TextInput kind="url" name="joinUrl" placeholder="https://zoom.us/j/…" defaultValue={event?.joinUrl ?? undefined} />
       </Field>
       <Field label="Notes (optional)">
-        <TextArea name="notes" maxLength={1000} placeholder="What to prepare, chapter, etc." defaultValue={event?.notes ?? undefined} />
+        <TextArea kind="text" name="notes" maxLength={1000} placeholder="What to prepare, chapter, etc." defaultValue={event?.notes ?? undefined} />
       </Field>
     </div>
   );

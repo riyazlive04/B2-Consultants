@@ -190,14 +190,14 @@ export function MembersPanel({
               </h4>
               <div className="space-y-3">
                 <Field label="Full name">
-                  <TextInput name="fullName" required maxLength={120} />
+                  <TextInput kind="name" name="fullName" required maxLength={120} />
                 </Field>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Email (optional)">
-                    <TextInput name="email" type="email" />
+                    <TextInput kind="email" name="email" />
                   </Field>
                   <Field label="Phone (optional)">
-                    <TextInput name="phone" maxLength={30} />
+                    <TextInput kind="phone" name="phone" />
                   </Field>
                 </div>
               </div>
@@ -230,7 +230,7 @@ export function MembersPanel({
             className="space-y-3"
           >
             <Field label="Login email">
-              <TextInput name="email" type="email" required defaultValue={loginFor.email ?? ""} />
+              <TextInput kind="email" name="email" required defaultValue={loginFor.email ?? ""} />
             </Field>
             <Field label="Password" hint="At least 8 characters — share it with the student privately.">
               <TextInput name="password" type="password" required minLength={8} />

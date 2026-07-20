@@ -8,7 +8,7 @@ import ContactRecord from "./_components/ContactRecord";
 export const dynamic = "force-dynamic";
 
 export default async function ContactPage({ params }: { params: { id: string } }) {
-  await requireSection("contacts");
+  const session = await requireSection("contacts");
   // The Lead IS the contact, so its id is the leadId every agreement hangs off.
   const [contact, filters, customFields, agreement] = await Promise.all([
     getContactDetail(params.id),
@@ -28,6 +28,7 @@ export default async function ContactPage({ params }: { params: { id: string } }
         allTags={filters.tags.map((t) => t.name)}
         customFields={customFields}
         agreement={agreement}
+        canConvert={session.role === "ADMIN"}
       />
     </div>
   );

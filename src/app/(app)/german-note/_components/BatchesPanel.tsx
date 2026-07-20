@@ -10,16 +10,18 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
+import type { LevelOption } from "@/lib/levels";
 import { LevelChip, StatusChip } from "./LevelChip";
 
-const LEVEL_OPTIONS = [
-  { value: "GN_A1", label: "GN A1" },
-  { value: "GN_A2", label: "GN A2" },
-  { value: "GN_B1", label: "GN B1" },
-  { value: "GN_B2", label: "GN B2" },
-];
-
-function BatchFields({ batch, tutors }: { batch?: GnManageBatch; tutors: GnTutorRow[] }) {
+function BatchFields({
+  batch,
+  tutors,
+  levelOptions,
+}: {
+  batch?: GnManageBatch;
+  tutors: GnTutorRow[];
+  levelOptions: LevelOption[];
+}) {
   const tutorOptions = [
     { value: "", label: "No tutor assigned yet" },
     ...tutors.map((t) => ({ value: t.id, label: `${t.name} (${t.email})` })),
@@ -31,7 +33,7 @@ function BatchFields({ batch, tutors }: { batch?: GnManageBatch; tutors: GnTutor
           <TextInput name="name" required maxLength={120} placeholder="A1 Evening — July 2026" defaultValue={batch?.name} />
         </Field>
         <Field label="Level">
-          <Select name="level" options={LEVEL_OPTIONS} defaultValue={batch?.level ?? "GN_A1"} />
+          <Select name="level" options={levelOptions} defaultValue={batch?.level ?? levelOptions[0]?.value} />
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -39,7 +41,7 @@ function BatchFields({ batch, tutors }: { batch?: GnManageBatch; tutors: GnTutor
           <Select name="tutorId" options={tutorOptions} defaultValue={batch?.tutorId ?? ""} />
         </Field>
         <Field label="Target class size" hint="Spec target is ~8 per batch.">
-          <TextInput name="targetStrength" inputMode="numeric" defaultValue={batch?.targetStrength?.toString() ?? "8"} />
+          <TextInput kind="int" name="targetStrength" defaultValue={batch?.targetStrength?.toString() ?? "8"} />
         </Field>
         {batch && (
           <Field label="Status" hint="Archived batches keep recordings readable but close their discussion.">
@@ -55,13 +57,21 @@ function BatchFields({ batch, tutors }: { batch?: GnManageBatch; tutors: GnTutor
         )}
       </div>
       <Field label="Notes (optional)">
-        <TextArea name="notes" maxLength={2000} defaultValue={batch?.notes ?? undefined} placeholder="Schedule, Zoom link, track…" />
+        <TextArea kind="text" name="notes" maxLength={2000} defaultValue={batch?.notes ?? undefined} placeholder="Schedule, Zoom link, track…" />
       </Field>
     </div>
   );
 }
 
-export function BatchesPanel({ batches, tutors }: { batches: GnManageBatch[]; tutors: GnTutorRow[] }) {
+export function BatchesPanel({
+  batches,
+  tutors,
+  levelOptions,
+}: {
+  batches: GnManageBatch[];
+  tutors: GnTutorRow[];
+  levelOptions: LevelOption[];
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
@@ -94,7 +104,7 @@ export function BatchesPanel({ batches, tutors }: { batches: GnManageBatch[]; tu
             refresh();
           }}
         >
-          <BatchFields tutors={tutors} />
+          <BatchFields tutors={tutors} levelOptions={levelOptions} />
           <div className="mt-4 flex items-center justify-between gap-3">
             <FormError message={error} />
             <span className="ml-auto"><SubmitButton>Create batch</SubmitButton></span>
@@ -169,7 +179,7 @@ export function BatchesPanel({ batches, tutors }: { batches: GnManageBatch[]; tu
               refresh();
             }}
           >
-            <BatchFields batch={editing} tutors={tutors} />
+            <BatchFields batch={editing} tutors={tutors} levelOptions={levelOptions} />
             <div className="mt-4 flex items-center justify-between gap-3">
               <FormError message={error} />
               <span className="ml-auto"><SubmitButton>Save changes</SubmitButton></span>

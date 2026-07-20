@@ -1,0 +1,44 @@
+# TLS termination for the B2 app. Caddy provisions and renews the Let's Encrypt
+# certificate automatically — the only prerequisite is that APP_DOMAIN's DNS A/AAAA
+# record already points at this VPS and ports 80+ 443 are open. Port 80 must stay
+# reachable even though the app is https-only: that is where the ACME HTTP-01
+# challenge and the →https redirect live.
+
+{
+	email {$TLS_EMAIL}
+	# Uncomment to rehearse against the ACME staging CA (untrusted cert, no rate limit).
+	# Let's Encrypt allows only 5 identical certs/week — worth using while DNS settles.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# X-Forwarded-Proto / -Host are set by reverse_proxy automatically, and the app
+	# depends on them: users-actions.ts builds invite + reset origins from these
+	# headers, and better-auth infers secure cookies from the https scheme. Without a
+	# proxy passing them, emailed links come out as http:// or localhost.
+	reverse_proxy app:3000 {
+		health_uri /api/health
+		health_interval 30s
+		health_timeout 10s
+	}
+
+	# HSTS. Deliberately no `preload`/`includeSubDomains` — preload is effectively
+	# irreversible, and subdomains here are not all known to be https yet.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		# The app already sets X-Frame-Options, CSP frame-ancestors, nosniff,
+		# Referrer-Policy and Permissions-Policy per-route in next.config.mjs
+		# (the /pdf routes need SAMEORIGIN, everything else DENY). Do not duplicate
+		# them here: a second X-Frame-Options would resolve to DENY and break the
+		# agreement-PDF iframe on the signing page.
+		-Server
+	}
+
+	# Access log to stdout → `docker compose logs caddy`.
+	log {
+		output stdout
+		format console
+	}
+}

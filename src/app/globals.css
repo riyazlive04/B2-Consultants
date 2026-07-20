@@ -29,6 +29,11 @@
   --primary-tint: #bbd6ff;
   --primary-rgb: 10, 100, 226; /* raw channels for rgba() tints */
 
+  /* brand-indigo — the periwinkle of the B2 Consultants logo mark. Kept OUT of the
+     --primary family on purpose: --primary is the interactive blue, this is only ever
+     the logo's ink. Lightened in dark mode so the mark stays legible on a navy rail. */
+  --brand-indigo: #5b60c9;
+
   /* ink */
   --ink: #16203a;   /* primary text, headings, key figures — never pure black */
   --ink-2: #4a566e; /* secondary text, labels, table body */
@@ -150,6 +155,7 @@
   --primary-soft: #1f3056;
   --primary-tint: #37527f;
   --primary-rgb: 91, 157, 255;
+  --brand-indigo: #9296f0;
   --ink: #eaf0fb;
   --ink-2: #aab7ce;
   --ink-3: #8894aa; /* lifted from #76849d: the old value read 3.73:1 on --bg-surface-2 */
@@ -432,6 +438,14 @@ tbody tr:hover {
 }
 .toast-in { animation: toast-in 200ms ease-out both; }
 
+/* toast exit — a toast that just vanishes from the DOM reads as a glitch; this slides
+   it back down and fades it so the eye can follow the dismissal (or an Undo landing). */
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+.toast-out { animation: toast-out 180ms ease-in forwards; }
+
 @keyframes dialog-in {
   from { opacity: 0; transform: translateY(8px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -594,7 +608,7 @@ tbody tr:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise-in, .toast-in, .dialog-in, .overlay-in, .card-hover { animation: none; transition: none; }
+  .rise-in, .toast-in, .toast-out, .dialog-in, .overlay-in, .card-hover { animation: none; transition: none; }
   /* The new §6 layer holds still too — the END STATE must survive, so hover/focus
      still recolour and lift; only the travel and the entrances are removed. */
   .tab-indicator { transition: none; }

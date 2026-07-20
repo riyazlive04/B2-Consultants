@@ -39,6 +39,13 @@ export const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
+/** Which business a cost belongs to (§1.4). SHARED is the default and gets apportioned. */
+export const EXPENSE_BUSINESS_LINE_LABELS: Record<string, string> = {
+  SHARED: "Shared (split across both)",
+  B2: "B2 only",
+  GERMAN_NOTE: "German Note only",
+};
+
 export const PENDING_STATUS_LABELS: Record<string, string> = {
   ACTIVE: "Active",
   PAID_IN_FULL: "Paid in full",

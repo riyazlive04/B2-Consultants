@@ -200,19 +200,20 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
               <TextInput type="month" name="month" required defaultValue={board.month} />
             </Field>
             <Field label="Bonus (₹)" hint="INR, EUR, or both">
-              <TextInput name="bonusInr" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.bonusInrRaw) : ""} />
+              <TextInput kind="money" name="bonusInr" placeholder="0.00" defaultValue={editing ? minorToInput(editing.bonusInrRaw) : ""} />
             </Field>
             <Field label="Bonus (€)">
-              <TextInput name="bonusEur" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.bonusEurRaw) : ""} />
+              <TextInput kind="money" name="bonusEur" placeholder="0.00" defaultValue={editing ? minorToInput(editing.bonusEurRaw) : ""} />
             </Field>
             <Field label="Commission (₹)" hint="INR, EUR, or both">
-              <TextInput name="commInr" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.commInrRaw) : ""} />
+              <TextInput kind="money" name="commInr" placeholder="0.00" defaultValue={editing ? minorToInput(editing.commInrRaw) : ""} />
             </Field>
             <Field label="Commission (€)">
-              <TextInput name="commEur" inputMode="decimal" placeholder="0.00" defaultValue={editing ? minorToInput(editing.commEurRaw) : ""} />
+              <TextInput kind="money" name="commEur" placeholder="0.00" defaultValue={editing ? minorToInput(editing.commEurRaw) : ""} />
             </Field>
+            {/* Free text — the reason is prose with numbers in it ("hit 40 appointments"). */}
             <Field label="Reason / criteria" hint="e.g. hit 40 appointments · good call QA">
-              <TextInput name="reason" required placeholder="Why this reward" defaultValue={editing?.reason ?? ""} />
+              <TextInput kind="text" name="reason" required placeholder="Why this reward" defaultValue={editing?.reason ?? ""} />
             </Field>
             <Field label="Status">
               <Select name="status" options={optionsFrom(PAYOUT_STATUS_LABELS)} defaultValue={editing?.status ?? "PENDING"} />

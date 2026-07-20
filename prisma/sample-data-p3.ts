@@ -126,7 +126,7 @@ async function main() {
       { name: "Karthick salary", category: "TEAM_SALARIES", amountInrMinor: inr(50000), frequency: "MONTHLY", nextDueDate: d("2026-08-01"), isCogs: true, status: "ACTIVE" },
       { name: "Meta Ads budget", category: "MARKETING", amountInrMinor: inr(40000), frequency: "MONTHLY", nextDueDate: d("2026-07-10"), isCogs: false, status: "ACTIVE" },
       { name: "WATI subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(8000), frequency: "MONTHLY", nextDueDate: d("2026-07-05"), isCogs: false, status: "ACTIVE" },
-      { name: "Skool subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(4000), frequency: "MONTHLY", nextDueDate: d("2026-07-15"), isCogs: true, status: "ACTIVE" },
+      { name: "Skool subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(4000), frequency: "MONTHLY", nextDueDate: d("2026-07-15"), isCogs: false, status: "ACTIVE" },
       { name: "Zoom annual plan", category: "TOOLS_SOFTWARE", amountInrMinor: inr(24000), frequency: "ANNUAL", nextDueDate: d("2026-11-01"), isCogs: false, status: "ACTIVE" },
     ],
   });

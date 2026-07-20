@@ -5,11 +5,15 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
 import { parseDateInput, toDateInputValue } from "@/lib/dates";
+import { optionalRule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /** Weekly funnel snapshot (PRD3 §3.2) - Admin-only, one row per week (Monday). */
 
+// Deliberately NOT rule("int") from lib/field-rules: this one also has to turn an untouched box
+// into 0 and hand the column a number, which that (string) schema doesn't do. The character rule
+// it enforces is the same — the matching inputs carry kind="int" plus maxLength={7}.
 const intField = z
   .string()
   .trim()
@@ -27,7 +31,7 @@ const snapshotSchema = z.object({
   enrollmentsElite: intField,
   ghostedDownloads: intField,
   workshopAttendees: intField,
-  notes: z.string().trim().optional(),
+  notes: optionalRule("text"),
 });
 
 export async function saveWeeklySnapshot(form: FormData): Promise<ActionResult> {

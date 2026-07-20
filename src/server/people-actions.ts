@@ -8,6 +8,7 @@ import { requireAdmin, requireSection, requireSession } from "@/lib/rbac";
 import { istMinutesOfDay, istToday } from "@/lib/dates";
 import { formatIstMinutes } from "@/lib/config-schema";
 import { activityDate } from "@/lib/activity-actions";
+import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { getDailyLogEod } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
 import { LOG_FIELD_UNIT } from "@/lib/labels";
@@ -26,21 +27,22 @@ function firstError(e: z.ZodError): string {
 // ── Team profiles ──────────────────────────────────────────────
 
 const profileSchema = z.object({
-  fullName: z.string().trim().min(1, "Full name is required"),
+  fullName: rule("name"),
+  // NOT `name`: a role title legitimately carries digits ("Level 2 Coach").
   roleTitle: z.string().trim().min(1, "Role title is required"),
   dashboardRole: z.enum(["ADMIN", "HEAD", "USER"]),
-  email: z.string().trim().email("Valid login email required"),
-  phone: z.string().trim().optional(),
+  email: rule("email"),
+  phone: optionalRule("phone"),
   dateJoined: z.string().optional(),
-  keyResponsibilities: z.string().trim().optional(),
+  keyResponsibilities: optionalRule("text"),
   status: z.enum(["ACTIVE", "ON_LEAVE", "INACTIVE"]),
   logVariant: z.enum(["DISCOVERY_SPECIALIST", "APPOINTMENT_SETTER", "DELIVERY_COACH"]),
   // First-call rotation (client notes: 80/20 split, Asma off Saturdays)
-  firstCallSharePct: z.string().trim().regex(/^\d{0,3}$/, "Share must be 0-100").optional(),
+  firstCallSharePct: blankToUndefined(intInRange(0, 100, "Share must be")),
   worksSaturdays: z.string().optional(), // checkbox
   // How many calls a day this person is expected to make — drives the My Desk bar and the
   // once-a-day greeting. Blank/0 = no target, which hides the bar rather than showing 0/0.
-  dailyCallTarget: z.string().trim().regex(/^\d{0,3}$/, "Daily call target must be 0-999").optional(),
+  dailyCallTarget: blankToUndefined(intInRange(0, 999, "Daily call target must be")),
 });
 
 export async function saveTeamProfile(id: string | null, form: FormData): Promise<ActionResult> {
@@ -133,11 +135,13 @@ export async function moveProfile(id: string, direction: "up" | "down"): Promise
 const okrSchema = z.object({
   teamProfileId: z.string().min(1),
   month: z.string().regex(/^\d{4}-\d{2}$/, "Pick a month"),
+  // title / targetValue / currentProgress stay free text — "Increase show-up rate to 80%",
+  // "50 calls", "3 students" are all legitimate values.
   title: z.string().trim().min(1, "OKR title is required"),
   targetValue: z.string().trim().min(1, "Target value is required"),
   currentProgress: z.string().trim().optional(),
   manualCompletionPct: z.string().trim().optional(),
-  notes: z.string().trim().optional(),
+  notes: optionalRule("text"),
 });
 
 const parseNumeric = (s: string | undefined | null): number | null => {
@@ -281,7 +285,9 @@ const logSchema = z.object({
   studentsCheckedInOn: num.optional(),
   assignmentsReviewed: num.optional(),
   studentsFlaggedAtRisk: num.optional(),
-  notes: z.string().trim().optional(),
+  // Free text (a blocker can read however the person needs it to), but capped — this
+  // field was previously unbounded, so the 2000-char client maxLength was the only limit.
+  notes: optionalRule("text"),
 });
 
 /**

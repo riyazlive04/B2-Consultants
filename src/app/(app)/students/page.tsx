@@ -21,6 +21,11 @@ import { requireSection } from "@/lib/rbac";
 import { getStudentsOverview } from "@/server/students-metrics";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { StudentsPanel } from "./_components/StudentsPanel";
+import { BookOrdersPanel } from "./_components/BookOrdersPanel";
+import { ImportPanel } from "./_components/ImportPanel";
+import { getBookOrderData, getStudentOptions } from "@/server/book-order-metrics";
+import { getActiveLevels } from "@/server/levels";
+import { levelOptions } from "@/lib/levels";
 import { TrackerTable } from "./_components/TrackerTable";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +37,14 @@ export default async function StudentsPage() {
     await getStudentsOverview();
   const waByStudent = await getWhatsAppStatusMap("studentId", tracker.map((t) => t.studentId));
   const today = toDateInputValue(istToday());
+  // Book orders and Import are Admin-only tabs — a Head shouldn't pay for reads they can't see.
+  const [bookOrders, studentOptions] = isAdmin
+    ? await Promise.all([getBookOrderData(), getStudentOptions()])
+    : [{ rows: [], vendors: [], thresholdRupees: 0 }, []];
+  // Book orders are per single level (never a bundle).
+  const bookLevelOptions = isAdmin
+    ? levelOptions(await getActiveLevels(), ["GERMAN_LEVEL", "COACHING_TIER", "OTHER"])
+    : [];
 
   return (
     <div className="w-full space-y-8">
@@ -163,6 +176,23 @@ export default async function StudentsPage() {
             content: <TrackerTable rows={tracker} isAdmin={isAdmin} waStatus={waByStudent} />,
           },
           { label: "All students & LTV", content: <StudentsPanel rows={students} isAdmin={isAdmin} today={today} /> },
+          ...(isAdmin
+            ? [
+                {
+                  label: `Book orders${bookOrders.rows.filter((r) => r.readyToRelease).length ? " ●" : ""}`,
+                  content: (
+                    <BookOrdersPanel
+                      rows={bookOrders.rows}
+                      vendors={bookOrders.vendors}
+                      students={studentOptions}
+                      thresholdRupees={bookOrders.thresholdRupees}
+                      levelOptions={bookLevelOptions}
+                    />
+                  ),
+                },
+                { label: "Import", content: <ImportPanel /> },
+              ]
+            : []),
         ]}
       />
     </div>

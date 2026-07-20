@@ -54,6 +54,19 @@ export async function getTodayInrPerEur(): Promise<FxResult> {
   }
 }
 
+/**
+ * Warm today's rate ahead of the first user request (audit §C #18). getTodayInrPerEur already
+ * fetches-and-caches lazily; the gap was that the FIRST caller of each UTC day paid the
+ * frankfurter.app round-trip inline in their request, and if the API happened to be down at
+ * that instant the whole day fell back to the stale/₹90 rate. A daily cron calls this just
+ * after 00:00 UTC so a real person never eats the fetch and recovery is attempted early.
+ * Idempotent and side-effect-free beyond the same upsert getTodayInrPerEur already does.
+ */
+export async function prewarmTodayFx(): Promise<{ rate: string; date: string; stale: boolean }> {
+  const r = await getTodayInrPerEur();
+  return { rate: r.rate.toString(), date: r.date.toISOString().slice(0, 10), stale: r.stale };
+}
+
 /** Convert paise → cents at a given INR-per-EUR rate (both integer minor units). */
 export function inrMinorToEurMinor(inrMinor: bigint, inrPerEur: Prisma.Decimal): bigint {
   const eur = new Prisma.Decimal(inrMinor.toString()).div(inrPerEur);

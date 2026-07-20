@@ -8,6 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { updateMyProfile } from "@/server/profile-actions";
 import { Field, FormError, TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
+import { TimeZoneCard } from "./TimeZoneCard";
 
 /** Resize an uploaded image to a square ~256px JPEG data URL - keeps the row small. */
 function resizeToDataUrl(file: File, size = 256): Promise<string> {
@@ -136,7 +137,7 @@ export function ProfileClient({
 
         <div className="mt-6 grid gap-4">
           <Field label="Display name">
-            <TextInput value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+            <TextInput kind="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
           </Field>
           <Field label="Email" hint="Your login email is managed by an Admin.">
             <TextInput value={user.email} disabled readOnly />
@@ -161,6 +162,8 @@ export function ProfileClient({
           </button>
         </div>
       </div>
+
+      <TimeZoneCard />
 
       <PasswordCard />
     </div>

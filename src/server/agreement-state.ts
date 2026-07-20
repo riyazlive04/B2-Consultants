@@ -1,6 +1,7 @@
 import "server-only";
 import type { WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { ACTIVE } from "@/lib/soft-delete";
 import { LEAD_STAGE_LABELS, PROGRAM_LEVEL_LABELS } from "@/lib/labels";
 import {
   agreementGroup,
@@ -189,6 +190,7 @@ export async function getAgreementTaskCounts(): Promise<AgreementTaskCounts> {
     // to be reminded of.
     prisma.lead.count({
       where: {
+        ...ACTIVE,
         stage: { in: eligible as unknown as never[] },
         agreements: { none: { status: { notIn: ["VOIDED", "DECLINED"] } } },
       },
@@ -253,7 +255,7 @@ export async function getAgreementCandidatesGrouped(): Promise<AgreementCandidat
 
   const [leads, students] = await Promise.all([
     prisma.lead.findMany({
-      where: { stage: { in: CANDIDATE_STAGES as unknown as never[] } },
+      where: { ...ACTIVE, stage: { in: CANDIDATE_STAGES as unknown as never[] } },
       select: {
         id: true,
         name: true,

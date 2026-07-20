@@ -15,9 +15,18 @@ import { DateText } from "@/components/ui/DateText";
 import {
   moveOpportunity, createOpportunity, updateOpportunity, deleteOpportunity,
   createPipeline, deletePipeline, addStage, renameStage, deleteStage, reorderStages,
+  setStageLegacyStage,
   getOpportunityNotes, createOpportunityNote, toggleOpportunityNotePin, deleteOpportunityNote,
   type OpportunityNote,
 } from "@/server/opportunities-actions";
+import { LEAD_STAGE_LABELS } from "@/lib/labels";
+
+// Options for mapping a custom pipeline's stage back to a lead-lifecycle stage (the bridge that
+// syncs a card move to Lead.stage). "" = no sync; the board stays a standalone process.
+const LIFECYCLE_OPTS = [
+  { value: "", label: "— No lead-stage sync —" },
+  ...Object.entries(LEAD_STAGE_LABELS).map(([value, label]) => ({ value, label })),
+];
 
 const SOURCE_OPTS = [
   { value: "", label: "— source —" },
@@ -151,6 +160,23 @@ export default function Board({
     const id = dragId;
     setDragId(null);
     if (!id) return;
+
+    // Dropping a card straight onto the Won column records it as a won deal (and, on the sales
+    // pipeline, marks the underlying contact Won). That's easy to trigger with a stray drag, so a
+    // direct-to-Won drop must be explicitly verified first. Only when the card is actually MOVING
+    // into Won — reordering a card already in Won doesn't nag.
+    const target = stages.find((s) => s.id === toStageId);
+    const card = stages.flatMap((s) => s.cards).find((c) => c.id === id);
+    const movingIntoWon = target?.legacyStage === "WON" && card?.stageId !== toStageId;
+    if (movingIntoWon) {
+      const ok = await askConfirm({
+        title: `Mark "${card?.name ?? "this deal"}" as Won?`,
+        body: "You dropped this card directly into Won. That records it as a won deal and moves the contact to the Won stage. Move the card back to undo.",
+        confirmLabel: "Mark as Won",
+      });
+      if (!ok) return; // declined — leave the board exactly as it was, no move
+    }
+
     const prev = stages;
     const optimistic = moveCardLocally(id, toStageId, toIndex);
     if (optimistic) setStages(optimistic);
@@ -230,7 +256,7 @@ export default function Board({
               }}
               className="space-y-4"
             >
-              <Field label="Pipeline name"><TextInput name="name" required placeholder="e.g. Sales" /></Field>
+              <Field label="Pipeline name"><TextInput kind="text" name="name" required placeholder="e.g. Sales" /></Field>
               <div className="flex justify-end gap-2 pt-1">
                 <Btn variant="ghost" type="button" onClick={() => setCreateFirstOpen(false)}>Cancel</Btn>
                 <SubmitButton>Create</SubmitButton>
@@ -361,14 +387,15 @@ export default function Board({
             </Field>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Name"><TextInput name="newName" placeholder="Full name" /></Field>
-              <Field label="Phone"><TextInput name="newPhone" placeholder="+91…" /></Field>
+              <Field label="Name"><TextInput kind="name" name="newName" placeholder="Full name" /></Field>
+              <Field label="Phone"><TextInput kind="phone" name="newPhone" placeholder="+91…" /></Field>
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Stage"><Select name="stageId" options={stageOpts} defaultValue={stageOpts[0]?.value} /></Field>
-            <Field label="Value (₹)"><TextInput name="valueInr" inputMode="decimal" placeholder="150000" /></Field>
-            <Field label="Deal name"><TextInput name="name" placeholder="Defaults to contact name" /></Field>
+            <Field label="Value (₹)"><TextInput kind="money" name="valueInr" placeholder="150000" /></Field>
+            {/* Deal name is free text, not kind="name": "Level 2 — Q3 renewal" is a real deal. */}
+            <Field label="Deal name"><TextInput kind="text" name="name" placeholder="Defaults to contact name" /></Field>
             <Field label="Source"><Select name="source" options={SOURCE_OPTS} defaultValue="" /></Field>
             <Field label="Owner"><Select name="assignedToId" options={ownerOpts} defaultValue="" /></Field>
           </div>
@@ -394,8 +421,8 @@ export default function Board({
                 content: (
                   <form action={saveOpp} key={editCard.id} className="space-y-4">
                     <div className="grid grid-cols-2 gap-3">
-                      <Field label="Deal name"><TextInput name="name" required defaultValue={editCard.name} /></Field>
-                      <Field label="Value (₹)"><TextInput name="valueInr" inputMode="decimal" defaultValue={editCard.valueInr.replace(/[^\d.]/g, "")} /></Field>
+                      <Field label="Deal name"><TextInput kind="text" name="name" required defaultValue={editCard.name} /></Field>
+                      <Field label="Value (₹)"><TextInput kind="money" name="valueInr" defaultValue={editCard.valueInr.replace(/[^\d.]/g, "")} /></Field>
                       <Field label="Stage">
                         <Select name="stageId" options={stageOpts} defaultValue={editCard.stageId} />
                       </Field>
@@ -508,6 +535,9 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
   }, [board]);
 
   const byId = Object.fromEntries(board.stages.map((s) => [s.id, s]));
+  // The default Sales pipeline's stage→lifecycle mapping is seed-managed (load-bearing for the
+  // whole lead lifecycle), so the picker is offered only on custom pipelines.
+  const activeIsDefault = !!board.pipelines.find((p) => p.id === board.activePipelineId)?.isDefault;
 
   async function moveStage(id: string, dir: -1 | 1) {
     const idx = order.indexOf(id);
@@ -532,24 +562,47 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
               const s = byId[id];
               if (!s) return null;
               return (
-                <div key={id} className="flex items-center gap-1.5">
-                  <div className="flex flex-col">
-                    <IconButton label="Move stage up" size="sm" onClick={() => moveStage(id, -1)} disabled={i === 0}>
-                      <ChevronUp size={13} />
-                    </IconButton>
-                    <IconButton label="Move stage down" size="sm" onClick={() => moveStage(id, 1)} disabled={i === order.length - 1}>
-                      <ChevronDown size={13} />
+                <div key={id} className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex flex-col">
+                      <IconButton label="Move stage up" size="sm" onClick={() => moveStage(id, -1)} disabled={i === 0}>
+                        <ChevronUp size={13} />
+                      </IconButton>
+                      <IconButton label="Move stage down" size="sm" onClick={() => moveStage(id, 1)} disabled={i === order.length - 1}>
+                        <ChevronDown size={13} />
+                      </IconButton>
+                    </div>
+                    <input
+                      value={names[id] ?? ""}
+                      onChange={(e) => setNames((v) => ({ ...v, [id]: e.target.value }))}
+                      className="h-9 flex-1 rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary"
+                    />
+                    <Btn size="sm" variant="soft" onClick={async () => { const r = await renameStage(id, names[id] ?? ""); if (r.ok) toast("Stage renamed"); else toast(r.error, "error"); }}>Save</Btn>
+                    <IconButton label="Delete stage" onClick={async () => { if (await askConfirm({ title: `Delete "${s.name}"?`, danger: true })) { const r = await deleteStage(id); if (r.ok) toast("Stage deleted"); else toast(r.error, "error"); } }}>
+                      <Trash2 size={15} />
                     </IconButton>
                   </div>
-                  <input
-                    value={names[id] ?? ""}
-                    onChange={(e) => setNames((v) => ({ ...v, [id]: e.target.value }))}
-                    className="h-9 flex-1 rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary"
-                  />
-                  <Btn size="sm" variant="soft" onClick={async () => { const r = await renameStage(id, names[id] ?? ""); if (r.ok) toast("Stage renamed"); else toast(r.error, "error"); }}>Save</Btn>
-                  <IconButton label="Delete stage" onClick={async () => { if (await askConfirm({ title: `Delete "${s.name}"?`, danger: true })) { const r = await deleteStage(id); if (r.ok) toast("Stage deleted"); else toast(r.error, "error"); } }}>
-                    <Trash2 size={15} />
-                  </IconButton>
+                  {/* Custom pipelines opt into the Lead.stage bridge per stage — moving a card here
+                      then syncs the contact's lifecycle stage (funnel/reminders stay correct). */}
+                  {!activeIsDefault && (
+                    <div className="flex items-center gap-2 pl-10">
+                      <span className="whitespace-nowrap text-caption text-ink-3">Syncs lead stage →</span>
+                      <Select
+                        key={`${id}-${s.legacyStage ?? "none"}`}
+                        size="sm"
+                        defaultValue={s.legacyStage ?? ""}
+                        aria-label={`Lead lifecycle stage for ${s.name}`}
+                        options={LIFECYCLE_OPTS}
+                        onChange={async (e) => {
+                          const r = await setStageLegacyStage(id, e.target.value);
+                          if (r.ok) {
+                            toast(e.target.value ? `Mapped to "${LEAD_STAGE_LABELS[e.target.value] ?? e.target.value}"` : "Sync cleared");
+                            router.refresh();
+                          } else toast(r.error, "error");
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -640,7 +693,7 @@ function OpportunityNotesPanel({ opportunityId }: { opportunityId: string }) {
   return (
     <div className="space-y-4">
       <form action={add} ref={formRef} className="space-y-2">
-        <TextArea name="body" rows={3} placeholder="Write a note about this deal…" />
+        <TextArea kind="text" name="body" rows={3} placeholder="Write a note about this deal…" />
         <FormError message={addError} />
         <div className="flex justify-end"><SubmitButton>Add note</SubmitButton></div>
       </form>

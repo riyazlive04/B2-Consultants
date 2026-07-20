@@ -52,7 +52,7 @@ export const requireSession = cache(async () => {
   // overrides live on the user row so Admin changes take effect on next request
   const row = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { sectionAccess: true, capabilities: true, status: true },
+    select: { sectionAccess: true, capabilities: true, status: true, themePreference: true },
   });
 
   // Suspension takes effect on the very next request. Suspending already deletes the
@@ -65,7 +65,10 @@ export const requireSession = cache(async () => {
 
   const overrides = (row?.sectionAccess as SectionOverrides | null) ?? null;
   const capabilities = (row?.capabilities as CapabilityOverrides | null) ?? null;
-  return { ...session, role, overrides, capabilities };
+  // Part 2 §13: the person's own light/dark choice, so the shell can apply it before paint
+  // rather than trusting whatever this particular browser cached.
+  const themePreference = row?.themePreference ?? "SYSTEM";
+  return { ...session, role, overrides, capabilities, themePreference };
 });
 
 /**

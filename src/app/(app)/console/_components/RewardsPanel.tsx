@@ -411,10 +411,10 @@ function RuleForm({
           ) : (
             <>
               <Field label="Amount ₹" hint="Leave blank if paying in EUR only">
-                <TextInput name="amountInr" inputMode="decimal" defaultValue={rule && Number(rule.amountInrMinor) > 0 ? moneyInput(rule.amountInrMinor) : ""} />
+                <TextInput name="amountInr" kind="money" defaultValue={rule && Number(rule.amountInrMinor) > 0 ? moneyInput(rule.amountInrMinor) : ""} />
               </Field>
               <Field label="Amount €">
-                <TextInput name="amountEur" inputMode="decimal" defaultValue={rule && Number(rule.amountEurMinor) > 0 ? moneyInput(rule.amountEurMinor) : ""} />
+                <TextInput name="amountEur" kind="money" defaultValue={rule && Number(rule.amountEurMinor) > 0 ? moneyInput(rule.amountEurMinor) : ""} />
               </Field>
             </>
           )}

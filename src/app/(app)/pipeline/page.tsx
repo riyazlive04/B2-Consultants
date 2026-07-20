@@ -20,14 +20,22 @@ import { istMonthRange, istToday, toDateInputValue } from "@/lib/dates";
 import { formatInrMinor, formatPct } from "@/lib/format";
 import { hasCapability, requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { getActiveLevels } from "@/server/levels";
+import { levelOptions } from "@/lib/levels";
 import { Card, CardTitle, PageHeader, Pill } from "@/components/ui/kit";
-import { getPipelineOverview } from "@/server/pipeline-metrics";
+import { getPipelineOverview, getKanbanLeads, getPipelineAging, KANBAN_STAGES } from "@/server/pipeline-metrics";
+import { getPipelineConfig } from "@/server/founder-config";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { getFirstCallSplit } from "@/server/assignment";
 import { LeadSection } from "./_components/LeadSection";
+import { KanbanBoard } from "./_components/KanbanBoard";
 import { OutcomeSection } from "./_components/OutcomeSection";
 import { StageChart } from "./_components/StageChart";
 import { TargetBar } from "./_components/TargetBar";
+import { AgingSection } from "./_components/AgingSection";
+import { ArchivedGroups } from "@/components/ui/ArchivedGroups";
+import { getArchivedLeads } from "@/server/archive-metrics";
+import { restoreLead, purgeLead } from "@/server/contacts-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -63,21 +71,48 @@ export default async function PipelinePage() {
   // Admins always hold the capability, so nothing changes for them.
   const isAdmin = session.role === "ADMIN";
   const canConfigure = hasCapability(session.role, session.capabilities, "pipeline.configure");
-  const { metrics, target, leads, outcomes, leadOptions, assignees, callFirst, riskDeals } =
-    await getPipelineOverview(session.user.id, isAdmin);
-  const callSplit = isAdmin ? await getFirstCallSplit() : null;
-  const waByLead = await getWhatsAppStatusMap("leadId", leads.map((l) => l.id));
-  const today = toDateInputValue(istToday());
+  const canPurge = session.role === "ADMIN";
+  // ── Wave 1: every independent read in one round-trip. On Supabase (~204ms RTT,
+  // connection_limit) these used to run as ~7 sequential awaits (~1.4s of pure latency);
+  // none of them depends on another, so they fan out in a single Promise.all.
+  //   · aging (1.7) is founder-facing — a non-admin only sees their own board, so a global
+  //     aging table would surface leads that aren't theirs. Admin-only, like the split card.
+  //   · the viewer's log variant is only needed for a non-admin (admins see both tabs).
+  const [archLeads, overview, callSplit, aging, activeLevels, pipelineConfig, viewerProfile] =
+    await Promise.all([
+      getArchivedLeads(),
+      getPipelineOverview(session.user.id, isAdmin),
+      isAdmin ? getFirstCallSplit() : Promise.resolve(null),
+      isAdmin ? getPipelineAging() : Promise.resolve([] as Awaited<ReturnType<typeof getPipelineAging>>),
+      getActiveLevels(),
+      getPipelineConfig(),
+      isAdmin
+        ? Promise.resolve(null)
+        : prisma.teamProfile.findUnique({
+            where: { userId: session.user.id },
+            select: { logVariant: true },
+          }),
+    ]);
 
+  const archivedCount = archLeads.length;
+  const { metrics, target, leads, outcomes, leadOptions, assignees, callFirst, riskDeals } = overview;
+  const levelOpts = levelOptions(activeLevels); // wonLevel accepts any level
+  const { mode: pipelineMode } = pipelineConfig;
+  const today = toDateInputValue(istToday());
   // PRD1 §5.1 duty split: the appointment setter (Nilofer) enters leads/outreach; the
-  // discovery specialist (Asma) enters call outcomes. Admin sees both tabs. A member
-  // with no log variant set sees both, so nobody is ever locked out of entry.
-  const viewerVariant = isAdmin
-    ? null
-    : (await prisma.teamProfile.findUnique({
-        where: { userId: session.user.id },
-        select: { logVariant: true },
-      }))?.logVariant ?? null;
+  // discovery specialist (Asma) enters call outcomes. A member with no log variant set
+  // sees both, so nobody is ever locked out of entry.
+  const viewerVariant = isAdmin ? null : viewerProfile?.logVariant ?? null;
+
+  // ── Wave 2: the only two reads that genuinely depend on Wave 1's results —
+  // WhatsApp status needs the lead IDs, and the Kanban read is opt-in (Founder Console →
+  // Operations), gated on the config mode so we don't pay for it unless it's chosen.
+  const [waByLead, kanbanLeads] = await Promise.all([
+    getWhatsAppStatusMap("leadId", leads.map((l) => l.id)),
+    pipelineMode === "drag_drop"
+      ? getKanbanLeads(session.role, session.user.id)
+      : Promise.resolve([] as Awaited<ReturnType<typeof getKanbanLeads>>),
+  ]);
   const showLeads = isAdmin || viewerVariant === null || viewerVariant === "APPOINTMENT_SETTER";
   const showOutcomes = isAdmin || viewerVariant === null || viewerVariant === "DISCOVERY_SPECIALIST";
 
@@ -393,10 +428,18 @@ export default async function PipelinePage() {
 
       <Tabs
         tabs={[
+          // Board first when the founder has chosen drag-and-drop — the mode they picked
+          // should be the one they land on, not a tab they have to go find.
+          ...(pipelineMode === "drag_drop"
+            ? [{
+                label: "Board",
+                content: <KanbanBoard leads={kanbanLeads} stages={[...KANBAN_STAGES]} />,
+              }]
+            : []),
           ...(showLeads
             ? [{
                 label: "Leads",
-                content: <LeadSection rows={leads} today={today} isAdmin={canConfigure} assignees={assignees} waStatus={waByLead} />,
+                content: <LeadSection rows={leads} today={today} isAdmin={canConfigure} assignees={assignees} levelOptions={levelOpts} waStatus={waByLead} />,
               }]
             : []),
           ...(showOutcomes
@@ -407,6 +450,23 @@ export default async function PipelinePage() {
                 ),
               }]
             : []),
+          ...(isAdmin
+            ? [{
+                label: "Aging",
+                content: <AgingSection rows={aging} />,
+              }]
+            : []),
+          {
+            label: `Archived${archivedCount ? ` (${archivedCount})` : ""}`,
+            content: (
+              <ArchivedGroups
+                canPurge={canPurge}
+                groups={[
+                  { label: "Leads", noun: "lead", rows: archLeads, restore: restoreLead, purge: purgeLead },
+                ]}
+              />
+            ),
+          },
         ]}
       />
     </div>

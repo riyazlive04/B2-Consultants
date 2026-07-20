@@ -7,11 +7,17 @@ import { Tabs } from "@/components/ui/Tabs";
 import { PageHeader } from "@/components/ui/kit";
 import {
   getAgreementWorkflow,
+  getBookOrderConfig,
   getCommissionRulesConfig,
+  getPipelineConfig,
+  getTutorFeeConfig,
   getDailyLogEod,
   getDailyLogTargets,
   getGamificationConfig,
   getResolvedSections,
+  getMaintenanceConfig,
+  getScheduledReportConfig,
+  getFinancePostingConfig,
 } from "@/server/founder-config";
 import { getGoalsWithProgress } from "@/server/goals";
 import { listRewardGrants, listRewardRules } from "@/server/rewards";
@@ -23,6 +29,9 @@ import { CommissionPanel } from "./_components/CommissionPanel";
 import { DailyTargetsPanel } from "./_components/DailyTargetsPanel";
 import { DailyLogEodPanel } from "./_components/DailyLogEodPanel";
 import { AgreementWorkflowPanel } from "./_components/AgreementWorkflowPanel";
+import { TutorFeePanel } from "./_components/TutorFeePanel";
+import { OperationsPanel } from "./_components/OperationsPanel";
+import { MaintenancePanel } from "./_components/MaintenancePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +57,9 @@ export default async function ConsolePage() {
     dailyTargets,
     agreementWorkflow,
     dailyLogEod,
+    tutorFee,
+    bookOrders,
+    pipelineConfig,
   ] = await Promise.all([
       getResolvedSections(),
       getGamificationConfig(),
@@ -63,7 +75,16 @@ export default async function ConsolePage() {
       getDailyLogTargets(),
       getAgreementWorkflow(),
       getDailyLogEod(),
+      getTutorFeeConfig(),
+      getBookOrderConfig(),
+      getPipelineConfig(),
     ]);
+
+  const [maintenanceConfig, scheduledReportConfig, financePostingConfig] = await Promise.all([
+    getMaintenanceConfig(),
+    getScheduledReportConfig(),
+    getFinancePostingConfig(),
+  ]);
 
   // Auto-save is the only rule here that needs an external clock. Read the seam's real
   // precondition so the panel can warn instead of claiming a rule that can never fire.
@@ -131,6 +152,11 @@ export default async function ConsolePage() {
             ),
           },
           { label: "Commission", content: <CommissionPanel rules={commissionRules} /> },
+          { label: "Tutor Fee", content: <TutorFeePanel config={tutorFee} /> },
+          {
+            label: "Operations",
+            content: <OperationsPanel bookOrders={bookOrders} pipeline={pipelineConfig} />,
+          },
           {
             label: "Daily Targets",
             content: (
@@ -141,6 +167,17 @@ export default async function ConsolePage() {
             ),
           },
           { label: "Agreements", content: <AgreementWorkflowPanel config={agreementWorkflow} /> },
+          {
+            label: "Maintenance",
+            content: (
+              <MaintenancePanel
+                maintenance={maintenanceConfig}
+                report={scheduledReportConfig}
+                posting={financePostingConfig}
+                cronArmed={cronArmed}
+              />
+            ),
+          },
         ]}
       />
     </div>

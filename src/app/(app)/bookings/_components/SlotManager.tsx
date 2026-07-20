@@ -60,14 +60,14 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
         window).
       </p>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Field label="Buffer between slots (min)" hint="Gap kept between consecutive generated slots">
-          <TextInput type="number" name="bufferMinutes" required defaultValue={rules.bufferMinutes} min={0} max={240} />
+        <Field label="Buffer between slots (min)" hint="Gap kept between consecutive generated slots. 0–240.">
+          <TextInput kind="int" name="bufferMinutes" required defaultValue={rules.bufferMinutes} maxLength={3} />
         </Field>
-        <Field label="Minimum notice (hours)" hint="Hides slots starting sooner than this from now">
-          <TextInput type="number" name="minNoticeHours" required defaultValue={rules.minNoticeHours} min={0} max={240} />
+        <Field label="Minimum notice (hours)" hint="Hides slots starting sooner than this from now. 0–240.">
+          <TextInput kind="int" name="minNoticeHours" required defaultValue={rules.minNoticeHours} maxLength={3} />
         </Field>
-        <Field label="Max advance booking (days)" hint="Hides slots further out than this">
-          <TextInput type="number" name="maxAdvanceDays" required defaultValue={rules.maxAdvanceDays} min={1} max={365} />
+        <Field label="Max advance booking (days)" hint="Hides slots further out than this. 1–365.">
+          <TextInput kind="int" name="maxAdvanceDays" required defaultValue={rules.maxAdvanceDays} maxLength={3} />
         </Field>
       </div>
 
@@ -94,11 +94,11 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
           />
         </div>
         <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Ask to confirm (hours before)" hint="Send the confirm request once the call is within this window. 0 = don't ask.">
-            <TextInput type="number" name="confirmRequestLeadHours" required defaultValue={rules.confirmRequestLeadHours} min={0} max={240} />
+          <Field label="Ask to confirm (hours before)" hint="Send the confirm request once the call is within this window. 0 = don't ask. Max 240.">
+            <TextInput kind="int" name="confirmRequestLeadHours" required defaultValue={rules.confirmRequestLeadHours} maxLength={3} />
           </Field>
           <Field label="Auto-cancel if unconfirmed (hours before)" hint="Must be less than the ask window, so there's time to reply.">
-            <TextInput type="number" name="autoCancelHours" required defaultValue={rules.autoCancelHours} min={0} max={240} />
+            <TextInput kind="int" name="autoCancelHours" required defaultValue={rules.autoCancelHours} maxLength={3} />
           </Field>
         </div>
       </div>
@@ -183,7 +183,7 @@ export function SlotManager({
           <Field label="End date"><TextInput type="date" name="endDate" required defaultValue={today} min={today} /></Field>
           <Field label="From (IST)"><TextInput type="time" name="startTime" required defaultValue="15:00" /></Field>
           <Field label="To (IST)"><TextInput type="time" name="endTime" required defaultValue="18:00" /></Field>
-          <Field label="Every (min)"><TextInput type="number" name="intervalMins" required defaultValue="30" min={15} max={240} /></Field>
+          <Field label="Every (min)"><TextInput kind="int" name="intervalMins" required defaultValue="30" maxLength={3} /></Field>
           <Field label="Call type">
             <Select name="durationMins" options={SLOT_DURATION_OPTIONS} defaultValue="30" />
           </Field>

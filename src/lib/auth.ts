@@ -3,7 +3,7 @@ import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { prisma } from "./prisma";
-import { getEmailRuntime, sendResendEmail } from "./email";
+import { brandEmailHeader, getEmailRuntime, sendResendEmail } from "./email";
 
 /**
  * Base URL resolution: explicit BETTER_AUTH_URL wins; on Vercel fall back to the
@@ -18,9 +18,13 @@ const baseURL =
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
 
 // Preview deployments get a unique *.vercel.app URL per deploy — trust it too.
+// EXTRA_TRUSTED_ORIGINS (comma-separated) lets a temporary tunnel (e.g. ngrok) sign in
+// WITHOUT repointing BETTER_AUTH_URL — so emailed/booking/agreement links keep using the
+// real base URL. Leave it unset in production; it only widens the sign-in origin allow-list.
 const trustedOrigins = [
   process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
   process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
+  ...(process.env.EXTRA_TRUSTED_ORIGINS?.split(",").map((o) => o.trim()) ?? []),
 ].filter((o): o is string => Boolean(o));
 
 /**
@@ -33,6 +37,7 @@ const trustedOrigins = [
 function resetPasswordEmailHtml(name: string, url: string): string {
   const first = (name || "").trim().split(/\s+/)[0] || "there";
   return `<div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#16203A;line-height:1.6">
+    ${brandEmailHeader()}
     <p>Hi ${first},</p>
     <p>Someone asked to reset the password on your B2 Consultants account. If that was you, set a new one here — this link works once and expires in an hour:</p>
     <p><a href="${url}" style="color:#3762F0">Reset your password</a></p>

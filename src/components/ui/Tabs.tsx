@@ -20,11 +20,14 @@ export type TabsVariant = "pill" | "underline";
 export function Tabs({
   tabs,
   variant = "pill",
+  initial = 0,
 }: {
   tabs: { label: string; content: ReactNode }[];
   variant?: TabsVariant;
+  /** Which tab is open on first render (e.g. a deep-link landing on "Expenses"). */
+  initial?: number;
 }) {
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(initial);
   const baseId = useId();
   const listRef = useRef<HTMLDivElement>(null);
   // Until the first measurement lands, the indicator must not animate — otherwise it

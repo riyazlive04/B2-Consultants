@@ -45,7 +45,7 @@ export default function ChannelSettings({ settings }: { settings: Settings }) {
           <StatusChips s={settings.email} />
           <form action={saveEmail} className="space-y-3">
             <Field label="From name"><TextInput name="fromName" defaultValue={settings.email.fromName} /></Field>
-            <Field label="From email" hint="Must be on a Resend-verified domain"><TextInput name="fromEmail" type="email" defaultValue={settings.email.fromEmail} placeholder="hello@b2consultants.com" /></Field>
+            <Field label="From email" hint="Must be on a Resend-verified domain"><TextInput name="fromEmail" kind="email" defaultValue={settings.email.fromEmail} placeholder="hello@b2consultants.com" /></Field>
             <label className="flex items-center justify-between text-sm font-medium text-ink">Pause sending<Switch checked={emailPaused} onChange={setEmailPaused} /></label>
             <div className="flex justify-end"><SubmitButton>Save email</SubmitButton></div>
           </form>
@@ -56,7 +56,7 @@ export default function ChannelSettings({ settings }: { settings: Settings }) {
         <div className="space-y-4">
           <StatusChips s={settings.sms} />
           <form action={saveSms} className="space-y-3">
-            <Field label="From number" hint="Your Twilio sender, E.164 format"><TextInput name="fromNumber" defaultValue={settings.sms.fromNumber} placeholder="+1..." /></Field>
+            <Field label="From number" hint="Your Twilio sender, E.164 format"><TextInput name="fromNumber" kind="phone" defaultValue={settings.sms.fromNumber} placeholder="+1..." /></Field>
             <label className="flex items-center justify-between text-sm font-medium text-ink">Pause sending<Switch checked={smsPaused} onChange={setSmsPaused} /></label>
             <div className="flex justify-end"><SubmitButton>Save SMS</SubmitButton></div>
           </form>

@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ACTIVE } from "@/lib/soft-delete";
 
 /**
  * "A new lead just landed for you" — the feed behind the 30s in-app popup.
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
   }
 
   const rows = await prisma.lead.findMany({
-    where: { assignedToId: session.user.id, createdAt: { gt: since } },
+    where: { ...ACTIVE, assignedToId: session.user.id, createdAt: { gt: since } },
     orderBy: { createdAt: "desc" },
     take: MAX,
     select: { id: true, name: true, phone: true, city: true, leadSource: true, createdAt: true },

@@ -3,6 +3,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { istMonthRange, istToday, kpiDateRange, type KpiRangeKey } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
+import { ACTIVE } from "@/lib/soft-delete";
 import { getPendingRows } from "./finance-metrics";
 
 /**
@@ -45,7 +46,7 @@ export const getRunwaySnapshot = cache(async (range: KpiRangeKey = "this-month")
   const [latestCash, expenses] = await Promise.all([
     prisma.cashPosition.findFirst({ orderBy: { date: "desc" } }),
     prisma.expense.findMany({
-      where: { date: { gte: threeMonthsAgo, lt: thisMonthStart } },
+      where: { ...ACTIVE, date: { gte: threeMonthsAgo, lt: thisMonthStart } },
       select: { date: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
     }),
   ]);
@@ -91,13 +92,13 @@ export async function getCashOverview() {
       getPendingRows(),
       prisma.payable.findMany({ orderBy: { nextDueDate: "asc" } }),
       prisma.income.findMany({
-        where: { date: { gte: month.start, lt: month.end } },
+        where: { ...ACTIVE, date: { gte: month.start, lt: month.end } },
         select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
       }),
       prisma.appSetting.findUnique({ where: { key: "runwayGrowthRatePct" } }),
       // revenue for the last 4 months (growth-rate estimate)
       prisma.income.findMany({
-        where: { date: { gte: new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 3, 1)) } },
+        where: { ...ACTIVE, date: { gte: new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 3, 1)) } },
         select: { date: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
       }),
     ]);

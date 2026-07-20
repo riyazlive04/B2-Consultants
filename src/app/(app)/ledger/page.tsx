@@ -7,13 +7,14 @@ import {
   Grid,
   PageHeader,
   Panel,
-  Pill,
   Stat,
 } from "@/components/ui/kit";
-import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
+import { formatInrMinor } from "@/lib/format";
+// (formatDate/formatEurMinor moved into JournalList with the entry rendering)
 import { requireSection } from "@/lib/rbac";
 import { getJournal, getTrialBalance, verifyAuditChain } from "@/server/ledger";
 import { TrialBalanceTable } from "./_components/TrialBalanceTable";
+import { JournalList } from "./_components/JournalList";
 
 export const dynamic = "force-dynamic";
 
@@ -125,62 +126,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: { pag
             <EmptyState title="No journal entries" body="Finance writes here on every income and expense." />
           </div>
         ) : (
-          <ul className="divide-y divide-line">
-            {journal.entries.map((e) => {
-              const isVoid = e.status === "VOID";
-              return (
-                <li key={e.id} className="px-6 py-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
-                        <span className={isVoid ? "line-through text-muted" : ""}>{e.narration}</span>
-                        {isVoid && <Pill tone="bad">Void</Pill>}
-                        {e.reversalOfId && <Pill tone="warn">Reversal</Pill>}
-                      </p>
-                      <p className="mt-0.5 text-caption text-muted">
-                        {formatDate(e.date)} · {e.sourceType.toLowerCase()}
-                        {e.postedBy?.name ? ` · posted by ${e.postedBy.name}` : ""}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 overflow-x-auto">
-                    <table className="w-full text-left text-sm" style={{ minWidth: 560 }}>
-                      <tbody>
-                        {e.lines.map((l) => {
-                          const isDebit = l.baseDebitMinor > BigInt(0);
-                          const base = isDebit ? l.baseDebitMinor : l.baseCreditMinor;
-                          const native = isDebit ? l.debitMinor : l.creditMinor;
-                          return (
-                            <tr key={l.id} className="border-b border-line last:border-b-0">
-                              {/* Indenting credits is the convention that lets you read a
-                                  journal entry at a glance without reading the headers. */}
-                              <td className={`py-1.5 ${isDebit ? "" : "pl-8"}`}>
-                                <span className="tnum text-muted">{l.account.code}</span>{" "}
-                                <span className="text-ink-2">{l.account.name}</span>
-                                {l.isCogs && <span className="ml-2 text-caption text-muted">(COGS)</span>}
-                              </td>
-                              <td className="tnum py-1.5 text-right text-ink">
-                                {isDebit ? formatInrMinor(base) : ""}
-                              </td>
-                              <td className="tnum py-1.5 text-right text-ink">
-                                {isDebit ? "" : formatInrMinor(base)}
-                              </td>
-                              {/* The transacted amount, when it wasn't in base currency. Without
-                                  this a EUR receipt looks like it was banked in rupees. */}
-                              <td className="py-1.5 pl-4 text-right text-caption text-muted">
-                                {l.currency === "EUR" ? `${formatEurMinor(native)} @ ${l.fxRate.toString()}` : ""}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <JournalList entries={journal.entries} />
         )}
 
         {pages > 1 && (

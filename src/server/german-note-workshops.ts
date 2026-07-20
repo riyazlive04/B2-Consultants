@@ -414,6 +414,123 @@ export const getGnWorkshops = cache(async (): Promise<GnWorkshopSummary[]> => {
   });
 });
 
+// ── founder stats (the /german-note business block) ────────────
+
+/** One person who still owes money, flattened across every workshop. */
+export type GnDuesRow = {
+  conversionId: string;
+  fullName: string;
+  workshopId: string;
+  workshopName: string;
+  /** POSITIVE paise still owed (pnl.balance is paid − final, so a debt is negative there) */
+  owed: number;
+  final: number;
+  paid: number;
+  nextDueDate: string | null;
+  paymentMethod: string | null;
+  status: GnConversionStatus;
+};
+
+/** One workshop, reduced to what the financials charts and list need. */
+export type GnWorkshopBar = {
+  id: string;
+  name: string;
+  month: string;
+  status: GnWorkshopStatus;
+  rollup: GnPnlRollup;
+  /** POSITIVE paise still owed within this workshop */
+  outstanding: number;
+};
+
+export type GnFounderStats = {
+  workshops: number;
+  /** rollup over EVERY conversion in every workshop */
+  totals: GnPnlRollup;
+  /**
+   * Net profit on the CASH basis: collected − total expense.
+   * `totals.netProfit` is the QUOTED basis (revenue − expense) and overstates
+   * profit on money that has not arrived — docs F1, §6.7. Both are shown.
+   */
+  netProfitCash: number;
+  /** POSITIVE paise outstanding across all workshops */
+  outstanding: number;
+  dues: GnDuesRow[];
+  /** newest intake first — the order the charts and the list read in */
+  perWorkshop: GnWorkshopBar[];
+  /** seats across every workshop (a bundle counts once per level it enrols into) */
+  seats: GnBySeatLevel[];
+  /** exact product bought, across every workshop */
+  byProduct: GnByProduct[];
+};
+
+/**
+ * The founder's German Note money, across all workshops at once.
+ *
+ * Nothing else aggregates this — `getGnWorkshops` is per-workshop, so "who owes me
+ * money right now" had no home. Rows are concatenated BEFORE `rollup` so each
+ * workshop keeps its own ad-spend allocation (ads are split per workshop in `buildRows`).
+ */
+export const getGnFounderStats = cache(async (): Promise<GnFounderStats> => {
+  const workshops = await prisma.gnWorkshop.findMany({
+    include: { conversions: true, adSets: true },
+  });
+
+  const all: GnConversionRow[] = [];
+  const dues: GnDuesRow[] = [];
+  const perWorkshop: GnWorkshopBar[] = [];
+  for (const w of workshops) {
+    const rows = buildRows(w.conversions, w.adSets);
+    all.push(...rows);
+    let owedHere = 0;
+    for (const r of rows) {
+      if (r.pnl.balance >= 0) continue; // settled, or overpaid — not a debt
+      owedHere += -r.pnl.balance;
+      dues.push({
+        conversionId: r.id,
+        fullName: r.fullName,
+        workshopId: w.id,
+        workshopName: w.name,
+        owed: -r.pnl.balance,
+        final: r.pnl.final,
+        paid: r.pnl.paid,
+        nextDueDate: r.nextDueDate,
+        paymentMethod: r.paymentMethod,
+        status: r.status,
+      });
+    }
+    perWorkshop.push({
+      id: w.id,
+      name: w.name,
+      month: w.month.toISOString(),
+      status: w.status,
+      rollup: rollup(rows),
+      outstanding: owedHere,
+    });
+  }
+  // Newest intake first — charts read left-to-right as most-recent-first.
+  perWorkshop.sort((a, b) => b.month.localeCompare(a.month));
+
+  // Soonest due first; undated last. Ties broken by size, so the biggest debt leads.
+  dues.sort((a, b) => {
+    if (a.nextDueDate && b.nextDueDate) return a.nextDueDate.localeCompare(b.nextDueDate) || b.owed - a.owed;
+    if (a.nextDueDate) return -1;
+    if (b.nextDueDate) return 1;
+    return b.owed - a.owed;
+  });
+
+  const totals = rollup(all);
+  return {
+    workshops: workshops.length,
+    totals,
+    netProfitCash: totals.cashCollected - totals.totalExp,
+    outstanding: sum(dues, (d) => d.owed),
+    dues,
+    perWorkshop,
+    seats: bySeatLevel(all),
+    byProduct: byProduct(all),
+  };
+});
+
 // ── detail (per-workshop page) ─────────────────────────────────
 
 export type GnWorkshopDetail = {

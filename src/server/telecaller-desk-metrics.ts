@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { ACTIVE } from "@/lib/soft-delete";
 import { istBoundaryToInstant, istMonthInstantRange, istToday } from "@/lib/dates";
 import type { GoalProgress } from "@/lib/goals";
 import { getGoalsWithProgress } from "./goals";
@@ -134,7 +135,7 @@ export const getTelecallerDesk = cache(async (userId: string): Promise<Telecalle
       // `phone` is nullable since the Synamate import. A lead with no number cannot be rung, so it
       // has no place on a dial list — excluded here rather than downstream, so the take:500 cap is
       // spent on leads that are actually callable.
-      where: { assignedToId: userId, stage: { in: [...OPEN_STAGES] }, phone: { not: null } },
+      where: { ...ACTIVE, assignedToId: userId, stage: { in: [...OPEN_STAGES] }, phone: { not: null } },
       select: {
         id: true, name: true, phone: true, city: true, stage: true,
         leadSource: true, createdAt: true,

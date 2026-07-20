@@ -37,17 +37,22 @@ export function ResumeEditor({ data, onChange }: Props) {
       {/* ── Header ── */}
       <EditorSection title="Contact & header">
         <div className="grid gap-3 sm:grid-cols-2">
+          {/* Only the four identity fields below carry a `kind`. Everything else in this editor
+              is the candidate's own CV copy — a headline reads "Engineer II", a skill is "C++",
+              a date is "05/2021" — and a character filter there would silently eat real content.
+              A person's name, their email, their phone and their links are the only inputs whose
+              alphabet is genuinely fixed. */}
           <Field label="Full name">
-            <TextInput value={data.header.fullName} onChange={(e) => setHeader("fullName", e.target.value)} placeholder="Jane Doe" />
+            <TextInput kind="name" value={data.header.fullName} onChange={(e) => setHeader("fullName", e.target.value)} placeholder="Jane Doe" />
           </Field>
           <Field label="Headline / target position">
             <TextInput value={data.header.headline} onChange={(e) => setHeader("headline", e.target.value)} placeholder="Mechanical Engineer" />
           </Field>
           <Field label="Email">
-            <TextInput value={data.header.email} onChange={(e) => setHeader("email", e.target.value)} placeholder="jane@example.com" />
+            <TextInput kind="email" value={data.header.email} onChange={(e) => setHeader("email", e.target.value)} placeholder="jane@example.com" />
           </Field>
           <Field label="Phone">
-            <TextInput value={data.header.phone} onChange={(e) => setHeader("phone", e.target.value)} placeholder="+49 …" />
+            <TextInput kind="phone" value={data.header.phone} onChange={(e) => setHeader("phone", e.target.value)} placeholder="+49 …" />
           </Field>
           <Field label="Location">
             <TextInput value={data.header.location} onChange={(e) => setHeader("location", e.target.value)} placeholder="Frankfurt, Germany" />
@@ -62,10 +67,10 @@ export function ResumeEditor({ data, onChange }: Props) {
             <TextInput value={data.header.relocation} onChange={(e) => setHeader("relocation", e.target.value)} placeholder="Open to relocation across Germany" />
           </Field>
           <Field label="LinkedIn">
-            <TextInput value={data.header.linkedin} onChange={(e) => setHeader("linkedin", e.target.value)} placeholder="linkedin.com/in/…" />
+            <TextInput kind="url" value={data.header.linkedin} onChange={(e) => setHeader("linkedin", e.target.value)} placeholder="linkedin.com/in/…" />
           </Field>
           <Field label="Website / portfolio">
-            <TextInput value={data.header.website} onChange={(e) => setHeader("website", e.target.value)} placeholder="jane.dev" />
+            <TextInput kind="url" value={data.header.website} onChange={(e) => setHeader("website", e.target.value)} placeholder="jane.dev" />
           </Field>
         </div>
         <PhotoField value={data.header.photoDataUrl} onChange={(v) => setHeader("photoDataUrl", v)} />

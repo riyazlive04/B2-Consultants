@@ -65,13 +65,13 @@ export function CashPositionSection({
             <TextInput type="date" name="date" required defaultValue={today} />
           </Field>
           <Field label="Business bank balance (₹)">
-            <TextInput name="bankBalance" inputMode="decimal" required placeholder="0.00" />
+            <TextInput kind="money" name="bankBalance" required placeholder="0.00" />
           </Field>
           <Field label="Personal savings (₹, optional)" hint="Planning only - never counted in runway">
-            <TextInput name="personalSavings" inputMode="decimal" placeholder="0.00" />
+            <TextInput kind="money" name="personalSavings" placeholder="0.00" />
           </Field>
           <Field label="Notes">
-            <TextInput name="notes" placeholder="Large payment made / expected…" />
+            <TextInput kind="text" name="notes" placeholder="Large payment made / expected…" />
           </Field>
         </div>
         <div className="mt-4 flex items-center gap-3">
@@ -145,14 +145,15 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
           key={editing?.id ?? "new"}
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Free text, not kind="name": "WATI subscription" / "Karthick salary" are labels, not people. */}
             <Field label="Payable name" hint="e.g. WATI subscription, Karthick salary">
-              <TextInput name="name" required defaultValue={editing?.name ?? ""} />
+              <TextInput kind="text" name="name" required defaultValue={editing?.name ?? ""} />
             </Field>
             <Field label="Category">
               <Select name="category" options={optionsFrom(EXPENSE_CATEGORY_LABELS)} defaultValue={editing?.category ?? "TOOLS_SOFTWARE"} />
             </Field>
             <Field label="Amount (₹)">
-              <TextInput name="amountInr" inputMode="decimal" required defaultValue={editing ? minorToInput(editing.amountInrRaw) : ""} />
+              <TextInput kind="money" name="amountInr" required defaultValue={editing ? minorToInput(editing.amountInrRaw) : ""} />
             </Field>
             <Field label="Frequency">
               <Select name="frequency" options={optionsFrom(FREQ_LABELS)} defaultValue={editing?.frequency ?? "MONTHLY"} />
@@ -198,6 +199,9 @@ export function GrowthOverrideForm({ overridePct }: { overridePct: number | null
       className="flex flex-wrap items-center gap-2"
     >
       <label className="text-xs text-muted" htmlFor="growthPct">Growth % override</label>
+      {/* NOT kind="rate": setGrowthOverride accepts -50…200, and `rate` both strips the leading
+          "-" as you type and caps at 100 — it would silently make a shrinking forecast unenterable.
+          Left as a plain decimal input; the -50…200 bound is enforced server-side. */}
       <input
         id="growthPct"
         name="growthPct"

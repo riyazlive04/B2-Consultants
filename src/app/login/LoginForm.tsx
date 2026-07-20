@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { Check, Loader2, Lock, Phone, ShieldCheck, Users } from "lucide-react";
+import { Check, Eye, EyeOff, Loader2, Lock, Phone, ShieldCheck, Users } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
+import { BrandLogo } from "@/components/shell/BrandLogo";
+import { fieldKindProps } from "@/components/ui/field-base";
 import { submitAccessRequest } from "@/server/access-requests";
 
 /**
@@ -38,6 +40,7 @@ export default function LoginForm() {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [reqRole, setReqRole] = useState<ReqRole>("USER");
@@ -48,6 +51,12 @@ export default function LoginForm() {
     resetDone ? "Password updated — sign in with your new password." : null,
   );
   const [busy, setBusy] = useState(false);
+
+  // Character rules for the sign-up fields (see lib/field-rules). The password below deliberately
+  // gets none — a password must accept every character it was typed with.
+  const nameField = fieldKindProps<HTMLInputElement>("name", (e) => setName(e.target.value));
+  const emailField = fieldKindProps<HTMLInputElement>("email", (e) => setEmail(e.target.value));
+  const noteField = fieldKindProps<HTMLTextAreaElement>("text", (e) => setNote(e.target.value));
 
   const switchMode = (m: Mode) => {
     setMode(m);
@@ -100,12 +109,10 @@ export default function LoginForm() {
       <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-10 w-10 flex-none place-items-center rounded-btn bg-primary text-sm font-bold text-on-accent">
-              B2
-            </span>
+            <BrandLogo className="h-10 w-10 flex-none" />
             <span className="flex flex-col leading-tight">
               <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
-              <span className="text-caption text-ink-2">Founder cockpit</span>
+              <span className="text-caption text-ink-2">Business cockpit</span>
             </span>
           </div>
           <ThemeToggle frosted />
@@ -138,12 +145,10 @@ export default function LoginForm() {
           {/* mobile brand row (brand panel is hidden below lg) */}
           <div className="mb-6 flex items-center justify-between lg:hidden">
             <div className="flex items-center gap-2.5">
-              <span className="grid h-9 w-9 flex-none place-items-center rounded-btn bg-primary text-xs font-bold text-on-accent">
-                B2
-              </span>
+              <BrandLogo className="h-9 w-9 flex-none" />
               <span className="flex flex-col leading-tight">
                 <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-                <span className="text-caption text-ink-3">Founder cockpit</span>
+                <span className="text-caption text-ink-3">Business cockpit</span>
               </span>
             </div>
             <ThemeToggle />
@@ -164,7 +169,7 @@ export default function LoginForm() {
           <p className="mt-1 text-[13px] text-ink-2">
             {isSignup
               ? "New accounts are approved by your admin. Tell us who you are."
-              : "Sign in to the B2 founder cockpit."}
+              : "Sign in to your B2 Consultants workspace."}
           </p>
 
           <form onSubmit={submit} className="mt-5 flex flex-col gap-4">
@@ -212,9 +217,10 @@ export default function LoginForm() {
               <label className="block text-xs font-semibold text-ink-2">
                 Full name
                 <input
+                  {...nameField.attrs}
                   required
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={nameField.onChange}
                   placeholder="e.g. Sana Kapoor"
                   autoComplete="name"
                   className={fieldCls}
@@ -225,10 +231,10 @@ export default function LoginForm() {
             <label className="block text-xs font-semibold text-ink-2">
               Work email
               <input
-                type="email"
+                {...emailField.attrs}
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={emailField.onChange}
                 placeholder="you@b2consultants.in"
                 autoComplete="email"
                 className={fieldCls}
@@ -243,15 +249,28 @@ export default function LoginForm() {
                     Forgot password?
                   </Link>
                 </span>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  className={fieldCls}
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    className={`${fieldCls} pr-11`}
+                  />
+                  {/* Show/hide toggle — reveal what you're typing before signing in. */}
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    title={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-field text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </label>
             )}
 
@@ -259,8 +278,12 @@ export default function LoginForm() {
               <label className="block text-xs font-semibold text-ink-2">
                 Why you need access <span className="font-normal text-ink-3">(optional)</span>
                 <textarea
+                  {...noteField.attrs}
+                  /* 500, not the kind's 2000 cap: submitAccessRequest rejects anything longer,
+                     and it reports that as "enter a valid email" — a dead end for the typist. */
+                  maxLength={500}
                   value={note}
-                  onChange={(e) => setNote(e.target.value)}
+                  onChange={noteField.onChange}
                   placeholder="e.g. New telecaller, need the board & daily log…"
                   className={`${fieldCls} min-h-[60px] resize-y`}
                 />

@@ -347,7 +347,7 @@ function GenerateModal({
           )}
         </Field>
         <Field label="Duration (minutes)">
-          <TextInput type="number" inputMode="numeric" value={String(duration)} onChange={(e) => setDuration(Number(e.target.value) || defaultDuration)} className="w-36" />
+          <TextInput kind="int" maxLength={3} value={String(duration)} onChange={(e) => setDuration(Number(e.target.value) || defaultDuration)} className="w-36" />
         </Field>
         <p className="text-caption text-ink-3">
           {canSubmit ? `Will create up to ${dates.length * times.length} slot${dates.length * times.length === 1 ? "" : "s"} (${dates.length} day${dates.length === 1 ? "" : "s"} × ${times.length} time${times.length === 1 ? "" : "s"}). Existing slots are skipped.` : "Pick a date range with at least one weekday selected, and add at least one time."}

@@ -161,17 +161,19 @@ export function TemplateEditor({ template, aiStatus }: { template: ResumeTemplat
       >
         {/* axis weights */}
         <p className="mb-2 text-caption font-semibold uppercase tracking-wide text-muted">Axis weights</p>
+        {/* These are the founder's dials, not CV content — every one is a whole 0-100 percent
+            that coerceResumeTemplate() clamps on the way in, so digits-only is the true alphabet. */}
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Keyword %" hint="JD-term coverage"><TextInput type="number" value={String(cfg.ats.weightKeywords)} onChange={(e) => setAts({ weightKeywords: Number(e.target.value) || 0 })} /></Field>
-          <Field label="Conformance %" hint="vs B2 template"><TextInput type="number" value={String(cfg.ats.weightConformance)} onChange={(e) => setAts({ weightConformance: Number(e.target.value) || 0 })} /></Field>
-          <Field label="Formatting %" hint="ATS-parseability"><TextInput type="number" value={String(cfg.ats.weightFormatting)} onChange={(e) => setAts({ weightFormatting: Number(e.target.value) || 0 })} /></Field>
+          <Field label="Keyword %" hint="JD-term coverage"><TextInput kind="int" maxLength={3} value={String(cfg.ats.weightKeywords)} onChange={(e) => setAts({ weightKeywords: Number(e.target.value) || 0 })} /></Field>
+          <Field label="Conformance %" hint="vs B2 template"><TextInput kind="int" maxLength={3} value={String(cfg.ats.weightConformance)} onChange={(e) => setAts({ weightConformance: Number(e.target.value) || 0 })} /></Field>
+          <Field label="Formatting %" hint="ATS-parseability"><TextInput kind="int" maxLength={3} value={String(cfg.ats.weightFormatting)} onChange={(e) => setAts({ weightFormatting: Number(e.target.value) || 0 })} /></Field>
         </div>
 
         {/* verdict bands */}
         <p className="mb-2 mt-6 text-caption font-semibold uppercase tracking-wide text-muted">Verdict bands</p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Strong match at ≥ %" hint="Green — polish & send"><TextInput type="number" value={String(cfg.ats.bands.strong)} onChange={(e) => setAts({ bands: { ...cfg.ats.bands, strong: Number(e.target.value) || 0 } })} /></Field>
-          <Field label="Partial match at ≥ %" hint="Amber — close the gaps"><TextInput type="number" value={String(cfg.ats.bands.partial)} onChange={(e) => setAts({ bands: { ...cfg.ats.bands, partial: Number(e.target.value) || 0 } })} /></Field>
+          <Field label="Strong match at ≥ %" hint="Green — polish & send"><TextInput kind="int" maxLength={3} value={String(cfg.ats.bands.strong)} onChange={(e) => setAts({ bands: { ...cfg.ats.bands, strong: Number(e.target.value) || 0 } })} /></Field>
+          <Field label="Partial match at ≥ %" hint="Amber — close the gaps"><TextInput kind="int" maxLength={3} value={String(cfg.ats.bands.partial)} onChange={(e) => setAts({ bands: { ...cfg.ats.bands, partial: Number(e.target.value) || 0 } })} /></Field>
         </div>
 
         {/* rule checklist */}
@@ -243,7 +245,7 @@ export function TemplateEditor({ template, aiStatus }: { template: ResumeTemplat
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Model"><Select value={ai.model} onChange={(e) => setAi({ ...ai, model: e.target.value })} options={MODEL_OPTIONS} /></Field>
           <Field label="Max output tokens" hint="Higher = longer, deeper reviews (1024–16000).">
-            <TextInput type="number" value={String(ai.maxTokens)} onChange={(e) => setAi({ ...ai, maxTokens: Number(e.target.value) || 4096 })} />
+            <TextInput kind="int" maxLength={5} value={String(ai.maxTokens)} onChange={(e) => setAi({ ...ai, maxTokens: Number(e.target.value) || 4096 })} />
           </Field>
         </div>
         <div className="mt-3">

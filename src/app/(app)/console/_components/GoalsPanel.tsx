@@ -164,7 +164,9 @@ export function GoalsPanel({ goals, people }: { goals: GoalProgress[]; people: G
               <Select name="metric" options={METRIC_OPTIONS} defaultValue={current?.metric ?? "wins"} />
             </Field>
             <Field label="Target" hint="A plain number. Revenue is in whole rupees.">
-              <TextInput name="targetValue" required inputMode="decimal" defaultValue={current ? String(current.targetValue) : ""} />
+              {/* `money` (not `int`): a revenueInr goal is a rupee amount, and the count/XP
+                  metrics are a strict subset of what it accepts. */}
+              <TextInput name="targetValue" required kind="money" defaultValue={current ? String(current.targetValue) : ""} />
             </Field>
             <Field label="Whose goal">
               <Select

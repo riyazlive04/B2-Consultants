@@ -55,8 +55,27 @@ export type TeamGame = {
   ruleset: Ruleset;
 };
 
+/**
+ * Cross-request cache (audit §C #20). getTeamGame full-scans ~7 append-only tables on nearly every
+ * page load (the layout's notification count, the home card and the Arena all call it), and
+ * React.cache only dedupes WITHIN a single request. This per-instance memo holds the result for a
+ * short TTL ACROSS requests — the same pattern notifications.ts already uses (notifMemo). Keyed by
+ * the IST day so it self-busts at midnight; `invalidateTeamGameMemo` lets an XP-affecting write
+ * clear it so a fresh action shows immediately rather than up to TTL late.
+ */
+const TEAM_GAME_TTL_MS = 120_000;
+let teamGameMemo: { key: string; at: number; value: TeamGame } | null = null;
+
+export function invalidateTeamGameMemo(): void {
+  teamGameMemo = null;
+}
+
 export const getTeamGame = cache(async (): Promise<TeamGame> => {
   const todayKey = dateKeyOf(istToday());
+  const now = Date.now();
+  if (teamGameMemo && teamGameMemo.key === todayKey && now - teamGameMemo.at < TEAM_GAME_TTL_MS) {
+    return teamGameMemo.value;
+  }
   const config = await getGamificationConfig();
 
   const [profiles, logs, stageHistory, outcomes, milestoneLogs, signalLogs, okrs] = await Promise.all([
@@ -172,7 +191,7 @@ export const getTeamGame = cache(async (): Promise<TeamGame> => {
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
     .slice(0, 30);
 
-  return {
+  const value: TeamGame = {
     todayKey,
     weekStart: weekStartKey(todayKey),
     monthKey: monthKeyOf(todayKey),
@@ -180,6 +199,8 @@ export const getTeamGame = cache(async (): Promise<TeamGame> => {
     feed,
     ruleset: currentRuleset(config, todayKey),
   };
+  teamGameMemo = { key: todayKey, at: Date.now(), value };
+  return value;
 });
 
 /** This user's player card, or null when they don't play (no team profile / Admin). */

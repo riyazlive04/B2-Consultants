@@ -1,0 +1,9 @@
+# Shell scripts MUST stay LF. This repo is developed on Windows, and a CRLF line
+# ending on a `#!/bin/sh` script makes Alpine fail with "can't execute 'sh\r'" —
+# which would silently break the cron sidecar the moment someone edits these on Windows.
+*.sh text eol=lf
+docker/cron/entrypoint.sh text eol=lf
+docker/cron/tick.sh text eol=lf
+
+# The Caddyfile is read by a Linux container too.
+Caddyfile text eol=lf

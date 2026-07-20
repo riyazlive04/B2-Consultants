@@ -116,7 +116,7 @@ export default function SubscriptionsTab({
           <Field label="Contact (optional)">
             <Select name="leadId" options={[{ value: "", label: "— none / manual —" }, ...pickers.contacts.slice(0, 500).map((c) => ({ value: c.id, label: c.name }))]} defaultValue="" />
           </Field>
-          <Field label="Customer name"><TextInput name="customerName" required /></Field>
+          <Field label="Customer name"><TextInput kind="name" name="customerName" required /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Product (optional)"><Select name="productId" options={[{ value: "", label: "— none —" }, ...pickers.products.map((p) => ({ value: p.id, label: p.name }))]} defaultValue="" /></Field>
             <Field label="Billing"><Select name="interval" options={INTERVAL_OPTS} defaultValue="MONTHLY" /></Field>

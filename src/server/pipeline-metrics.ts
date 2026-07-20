@@ -7,6 +7,8 @@ import {
   kpiInstantRange, type KpiRangeKey,
 } from "@/lib/dates";
 import { aggInrMinor, sumAgg } from "@/lib/money";
+import { LEAD_STAGE_LABELS } from "@/lib/labels";
+import { ACTIVE } from "@/lib/soft-delete";
 
 /**
  * Pipeline dashboard (PRD1 §5.4). Booked / completed / won counts come from the
@@ -123,7 +125,7 @@ const getEffectiveAvgFee = cache(async (): Promise<EffectiveFee> => {
 
   const [rows, fallbackMinor] = await Promise.all([
     prisma.income.findMany({
-      where: { programLevel: { in: FEE_LEVELS as unknown as never[] }, date: { gte: since } },
+      where: { ...ACTIVE, programLevel: { in: FEE_LEVELS as unknown as never[] }, date: { gte: since } },
       select: {
         programLevel: true, studentId: true, studentName: true,
         amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,
@@ -167,7 +169,7 @@ export function invalidateAvgFeeCache(): void {
 export const getPipelineSnapshot = cache(async (range: KpiRangeKey = "this-month") => {
   const ts = kpiInstantRange(range);
   const [interestedLeads, fee, wonRows, completedRows] = await Promise.all([
-    prisma.lead.count({ where: { stage: { in: INTERESTED_STAGES as unknown as never[] } } }),
+    prisma.lead.count({ where: { ...ACTIVE, stage: { in: INTERESTED_STAGES as unknown as never[] } } }),
     getEffectiveAvgFee(),
     prisma.leadStageHistory.findMany({
       where: { toStage: "WON", changedAt: { gte: ts.start, lt: ts.end } },
@@ -219,8 +221,8 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
     leadsThisWeek, leadsThisMonth, booked, completed, noShows, wonRows,
     hqOutcomes, monthOutcomes, interestedLeads, monthIncomes, fee, targetRow,
   ] = await Promise.all([
-    prisma.lead.count({ where: { dateIn: { gte: week.start, lt: week.end }, ...ownLeadWhere } }),
-    prisma.lead.count({ where: { dateIn: { gte: mStart, lt: mEnd }, ...ownLeadWhere } }),
+    prisma.lead.count({ where: { ...ACTIVE, dateIn: { gte: week.start, lt: week.end }, ...ownLeadWhere } }),
+    prisma.lead.count({ where: { ...ACTIVE, dateIn: { gte: mStart, lt: mEnd }, ...ownLeadWhere } }),
     distinctLeadsReaching("DISCO_BOOKED", ts.start, ts.end, ownScope),
     distinctLeadsReaching("DISCO_COMPLETED", ts.start, ts.end, ownScope),
     distinctLeadsReaching("NO_SHOW", ts.start, ts.end, ownScope),
@@ -233,9 +235,9 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
       where: { highlyQualified: true, callDate: { gte: mStart, lt: mEnd }, ...ownOutcomeWhere },
     }),
     prisma.discoveryOutcome.count({ where: { callDate: { gte: mStart, lt: mEnd }, ...ownOutcomeWhere } }),
-    prisma.lead.count({ where: { stage: { in: INTERESTED_STAGES as unknown as never[] }, ...ownLeadWhere } }),
+    prisma.lead.count({ where: { ...ACTIVE, stage: { in: INTERESTED_STAGES as unknown as never[] }, ...ownLeadWhere } }),
     prisma.income.findMany({
-      where: { date: { gte: mStart, lt: mEnd } },
+      where: { ...ACTIVE, date: { gte: mStart, lt: mEnd } },
       select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
     }),
     getEffectiveAvgFee(),
@@ -286,7 +288,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   // Open leads first (lean select), then history/outcomes scoped to just those
   // ids — the unscoped groupBy walked the entire stage history on every render.
   const openLeads = await prisma.lead.findMany({
-    where: { stage: { in: OPEN_STAGES as unknown as never[] }, ...ownLeadWhere },
+    where: { ...ACTIVE, stage: { in: OPEN_STAGES as unknown as never[] }, ...ownLeadWhere },
     select: { id: true, name: true, phone: true, stage: true, dateIn: true, createdAt: true },
   });
   const openLeadIds = openLeads.map((l) => l.id);
@@ -347,7 +349,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   const outcomeWhere = isAdmin ? {} : { enteredById: viewerId };
   const [leads, outcomes, leadOptions, assigneeRows] = await Promise.all([
     prisma.lead.findMany({
-      where: leadWhere,
+      where: { ...leadWhere, ...ACTIVE },
       orderBy: { dateIn: "desc" },
       take: 500,
       include: { enteredBy: { select: { name: true } }, assignedTo: { select: { name: true } } },
@@ -362,7 +364,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
     // matches the write rules in pipeline-actions and keeps the full lead book
     // (names + phones) out of a member's serialized page props.
     prisma.lead.findMany({
-      where: isAdmin ? {} : { OR: [{ enteredById: viewerId }, { assignedToId: viewerId }] },
+      where: { ...(isAdmin ? {} : { OR: [{ enteredById: viewerId }, { assignedToId: viewerId }] }), ...ACTIVE },
       orderBy: { dateIn: "desc" },
       take: 500,
       select: { id: true, name: true, phone: true },
@@ -440,3 +442,113 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
 export type PipelineOverview = Awaited<ReturnType<typeof getPipelineOverview>>;
 export type LeadRow = PipelineOverview["leads"][number];
 export type OutcomeRow = PipelineOverview["outcomes"][number];
+
+/**
+ * Leads as kanban cards, for the drag-and-drop pipeline (Part 2 §9).
+ *
+ * Bounded deliberately: this board renders every card at once, and the lead table holds
+ * 23k+ rows. Open/live stages only, most recent first, hard-capped — a board that tried to
+ * paint the full history would hang the browser and tell nobody anything useful. WON and LOST
+ * are excluded because they're outcomes, not stages you drag work through.
+ */
+export const KANBAN_STAGES = [
+  "NEW_LEAD",
+  "DISCO_BOOKED",
+  "DISCO_COMPLETED",
+  "SSS_BOOKED",
+  "SSS_COMPLETED",
+  "PROPOSAL_SENT",
+  "OFFER_FOLLOWUP",
+  "DEPOSIT_FOLLOWUP",
+  "DEPOSIT_PAID",
+] as const;
+
+const KANBAN_CARD_LIMIT = 300;
+
+export async function getKanbanLeads(role: string, userId: string) {
+  const leads = await prisma.lead.findMany({
+    where: { ...ACTIVE, stage: { in: [...KANBAN_STAGES] } },
+    orderBy: { dateIn: "desc" },
+    take: KANBAN_CARD_LIMIT,
+    select: {
+      id: true,
+      name: true,
+      stage: true,
+      enteredById: true,
+      assignedTo: { select: { name: true } },
+    },
+  });
+  return leads.map((l) => ({
+    id: l.id,
+    name: l.name,
+    stage: l.stage as string,
+    ownerName: l.assignedTo?.name ?? null,
+    valueLabel: null as string | null,
+    // Mirror the server's ownership rule so the UI doesn't offer a drag that will be refused.
+    // The action re-checks regardless — this only stops the board from lying.
+    canMove: role === "ADMIN" || l.enteredById === userId,
+  }));
+}
+
+export type StageAging = {
+  stage: string;
+  label: string;
+  count: number;
+  avgDays: number;
+  oldestDays: number;
+  // Distribution by time-in-stage: 0–3d, 4–7d, 8–14d, 15d+.
+  fresh: number;
+  warm: number;
+  stale: number;
+  cold: number;
+};
+
+/**
+ * Aging analysis (issue 1.7): for every OPEN lead, how long it has sat in its CURRENT stage.
+ * Time-in-stage = now − the latest LeadStageHistory.changedAt — the history is append-only, so a
+ * lead's newest row is when it entered the stage it's in now (that table is indexed on
+ * [toStage, changedAt]). Terminal stages (Won/Lost/No-show) don't age, so they're excluded via
+ * KANBAN_STAGES. Complements the existing by-stage view — the two together are the doc's ask.
+ */
+export async function getPipelineAging(): Promise<StageAging[]> {
+  const leads = await prisma.lead.findMany({
+    where: { ...ACTIVE, stage: { in: [...KANBAN_STAGES] } },
+    select: { id: true, stage: true },
+  });
+  if (!leads.length) return [];
+
+  const entered = await prisma.leadStageHistory.groupBy({
+    by: ["leadId"],
+    where: { leadId: { in: leads.map((l) => l.id) } },
+    _max: { changedAt: true },
+  });
+  const enteredAt = new Map(entered.map((e) => [e.leadId, e._max.changedAt]));
+
+  const now = Date.now();
+  const daysByStage = new Map<string, number[]>();
+  for (const l of leads) {
+    const at = enteredAt.get(l.id);
+    if (!at) continue; // no history row (shouldn't happen) — can't age it, skip
+    const days = Math.max(0, Math.floor((now - at.getTime()) / 86_400_000));
+    const arr = daysByStage.get(l.stage) ?? [];
+    arr.push(days);
+    daysByStage.set(l.stage, arr);
+  }
+
+  // Keep the canonical pipeline order; drop stages with nothing in them.
+  return KANBAN_STAGES.filter((s) => daysByStage.has(s)).map((s) => {
+    const days = daysByStage.get(s)!;
+    const total = days.reduce((a, b) => a + b, 0);
+    return {
+      stage: s,
+      label: LEAD_STAGE_LABELS[s] ?? s,
+      count: days.length,
+      avgDays: Math.round(total / days.length),
+      oldestDays: Math.max(...days),
+      fresh: days.filter((d) => d <= 3).length,
+      warm: days.filter((d) => d > 3 && d <= 7).length,
+      stale: days.filter((d) => d > 7 && d <= 14).length,
+      cold: days.filter((d) => d > 14).length,
+    };
+  });
+}

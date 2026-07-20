@@ -7,18 +7,26 @@ import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
 import { formatDate, formatInrMinor, majorStringToMinor } from "@/lib/format";
+import { optionalRule, rule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /** Cash Health (PRD3 §4) - Admin-only. */
 
-const moneyInput = z.string().trim().regex(/^\d{0,12}(\.\d{0,2})?$/, "Enter a plain amount");
+/**
+ * Shared with the browser via lib/field-rules. Stays OPTIONAL so an empty box is reported by the
+ * explicit "… is required" guards below rather than by the generic number-format message.
+ *
+ * This also fixes a live bug: the old regex rejected "25,000" on submit, and now the matching
+ * client filter strips the comma as it's typed, so the two agree.
+ */
+const moneyInput = optionalRule("money");
 
 const cashSchema = z.object({
   date: z.string().min(10),
   bankBalance: moneyInput,
-  personalSavings: moneyInput.optional().or(z.literal("")),
-  notes: z.string().trim().optional(),
+  personalSavings: moneyInput,
+  notes: optionalRule("text"),
 });
 
 export async function saveCashPosition(form: FormData): Promise<ActionResult> {
@@ -63,7 +71,8 @@ export async function saveCashPosition(form: FormData): Promise<ActionResult> {
 }
 
 const payableSchema = z.object({
-  name: z.string().trim().min(1, "Payable name is required"),
+  // Free text, not rule("name"): "WATI subscription" is a payable, not a person.
+  name: rule("text").pipe(z.string().min(1, "Payable name is required")),
   category: z.enum([
     "MARKETING", "TOOLS_SOFTWARE", "TEAM_SALARIES", "CONTENT_CREATION",
     "EVENTS_OFFLINE", "OPERATIONS", "COGS_DIRECT_DELIVERY", "OTHER",

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { rule } from "@/lib/field-rules";
 import { capabilityCheck, requireCapability } from "@/lib/rbac";
 import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
@@ -41,9 +42,14 @@ async function writeQueue(queue: AccessRequest[]): Promise<void> {
   });
 }
 
+/**
+ * PUBLIC input, so this is the real gate — the login screen's character filters are UX only and a
+ * crafted POST never runs them. `rule()` keeps the two definitions of "a name" / "an email" from
+ * drifting apart; `note` keeps its own 500 cap (tighter than the shared text kind's 2000).
+ */
 const submitSchema = z.object({
-  name: z.string().trim().min(1).max(120),
-  email: z.string().trim().email().max(200),
+  name: rule("name"),
+  email: rule("email"),
   role: z.enum(["ADMIN", "HEAD", "USER"]),
   note: z.string().trim().max(500).default(""),
 });

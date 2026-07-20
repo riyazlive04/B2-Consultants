@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma, LeadStage, LeadSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatInrMinor, formatEurMinor } from "@/lib/format";
+import { ACTIVE } from "@/lib/soft-delete";
 
 /**
  * Read layer for the Synamate-parity Contacts CRM (SYNAMATE_CLONE_SPEC §5).
@@ -94,6 +95,7 @@ function contactsWhere(opts: ContactsListOpts): Prisma.LeadWhereInput {
   const createdAt = dateRangeFilter(opts.dateFrom, opts.dateTo);
 
   return {
+    ...ACTIVE, // exclude archived contacts from every list/count that shares this where
     ...(opts.tagId ? { tags: { some: { id: opts.tagId } } } : {}),
     ...(opts.ownerId ? { assignedToId: opts.ownerId } : {}),
     ...(stage ? { stage } : {}),
@@ -123,7 +125,7 @@ const CONTACT_ROW_SELECT = {
   company: { select: { name: true } },
   assignedTo: { select: { name: true } },
   tags: { select: { id: true, name: true, color: true } },
-  _count: { select: { opportunities: { where: { status: "OPEN" } } } },
+  _count: { select: { opportunities: { where: { status: "OPEN", deletedAt: null } } } },
 } satisfies Prisma.LeadSelect;
 
 function toContactRow(l: Prisma.LeadGetPayload<{ select: typeof CONTACT_ROW_SELECT }>): ContactRow {
@@ -187,7 +189,7 @@ export async function getContactsList(opts: ContactsListOpts): Promise<ContactsL
 export async function getContactListFilters(): Promise<ContactListFilters> {
   const [tags, owners, companies, total] = await Promise.all([
     prisma.tag.findMany({
-      select: { id: true, name: true, color: true, _count: { select: { leads: true } } },
+      select: { id: true, name: true, color: true, _count: { select: { leads: { where: ACTIVE } } } },
       orderBy: { name: "asc" },
     }),
     prisma.user.findMany({
@@ -195,8 +197,8 @@ export async function getContactListFilters(): Promise<ContactListFilters> {
       select: { id: true, name: true, image: true },
       orderBy: { name: "asc" },
     }),
-    prisma.company.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.lead.count(),
+    prisma.company.findMany({ where: ACTIVE, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.lead.count({ where: ACTIVE }),
   ]);
   return {
     tags: tags.map((t) => ({ id: t.id, name: t.name, color: t.color, count: t._count.leads })),
@@ -269,10 +271,12 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
         orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
       },
       tasks: {
+        where: ACTIVE,
         include: { assignedTo: { select: { name: true } } },
         orderBy: [{ status: "asc" }, { dueAt: "asc" }],
       },
       opportunities: {
+        where: ACTIVE,
         include: { stage: { select: { name: true } }, pipeline: { select: { name: true } } },
         orderBy: { createdAt: "desc" },
       },
@@ -423,9 +427,10 @@ export async function getContactCustomFields() {
 
 export async function getCompaniesList() {
   const companies = await prisma.company.findMany({
+    where: ACTIVE,
     include: {
       owner: { select: { name: true } },
-      _count: { select: { leads: true } },
+      _count: { select: { leads: { where: ACTIVE } } },
     },
     orderBy: { name: "asc" },
   });
@@ -445,7 +450,12 @@ export async function getCompaniesList() {
 
 export async function getTasksList(opts: { status?: "OPEN" | "COMPLETED" }) {
   const tasks = await prisma.contactTask.findMany({
-    where: opts.status ? { status: opts.status } : {},
+    where: {
+      ...ACTIVE, // not archived
+      ...(opts.status ? { status: opts.status } : {}),
+      // Hide tasks whose parent contact is archived; standalone tasks (no lead) still show.
+      OR: [{ leadId: null }, { lead: { deletedAt: null } }],
+    },
     include: {
       assignedTo: { select: { name: true } },
       lead: { select: { id: true, name: true } },

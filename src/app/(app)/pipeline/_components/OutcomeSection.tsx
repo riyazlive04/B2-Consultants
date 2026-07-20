@@ -123,7 +123,7 @@ export function OutcomeSection({
               </div>
               <div className="sm:col-span-2 lg:col-span-3">
                 <Field label="Call notes" hint="Summary of what was discussed - key notes to closer">
-                  <TextArea name="notes" defaultValue={editing?.notes ?? ""} />
+                  <TextArea kind="text" name="notes" defaultValue={editing?.notes ?? ""} />
                 </Field>
               </div>
             </div>

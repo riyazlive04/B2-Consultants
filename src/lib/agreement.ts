@@ -53,8 +53,16 @@ export const AGREEMENT_BANKS = [
 
 // ───────────────────────────────── Field schema ─────────────────────────────────
 
-/** Money travels as a decimal string of MINOR units (paise), matching the BigInt columns
- *  elsewhere. JSON has no BigInt, and `number` silently loses precision past 2^53. */
+/**
+ * Money travels as a decimal string of MINOR units (paise), matching the BigInt columns
+ * elsewhere. JSON has no BigInt, and `number` silently loses precision past 2^53.
+ *
+ * NOT `rule("money")`, despite both being "money": that kind describes what a person TYPES —
+ * major-unit rupees with an optional "69999.50" decimal — while this describes what the form has
+ * already converted for storage. Swapping it in would accept a fractional paise, which `BigInt(v)`
+ * then throws on, and would drop the >0 floor. The money kind guards the input (AgreementForm's
+ * fee boxes); this guards the payload. They are different questions.
+ */
 const minorUnits = z
   .string()
   .regex(/^\d{1,15}$/, "Enter a whole rupee amount")
@@ -68,6 +76,24 @@ const instalmentSchema = z.object({
   dueMilestone: z.string().trim().min(3).max(120),
 });
 
+/**
+ * DELIBERATELY NOT built from `rule()` (lib/field-rules), unlike the rest of the app's forms.
+ *
+ * This schema is not just an input gate — it is the DESERIALIZER for frozen snapshots. Every
+ * surface re-parses stored rows through it (`parseAgreementData`, `getAgreementDetail`), and
+ * `contentHash()` derives the `dataSha256` printed on every page from the PARSED object. So a
+ * stricter rule here is retroactive, and applies to contracts that are already executed:
+ *
+ *   - a rejection (rule("name") refuses "Rahaman, Ameenur" — no comma in its class) turns a signed
+ *     agreement into "Stored fields are invalid" and blocks its own reminders;
+ *   - a transform (rule("name") squishes double spaces, rule("email") folds case) silently rewrites
+ *     the snapshot on read, so the hash no longer matches the one on the signed PDF.
+ *
+ * Character rules belong on the INPUT — AgreementForm carries kind="name"/"phone"/"email"/"money",
+ * which is what keeps new agreements clean. Anything added here must be satisfiable by every row
+ * already in the table. This action is founder-gated (`agreements.issue`), not a public endpoint,
+ * so the "a crafted POST skips the filter" argument that drives the shared rules does not apply.
+ */
 export const agreementDataSchema = z
   .object({
     student: z.object({

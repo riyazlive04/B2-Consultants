@@ -122,7 +122,7 @@ export function TargetBar({
             <form action={submit} className="flex flex-wrap items-center gap-2">
               <input type="hidden" name="month" value={month} />
               <div className="w-40">
-                <TextInput name="targetInr" inputMode="decimal" defaultValue={(targetInrMinor / 100).toFixed(0)} aria-label="Target (₹)" />
+                <TextInput kind="money" name="targetInr" defaultValue={(targetInrMinor / 100).toFixed(0)} aria-label="Target (₹)" />
               </div>
               <SubmitButton>Set target</SubmitButton>
               <button type="button" className="text-sm text-muted hover:underline" onClick={() => setEditing(false)}>
@@ -144,7 +144,7 @@ export function TargetBar({
               <div className="w-40">
                 <TextInput
                   name="avgFeeInr"
-                  inputMode="numeric"
+                  kind="int"
                   placeholder="e.g. 75000"
                   defaultValue={avgFeeFromIncome ? "" : (avgFeeInrMajor ? String(avgFeeInrMajor) : "")}
                   aria-label="Fallback average program fee (₹)"

@@ -9,6 +9,7 @@ import { readEmailSettings, writeEmailSettings } from "@/lib/email";
 import { readSmsSettings, writeSmsSettings } from "@/lib/sms";
 import { WHATSAPP_KINDS, WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
 import { getWatiRuntime } from "@/lib/wati";
+import { optionalRule } from "@/lib/field-rules";
 import { sendEmailMessage, sendSmsMessage, type SendOutcome } from "./messaging";
 import { sendWhatsApp, sendFreeFormMessage, type SendOutcome as WaSendOutcome } from "./whatsapp";
 import { logActivity, diffFields } from "./activity-log";
@@ -186,11 +187,18 @@ export async function sendSmsAction(leadId: string, form: FormData): Promise<Sen
 
 // ─────────────────────────── Templates ───────────────────────────
 
+// Bounded, but NOT character-filtered: a template name is a label the team invents
+// ("Follow-up 2"), and the subject/body are message copy — every character, emoji and
+// {{token}} is legitimate. The caps only stop an unbounded string reaching the DB.
 const templateSchema = z.object({
   channel: z.enum(["EMAIL", "SMS"]),
-  name: z.string().trim().min(1, "Template name is required"),
-  subject: z.string().trim().optional(),
-  body: z.string().trim().min(1, "Template body is required"),
+  name: z.string().trim().min(1, "Template name is required").max(160, "Template name is too long"),
+  subject: z.string().trim().max(300, "Subject is too long").optional(),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Template body is required")
+    .max(10_000, "Please keep the template under 10,000 characters"),
 });
 
 export async function createTemplate(form: FormData): Promise<ActionResult> {
@@ -268,13 +276,31 @@ export async function deleteTemplate(id: string): Promise<ActionResult> {
 
 // ─────────────────────────── Channel settings (admin) ───────────────────────────
 
+// Both senders are optional: a channel can be saved half-configured (paused, no address yet),
+// so blank stays blank — but a NON-blank value must be a real address/number, or the first
+// send fails at the provider with an opaque error instead of here with a fixable one.
+// `fromName` is deliberately NOT kind="name": it's a brand, and "B2 Consultants" has a digit.
+const emailSettingsSchema = z.object({
+  fromName: z.string().trim().max(160, "From name is too long"),
+  fromEmail: optionalRule("email"),
+});
+
+const smsSettingsSchema = z.object({
+  fromNumber: optionalRule("phone"),
+});
+
 export async function saveEmailSettings(form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
   const before = await readEmailSettings();
+  const parsed = emailSettingsSchema.safeParse({
+    fromName: String(form.get("fromName") ?? ""),
+    fromEmail: String(form.get("fromEmail") ?? ""),
+  });
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const settings = {
     paused: String(form.get("paused") ?? "") === "on",
-    fromName: String(form.get("fromName") ?? "").trim() || "B2 Consultants",
-    fromEmail: String(form.get("fromEmail") ?? "").trim(),
+    fromName: parsed.data.fromName || "B2 Consultants",
+    fromEmail: parsed.data.fromEmail ?? "",
   };
   await writeEmailSettings(settings);
   const diff = diffFields(before, settings);
@@ -295,9 +321,11 @@ export async function saveEmailSettings(form: FormData): Promise<ActionResult> {
 export async function saveSmsSettings(form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
   const before = await readSmsSettings();
+  const parsed = smsSettingsSchema.safeParse({ fromNumber: String(form.get("fromNumber") ?? "") });
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const settings = {
     paused: String(form.get("paused") ?? "") === "on",
-    fromNumber: String(form.get("fromNumber") ?? "").trim(),
+    fromNumber: parsed.data.fromNumber ?? "",
   };
   await writeSmsSettings(settings);
   const diff = diffFields(before, settings);

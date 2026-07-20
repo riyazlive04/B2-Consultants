@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { rule } from "@/lib/field-rules";
 import { requireSession } from "@/lib/rbac";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
@@ -21,7 +22,9 @@ import type { ActionResult } from "./finance-actions";
 const MAX_IMAGE_CHARS = 250_000;
 
 const schema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(80, "Name is too long"),
+  // The person's own name, so `rule("name")` — it carries the "required" floor. The 80 cap is
+  // this form's own (the shared kind allows 160) and matches the input's maxLength.
+  name: rule("name").pipe(z.string().max(80, "Name is too long")),
   image: z
     .string()
     .trim()

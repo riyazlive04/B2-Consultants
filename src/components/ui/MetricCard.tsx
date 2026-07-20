@@ -1,8 +1,11 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Maximize2 } from "lucide-react";
 import { SIGNAL_META, type SignalLevel } from "@/lib/signals";
 import { Sparkline } from "./Sparkline";
+import { Modal } from "./Modal";
 
 /**
  * §5.3's delta chip. `positiveIsGood` exists because a rise is not always a win:
@@ -36,10 +39,30 @@ function DeltaChip({ pct, caption, positiveIsGood = true }: Delta) {
 }
 
 /**
+ * Optional richer breakdown a card can hand its expand popup. Without it, the popup still
+ * opens and shows the card's own detail (big value, explanation, comparison, trend).
+ */
+export type MetricDetail = {
+  title?: string;
+  rows?: Array<{ label: string; value: ReactNode }>;
+  body?: ReactNode;
+  note?: string;
+};
+
+/**
  * Signal-aware metric card (calories/weight style): a header with an optional
  * tinted icon chip, a label and an optional right-aligned `target`, a big tabular
  * number, an optional `progress` bar and/or mini sparkline, plus an optional
- * footer breakdown. Pass `href` to make the whole card a clickable link.
+ * footer breakdown.
+ *
+ * INTERACTION (in priority order):
+ *   - `href`    → the whole card is a link (navigates).
+ *   - `onClick` → the whole card is a button calling that handler (the caller owns what
+ *                 happens — e.g. FinanceKpis opens its own currency-aware popup).
+ *   - otherwise → the whole card is a button that opens a built-in DETAIL POPUP: the value,
+ *                 its plain-English explanation (`tooltip`), the comparison (`target`), the
+ *                 trend (`delta`/`spark`), and any richer `detail` the caller passes. This is
+ *                 what makes every card in the app click-to-expand.
  */
 export function MetricCard({
   label,
@@ -51,6 +74,8 @@ export function MetricCard({
   footer,
   icon,
   href,
+  onClick,
+  detail,
   target,
   progress,
   delta,
@@ -64,21 +89,27 @@ export function MetricCard({
   footer?: ReactNode;
   icon?: ReactNode; // optional line icon shown in a soft tinted chip
   href?: string; // when set, the whole card links here
+  onClick?: () => void; // when set (and no href), the caller owns the click (its own popup)
+  detail?: MetricDetail; // richer breakdown for the built-in expand popup
   target?: ReactNode; // right-aligned goal / secondary figure in the header
   progress?: number; // 0-1 → renders a progress bar coloured by the signal/accent
   delta?: Delta; // §5.3 change-vs-previous chip
 }) {
+  const [open, setOpen] = useState(false);
   const tint = signal ? SIGNAL_META[signal] : undefined;
   const barColor = tint ? tint.color : "var(--primary)";
   const className =
     "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-line bg-surface p-6 shadow-card";
+
+  // Built-in expand applies only when the card isn't a link and the caller hasn't taken the click.
+  const selfExpand = !href && !onClick;
 
   const inner = (
     <>
       {tint && (
         <span aria-hidden className="absolute inset-x-0 top-0 h-1" style={{ background: tint.color }} />
       )}
-      {/* header: icon chip + label (left) · target or arrow (right) */}
+      {/* header: icon chip + label (left) · target / arrow / expand hint (right) */}
       <div className="relative flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {icon && (
@@ -119,9 +150,16 @@ export function MetricCard({
             size={18}
             className="flex-none text-muted transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-accent"
           />
-        ) : (
-          target != null && <span className="flex-none text-xs font-medium text-muted tnum">{target}</span>
-        )}
+        ) : target != null ? (
+          <span className="flex-none text-xs font-medium text-muted tnum">{target}</span>
+        ) : selfExpand ? (
+          // subtle affordance so the card reads as "there's more behind this"
+          <Maximize2
+            size={15}
+            aria-hidden
+            className="flex-none text-ink-3 opacity-0 transition-opacity group-hover:opacity-100"
+          />
+        ) : null}
       </div>
 
       {/* §2.1 `metric` (28/34, Jakarta 700, tabular) — the token existed but was never used */}
@@ -147,11 +185,65 @@ export function MetricCard({
     </>
   );
 
-  return href ? (
-    <Link href={href} className={className}>
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {inner}
+      </Link>
+    );
+  }
+
+  const cardButton = (
+    <button
+      type="button"
+      onClick={onClick ?? (() => setOpen(true))}
+      className={`${className} w-full cursor-pointer text-left`}
+    >
       {inner}
-    </Link>
-  ) : (
-    <div className={className}>{inner}</div>
+    </button>
+  );
+
+  // Caller-managed click (e.g. FinanceKpis' currency-aware popup) — no built-in modal.
+  if (onClick) return cardButton;
+
+  // Built-in expand popup: every other card is click-to-expand.
+  return (
+    <>
+      {cardButton}
+      <Modal open={open} onClose={() => setOpen(false)} title={detail?.title ?? label} subtitle={detail?.title ? label : undefined} size="md">
+        <div className="space-y-4">
+          <div className="rounded-card border border-line bg-surface-2 p-4">
+            <div className="font-display text-3xl font-bold tabular-nums text-ink">{value}</div>
+            {secondary && <div className="mt-0.5 text-sm text-muted tabular-nums">{secondary}</div>}
+            {target != null && <div className="mt-1 text-xs text-muted tnum">{target}</div>}
+          </div>
+
+          {tooltip && <p className="text-sm text-ink-2">{tooltip}</p>}
+          {delta && <DeltaChip {...delta} />}
+
+          {detail?.rows && detail.rows.length > 0 && (
+            <ul className="divide-y divide-line">
+              {detail.rows.map((r, i) => (
+                <li key={i} className="flex items-baseline justify-between gap-3 py-2.5">
+                  <span className="text-sm text-ink-2">{r.label}</span>
+                  <span className="text-right text-sm font-semibold tabular-nums text-ink">{r.value}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {detail?.body}
+
+          {spark && spark.length > 1 && (
+            <div style={{ color: barColor }}>
+              <Sparkline data={spark} />
+            </div>
+          )}
+
+          {footer && <div className="border-t border-line pt-3">{footer}</div>}
+          {detail?.note && <p className="text-caption text-muted">{detail.note}</p>}
+        </div>
+      </Modal>
+    </>
   );
 }

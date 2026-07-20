@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ACTIVE } from "@/lib/soft-delete";
 import { resolveSections, sectionAllowed, type AppRole, type SectionOverrides } from "@/lib/sections";
 import { getSectionsConfig } from "@/server/founder-config";
 
@@ -38,6 +39,7 @@ export async function GET() {
   const [contacts, opportunities, invoices] = await Promise.all([
     allowed("contacts")
       ? prisma.lead.findMany({
+          where: ACTIVE,
           orderBy: { updatedAt: "desc" },
           take: PER_TYPE_CAP,
           select: { id: true, name: true, phone: true, company: { select: { name: true } } },
@@ -45,6 +47,7 @@ export async function GET() {
       : Promise.resolve([]),
     allowed("opportunities")
       ? prisma.opportunity.findMany({
+          where: { deletedAt: null, lead: { deletedAt: null } },
           orderBy: { updatedAt: "desc" },
           take: PER_TYPE_CAP,
           select: { id: true, name: true, pipelineId: true, lead: { select: { name: true } } },
@@ -52,6 +55,7 @@ export async function GET() {
       : Promise.resolve([]),
     allowed("payments")
       ? prisma.invoice.findMany({
+          where: ACTIVE,
           orderBy: { updatedAt: "desc" },
           take: PER_TYPE_CAP,
           select: { id: true, number: true, customerName: true },

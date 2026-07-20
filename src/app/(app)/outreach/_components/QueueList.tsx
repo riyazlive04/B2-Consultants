@@ -12,6 +12,7 @@ import {
   Settings2,
   Video,
 } from "lucide-react";
+import { fieldKindProps } from "@/components/ui/field-base";
 import type { QueueRow, QueueStep } from "@/server/outreach-metrics";
 import {
   markStepSent,
@@ -238,6 +239,11 @@ function ProspectCard({ row }: { row: QueueRow }) {
   const [pending, start] = useTransition();
   const next = row.next ?? row.steps[0] ?? null;
 
+  // The Zoom link is pasted out of a calendar invite, which is exactly where a trailing space or a
+  // wrapped newline comes from — and this value is interpolated straight into a WhatsApp template.
+  // Uncontrolled (defaultValue), so the scrub is the only onChange it needs.
+  const zoomProps = fieldKindProps<HTMLInputElement>("url", undefined);
+
   const channelIcon =
     next?.channel === "CALL" ? <PhoneCall size={13} /> : next?.channel === "WHATSAPP" ? <MessageCircle size={13} /> : <Settings2 size={13} />;
 
@@ -345,8 +351,10 @@ function ProspectCard({ row }: { row: QueueRow }) {
                   <Video size={12} /> Zoom link (from the Discovery Specialist&apos;s calendar)
                 </span>
                 <input
+                  {...zoomProps.attrs}
                   name="zoomLink"
                   defaultValue={row.zoomLink ?? ""}
+                  onChange={zoomProps.onChange}
                   placeholder="https://zoom.us/j/…"
                   className="w-full rounded-field border border-line bg-surface px-2 py-1.5 text-xs"
                 />

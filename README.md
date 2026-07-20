@@ -80,8 +80,11 @@ Do **not** run `db:demo` on the real deployment — it resets business data by d
 
 ## Rules baked in
 
-- Manual entry is the guaranteed core; ingest (Synamate/Razorpay/Sheets) is optional, flag-gated
-  (`INGEST_ENABLED`), writes to the same tables with `source` + `manualOverride`.
+- Manual entry is the guaranteed core. Inbound leads already arrive by **signed webhook** (Pabbly,
+  Meta, FlexiFunnels) — always on, not gated. `INGEST_ENABLED` (`src/lib/ingest.ts`) is the reserved
+  master switch for an *optional, scheduled* pull-importer (Razorpay/Sheets) that would write to the
+  same tables with `source` + `manualOverride` — that importer isn't built yet, so the flag has no
+  scheduled consumer today; leave it `false` until one exists. One-off backfills live in `scripts/`.
 - Audit tables (daily logs, milestone log, signal changes, lead stage history) are append-only —
   enforced by Postgres triggers, not just the service layer.
 - Money is BigInt minor units (paise/cents), INR + EUR side by side, FX rate stamped per record.

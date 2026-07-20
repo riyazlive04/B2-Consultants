@@ -8,11 +8,13 @@ import { Card } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { ComboBox } from "@/components/ui/ComboBox";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import {
   optionsFrom, PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, PROGRAM_LEVEL_LABELS,
 } from "@/lib/labels";
 import { AmountPair } from "@/components/ui/AmountPair";
+import { StudentName } from "@/components/ui/StudentName";
 
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
@@ -23,18 +25,27 @@ export function IncomeSection({
   rows,
   today,
   studentOptions = [],
+  studentCodeById = {},
+  levelOptions,
   fxRate,
   fxStale,
+  fxDate,
 }: {
   rows: IncomeRow[];
   today: string;
-  studentOptions?: { value: string; label: string }[];
+  studentOptions?: { value: string; label: string; hint?: string }[];
+  studentCodeById?: Record<string, string>;
+  levelOptions: { value: string; label: string }[];
   fxRate: number;
   fxStale?: boolean;
+  fxDate?: string;
 }) {
   const [editing, setEditing] = useState<IncomeRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Optimistic delete: hide the row at once, restore it if the archive fails.
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
+  const visibleRows = rows.filter((r) => !removedIds.has(r.id));
 
   const submit = async (form: FormData) => {
     setError(null);
@@ -48,19 +59,36 @@ export function IncomeSection({
 
   const remove = async (row: IncomeRow) => {
     const ok = await askConfirm({
-      title: `Delete income entry for ${row.studentName}?`,
-      body: "This cannot be undone.",
-      confirmLabel: "Delete",
+      title: `Archive income entry for ${row.studentName}?`,
+      body: "It moves to the Archived tab — you can restore it there.",
+      confirmLabel: "Archive",
       danger: true,
     });
     if (!ok) return;
-    await deleteIncome(row.id);
-    toast("Income entry deleted");
+    setRemovedIds((s) => new Set(s).add(row.id)); // optimistic
+    const res = await deleteIncome(row.id);
+    if (!res.ok) {
+      setRemovedIds((s) => {
+        const n = new Set(s);
+        n.delete(row.id);
+        return n;
+      });
+      return toast(res.error, "error");
+    }
+    toast("Income entry archived");
   };
 
   const columns: Column<IncomeRow>[] = [
     { key: "date", header: "Date", cell: (r) => formatDate(r.date), value: (r) => r.date.slice(0, 10) },
-    { key: "student", header: "Student", cell: (r) => r.studentName, value: (r) => r.studentName },
+    {
+      key: "student", header: "Student",
+      cell: (r) => <StudentName name={r.studentName} code={r.studentId ? studentCodeById[r.studentId] : null} />,
+      // the code joins the sort/filter/CSV value so "B2-0007" finds the row
+      value: (r) =>
+        r.studentId && studentCodeById[r.studentId]
+          ? `${r.studentName} ${studentCodeById[r.studentId]}`
+          : r.studentName,
+    },
     {
       key: "inr", header: "INR", align: "right",
       cell: (r) => (BigInt(r.amountInrRaw) === BigInt(0) ? "-" : formatInrMinor(BigInt(r.amountInrRaw))),
@@ -76,7 +104,7 @@ export function IncomeSection({
       cell: (r) => `${formatInrMinor(r.agg.inr, { compact: true })} · ${formatEurMinor(r.agg.eur, { compact: true })}`,
       value: (r) => r.agg.inr / 100,
     },
-    { key: "level", header: "Level", cell: (r) => PROGRAM_LEVEL_LABELS[r.programLevel], value: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] },
+    { key: "level", header: "Level", cell: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel, value: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel },
     { key: "type", header: "Type", cell: (r) => PAYMENT_TYPE_LABELS[r.paymentType], value: (r) => PAYMENT_TYPE_LABELS[r.paymentType] },
     { key: "method", header: "Method", cell: (r) => PAYMENT_METHOD_LABELS[r.paymentMethod], value: (r) => PAYMENT_METHOD_LABELS[r.paymentMethod] },
     { key: "notes", header: "Notes", cell: (r) => r.notes ?? "", value: (r) => r.notes ?? "" },
@@ -109,12 +137,30 @@ export function IncomeSection({
           <Field label="Date">
             <TextInput type="date" name="date" required defaultValue={editing ? editing.date.slice(0, 10) : today} />
           </Field>
-          <Field label="Student name">
-            <TextInput name="studentName" required placeholder="Who paid" defaultValue={editing?.studentName ?? ""} />
+          <Field
+            label="Student name"
+            hint={studentOptions.length > 0 ? "Search to link a student — feeds their LTV" : undefined}
+          >
+            {studentOptions.length > 0 ? (
+              // Searchable auto-populate (issue 2.6): picking a student fills the name AND the
+              // hidden studentId, so the payment links to the right record instead of a typed match.
+              <ComboBox
+                options={studentOptions}
+                nameText="studentName"
+                nameValue="studentId"
+                required
+                placeholder="Search or type who paid"
+                defaultText={editing?.studentName ?? ""}
+                defaultValue={editing?.studentId ?? ""}
+              />
+            ) : (
+              <TextInput kind="name" name="studentName" required placeholder="Who paid" defaultValue={editing?.studentName ?? ""} />
+            )}
           </Field>
           <AmountPair
             fxRate={fxRate}
             fxStale={fxStale}
+            fxDate={fxDate}
             inrName="amountInr"
             eurName="amountEur"
             inrLabel="Amount received (₹)"
@@ -123,8 +169,8 @@ export function IncomeSection({
             defaultInr={editing ? minorToInput(editing.amountInrRaw) : ""}
             defaultEur={editing ? minorToInput(editing.amountEurRaw) : ""}
           />
-          <Field label="Program level">
-            <Select name="programLevel" options={optionsFrom(PROGRAM_LEVEL_LABELS)} defaultValue={editing?.programLevel ?? "GUIDED"} />
+          <Field label="Programme level">
+            <Select name="programLevel" options={levelOptions} defaultValue={editing?.programLevel ?? "GUIDED"} />
           </Field>
           <Field label="Payment type">
             <Select name="paymentType" options={optionsFrom(PAYMENT_TYPE_LABELS)} defaultValue={editing?.paymentType ?? "FULL_PAYMENT"} />
@@ -133,17 +179,8 @@ export function IncomeSection({
             <Select name="paymentMethod" options={optionsFrom(PAYMENT_METHOD_LABELS)} defaultValue={editing?.paymentMethod ?? "UPI"} />
           </Field>
           <Field label="Notes (optional)">
-            <TextInput name="notes" placeholder="Any extra info" defaultValue={editing?.notes ?? ""} />
+            <TextInput kind="text" name="notes" placeholder="Any extra info" defaultValue={editing?.notes ?? ""} />
           </Field>
-          {studentOptions.length > 0 && (
-            <Field label="Link to student (optional)" hint="Feeds the student’s LTV">
-              <Select
-                name="studentId"
-                options={[{ value: "", label: "-" }, ...studentOptions]}
-                defaultValue={editing?.studentId ?? ""}
-              />
-            </Field>
-          )}
         </div>
         <div className="mt-4 flex items-center gap-3">
           <SubmitButton>{editing ? "Save changes" : "Add income"}</SubmitButton>
@@ -152,7 +189,7 @@ export function IncomeSection({
         </form>
       </Card>
 
-      <DataTable rows={rows} columns={columns} csvName="income" filterPlaceholder="Filter income…" />
+      <DataTable rows={visibleRows} columns={columns} csvName="income" filterPlaceholder="Filter income…" />
     </section>
   );
 }

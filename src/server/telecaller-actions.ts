@@ -13,16 +13,30 @@ import {
   formatMonth,
 } from "@/lib/format";
 import { PAYOUT_STATUS_LABELS } from "@/lib/labels";
+import { optionalRule, rule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
+import { syncPayoutExpense, type PayoutForSync } from "./finance-autopost";
 
 /** Telecaller Pay is Admin-only (Ameen). Every action re-checks. */
 
-const moneyInput = z
-  .string()
-  .trim()
-  .regex(/^\d{0,12}(\.\d{0,2})?$/, "Enter a plain amount like 5000 or 5000.50")
-  .optional()
-  .or(z.literal(""));
+/** Shape a payout row + its person's name into the finance auto-post argument. */
+function payoutSyncArg(
+  row: {
+    id: string; month: Date; bonusInrMinor: bigint; bonusEurMinor: bigint;
+    commInrMinor: bigint; commEurMinor: bigint; fxRateUsed: PayoutForSync["fxRateUsed"];
+    status: "PENDING" | "PAID";
+  },
+  vendorName: string,
+): PayoutForSync {
+  return {
+    id: row.id, month: row.month, bonusInrMinor: row.bonusInrMinor, bonusEurMinor: row.bonusEurMinor,
+    commInrMinor: row.commInrMinor, commEurMinor: row.commEurMinor, fxRateUsed: row.fxRateUsed,
+    status: row.status, vendorName,
+  };
+}
+
+/** Shared with the browser via lib/field-rules; an empty box is caught by requireSomeAmount below. */
+const moneyInput = optionalRule("money");
 
 const payoutSchema = z.object({
   teamProfileId: z.string().min(1, "Choose a telecaller"),
@@ -31,7 +45,8 @@ const payoutSchema = z.object({
   bonusEur: moneyInput,
   commInr: moneyInput,
   commEur: moneyInput,
-  reason: z.string().trim().min(1, "Add a short reason / criteria"),
+  // Free text: the reason is prose that contains numbers ("hit 40 appointments").
+  reason: rule("text").pipe(z.string().min(1, "Add a short reason / criteria")),
   status: z.enum(["PENDING", "PAID"]),
 });
 
@@ -137,7 +152,12 @@ export async function createPayout(form: FormData): Promise<ActionResult> {
     meta: { ...payoutShape(row), teamProfile: profile.fullName, fxRateUsed: String(fx.rate) },
   });
 
+  // Auto-post to Finance: a PAID payout becomes a TEAM_SALARIES expense (user request).
+  await syncPayoutExpense(session.user.id, payoutSyncArg(row, profile.fullName), row.id);
+
   revalidatePath("/telecaller");
+  revalidatePath("/finance");
+  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -168,7 +188,11 @@ export async function updatePayout(id: string, form: FormData): Promise<ActionRe
     status: d.status,
   };
 
-  await prisma.telecallerPayout.update({ where: { id }, data });
+  const row = await prisma.telecallerPayout.update({
+    where: { id },
+    data,
+    include: { teamProfile: { select: { fullName: true } } },
+  });
 
   const diff = diffFields(payoutShape(existing), payoutShape(data));
   if (diff.changed.length) {
@@ -182,7 +206,12 @@ export async function updatePayout(id: string, form: FormData): Promise<ActionRe
     });
   }
 
+  // Keep the auto-posted expense in step with the edit (amount / paid-status / person).
+  await syncPayoutExpense(session.user.id, payoutSyncArg(row, row.teamProfile.fullName), id);
+
   revalidatePath("/telecaller");
+  revalidatePath("/finance");
+  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -208,7 +237,12 @@ export async function setPayoutStatus(id: string, status: "PENDING" | "PAID"): P
     });
   }
 
+  // PAID ⇒ post the expense; back to PENDING ⇒ remove it. syncPayoutExpense handles both.
+  await syncPayoutExpense(session.user.id, payoutSyncArg(row, row.teamProfile.fullName), row.id);
+
   revalidatePath("/telecaller");
+  revalidatePath("/finance");
+  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -219,6 +253,8 @@ export async function deletePayout(id: string): Promise<ActionResult> {
     where: { id },
     include: { teamProfile: { select: { fullName: true } } },
   });
+  // Remove the auto-posted expense that mirrored this payout.
+  await syncPayoutExpense(session.user.id, null, row.id);
   await logActivity(session, {
     action: "payout.delete",
     section: "telecaller",
@@ -228,5 +264,7 @@ export async function deletePayout(id: string): Promise<ActionResult> {
     meta: payoutShape(row),
   });
   revalidatePath("/telecaller");
+  revalidatePath("/finance");
+  revalidatePath("/ledger");
   return { ok: true };
 }

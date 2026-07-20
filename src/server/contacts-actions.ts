@@ -6,9 +6,13 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck, requireSection } from "@/lib/rbac";
 import { parseMentions } from "@/lib/gn-mentions";
+import { optionalRule, rule } from "@/lib/field-rules";
 import { emitTrigger } from "./automation";
+import { findDuplicateLead } from "./lead-intake";
+import { pickFirstCaller } from "./assignment";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
+import { archiveData, restoreData } from "@/lib/soft-delete";
 
 /**
  * Mutations for the Synamate-parity Contacts CRM (SYNAMATE_CLONE_SPEC §5): contact records,
@@ -33,10 +37,11 @@ function reval(leadId?: string) {
 // ─────────────────────────── Contacts ───────────────────────────
 
 const contactSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
-  phone: z.string().trim().min(5, "Phone / WhatsApp with country code is required"),
-  email: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
-  city: z.string().trim().optional(),
+  name: rule("name"),
+  phone: rule("phone"),
+  email: optionalRule("email"),
+  city: optionalRule("city"),
+  // Free text: an industry legitimately carries digits ("3D Printing", "B2B SaaS").
   industry: z.string().trim().optional(),
   leadSource: z.enum(CONTACT_SOURCES),
   companyId: z.string().trim().optional(),
@@ -47,6 +52,36 @@ export async function createContact(form: FormData): Promise<ActionResult> {
   const parsed = contactSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
+
+  // Duplicate check at the point of entry (issue 1.3): the capture path dedupes, but typing the
+  // same person in here twice used to silently create a second row. Block it and point the rep at
+  // the existing record rather than fragmenting the person across two leads.
+  const dup = await findDuplicateLead({ phone: d.phone, email: d.email });
+  if (dup) {
+    // Re-adding an ARCHIVED contact: restore it instead of erroring (it's hidden everywhere) or
+    // creating a duplicate. Keeps the duplicate-check intact while handling the archive cleanly.
+    if (dup.lead.deletedAt) {
+      await prisma.lead.update({ where: { id: dup.lead.id }, data: restoreData });
+      await logActivity(session, {
+        action: "contact.restore",
+        section: "contacts",
+        entityType: "Lead",
+        entityId: dup.lead.id,
+        summary: `Restored archived contact ${dup.lead.name} on re-entry`,
+      });
+      reval();
+      revalidatePath("/pipeline");
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      error: `A contact with this ${dup.on === "phone" ? "phone number" : "email"} already exists — ${dup.lead.name}. Open that contact instead of adding a new one.`,
+    };
+  }
+  // Auto-assign an owner on creation (issue 1.1) via the same first-call rotation the webhooks use,
+  // so a back-office lead no longer lands unassigned (which is why the owner column read
+  // "Unassigned" — issue 1.2). A rotation misconfig returns null and must never block entry.
+  const assignedToId = await pickFirstCaller().catch(() => null);
 
   const newLeadId = await prisma.$transaction(async (tx) => {
     const lead = await tx.lead.create({
@@ -61,6 +96,7 @@ export async function createContact(form: FormData): Promise<ActionResult> {
         dateIn: new Date(),
         stage: "NEW_LEAD",
         enteredById: session.user.id,
+        assignedToId,
       },
     });
     await tx.leadStageHistory.create({
@@ -120,21 +156,68 @@ export async function updateContact(id: string, form: FormData): Promise<ActionR
   return { ok: true };
 }
 
+/**
+ * Delete = ARCHIVE. Sets `deletedAt` and hides the contact everywhere; its notes/tasks/opps
+ * survive (nothing cascades) and its opportunities drop off active boards via the parent
+ * filter (see opportunities-metrics `getBoard`). Restorable from the Archived tab.
+ */
 export async function deleteContact(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   const lead = await prisma.lead.findUnique({ where: { id }, select: { name: true } });
-  await prisma.lead.delete({ where: { id } }); // cascades notes/tasks/opps/history
+  await prisma.lead.update({ where: { id }, data: archiveData(session.user.id) });
   if (lead) {
     await logActivity(session, {
-      action: "contact.delete",
+      action: "contact.archive",
       section: "contacts",
       entityType: "Lead",
       entityId: id,
-      summary: `Deleted contact ${lead.name}`,
+      summary: `Archived contact ${lead.name}`,
     });
   }
   reval();
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+/** Restore an archived contact (Lead) to active. */
+export async function restoreLead(id: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
+  const lead = await prisma.lead.findUnique({ where: { id }, select: { name: true, deletedAt: true } });
+  if (!lead) return { ok: false, error: "Contact not found" };
+  if (!lead.deletedAt) return { ok: false, error: "This contact is not archived" };
+  await prisma.lead.update({ where: { id }, data: restoreData });
+  await logActivity(session, {
+    action: "contact.restore",
+    section: "contacts",
+    entityType: "Lead",
+    entityId: id,
+    summary: `Restored contact ${lead.name}`,
+  });
+  reval();
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+/** Permanent delete — only from the Archived tab. Cascades notes/tasks/opps/history. */
+export async function purgeLead(id: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
+  const lead = await prisma.lead.findUnique({ where: { id }, select: { name: true, deletedAt: true } });
+  if (!lead) return { ok: false, error: "Contact not found" };
+  if (!lead.deletedAt) return { ok: false, error: "Archive it first" };
+  await prisma.lead.delete({ where: { id } }); // cascades notes/tasks/opps/history
+  await logActivity(session, {
+    action: "contact.purge",
+    section: "contacts",
+    entityType: "Lead",
+    entityId: id,
+    summary: `Permanently deleted the archived contact ${lead.name} and its history`,
+    meta: { hard: true },
+  });
+  reval();
+  revalidatePath("/pipeline");
   return { ok: true };
 }
 
@@ -381,8 +464,9 @@ export async function toggleNotePin(id: string): Promise<ActionResult> {
 // ─────────────────────────── Tasks ───────────────────────────
 
 const taskSchema = z.object({
+  // A task title is a label, not a person — "Chase 2nd instalment" is valid.
   title: z.string().trim().min(1, "Task title is required"),
-  body: z.string().trim().optional(),
+  body: optionalRule("text"),
   dueAt: z.string().trim().optional(),
   assignedToId: z.string().trim().optional(),
   leadId: z.string().trim().optional(),
@@ -447,6 +531,7 @@ export async function toggleTask(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+/** Delete = ARCHIVE. */
 export async function deleteTask(id: string): Promise<ActionResult> {
   const session = await requireSection("contacts");
   const task = await prisma.contactTask.findUnique({
@@ -454,14 +539,58 @@ export async function deleteTask(id: string): Promise<ActionResult> {
     select: { leadId: true, title: true },
   });
   if (!task) return { ok: false, error: "Task not found" };
-  await prisma.contactTask.delete({ where: { id } });
+  await prisma.contactTask.update({ where: { id }, data: archiveData(session.user.id) });
   await logActivity(session, {
-    action: "task.delete",
+    action: "task.archive",
     section: "contacts",
     entityType: "ContactTask",
     entityId: id,
-    summary: `Deleted task "${task.title}"`,
+    summary: `Archived task "${task.title}"`,
     meta: { leadId: task.leadId },
+  });
+  reval(task.leadId ?? undefined);
+  return { ok: true };
+}
+
+/** Restore an archived task. */
+export async function restoreTask(id: string): Promise<ActionResult> {
+  const session = await requireSection("contacts");
+  const task = await prisma.contactTask.findUnique({
+    where: { id },
+    select: { leadId: true, title: true, deletedAt: true },
+  });
+  if (!task) return { ok: false, error: "Task not found" };
+  if (!task.deletedAt) return { ok: false, error: "This task is not archived" };
+  await prisma.contactTask.update({ where: { id }, data: restoreData });
+  await logActivity(session, {
+    action: "task.restore",
+    section: "contacts",
+    entityType: "ContactTask",
+    entityId: id,
+    summary: `Restored task "${task.title}"`,
+    meta: { leadId: task.leadId },
+  });
+  reval(task.leadId ?? undefined);
+  return { ok: true };
+}
+
+/** Permanent delete — only from the Archived tab. */
+export async function purgeTask(id: string): Promise<ActionResult> {
+  const session = await requireSection("contacts");
+  const task = await prisma.contactTask.findUnique({
+    where: { id },
+    select: { leadId: true, title: true, deletedAt: true },
+  });
+  if (!task) return { ok: false, error: "Task not found" };
+  if (!task.deletedAt) return { ok: false, error: "Archive it first" };
+  await prisma.contactTask.delete({ where: { id } });
+  await logActivity(session, {
+    action: "task.purge",
+    section: "contacts",
+    entityType: "ContactTask",
+    entityId: id,
+    summary: `Permanently deleted the archived task "${task.title}"`,
+    meta: { leadId: task.leadId, hard: true },
   });
   reval(task.leadId ?? undefined);
   return { ok: true };
@@ -470,11 +599,13 @@ export async function deleteTask(id: string): Promise<ActionResult> {
 // ─────────────────────────── Companies ───────────────────────────
 
 const companySchema = z.object({
+  // NOT `name`: a company name is an entity label and legitimately carries digits
+  // ("BMW 3 GmbH", "3M"). Same for `domain`, which is stored bare, not as a URL.
   name: z.string().trim().min(1, "Company name is required"),
   domain: z.string().trim().optional(),
-  phone: z.string().trim().optional(),
-  email: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
-  city: z.string().trim().optional(),
+  phone: optionalRule("phone"),
+  email: optionalRule("email"),
+  city: optionalRule("city"),
   country: z.string().trim().optional(),
   ownerId: z.string().trim().optional(),
 });
@@ -543,20 +674,60 @@ export async function updateCompany(id: string, form: FormData): Promise<ActionR
   return { ok: true };
 }
 
+/** Delete = ARCHIVE. Its leads keep their `companyId` (still resolvable) and stay active. */
 export async function deleteCompany(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   const company = await prisma.company.findUnique({ where: { id }, select: { name: true } });
-  await prisma.company.delete({ where: { id } }); // Lead.companyId → null (SetNull)
+  await prisma.company.update({ where: { id }, data: archiveData(session.user.id) });
   if (company) {
     await logActivity(session, {
-      action: "company.delete",
+      action: "company.archive",
       section: "contacts",
       entityType: "Company",
       entityId: id,
-      summary: `Deleted company ${company.name}`,
+      summary: `Archived company ${company.name}`,
     });
   }
+  revalidatePath("/contacts");
+  return { ok: true };
+}
+
+/** Restore an archived company. */
+export async function restoreCompany(id: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
+  const company = await prisma.company.findUnique({ where: { id }, select: { name: true, deletedAt: true } });
+  if (!company) return { ok: false, error: "Company not found" };
+  if (!company.deletedAt) return { ok: false, error: "This company is not archived" };
+  await prisma.company.update({ where: { id }, data: restoreData });
+  await logActivity(session, {
+    action: "company.restore",
+    section: "contacts",
+    entityType: "Company",
+    entityId: id,
+    summary: `Restored company ${company.name}`,
+  });
+  revalidatePath("/contacts");
+  return { ok: true };
+}
+
+/** Permanent delete — only from the Archived tab. Lead.companyId → null (SetNull). */
+export async function purgeCompany(id: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
+  const company = await prisma.company.findUnique({ where: { id }, select: { name: true, deletedAt: true } });
+  if (!company) return { ok: false, error: "Company not found" };
+  if (!company.deletedAt) return { ok: false, error: "Archive it first" };
+  await prisma.company.delete({ where: { id } }); // Lead.companyId → null (SetNull)
+  await logActivity(session, {
+    action: "company.purge",
+    section: "contacts",
+    entityType: "Company",
+    entityId: id,
+    summary: `Permanently deleted the archived company ${company.name}`,
+    meta: { hard: true },
+  });
   revalidatePath("/contacts");
   return { ok: true };
 }
@@ -569,6 +740,7 @@ const CUSTOM_FIELD_TYPES = [
 ] as const;
 
 const customFieldSchema = z.object({
+  // A custom-field name is a label ("Budget 2026"), never a person — leave it free text.
   name: z.string().trim().min(1, "Field name is required"),
   fieldType: z.enum(CUSTOM_FIELD_TYPES),
   options: z.string().trim().optional(), // comma-separated for DROPDOWN/MULTI_SELECT

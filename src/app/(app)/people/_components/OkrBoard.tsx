@@ -164,11 +164,11 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
               <TextInput name="currentProgress" defaultValue={editing.okr?.currentProgress ?? ""} />
             </Field>
             <Field label="Manual completion % (0-100)" hint="Only when target is text - otherwise auto">
-              <TextInput name="manualCompletionPct" inputMode="numeric" defaultValue={editing.okr?.manualCompletionPct?.toString() ?? ""} />
+              <TextInput kind="int" name="manualCompletionPct" min={0} max={100} defaultValue={editing.okr?.manualCompletionPct?.toString() ?? ""} />
             </Field>
             <div className="sm:col-span-2">
               <Field label="Notes" hint="Blockers, context, updates">
-                <TextArea name="notes" defaultValue={editing.okr?.notes ?? ""} />
+                <TextArea kind="text" name="notes" defaultValue={editing.okr?.notes ?? ""} />
               </Field>
             </div>
           </div>

@@ -2,8 +2,11 @@ import "server-only";
 import { ChevronDown, TrendingUp } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { istMonthRange, istToday } from "@/lib/dates";
+import { ACTIVE } from "@/lib/soft-delete";
 import { formatInrMinor, formatMonth } from "@/lib/format";
 import { SIGNAL_META, type SignalLevel } from "@/lib/signals";
+import { Gauge, type GaugeBand } from "@/components/ui/Gauge";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { getPendingRows } from "@/server/finance-metrics";
 import { getPipelineSnapshot } from "@/server/pipeline-metrics";
 
@@ -93,7 +96,7 @@ export async function MonthHero() {
 
   const [trendIncomes, target, pendingRows, pipeline] = await Promise.all([
     prisma.income.findMany({
-      where: { date: { gte: prevMonthStart } },
+      where: { ...ACTIVE, date: { gte: prevMonthStart } },
       select: { date: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
     }),
     prisma.monthlyTarget.findUnique({ where: { month: monthStart } }),
@@ -148,6 +151,22 @@ export async function MonthHero() {
   );
   const monthShort = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(monthStart);
   const prevMonthShort = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(prevMonthStart);
+  // §2.6: "vs same day last month" was being read as "vs last year" by some people.
+  // Naming the actual calendar date it compares against ("vs 18 Jun") removes the
+  // ambiguity in a way no amount of rewording of the phrase alone could.
+  const prevSameDayLabel = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(
+    new Date(
+      Date.UTC(
+        prevMonthStart.getUTCFullYear(),
+        prevMonthStart.getUTCMonth(),
+        Math.min(dayOfMonth, prevDaysInMonth),
+      ),
+    ),
+  );
 
   // ── Projected finish: collected + receivables due before month-end + the
   //    pipeline forecast pro-rated to the days left. "Will I hit ₹8L?" gets a number.
@@ -166,12 +185,14 @@ export async function MonthHero() {
     projectedPct === null ? null : projectedPct >= 100 ? "ok" : projectedPct >= 80 ? "watch" : "risk";
   const projMeta = projectedSignal ? SIGNAL_META[projectedSignal] : null;
 
-  // Meter segments — each money source keeps one identity colour everywhere
+  // Meter segments — each money source keeps one identity colour everywhere.
+  // §2.4: "due" and "pipeline forecast" were single words that gave no clue whether
+  // they were forecasts or balances owed; each now says what it actually is.
   let segUsed = 0;
   const segments = [
-    { key: "collected", label: "collected", minor: collectedMinor, color: "var(--chart-1)" },
-    { key: "due", label: "due this month", minor: dueThisMonthMinor, color: "var(--chart-2)" },
-    { key: "forecast", label: "pipeline forecast", minor: forecastMinor, color: "var(--chart-3)" },
+    { key: "collected", label: "Collected (in the bank)", minor: collectedMinor, color: "var(--chart-1)" },
+    { key: "due", label: "Instalments owed, due before month-end", minor: dueThisMonthMinor, color: "var(--chart-2)" },
+    { key: "forecast", label: "Forecast from open pipeline", minor: forecastMinor, color: "var(--chart-3)" },
   ]
     .map((s) => {
       const frac = targetMinor > 0 ? s.minor / targetMinor : 0;
@@ -181,48 +202,120 @@ export async function MonthHero() {
     })
     .filter((s) => s.minor > 0);
 
+  // §2.3/§2.4: "Projected finish · 68%" never said 68% *of what*, and "Projected
+  // finish" vs "Due" gave no clue which was the forecast and which was money owed.
+  // Every tile now states its unit and carries its derivation on hover.
   const heroTiles = [
-    { label: "Collected", value: formatInrMinor(collectedMinor, { compact: true }), color: undefined },
     {
-      label: "Projected finish",
+      label: "Collected so far",
+      value: formatInrMinor(collectedMinor, { compact: true }),
+      color: undefined,
+      hint: "Money actually received this month — the sum of every income entry dated in this month.",
+    },
+    {
+      label: "Forecast month-end",
       value:
         projectedPct === null
           ? "—"
-          : `${formatInrMinor(projectedMinor, { compact: true })} · ${Math.round(projectedPct)}%`,
+          : `${formatInrMinor(projectedMinor, { compact: true })} · ${Math.round(projectedPct)}% of target`,
       color: projMeta?.color,
+      hint:
+        "Where the month is expected to END: what's collected so far, plus instalments already owed and due before month-end, plus a pro-rated forecast from the open pipeline. " +
+        `The percentage is of the ${formatInrMinor(targetMinor, { compact: true })} monthly target.`,
     },
-    { label: "Target", value: formatInrMinor(targetMinor, { compact: true }), color: undefined },
+    {
+      label: "Monthly target",
+      value: formatInrMinor(targetMinor, { compact: true }),
+      color: undefined,
+      hint: "The revenue goal for this month, set under Pipeline → target.",
+    },
   ];
+
+  // Where the forecast lands on the gauge, so the dial shows both "where I am" (needle)
+  // and "where I'm heading" (§2.7 — the projected finish was invisible on the bar).
+  const projectedFrac = targetMinor > 0 ? projectedMinor / targetMinor : 0;
+  const gaugeBands: GaugeBand[] = [
+    { upTo: 0.5, color: "var(--bad)" },
+    { upTo: 0.9, color: "var(--warn)" },
+    { upTo: 1, color: "var(--good)" },
+  ];
+  const collectedPctOfTarget = targetMinor > 0 ? (collectedMinor / targetMinor) * 100 : null;
 
   return (
     <div className="hero-sky rise-in relative overflow-hidden rounded-hero p-6">
-      {/* Headline: collected + same-day delta (left) · ahead/behind-pace chip (right) */}
-      <div className="relative flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink-2">
-            <TrendingUp size={14} /> Collected · {formatMonth(monthStart)}
-          </p>
-          <p className="mt-1.5 font-display text-3xl font-bold tracking-tight sm:text-4xl">
-            {formatInrMinor(collectedMinor)}
-          </p>
-          {momPct !== null && (
-            <p className="tnum mt-0.5 text-sm text-ink-2">
-              <span className="font-semibold" style={{ color: momPct >= 0 ? "var(--good)" : "var(--bad)" }}>
-                {momPct >= 0 ? "▲" : "▼"} {Math.abs(Math.round(momPct * 10) / 10)}%
-              </span>{" "}
-              vs same day last month
-            </p>
-          )}
+      {/* §2.1: one dial answers "am I on track?" before any digit is read. The four
+          numbers still exist, but as supporting detail rather than four equal claims
+          competing for the eye. */}
+      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center">
+        <div className="flex justify-center lg:flex-none">
+          <Gauge
+            value={collectedMinor}
+            max={targetMinor}
+            valueText={formatInrMinor(collectedMinor, { compact: true })}
+            maxText={formatInrMinor(targetMinor, { compact: true })}
+            label={`Collected · ${formatMonth(monthStart)}`}
+            // The caption states what the NEEDLE is a percentage of. It used to quote the
+            // pace percentage (48%) while the needle sat at the target percentage (31%) —
+            // two different numbers on one dial, which is the exact confusion §2.3 raised.
+            caption={
+              collectedPctOfTarget === null
+                ? undefined
+                : `${Math.round(collectedPctOfTarget)}% of the ${formatInrMinor(targetMinor, {
+                    compact: true,
+                  })} monthly target`
+            }
+            marker={monthFrac}
+            markerLabel={`Target to reach by today: ${formatInrMinor(expectedMinor, { compact: true })}`}
+            bands={gaugeBands}
+          />
         </div>
-        {paceMeta && (
-          <span
-            className="tnum flex-none rounded-full px-3 py-1 text-xs font-semibold"
-            style={{ background: paceMeta.soft, color: paceMeta.color }}
-          >
-            {paceDeltaMinor >= 0 ? "▲" : "▼"} {formatInrMinor(Math.abs(paceDeltaMinor), { compact: true })}{" "}
-            {paceDeltaMinor >= 0 ? "ahead of" : "behind"} pace
-          </span>
-        )}
+
+        {/* Headline: collected + same-day delta · ahead/behind-pace chip */}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink-2">
+                <TrendingUp size={14} /> Collected · {formatMonth(monthStart)}
+              </p>
+              <p className="mt-1.5 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+                {formatInrMinor(collectedMinor)}
+              </p>
+              {momPct !== null && (
+                <p className="tnum mt-0.5 flex flex-wrap items-center gap-1 text-sm text-ink-2">
+                  <span className="font-semibold" style={{ color: momPct >= 0 ? "var(--good)" : "var(--bad)" }}>
+                    {momPct >= 0 ? "▲" : "▼"} {Math.abs(Math.round(momPct * 10) / 10)}%
+                  </span>{" "}
+                  {momPct >= 0 ? "more" : "less"} than the same day last month ({prevSameDayLabel})
+                  <InfoHint
+                    text={`Compares the same number of days into each month: ${formatInrMinor(
+                      collectedMinor,
+                      { compact: true },
+                    )} by day ${dayOfMonth} this month, against ${formatInrMinor(prevSameDayMinor, {
+                      compact: true,
+                    })} by ${prevSameDayLabel} last month. This is last MONTH, not last year.`}
+                  />
+                </p>
+              )}
+            </div>
+            {paceMeta && (
+              <span
+                className="tnum flex flex-none items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
+                style={{ background: paceMeta.soft, color: paceMeta.color }}
+              >
+                {paceDeltaMinor >= 0 ? "▲" : "▼"} {formatInrMinor(Math.abs(paceDeltaMinor), { compact: true })}{" "}
+                {paceDeltaMinor >= 0 ? "ahead of" : "behind"} target pace
+                <InfoHint
+                  text={`The gap between what's collected (${formatInrMinor(collectedMinor, {
+                    compact: true,
+                  })}) and the straight-line pace for hitting target by month-end (${formatInrMinor(
+                    expectedMinor,
+                    { compact: true },
+                  )} by day ${dayOfMonth}).`}
+                />
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Path to target: what's in (collected) + what's scheduled (receivables due
@@ -234,15 +327,38 @@ export async function MonthHero() {
             <div key={s.key} className="h-full" style={{ width: `${s.w * 100}%`, background: s.color }} />
           ))}
         </div>
+        {/* where today should be on a straight line to target */}
         <span
           aria-hidden
           className="absolute -top-1 h-4 w-0.5 rounded-full"
           style={{ left: `calc(${monthFrac * 100}% - 1px)`, background: "var(--ink-2)" }}
-          title={`Expected by today: ${formatInrMinor(expectedMinor, { compact: true })}`}
+          title={`Target to reach by today: ${formatInrMinor(expectedMinor, { compact: true })}`}
         />
+        {/* §2.7: the projected finish had no mark on the bar at all — it is now an
+            explicit green tick, and it appears in the legend below. */}
+        {projectedPct !== null && projectedMinor > 0 && (
+          <span
+            aria-hidden
+            className="absolute -top-1.5 h-5 w-0.5 rounded-full"
+            style={{
+              left: `calc(${Math.min(1, projectedFrac) * 100}% - 1px)`,
+              background: "var(--good)",
+            }}
+            title={`Forecast month-end: ${formatInrMinor(projectedMinor, { compact: true })}`}
+          />
+        )}
         <div className="tnum mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-caption font-medium text-ink-2">
-          <span>
-            Day {dayOfMonth} of {daysInMonth} · ▎expected by today {formatInrMinor(expectedMinor, { compact: true })}
+          <span className="flex items-center gap-1">
+            Day {dayOfMonth} of {daysInMonth} · ▎target to reach by today{" "}
+            {formatInrMinor(expectedMinor, { compact: true })}
+            <InfoHint
+              text={`Straight-line pace, not a forecast: ${formatInrMinor(targetMinor, {
+                compact: true,
+              })} target ÷ ${daysInMonth} days × ${dayOfMonth} days elapsed = ${formatInrMinor(
+                expectedMinor,
+                { compact: true },
+              )}. Hitting this every day lands exactly on target at month-end.`}
+            />
           </span>
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {segments.map((s) => (
@@ -251,6 +367,16 @@ export async function MonthHero() {
                 {s.label} {inrShort(s.minor)}
               </span>
             ))}
+            {projectedPct !== null && projectedMinor > 0 && (
+              <span className="flex items-center gap-1">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-0.5 rounded-full"
+                  style={{ background: "var(--good)" }}
+                />
+                forecast month-end {inrShort(projectedMinor)}
+              </span>
+            )}
           </span>
         </div>
       </div>
@@ -259,7 +385,10 @@ export async function MonthHero() {
       <div className="relative mt-5 grid grid-cols-3 gap-3 border-t border-primary-tint pt-4">
         {heroTiles.map((t) => (
           <div key={t.label}>
-            <p className="text-caption font-medium text-ink-2">{t.label}</p>
+            <p className="flex items-center gap-1 text-caption font-medium text-ink-2">
+              {t.label}
+              <InfoHint text={t.hint} />
+            </p>
             <p
               className="tnum mt-0.5 font-display text-h2 font-bold tracking-tight sm:text-xl"
               style={t.color ? { color: t.color } : undefined}

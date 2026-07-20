@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
+import { BrandLogo } from "@/components/shell/BrandLogo";
+import { fieldKindProps } from "@/components/ui/field-base";
 
 /**
  * Same two-pane shell as LoginForm (src/app/login/LoginForm.tsx) — same brand
@@ -20,6 +22,8 @@ export default function ForgotPasswordForm() {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const emailField = fieldKindProps<HTMLInputElement>("email", (e) => setEmail(e.target.value));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,12 +49,10 @@ export default function ForgotPasswordForm() {
       <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-10 w-10 flex-none place-items-center rounded-btn bg-primary text-sm font-bold text-on-accent">
-              B2
-            </span>
+            <BrandLogo className="h-10 w-10 flex-none" />
             <span className="flex flex-col leading-tight">
               <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
-              <span className="text-caption text-ink-2">Founder cockpit</span>
+              <span className="text-caption text-ink-2">Business cockpit</span>
             </span>
           </div>
           <ThemeToggle frosted />
@@ -74,12 +76,10 @@ export default function ForgotPasswordForm() {
           {/* mobile brand row (brand panel is hidden below lg) */}
           <div className="mb-6 flex items-center justify-between lg:hidden">
             <div className="flex items-center gap-2.5">
-              <span className="grid h-9 w-9 flex-none place-items-center rounded-btn bg-primary text-xs font-bold text-on-accent">
-                B2
-              </span>
+              <BrandLogo className="h-9 w-9 flex-none" />
               <span className="flex flex-col leading-tight">
                 <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-                <span className="text-caption text-ink-3">Founder cockpit</span>
+                <span className="text-caption text-ink-3">Business cockpit</span>
               </span>
             </div>
             <ThemeToggle />
@@ -107,10 +107,10 @@ export default function ForgotPasswordForm() {
               <label className="block text-xs font-semibold text-ink-2">
                 Work email
                 <input
-                  type="email"
+                  {...emailField.attrs}
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={emailField.onChange}
                   placeholder="you@b2consultants.in"
                   autoComplete="email"
                   autoFocus

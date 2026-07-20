@@ -36,6 +36,21 @@ export function signalForStudent(colour: "GREEN" | "AMBER" | "RED"): SignalLevel
 }
 
 /**
+ * Colour for a SIGNED figure — profit green, loss red, exactly zero neutral.
+ *
+ * Only for numbers where the sign carries a decision: net/gross profit, profit
+ * margin, a running balance. NEVER for always-positive figures like revenue or
+ * collections — if every number is green the colour stops meaning anything, which
+ * is the cognitive-load problem this was meant to solve. Returns `undefined` at
+ * zero so the value inherits normal ink rather than claiming a verdict.
+ */
+export function signedColor(value: number): string | undefined {
+  if (value > 0) return "var(--good)";
+  if (value < 0) return "var(--bad)";
+  return undefined;
+}
+
+/**
  * Speed-to-lead (Synamate "Speed Ratio", client notes): contacted within 5 minutes is
  * green, 6-60 minutes amber, above an hour carries no colour (plain chip).
  */

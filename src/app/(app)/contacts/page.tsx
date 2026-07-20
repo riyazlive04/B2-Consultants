@@ -13,6 +13,11 @@ import ContactsTable from "./_components/ContactsTable";
 import CompaniesTable from "./_components/CompaniesTable";
 import TasksTable from "./_components/TasksTable";
 import CustomFieldsPanel from "./_components/CustomFieldsPanel";
+import { ArchivedGroups } from "@/components/ui/ArchivedGroups";
+import { getArchivedLeads, getArchivedCompanies, getArchivedTasks } from "@/server/archive-metrics";
+import {
+  restoreLead, purgeLead, restoreCompany, purgeCompany, restoreTask, purgeTask,
+} from "@/server/contacts-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -36,23 +41,29 @@ export default async function ContactsPage({
   const session = await requireSection("contacts");
   const canConfigure = hasCapability(session.role, session.capabilities, "pipeline.configure");
 
-  const [contactsPage, filters, companies, customFields, tasks] = await Promise.all([
-    getContactsList({
-      search: searchParams.q,
-      ownerId: searchParams.owner,
-      stage: searchParams.stage,
-      source: searchParams.source,
-      city: searchParams.city,
-      dateFrom: searchParams.from,
-      dateTo: searchParams.to,
-      tagId: searchParams.tag,
-      cursor: searchParams.cursor,
-    }),
-    getContactListFilters(),
-    getCompaniesList(),
-    getContactCustomFields(),
-    getTasksList({}),
-  ]);
+  const [contactsPage, filters, companies, customFields, tasks, archLeads, archCompanies, archTasks] =
+    await Promise.all([
+      getContactsList({
+        search: searchParams.q,
+        ownerId: searchParams.owner,
+        stage: searchParams.stage,
+        source: searchParams.source,
+        city: searchParams.city,
+        dateFrom: searchParams.from,
+        dateTo: searchParams.to,
+        tagId: searchParams.tag,
+        cursor: searchParams.cursor,
+      }),
+      getContactListFilters(),
+      getCompaniesList(),
+      getContactCustomFields(),
+      getTasksList({}),
+      getArchivedLeads(),
+      getArchivedCompanies(),
+      getArchivedTasks(),
+    ]);
+  const archivedCount = archLeads.length + archCompanies.length + archTasks.length;
+  const canPurge = session.role === "ADMIN";
 
   return (
     <div className="w-full space-y-4">
@@ -69,6 +80,19 @@ export default async function ContactsPage({
           },
           { label: "Tasks", content: <TasksTable rows={tasks} owners={filters.owners} /> },
           { label: "Custom fields", content: <CustomFieldsPanel defs={customFields} canManage={canConfigure} /> },
+          {
+            label: `Archived${archivedCount ? ` (${archivedCount})` : ""}`,
+            content: (
+              <ArchivedGroups
+                canPurge={canPurge}
+                groups={[
+                  { label: "Contacts", noun: "contact", rows: archLeads, restore: restoreLead, purge: purgeLead },
+                  { label: "Companies", noun: "company", rows: archCompanies, restore: restoreCompany, purge: purgeCompany },
+                  { label: "Tasks", noun: "task", rows: archTasks, restore: restoreTask, purge: purgeTask },
+                ]}
+              />
+            ),
+          },
         ]}
       />
     </div>

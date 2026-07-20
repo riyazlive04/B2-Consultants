@@ -23,6 +23,8 @@ import { getSessionCookie } from "better-auth/cookies";
 //  - /api/resend/*    Resend delivery-status + inbound-email webhook  (Svix-signed, RESEND_WEBHOOK_SECRET)
 //  - /api/twilio/*    Twilio inbound-SMS + delivery-status webhook  (X-Twilio-Signature, TWILIO_AUTH_TOKEN)
 //  - /api/cron/*      the scheduled reminder trigger, hit by an external cron (CRON_SECRET)
+//  - /api/health      container liveness/readiness probe. Carries no data and no secret —
+//                     it reports ok/degraded only, so it needs no session and leaks nothing.
 //  - /f/*             Phase 2: publicly-hosted native forms (submit → idempotent lead-intake)
 //  - /p/*             Phase 2: publicly-hosted funnel / landing pages
 //  - /i/*             Phase 3: public invoice / estimate view + PDF (addressed by publicToken)
@@ -31,7 +33,7 @@ import { getSessionCookie } from "better-auth/cookies";
 // like /funnel, /finance, /people, /pipeline, /profile, /invite (invite is its own prefix anyway).
 const PUBLIC_PREFIXES = [
   "/book", "/invite", "/agreement",
-  "/api/leads", "/api/wati", "/api/resend", "/api/twilio", "/api/cron",
+  "/api/leads", "/api/wati", "/api/resend", "/api/twilio", "/api/cron", "/api/health",
   "/f", "/p", "/i",
   "/forgot-password", "/reset-password",
 ];

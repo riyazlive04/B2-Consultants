@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarCheck, CheckCircle2 } from "lucide-react";
 import { submitBooking } from "@/server/booking-actions";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { PhoneField } from "@/components/ui/PhoneField";
 import { INTAKE_OPTIONS } from "@/lib/booking-intake";
+import { CONSENT_LABEL, CONSENT_VALUE } from "@/lib/consent";
 import { slotTypeLabel } from "@/lib/labels";
 
 const IST_ZONE = "Asia/Kolkata";
@@ -180,13 +182,13 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
         <h2 className="font-display text-h2 font-semibold">2. Your details</h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Full name"><TextInput name="name" required placeholder="Your name" /></Field>
-          <Field label="Email"><TextInput type="email" name="email" required placeholder="you@email.com" /></Field>
-          <Field label="Phone / WhatsApp" hint="Always include the country code — +91 (India), +49 (Germany)">
-            <TextInput name="phone" required placeholder="+91… / +49…" />
+          <Field label="Full name"><TextInput kind="name" name="name" required placeholder="Your name" /></Field>
+          <Field label="Email"><TextInput kind="email" name="email" required placeholder="you@email.com" /></Field>
+          <Field label="Phone / WhatsApp" hint="Pick your country, then type your number">
+            <PhoneField name="phone" required />
           </Field>
-          <Field label="WhatsApp (if different)"><TextInput name="whatsapp" placeholder="Optional" /></Field>
-          <Field label="City"><TextInput name="city" placeholder="Your city" /></Field>
+          <Field label="WhatsApp (if different)"><PhoneField name="whatsapp" /></Field>
+          <Field label="City"><TextInput kind="city" name="city" placeholder="Your city" /></Field>
           <Field label="How did you hear about us?">
             <Select name="howKnowUs" options={withPlaceholder(INTAKE_OPTIONS.howKnowUs, "Select…")} defaultValue="" />
           </Field>
@@ -202,9 +204,10 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
         <h2 className="font-display text-h2 font-semibold">3. About your goal</h2>
         <p className="mt-0.5 text-xs text-muted">This helps us tailor the call to you.</p>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Current job title"><TextInput name="currentJobTitle" placeholder="e.g. Mechanical Engineer" /></Field>
-          <Field label="Industry"><TextInput name="prospectIndustry" placeholder="e.g. Automotive" /></Field>
-          <Field label="LinkedIn profile"><TextInput name="linkedInProfile" placeholder="Optional URL" /></Field>
+          {/* Job title / industry stay unfiltered: "Engineer II", "Industry 4.0" are real answers. */}
+          <Field label="Current job title"><TextInput kind="text" maxLength={160} name="currentJobTitle" placeholder="e.g. Mechanical Engineer" /></Field>
+          <Field label="Industry"><TextInput kind="text" maxLength={160} name="prospectIndustry" placeholder="e.g. Automotive" /></Field>
+          <Field label="LinkedIn profile"><TextInput kind="url" name="linkedInProfile" placeholder="linkedin.com/in/you" /></Field>
           <Field label="Highest education">
             <Select name="highestEducation" options={withPlaceholder(INTAKE_OPTIONS.highestEducation, "Select…")} defaultValue="" />
           </Field>
@@ -241,10 +244,10 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
         </div>
         <div className="mt-4 grid grid-cols-1 gap-4">
           <Field label="Why Germany?" hint="A sentence or two on what you're hoping for.">
-            <TextArea name="whyGermany" />
+            <TextArea kind="text" name="whyGermany" />
           </Field>
           <Field label="Anything you'd like to focus on in the call?">
-            <TextArea name="reasonForCall" />
+            <TextArea kind="text" name="reasonForCall" />
           </Field>
         </div>
       </section>
@@ -259,6 +262,23 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
         className="absolute left-[-9999px] h-0 w-0 opacity-0"
       />
       <input type="hidden" name="utm" ref={utmRef} defaultValue="" />
+
+      {/*
+        GDPR consent (spec §15). `required` gives the prospect an instant browser-native
+        message instead of a server round-trip, but it is only a courtesy — submitBooking
+        refuses unconsented submissions regardless, since a client-side attribute is not a
+        compliance control.
+      */}
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-subtle bg-surface p-4 text-sm">
+        <input
+          type="checkbox"
+          name="consent"
+          value={CONSENT_VALUE}
+          required
+          className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]"
+        />
+        <span className="text-muted">{CONSENT_LABEL}</span>
+      </label>
 
       <div className="flex flex-col items-center gap-3">
         <SubmitButton>Confirm my call</SubmitButton>

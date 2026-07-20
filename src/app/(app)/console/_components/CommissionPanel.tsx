@@ -11,9 +11,16 @@ import { Card, Hint, NumInput, SaveBar } from "./kit";
 /**
  * Commission rates editor (Founder Console → Commission).
  *
- * The three rates that Finance → Commission splits every student payment by. They were
- * hardcoded (5/3/4); now they're founder-editable and read live by getCommissionReport.
+ * Every rate the deal-team split uses lives here and nowhere else. They were hardcoded
+ * (5/3/4); they are now founder-editable and read live by getCommissionReport, which is the
+ * whole point — the founders change these without a deploy, so the spec's example numbers are
+ * a starting position, never something the code should assert.
+ *
  * Each is a percentage of the payment ACTUALLY received — a cut of real cash in, per payment.
+ *
+ * If you add a rate to commissionRulesConfigSchema, it MUST get a field here. The panel posts
+ * its whole draft, so a rate with no input is a value the founder can see the effect of but
+ * never change — the exact "code change = blocker" problem this panel exists to remove.
  */
 
 const EXAMPLE_PAYMENT = 10_000; // ₹, the worked example the founder sees under the fields
@@ -30,6 +37,21 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
 
   const rupees = (pct: number) =>
     `₹${Math.round((EXAMPLE_PAYMENT * pct) / 100).toLocaleString("en-IN")}`;
+
+  /**
+   * The cover split, shown as real money on both sides.
+   *
+   * Mirrors commission-metrics exactly: the stand-in's share is rounded and the owner takes
+   * the REMAINDER, so the two always sum to the leg. Rounding each independently would show
+   * the founder a total that the payout report never actually pays.
+   */
+  const cover = (() => {
+    const leg = Math.round((EXAMPLE_PAYMENT * draft.splitPct) / 100);
+    const substitute = Math.round((leg * draft.substitutePct) / 100);
+    const owner = leg - substitute;
+    const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+    return { substitute: fmt(substitute), owner: fmt(owner) };
+  })();
 
   async function save() {
     setBusy(true);
@@ -53,7 +75,7 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
 
       <Card>
         <div className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field
               label="Both calls — one person (%)"
               hint="Same person did the first (lead) call AND the discovery call."
@@ -90,6 +112,18 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
                 max={100}
               />
             </Field>
+            <Field
+              label="Substitute's share when covering (%)"
+              hint="Someone ran a discovery call in another person's slot. The stand-in keeps this share of that leg; the slot's owner keeps the rest. It splits the leg — it does not cost extra."
+            >
+              <NumInput
+                ariaLabel="Substitute share percentage"
+                value={draft.substitutePct}
+                onChange={(n) => patch({ substitutePct: n })}
+                min={0}
+                max={100}
+              />
+            </Field>
           </div>
 
           {/* Worked example so the numbers are tangible before saving. */}
@@ -106,6 +140,12 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
               </li>
               <li>
                 Closer runs the SSS call → <span className="font-semibold text-ink">+{rupees(draft.closerPct)}</span> on top
+              </li>
+              <li>
+                A stand-in covers a discovery slot → that{" "}
+                <span className="font-semibold text-ink">{rupees(draft.splitPct)}</span> leg becomes{" "}
+                <span className="font-semibold text-ink">{cover.substitute}</span> to the stand-in and{" "}
+                <span className="font-semibold text-ink">{cover.owner}</span> to the slot&apos;s owner
               </li>
             </ul>
           </div>

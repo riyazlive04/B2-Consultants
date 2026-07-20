@@ -27,21 +27,21 @@ function AdSetFields({ set }: { set?: GnAdSetRow }) {
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Ad spend (₹)">
-          <TextInput name="adSpend" inputMode="decimal" placeholder="0.00" defaultValue={set ? moneyInput(set.adSpend) : undefined} />
+          <TextInput kind="money" name="adSpend" placeholder="0.00" defaultValue={set ? moneyInput(set.adSpend) : undefined} />
         </Field>
         <Field label="Reach">
-          <TextInput name="reach" inputMode="numeric" placeholder="0" defaultValue={set ? String(set.reach) : undefined} />
+          <TextInput kind="int" name="reach" placeholder="0" defaultValue={set ? String(set.reach) : undefined} />
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Link clicks">
-          <TextInput name="linkClicks" inputMode="numeric" placeholder="0" defaultValue={set ? String(set.linkClicks) : undefined} />
+          <TextInput kind="int" name="linkClicks" placeholder="0" defaultValue={set ? String(set.linkClicks) : undefined} />
         </Field>
         <Field label="Attended">
-          <TextInput name="attended" inputMode="numeric" placeholder="0" defaultValue={set ? String(set.attended) : undefined} />
+          <TextInput kind="int" name="attended" placeholder="0" defaultValue={set ? String(set.attended) : undefined} />
         </Field>
         <Field label="Conversions">
-          <TextInput name="conversions" inputMode="numeric" placeholder="0" defaultValue={set ? String(set.conversions) : undefined} />
+          <TextInput kind="int" name="conversions" placeholder="0" defaultValue={set ? String(set.conversions) : undefined} />
         </Field>
       </div>
     </div>

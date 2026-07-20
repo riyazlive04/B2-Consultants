@@ -85,7 +85,7 @@ export function LogsBoard({
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-64 flex-1">
-                <TextInput name="correctionNote" required placeholder="e.g. Actually 6 calls - one logged twice" />
+                <TextInput kind="text" name="correctionNote" required placeholder="e.g. Actually 6 calls - one logged twice" />
               </div>
               <SubmitButton>Save note</SubmitButton>
               <Btn variant="ghost" onClick={() => setCorrecting(null)}>

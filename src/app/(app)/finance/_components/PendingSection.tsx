@@ -20,6 +20,7 @@ import { AmountPair } from "@/components/ui/AmountPair";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import { optionsFrom, PENDING_STATUS_LABELS, PROGRAM_LEVEL_LABELS } from "@/lib/labels";
+import { StudentName } from "@/components/ui/StudentName";
 
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
@@ -121,11 +122,11 @@ function EmiScheduleModal({
             instalment absorbs any rounding.
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="Number of instalments"><TextInput name="count" inputMode="numeric" required defaultValue="2" /></Field>
+            <Field label="Number of instalments"><TextInput kind="int" name="count" required defaultValue="2" /></Field>
             <Field label="First due date">
               <TextInput type="date" name="firstDueDate" required defaultValue={row.nextDueDate?.slice(0, 10) ?? ""} />
             </Field>
-            <Field label="Days between"><TextInput name="intervalDays" inputMode="numeric" defaultValue="30" /></Field>
+            <Field label="Days between"><TextInput kind="int" name="intervalDays" defaultValue="30" /></Field>
           </div>
           <SubmitButton>Generate schedule</SubmitButton>
         </form>
@@ -136,19 +137,28 @@ function EmiScheduleModal({
 
 export function PendingSection({
   rows,
+  studentCodeById = {},
   waStatus = {},
+  levelOptions,
   fxRate,
   fxStale,
+  fxDate,
 }: {
   rows: PendingRow[];
+  studentCodeById?: Record<string, string>;
   waStatus?: Record<string, WhatsAppStatusCell>;
+  levelOptions: { value: string; label: string }[];
   fxRate: number;
   fxStale?: boolean;
+  fxDate?: string;
 }) {
   const [editing, setEditing] = useState<PendingRow | null>(null);
   const [emiRowId, setEmiRowId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Optimistic delete: hide the row at once, restore it if the archive fails.
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
+  const visibleRows = rows.filter((r) => !removedIds.has(r.id));
   // Derive by id (not a captured row) so the modal reflects fresh instalments after a revalidate.
   const emiRow = emiRowId ? rows.find((r) => r.id === emiRowId) ?? null : null;
 
@@ -165,18 +175,35 @@ export function PendingSection({
 
   const remove = async (row: PendingRow) => {
     const ok = await askConfirm({
-      title: `Delete pending payment for ${row.studentName}?`,
-      confirmLabel: "Delete",
+      title: `Archive pending payment for ${row.studentName}?`,
+      body: "It moves to the Archived tab — you can restore it there.",
+      confirmLabel: "Archive",
       danger: true,
     });
     if (!ok) return;
-    await deletePendingPayment(row.id);
-    toast("Pending payment deleted");
+    setRemovedIds((s) => new Set(s).add(row.id)); // optimistic
+    const res = await deletePendingPayment(row.id);
+    if (!res.ok) {
+      setRemovedIds((s) => {
+        const n = new Set(s);
+        n.delete(row.id);
+        return n;
+      });
+      return toast(res.error, "error");
+    }
+    toast("Pending payment archived");
   };
 
   const columns: Column<PendingRow>[] = [
-    { key: "student", header: "Student", cell: (r) => r.studentName, value: (r) => r.studentName },
-    { key: "level", header: "Level", cell: (r) => PROGRAM_LEVEL_LABELS[r.programLevel], value: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] },
+    {
+      key: "student", header: "Student",
+      cell: (r) => <StudentName name={r.studentName} code={r.studentId ? studentCodeById[r.studentId] : null} />,
+      value: (r) =>
+        r.studentId && studentCodeById[r.studentId]
+          ? `${r.studentName} ${studentCodeById[r.studentId]}`
+          : r.studentName,
+    },
+    { key: "level", header: "Level", cell: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel, value: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel },
     { key: "fee", header: "Total fee", align: "right", cell: (r) => money2(r.totalFee), value: (r) => r.totalFee.inr / 100 },
     {
       key: "paid", header: "Paid so far", align: "right",
@@ -246,14 +273,15 @@ export function PendingSection({
         <form ref={formRef} action={submit} key={editing?.id ?? "new"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Student name">
-            <TextInput name="studentName" required defaultValue={editing?.studentName ?? ""} />
+            <TextInput kind="name" name="studentName" required defaultValue={editing?.studentName ?? ""} />
           </Field>
-          <Field label="Program level">
-            <Select name="programLevel" options={optionsFrom(PROGRAM_LEVEL_LABELS)} defaultValue={editing?.programLevel ?? "GUIDED"} />
+          <Field label="Programme level">
+            <Select name="programLevel" options={levelOptions} defaultValue={editing?.programLevel ?? "GUIDED"} />
           </Field>
           <AmountPair
             fxRate={fxRate}
             fxStale={fxStale}
+            fxDate={fxDate}
             inrName="totalFeeInr"
             eurName="totalFeeEur"
             inrLabel="Total fee agreed (₹)"
@@ -269,7 +297,7 @@ export function PendingSection({
             <Select name="status" options={optionsFrom(PENDING_STATUS_LABELS)} defaultValue={editing?.status ?? "ACTIVE"} />
           </Field>
           <Field label="Notes (optional)">
-            <TextInput name="notes" defaultValue={editing?.notes ?? ""} />
+            <TextInput kind="text" name="notes" defaultValue={editing?.notes ?? ""} />
           </Field>
         </div>
         <div className="mt-4 flex items-center gap-3">
@@ -280,7 +308,7 @@ export function PendingSection({
       </Card>
 
       <DataTable
-        rows={rows}
+        rows={visibleRows}
         columns={columns}
         csvName="pending-payments"
         filterPlaceholder="Filter pending payments…"

@@ -732,7 +732,9 @@ async function seedFinanceOps(ids: Ids) {
     push(day(1), 22000, "TEAM_SALARIES", false, "Asma", `Discovery specialist retainer — ${label}`);
     push(day(2), 32000 + i * 2500, "MARKETING", false, "Meta Ads", `${label} lead-gen campaigns`);
     push(day(3), 8000, "TOOLS_SOFTWARE", false, "WATI", "WhatsApp automation — monthly");
-    push(day(4), 4000, "TOOLS_SOFTWARE", true, "Skool", "Student community platform — monthly");
+    // NOT COGS: the community platform is billed monthly whether or not anyone
+    // enrols, so it is Tools & Software (same treatment as WATI above).
+    push(day(4), 4000, "TOOLS_SOFTWARE", false, "Skool", "Student community platform — monthly");
     push(day(5), 28000, "OPERATIONS", false, "Sirah Workspace", `${label} — rent, utilities, internet`);
     push(day(12), 15000, "CONTENT_CREATION", false, "FrameCraft Studio", `${label} reels + YouTube edit batch`);
     push(day(18), 6500, "COGS_DIRECT_DELIVERY", true, "PrintWorks", "Student welcome kits + workbooks");
@@ -756,7 +758,7 @@ async function seedFinanceOps(ids: Ids) {
       { name: "Meta Ads budget", category: "MARKETING", amountInrMinor: inr(45000), frequency: "MONTHLY", nextDueDate: daysAhead(6), isCogs: false, status: "ACTIVE" },
       { name: "Office rent + utilities", category: "OPERATIONS", amountInrMinor: inr(28000), frequency: "MONTHLY", nextDueDate: daysAhead(1), isCogs: false, status: "ACTIVE" },
       { name: "WATI subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(8000), frequency: "MONTHLY", nextDueDate: daysAhead(3), isCogs: false, status: "ACTIVE" },
-      { name: "Skool subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(4000), frequency: "MONTHLY", nextDueDate: daysAhead(11), isCogs: true, status: "ACTIVE" },
+      { name: "Skool subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(4000), frequency: "MONTHLY", nextDueDate: daysAhead(11), isCogs: false, status: "ACTIVE" },
       { name: "Professional indemnity insurance", category: "OPERATIONS", amountInrMinor: inr(21000), frequency: "QUARTERLY", nextDueDate: daysAhead(40), isCogs: false, status: "ACTIVE" },
       { name: "Zoom annual plan", category: "TOOLS_SOFTWARE", amountInrMinor: inr(24000), frequency: "ANNUAL", nextDueDate: daysAhead(120), isCogs: false, status: "ACTIVE" },
       { name: "Canva Pro (paused trial)", category: "TOOLS_SOFTWARE", amountInrMinor: inr(6000), frequency: "MONTHLY", nextDueDate: null, isCogs: false, status: "PAUSED" },

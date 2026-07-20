@@ -41,7 +41,7 @@ function WorkshopFields({ workshop }: { workshop?: GnWorkshopSummary }) {
         </Field>
       )}
       <Field label="Notes (optional)">
-        <TextArea name="notes" maxLength={2000} defaultValue={workshop?.notes ?? undefined} placeholder="Ad campaign, offer, anything worth remembering…" />
+        <TextArea kind="text" name="notes" maxLength={2000} defaultValue={workshop?.notes ?? undefined} placeholder="Ad campaign, offer, anything worth remembering…" />
       </Field>
     </div>
   );
@@ -63,7 +63,17 @@ function SeatMini({ seats }: { seats: GnWorkshopSummary["seats"] }) {
   );
 }
 
-export function WorkshopsPanel({ workshops }: { workshops: GnWorkshopSummary[] }) {
+/** `canManage` is false for a read-only viewer (HEAD): they see every workshop and
+ *  its numbers, but no create/edit/delete. Every action behind these controls is
+ *  `requireAdmin()` server-side anyway — this just stops us rendering buttons that
+ *  would only fail. */
+export function WorkshopsPanel({
+  workshops,
+  canManage = true,
+}: {
+  workshops: GnWorkshopSummary[];
+  canManage?: boolean;
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
@@ -82,9 +92,11 @@ export function WorkshopsPanel({ workshops }: { workshops: GnWorkshopSummary[] }
             and the P&amp;L.
           </p>
         </div>
-        <Btn variant="soft" icon={<Plus size={15} />} onClick={() => { setCreating((v) => !v); setError(null); }}>
-          {creating ? "Close" : "New workshop"}
-        </Btn>
+        {canManage && (
+          <Btn variant="soft" icon={<Plus size={15} />} onClick={() => { setCreating((v) => !v); setError(null); }}>
+            {creating ? "Close" : "New workshop"}
+          </Btn>
+        )}
       </div>
 
       {creating && (
@@ -109,7 +121,7 @@ export function WorkshopsPanel({ workshops }: { workshops: GnWorkshopSummary[] }
 
       {workshops.length === 0 && !creating && (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          No workshops yet — create the first intake above.
+          {canManage ? "No workshops yet — create the first intake above." : "No workshops yet."}
         </p>
       )}
 
@@ -129,31 +141,33 @@ export function WorkshopsPanel({ workshops }: { workshops: GnWorkshopSummary[] }
                 </div>
                 <p className="mt-1.5"><SeatMini seats={w.seats} /></p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <IconButton label={`Edit ${w.name}`} size="sm" onClick={() => { setEditing(w); setError(null); }}>
-                  <Pencil size={15} />
-                </IconButton>
-                <IconButton
-                  label={`Delete ${w.name}`}
-                  size="sm"
-                  tone="danger"
-                  onClick={async () => {
-                    const ok = await askConfirm({
-                      title: `Delete “${w.name}”?`,
-                      body: "Its conversions and ad-sets are removed permanently. Prefer Archive (edit → status) to close a finished workshop.",
-                      confirmLabel: "Delete forever",
-                      danger: true,
-                    });
-                    if (!ok) return;
-                    const res = await deleteWorkshop(w.id);
-                    if (!res.ok) return toast(res.error, "error");
-                    toast("Workshop deleted");
-                    refresh();
-                  }}
-                >
-                  <Trash2 size={15} />
-                </IconButton>
-              </div>
+              {canManage && (
+                <div className="flex items-center gap-1.5">
+                  <IconButton label={`Edit ${w.name}`} size="sm" onClick={() => { setEditing(w); setError(null); }}>
+                    <Pencil size={15} />
+                  </IconButton>
+                  <IconButton
+                    label={`Delete ${w.name}`}
+                    size="sm"
+                    tone="danger"
+                    onClick={async () => {
+                      const ok = await askConfirm({
+                        title: `Delete “${w.name}”?`,
+                        body: "Its conversions and ad-sets are removed permanently. Prefer Archive (edit → status) to close a finished workshop.",
+                        confirmLabel: "Delete forever",
+                        danger: true,
+                      });
+                      if (!ok) return;
+                      const res = await deleteWorkshop(w.id);
+                      if (!res.ok) return toast(res.error, "error");
+                      toast("Workshop deleted");
+                      refresh();
+                    }}
+                  >
+                    <Trash2 size={15} />
+                  </IconButton>
+                </div>
+              )}
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">

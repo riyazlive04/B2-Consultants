@@ -64,6 +64,21 @@ export async function getEmailRuntime(): Promise<EmailRuntime> {
   };
 }
 
+/**
+ * Brand header for transactional emails. Deliberately CSS-drawn, not an <img>:
+ * this app has no public asset host to serve a logo file from, and most email
+ * clients strip inline SVG — a bordered serif "B²" (the "²" via &sup2;) renders
+ * the mark reliably everywhere. Colour matches the app's --brand-indigo token.
+ */
+export function brandEmailHeader(): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 22px"><tr>
+    <td style="vertical-align:middle">
+      <span style="display:inline-block;border:2px solid #5b60c9;border-radius:7px;padding:2px 9px;font-family:Georgia,'Times New Roman',serif;font-weight:bold;font-size:18px;line-height:1.3;color:#5b60c9">B&sup2;</span>
+    </td>
+    <td style="vertical-align:middle;padding-left:10px;font-family:Inter,Arial,sans-serif;font-weight:700;font-size:16px;color:#16203A">B2 Consultants</td>
+  </tr></table>`;
+}
+
 export type SendResult = { ok: boolean; id?: string; error?: string };
 
 /** POST to Resend. Resolves a result; never throws. Caller must have checked runtime.enabled. */

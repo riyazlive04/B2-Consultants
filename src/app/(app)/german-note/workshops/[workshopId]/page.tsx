@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, BarChart3, TrendingUp, Users, Wallet } from "lucide-react";
-import { requireAdmin, requireSection } from "@/lib/rbac";
+import { requireCapability, requireSection } from "@/lib/rbac";
 import { getGnWorkshopDetail, type GnCapacityRow, type SeatLevel } from "@/server/german-note-workshops";
 import { formatMonth } from "@/lib/format";
 import { AdSetsPanel } from "../../_components/AdSetsPanel";
@@ -18,7 +18,9 @@ export const dynamic = "force-dynamic";
 
 export default async function WorkshopDetailPage({ params }: { params: { workshopId: string } }) {
   await requireSection("german-note");
-  await requireAdmin();
+  // Same key as the Financials tab that links here — otherwise a granted viewer
+  // would click a workshop and get bounced. Admin passes implicitly.
+  await requireCapability("germanNote.finance");
   const w = await getGnWorkshopDetail(params.workshopId);
   if (!w) notFound();
 
@@ -27,8 +29,8 @@ export default async function WorkshopDetailPage({ params }: { params: { worksho
   return (
     <div className="w-full space-y-8">
       <div>
-        <Link href="/german-note/manage" className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
-          <ArrowLeft size={13} /> Manage German Note
+        <Link href="/german-note" className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
+          <ArrowLeft size={13} /> German Note · Financials
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-2.5">
           <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">{w.name}</h1>

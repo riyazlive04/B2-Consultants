@@ -2,14 +2,61 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Prisma, type LeadStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck, requireSection } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
 import { majorStringToMinor, formatInrMinor, formatMonth } from "@/lib/format";
 import { LEAD_STAGE_LABELS, CALL_OUTCOME_LABELS } from "@/lib/labels";
+import { optionalRule, rule } from "@/lib/field-rules";
+import { statusForLegacyStage } from "@/lib/opportunity-status";
 import { invalidateAvgFeeCache } from "./pipeline-metrics";
+import { findDuplicateLead } from "./lead-intake";
+import { pickFirstCaller } from "./assignment";
 import { logActivity, diffFields } from "./activity-log";
+import { isKnownLevel } from "./levels";
 import type { ActionResult } from "./finance-actions";
+import { archiveData, restoreData } from "@/lib/soft-delete";
+
+/**
+ * Reverse write-through for issue 1.5: when the Pipeline board changes a lead's stage, move that
+ * lead's opportunity ON THE DEFAULT SALES PIPELINE to the column bridged to the new stage (and set
+ * its status), so `/pipeline` and `/opportunities` never show the same deal in two places. Mirror
+ * of opportunities-actions.moveOpportunity's opp→lead direction, sharing statusForLegacyStage.
+ * No-ops when the lead has no opportunity, or when no default-pipeline column is bridged to this
+ * stage; custom pipelines are a separate view and are left untouched.
+ */
+async function syncDefaultOpportunity(
+  tx: Prisma.TransactionClient,
+  leadId: string,
+  newStage: LeadStage,
+): Promise<void> {
+  const opps = await tx.opportunity.findMany({
+    where: { leadId, pipeline: { isDefault: true, deletedAt: null } },
+    select: { id: true, stageId: true, wonAt: true },
+  });
+  if (!opps.length) return;
+  const target = await tx.pipelineStage.findFirst({
+    where: { pipeline: { isDefault: true, deletedAt: null }, legacyStage: newStage, deletedAt: null },
+    select: { id: true },
+  });
+  if (!target) return;
+  const status = statusForLegacyStage(newStage);
+  const max = await tx.opportunity.aggregate({ where: { stageId: target.id }, _max: { position: true } });
+  let pos = (max._max.position ?? -1) + 1;
+  for (const o of opps) {
+    if (o.stageId === target.id) continue; // already in the right column
+    await tx.opportunity.update({
+      where: { id: o.id },
+      data: {
+        stageId: target.id,
+        status,
+        wonAt: status === "WON" ? o.wonAt ?? new Date() : null,
+        position: pos++,
+      },
+    });
+  }
+}
 
 /**
  * Pipeline entry is for Asma/Nilofer (USER) + Admin (PRD1 §5.1).
@@ -27,22 +74,18 @@ const LEAD_STAGES = [
 // Stages where the split/full-pay plan applies (deposit collected onward).
 const PAYMENT_PLAN_STAGES = new Set(["DEPOSIT_PAID", "WON"]);
 
-const PROGRAM_LEVELS = [
-  "SOLO", "GUIDED", "ELITE", "GN_A1", "GN_A2", "GN_B1", "GN_B2", "GN_BUNDLE", "OTHER",
-] as const;
-
 const leadSchema = z.object({
-  name: z.string().trim().min(1, "Lead name is required"),
-  phone: z.string().trim().min(5, "Phone / WhatsApp with country code is required"),
+  name: rule("name"),
+  phone: rule("phone"),
   leadSource: z.enum([
     "INSTAGRAM", "YOUTUBE", "LINKEDIN", "WHATSAPP", "REFERRAL", "SUMMIT", "WORKSHOP",
     "GHOSTED_BLUEPRINT", "OTHER",
   ]),
   dateIn: z.string().min(10),
   stage: z.enum(LEAD_STAGES),
-  wonLevel: z.enum(PROGRAM_LEVELS).optional().or(z.literal("")),
+  wonLevel: z.string().trim().optional().or(z.literal("")), // validated vs the live catalogue when set + Won
   paymentPlan: z.enum(["SPLIT_PAY", "FULL_PAY"]).optional().or(z.literal("")),
-  notes: z.string().trim().optional(),
+  notes: optionalRule("text"),
 });
 
 function firstError(e: z.ZodError): string {
@@ -70,6 +113,36 @@ export async function createLead(form: FormData): Promise<ActionResult> {
   if (d.stage === "WON" && !d.wonLevel) {
     return { ok: false, error: "Pick the program level this lead enrolled in (Won)" };
   }
+  if (d.wonLevel && !(await isKnownLevel(d.wonLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
+
+  // Duplicate check at the point of entry (issue 1.3) — same normalized-phone dedup the capture
+  // path uses, so the same person isn't split across two pipeline rows.
+  const dup = await findDuplicateLead({ phone: d.phone });
+  if (dup) {
+    // Re-adding someone who was ARCHIVED: restore them instead of blocking with a confusing
+    // "already exists" (the row is hidden from every active view) or splitting them into a
+    // duplicate. Respects the existing duplicate-check while handling the archive cleanly.
+    if (dup.lead.deletedAt) {
+      await prisma.lead.update({ where: { id: dup.lead.id }, data: restoreData });
+      await logActivity(session, {
+        action: "lead.restore",
+        section: "pipeline",
+        entityType: "Lead",
+        entityId: dup.lead.id,
+        summary: `Restored archived lead ${dup.lead.name} on re-entry`,
+      });
+      revalidatePath("/pipeline");
+      revalidatePath("/contacts");
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      error: `A lead with this phone number already exists — ${dup.lead.name}. Open that lead instead of adding a new one.`,
+    };
+  }
+  // Auto-assign an owner on creation (issues 1.1/1.2) via the configured first-call rotation;
+  // a rotation misconfig returns null and must never block entry.
+  const assignedToId = await pickFirstCaller().catch(() => null);
 
   const created = await prisma.$transaction(async (tx) => {
     const lead = await tx.lead.create({
@@ -83,6 +156,7 @@ export async function createLead(form: FormData): Promise<ActionResult> {
         paymentPlan: PAYMENT_PLAN_STAGES.has(d.stage) && d.paymentPlan ? d.paymentPlan : null,
         notes: d.notes || null,
         enteredById: session.user.id,
+        assignedToId,
       },
     });
     await tx.leadStageHistory.create({
@@ -118,6 +192,7 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
   if (d.stage === "WON" && !d.wonLevel) {
     return { ok: false, error: "Pick the program level this lead enrolled in (Won)" };
   }
+  if (d.wonLevel && !(await isKnownLevel(d.wonLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
 
   const data = {
     name: d.name,
@@ -125,7 +200,7 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
     leadSource: d.leadSource,
     dateIn: parseDateInput(d.dateIn),
     stage: d.stage,
-    wonLevel: d.stage === "WON" ? (d.wonLevel as (typeof PROGRAM_LEVELS)[number]) : lead.wonLevel,
+    wonLevel: d.stage === "WON" ? (d.wonLevel || null) : lead.wonLevel,
     paymentPlan: PAYMENT_PLAN_STAGES.has(d.stage) ? d.paymentPlan || lead.paymentPlan : lead.paymentPlan,
     notes: d.notes || null,
     manualOverride: lead.source !== "MANUAL" ? true : lead.manualOverride,
@@ -137,6 +212,7 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
       await tx.leadStageHistory.create({
         data: { leadId: id, fromStage: lead.stage, toStage: d.stage, changedById: session.user.id },
       });
+      await syncDefaultOpportunity(tx, id, d.stage); // keep the opp board in sync (1.5)
     }
   });
 
@@ -153,22 +229,25 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
   }
 
   revalidatePath("/pipeline");
+  revalidatePath("/opportunities"); // a stage change may have moved the linked opp (1.5)
   return { ok: true };
 }
 
+/** Delete = ARCHIVE. The lead's history/outcomes/opps survive; restore from the Archived tab. */
 export async function deleteLead(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
-  const lead = await prisma.lead.delete({ where: { id } }); // cascades outcomes + history
+  const lead = await prisma.lead.update({ where: { id }, data: archiveData(session.user.id) });
   await logActivity(session, {
-    action: "lead.delete",
+    action: "lead.archive",
     section: "pipeline",
     entityType: "Lead",
     entityId: lead.id,
-    summary: `Deleted lead ${lead.name} — ${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage}`,
+    summary: `Archived lead ${lead.name} — ${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage}`,
     meta: { stage: lead.stage, leadSource: lead.leadSource, phone: lead.phone },
   });
   revalidatePath("/pipeline");
+  revalidatePath("/contacts");
   return { ok: true };
 }
 
@@ -242,7 +321,7 @@ const outcomeSchema = z.object({
   bantNeed: z.string().optional(),
   bantTimeline: z.string().optional(),
   sssDate: z.string().optional(),
-  notes: z.string().trim().optional(),
+  notes: optionalRule("text"),
 });
 
 /**
@@ -444,5 +523,62 @@ export async function setPipelineAvgFee(form: FormData): Promise<ActionResult> {
   });
   invalidateAvgFeeCache();
   revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+/**
+ * Move one lead to a stage — the drag-and-drop pipeline's only write (Part 2 §9, §18.6).
+ *
+ * Narrow on purpose. `updateLead` takes the whole form, so reusing it for a drag would mean
+ * the board POSTing every field of a lead it never showed, and a stale card could silently
+ * revert a name someone else had just fixed. This touches `stage` and nothing else.
+ *
+ * Enforces the SAME ownership rule as updateLead — a USER may only move leads they entered —
+ * because a board is a different way to look at the pipeline, not a different set of rules.
+ * The stage-history row is written in the same transaction, so a move can never happen
+ * without its audit trail.
+ */
+export async function moveLeadStage(id: string, toStage: string): Promise<ActionResult> {
+  const session = await requireSection("pipeline");
+  if (!(LEAD_STAGES as readonly string[]).includes(toStage)) {
+    return { ok: false, error: "Unknown stage" };
+  }
+  const stage = toStage as (typeof LEAD_STAGES)[number];
+
+  const lead = await prisma.lead.findUnique({
+    where: { id },
+    select: { id: true, name: true, stage: true, enteredById: true, wonLevel: true },
+  });
+  if (!lead) return { ok: false, error: "Lead not found" };
+  if (session.role !== "ADMIN" && lead.enteredById !== session.user.id) {
+    return { ok: false, error: "You can only move leads you entered" };
+  }
+  if (lead.stage === stage) return { ok: true }; // dropped back where it started
+
+  // WON needs the program level, which a drag can't supply. Refuse rather than write a WON
+  // lead with no level — that row feeds revenue and commission, and a half-made one is worse
+  // than a card that wouldn't move.
+  if (stage === "WON" && !lead.wonLevel) {
+    return { ok: false, error: "Open the lead and pick the program level to mark it Won." };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.lead.update({ where: { id }, data: { stage } });
+    await tx.leadStageHistory.create({
+      data: { leadId: id, fromStage: lead.stage, toStage: stage, changedById: session.user.id },
+    });
+    await syncDefaultOpportunity(tx, id, stage); // keep the opp board in sync (1.5)
+  });
+
+  await logActivity(session, {
+    action: "lead.stage.move",
+    section: "pipeline",
+    entityType: "Lead",
+    entityId: id,
+    summary: `Moved ${lead.name} from ${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage} to ${LEAD_STAGE_LABELS[stage] ?? stage}`,
+    meta: { fromStage: lead.stage, toStage: stage, via: "drag_drop" },
+  });
+  revalidatePath("/pipeline");
+  revalidatePath("/opportunities"); // the linked opp may have moved (1.5)
   return { ok: true };
 }

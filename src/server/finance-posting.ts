@@ -1,4 +1,4 @@
-import { Prisma, type ExpenseCategory, type PaymentMethod, type ProgramLevel } from "@prisma/client";
+import { Prisma, type ExpenseCategory, type PaymentMethod } from "@prisma/client";
 import { eurMinorToInrMinor } from "@/lib/fx";
 import { ACCOUNT, assetAccountFor, expenseAccountFor, incomeAccountFor } from "@/lib/chart-of-accounts";
 import type { DraftEntry, DraftLine } from "./ledger-core";
@@ -67,13 +67,19 @@ export type IncomeForPosting = DualCurrencyRow & {
   id: string;
   date: Date;
   studentName: string;
-  programLevel: ProgramLevel;
+  programLevel: string; // Level.code
   paymentMethod: PaymentMethod;
   enteredById: string | null;
 };
 
-/** Dr the asset the money landed in · Cr income for the program level. */
-export function incomeEntryDraft(i: IncomeForPosting): DraftEntry {
+/**
+ * Dr the asset the money landed in · Cr income for the program level.
+ *
+ * `incomeAccounts` (code → GL account, from server/levels.ts `levelIncomeAccounts()`) honours a
+ * per-level account override. Omit it and posting falls back to the prefix rule in
+ * incomeAccountFor — correct for the seeded defaults, so the seed script needs no map.
+ */
+export function incomeEntryDraft(i: IncomeForPosting, incomeAccounts?: Map<string, string>): DraftEntry {
   return {
     date: i.date,
     narration: `Income — ${i.studentName} (${i.programLevel})`,
@@ -83,7 +89,7 @@ export function incomeEntryDraft(i: IncomeForPosting): DraftEntry {
     lines: [
       ...assetLines(i, i.paymentMethod, "debit"),
       {
-        accountCode: incomeAccountFor(i.programLevel),
+        accountCode: incomeAccountFor(i.programLevel, incomeAccounts),
         side: "credit",
         amountMinor: baseTotalMinor(i),
         currency: "INR",
@@ -185,6 +191,56 @@ function paymentAssetMethod(method: string): PaymentMethod {
  * only ever receives credits here and will trend negative over time until a follow-up
  * posts the issuance side too. That is a known, flagged gap, not a bug in this function.
  */
+export type InvoiceForIssuance = {
+  id: string;
+  issueDate: Date;
+  totalInrMinor: bigint;
+  number: string;
+  customerName: string;
+  /** the level of the linked won lead, when there is one — else revenue lands in "Other". */
+  programLevel?: string | null;
+  issuedById?: string | null;
+};
+
+/**
+ * Dr Accounts receivable (1100) · Cr Income, when an invoice is ISSUED (audit §C #22).
+ *
+ * paymentEntryDraft above only ever CREDITS 1100 (cash came in against an invoice); without a
+ * matching issuance debit, AR is one-sided and trends negative over an invoice's life. This is
+ * the missing half: recognising the revenue and the receivable the moment the invoice is issued,
+ * so a fully-paid invoice nets AR back to zero (Dr AR on issue, Cr AR on payment) and revenue is
+ * booked once, at issue, exactly like a hand-keyed Income row.
+ *
+ * Income account: an invoice has line items, not a program level, so it credits the linked won
+ * lead's level when there is one and "Income — Other" (4090) otherwise — never undefined, so the
+ * entry always balances. INR-only, like the payment side (invoices carry no EUR split).
+ */
+export function invoiceIssuanceEntryDraft(inv: InvoiceForIssuance): DraftEntry {
+  return {
+    date: inv.issueDate,
+    narration: `Invoice issued — ${inv.customerName} (${inv.number})`,
+    sourceType: "INVOICE",
+    sourceId: inv.id,
+    postedById: inv.issuedById ?? null,
+    lines: [
+      {
+        accountCode: ACCOUNT.RECEIVABLE,
+        side: "debit",
+        amountMinor: inv.totalInrMinor,
+        currency: "INR",
+        fxRate: ONE,
+      },
+      {
+        accountCode: incomeAccountFor(inv.programLevel ?? "OTHER"),
+        side: "credit",
+        amountMinor: inv.totalInrMinor,
+        currency: "INR",
+        fxRate: ONE,
+      },
+    ],
+  };
+}
+
 export function paymentEntryDraft(p: PaymentForPosting): DraftEntry {
   return {
     date: p.paidAt,

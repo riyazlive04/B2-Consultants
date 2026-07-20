@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { X } from "lucide-react";
 
 /**
  * App-wide feedback layer - one <FeedbackHost /> mounted in the shell provides:
  *   toast("Income added")            → bottom-right toast with a self-drawing ✓/✕
+ *   toastUndo("Lead archived", fn)   → a toast carrying an Undo action + a grace window
  *   askConfirm({ title, body, … })   → frosted-glass modal replacing window.confirm()
  *   celebrate()                      → confetti burst, reserved for real wins
  *                                      (payment recorded, student enrolled, streak milestone)
@@ -12,10 +14,32 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
  */
 
 type ToastKind = "success" | "error";
-type ToastMsg = { id: number; kind: ToastKind; text: string };
+export type ToastAction = { label: string; onClick: () => void };
+type ToastMsg = {
+  id: number;
+  kind: ToastKind;
+  text: string;
+  action?: ToastAction;
+  duration: number;
+  leaving?: boolean;
+};
 
-export function toast(text: string, kind: ToastKind = "success") {
-  window.dispatchEvent(new CustomEvent("app:toast", { detail: { text, kind } }));
+type ToastOptions = { action?: ToastAction; duration?: number };
+
+export function toast(text: string, kind: ToastKind = "success", opts?: ToastOptions) {
+  window.dispatchEvent(
+    new CustomEvent("app:toast", { detail: { text, kind, action: opts?.action, duration: opts?.duration } }),
+  );
+}
+
+/**
+ * The Gmail "undo send" pattern: perform the (reversible) action optimistically, then
+ * surface a toast with an Undo button and a longer grace window instead of blocking the
+ * user with a confirm dialog first. `onUndo` reverses it. Reserve this for reversible /
+ * soft-delete actions; keep askConfirm for the truly irreversible (permanent purge, void).
+ */
+export function toastUndo(text: string, onUndo: () => void, opts?: { duration?: number }) {
+  toast(text, "success", { action: { label: "Undo", onClick: onUndo }, duration: opts?.duration ?? 6000 });
 }
 
 /** Confetti for milestone moments. No-ops under prefers-reduced-motion. */
@@ -89,17 +113,46 @@ export function FeedbackHost() {
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [confirm, setConfirm] = useState<{ opts: ConfirmOptions; resolve: (v: boolean) => void } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const titleId = useId();
   const bodyId = useId();
+
+  // Flip the toast to its .toast-out state first so it slides out, then drop it from the
+  // DOM after the exit animation — a toast that just disappears reads as a glitch.
+  const startLeave = useCallback((id: number) => {
+    const timers = timersRef.current;
+    clearTimeout(timers.get(id));
+    timers.delete(id);
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 180);
+  }, []);
+
+  // (Re)start a toast's auto-dismiss timer — used on arrival and to resume after hover.
+  const arm = useCallback(
+    (id: number, ms: number) => {
+      const timers = timersRef.current;
+      clearTimeout(timers.get(id));
+      timers.set(id, setTimeout(() => startLeave(id), ms));
+    },
+    [startLeave],
+  );
+
+  const pause = useCallback((id: number) => clearTimeout(timersRef.current.get(id)), []);
 
   useEffect(() => {
     let id = 0;
     let burstId = 0;
     const onToast = (e: Event) => {
-      const { text, kind } = (e as CustomEvent).detail as { text: string; kind: ToastKind };
-      const t = { id: ++id, text, kind };
+      const { text, kind, action, duration } = (e as CustomEvent).detail as {
+        text: string;
+        kind: ToastKind;
+        action?: ToastAction;
+        duration?: number;
+      };
+      const ms = duration ?? 4000; // §5.9 default 4s; undo toasts pass ~6s
+      const t: ToastMsg = { id: ++id, text, kind, action, duration: ms };
       setToasts((prev) => [...prev.slice(-3), t]);
-      setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== t.id)), 4000); // §5.9 auto-dismiss 4s
+      arm(t.id, ms);
     };
     const onCelebrate = () => {
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -113,12 +166,15 @@ export function FeedbackHost() {
     window.addEventListener("app:toast", onToast);
     window.addEventListener("app:celebrate", onCelebrate);
     window.addEventListener("app:confirm", onConfirm);
+    const timers = timersRef.current;
     return () => {
       window.removeEventListener("app:toast", onToast);
       window.removeEventListener("app:celebrate", onCelebrate);
       window.removeEventListener("app:confirm", onConfirm);
+      timers.forEach((t) => clearTimeout(t));
+      timers.clear();
     };
-  }, []);
+  }, [arm]);
 
   const answer = useCallback(
     (v: boolean) => {
@@ -209,22 +265,54 @@ export function FeedbackHost() {
         </div>
       )}
 
-      {/* Toasts — white surface with a semantic tint */}
+      {/* Screen-reader announcements, split by urgency: an error is assertive (it
+          interrupts), a success is polite. Kept off-screen and separate from the visible
+          stack so the visual toasts can stay chronological without double-announcing. */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {[...toasts].reverse().find((t) => t.kind === "success" && !t.leaving)?.text ?? ""}
+      </div>
+      <div className="sr-only" role="alert" aria-live="assertive">
+        {[...toasts].reverse().find((t) => t.kind === "error" && !t.leaving)?.text ?? ""}
+      </div>
+
+      {/* Toasts — white surface with a semantic tint. Hovering pauses the dismiss timer
+          so a message (or an Undo action) can't slip away while it's being read. */}
       <div
-        role="status"
-        aria-live="polite"
-        className="pointer-events-none fixed bottom-5 right-5 z-[100] flex flex-col gap-2"
+        aria-hidden
+        className="pointer-events-none fixed bottom-5 right-5 z-[100] flex flex-col items-end gap-2"
       >
         {toasts.map((t) => (
           <div
             key={t.id}
+            onMouseEnter={() => pause(t.id)}
+            onMouseLeave={() => arm(t.id, Math.min(t.duration, 2500))}
             // §5.9: r-md, e-2, and a signal-coloured left bar (not e-3 / r-sm)
-            className={`toast-in pointer-events-auto flex items-center gap-2.5 rounded-btn border border-line border-l-4 bg-surface px-4 py-2.5 text-sm font-medium shadow-soft ${
+            className={`${t.leaving ? "toast-out" : "toast-in"} pointer-events-auto flex items-center gap-2.5 rounded-btn border border-line border-l-4 bg-surface px-4 py-2.5 text-sm font-medium shadow-soft ${
               t.kind === "success" ? "border-l-ok text-ok" : "border-l-risk text-risk"
             }`}
           >
             <DrawnMark kind={t.kind} />
             <span className="text-ink">{t.text}</span>
+            {t.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  t.action!.onClick();
+                  startLeave(t.id);
+                }}
+                className="ml-1 flex-none rounded-btn px-2 py-1 text-xs font-semibold text-primary-strong transition-colors hover:bg-primary-soft"
+              >
+                {t.action.label}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={() => startLeave(t.id)}
+              className="ml-0.5 grid h-6 w-6 flex-none place-items-center rounded-btn text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+            >
+              <X size={14} />
+            </button>
           </div>
         ))}
       </div>

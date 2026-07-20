@@ -384,6 +384,15 @@ export const commissionRulesConfigSchema = z.object({
   bothCallsPct: z.number().min(0).max(100),
   splitPct: z.number().min(0).max(100),
   closerPct: z.number().min(0).max(100),
+  /**
+   * The stand-in's share of a covered leg (spec Part 2 §7.1: "the substitute keeps 20%, the
+   * original owner keeps 80% of that portion — configurable"). Applies ONLY to a leg whose
+   * DiscoveryOutcome names a `coveredForId`; the owner takes the remainder (100 − this).
+   *
+   * It splits the leg, it does not add to it: a covered discovery still costs the business
+   * splitPct of the payment, just divided between two people.
+   */
+  substitutePct: z.number().min(0).max(100).default(20),
 });
 
 export type CommissionRulesConfig = z.infer<typeof commissionRulesConfigSchema>;
@@ -392,11 +401,123 @@ export const DEFAULT_COMMISSION_RULES_CONFIG: CommissionRulesConfig = {
   bothCallsPct: 5,
   splitPct: 3,
   closerPct: 4,
+  substitutePct: 20,
 };
 
 export function coerceCommissionRulesConfig(value: unknown): CommissionRulesConfig {
   const parsed = commissionRulesConfigSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_COMMISSION_RULES_CONFIG;
+}
+
+// ───────────────────────────── tutor fee ─────────────────────────────
+
+/**
+ * What we owe a tutor for running a batch (spec Part 2 §5), founder-editable via
+ * AppSetting("tutorFee"). The rate is driven by BATCH SIZE, not by level:
+ *
+ *     rate = (students >= thresholdStudents) ? atOrAbove : below
+ *
+ * and it is charged PER HEAD per level, so a 5-student A1 batch costs 5 × ₹7,000. A thin
+ * batch pays the tutor more per head — the founder's stated volume tradeoff, not a typo.
+ *
+ * Rates are per-level because Part 2 §5 says they are "configurable and can differ per
+ * level"; they default flat to the only two numbers the founder actually stated (§18.2
+ * left the full per-level table open, so inventing one here would be fiction).
+ *
+ * Rates are WHOLE RUPEES — this is what the founder types into the console. Callers in
+ * lib/tutor-fee.ts convert to paise; nothing else should do that arithmetic itself.
+ *
+ * NOT the same thing as GN_LEVEL_COST.tutor in lib/gn-workshop-pricing.ts. That is a
+ * per-conversion COGS figure reconciled against the founders' PDF workbook and answers
+ * "what did this sale cost to deliver". This answers "what do we pay the tutor to run this
+ * batch". They are kept apart until §18.2 is settled — merging them would silently restate
+ * historical workshop P&L.
+ */
+export const TUTOR_FEE_LEVELS = ["A1", "A2", "B1"] as const;
+export type TutorFeeLevel = (typeof TUTOR_FEE_LEVELS)[number];
+
+const tutorFeeBandSchema = z.object({
+  atOrAbove: z.number().int().min(0).max(10_000_000),
+  below: z.number().int().min(0).max(10_000_000),
+});
+
+export const tutorFeeConfigSchema = z.object({
+  thresholdStudents: z.number().int().min(1).max(100),
+  ratesByLevel: z.object({
+    A1: tutorFeeBandSchema,
+    A2: tutorFeeBandSchema,
+    B1: tutorFeeBandSchema,
+  }),
+});
+
+export type TutorFeeConfig = z.infer<typeof tutorFeeConfigSchema>;
+
+export const DEFAULT_TUTOR_FEE_CONFIG: TutorFeeConfig = {
+  thresholdStudents: 5,
+  ratesByLevel: {
+    A1: { atOrAbove: 7000, below: 8000 },
+    A2: { atOrAbove: 7000, below: 8000 },
+    B1: { atOrAbove: 7000, below: 8000 },
+  },
+};
+
+export function coerceTutorFeeConfig(value: unknown): TutorFeeConfig {
+  const parsed = tutorFeeConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_TUTOR_FEE_CONFIG;
+}
+
+// ───────────────────────────── book orders ─────────────────────────────
+
+/**
+ * When to place a book order with the publisher (spec §9.2, Part 2 §4.4), founder-editable
+ * via AppSetting("bookOrders").
+ *
+ *   pay ≥ orderThreshold up front  → order now
+ *   anything less (i.e. on EMI)    → defer until they've paid enough
+ *
+ * The threshold is config rather than a constant because ₹30,000 was an EXAMPLE the founders
+ * gave on the call, and Part 2 §18.3 lists the precise figure as still open. Encoding the
+ * example as law would quietly make an unconfirmed number authoritative.
+ *
+ * `orderThresholdInrMinor` is paise, like every other amount.
+ */
+export const bookOrderConfigSchema = z.object({
+  orderThresholdInrMinor: z.number().int().min(0),
+  /** Order A1's books first and re-quote before each later level (§19.3). */
+  requireFreshQuotePerLevel: z.boolean().default(true),
+});
+
+export type BookOrderConfig = z.infer<typeof bookOrderConfigSchema>;
+
+export const DEFAULT_BOOK_ORDER_CONFIG: BookOrderConfig = {
+  orderThresholdInrMinor: 3_000_000, // ₹30,000 — the spec's example, pending §18.3
+  requireFreshQuotePerLevel: true,
+};
+
+export function coerceBookOrderConfig(value: unknown): BookOrderConfig {
+  const parsed = bookOrderConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_BOOK_ORDER_CONFIG;
+}
+
+// ───────────────────────────── pipeline mode ─────────────────────────────
+
+/**
+ * Rules-driven vs drag-and-drop pipeline (spec Part 2 §9, §18.6 — the founders were offered
+ * both and hadn't picked). Config, not a schema change: the same Pipeline data renders either
+ * way, so this only decides who moves a card — a rule, or a hand.
+ */
+export const pipelineConfigSchema = z.object({
+  mode: z.enum(["rules", "drag_drop"]),
+});
+
+export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;
+
+/** Rules is the shipped behaviour, so it stays the default — the toggle is opt-in. */
+export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = { mode: "rules" };
+
+export function coercePipelineConfig(value: unknown): PipelineConfig {
+  const parsed = pipelineConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_PIPELINE_CONFIG;
 }
 
 // ───────────────────────────── saved countersignature ─────────────────────────────
@@ -614,3 +735,120 @@ export function coerceSssConfig(value: unknown): SssConfig {
 export const goalMetricSchema = z.enum(GOAL_METRICS as unknown as [string, ...string[]]);
 export const goalScopeSchema = z.enum(["COMPANY", "USER"]);
 export const goalPeriodSchema = z.enum(["MONTH", "QUARTER", "YEAR"]);
+
+// ───────────────────────── daily maintenance (housekeeping cron) ─────────────────────────
+
+/**
+ * The once-a-day housekeeping the app never had a clock to run (audit §C #18/#19/#21).
+ * Founder-editable via AppSetting("maintenanceConfig"), same lazy-default pattern as every
+ * config above. Read by `server/daily-maintenance.ts`, ticked by /api/cron/daily.
+ *
+ *   fxPrewarm     — warm the day's INR/EUR rate before a user request pays the fetch latency
+ *                   (lib/fx.getTodayInrPerEur). Purely a cache-warm; ships ON because it can
+ *                   never do anything but avoid a stall.
+ *   overdueSweep  — flip SENT invoices and DUE instalments to OVERDUE once their due date has
+ *                   passed. Non-destructive status correctness; ships ON. PARTIAL invoices are
+ *                   left alone on purpose — the status column can't hold "partly-paid AND late".
+ *   retention     — hard-delete aged growth rows older than the window. This DELETES data, so it
+ *                   ships OFF and every window defaults generously. 0 days on any line means
+ *                   "keep forever" (that line is skipped). Append-only audit tables (daily logs,
+ *                   stage/milestone/signal history, the hash-chained audit trail) are NEVER
+ *                   touched — only WhatsApp message rows and expired, unaccepted user invites.
+ */
+const retentionDays = z.number().int().min(0).max(3650);
+
+export const maintenanceConfigSchema = z.object({
+  fxPrewarm: z.object({ enabled: z.boolean() }),
+  overdueSweep: z.object({ enabled: z.boolean() }),
+  retention: z.object({
+    enabled: z.boolean(),
+    whatsAppMessageDays: retentionDays,
+    expiredInviteDays: retentionDays,
+  }),
+});
+
+export type MaintenanceConfig = z.infer<typeof maintenanceConfigSchema>;
+
+export const DEFAULT_MAINTENANCE_CONFIG: MaintenanceConfig = {
+  fxPrewarm: { enabled: true },
+  overdueSweep: { enabled: true },
+  retention: { enabled: false, whatsAppMessageDays: 365, expiredInviteDays: 30 },
+};
+
+export function coerceMaintenanceConfig(value: unknown): MaintenanceConfig {
+  const parsed = maintenanceConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_MAINTENANCE_CONFIG;
+}
+
+// ───────────────────────── scheduled report email ─────────────────────────
+
+/**
+ * "Email me the numbers" — a founder digest delivered on a cadence over the existing Resend
+ * seam (lib/email.ts). Founder-editable via AppSetting("scheduledReport"). Read + sent by
+ * `server/scheduled-report.ts` from the daily cron, guarded so it fires exactly once per period.
+ *
+ * Ships OFF (it sends real email). recipients are validated as addresses; an empty list is a
+ * no-op even when enabled, so turning it on without a recipient can't blast anyone. sendAtMinutes
+ * is an IST minute-of-day: the digest goes out on the first cron tick at/after that time on the
+ * due day. weekday is 1..7 (Mon..Sun, ISO) for WEEKLY; monthday is 1..28 for MONTHLY.
+ */
+const emailAddress = z
+  .string()
+  .trim()
+  .regex(/^[^@\s]+@[^@\s]+\.[^@\s]+$/, "Enter a valid email address");
+
+export const scheduledReportConfigSchema = z.object({
+  enabled: z.boolean(),
+  cadence: z.enum(["WEEKLY", "MONTHLY"]),
+  recipients: z.array(emailAddress).max(10),
+  weekday: z.number().int().min(1).max(7),
+  monthday: z.number().int().min(1).max(28),
+  sendAtMinutes: istMinuteOfDay,
+});
+
+export type ScheduledReportConfig = z.infer<typeof scheduledReportConfigSchema>;
+
+export const DEFAULT_SCHEDULED_REPORT_CONFIG: ScheduledReportConfig = {
+  enabled: false,
+  cadence: "WEEKLY",
+  recipients: [],
+  weekday: 1, // Monday
+  monthday: 1,
+  sendAtMinutes: 9 * 60, // 9:00 AM IST
+};
+
+export function coerceScheduledReportConfig(value: unknown): ScheduledReportConfig {
+  const parsed = scheduledReportConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_SCHEDULED_REPORT_CONFIG;
+}
+
+// ───────────────────────── finance posting (ledger) ─────────────────────────
+
+/**
+ * Two accounting-correctness switches, both OFF by default because they post to the real
+ * double-entry ledger (audit §C #22/#23). Founder-editable via AppSetting("financePosting").
+ *
+ *   invoiceIssuancePosting — post Dr Accounts-receivable / Cr Income when an invoice is issued,
+ *     so AR is two-sided instead of only ever being credited by payments (finance-posting.ts's
+ *     documented gap). Read by `server/invoice-posting.ts`.
+ *   commissionAccrual — when a commission payout run is recorded, also post Dr Team-salaries /
+ *     Cr Accounts-payable for the month's total (an accrual, NOT a cash payment — so it never
+ *     asserts money left the bank). Read by `server/commission-actions.ts`. With this OFF the
+ *     payout run is still recorded as a snapshot; only the ledger posting is withheld.
+ */
+export const financePostingConfigSchema = z.object({
+  invoiceIssuancePosting: z.object({ enabled: z.boolean() }),
+  commissionAccrual: z.object({ enabled: z.boolean() }),
+});
+
+export type FinancePostingConfig = z.infer<typeof financePostingConfigSchema>;
+
+export const DEFAULT_FINANCE_POSTING_CONFIG: FinancePostingConfig = {
+  invoiceIssuancePosting: { enabled: false },
+  commissionAccrual: { enabled: false },
+};
+
+export function coerceFinancePostingConfig(value: unknown): FinancePostingConfig {
+  const parsed = financePostingConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_FINANCE_POSTING_CONFIG;
+}

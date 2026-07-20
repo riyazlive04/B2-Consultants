@@ -8,14 +8,18 @@ import { requireSection, capabilityCheck } from "@/lib/rbac";
 import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
 import { formatEurMinor, formatInrMinor, majorStringToMinor } from "@/lib/format";
 import { parseDateInput } from "@/lib/dates";
+import { optionalRule, rule } from "@/lib/field-rules";
 import { emitTrigger } from "./automation";
 import { appendAudit, LedgerError, postEntry } from "./ledger";
 import { paymentEntryDraft } from "./finance-posting";
 import { getInvoicePdfData } from "./payments-metrics";
 import { renderInvoicePdf } from "@/documents/invoice-pdf";
-import { getEmailRuntime, sendResendEmail } from "@/lib/email";
+import { brandEmailHeader, getEmailRuntime, sendResendEmail } from "@/lib/email";
 import { logActivity, diffFields } from "./activity-log";
+import { syncPaymentIncome } from "./finance-autopost";
+import { syncInvoiceIssuance } from "./invoice-posting";
 import type { ActionResult } from "./finance-actions";
+import { archiveData, restoreData } from "@/lib/soft-delete";
 
 /** Payments (Synamate "Payments"): products, invoices/estimates, manual payments, subscriptions.
  *  No processor is wired — statuses advance manually. Gated to the `payments` section; deletes
@@ -81,10 +85,11 @@ function invoiceDiffShape(row: Invoice) {
 // ─────────────────────────── Products ───────────────────────────
 
 const productSchema = z.object({
-  name: z.string().trim().min(1, "Product name is required"),
-  description: z.string().trim().optional(),
-  priceInr: z.string().trim().optional(),
-  priceEur: z.string().trim().optional(),
+  // Free text, not rule("name"): "Level 2 Bundle" is a product, not a person.
+  name: rule("text").pipe(z.string().min(1, "Product name is required")),
+  description: optionalRule("text"),
+  priceInr: optionalRule("money"),
+  priceEur: optionalRule("money"),
   interval: z.enum(INTERVALS),
   active: z.string().optional(),
 });
@@ -163,20 +168,60 @@ export async function updateProduct(id: string, form: FormData): Promise<ActionR
   return { ok: true };
 }
 
+/** Delete = ARCHIVE. Subscriptions keep their productId (still resolvable). */
 export async function deleteProduct(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
-  const row = await prisma.product.delete({ where: { id } });
+  const row = await prisma.product.update({ where: { id }, data: archiveData(session.user.id) });
 
   await logActivity(session, {
-    action: "payments.product.delete",
+    action: "payments.product.archive",
     section: "payments",
     entityType: "Product",
     entityId: row.id,
-    summary: `Deleted the product "${row.name}"`,
+    summary: `Archived the product "${row.name}"`,
     meta: { priceInrMinor: row.priceInrMinor.toString(), interval: row.interval },
   });
 
+  revalidatePath("/payments");
+  return { ok: true };
+}
+
+/** Restore an archived product. */
+export async function restoreProduct(id: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
+  const existing = await prisma.product.findUnique({ where: { id }, select: { name: true, deletedAt: true } });
+  if (!existing) return { ok: false, error: "Product not found" };
+  if (!existing.deletedAt) return { ok: false, error: "This product is not archived" };
+  await prisma.product.update({ where: { id }, data: restoreData });
+  await logActivity(session, {
+    action: "payments.product.restore",
+    section: "payments",
+    entityType: "Product",
+    entityId: id,
+    summary: `Restored the product "${existing.name}"`,
+  });
+  revalidatePath("/payments");
+  return { ok: true };
+}
+
+/** Permanent delete — only from the Archived tab. Subscription.productId → null (SetNull). */
+export async function purgeProduct(id: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
+  const existing = await prisma.product.findUnique({ where: { id }, select: { name: true, deletedAt: true } });
+  if (!existing) return { ok: false, error: "Product not found" };
+  if (!existing.deletedAt) return { ok: false, error: "Archive it first" };
+  await prisma.product.delete({ where: { id } });
+  await logActivity(session, {
+    action: "payments.product.purge",
+    section: "payments",
+    entityType: "Product",
+    entityId: id,
+    summary: `Permanently deleted the archived product "${existing.name}"`,
+    meta: { hard: true },
+  });
   revalidatePath("/payments");
   return { ok: true };
 }
@@ -222,18 +267,46 @@ async function nextNumber(tx: TxClient, kind: InvoiceKind): Promise<string> {
   return `${prefix}-${String(max + 1).padStart(4, "0")}`;
 }
 
-function validatePayload(p: InvoicePayload): string | null {
-  if (!p.customerName?.trim()) return "Customer name is required";
-  if (!p.items.length) return "Add at least one line item";
-  if (p.items.some((it) => !it.description.trim())) return "Every line item needs a description";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(p.issueDate)) return "Invalid issue date";
-  return null;
-}
+/**
+ * createInvoice/updateInvoice take a JSON payload rather than FormData, so NOTHING here has been
+ * near the browser's field filters by the time it lands — a crafted call could set taxPercent to
+ * 10_000 or paste a novel into a line item. Re-check the whole shape against the same rules the
+ * client filters on (lib/field-rules). Replaces the old hand-rolled validatePayload, which checked
+ * only the customer name, the item count and the issue date — taxPercent reached Prisma unchecked.
+ */
+const invoicePayloadSchema = z.object({
+  kind: z.enum(["INVOICE", "ESTIMATE"]),
+  leadId: z.string().trim().optional(),
+  customerName: rule("name"),
+  customerEmail: optionalRule("email"),
+  customerPhone: optionalRule("phone"),
+  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid issue date"),
+  dueDate: z.string().trim().optional(),
+  items: z
+    .array(
+      z.object({
+        // Free text, not rule("name"): "Level 2 Bundle" is a legitimate line item.
+        description: rule("text").pipe(z.string().min(1, "Every line item needs a description")),
+        quantity: z.coerce.number().int().min(1, "Quantity must be at least 1").max(9999),
+        // `?? ""` so the type stays a plain string — computeTotals/majorStringToMinor take one.
+        unitPriceInr: optionalRule("money").transform((v) => v ?? ""),
+      }),
+    )
+    .min(1, "Add at least one line item"),
+  discountInr: optionalRule("money"),
+  taxPercent: z.coerce
+    .number()
+    .min(0, "Tax % can't be negative")
+    .max(100, "Tax % must be 100 or less")
+    .optional(),
+  notes: optionalRule("text"),
+});
 
-export async function createInvoice(payload: InvoicePayload): Promise<ActionResult> {
+export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> {
   const session = await requireSection("payments");
-  const err = validatePayload(payload);
-  if (err) return { ok: false, error: err };
+  const parsedPayload = invoicePayloadSchema.safeParse(raw);
+  if (!parsedPayload.success) return { ok: false, error: firstError(parsedPayload.error) };
+  const payload = parsedPayload.data;
   const fx = await getTodayInrPerEur();
   const discount = payload.discountInr?.trim() ? majorStringToMinor(payload.discountInr) : 0n;
   const t = computeTotals(payload.items, discount, payload.taxPercent ?? 0, fx.rate);
@@ -294,10 +367,11 @@ export async function createInvoice(payload: InvoicePayload): Promise<ActionResu
   return { ok: true };
 }
 
-export async function updateInvoice(id: string, payload: InvoicePayload): Promise<ActionResult> {
+export async function updateInvoice(id: string, raw: InvoicePayload): Promise<ActionResult> {
   const session = await requireSection("payments");
-  const err = validatePayload(payload);
-  if (err) return { ok: false, error: err };
+  const parsedPayload = invoicePayloadSchema.safeParse(raw);
+  if (!parsedPayload.success) return { ok: false, error: firstError(parsedPayload.error) };
+  const payload = parsedPayload.data;
   const fx = await getTodayInrPerEur();
   const discount = payload.discountInr?.trim() ? majorStringToMinor(payload.discountInr) : 0n;
   const t = computeTotals(payload.items, discount, payload.taxPercent ?? 0, fx.rate);
@@ -386,26 +460,86 @@ export async function setInvoiceStatus(id: string, status: string): Promise<Acti
     }
   }
 
+  // Keep the ledger's issuance entry (Dr AR / Cr Income) in step with the new status — post it on
+  // the way into an issued state, reverse it if the invoice fell back to DRAFT or VOID. No-op unless
+  // financePosting.invoiceIssuancePosting is on (audit §C #22).
+  await syncInvoiceIssuance(id, session.user.id);
+
   revalidatePath("/payments");
   revalidatePath(`/payments/${id}`);
+  revalidatePath("/ledger");
   return { ok: true };
 }
 
+/**
+ * Delete = ARCHIVE. Hides the invoice; its payments and auto-posted Income mirror stay (received
+ * money is real, and this is reversible). The full income cleanup runs on purge only.
+ */
 export async function deleteInvoice(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
-  const row = await prisma.invoice.delete({ where: { id } });
-
+  const row = await prisma.invoice.update({ where: { id }, data: archiveData(session.user.id) });
   await logActivity(session, {
-    action: row.kind === "ESTIMATE" ? "payments.estimate.delete" : "payments.invoice.delete",
+    action: row.kind === "ESTIMATE" ? "payments.estimate.archive" : "payments.invoice.archive",
     section: "payments",
     entityType: "Invoice",
     entityId: row.id,
-    summary: `Deleted ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} — ${formatInrMinor(row.totalInrMinor)}`,
+    summary: `Archived ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} — ${formatInrMinor(row.totalInrMinor)}`,
     meta: { kind: row.kind, number: row.number, totalInrMinor: row.totalInrMinor.toString(), status: row.status },
   });
-
   revalidatePath("/payments");
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
+/** Restore an archived invoice/estimate. */
+export async function restoreInvoice(id: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
+  const existing = await prisma.invoice.findUnique({
+    where: { id },
+    select: { number: true, kind: true, customerName: true, deletedAt: true },
+  });
+  if (!existing) return { ok: false, error: "Invoice not found" };
+  if (!existing.deletedAt) return { ok: false, error: "This invoice is not archived" };
+  await prisma.invoice.update({ where: { id }, data: restoreData });
+  await logActivity(session, {
+    action: existing.kind === "ESTIMATE" ? "payments.estimate.restore" : "payments.invoice.restore",
+    section: "payments",
+    entityType: "Invoice",
+    entityId: id,
+    summary: `Restored ${existing.kind === "ESTIMATE" ? "estimate" : "invoice"} ${existing.number} for ${existing.customerName}`,
+    meta: { kind: existing.kind, number: existing.number },
+  });
+  revalidatePath("/payments");
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
+/**
+ * Permanent delete — only from the Archived tab. Cascades line items + payments and removes each
+ * payment's auto-posted Income mirror so no phantom revenue is left behind (the original delete
+ * behaviour, now the true end-of-life step).
+ */
+export async function purgeInvoice(id: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
+  const existing = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true } });
+  if (!existing) return { ok: false, error: "Invoice not found" };
+  if (!existing.deletedAt) return { ok: false, error: "Archive it first" };
+  const payments = await prisma.invoicePayment.findMany({ where: { invoiceId: id }, select: { id: true } });
+  const row = await prisma.invoice.delete({ where: { id } });
+  for (const p of payments) await syncPaymentIncome(null, p.id);
+  await logActivity(session, {
+    action: row.kind === "ESTIMATE" ? "payments.estimate.purge" : "payments.invoice.purge",
+    section: "payments",
+    entityType: "Invoice",
+    entityId: row.id,
+    summary: `Permanently deleted the archived ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number}`,
+    meta: { kind: row.kind, number: row.number, hard: true },
+  });
+  revalidatePath("/payments");
+  revalidatePath("/finance");
   return { ok: true };
 }
 
@@ -417,6 +551,7 @@ function publicInvoiceUrl(token: string): string {
 function invoiceEmailHtml(opts: { customerName: string; noun: string; number: string; totalDisplay: string; url: string }): string {
   const first = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
   return `<div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#16203A;line-height:1.6">
+    ${brandEmailHeader()}
     <p>Hi ${first},</p>
     <p>Please find your ${opts.noun.toLowerCase()} <strong>${opts.number}</strong> (${opts.totalDisplay}) attached.</p>
     <p>You can also view and download it online: <a href="${opts.url}" style="color:#3762F0">${opts.url}</a></p>
@@ -486,6 +621,10 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
 
   await prisma.invoice.update({ where: { id }, data: { status: "SENT", sentAt: new Date() } });
 
+  // Issuing = recognising the revenue + receivable on the ledger (audit §C #22). No-op unless the
+  // flag is on; best-effort, so a posting hiccup never blocks the send.
+  await syncInvoiceIssuance(inv.id, session.user.id);
+
   // The summary carries `message` because the status flip and actual delivery can disagree —
   // the founder needs to see which one happened.
   await logActivity(session, {
@@ -511,10 +650,13 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
  */
 export async function recordPayment(invoiceId: string, form: FormData): Promise<ActionResult> {
   const session = await requireSection("payments");
-  const amountRaw = String(form.get("amountInr") ?? "").trim();
-  if (!/^\d{1,12}(\.\d{0,2})?$/.test(amountRaw)) return { ok: false, error: "Enter a valid amount" };
+  const amount = rule("money").safeParse(String(form.get("amountInr") ?? ""));
+  if (!amount.success) return { ok: false, error: firstError(amount.error) };
+  const amountRaw = amount.data;
   const method = String(form.get("method") ?? "cash").trim() || "cash";
-  const reference = String(form.get("reference") ?? "").trim() || null;
+  const ref = optionalRule("text").safeParse(String(form.get("reference") ?? ""));
+  if (!ref.success) return { ok: false, error: firstError(ref.error) };
+  const reference = ref.data ?? null;
   const amountInrMinor = majorStringToMinor(amountRaw);
 
   let paidLeadId: string | null = null;
@@ -580,12 +722,25 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
         invoiceStatus: r.status,
       },
     });
+
+    // Auto-post the collection to Finance as Income (user request) so it lands on the P&L / LTV.
+    const fx = await getTodayInrPerEur();
+    await syncPaymentIncome(
+      { id: r.paymentId, amountInrMinor, fxRateUsed: fx.rate, studentName: r.customerName, method, paidOn: new Date() },
+      r.paymentId,
+    );
+
+    // Ensure the invoice's issuance entry exists before its payment credits AR — a payment recorded
+    // against an invoice that was never explicitly "sent" would otherwise leave AR one-sided again
+    // (audit §C #22). No-op unless the flag is on; idempotent.
+    await syncInvoiceIssuance(invoiceId, session.user.id);
   }
 
   if (paidLeadId) await emitTrigger("INVOICE_PAID", { leadId: paidLeadId });
   revalidatePath("/payments");
   revalidatePath(`/payments/${invoiceId}`);
   revalidatePath("/ledger");
+  revalidatePath("/finance");
   return { ok: true };
 }
 
@@ -650,10 +805,10 @@ export async function convertEstimate(id: string): Promise<ActionResult> {
 
 const subSchema = z.object({
   leadId: z.string().trim().optional(),
-  customerName: z.string().trim().min(1, "Customer name is required"),
+  customerName: rule("name"),
   productId: z.string().trim().optional(),
-  amountInr: z.string().trim().optional(),
-  amountEur: z.string().trim().optional(),
+  amountInr: optionalRule("money"),
+  amountEur: optionalRule("money"),
   interval: z.enum(INTERVALS),
   nextBillingDate: z.string().trim().optional(),
 });

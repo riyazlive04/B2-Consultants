@@ -71,7 +71,9 @@ function LogCallModal({ lead, onClose }: { lead: DeskLead; onClose: () => void }
           <Select name="outcome" options={OUTCOME_OPTIONS} defaultValue="SPOKE" />
         </Field>
         <Field label="Notes (optional)">
-          <TextInput name="notes" maxLength={500} placeholder="What did they say?" />
+          {/* An explicit 500 to match callSchema's cap — the caller's maxLength wins over
+              kind="text"'s 2000, so the field can't outrun what the action will accept. */}
+          <TextInput kind="text" name="notes" maxLength={500} placeholder="What did they say?" />
         </Field>
         <div className="flex items-center justify-between gap-3">
           <FormError message={error} />

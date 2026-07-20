@@ -98,8 +98,9 @@ export default function ProductsTab({
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? "Edit product" : "New product"} size="sm">
         <form action={submit} key={editing?.id ?? "new"} className="space-y-4">
-          <Field label="Name"><TextInput name="name" required defaultValue={editing?.name ?? ""} /></Field>
-          <Field label="Description"><TextArea name="description" rows={2} defaultValue={editing?.description ?? ""} /></Field>
+          {/* Free text, not kind="name": "Level 2 Bundle" is a product, not a person. */}
+          <Field label="Name"><TextInput kind="text" name="name" required defaultValue={editing?.name ?? ""} /></Field>
+          <Field label="Description"><TextArea kind="text" name="description" rows={2} defaultValue={editing?.description ?? ""} /></Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <AmountPair
               fxRate={fxRate}

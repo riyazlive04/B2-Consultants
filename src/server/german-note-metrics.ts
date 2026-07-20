@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { resolveWatchTruth } from "@/lib/video-progress";
 import type { AppRole } from "@/lib/rbac";
 
 /**
@@ -138,7 +139,12 @@ export type GnRecordingRow = {
   embedUrl: string;
   notes: string | null;
   postedByName: string | null;
+  /** Completion, resolved by lib/video-progress: tracking wins over the tick (spec §10.3). */
   watched: boolean;
+  /** Tracked %, or null when the provider reports nothing. */
+  watchedPct: number | null;
+  /** They ticked it, but the tracking says otherwise — the case the founders want visible. */
+  disputed: boolean;
 };
 
 /** A Classroom section: a real module, or the synthetic "Class recordings" bucket (id null). */
@@ -566,7 +572,10 @@ export const getGnBatchDetail = cache(
           orderBy: [{ classDate: "asc" }, { createdAt: "asc" }],
           include: {
             postedBy: { select: { name: true } },
-            watches: { where: { userId }, select: { id: true } },
+            watches: {
+              where: { userId },
+              select: { id: true, selfReported: true, watchedPct: true },
+            },
           },
         },
       },
@@ -590,7 +599,16 @@ export const getGnBatchDetail = cache(
       embedUrl: r.embedUrl,
       notes: r.notes,
       postedByName: r.postedBy?.name ?? null,
-      watched: r.watches.length > 0,
+      // A watch row no longer implies "watched" — tracking may exist with no tick, and a tick
+      // may be contradicted by tracking. resolveWatchTruth is the single place that decides.
+      ...(() => {
+        const w = r.watches[0];
+        const truth = resolveWatchTruth({
+          watchedPct: w?.watchedPct ?? null,
+          selfReported: w?.selfReported ?? false,
+        });
+        return { watched: truth.complete, watchedPct: truth.pct, disputed: truth.disputed };
+      })(),
     }));
 
     // Build Classroom sections: each module (ordered) with its lessons, then a

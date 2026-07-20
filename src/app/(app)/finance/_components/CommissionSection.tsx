@@ -15,7 +15,7 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
     { key: "date", header: "Payment date", cell: (r) => formatDate(r.date), value: (r) => r.date.slice(0, 10) },
     { key: "student", header: "Student", cell: (r) => r.studentName, value: (r) => r.studentName },
     {
-      key: "level", header: "Program",
+      key: "level", header: "Programme",
       cell: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel,
       value: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel,
     },
@@ -25,7 +25,24 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
       value: (r) => r.amountInrMinor,
     },
     { key: "first", header: "First call", cell: (r) => r.firstCaller ?? "-", value: (r) => r.firstCaller ?? "" },
-    { key: "disco", header: "Discovery call", cell: (r) => r.discoveryCaller ?? "-", value: (r) => r.discoveryCaller ?? "" },
+    {
+      key: "disco", header: "Discovery call",
+      cell: (r) => (
+        <span className="inline-flex items-center gap-1">
+          {r.discoveryCaller ?? "-"}
+          {r.offDayReview && (
+            <span
+              className="cursor-help rounded-full bg-watch-soft px-1.5 text-caption font-semibold text-watch"
+              title={r.offDayReview}
+              aria-label={r.offDayReview}
+            >
+              day off ⚠
+            </span>
+          )}
+        </span>
+      ),
+      value: (r) => r.discoveryCaller ?? "",
+    },
     {
       key: "rule", header: "Rule",
       cell: (r) => (
@@ -83,6 +100,13 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
           <p className="mt-3 rounded-field bg-watch-soft px-3 py-2 text-xs font-medium text-watch">
             {report.unattributed} payment{report.unattributed === 1 ? "" : "s"} without call attribution -
             assign the lead a first-caller on Pipeline and make sure the discovery outcome is recorded.
+          </p>
+        )}
+        {report.offDayReviews > 0 && (
+          <p className="mt-3 rounded-field bg-watch-soft px-3 py-2 text-xs font-medium text-watch">
+            {report.offDayReviews} discovery call{report.offDayReviews === 1 ? " is" : "s are"} credited on a
+            caller&rsquo;s day off (a Saturday they don&rsquo;t work). Confirm who covered — and record the cover
+            on the discovery outcome — so the commission is split to the right person.
           </p>
         )}
       </Card>

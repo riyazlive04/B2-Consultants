@@ -55,7 +55,13 @@ function jsonSafe(row: Record<string, unknown>): Record<string, unknown> {
   );
 }
 
-function revalidateWorkshop(workshopId?: string) {
+/**
+ * `workshopId` is nullable, not merely optional, since ER v2 Track F generalised
+ * `GnWorkshopAdSet` into `AdSpend`: spend can now belong to a MarketingSource campaign with
+ * no workshop behind it. Those rows have no workshop page to revalidate — the manage page is
+ * still refreshed, which is all there is to refresh.
+ */
+function revalidateWorkshop(workshopId?: string | null) {
   revalidatePath("/german-note/manage");
   if (workshopId) revalidatePath(`/german-note/workshops/${workshopId}`);
 }
@@ -82,13 +88,13 @@ export async function createWorkshop(form: FormData): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const month = parseMonth(parsed.data.month);
   if (!month) return { ok: false, error: "Invalid month" };
-  const workshop = await prisma.gnWorkshop.create({
+  const workshop = await prisma.workshop.create({
     data: { name: parsed.data.name, month, notes: parsed.data.notes || null },
   });
   await logActivity(session, {
     action: "gn.workshop.create",
     section: "german-note",
-    entityType: "GnWorkshop",
+    entityType: "Workshop",
     entityId: workshop.id,
     summary: `Created the workshop "${workshop.name}"`,
     meta: { month: parsed.data.month },
@@ -105,11 +111,11 @@ export async function updateWorkshop(workshopId: string, form: FormData): Promis
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const month = parseMonth(parsed.data.month);
   if (!month) return { ok: false, error: "Invalid month" };
-  const before = await prisma.gnWorkshop.findUnique({
+  const before = await prisma.workshop.findUnique({
     where: { id: workshopId },
     select: { name: true, month: true, status: true, notes: true },
   });
-  const workshop = await prisma.gnWorkshop.update({
+  const workshop = await prisma.workshop.update({
     where: { id: workshopId },
     data: {
       name: parsed.data.name,
@@ -130,7 +136,7 @@ export async function updateWorkshop(workshopId: string, form: FormData): Promis
     await logActivity(session, {
       action: "gn.workshop.update",
       section: "german-note",
-      entityType: "GnWorkshop",
+      entityType: "Workshop",
       entityId: workshopId,
       summary: `Edited the workshop "${workshop.name}"`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
@@ -143,11 +149,11 @@ export async function updateWorkshop(workshopId: string, form: FormData): Promis
 /** Hard delete — cascades the workshop's conversions and ad-sets. */
 export async function deleteWorkshop(workshopId: string): Promise<ActionResult> {
   const session = await requireAdmin();
-  const workshop = await prisma.gnWorkshop.delete({ where: { id: workshopId } });
+  const workshop = await prisma.workshop.delete({ where: { id: workshopId } });
   await logActivity(session, {
     action: "gn.workshop.delete",
     section: "german-note",
-    entityType: "GnWorkshop",
+    entityType: "Workshop",
     entityId: workshopId,
     summary: `Deleted the workshop "${workshop.name}" and everything recorded against it`,
     meta: { status: workshop.status },
@@ -221,7 +227,7 @@ function conversionData(form: FormData) {
 
 export async function createConversion(workshopId: string, form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
-  const workshop = await prisma.gnWorkshop.findUnique({ where: { id: workshopId }, select: { id: true, name: true } });
+  const workshop = await prisma.workshop.findUnique({ where: { id: workshopId }, select: { id: true, name: true } });
   if (!workshop) return { ok: false, error: "Workshop not found" };
   const res = conversionData(form);
   if (!res.ok) return { ok: false, error: res.error };
@@ -319,22 +325,22 @@ function adSetData(form: FormData) {
 
 export async function createAdSet(workshopId: string, form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
-  const workshop = await prisma.gnWorkshop.findUnique({ where: { id: workshopId }, select: { id: true, name: true } });
+  const workshop = await prisma.workshop.findUnique({ where: { id: workshopId }, select: { id: true, name: true } });
   if (!workshop) return { ok: false, error: "Workshop not found" };
   const res = adSetData(form);
   if (!res.ok) return { ok: false, error: res.error };
-  const last = await prisma.gnWorkshopAdSet.findFirst({
+  const last = await prisma.adSpend.findFirst({
     where: { workshopId },
     orderBy: { orderIndex: "desc" },
     select: { orderIndex: true },
   });
-  const adSet = await prisma.gnWorkshopAdSet.create({
+  const adSet = await prisma.adSpend.create({
     data: { workshopId, orderIndex: (last?.orderIndex ?? -1) + 1, ...res.data },
   });
   await logActivity(session, {
     action: "gn.ad-set.create",
     section: "german-note",
-    entityType: "GnWorkshopAdSet",
+    entityType: "AdSpend",
     entityId: adSet.id,
     summary: `Added the ad-set ${adSet.label ? `"${adSet.label}"` : "(unlabelled)"} to the workshop "${workshop.name}"`,
     meta: { workshopId, adSpendInrMinor: adSet.adSpendInrMinor.toString(), conversions: adSet.conversions },
@@ -345,17 +351,17 @@ export async function createAdSet(workshopId: string, form: FormData): Promise<A
 
 export async function updateAdSet(adSetId: string, form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
-  const existing = await prisma.gnWorkshopAdSet.findUnique({ where: { id: adSetId } });
+  const existing = await prisma.adSpend.findUnique({ where: { id: adSetId } });
   if (!existing) return { ok: false, error: "Ad-set not found" };
   const res = adSetData(form);
   if (!res.ok) return { ok: false, error: res.error };
-  const adSet = await prisma.gnWorkshopAdSet.update({ where: { id: adSetId }, data: res.data });
+  const adSet = await prisma.adSpend.update({ where: { id: adSetId }, data: res.data });
   const diff = diffFields(jsonSafe(existing), jsonSafe(res.data));
   if (diff.changed.length > 0) {
     await logActivity(session, {
       action: "gn.ad-set.update",
       section: "german-note",
-      entityType: "GnWorkshopAdSet",
+      entityType: "AdSpend",
       entityId: adSetId,
       summary: `Edited the ad-set ${adSet.label ? `"${adSet.label}"` : "(unlabelled)"}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after, workshopId: existing.workshopId },
@@ -367,16 +373,16 @@ export async function updateAdSet(adSetId: string, form: FormData): Promise<Acti
 
 export async function deleteAdSet(adSetId: string): Promise<ActionResult> {
   const session = await requireAdmin();
-  const existing = await prisma.gnWorkshopAdSet.findUnique({
+  const existing = await prisma.adSpend.findUnique({
     where: { id: adSetId },
     select: { workshopId: true, label: true },
   });
   if (!existing) return { ok: false, error: "Ad-set not found" };
-  await prisma.gnWorkshopAdSet.delete({ where: { id: adSetId } });
+  await prisma.adSpend.delete({ where: { id: adSetId } });
   await logActivity(session, {
     action: "gn.ad-set.delete",
     section: "german-note",
-    entityType: "GnWorkshopAdSet",
+    entityType: "AdSpend",
     entityId: adSetId,
     summary: `Deleted the ad-set ${existing.label ? `"${existing.label}"` : "(unlabelled)"}`,
     meta: { workshopId: existing.workshopId },

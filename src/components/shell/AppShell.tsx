@@ -16,11 +16,13 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "./ThemeToggle";
 import { RecordButton } from "./RecordButton";
+import { SectionAccessProvider } from "./SectionAccess";
 import { BrandLogo } from "./BrandLogo";
 import { FallbackIcon, SECTION_ICONS } from "./section-icons";
 import { CommandPalette, openCommandPalette } from "@/components/ui/CommandPalette";
 import { useModKey } from "@/lib/use-mod-key";
 import type { SectionIconName } from "@/lib/sections";
+import { lockBodyScroll } from "@/lib/scroll-lock";
 
 /** Label, icon, group and order all come from the founder's section config. */
 export type NavItem = {
@@ -98,13 +100,9 @@ export function AppShell({
   // close the mobile drawer on navigation + lock scroll + Esc
   useEffect(() => setDrawer(false), [pathname]);
   useEffect(() => {
-    if (drawer) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = prev;
-      };
-    }
+    // Shared counter, never a private save/restore — a drawer closed after a modal would
+    // otherwise write `overflow: hidden` back onto an empty page (lib/scroll-lock.ts).
+    if (drawer) return lockBodyScroll();
   }, [drawer]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(false);
@@ -365,55 +363,75 @@ export function AppShell({
             type="button"
             aria-label="Open menu"
             onClick={() => setDrawer(true)}
-            className="grid h-10 w-10 place-items-center rounded-btn text-ink hover:bg-surface-2 md:hidden"
+            className="grid h-10 w-10 flex-none place-items-center rounded-btn text-ink hover:bg-surface-2 md:hidden"
           >
             <Menu size={20} />
           </button>
-          <Link href="/" className="flex items-center gap-2 md:hidden">
+          {/* The wordmark yields below 375px — on a 320px phone the hamburger already says "this
+              is the app", and the alternative was squashing the icon buttons under their 40px hit
+              target (§7). Between 375 and md it stays. */}
+          <Link href="/" className="hidden flex-none items-center gap-2 min-[375px]:flex md:hidden">
             <BrandLogo className="h-8 w-8" />
           </Link>
 
           {/* The always-visible metric strip: search · month · runway · theme · alerts · user.
-              On a phone this cluster is what overflows the viewport (it needs ~320px next to
-              the hamburger and brand), so the gap tightens and the month/theme drop out below
-              their breakpoints. Search, runway (§9.4), alerts, profile and logout all stay. */}
+              On a phone this cluster is what overflows the viewport — it needs ~310px next to the
+              hamburger and wordmark, which is more than a 390px screen has once padding is paid.
+              Everything here is `flex-none`: letting flex resolve the shortfall by shrinking meant
+              a 40px icon button rendering at 18px, i.e. an unhittable target (§7) AND still 6px of
+              overflow. So the strip sheds whole controls at breakpoints instead, keeping what a
+              phone cannot get elsewhere: search (no ⌘K without a keyboard), Record, alerts and the
+              profile link. Month, theme, runway and logout all have another home — logout is in the
+              drawer rail, runway is on the dashboard. */}
           <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-2 md:gap-3">
             <button
               type="button"
               onClick={openCommandPalette}
               aria-label={`Search contacts, opportunities, invoices (${modLabel})`}
               title={`Search (${modLabel})`}
-              className="flex h-10 items-center gap-2 rounded-full border border-line-strong bg-surface-2 px-3 text-sm text-ink-2 transition-colors hover:bg-surface hover:text-ink md:w-52"
+              /* The 13rem box and its ⌘K hint wait for `lg`, not `md`. At exactly `md` the rail has
+                 just appeared and the tablet is at its tightest — a 208px search field there cost
+                 44px more than the row had, so the whole page scrolled sideways. A tablet also has
+                 no physical keyboard to press the shortcut this chip advertises. */
+              className="flex h-10 flex-none items-center gap-2 rounded-full border border-line-strong bg-surface-2 px-3 text-sm text-ink-2 transition-colors hover:bg-surface hover:text-ink lg:w-52"
             >
               <Search size={15} className="flex-none text-ink-3" />
-              <span className="hidden truncate md:inline">Search…</span>
-              <kbd className="ml-auto hidden flex-none rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-3 md:inline">
+              <span className="hidden truncate lg:inline">Search…</span>
+              <kbd className="ml-auto hidden flex-none rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-3 lg:inline">
                 {modLabel}
               </kbd>
             </button>
-            {/* Record CTA — Finance is an Admin section, so only Admin gets the quick-add. */}
-            {user.role === "ADMIN" && <RecordButton />}
-            <span className="hidden text-sm font-medium text-ink-2 lg:inline">{currentMonth}</span>
-            {runwaySlot}
+            {/* Record CTA — writes income and expenses, so it is gated on FINANCE ACCESS, not
+                on the role (Error Log O2). Gating on `role === "ADMIN"` alone left the button —
+                and the modal behind it — in the top bar even when Finance had been switched off
+                in the founder console, which is the "section removed but still reachable" case.
+                `items` is already the caller's filtered section list, so this asks the same
+                question the sidebar does and cannot drift from it. */}
+            {items.some((i) => i.href === "/finance") && <RecordButton />}
+            <span className="hidden flex-none text-sm font-medium text-ink-2 lg:inline">{currentMonth}</span>
+            {/* Runway is the widest thing in the strip (~84px) and the one figure that is also on
+                the dashboard a tap away, so it is what buys the phone its space back. */}
+            <span className="hidden flex-none sm:inline-flex">{runwaySlot}</span>
             {/* Theme falls back to the OS `prefers-color-scheme` when this is hidden, so a
                 phone still gets the right mode — it just can't override it from the top bar. */}
             <span className="hidden sm:inline-flex">
               <ThemeToggle />
             </span>
-            {bellSlot}
-            <Link href="/profile" title="Your profile" className="flex items-center gap-2 rounded-full py-1 md:pr-2">
+            <span className="flex-none">{bellSlot}</span>
+            <Link href="/profile" title="Your profile" className="flex flex-none items-center gap-2 rounded-full py-1 md:pr-2">
               <Avatar size={34} />
               <span className="hidden max-w-36 truncate text-sm font-semibold text-ink xl:inline">
                 {user.name}
               </span>
             </Link>
-            {/* PRD §6: logout lives in the top bar (username · month · logout). */}
+            {/* PRD §6: logout lives in the top bar (username · month · logout) — from `sm` up.
+                Below that the phone drawer's rail carries its own "Log out", so nothing is lost. */}
             <button
               type="button"
               onClick={logout}
               title="Log out"
               aria-label="Log out"
-              className="grid h-10 w-10 place-items-center rounded-btn text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+              className="hidden h-10 w-10 flex-none place-items-center rounded-btn text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink sm:grid"
             >
               <LogOut size={18} />
             </button>
@@ -421,13 +439,26 @@ export function AppShell({
         </header>
 
         {/* Full-width content: pages set their own max-width. Synamate-parity list pages
-            (Contacts, Opportunities, Payments, …) go edge-to-edge; classic pages stay centred. */}
+            (Contacts, Opportunities, Payments, …) go edge-to-edge; classic pages stay centred.
+
+            `overflow-x-clip` is the app-wide guard against PHANTOM horizontal scroll — the page
+            scrolling sideways into blank space because something nobody can see sticks out to the
+            right. Absolutely-positioned decorations still join the scrollable area even at
+            `opacity: 0`, so every un-hovered hint tooltip and every visually-hidden chart data
+            table was quietly widening the document on narrow screens.
+            `clip`, NOT `hidden`: `hidden` would make this a scroll container, which breaks every
+            `position: sticky` table header inside it and would let JS scroll the clipped content
+            into view. `clip` just refuses to paint past the padding box and never scrolls.
+            Real popovers are unaffected — Popover/Modal/toasts portal to `document.body`, so they
+            are not descendants of this box. */}
         <main
           id="main"
           tabIndex={-1}
-          className="w-full flex-1 px-4 py-6 outline-none md:px-7 md:py-7"
+          className="w-full flex-1 overflow-x-clip px-4 py-6 outline-none md:px-7 md:py-7"
         >
-          {children}
+          {/* O2: any client component below can now ask whether a section link is reachable,
+              instead of rendering a link that bounces to /?denied=. */}
+          <SectionAccessProvider hrefs={items.map((i) => i.href)}>{children}</SectionAccessProvider>
         </main>
       </div>
 

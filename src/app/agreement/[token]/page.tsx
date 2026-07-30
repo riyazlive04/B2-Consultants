@@ -5,6 +5,7 @@ import { AGREEMENT_PROVIDER } from "@/lib/agreement";
 import { loadAgreementByToken, markAgreementViewed, maskPhone, type TokenFailure } from "@/server/agreement-core";
 import type { AgreementData } from "@/lib/agreement";
 import { SignCeremony } from "./_components/SignCeremony";
+import { SignedCopyLinks } from "./_components/SignedCopyLinks";
 
 /**
  * The student's signing page. PUBLIC — the token is the only credential.
@@ -27,7 +28,7 @@ const REASONS: Record<TokenFailure, { title: string; body: string }> = {
   },
   used: {
     title: "Already signed",
-    body: "This agreement has been signed. Your countersigned copy was sent on WhatsApp.",
+    body: "This agreement has been signed. Your countersigned copy was sent on WhatsApp — you can also open or download it here.",
   },
   declined: {
     title: "Agreement declined",
@@ -49,6 +50,11 @@ export default async function SignAgreementPage({ params }: { params: { token: s
         <div className="rounded-card border border-line bg-surface p-8 text-center shadow-card">
           <h1 className="font-display text-xl font-bold">{r.title}</h1>
           <p className="mt-2 text-sm text-muted">{r.body}</p>
+          {/* "used" is the ONLY failure that still has a document behind it, and it always does:
+              signing seals `pdfBytes` in the same updateMany that sets `signedAt`, and a signed row
+              can never be voided or declined (both guard on `signedAt: null`), so no extra lookup is
+              needed to know the copy route will answer. */}
+          {found.reason === "used" && <SignedCopyLinks token={params.token} />}
           <p className="mt-6 text-xs text-muted">
             {AGREEMENT_PROVIDER.email} · {AGREEMENT_PROVIDER.mobile}
           </p>

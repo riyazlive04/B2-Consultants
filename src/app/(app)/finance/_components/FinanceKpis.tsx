@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { Wallet, Percent, PiggyBank, Package, CreditCard, Clock, CalendarRange, ArrowLeftRight } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Wallet, Percent, PiggyBank, Package, CreditCard, Clock, CalendarRange } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Modal } from "@/components/ui/Modal";
 import { formatEurMinor, formatInrMinor } from "@/lib/format";
 import { signedColor, type SignalLevel } from "@/lib/signals";
+import { useFinanceCcy, type Ccy } from "./FinanceCurrency";
 
 /**
- * The Finance KPI grid, made interactive (two requests):
- *   1. A currency toggle — flip whether every figure reads INR-first (EUR beneath) or EUR-first
- *      (INR beneath). The preference is remembered per device.
+ * The Finance KPI grid, made interactive:
+ *   1. It reads the shared ₹/€ preference (owned by FinanceCurrencyProvider, flipped by the toggle
+ *      at the top of the page), so every figure reads INR-first or EUR-first with the other beneath.
  *   2. Every card is clickable and pops up the breakdown behind its number, in the same currency
  *      order. Non-money cards (profit margin) carry `valueText` and show their own components.
  *
@@ -56,9 +57,6 @@ export type Kpi = {
   detailRows: KpiRow[];
 };
 
-type Ccy = "INR" | "EUR";
-const STORAGE_KEY = "b2_finance_ccy";
-
 function money(inrMinor: number | undefined, eurMinor: number | undefined, ccy: Ccy, compact: boolean) {
   const inr = inrMinor !== undefined ? formatInrMinor(inrMinor, { compact }) : null;
   const eur = eurMinor !== undefined ? formatEurMinor(eurMinor, { compact }) : null;
@@ -68,54 +66,16 @@ function money(inrMinor: number | undefined, eurMinor: number | undefined, ccy: 
 }
 
 export function FinanceKpis({ kpis }: { kpis: Kpi[] }) {
-  const [ccy, setCcy] = useState<Ccy>("INR");
+  const { ccy } = useFinanceCcy();
   const [open, setOpen] = useState<Kpi | null>(null);
-
-  useEffect(() => {
-    try {
-      const s = localStorage.getItem(STORAGE_KEY);
-      if (s === "INR" || s === "EUR") setCcy(s);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const pick = (c: Ccy) => {
-    setCcy(c);
-    try {
-      localStorage.setItem(STORAGE_KEY, c);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const seg = (c: Ccy, label: string) => (
-    <button
-      type="button"
-      onClick={() => pick(c)}
-      aria-pressed={ccy === c}
-      className={`press h-8 rounded-full px-3 text-[13px] font-semibold transition-colors ${
-        ccy === c ? "bg-primary text-on-accent" : "text-ink-2 hover:text-ink"
-      }`}
-    >
-      {label}
-    </button>
-  );
 
   return (
     <div className="space-y-4">
-      {/* Currency toggle — flips primary/secondary for every figure below. */}
-      <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-1.5 text-caption text-muted">
-          <ArrowLeftRight size={13} /> Showing{" "}
-          <span className="font-semibold text-ink-2">{ccy === "INR" ? "₹ INR first" : "€ EUR first"}</span>
-          {" "}· the other currency sits beneath. Tap any card for the breakdown.
-        </p>
-        <div className="flex flex-none items-center gap-0.5 rounded-full border border-line-strong bg-surface-2 p-0.5">
-          {seg("INR", "₹ INR")}
-          {seg("EUR", "€ EUR")}
-        </div>
-      </div>
+      <p className="flex items-center gap-1.5 text-caption text-muted">
+        Showing{" "}
+        <span className="font-semibold text-ink-2">{ccy === "INR" ? "₹ INR first" : "€ EUR first"}</span>
+        {" "}· the other currency sits beneath. Tap any card for the breakdown.
+      </p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((k) => {

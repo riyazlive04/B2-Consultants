@@ -24,7 +24,14 @@ import { notifyNewOptIn } from "./outreach-notify";
 
 export type IntakeLead = {
   name: string;
-  phone: string;
+  /**
+   * Nullable since ER v2 Track G: a workshop registration may arrive with an email and no
+   * phone. Every other caller (the Meta / FlexiFunnels / Pabbly webhooks, the booking form)
+   * still refuses a lead without one, so this widens the type without loosening them.
+   *
+   * A BLANK phone must never reach the dedup below — see the comment there.
+   */
+  phone: string | null;
   email?: string | null;
   city?: string | null;
   industry?: string | null;
@@ -44,7 +51,7 @@ function bound(input: IntakeLead): IntakeLead {
   return {
     ...input,
     name: input.name.slice(0, 160),
-    phone: input.phone.slice(0, 32),
+    phone: cut(input.phone, 32) ?? null,
     email: cut(input.email, 254),
     city: cut(input.city, 120),
     industry: cut(input.industry, 160),
@@ -157,11 +164,28 @@ export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResu
   // "not booked" for a prospect who has booked, because the booking hangs off a different row.
   // libphonenumber is already a dependency and already fails closed (null on anything it can't
   // prove valid), so an unparseable number falls back to the exact compare rather than guessing.
-  const normalized = normalizeWhatsappNumber(input.phone);
-  const byPhone = normalized
-    ? await findLeadByNormalizedPhone(normalized, input.phone)
-    : await prisma.lead.findFirst({ where: { phone: input.phone } });
-  if (byPhone) return { lead: byPhone, created: false, deduped: "phone" };
+  //
+  // A BLANK phone is skipped entirely rather than compared. The exact-compare fallback below
+  // would otherwise match every other phoneless lead to each other: the first email-only
+  // registration creates a lead with phone "", and the second one silently merges into it —
+  // two different people, one record. Absence of a number is not evidence of sameness.
+  const phone = input.phone?.trim() || null;
+  if (phone) {
+    const normalized = normalizeWhatsappNumber(phone);
+    const byPhone = normalized
+      ? await findLeadByNormalizedPhone(normalized, phone)
+      : await prisma.lead.findFirst({ where: { phone } });
+    if (byPhone) return { lead: byPhone, created: false, deduped: "phone" };
+  }
+
+  // Email is the fallback identity when there is no number to match on. Case-insensitive,
+  // the same folding findDuplicateLead and the booking form use.
+  if (!phone && input.email?.trim()) {
+    const byEmail = await prisma.lead.findFirst({
+      where: { email: { equals: input.email.trim(), mode: "insensitive" } },
+    });
+    if (byEmail) return { lead: byEmail, created: false, deduped: "phone" };
+  }
 
   // 3. brand-new lead. Auto-assign the first caller per the configured rotation
   // (80/20 split, Saturday rule) - a failure here must never block lead capture.
@@ -170,7 +194,10 @@ export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResu
     const created = await tx.lead.create({
       data: {
         name: input.name,
-        phone: input.phone,
+        // Blank normalises to null: `Lead.phone` is nullable, and an empty string there would
+        // be a third state ("we have a phone, and it is nothing") that every send path would
+        // have to special-case on top of the null check it already does.
+        phone: input.phone?.trim() || null,
         email: input.email ?? null,
         city: input.city ?? null,
         industry: input.industry ?? null,

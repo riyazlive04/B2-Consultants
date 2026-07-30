@@ -18,10 +18,19 @@ import {
   getMaintenanceConfig,
   getScheduledReportConfig,
   getFinancePostingConfig,
+  getInstalmentPlanConfig,
+  getSlotPatternConfig,
+  getSssPatternConfig,
+  getSssConfig,
+  getBookingRulesConfig,
 } from "@/server/founder-config";
 import { getGoalsWithProgress } from "@/server/goals";
+import { listTutorFees } from "@/server/tutor-fees";
+import { getAllQualificationQuestions, shadowAgreement } from "@/server/qualification";
+import { getBookableTeamMembers } from "@/server/booking-metrics";
 import { listRewardGrants, listRewardRules } from "@/server/rewards";
 import { SectionsPanel } from "./_components/SectionsPanel";
+import { AccessMatrixPanel } from "./_components/AccessMatrixPanel";
 import { GamificationPanel } from "./_components/GamificationPanel";
 import { GoalsPanel } from "./_components/GoalsPanel";
 import { RewardsPanel, type GrantView, type RuleRow } from "./_components/RewardsPanel";
@@ -30,7 +39,11 @@ import { DailyTargetsPanel } from "./_components/DailyTargetsPanel";
 import { DailyLogEodPanel } from "./_components/DailyLogEodPanel";
 import { AgreementWorkflowPanel } from "./_components/AgreementWorkflowPanel";
 import { TutorFeePanel } from "./_components/TutorFeePanel";
+import { InstalmentPlanPanel } from "./_components/InstalmentPlanPanel";
+import { TutorFeeLedgerPanel } from "./_components/TutorFeeLedgerPanel";
+import { QualificationPanel } from "./_components/QualificationPanel";
 import { OperationsPanel } from "./_components/OperationsPanel";
+import { AvailabilityPanel } from "./_components/AvailabilityPanel";
 import { MaintenancePanel } from "./_components/MaintenancePanel";
 
 export const dynamic = "force-dynamic";
@@ -80,11 +93,44 @@ export default async function ConsolePage() {
       getPipelineConfig(),
     ]);
 
-  const [maintenanceConfig, scheduledReportConfig, financePostingConfig] = await Promise.all([
+  // ER v2 Tracks C + D. Kept in their own Promise.all rather than appended to the tuple
+  // above: that one is already at the length where an added entry silently shifts a
+  // destructured name, and these two are unrelated to the config block.
+  const [tutorFeeRows, qualificationQuestions, shadowStatus] = await Promise.all([
+    listTutorFees(),
+    getAllQualificationQuestions(),
+    shadowAgreement(),
+  ]);
+
+  const [
+    maintenanceConfig,
+    scheduledReportConfig,
+    financePostingConfig,
+    slotPattern,
+    sssPattern,
+    sssConfig,
+    bookingRules,
+    bookableMembers,
+    instalmentPlans,
+  ] = await Promise.all([
     getMaintenanceConfig(),
     getScheduledReportConfig(),
     getFinancePostingConfig(),
+    getSlotPatternConfig(),
+    getSssPatternConfig(),
+    getSssConfig(),
+    getBookingRulesConfig(),
+    // The same list the manual slot generator offers, so a pattern can't assign to someone the
+    // hand-made path wouldn't.
+    getBookableTeamMembers(),
+    getInstalmentPlanConfig(),
   ]);
+
+  // The SSS diary's owner is a User (the founder), not a TeamProfile — resolve the name so the
+  // panel can say whose calendar it is rather than showing a raw id.
+  const sssOwner = sssConfig.ownerId
+    ? await prisma.user.findUnique({ where: { id: sssConfig.ownerId }, select: { name: true, email: true } })
+    : null;
 
   // Auto-save is the only rule here that needs an external clock. Read the seam's real
   // precondition so the panel can warn instead of claiming a rule that can never fire.
@@ -137,6 +183,8 @@ export default async function ConsolePage() {
       <Tabs
         tabs={[
           { label: "Sections", content: <SectionsPanel sections={sections} /> },
+          // Read-only companion to Sections: the same access rules, checked against spec §3 (O3).
+          { label: "Access Matrix", content: <AccessMatrixPanel sections={sections} /> },
           { label: "Gamification", content: <GamificationPanel config={config} /> },
           { label: `Goals${goals.length ? ` (${goals.length})` : ""}`, content: <GoalsPanel goals={goals} people={people} /> },
           {
@@ -152,10 +200,42 @@ export default async function ConsolePage() {
             ),
           },
           { label: "Commission", content: <CommissionPanel rules={commissionRules} /> },
+          // Next to Commission because it is the same kind of rule: a money figure the founder
+          // sets that Finance then applies to every new deal.
+          { label: "Instalment Plans", content: <InstalmentPlanPanel config={instalmentPlans} /> },
           { label: "Tutor Fee", content: <TutorFeePanel config={tutorFee} /> },
+          {
+            label: `Tutor Fees${tutorFeeRows.filter((f) => f.status === "DRAFT").length ? ` (${tutorFeeRows.filter((f) => f.status === "DRAFT").length})` : ""}`,
+            content: (
+              <TutorFeeLedgerPanel
+                fees={tutorFeeRows}
+                accrualOn={financePostingConfig.tutorFeeAccrual.enabled}
+              />
+            ),
+          },
+          {
+            label: "Qualification",
+            content: <QualificationPanel questions={qualificationQuestions} shadow={shadowStatus} />,
+          },
           {
             label: "Operations",
             content: <OperationsPanel bookOrders={bookOrders} pipeline={pipelineConfig} />,
+          },
+          {
+            // Sits next to Operations because it is the same kind of rule — but it is the only
+            // tab here whose absence had a visible outward symptom: an empty public /book page.
+            label: "Availability",
+            content: (
+              <AvailabilityPanel
+                booking={slotPattern}
+                sss={sssPattern}
+                people={bookableMembers}
+                sssOwnerName={sssOwner?.name ?? sssOwner?.email ?? null}
+                sssDurationMins={sssConfig.slotDurationMins}
+                bookingBufferMins={bookingRules.bufferMinutes}
+                bookingMaxAdvanceDays={bookingRules.maxAdvanceDays}
+              />
+            ),
           },
           {
             label: "Daily Targets",

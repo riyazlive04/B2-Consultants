@@ -13,7 +13,7 @@ export default function Loading() {
       <SkeletonPageHeader />
       <SkeletonMetricCards count={4} />
       <SkeletonMetricCards count={4} />
-      {/* "Average LTV: Solo … Guided … Elite … Upgrade rate" strip */}
+      {/* "Average paid: Solo … Guided … Elite … Upgrade rate" strip */}
       <SkeletonBlock className="h-4 w-[36rem] max-w-full" />
       <SkeletonTabs count={2} />
       <SkeletonTable rows={8} cols={7} />

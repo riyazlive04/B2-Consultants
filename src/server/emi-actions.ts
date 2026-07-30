@@ -6,7 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
 import { formatDate, formatInrMinor } from "@/lib/format";
+import { instalmentDueDates, instalmentExtraFor, splitInstalments } from "@/lib/instalment-plan";
 import { logActivity, diffFields } from "./activity-log";
+import { getInstalmentPlanConfig } from "./founder-config";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -31,7 +33,8 @@ export async function generateInstalmentPlan(pendingPaymentId: string, form: For
   const parsed = generateSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const { count, firstDueDate } = parsed.data;
-  const intervalDays = parsed.data.intervalDays ?? 30;
+  const config = await getInstalmentPlanConfig();
+  const intervalDays = parsed.data.intervalDays ?? config.defaultIntervalDays;
 
   const pp = await prisma.pendingPayment.findUnique({
     where: { id: pendingPaymentId },
@@ -47,49 +50,86 @@ export async function generateInstalmentPlan(pendingPaymentId: string, form: For
   if (!pp) return { ok: false, error: "Receivable not found" };
   if (pp.instalments.length) return { ok: false, error: "A schedule already exists — clear it before regenerating" };
 
-  const n = BigInt(count);
-  const baseInr = pp.totalFeeInrMinor / n;
-  const baseEur = pp.totalFeeEurMinor / n;
-  const remInr = pp.totalFeeInrMinor - baseInr * n; // remainder onto the last instalment
-  const remEur = pp.totalFeeEurMinor - baseEur * n;
+  /**
+   * The surcharge is priced by plan length in the Console and SNAPSHOTTED onto the receivable
+   * here. Re-pricing the table later must not move the balance on a plan the student already
+   * agreed to, which is only true because the figure is stored rather than re-derived on read.
+   */
+  const extra = instalmentExtraFor(count, config);
+  const total = {
+    inr: pp.totalFeeInrMinor + extra.inr,
+    eur: pp.totalFeeEurMinor + extra.eur,
+  };
+  const amounts = splitInstalments(total, count);
   const start = parseDateInput(firstDueDate);
+  const dueDates = instalmentDueDates(start, count, intervalDays);
 
-  const rows = Array.from({ length: count }, (_, i) => {
-    const due = new Date(start);
-    due.setUTCDate(start.getUTCDate() + i * intervalDays);
-    const last = i === count - 1;
-    return {
-      pendingPaymentId,
-      seq: i + 1,
-      amountInrMinor: baseInr + (last ? remInr : 0n),
-      amountEurMinor: baseEur + (last ? remEur : 0n),
-      fxRateUsed: pp.fxRateUsed,
-      dueDate: due,
-    };
-  });
+  const rows = amounts.map((amount, i) => ({
+    pendingPaymentId,
+    seq: i + 1,
+    amountInrMinor: amount.inr,
+    amountEurMinor: amount.eur,
+    fxRateUsed: pp.fxRateUsed,
+    dueDate: dueDates[i],
+  }));
 
   await prisma.$transaction([
     prisma.instalment.createMany({ data: rows }),
-    // Keep the receivable's headline "next due" in step with instalment #1.
-    prisma.pendingPayment.update({ where: { id: pendingPaymentId }, data: { nextDueDate: start } }),
+    prisma.pendingPayment.update({
+      where: { id: pendingPaymentId },
+      data: {
+        // Keep the receivable's headline "next due" in step with instalment #1.
+        nextDueDate: start,
+        planExtraInrMinor: extra.inr,
+        planExtraEurMinor: extra.eur,
+        intervalDays,
+        numEmis: count,
+      },
+    }),
   ]);
 
+  const extraNote = extra.inr > BigInt(0) ? ` (incl. ${formatInrMinor(extra.inr)} plan extra)` : "";
   await logActivity(session, {
     action: "finance.instalmentPlan.create",
     section: "finance",
     entityType: "PendingPayment",
     entityId: pendingPaymentId,
-    summary: `Generated a ${count}-instalment plan for ${pp.studentName} — ${formatInrMinor(pp.totalFeeInrMinor)} from ${formatDate(start)}, every ${intervalDays} days`,
+    summary: `Generated a ${count}-instalment plan for ${pp.studentName} — ${formatInrMinor(total.inr)}${extraNote} from ${formatDate(start)}, every ${intervalDays} days`,
     meta: {
       count,
       intervalDays,
       firstDueDate: start.toISOString(),
       totalFeeInrMinor: pp.totalFeeInrMinor.toString(),
+      planExtraInrMinor: extra.inr.toString(),
+      planExtraEurMinor: extra.eur.toString(),
+      totalToCollectInrMinor: total.inr.toString(),
     },
   });
 
   revalidatePath("/finance");
   return { ok: true };
+}
+
+/**
+ * What an N-instalment plan would cost and how it would split — read by the EMI modal so the
+ * founder sees the surcharge and the schedule BEFORE generating. Returns minor units as strings
+ * because BigInt does not cross the server/client boundary.
+ */
+export async function previewInstalmentPlan(count: number): Promise<{
+  count: number;
+  intervalDays: number;
+  extraInrMinor: string;
+  extraEurMinor: string;
+}> {
+  await requireSection("finance");
+  const config = await getInstalmentPlanConfig();
+  const extra = instalmentExtraFor(count, config);
+  return {
+    count,
+    intervalDays: config.defaultIntervalDays,
+    extraInrMinor: extra.inr.toString(),
+    extraEurMinor: extra.eur.toString(),
+  };
 }
 
 const statusSchema = z.enum(["DUE", "PAID", "OVERDUE"]);

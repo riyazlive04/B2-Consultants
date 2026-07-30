@@ -44,7 +44,7 @@ export function SnapshotForm({ entry }: { entry: FunnelOverview["entry"] }) {
       </div>
       <p className="mb-4 text-xs text-muted">
         Awareness reach and Ghosted Blueprint downloads are manual (Meta/IG/YT dashboards).
-        Leads, calls, proposals and enrollments are pre-filled from Pipeline & Students -
+        Leads, calls, proposals and enrolments are pre-filled from Pipeline & Students -
         override them if needed.
       </p>
       <input type="hidden" name="weekStart" value={entry.weekStart} />
@@ -65,13 +65,13 @@ export function SnapshotForm({ entry }: { entry: FunnelOverview["entry"] }) {
         <Field label="Ghosted Blueprint downloads" hint="manual">
           <TextInput kind="int" maxLength={7} name="ghostedDownloads" defaultValue={e ? String(e.ghostedDownloads) : ""} placeholder="0" />
         </Field>
-        <Field label="Enrollments - Solo" hint={`auto: ${a.enrollmentsSolo}`}>
+        <Field label="Enrolments - Solo" hint={`auto: ${a.enrollmentsSolo}`}>
           <TextInput kind="int" maxLength={7} name="enrollmentsSolo" defaultValue={def(e?.enrollmentsSolo, a.enrollmentsSolo)} placeholder="0" />
         </Field>
-        <Field label="Enrollments - Guided" hint={`auto: ${a.enrollmentsGuided}`}>
+        <Field label="Enrolments - Guided" hint={`auto: ${a.enrollmentsGuided}`}>
           <TextInput kind="int" maxLength={7} name="enrollmentsGuided" defaultValue={def(e?.enrollmentsGuided, a.enrollmentsGuided)} placeholder="0" />
         </Field>
-        <Field label="Enrollments - Elite" hint={`auto: ${a.enrollmentsElite}`}>
+        <Field label="Enrolments - Elite" hint={`auto: ${a.enrollmentsElite}`}>
           <TextInput kind="int" maxLength={7} name="enrollmentsElite" defaultValue={def(e?.enrollmentsElite, a.enrollmentsElite)} placeholder="0" />
         </Field>
         <Field label="Workshop / webinar attendees">

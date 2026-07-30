@@ -70,6 +70,9 @@ export const ACCOUNT = {
   GATEWAY_CLEARING: "1030",
   RECEIVABLE: "1100",
   PAYABLE: "2000",
+  /// Direct delivery cost of goods sold — where a tutor fee accrues (ER v2 Track C). Already
+  /// flagged isCogs, so gross profit stays a ledger slice rather than a second calculation.
+  COGS_DELIVERY: "5000",
   FX_GAIN_LOSS: "7000",
 } as const;
 

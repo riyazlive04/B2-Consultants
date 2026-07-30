@@ -36,7 +36,22 @@ const NAME_OK = String.raw`\p{L}\p{M}`;
  */
 const NAME_PUNCT = String.raw` .,'’/\-`;
 
-const NOT_NAME = new RegExp(`[^${NAME_OK}${NAME_PUNCT}]`, "gu");
+/**
+ * Digits are ALLOWED in a name, but can never make up the whole of one.
+ *
+ * They were refused outright, which rejected "Anna Smith 2" — and appending a number is exactly
+ * how someone hand-disambiguates the two real "Anna Smith"s on this roster (Error Log I1). The
+ * form said "Name can only contain letters" and the entry simply did not save, so the person's
+ * only workaround was blocked by the validator.
+ *
+ * The guard that matters is NOT the character set, it is the `refine` below requiring at least
+ * one LETTER — which is why `NAME_OK` stays letters-only and digits live in their own class.
+ * That is what still rejects a bare "9876543210" as a name, i.e. the phone-as-display-name
+ * problem (Error Log I2) is prevented by the letter requirement, not by banning digits.
+ */
+const NAME_DIGIT = String.raw`0-9`;
+
+const NOT_NAME = new RegExp(`[^${NAME_OK}${NAME_PUNCT}${NAME_DIGIT}]`, "gu");
 /** Phone "special variables" — the country-code plus and the grouping a person types by habit. */
 const NOT_PHONE = new RegExp(String.raw`[^\d+()\s\-]`, "g");
 const NOT_DIGIT = /\D/g;
@@ -130,8 +145,13 @@ const nameSchema = z
       .string()
       .min(1, "Name is required")
       .max(MAX.name, "Name is too long")
-      .regex(new RegExp(`^[${NAME_OK}${NAME_PUNCT}]+$`, "u"), "Name can only contain letters")
-      // A name made only of dots/dashes passes the class check but is not a name.
+      .regex(
+        new RegExp(`^[${NAME_OK}${NAME_PUNCT}${NAME_DIGIT}]+$`, "u"),
+        "Name can contain letters, digits and . , ' - / only",
+      )
+      // A name made only of dots, dashes OR DIGITS passes the class check but is not a name.
+      // `NAME_OK` is deliberately letters-only here: this is the single check standing between
+      // the roster and a phone number saved as somebody's name.
       .refine((v) => new RegExp(`[${NAME_OK}]`, "u").test(v), "Enter a real name"),
   );
 
@@ -188,14 +208,25 @@ export const FIELD_RULES: Record<FieldKind, FieldRule> = {
     schema: z.string().trim().toLowerCase().email("Enter a valid email address").max(MAX.email),
   },
   city: {
-    // A city is name-shaped but not a person: "Baden-Württemberg", never a digit.
+    /**
+     * City shares `filterName`, so it necessarily shares the digit rule — and this schema MUST
+     * match the filter or we recreate exactly the asymmetry this module exists to prevent: the
+     * browser would quietly accept a character the server then rejects.
+     *
+     * Digits belong here on their own merits anyway. This roster is Indian and German, and
+     * "Sector 62", "Phase 3" and "Rohini Sector 8" are ordinary localities — the old comment
+     * ("never a digit") held for Baden-Württemberg and not for Noida.
+     */
     filter: filterName,
     attrs: { inputMode: "text", autoComplete: "address-level2", maxLength: MAX.city },
     schema: z
       .string()
       .trim()
       .max(MAX.city, "City is too long")
-      .regex(new RegExp(`^[${NAME_OK}${NAME_PUNCT}]*$`, "u"), "City can only contain letters"),
+      .regex(
+        new RegExp(`^[${NAME_OK}${NAME_PUNCT}${NAME_DIGIT}]*$`, "u"),
+        "City can contain letters, digits and . , ' - / only",
+      ),
   },
   url: {
     filter: filterUrl,

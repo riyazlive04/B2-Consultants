@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession, resolveSections, sectionAllowed } from "@/lib/rbac";
 import { getSectionsConfig } from "@/server/founder-config";
-import { getResumeForRender, getResumeTemplate } from "@/server/resume-metrics";
+import { getResumeForRender, getResumeTemplate, resumeScope } from "@/server/resume-metrics";
 import { renderResumePdf } from "@/documents/resume-pdf";
 import { renderResumeDocx } from "@/documents/resume-docx";
 
@@ -9,6 +9,10 @@ import { renderResumeDocx } from "@/documents/resume-docx";
  * Authenticated CV export. `?format=pdf` (default) or `?format=docx`. Gated to the
  * cv-check section exactly like /api/cv-extract, so only coaches/students who can open
  * the Studio can download a CV. Rendered on demand from the stored ResumeData.
+ *
+ * Section access is necessary but not sufficient: `cv-check` is granted to STUDENT by default,
+ * so a section-only gate let any student pull any other student's CV by id. `resumeScope` adds
+ * the row-level rule — coaches see all, everyone else sees only what they own.
  */
 
 export const runtime = "nodejs"; // @react-pdf/renderer + docx are Node libraries
@@ -28,7 +32,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     return new NextResponse("You don't have access to the CV Studio.", { status: 403 });
   }
 
-  const [resume, template] = await Promise.all([getResumeForRender(params.id), getResumeTemplate()]);
+  const [resume, template] = await Promise.all([
+    getResumeForRender(params.id, resumeScope(session)),
+    getResumeTemplate(),
+  ]);
   if (!resume) return new NextResponse("CV not found", { status: 404 });
 
   const format = new URL(req.url).searchParams.get("format") === "docx" ? "docx" : "pdf";

@@ -74,7 +74,7 @@ export async function runCommissionPayout(): Promise<ActionResult> {
     try {
       const draft: DraftEntry = {
         date: istToday(),
-        narration: `Commission accrual — ${monthKey}`,
+        narration: `Commission owed — ${monthKey}`,
         sourceType: "MANUAL",
         sourceId: COMMISSION_SOURCE(monthKey),
         postedById: session.user.id,
@@ -98,7 +98,7 @@ export async function runCommissionPayout(): Promise<ActionResult> {
     section: "finance",
     entityType: "CommissionPayoutRun",
     entityId: run.id,
-    summary: `Recorded the ${monthKey} commission payout — ${formatInrMinor(totalInrMinor)} across ${lines.length} ${lines.length === 1 ? "person" : "people"}${postedEntryId ? " (accrued to the ledger)" : ""}`,
+    summary: `Recorded the ${monthKey} commission payout — ${formatInrMinor(totalInrMinor)} across ${lines.length} ${lines.length === 1 ? "person" : "people"}${postedEntryId ? " (recorded as owed in the ledger)" : ""}`,
     meta: { month: monthKey, totalInrMinor: totalInrMinor.toString(), people: lines.length, posted: Boolean(postedEntryId) },
   });
 

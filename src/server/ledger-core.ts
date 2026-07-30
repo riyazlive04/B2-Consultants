@@ -62,6 +62,22 @@ export function monthKeyOf(date: Date): string {
   return date.toISOString().slice(0, 7);
 }
 
+export async function isPeriodLocked(db: LedgerDb, date: Date): Promise<boolean> {
+  return (await db.periodLock.findUnique({ where: { month: monthKeyOf(date) } })) !== null;
+}
+
+/**
+ * The one place a write into a closed month is refused. Both `postEntry` and `voidEntry` go
+ * through it — a reversal is a posting like any other, and letting it skip the check meant a
+ * void could write into a month the founder had already closed and reported.
+ */
+async function assertPeriodOpen(db: LedgerDb, date: Date): Promise<void> {
+  if (await isPeriodLocked(db, date)) {
+    const month = monthKeyOf(date);
+    throw new LedgerError(`Accounting period ${month} is locked — no entry can be posted into it.`);
+  }
+}
+
 /** A line's value in base currency (INR paise). */
 function baseMinorOf(line: DraftLine): bigint {
   if (line.currency === BASE_CURRENCY) {
@@ -119,10 +135,7 @@ export async function postEntry(tx: LedgerDb, draft: DraftEntry): Promise<string
     );
   }
 
-  const month = monthKeyOf(draft.date);
-  if (await tx.periodLock.findUnique({ where: { month } })) {
-    throw new LedgerError(`Accounting period ${month} is locked — no entry can be posted into it.`);
-  }
+  await assertPeriodOpen(tx, draft.date);
 
   const byCode = await resolveAccountIds(
     tx,
@@ -183,17 +196,44 @@ export async function liveEntryForSource(
 }
 
 /**
+ * What a void leaves the caller to do. `reversalId` for the audit payload; `restateOn` is the
+ * date any re-post MUST carry — see `voidEntry` for why it is not always the record's own date.
+ */
+export type VoidResult = {
+  reversalId: string;
+  /** null = "date the restatement from the record itself, as normal". */
+  restateOn: Date | null;
+};
+
+/**
  * Void an entry by posting its mirror image and flagging the original.
  *
- * The reversal is dated `on` (today), not the original's date: reversing into a month Ameen
- * has already closed and reported would restate it, which is precisely what period locking
- * exists to prevent.
+ * THE RULE: a correction never straddles two periods. Both halves land in the same month, or
+ * the correction is refused.
+ *
+ * This used to date every reversal `on` (today) while the caller's restatement kept the
+ * original's date. The all-time trial balance still balanced — it sums VOID lines by design —
+ * so `verify-ledger.ts` passed throughout. But any PERIOD-SCOPED read counted the original in
+ * its own month with nothing to cancel it, and showed the bare reversal as a phantom negative
+ * in the current one. Confirmed live at ₹45,000: June overstated, July understated.
+ *
+ * The old comment defended this as protecting a closed month, which is right for a LOCKED
+ * period and wrong for an open one. So it now splits on that, and only on that:
+ *
+ *   · original's period OPEN   → date the reversal to the ORIGINAL's date. The two net to zero
+ *                                inside the month they belong to. `restateOn` is null: the
+ *                                caller dates the restatement from the record, which is what
+ *                                makes a genuine date change reclassify rather than split.
+ *   · original's period LOCKED → history is sealed and cannot be restated in place, so the whole
+ *                                correction moves to the current period: the reversal is dated
+ *                                `on`, and `restateOn` says the caller must date its re-post
+ *                                there too rather than into the record's own (locked) month.
  */
 export async function voidEntry(
   tx: LedgerDb,
   entryId: string,
   opts: { reason: string; actorId?: string | null; on: Date },
-): Promise<string> {
+): Promise<VoidResult> {
   const original = await tx.journalEntry.findUnique({
     where: { id: entryId },
     include: { lines: true },
@@ -201,9 +241,15 @@ export async function voidEntry(
   if (!original) throw new LedgerError(`Journal entry ${entryId} not found`);
   if (original.status === "VOID") throw new LedgerError(`Journal entry ${entryId} is already void`);
 
+  const originalPeriodLocked = await isPeriodLocked(tx, original.date);
+  const reversalDate = originalPeriodLocked ? opts.on : original.date;
+  // Both months locked means there is nowhere legal to put the correction. Fail loudly rather
+  // than writing into a closed period, which is what the missing guard here used to allow.
+  await assertPeriodOpen(tx, reversalDate);
+
   const reversal = await tx.journalEntry.create({
     data: {
-      date: opts.on,
+      date: reversalDate,
       narration: `Reversal of "${original.narration}" — ${opts.reason}`,
       sourceType: original.sourceType,
       // sourceId stays null: the reversal is not the source row, and reusing the id would
@@ -229,22 +275,33 @@ export async function voidEntry(
   });
 
   await tx.journalEntry.update({ where: { id: original.id }, data: { status: "VOID" } });
-  return reversal.id;
+  return { reversalId: reversal.id, restateOn: originalPeriodLocked ? opts.on : null };
 }
 
 /**
  * Void the live entry for a source row, if it has one. Used when Finance edits or deletes
  * a record: the old entry is reversed, and an edit then posts the restated one.
+ *
+ * Callers that re-post MUST honour the returned `restateOn` — `restatedDate` below is the
+ * one-liner for it.
  */
 export async function voidEntryForSource(
   tx: LedgerDb,
   sourceType: LedgerSourceType,
   sourceId: string,
   opts: { reason: string; actorId?: string | null; on: Date },
-): Promise<string | null> {
+): Promise<VoidResult | null> {
   const entry = await liveEntryForSource(tx, sourceType, sourceId);
   if (!entry) return null;
   return voidEntry(tx, entry.id, opts);
+}
+
+/**
+ * The date a restatement should carry: whatever the void demands, else the record's own.
+ * Nothing was voided (`null` result) means nothing constrains it either.
+ */
+export function restatedDate(voided: VoidResult | null, recordDate: Date): Date {
+  return voided?.restateOn ?? recordDate;
 }
 
 // ───────────────────────── Immutable audit chain ─────────────────────────
@@ -378,10 +435,88 @@ export async function getTrialBalance(db: LedgerDb, upTo?: Date) {
   return { rows, totalDebit, totalCredit, balanced: totalDebit === totalCredit };
 }
 
-/** The read-only Journal view (SPEC §10.4): newest entries with their lines. */
-export async function getJournal(db: LedgerDb, opts: { take?: number; skip?: number } = {}) {
+/** Half-open UTC bounds of a "YYYY-MM" key — the same convention `monthKeyOf` produces. */
+export function monthBounds(month: string): { start: Date; end: Date } {
+  const start = new Date(`${month}-01T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+  return { start, end };
+}
+
+/**
+ * Net movement per account WITHIN one month — the period-scoped counterpart to the cumulative
+ * trial balance above, and the read a monthly P&L is built from.
+ *
+ * It exists as much for the test suite as for the app. `getTrialBalance` sums every line ever
+ * posted, so a reversal dated into the wrong month still cancels its original somewhere in the
+ * total and the books balance perfectly — which is exactly how the mis-dated-reversal defect
+ * survived `verify-ledger.ts`. **Balance is not correctness.** Only a period-scoped read can see
+ * that kind of error, so the fix and this reader arrived together.
+ *
+ * VOID entries' lines are included, deliberately and identically to `getTrialBalance`: a void is
+ * expressed by the reversal that cancels it, not by hiding the original. That is what makes the
+ * dating of the reversal the thing that matters.
+ */
+export async function getPeriodMovements(
+  db: LedgerDb,
+  month: string,
+): Promise<Map<AccountCode, bigint>> {
+  const { start, end } = monthBounds(month);
+  const grouped = await db.journalLine.groupBy({
+    by: ["accountId"],
+    where: { entry: { date: { gte: start, lt: end } } },
+    _sum: { baseDebitMinor: true, baseCreditMinor: true },
+  });
+  const accounts = await db.ledgerAccount.findMany({ select: { id: true, code: true } });
+  const codeById = new Map(accounts.map((a) => [a.id, a.code as AccountCode]));
+
+  const out = new Map<AccountCode, bigint>();
+  for (const g of grouped) {
+    const code = codeById.get(g.accountId);
+    if (!code) continue;
+    // debit-positive, so an expense reads positive and revenue reads negative — the same
+    // orientation as the trial balance columns.
+    out.set(code, (g._sum.baseDebitMinor ?? BigInt(0)) - (g._sum.baseCreditMinor ?? BigInt(0)));
+  }
+  return out;
+}
+
+/**
+ * The read-only Journal view (SPEC §10.4): newest entries with their lines.
+ *
+ * `q` filters across the whole ledger — not just the current page — so a search spans every
+ * entry, then paginates the matches. It matches the narration, who posted it, and any leg's
+ * account code or name (case-insensitive), which is how a human refers to an entry.
+ */
+export async function getJournal(
+  db: LedgerDb,
+  opts: { take?: number; skip?: number; q?: string } = {},
+) {
+  const q = opts.q?.trim();
+  const where: Prisma.JournalEntryWhereInput | undefined = q
+    ? {
+        OR: [
+          { narration: { contains: q, mode: "insensitive" } },
+          { postedBy: { name: { contains: q, mode: "insensitive" } } },
+          {
+            lines: {
+              some: {
+                account: {
+                  OR: [
+                    { name: { contains: q, mode: "insensitive" } },
+                    { code: { contains: q, mode: "insensitive" } },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      }
+    : undefined;
+
   const [entries, total] = await Promise.all([
     db.journalEntry.findMany({
+      where,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: opts.take ?? 50,
       skip: opts.skip ?? 0,
@@ -393,7 +528,7 @@ export async function getJournal(db: LedgerDb, opts: { take?: number; skip?: num
         },
       },
     }),
-    db.journalEntry.count(),
+    db.journalEntry.count({ where }),
   ]);
   return { entries, total };
 }

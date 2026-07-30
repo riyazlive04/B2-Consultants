@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Eraser, Expand, Minimize2, PenLine, Undo2 } from "lucide-react";
 import { collectReportedDevice, type CaptureMeta, type SigningDevice } from "@/lib/device";
+import { lockBodyScroll } from "@/lib/scroll-lock";
 
 /**
  * Draw-to-sign pad. Works with a finger, a stylus and a mouse, on a phone or a laptop.
@@ -189,11 +190,12 @@ export function SignaturePad({
     if (!fullScreen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setFullScreen(false);
     window.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // Shared counter (lib/scroll-lock.ts) — full-screen signing opens from inside the
+    // agreement modal, so this and the modal's lock always interleave.
+    const releaseScroll = lockBodyScroll();
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
+      releaseScroll();
     };
   }, [fullScreen]);
 

@@ -21,6 +21,7 @@
     "db:demo": "tsx prisma/demo-data.ts",
     "db:workshops": "tsx prisma/seed-workshops.ts",
     "db:crm": "tsx prisma/seed-crm.ts",
+    "db:link-bookings": "tsx prisma/backfill-booking-links.ts",
     "verify:outreach": "tsx prisma/verify-outreach.ts",
     "verify:automation": "tsx prisma/verify-automation.ts",
     "docs:whatsapp": "tsx scripts/whatsapp-templates-docx.ts"

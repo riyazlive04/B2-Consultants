@@ -6,6 +6,7 @@ import { ArrowUpRight, Maximize2 } from "lucide-react";
 import { SIGNAL_META, type SignalLevel } from "@/lib/signals";
 import { Sparkline } from "./Sparkline";
 import { Modal } from "./Modal";
+import { useCanNavigate } from "@/components/shell/SectionAccess";
 
 /**
  * §5.3's delta chip. `positiveIsGood` exists because a rise is not always a win:
@@ -96,13 +97,17 @@ export function MetricCard({
   delta?: Delta; // §5.3 change-vs-previous chip
 }) {
   const [open, setOpen] = useState(false);
+  // O2: a card pointing into a section this viewer cannot open keeps its NUMBER (the figure is
+  // still true and still worth seeing) but loses the link, falling back to the built-in detail
+  // popup instead of bouncing to /?denied=.
+  const linkable = useCanNavigate(href) ? href : undefined;
   const tint = signal ? SIGNAL_META[signal] : undefined;
   const barColor = tint ? tint.color : "var(--primary)";
   const className =
     "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-line bg-surface p-6 shadow-card";
 
   // Built-in expand applies only when the card isn't a link and the caller hasn't taken the click.
-  const selfExpand = !href && !onClick;
+  const selfExpand = !linkable && !onClick;
 
   const inner = (
     <>
@@ -121,8 +126,14 @@ export function MetricCard({
               {icon}
             </span>
           )}
-          <span className="flex items-center gap-1.5 truncate text-label uppercase text-ink-3">
-            <span className="truncate">{label}</span>
+          {/* The label WRAPS to a second line rather than truncating.
+              A 4-up KPI row on an iPad in landscape gives each card ~200px, which turned
+              "Total active students" into "TOTAL ACTI…" and "Top paying student" into
+              "TOP PAYING…" — a KPI whose name you cannot read is not a KPI. Two lines is the cap
+              (`line-clamp-2`), so a pathological label still can't push the figure out of sight,
+              and grid rows equalise height anyway so the row just gets a few pixels taller. */}
+          <span className="flex min-w-0 items-start gap-1.5 text-label uppercase text-ink-3">
+            <span className="line-clamp-2 min-w-0">{label}</span>
             {tooltip && (
               // keyboard- and touch-reachable (§5.9): the definition shows on
               // hover AND focus, not only via the mouse-only title attribute
@@ -137,7 +148,9 @@ export function MetricCard({
                   role="tooltip"
                   // `text-surface`, not `text-white`: --ink is near-white in the dark
                   // theme, so a hardcoded white label rendered white-on-white there.
-                  className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 w-56 -translate-x-1/2 whitespace-normal rounded-field bg-ink px-2.5 py-1.5 text-left text-caption font-normal normal-case leading-snug tracking-normal text-surface opacity-0 shadow-soft transition-opacity group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
+                  // Pinned to the bottom gutters on phones, centred bubble from `sm` — see InfoHint
+                  // for why (a 224px bubble does not fit either side of a chip on a 390px screen).
+                  className="pointer-events-none fixed inset-x-4 bottom-4 z-30 w-auto translate-x-0 whitespace-normal rounded-field bg-ink px-3 py-2 text-left text-caption font-normal normal-case leading-snug tracking-normal text-surface opacity-0 shadow-pop transition-opacity group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100 sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-full sm:z-20 sm:mt-1.5 sm:w-56 sm:-translate-x-1/2 sm:px-2.5 sm:py-1.5 sm:shadow-soft"
                 >
                   {tooltip}
                 </span>
@@ -145,7 +158,7 @@ export function MetricCard({
             )}
           </span>
         </div>
-        {href ? (
+        {linkable ? (
           <ArrowUpRight
             size={18}
             className="flex-none text-muted transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-accent"
@@ -185,9 +198,9 @@ export function MetricCard({
     </>
   );
 
-  if (href) {
+  if (linkable) {
     return (
-      <Link href={href} className={className}>
+      <Link href={linkable} className={className}>
         {inner}
       </Link>
     );

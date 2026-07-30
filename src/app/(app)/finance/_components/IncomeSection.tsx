@@ -15,6 +15,8 @@ import {
 } from "@/lib/labels";
 import { AmountPair } from "@/components/ui/AmountPair";
 import { StudentName } from "@/components/ui/StudentName";
+import { money, moneyAlt, moneyInline, moneyValue } from "@/lib/money-display";
+import { useFinanceCcy } from "./FinanceCurrency";
 
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
@@ -40,9 +42,19 @@ export function IncomeSection({
   fxStale?: boolean;
   fxDate?: string;
 }) {
+  const { ccy } = useFinanceCcy();
   const [editing, setEditing] = useState<IncomeRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Which payment type the form currently shows — the instalment questions render only for
+  // INSTALMENT. null = "follow the row being edited (or the default)", so entering/leaving
+  // edit mode resets the answer along with the rest of the re-keyed form.
+  const [paymentTypeChoice, setPaymentTypeChoice] = useState<string | null>(null);
+  const paymentType = paymentTypeChoice ?? editing?.paymentType ?? "FULL_PAYMENT";
+  const switchEditing = (row: IncomeRow | null) => {
+    setEditing(row);
+    setPaymentTypeChoice(null);
+  };
   // Optimistic delete: hide the row at once, restore it if the archive fails.
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const visibleRows = rows.filter((r) => !removedIds.has(r.id));
@@ -53,7 +65,7 @@ export function IncomeSection({
     if (!res.ok) return setError(res.error);
     toast(editing ? "Income entry updated" : "Payment recorded");
     if (!editing) celebrate(); // money in the door — worth confetti (edits stay quiet)
-    setEditing(null);
+    switchEditing(null);
     formRef.current?.reset();
   };
 
@@ -89,30 +101,60 @@ export function IncomeSection({
           ? `${r.studentName} ${studentCodeById[r.studentId]}`
           : r.studentName,
     },
+    // The two "as entered" columns stay currency-LABELLED, because that is what they are: the
+    // money that actually arrived in that currency, and a dash where none did. Converting them
+    // would erase the very distinction (a €500 PayPal payment vs a ₹54,372 UPI one).
     {
-      key: "inr", header: "INR", align: "right",
+      key: "inr", header: "Received ₹", align: "right",
       cell: (r) => (BigInt(r.amountInrRaw) === BigInt(0) ? "-" : formatInrMinor(BigInt(r.amountInrRaw))),
       value: (r) => Number(BigInt(r.amountInrRaw)) / 100,
     },
     {
-      key: "eur", header: "EUR", align: "right",
+      key: "eur", header: "Received €", align: "right",
       cell: (r) => (BigInt(r.amountEurRaw) === BigInt(0) ? "-" : formatEurMinor(BigInt(r.amountEurRaw))),
       value: (r) => Number(BigInt(r.amountEurRaw)) / 100,
     },
+    // The aggregate DOES follow the toggle — it is one amount quoted two ways, so which way
+    // leads is exactly the reader's choice.
     {
-      key: "agg", header: "Total (₹ · €)", align: "right",
-      cell: (r) => `${formatInrMinor(r.agg.inr, { compact: true })} · ${formatEurMinor(r.agg.eur, { compact: true })}`,
-      value: (r) => r.agg.inr / 100,
+      key: "agg", header: "Total", align: "right",
+      cell: (r) => moneyInline(r.agg, ccy, { compact: true }),
+      value: (r) => moneyValue(r.agg, ccy),
     },
     { key: "level", header: "Level", cell: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel, value: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel },
-    { key: "type", header: "Type", cell: (r) => PAYMENT_TYPE_LABELS[r.paymentType], value: (r) => PAYMENT_TYPE_LABELS[r.paymentType] },
+    {
+      key: "type", header: "Type",
+      cell: (r) => {
+        if (r.paymentType !== "INSTALMENT" || !r.instalmentCount) return PAYMENT_TYPE_LABELS[r.paymentType];
+        const extraInr = BigInt(r.instalmentExtraInrRaw);
+        const extraEur = BigInt(r.instalmentExtraEurRaw);
+        const extras = [
+          ...(extraInr > BigInt(0) ? [formatInrMinor(extraInr)] : []),
+          ...(extraEur > BigInt(0) ? [formatEurMinor(extraEur)] : []),
+        ];
+        return (
+          <span>
+            {PAYMENT_TYPE_LABELS[r.paymentType]} · {r.instalmentCount}×
+            {extras.length > 0 && (
+              // As-entered again: the surcharge is stored in the currency it was charged in.
+              <span className="block text-caption text-muted">+{extras.join(" + ")} extra</span>
+            )}
+          </span>
+        );
+      },
+      // the count joins the filter/CSV value so "3" or "instalment" finds the row
+      value: (r) =>
+        r.paymentType === "INSTALMENT" && r.instalmentCount
+          ? `${PAYMENT_TYPE_LABELS[r.paymentType]} (${r.instalmentCount}x)`
+          : PAYMENT_TYPE_LABELS[r.paymentType],
+    },
     { key: "method", header: "Method", cell: (r) => PAYMENT_METHOD_LABELS[r.paymentMethod], value: (r) => PAYMENT_METHOD_LABELS[r.paymentMethod] },
     { key: "notes", header: "Notes", cell: (r) => r.notes ?? "", value: (r) => r.notes ?? "" },
     {
       key: "actions", header: "", sortable: false,
       cell: (r) => (
         <span className="flex gap-2 whitespace-nowrap">
-          <Btn variant="ghost" size="sm" onClick={() => setEditing(r)}>Edit</Btn>
+          <Btn variant="ghost" size="sm" onClick={() => switchEditing(r)}>Edit</Btn>
           <Btn variant="danger" size="sm" onClick={() => remove(r)}>Delete</Btn>
         </span>
       ),
@@ -126,7 +168,7 @@ export function IncomeSection({
         title={editing ? `Edit income - ${editing.studentName}` : "Daily income entry"}
         actions={
           editing ? (
-            <Btn variant="ghost" size="sm" onClick={() => setEditing(null)}>
+            <Btn variant="ghost" size="sm" onClick={() => switchEditing(null)}>
               Cancel edit
             </Btn>
           ) : undefined
@@ -139,7 +181,7 @@ export function IncomeSection({
           </Field>
           <Field
             label="Student name"
-            hint={studentOptions.length > 0 ? "Search to link a student — feeds their LTV" : undefined}
+            hint={studentOptions.length > 0 ? "Search to link a student — feeds their total paid" : undefined}
           >
             {studentOptions.length > 0 ? (
               // Searchable auto-populate (issue 2.6): picking a student fills the name AND the
@@ -173,8 +215,41 @@ export function IncomeSection({
             <Select name="programLevel" options={levelOptions} defaultValue={editing?.programLevel ?? "GUIDED"} />
           </Field>
           <Field label="Payment type">
-            <Select name="paymentType" options={optionsFrom(PAYMENT_TYPE_LABELS)} defaultValue={editing?.paymentType ?? "FULL_PAYMENT"} />
+            <Select
+              name="paymentType"
+              options={optionsFrom(PAYMENT_TYPE_LABELS)}
+              defaultValue={editing?.paymentType ?? "FULL_PAYMENT"}
+              onChange={(e) => setPaymentTypeChoice(e.currentTarget.value)}
+            />
           </Field>
+          {/* Instalment plans carry two more answers: how many instalments the fee is split
+              into, and the surcharge added for choosing the plan. Asked only when it applies —
+              a full payment keeps the short form. */}
+          {paymentType === "INSTALMENT" && (
+            <>
+              <Field label="Number of instalments" hint="How many instalments the fee is split into">
+                <TextInput
+                  kind="int"
+                  name="instalmentCount"
+                  required
+                  placeholder="e.g. 3"
+                  defaultValue={editing?.instalmentCount ? String(editing.instalmentCount) : ""}
+                />
+              </Field>
+              <AmountPair
+                fxRate={fxRate}
+                fxStale={fxStale}
+                fxDate={fxDate}
+                inrName="instalmentExtraInr"
+                eurName="instalmentExtraEur"
+                inrLabel="Extra amount (₹)"
+                eurLabel="Extra amount (€)"
+                baseHint="Added to the fee for paying in instalments"
+                defaultInr={editing ? minorToInput(editing.instalmentExtraInrRaw) : ""}
+                defaultEur={editing ? minorToInput(editing.instalmentExtraEurRaw) : ""}
+              />
+            </>
+          )}
           <Field label="Payment method">
             <Select name="paymentMethod" options={optionsFrom(PAYMENT_METHOD_LABELS)} defaultValue={editing?.paymentMethod ?? "UPI"} />
           </Field>

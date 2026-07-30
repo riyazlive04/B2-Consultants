@@ -105,7 +105,7 @@ export const agreementDataSchema = z
       email: z.union([z.string().trim().email().max(200), z.literal("")]).default(""),
     }),
     batch: z.object({
-      /** §2.1 "Batch 12". Free text: batches are not a first-class model (GnBatch is the LMS cohort). */
+      /** §2.1 "Batch 12". Free text: batches are not a first-class model (Batch is the LMS cohort). */
       number: z.string().trim().min(1, "Enter the batch").max(40),
       startDate: isoDate,
     }),
@@ -118,10 +118,44 @@ export const agreementDataSchema = z
       z.object({
         option: z.literal("INSTALMENT"),
         totalInrMinor: minorUnits,
-        /** §7.2 caps the plan at two instalments. */
-        instalments: z.array(instalmentSchema).min(2).max(2),
+        /**
+         * 2 to 6 instalments (Error Log N3). The original template (§7.2) allowed exactly two,
+         * so this was `.min(2).max(2)` — which made the plans the business actually sells
+         * unrecordable: B2 sells 4 EMI on a bundle and 6 EMI across three courses, and German
+         * Note runs up to 6 equal instalments.
+         *
+         * WIDENING is the safe direction, and that is not incidental. This schema re-parses
+         * every stored agreement and `contentHash` hashes the PARSED object, so a narrower rule
+         * would retroactively invalidate executed contracts. Every existing row holds exactly
+         * two instalments, which still satisfies `.min(2)` — so they parse to the identical
+         * object and keep the hash printed on their signed PDF. See the agreement-hash test.
+         */
+        instalments: z.array(instalmentSchema).min(2).max(6),
       }),
     ]),
+    /**
+     * Bundle add-ons — the ₹300 / ₹600 book and material charges (Error Log N5), itemised so
+     * the student sees what they are paying for rather than one opaque total.
+     *
+     * `.optional()` with NO `.default()`, deliberately. `canonicalJson` drops `undefined` keys,
+     * so an agreement signed before this field existed parses to exactly the same object and
+     * hashes to exactly the same value. A `.default([])` would materialise the key on every old
+     * row and change every historic hash — silently breaking the integrity check on contracts
+     * that are already executed.
+     *
+     * These are part of `totalInrMinor`, not extra to it: the instalment-sum invariant below is
+     * the guarantee that what is scheduled equals what is owed, and an add-on outside the total
+     * would quietly break it.
+     */
+    addOns: z
+      .array(
+        z.object({
+          label: z.string().trim().min(2).max(80),
+          amountInrMinor: minorUnits,
+        }),
+      )
+      .max(10)
+      .optional(),
   })
   .superRefine((d, ctx) => {
     if (d.payment.option !== "INSTALMENT") return;

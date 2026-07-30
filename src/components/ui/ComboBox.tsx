@@ -92,7 +92,8 @@ export function ComboBox({
       case "Enter":
         if (matches[active]) { e.preventDefault(); pick(matches[active]); }
         return;
-      case "Escape": e.preventDefault(); setOpen(false); return;
+      // stopPropagation: Escape closes only the suggestions, not a Modal hosting it (see SelectMenu)
+      case "Escape": e.preventDefault(); e.stopPropagation(); setOpen(false); return;
       case "Tab": setOpen(false); return;
     }
   }

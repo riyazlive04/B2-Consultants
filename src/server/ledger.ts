@@ -19,15 +19,18 @@ import {
 export {
   LedgerError,
   monthKeyOf,
+  isPeriodLocked,
   postEntry,
   postEntryOnce,
   voidEntry,
   voidEntryForSource,
+  restatedDate,
   appendAudit,
   seedChartOfAccounts,
 } from "./ledger-core";
-export type { DraftEntry, DraftLine, LedgerDb, TrialBalanceRow, AuditInput } from "./ledger-core";
+export type { DraftEntry, DraftLine, LedgerDb, TrialBalanceRow, AuditInput, VoidResult } from "./ledger-core";
 
 export const getTrialBalance = (upTo?: Date) => getTrialBalanceWith(prisma, upTo);
-export const getJournal = (opts?: { take?: number; skip?: number }) => getJournalWith(prisma, opts);
+export const getJournal = (opts?: { take?: number; skip?: number; q?: string }) =>
+  getJournalWith(prisma, opts);
 export const verifyAuditChain = () => verifyAuditChainWith(prisma);

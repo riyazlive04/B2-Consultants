@@ -73,7 +73,7 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
 export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   DISCO_REMINDER: "Un-booked leads (New / Disco-not-booked) who haven't scheduled a call yet.",
   BOOKING_CONFIRMATION: "Sent once, right after a prospect books a discovery-call slot.",
-  BOOKING_REMINDER: "Before an upcoming booked slot (per the lead-hours cadence).",
+  BOOKING_REMINDER: "Before an upcoming booked slot (per the lead-hours schedule).",
   NO_SHOW_FOLLOWUP: "A lead marked No-show — nudge them to rebook.",
   PAYMENT_REMINDER: "A pending payment that is overdue.",
   EMI_PRE_DUE: "An instalment falls due in the next few days — lands BEFORE the due date, unlike the overdue reminder.",

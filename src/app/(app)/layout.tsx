@@ -4,6 +4,7 @@ import { AccessDeniedToast } from "@/components/shell/AccessDeniedToast";
 import { NotificationBell } from "@/components/shell/NotificationBell";
 import { RunwayBadge } from "@/components/shell/RunwayBadge";
 import { AppShell } from "@/components/shell/AppShell";
+import { CurrencyProvider } from "@/components/ui/CurrencyToggle";
 import { ThemeSync } from "@/components/shell/ThemeSync";
 import { SkeletonPill } from "@/components/ui/Skeleton";
 import { CallsTodayGreeting } from "@/components/shell/CallsTodayGreeting";
@@ -69,6 +70,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }));
 
   return (
+    /**
+     * ONE ₹/€ provider for the whole authenticated app.
+     *
+     * It started per-page (Finance, then the dashboard), which broke the moment the notification
+     * BELL needed the same currency: the bell lives in this shell, outside any page, so it fell
+     * back to INR while the page beside it showed euros. Two providers would have been worse than
+     * one — they read the same localStorage key but hold separate state, so flipping the toggle on
+     * a page would leave the bell on its old currency until a reload.
+     *
+     * Emits no DOM node, so wrapping the shell changes no layout.
+     */
+    <CurrencyProvider>
     <div className="contents">
       {/* The user's own theme wins over whatever this browser happens to have cached. */}
       <ThemeSync preference={session.themePreference} />
@@ -108,5 +121,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <CallsGreetingSlot userId={session.user.id} />
       </Suspense>
     </div>
+    </CurrencyProvider>
   );
 }

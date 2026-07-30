@@ -35,7 +35,7 @@ export function CashPositionSection({
   const columns: Column<CashOverview["positions"][number]>[] = [
     { key: "date", header: "Date", cell: (r) => formatDate(r.date), value: (r) => r.date.slice(0, 10) },
     {
-      key: "balance", header: "Bank balance", align: "right",
+      key: "balance", header: "Cash in Hand", align: "right",
       cell: (r) => formatInrMinor(r.balanceInr), value: (r) => r.balanceInr / 100,
     },
     {
@@ -82,6 +82,55 @@ export function CashPositionSection({
       </Card>
       <DataTable rows={positions} columns={columns} csvName="cash-positions" emptyMessage="No entries yet - add the first Monday balance above." />
     </section>
+  );
+}
+
+/**
+ * Frequency + the due date that only some frequencies have (Error Log H3).
+ *
+ * A ONE-TIME payable has no NEXT due date — there is no next one. The field was shown and
+ * required-looking regardless, so a one-off invoice could not be recorded without inventing a
+ * recurrence date that then drove the "due this month" figures.
+ *
+ * The input is REMOVED, not merely disabled, when the frequency is one-time: an absent field
+ * submits nothing, and `savePayable` already maps a missing/blank value to `null`, so the
+ * stored row correctly carries no schedule. A stale date from before the switch cannot survive
+ * either, because the element carrying it no longer exists.
+ */
+function PayableSchedule({
+  defaultFrequency,
+  defaultDueDate,
+}: {
+  defaultFrequency: string;
+  defaultDueDate: string;
+}) {
+  const [frequency, setFrequency] = useState(defaultFrequency);
+  const oneTime = frequency === "ONE_TIME";
+
+  return (
+    <>
+      <Field label="Frequency">
+        <Select
+          name="frequency"
+          options={optionsFrom(FREQ_LABELS)}
+          value={frequency}
+          onChange={(e) => setFrequency(e.currentTarget.value)}
+        />
+      </Field>
+      {/* Distinct keys: without them React reconciles these two inputs as the SAME element
+          (same type, same position) and the switch flips it controlled↔uncontrolled, which it
+          warns about. Keyed, each branch mounts fresh — which is also what guarantees the
+          placeholder carries no stale date. */}
+      {oneTime ? (
+        <Field key="one-time" label="Next due date" hint="Not scheduled — a one-time payable recurs only once.">
+          <TextInput type="date" disabled defaultValue="" />
+        </Field>
+      ) : (
+        <Field key="recurring" label="Next due date">
+          <TextInput type="date" name="nextDueDate" defaultValue={defaultDueDate} />
+        </Field>
+      )}
+    </>
   );
 }
 
@@ -155,12 +204,13 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
             <Field label="Amount (₹)">
               <TextInput kind="money" name="amountInr" required defaultValue={editing ? minorToInput(editing.amountInrRaw) : ""} />
             </Field>
-            <Field label="Frequency">
-              <Select name="frequency" options={optionsFrom(FREQ_LABELS)} defaultValue={editing?.frequency ?? "MONTHLY"} />
-            </Field>
-            <Field label="Next due date">
-              <TextInput type="date" name="nextDueDate" defaultValue={editing?.nextDueDate?.slice(0, 10) ?? ""} />
-            </Field>
+            {/* Keyed so switching which payable is being edited resets the schedule state
+                along with the rest of the form, rather than carrying the last one's frequency. */}
+            <PayableSchedule
+              key={editing?.id ?? "new"}
+              defaultFrequency={editing?.frequency ?? "MONTHLY"}
+              defaultDueDate={editing?.nextDueDate?.slice(0, 10) ?? ""}
+            />
             <Field label="Status">
               <Select name="status" options={optionsFrom(PAYABLE_STATUS_LABELS)} defaultValue={editing?.status ?? "ACTIVE"} />
             </Field>
@@ -181,6 +231,10 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
         csvName="payables"
         rowClassName={(r) => (r.dueSoonUnderfunded ? "bg-risk-soft" : undefined)}
         emptyMessage="No payables yet - add fixed costs to compute break-even."
+        // The query already returns these by nextDueDate ascending (cash-metrics.ts) — this
+        // makes the table SAY so. The list read as arbitrary (Error Log H1) because no header
+        // carried a sort arrow, so soonest-first looked like insertion order.
+        defaultSort="due"
       />
     </section>
   );

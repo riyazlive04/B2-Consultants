@@ -15,13 +15,30 @@ import {
 } from "@/lib/resume-template";
 import { coerceReviewResult, type AiReviewResult } from "@/lib/resume-review-types";
 import { getAiRuntime, callClaude, extractJson, readAiSettings, writeAiSettings, type AiSettings } from "@/lib/anthropic";
-import { getResumeTemplate, getResume, type ResumeDetail } from "@/server/resume-metrics";
+import { getResumeTemplate, getResume, resumeScope, type ResumeDetail } from "@/server/resume-metrics";
 import { analyseCv } from "@/lib/cv-analysis";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 const TEMPLATE_KEY = "resumeTemplateConfig";
 const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
+
+/**
+ * Every action below that touches an EXISTING resume resolves it through here rather than by
+ * bare id. `requireSection("cv-check")` only says the person may open the Studio, and the
+ * section is granted to STUDENT by default — so an id-only lookup let one candidate edit,
+ * delete, duplicate or re-review another's CV. See `resumeScope` for the rule itself.
+ *
+ * Returns null for both "gone" and "not yours", deliberately: distinguishing them would confirm
+ * the existence of an id the caller has no business knowing about.
+ */
+async function findOwned<S extends Prisma.ResumeSelect>(
+  session: { role: Parameters<typeof resumeScope>[0]["role"]; user: { id: string } },
+  id: string,
+  select: S,
+) {
+  return prisma.resume.findFirst({ where: { id, ...resumeScope(session) }, select });
+}
 
 // ───────────────────────────── resume CRUD ─────────────────────────────
 
@@ -67,7 +84,7 @@ export async function updateResume(input: {
   const session = await requireSection("cv-check");
   const title = input.title.trim();
   if (!title) return { ok: false, error: "Give the CV a title." };
-  const exists = await prisma.resume.findUnique({ where: { id: input.id }, select: { id: true, title: true, language: true, data: true } });
+  const exists = await findOwned(session, input.id, { id: true, title: true, language: true, data: true });
   if (!exists) return { ok: false, error: "That CV no longer exists." };
 
   const language = input.language === "DE" ? "DE" : "EN";
@@ -99,8 +116,11 @@ export async function updateResume(input: {
 
 export async function deleteResume(id: string): Promise<ActionResult> {
   const session = await requireSection("cv-check");
-  const row = await prisma.resume.delete({ where: { id } }).catch(() => null);
+  // Resolve under scope first — `delete({ where: { id } })` cannot carry a non-unique filter, so
+  // an unscoped delete would happily remove someone else's CV.
+  const row = await findOwned(session, id, { title: true, language: true });
   if (row) {
+    await prisma.resume.delete({ where: { id } }).catch(() => null);
     await logActivity(session, {
       action: "resume.delete",
       section: "cv-check",
@@ -116,13 +136,13 @@ export async function deleteResume(id: string): Promise<ActionResult> {
 
 /** Full resume detail for the client editor/review panels (server-only reads can't be called from a client). */
 export async function loadResume(id: string): Promise<ResumeDetail | null> {
-  await requireSection("cv-check");
-  return getResume(id);
+  const session = await requireSection("cv-check");
+  return getResume(id, resumeScope(session));
 }
 
 export async function duplicateResume(id: string): Promise<ActionResult & { id?: string }> {
   const session = await requireSection("cv-check");
-  const src = await prisma.resume.findUnique({ where: { id } });
+  const src = await findOwned(session, id, { title: true, language: true, data: true });
   if (!src) return { ok: false, error: "That CV no longer exists." };
   const row = await prisma.resume.create({
     data: {
@@ -238,10 +258,7 @@ export async function runReview(input: { resumeId: string; jdText: string }): Pr
   const jd = input.jdText.trim();
   if (jd.length < 40) return { ok: false, error: "Paste the full job description (at least a few lines)." };
 
-  const row = await prisma.resume.findUnique({
-    where: { id: input.resumeId },
-    select: { title: true, language: true, data: true },
-  });
+  const row = await findOwned(session, input.resumeId, { title: true, language: true, data: true });
   if (!row) return { ok: false, error: "That CV no longer exists." };
 
   const data = coerceResumeData(row.data);
@@ -312,8 +329,13 @@ export async function runReview(input: { resumeId: string; jdText: string }): Pr
 
 export async function deleteReview(id: string): Promise<ActionResult> {
   const session = await requireSection("cv-check");
-  const row = await prisma.resumeReview.delete({ where: { id } }).catch(() => null);
+  // Scoped through the review's PARENT resume — a review carries no owner of its own.
+  const row = await prisma.resumeReview.findFirst({
+    where: { id, resume: resumeScope(session) },
+    select: { id: true, resumeId: true, provider: true, scoreOverall: true },
+  });
   if (row) {
+    await prisma.resumeReview.delete({ where: { id } }).catch(() => null);
     const resume = await prisma.resume.findUnique({ where: { id: row.resumeId }, select: { title: true } });
     await logActivity(session, {
       action: "resume.review.delete",

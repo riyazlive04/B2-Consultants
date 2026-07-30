@@ -8,6 +8,8 @@ import { runRetentionSweep } from "./retention";
 import { runScheduledReport } from "./scheduled-report";
 import { backfillInvoiceIssuance } from "./invoice-posting";
 import { runPaymentDueEmails } from "./payment-email-reminders";
+import { ensureBookingSlots } from "./slot-topup";
+import { ensureSssSlots } from "./sss-topup";
 
 /**
  * The once-a-day housekeeping orchestrator (audit §C #18/#19/#21/#22/#24), ticked by
@@ -50,6 +52,16 @@ export async function runDailyMaintenance(): Promise<DailyMaintenanceRun> {
   // Cheap, corrective, every tick.
   if (cfg.fxPrewarm.enabled) await safe("fxPrewarm", prewarmTodayFx);
   await safe("overdueSweep", runOverdueSweep);
+
+  // Keep the public /book calendar stocked. Additive-only (never updates or deletes a slot) and
+  // idempotent, so it runs on every tick rather than once a day: a once-daily top-up would leave
+  // the calendar short for up to 24h after the horizon widened. Self-gates on its own config,
+  // which ships disabled.
+  await safe("bookingSlotTopUp", ensureBookingSlots);
+
+  // The same treatment for the founder's SSS diary, which has never held a single row. Same
+  // additive-only guarantees, same self-gating on a config that ships disabled.
+  await safe("sssSlotTopUp", ensureSssSlots);
 
   // Event-driven posting handles new invoices; this mops up legacy/flag-was-off ones. Cheap
   // (postEntryOnce short-circuits already-posted), so it can run every tick.

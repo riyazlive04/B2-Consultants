@@ -250,7 +250,14 @@ export function StudentDetailClient({
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="font-display text-2xl font-semibold">{student.fullName}</h2>
+            <h2 className="flex flex-wrap items-baseline gap-2 font-display text-2xl font-semibold">
+              {student.fullName}
+              {/* The single most useful place for the code (Error Log I1): this is the page
+                  you are on while checking you have the right person before a call. */}
+              {student.code && (
+                <span className="tnum text-base font-medium text-ink-3">{student.code}</span>
+              )}
+            </h2>
             <p className="mt-1 text-sm text-muted">
               {[student.email, student.phone, student.industry].filter(Boolean).join(" · ") || "No contact details"}
             </p>
@@ -260,7 +267,7 @@ export function StudentDetailClient({
             )}
           </div>
           <div className="text-right">
-            <p className="text-sm font-medium text-muted">Lifetime value</p>
+            <p className="text-sm font-medium text-muted">Total paid</p>
             <p className="font-display text-3xl font-semibold">{formatInrMinor(student.ltvInr, { compact: true })}</p>
             <p className="text-xs text-muted">{student.incomes.length} linked payment(s)</p>
           </div>
@@ -325,7 +332,7 @@ export function StudentDetailClient({
                   onChange={async (ev) => {
                     const next = ev.target.value;
                     const ok = await askConfirm({
-                      title: "Change enrollment status?",
+                      title: "Change enrolment status?",
                       body: `Set this enrollment to “${STUDENT_STATUS_LABELS[next] ?? next}”.`,
                       confirmLabel: "Change status",
                     });
@@ -340,7 +347,7 @@ export function StudentDetailClient({
                       toast("Enrollment status updated");
                     }
                   }}
-                  aria-label="Enrollment status"
+                  aria-label="Enrolment status"
                   options={optionsFrom(STUDENT_STATUS_LABELS)}
                 />
               ) : (
@@ -583,7 +590,7 @@ export function StudentDetailClient({
               className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
             >
               <Field label="Program level"><Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" /></Field>
-              <Field label="Enrollment date"><TextInput type="date" name="enrollmentDate" required defaultValue={todayKey} /></Field>
+              <Field label="Enrolment date"><TextInput type="date" name="enrollmentDate" required defaultValue={todayKey} /></Field>
               <Field label="Sessions planned"><TextInput kind="int" name="totalSessionsPlanned" /></Field>
               <Field label="Assigned coach"><Select name="assignedCoach" options={COACH_OPTIONS} defaultValue="Karthick" /></Field>
               <Field label="Closer (L3)" hint="For the commission split">
@@ -593,19 +600,19 @@ export function StudentDetailClient({
                   defaultValue=""
                 />
               </Field>
-              <div className="flex items-end"><SubmitButton>Add enrollment</SubmitButton></div>
+              <div className="flex items-end"><SubmitButton>Add enrolment</SubmitButton></div>
             </form>
           )}
         </Card>
       )}
 
-      {/* Satisfaction / NPS (Admin, PRD2 §4.5) */}
-      <Card title="Satisfaction & NPS">
+      {/* Satisfaction / recommend score (Admin, PRD2 §4.5) */}
+      <Card title="Satisfaction & recommend score">
         {student.satisfaction.length > 0 && (
           <div className="mt-3 space-y-1 text-sm">
             {student.satisfaction.map((s) => (
               <p key={s.id}>
-                {formatDate(s.date)} - satisfaction <strong>{s.satisfactionScore}/10</strong>, NPS{" "}
+                {formatDate(s.date)} - satisfaction <strong>{s.satisfactionScore}/10</strong>, would recommend{" "}
                 <strong>{s.npsScore}/10</strong> · {OUTCOME_ACHIEVED_LABELS[s.outcomeAchieved]}
                 {s.testimonialReceived ? " · testimonial ✓" : ""}
                 {s.notes ? ` · ${s.notes}` : ""}
@@ -624,7 +631,7 @@ export function StudentDetailClient({
           >
             <Field label="Date of score"><TextInput type="date" name="date" required defaultValue={todayKey} /></Field>
             <Field label="Satisfaction (1-10)"><TextInput kind="int" name="satisfactionScore" min={1} max={10} required /></Field>
-            <Field label="NPS (0-10)"><TextInput kind="int" name="npsScore" min={0} max={10} required /></Field>
+            <Field label="Would recommend (0-10)"><TextInput kind="int" name="npsScore" min={0} max={10} required /></Field>
             <Field label="Outcome achieved">
               <Select name="outcomeAchieved" options={optionsFrom(OUTCOME_ACHIEVED_LABELS)} defaultValue="NO_OUTCOME_YET" />
             </Field>
@@ -666,7 +673,7 @@ export function StudentDetailClient({
             className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4"
           >
             <div className="min-w-72 flex-1">
-              <Field label="Link an unlinked income entry" hint="LTV updates immediately">
+              <Field label="Link an unlinked income entry" hint="Total paid updates immediately">
                 <Select name="incomeId" options={[{ value: "", label: "Pick an income entry…" }, ...student.unlinkedIncomes]} defaultValue="" />
               </Field>
             </div>

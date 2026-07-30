@@ -1,10 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createPendingPayment, deletePendingPayment, updatePendingPayment,
 } from "@/server/finance-actions";
-import { clearInstalmentPlan, generateInstalmentPlan, setInstalmentStatus } from "@/server/emi-actions";
+import {
+  clearInstalmentPlan, generateInstalmentPlan, previewInstalmentPlan, setInstalmentStatus,
+} from "@/server/emi-actions";
 import type { PendingRow } from "@/server/finance-metrics";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
 import { sendPaymentReminderMsg } from "@/server/whatsapp-actions";
@@ -18,17 +20,20 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { AmountPair } from "@/components/ui/AmountPair";
 import { SignalBadge } from "@/components/ui/SignalBadge";
-import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { money, moneyInline, moneyValue, type Ccy } from "@/lib/money-display";
+import { splitInstalments } from "@/lib/instalment-plan";
 import { optionsFrom, PENDING_STATUS_LABELS, PROGRAM_LEVEL_LABELS } from "@/lib/labels";
 import { StudentName } from "@/components/ui/StudentName";
+import { useFinanceCcy } from "./FinanceCurrency";
 
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
   return v === BigInt(0) ? "" : (Number(v) / 100).toFixed(2);
 };
 
-const money2 = (m: { inr: number; eur: number }) =>
-  `${formatInrMinor(m.inr, { compact: true })} · ${formatEurMinor(m.eur, { compact: true })}`;
+/** Chosen currency first, the other beneath — the toggle's rule, in a table cell. */
+const money2 = (m: { inr: number; eur: number }, ccy: Ccy) => moneyInline(m, ccy, { compact: true });
 
 const INSTALMENT_STATUS_OPTIONS = [
   { value: "DUE", label: "Due" },
@@ -46,8 +51,51 @@ function EmiScheduleModal({
   onClose: () => void;
   onError: (m: string | null) => void;
 }) {
+  const { ccy } = useFinanceCcy();
   const has = row.instalments.length > 0;
   const paidCount = row.instalments.filter((i) => i.status === "PAID").length;
+
+  /**
+   * What this plan length costs, straight from the Console table. Fetched rather than hardcoded
+   * so the founder's pricing is the single source: type 3 and the ₹600 appears here, and the
+   * amount the schedule is built from is the amount shown.
+   */
+  const [count, setCount] = useState(row.instalments.length || 2);
+  const [plan, setPlan] = useState<{ extraInr: number; extraEur: number; intervalDays: number } | null>(null);
+  const [intervalDays, setIntervalDays] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (has) return; // an existing schedule is history — don't re-price it
+    let live = true;
+    previewInstalmentPlan(count)
+      .then((p) => {
+        if (!live) return;
+        setPlan({
+          extraInr: Number(BigInt(p.extraInrMinor)),
+          extraEur: Number(BigInt(p.extraEurMinor)),
+          intervalDays: p.intervalDays,
+        });
+        // Adopt the configured gap until the founder types their own.
+        setIntervalDays((cur) => cur ?? p.intervalDays);
+      })
+      .catch(() => {
+        /* the form still works; it just can't show the surcharge up front */
+      });
+    return () => {
+      live = false;
+    };
+  }, [count, has]);
+
+  // The schedule the current answers would produce — same split function the server uses.
+  const previewTotal = {
+    inr: row.totalFee.inr + (plan?.extraInr ?? 0),
+    eur: row.totalFee.eur + (plan?.extraEur ?? 0),
+  };
+  const previewRows = splitInstalments(
+    { inr: BigInt(Math.round(previewTotal.inr)), eur: BigInt(Math.round(previewTotal.eur)) },
+    count,
+  );
+
   return (
     <Modal
       open
@@ -57,13 +105,28 @@ function EmiScheduleModal({
     >
       {has ? (
         <div className="space-y-2">
+          {/* What the plan came to, so an existing schedule explains its own total. */}
+          <div className="flex flex-wrap gap-x-5 gap-y-1 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
+            <span className="text-muted">
+              Fee <strong className="tnum text-ink-2">{money(row.totalFee, ccy)}</strong>
+            </span>
+            {row.planExtra.inr > 0 && (
+              <span className="text-muted">
+                + plan extra <strong className="tnum text-ink-2">{money(row.planExtra, ccy)}</strong>
+              </span>
+            )}
+            <span className="text-muted">
+              To collect <strong className="tnum text-ink">{money(row.toCollect, ccy)}</strong>
+            </span>
+            {row.intervalDays && <span className="text-muted">every {row.intervalDays} days</span>}
+          </div>
           {row.instalments.map((it) => (
             <div
               key={it.id}
               className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm"
             >
               <span className="font-medium">#{it.seq}</span>
-              <span className="tnum">{formatInrMinor(it.inr, { compact: true })}</span>
+              <span className="tnum">{money({ inr: it.inr, eur: it.eur }, ccy, { compact: true })}</span>
               <span className="text-xs text-muted">
                 due {formatDate(it.dueDate)}
                 {it.paidDate ? ` · paid ${formatDate(it.paidDate)}` : ""}
@@ -118,16 +181,67 @@ function EmiScheduleModal({
           className="space-y-4"
         >
           <p className="text-sm text-muted">
-            Split {money2(row.totalFee)} into equal instalments — 2 per level, 6 for a 3-level bundle. The last
-            instalment absorbs any rounding.
+            Split the fee into equal instalments — the last one absorbs any rounding. The extra for
+            each plan length is set in <strong>Console → Instalment Plans</strong>.
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="Number of instalments"><TextInput kind="int" name="count" required defaultValue="2" /></Field>
+            <Field label="Number of instalments" hint="Prices the plan from the Console table">
+              <TextInput
+                kind="int"
+                name="count"
+                required
+                value={String(count)}
+                onChange={(e) => setCount(Math.max(1, Number(e.currentTarget.value) || 0))}
+              />
+            </Field>
             <Field label="First due date">
               <TextInput type="date" name="firstDueDate" required defaultValue={row.nextDueDate?.slice(0, 10) ?? ""} />
             </Field>
-            <Field label="Days between"><TextInput kind="int" name="intervalDays" defaultValue="30" /></Field>
+            <Field label="Days between" hint={plan ? `Console default: ${plan.intervalDays}` : undefined}>
+              <TextInput
+                kind="int"
+                name="intervalDays"
+                value={intervalDays === null ? "" : String(intervalDays)}
+                onChange={(e) => setIntervalDays(Number(e.currentTarget.value) || 0)}
+              />
+            </Field>
           </div>
+
+          {/*
+            The surcharge and the schedule it produces, BEFORE generating. Without this the
+            founder types a count and finds out what it cost only afterwards — and the plan is
+            append-only in practice (clear + regenerate), so "afterwards" is the wrong time.
+          */}
+          <div className="rounded-field border border-line bg-surface-2 px-3 py-2.5">
+            <dl className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+              <div className="flex gap-2">
+                <dt className="text-muted">Fee</dt>
+                <dd className="tnum text-ink-2">{money(row.totalFee, ccy)}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-muted">+ plan extra</dt>
+                <dd className="tnum text-ink-2">
+                  {plan ? money({ inr: plan.extraInr, eur: plan.extraEur }, ccy) : "—"}
+                </dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-muted">Total to collect</dt>
+                <dd className="tnum font-semibold text-ink">{money(previewTotal, ccy)}</dd>
+              </div>
+            </dl>
+            {previewRows.length > 0 && previewRows.length <= 24 && (
+              <p className="mt-1.5 text-caption text-muted">
+                {count} × {money({ inr: Number(previewRows[0].inr), eur: Number(previewRows[0].eur) }, ccy)}
+                {previewRows[count - 1].inr !== previewRows[0].inr &&
+                  ` (last ${money(
+                    { inr: Number(previewRows[count - 1].inr), eur: Number(previewRows[count - 1].eur) },
+                    ccy,
+                  )})`}
+                {intervalDays ? ` · every ${intervalDays} days` : ""}
+              </p>
+            )}
+          </div>
+
           <SubmitButton>Generate schedule</SubmitButton>
         </form>
       )}
@@ -152,6 +266,7 @@ export function PendingSection({
   fxStale?: boolean;
   fxDate?: string;
 }) {
+  const { ccy } = useFinanceCcy();
   const [editing, setEditing] = useState<PendingRow | null>(null);
   const [emiRowId, setEmiRowId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -204,14 +319,30 @@ export function PendingSection({
           : r.studentName,
     },
     { key: "level", header: "Level", cell: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel, value: (r) => PROGRAM_LEVEL_LABELS[r.programLevel] ?? r.programLevel },
-    { key: "fee", header: "Total fee", align: "right", cell: (r) => money2(r.totalFee), value: (r) => r.totalFee.inr / 100 },
     {
-      key: "paid", header: "Paid so far", align: "right",
-      cell: (r) => money2(r.paidSoFar), value: (r) => r.paidSoFar.inr / 100,
+      key: "fee", header: "To collect", align: "right",
+      // Fee + the instalment surcharge. The surcharge is spelled out beneath rather than folded
+      // in silently, so a total that is ₹600 more than the agreed fee explains itself.
+      cell: (r) => (
+        <span className="whitespace-nowrap">
+          {money2(r.toCollect, ccy)}
+          {r.planExtra.inr > 0 && (
+            <span className="block text-caption text-muted">
+              incl. {money(r.planExtra, ccy)} plan extra
+            </span>
+          )}
+        </span>
+      ),
+      value: (r) => moneyValue(r.toCollect, ccy),
     },
     {
-      key: "balance", header: "Balance pending", align: "right",
-      cell: (r) => <strong className="tnum">{money2(r.balance)}</strong>, value: (r) => r.balance.inr / 100,
+      key: "paid", header: "Collected", align: "right",
+      cell: (r) => money2(r.paidSoFar, ccy), value: (r) => moneyValue(r.paidSoFar, ccy),
+    },
+    {
+      key: "balance", header: "Still to collect", align: "right",
+      cell: (r) => <strong className="tnum">{money2(r.balance, ccy)}</strong>,
+      value: (r) => moneyValue(r.balance, ccy),
     },
     {
       key: "due", header: "Next due", cell: (r) => (r.nextDueDate ? formatDate(r.nextDueDate) : "-"),
@@ -235,7 +366,13 @@ export function PendingSection({
           <span className="flex items-center gap-2 whitespace-nowrap">
             {w && <WhatsAppStatusBadge status={w.status} kind={w.kind} at={w.at} />}
             {r.balance.inr > 0 && (
-              <SendWhatsAppButton action={() => sendPaymentReminderMsg(r.id)} label="Remind" />
+              <SendWhatsAppButton
+                action={() => sendPaymentReminderMsg(r.id)}
+                label="Remind"
+                // L6: the control knows this person was already chased, so a second reminder
+                // has to be deliberate rather than a stray second click.
+                lastSentAt={w?.at ?? null}
+              />
             )}
           </span>
         );
@@ -257,8 +394,62 @@ export function PendingSection({
     },
   ];
 
+  /**
+   * The section's own bottom line: of everything owed, how much is in and how much is still out.
+   * Only rows that can still owe money count — a DROPPED or PAID_IN_FULL plan would otherwise
+   * inflate both sides and make the collected share meaningless.
+   */
+  const owingRows = visibleRows.filter((r) => r.status === "ACTIVE" || r.status === "OVERDUE");
+  const totals = owingRows.reduce(
+    (a, r) => ({
+      toCollect: { inr: a.toCollect.inr + r.toCollect.inr, eur: a.toCollect.eur + r.toCollect.eur },
+      collected: { inr: a.collected.inr + r.paidSoFar.inr, eur: a.collected.eur + r.paidSoFar.eur },
+      balance: { inr: a.balance.inr + r.balance.inr, eur: a.balance.eur + r.balance.eur },
+    }),
+    {
+      toCollect: { inr: 0, eur: 0 },
+      collected: { inr: 0, eur: 0 },
+      balance: { inr: 0, eur: 0 },
+    },
+  );
+  const collectedPct =
+    totals.toCollect.inr > 0 ? Math.round((totals.collected.inr / totals.toCollect.inr) * 100) : 0;
+  const overdueCount = owingRows.filter((r) => r.overdue).length;
+
   return (
     <section className="space-y-4">
+      {owingRows.length > 0 && (
+        <Card title="Collected vs still to collect" subtitle={`Across ${owingRows.length} open plan${owingRows.length === 1 ? "" : "s"} — fee plus any instalment extra.`}>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[
+              { label: "Total to collect", m: totals.toCollect, tone: "text-ink" },
+              { label: "Collected", m: totals.collected, tone: "text-good" },
+              { label: "Still to collect", m: totals.balance, tone: overdueCount ? "text-bad" : "text-ink" },
+            ].map((c) => (
+              <div key={c.label}>
+                <p className="text-caption text-muted">{c.label}</p>
+                <p className={`tnum text-h2 font-semibold ${c.tone}`}>{money(c.m, ccy)}</p>
+                <p className="tnum text-caption text-muted">{money(c.m, ccy === "INR" ? "EUR" : "INR")}</p>
+              </div>
+            ))}
+          </div>
+          {/* One bar, so "how far through the money are we" is answered without arithmetic. */}
+          <div className="mt-4">
+            <div
+              className="h-2 w-full overflow-hidden rounded-full bg-surface-2"
+              role="img"
+              aria-label={`${collectedPct}% of the total collected`}
+            >
+              <div className="h-full rounded-full bg-good transition-[width] duration-500" style={{ width: `${collectedPct}%` }} />
+            </div>
+            <p className="mt-1.5 text-caption text-muted">
+              {collectedPct}% collected
+              {overdueCount > 0 && ` · ${overdueCount} plan${overdueCount === 1 ? "" : "s"} overdue`}
+            </p>
+          </div>
+        </Card>
+      )}
+
       <Card
         title={editing ? `Edit pending payment - ${editing.studentName}` : "Pending payment (instalments)"}
         subtitle="“Paid so far” is summed automatically from income entries with the same student name - enter the agreed total fee only."

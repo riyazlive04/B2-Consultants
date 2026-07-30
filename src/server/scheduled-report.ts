@@ -101,7 +101,7 @@ function digestHtml(d: Awaited<ReturnType<typeof buildDigest>>, cadence: string)
       ${row("Open receivables", formatInrMinor(d.receivableMinor))}
       ${row("Overdue instalments", String(d.overdueInstalments))}
     </table>
-    <p style="color:#636F85;font-size:12px;margin:20px 0 0">Sent automatically by your B2 dashboard. Adjust cadence and recipients in Founder Console → Maintenance.</p>
+    <p style="color:#636F85;font-size:12px;margin:20px 0 0">Sent automatically by your B2 dashboard. Adjust how often it sends and who receives it in Founder Console → Maintenance.</p>
   </div>`;
 }
 

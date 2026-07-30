@@ -7,3 +7,4 @@ docker/cron/tick.sh text eol=lf
 
 # The Caddyfile is read by a Linux container too.
 Caddyfile text eol=lf
+Caddyfile.local text eol=lf

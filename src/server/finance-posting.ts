@@ -138,6 +138,64 @@ export function expenseEntryDraft(e: ExpenseForPosting): DraftEntry {
   };
 }
 
+export type TutorFeeForPosting = {
+  id: string;
+  approvedAt: Date;
+  batchName: string;
+  level: string;
+  trainerName: string | null;
+  /** Already resolved through `payableAmountInrMinor` — the override wins over the computed
+   *  figure, and the ledger must agree with what the founder approved on screen. */
+  payableInrMinor: bigint;
+  approvedById: string | null;
+};
+
+/**
+ * Dr COGS — Direct delivery · Cr Accounts payable, when a tutor fee is APPROVED
+ * (ER v2 Track C, behind `financePosting.tutorFeeAccrual`).
+ *
+ * AN ACCRUAL, NOT A PAYMENT. This asserts "we owe the trainer this", which is true the
+ * moment the founder approves it. It deliberately does NOT touch a bank account: the cash
+ * leg is the Expense row recorded when the trainer is actually paid, and that debits the
+ * expense category and credits the bank.
+ *
+ * Those two postings hit DIFFERENT accounts on the debit side (5000 COGS here vs the
+ * Expense row's category account), which is the one thing standing between this feature and
+ * double-counting the fee. If the founders start tagging the trainer's payment expense as
+ * COGS_DIRECT_DELIVERY as well, gross margin will be understated by exactly the fee — so
+ * `verify-ledger.ts` asserts payable is drawn down rather than re-debited.
+ *
+ * INR only: `TutorFee.amountInrMinor` is a single-currency figure by construction (the band
+ * rates are rupee amounts), so there is no EUR leg and no FX rate to stamp.
+ */
+export function tutorFeeAccrualDraft(f: TutorFeeForPosting): DraftEntry {
+  const who = f.trainerName ? ` — ${f.trainerName}` : "";
+  return {
+    date: f.approvedAt,
+    narration: `Tutor fee owed — ${f.batchName} (${f.level})${who}`,
+    sourceType: "TUTOR_FEE",
+    sourceId: f.id,
+    postedById: f.approvedById,
+    lines: [
+      {
+        accountCode: ACCOUNT.COGS_DELIVERY,
+        side: "debit",
+        amountMinor: f.payableInrMinor,
+        currency: "INR",
+        fxRate: ONE,
+        isCogs: true,
+      },
+      {
+        accountCode: ACCOUNT.PAYABLE,
+        side: "credit",
+        amountMinor: f.payableInrMinor,
+        currency: "INR",
+        fxRate: ONE,
+      },
+    ],
+  };
+}
+
 export type PaymentForPosting = {
   id: string;
   paidAt: Date;

@@ -36,13 +36,24 @@ export async function GET() {
     return !!section && sectionAllowed(section, role, overrides);
   };
 
-  const [contacts, opportunities, invoices] = await Promise.all([
+  const [contacts, students, opportunities, invoices] = await Promise.all([
     allowed("contacts")
       ? prisma.lead.findMany({
           where: ACTIVE,
           orderBy: { updatedAt: "desc" },
           take: PER_TYPE_CAP,
           select: { id: true, name: true, phone: true, company: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
+    // Students were absent entirely, so searching a student by name — or by the B2-0001 code
+    // that exists precisely to tell two "Anna Smith"s apart — found nothing (Error Log I1).
+    allowed("students")
+      ? prisma.student.findMany({
+          // No ACTIVE filter: Student is deliberately NOT one of the soft-deleted models, so
+          // it has no `deletedAt` column to filter on.
+          orderBy: { updatedAt: "desc" },
+          take: PER_TYPE_CAP,
+          select: { id: true, fullName: true, code: true, email: true },
         })
       : Promise.resolve([]),
     allowed("opportunities")
@@ -70,6 +81,15 @@ export async function GET() {
       sublabel: c.company?.name ?? c.phone,
       type: "contact" as const,
       href: `/contacts/${c.id}`,
+    })),
+    ...students.map((st) => ({
+      id: `student-${st.id}`,
+      label: st.fullName,
+      // The code goes in the sublabel because the palette scores sublabels too — so typing
+      // "B2-0042" finds the student, which is the whole point of issuing codes.
+      sublabel: [st.code, st.email].filter(Boolean).join(" · ") || null,
+      type: "student" as const,
+      href: `/students/${st.id}`,
     })),
     ...opportunities.map((o) => ({
       id: `opportunity-${o.id}`,

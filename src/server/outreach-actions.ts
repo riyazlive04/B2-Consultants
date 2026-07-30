@@ -592,7 +592,7 @@ export async function runOutreachNow(): Promise<ActionResult> {
  * the SLA windows are the SOP's contract with the team.
  */
 const CONFIG_FIELD_LABELS: Record<string, string> = {
-  enabled: "Engine on/off", autoSend: "Auto-send steps", sla: "SLA windows",
+  enabled: "Engine on/off", autoSend: "Auto-send steps", sla: "Response-time windows",
   defaultSpecialistName: "Default specialist", maxPerRun: "Max per run",
 };
 

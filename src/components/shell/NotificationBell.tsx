@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
+import { renderNotificationText } from "@/lib/notification-text";
 import type { Notification } from "@/server/notifications";
+import { useCcy } from "@/components/ui/CurrencyToggle";
+import { money } from "@/lib/money-display";
 
 const SEVERITY_STYLE: Record<Notification["severity"], { dot: string; label: string }> = {
   risk: { dot: "var(--bad)", label: "Act now" },
@@ -18,6 +21,11 @@ export function NotificationBell({ items: initialItems }: { items: Notification[
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const hasRisk = items.some((i) => i.severity === "risk");
+  // Same substitution as the dashboard band — the bell shows these exact rows, so an amount
+  // must not read in rupees here while the page it links to reads in euros.
+  const { ccy } = useCcy();
+  const text = (s: string, n: Notification) =>
+    renderNotificationText(s, n.amounts, (m) => money(m, ccy, { compact: true }));
 
   // Keep in sync when the server re-renders the shell (e.g. after a navigation).
   useEffect(() => setItems(initialItems), [initialItems]);
@@ -97,7 +105,7 @@ export function NotificationBell({ items: initialItems }: { items: Notification[
                     />
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5">
-                        <span className="min-w-0 truncate text-sm font-medium">{n.title}</span>
+                        <span className="min-w-0 truncate text-sm font-medium">{text(n.title, n)}</span>
                         {/* severity in words, not colour alone (§7) */}
                         <span
                           className="flex-none text-caption font-semibold uppercase tracking-wide"
@@ -106,7 +114,7 @@ export function NotificationBell({ items: initialItems }: { items: Notification[
                           {SEVERITY_STYLE[n.severity].label}
                         </span>
                       </span>
-                      <span className="block text-xs text-muted">{n.body}</span>
+                      <span className="block text-xs text-muted">{text(n.body, n)}</span>
                     </span>
                   </Link>
                 </li>

@@ -33,7 +33,7 @@ const csvSafe = (v: string | number | null | undefined): string | number => {
   return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
 };
 
-/** Student list + add form (Admin) - one row per person; LTV column sortable (PRD2 §4.6). */
+/** Student list + add form (Admin) - one row per person; total-paid column sortable (PRD2 §4.6). */
 export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]; isAdmin: boolean; today: string }) {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
       "Lead source": r.leadSource ? LEAD_SOURCE_LABELS[r.leadSource] : "",
       Industry: csvSafe(r.industry),
       "Target role": csvSafe(r.targetRole),
-      "LTV (INR)": r.ltvInr / 100,
+      "Total paid (INR)": r.ltvInr / 100,
       "Internal notes": csvSafe(r.internalNotes),
     }));
     const csv = Papa.unparse(data);
@@ -110,7 +110,7 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
       value: (r) => r.firstEnrollment?.slice(0, 10) ?? "",
     },
     {
-      key: "ltv", header: "LTV", align: "right",
+      key: "ltv", header: "Total paid", align: "right",
       cell: (r) => formatInrMinor(r.ltvInr, { compact: true }),
       value: (r) => r.ltvInr / 100,
     },
@@ -162,7 +162,7 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
             <Field label="Programme level">
               <Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" />
             </Field>
-            <Field label="Enrollment date" hint="Date they paid and started">
+            <Field label="Enrolment date" hint="Date they paid and started">
               <TextInput type="date" name="enrollmentDate" required defaultValue={today} />
             </Field>
             <Field label="Sessions planned" hint="e.g. 12 for Guided">

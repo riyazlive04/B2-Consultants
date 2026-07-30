@@ -4,6 +4,8 @@ import { Tabs } from "@/components/ui/Tabs";
 import { hasCapability, requireSection } from "@/lib/rbac";
 import { getGnOverview } from "@/server/german-note-metrics";
 import { getGnFounderStats, getGnWorkshops } from "@/server/german-note-workshops";
+import { getTutorDesk } from "@/server/tutor-desk";
+import { TutorSummary } from "./_components/TutorSummary";
 import { OnboardingWalkthrough } from "@/components/onboarding/OnboardingWalkthrough";
 import { CommunityFeed } from "./_components/CommunityFeed";
 import { FounderStats } from "./_components/FounderStats";
@@ -21,18 +23,24 @@ export default async function GermanNotePage({
   searchParams?: { onboarding?: string };
 }) {
   const session = await requireSection("german-note");
-  const { access, batches, feed, leaderboard, levelProgress, upcomingEvents, mentionCandidates } =
-    await getGnOverview(session.role, session.user.id);
 
   // Who sees the money is the founder's call, per person, from /people → Access —
   // NOT a property of the role. Admin always holds it; everyone else is off until
   // granted. Without the key there are no tabs at all, so the page is exactly what
   // it was. (`isViewer` still governs read-only COMMUNITY access for HEAD.)
   const seesBusiness = hasCapability(session.role, session.capabilities, "germanNote.finance");
-  const [founderStats, workshops] = await Promise.all([
+  // `getGnAccess` sets `isTutor` iff the role is TUTOR, so we can gate the tutor desk on the role
+  // directly — which means all four reads depend only on values known here and batch into ONE
+  // round of queries, instead of the founder stats/workshops waiting on the overview to return.
+  const isTutor = session.role === "TUTOR";
+  const [overview, founderStats, workshops, tutorDesk] = await Promise.all([
+    getGnOverview(session.role, session.user.id),
     seesBusiness ? getGnFounderStats() : Promise.resolve(null),
     seesBusiness ? getGnWorkshops() : Promise.resolve(null),
+    // A tutor is redirected here on sign-in, so this page IS their dashboard (spec §9).
+    isTutor ? getTutorDesk(session.user.id) : Promise.resolve(null),
   ]);
+  const { access, batches, feed, leaderboard, levelProgress, upcomingEvents, mentionCandidates } = overview;
 
   const isParticipant = access.isAdmin || access.isTutor || batches.length > 0;
 
@@ -46,6 +54,10 @@ export default async function GermanNotePage({
     </div>
   ) : (
     <div className="space-y-8">
+      {/* Tutor's own summary first (spec §9) — their batches, students with IDs, sessions
+          delivered and book-order status, before the shared community view below. */}
+      {tutorDesk && <TutorSummary desk={tutorDesk} />}
+
       {/* batches */}
       {batches.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2">

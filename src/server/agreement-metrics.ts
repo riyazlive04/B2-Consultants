@@ -29,10 +29,32 @@ const LIST_SELECT = {
   signedAt: true,
   expiresAt: true,
   pdfSha256: true,
-  student: { select: { id: true, fullName: true } },
-  lead: { select: { id: true, name: true } },
+  // `code` rides along so the table can show "B2-0042" beside the name (Error Log I1).
+  // An agreement is the document that binds a fee to a person; getting the person wrong here
+  // is the most expensive version of the duplicate-name problem, not the cheapest.
+  student: { select: { id: true, fullName: true, code: true } },
+  // The lead's own students, so a code can be resolved even when the agreement was raised
+  // against the lead and never directly linked to a Student (Error Log I1). A lead may have
+  // MANY students, so this is only usable when there is exactly one — see `resolveStudentCode`.
+  lead: { select: { id: true, name: true, students: { select: { id: true, code: true } } } },
   issuedBy: { select: { id: true, name: true } },
 } as const;
+
+/**
+ * The student code to show for an agreement.
+ *
+ * Direct link wins. Otherwise fall back to the lead's student — but ONLY when the lead has
+ * exactly one, because showing the wrong "Anna Smith"'s code on a signed contract is worse
+ * than showing none. Zero or many → no code, and the name stands alone as it did before.
+ */
+function resolveStudentCode(row: {
+  student: { code: string | null } | null;
+  lead: { students: { code: string | null }[] } | null;
+}): string | null {
+  if (row.student?.code) return row.student.code;
+  const leadStudents = row.lead?.students ?? [];
+  return leadStudents.length === 1 ? leadStudents[0].code : null;
+}
 
 export type AgreementRow = Awaited<ReturnType<typeof listAgreements>>[number];
 
@@ -44,6 +66,7 @@ export async function listAgreements() {
   });
   return rows.map((r) => ({
     ...r,
+    studentCode: resolveStudentCode(r),
     // `data` is Json to Prisma; the form and the table both want the typed shape.
     parsed: agreementDataSchema.safeParse(r.data),
   }));

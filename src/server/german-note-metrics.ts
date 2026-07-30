@@ -200,9 +200,9 @@ export type GnBatchDetail = {
  */
 export const getGnHomeSnapshot = cache(async () => {
   const [activeBatches, learners, nextEvent] = await Promise.all([
-    prisma.gnBatch.count({ where: { status: "ACTIVE" } }),
-    prisma.gnBatchMember.count({ where: { batch: { status: "ACTIVE" } } }),
-    prisma.gnEvent.findFirst({
+    prisma.batch.count({ where: { status: "ACTIVE" } }),
+    prisma.batchMember.count({ where: { batch: { status: "ACTIVE" } } }),
+    prisma.classSession.findFirst({
       where: { startsAt: { gte: new Date() }, batch: { status: "ACTIVE" } },
       orderBy: { startsAt: "asc" },
       select: { title: true, startsAt: true, batch: { select: { name: true } } },
@@ -222,7 +222,7 @@ export const getGnAccess = cache(async (role: AppRole, userId: string): Promise<
     return { isAdmin: false, isTutor: false, isViewer: true, isParticipant: true, memberBatchIds: [], tutorBatchIds: [] };
   }
   if (role === "TUTOR") {
-    const batches = await prisma.gnBatch.findMany({ where: { tutorId: userId }, select: { id: true } });
+    const batches = await prisma.batch.findMany({ where: { tutorId: userId }, select: { id: true } });
     return {
       isAdmin: false,
       isTutor: true,
@@ -233,7 +233,7 @@ export const getGnAccess = cache(async (role: AppRole, userId: string): Promise<
     };
   }
   if (role === "STUDENT") {
-    const memberships = await prisma.gnBatchMember.findMany({
+    const memberships = await prisma.batchMember.findMany({
       where: { student: { userId } },
       select: { batchId: true, batch: { select: { status: true } } },
     });
@@ -364,7 +364,7 @@ export async function loadMentionCandidates(batchId: string | null): Promise<GnM
   const byId = new Map<string, string>();
   if (batchId) {
     const [batch, memberUsers] = await Promise.all([
-      prisma.gnBatch.findUnique({ where: { id: batchId }, select: { tutor: { select: { id: true, name: true } } } }),
+      prisma.batch.findUnique({ where: { id: batchId }, select: { tutor: { select: { id: true, name: true } } } }),
       prisma.user.findMany({
         where: { studentProfile: { gnMemberships: { some: { batchId } } } },
         select: { id: true, name: true },
@@ -505,7 +505,7 @@ export const getGnOverview = cache(async (role: AppRole, userId: string) => {
       : { id: { in: access.memberBatchIds } };
   const isLearner = !access.isAdmin && !access.isViewer && !access.isTutor;
   const [batches, feed, leaderboard, mentionCandidates, myWatches, upcoming] = await Promise.all([
-    prisma.gnBatch.findMany({
+    prisma.batch.findMany({
       where,
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       include: BATCH_CARD_INCLUDE,
@@ -518,7 +518,7 @@ export const getGnOverview = cache(async (role: AppRole, userId: string) => {
     isLearner
       ? prisma.gnRecordingWatch.findMany({ where: { userId }, select: { recording: { select: { batchId: true } } } })
       : Promise.resolve([] as { recording: { batchId: string } }[]),
-    prisma.gnEvent.findMany({
+    prisma.classSession.findMany({
       where: { startsAt: { gte: new Date() }, batch: where },
       orderBy: { startsAt: "asc" },
       take: 6,
@@ -557,7 +557,7 @@ export const getGnOverview = cache(async (role: AppRole, userId: string) => {
 export const getGnBatchDetail = cache(
   async (batchId: string, role: AppRole, userId: string): Promise<GnBatchDetail | null> => {
     const access = await getGnAccess(role, userId);
-    const batch = await prisma.gnBatch.findUnique({
+    const batch = await prisma.batch.findUnique({
       where: { id: batchId },
       include: {
         tutor: { select: { id: true, name: true } },
@@ -680,7 +680,7 @@ export type GnStudentOption = {
 
 export const getGnManageData = cache(async () => {
   const [batches, tutors, students] = await Promise.all([
-    prisma.gnBatch.findMany({
+    prisma.batch.findMany({
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       include: {
         ...BATCH_CARD_INCLUDE,

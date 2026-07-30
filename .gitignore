@@ -51,9 +51,19 @@ next-env.d.ts
 # no-Docker local Postgres (scripts/local-db.mjs)
 /.pgdata/
 
+# Caddy's internal root CA, exported from the container for a LOCAL run of the prod
+# stack (docker-compose.local.yml). Not a secret — but it is per-machine, regenerated
+# whenever the caddy_data volume is recreated, and useless to anyone else.
+/caddy-local-root.crt
+
 # Supabase migration working dir (scripts/migrate-to-supabase.mjs).
 # data.sql is a full plaintext dump: lead PII, student records, the ledger. Never commit.
 /.migration/
+
+# Throwaway QA logins. These mint a real ADMIN account on whatever database .env points
+# at — which is production. Useful locally, but a one-command production admin should not
+# be sitting in a repo that more people can clone than can reach the database.
+/scripts/qa-temp-*.ts
 
 # local dev noise — runtime logs never belong in the repo (dev server, cron, verify runs)
 *.log

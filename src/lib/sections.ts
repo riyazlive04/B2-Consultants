@@ -52,33 +52,60 @@ type SectionCatalogueEntry = {
 
 export const SECTION_CATALOGUE = [
   { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"] },
-  { key: "telecaller", label: "Telecaller Pay", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN"] },
   { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"] },
   // Read-only journal + trial balance (SPEC §10.4, §12). Admin-only: it is the audit
   // surface for every rupee the other Finance screens summarise.
-  { key: "ledger", label: "Ledger", href: "/ledger", phase: 1, icon: "scale", group: "Finance", roles: ["ADMIN"] },
+  // Hidden in code: off in the nav and unreachable by route. The page and its posting engine
+  // stay intact, so the console can switch it back on without any code change.
+  { key: "ledger", label: "Ledger", href: "/ledger", phase: 1, icon: "scale", group: "Finance", roles: ["ADMIN"], hidden: true },
+  /**
+   * ROLE DEFAULTS FOLLOW SPEC §3 (`02-dashboard-rebuild-by-role-and-access.md`), by the founder's
+   * ruling: grant what the matrix grants, and switch off per person from Console → Sections or
+   * a user's Access dialog. Console → Access Matrix reports any remaining drift.
+   *
+   * ONE DELIBERATE EXCEPTION, and it is the important one. §3's `O` means "own records only".
+   * Where the own-records view is a DIFFERENT surface from the team board, the board is NOT
+   * granted — a Student with `O` on "Students — all" reads their own journey at /my-journey, and
+   * putting them on /students would hand them every other student's record. Same for Tutor and
+   * Student on Bookings, and Student on Invoices. `R`/`E`/`F` rows are granted outright; `O` rows
+   * are granted only where the section itself is already self-scoped (My Desk, Daily Log).
+   */
   { key: "pipeline", label: "Pipeline", href: "/pipeline", phase: 1, icon: "git-branch", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // Synamate CRM parity (Phase 1): Contacts (the CRM) + Opportunities (the drag-drop board).
   // Grouped with Pipeline under Sales so the whole lead → contact → deal flow sits together.
   { key: "contacts", label: "Contacts", href: "/contacts", phase: 1, icon: "contact", group: "Sales", roles: ["ADMIN", "USER"] },
-  { key: "opportunities", label: "Opportunities", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "USER"] },
-  { key: "bookings", label: "Bookings", href: "/bookings", phase: 1, icon: "calendar-check", group: "Sales", roles: ["ADMIN"] },
+  { key: "opportunities", label: "Opportunities", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
+  // §3: Head R · L1/L2/L3 E. Tutor and Student are `O` — their own calls surface on their own
+  // screens, and this is the whole-team calendar, so they are not granted it.
+  { key: "bookings", label: "Bookings", href: "/bookings", phase: 1, icon: "calendar-check", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // The Outreach Specialist SOP queue (Script_for_Outreach_Specialist.docx, Steps 1–23) + the
   // Key Metrics sheet it feeds. USER is in the default list because the outreach specialist IS a
   // USER — this is their day's work, not an admin report.
   { key: "outreach", label: "Outreach", href: "/outreach", phase: 1, icon: "message-circle", group: "Sales", roles: ["ADMIN", "USER"] },
   // Synamate Payments parity (Phase 3): invoices, estimates, products, subscriptions.
   { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"] },
+  // Kept last in the Finance group on purpose: the default sidebar order follows this
+  // catalogue order, so placing "Telecaller Pay" after Payments drops it to the bottom of Finance.
+  // §3 "Commissions — all": Head R. The telecaller tiers get their OWN commission on My Desk, not
+  // the whole-team board — §3 gives them `O` here, not `R`.
+  { key: "telecaller", label: "Telecaller Pay", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN", "HEAD"] },
   { key: "people", label: "Users", href: "/people", phase: 2, icon: "users", group: "People", roles: ["ADMIN"] },
-  { key: "students", label: "Students", href: "/students", phase: 2, icon: "graduation-cap", group: "People", roles: ["ADMIN", "HEAD"] },
-  { key: "agreements", label: "Agreements", href: "/agreements", phase: 4, icon: "file-signature", group: "People", roles: ["ADMIN"] },
-  { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "People", roles: ["HEAD", "USER"] },
+  // §3: Head F · L1/L2/L3 R. Tutor and Student are `O` — a student's own record is /my-journey and
+  // a tutor's own batch roster is on German Note; this board is every student.
+  { key: "students", label: "Students", href: "/students", phase: 2, icon: "graduation-cap", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
+  // §3: Head E · L3 E (L1/L2 hidden). L1/L2/L3 are one USER role, so USER is granted here and the
+  // ones who shouldn't have it are switched off per person. Student is `O` — their own agreement
+  // is on /my-journey. Issuing still needs the `agreements.issue` capability regardless.
+  { key: "agreements", label: "Agreements", href: "/agreements", phase: 4, icon: "file-signature", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
+  // §3 gives Tutor `O` here, and this screen is already self-scoped — it is the person's OWN log,
+  // which is also where a tutor's sessions-delivered figure comes from.
+  { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "People", roles: ["HEAD", "USER", "TUTOR"] },
   // The telecaller's OWN numbers + today's call list — a personal work view (the counterpart to
   // "Telecaller Pay": that board is Ameen looking at the team, this is Nilofer/Asma looking at
   // themselves), so it sits under People. USER is in the default list; ADMIN can inspect it, and
   // the page renders an explainer for anyone with no telecaller profile, since "telecaller" is a
   // TeamProfile.logVariant, not a role that could gate a section.
-  { key: "my-desk", label: "My Desk", href: "/my-desk", phase: 1, icon: "phone", group: "People", roles: ["ADMIN", "USER"] },
+  { key: "my-desk", label: "My Desk", href: "/my-desk", phase: 1, icon: "phone", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
   { key: "arena", label: "Arena", href: "/arena", phase: 2, icon: "trophy", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
   // STUDENT portal: their own journey only + the CV diagnostic (stores nothing).
   { key: "my-journey", label: "My Journey", href: "/my-journey", phase: 2, icon: "map", group: "People", roles: ["STUDENT"] },
@@ -95,7 +122,8 @@ export const SECTION_CATALOGUE = [
   // Reporting & Analytics Agent (Phase 6, BUILD_CHECKLIST §10): a minimal pivot report — object →
   // group-by → aggregate — closes the "every number lives on a hardcoded page" gap without new
   // schema. Admin-only, like the rest of Insights' cross-cutting views.
-  { key: "reports", label: "Reports", href: "/reports", phase: 6, icon: "bar-chart", group: "Insights", roles: ["ADMIN"] },
+  // §3: Head R · L1/L2/L3 O. Row-level scoping inside the report decides what each one can pull.
+  { key: "reports", label: "Reports", href: "/reports", phase: 6, icon: "bar-chart", group: "Insights", roles: ["ADMIN", "HEAD", "USER"] },
   { key: "console", label: "Founder Console", href: "/console", phase: 1, icon: "sliders", group: "Workspace", roles: ["ADMIN"], locked: true },
   // Who did what, when — every write in the app, with an exact IST timestamp.
   // `locked`, for the same reason `console` is: this is the screen that shows whether the

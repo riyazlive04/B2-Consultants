@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import type { AppRole } from "@/lib/sections";
 import { coerceResumeData, type ResumeData } from "@/lib/resume-types";
 import { coerceResumeTemplate, type ResumeTemplateConfig } from "@/lib/resume-template";
 import { coerceReviewResult, type AiReviewResult } from "@/lib/resume-review-types";
@@ -23,6 +24,30 @@ function fmtDate(d: Date): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// ───────────────────────────── row scope ─────────────────────────────
+
+/**
+ * WHO may reach WHICH CV.
+ *
+ * `cv-check` opens for ADMIN, HEAD and STUDENT (sections.ts). The first two run the Studio *for*
+ * candidates and need the whole list; a STUDENT *is* a candidate and must only ever reach their
+ * own. Until this existed, every read in this module was gated on the section alone — so any
+ * student could list, open and download every other student's CV, employment history and all.
+ *
+ * Two deliberate choices:
+ *
+ *  · It is a `where` fragment, not a post-fetch `if`. The database applies it on every path,
+ *    including the render path that never materialises the row in JS.
+ *  · Every reader takes it as a REQUIRED argument. A default of "unscoped" is precisely the bug
+ *    being fixed here; making it required means a new call site cannot compile without deciding.
+ */
+export type ResumeScope = { ownerUserId?: string };
+
+export function resumeScope(session: { role: AppRole; user: { id: string } }): ResumeScope {
+  const seesAll = session.role === "ADMIN" || session.role === "HEAD";
+  return seesAll ? {} : { ownerUserId: session.user.id };
+}
+
 export type ResumeListItem = {
   id: string;
   title: string;
@@ -33,8 +58,9 @@ export type ResumeListItem = {
   latestScore: number | null;
 };
 
-export async function listResumes(): Promise<ResumeListItem[]> {
+export async function listResumes(scope: ResumeScope): Promise<ResumeListItem[]> {
   const rows = await prisma.resume.findMany({
+    where: scope,
     orderBy: { updatedAt: "desc" },
     include: {
       _count: { select: { reviews: true } },
@@ -72,9 +98,11 @@ export type ResumeDetail = {
   reviews: ResumeReviewView[];
 };
 
-export async function getResume(id: string): Promise<ResumeDetail | null> {
-  const row = await prisma.resume.findUnique({
-    where: { id },
+export async function getResume(id: string, scope: ResumeScope): Promise<ResumeDetail | null> {
+  // findFirst, not findUnique: the scope is a non-unique filter, and an out-of-scope CV must be
+  // indistinguishable from a missing one — never a 403 that confirms the id exists.
+  const row = await prisma.resume.findFirst({
+    where: { id, ...scope },
     include: { reviews: { orderBy: { createdAt: "desc" } } },
   });
   if (!row) return null;
@@ -100,9 +128,10 @@ export async function getResume(id: string): Promise<ResumeDetail | null> {
 /** Raw resume record for the DOCX/PDF renderers (no date formatting needed). */
 export async function getResumeForRender(
   id: string,
+  scope: ResumeScope,
 ): Promise<{ title: string; language: string; data: ResumeData } | null> {
-  const row = await prisma.resume.findUnique({
-    where: { id },
+  const row = await prisma.resume.findFirst({
+    where: { id, ...scope },
     select: { title: true, language: true, data: true },
   });
   if (!row) return null;

@@ -47,6 +47,11 @@ model User {
   image         String?
   role          Role       @default(USER)
   status        UserStatus @default(ACTIVE)
+  // O4 — forced password change. Set true when an ADMIN sets someone's password (they picked it,
+  // so the owner must replace it); cleared the moment the user changes it. Invited users choose
+  // their own password on acceptance, so they are never flagged. `requireSession` bounces any
+  // flagged user to /change-password before an app route renders.
+  mustChangePassword Boolean @default(false)
   /// Part 2 §13: "dark and light per user" — the founder prefers dark, others may not.
   /// SYSTEM defers to the OS setting, which is why it is the default rather than LIGHT:
   /// a fresh account should follow the machine, not impose one person's taste.
@@ -81,10 +86,11 @@ model User {
   rewardGrantsDecided      RewardGrant[]      @relation("RewardGrantDecidedBy")
   invite                   UserInvite?        @relation("UserInviteFor")
   invitesCreated           UserInvite[]       @relation("UserInviteCreatedBy")
-  gnBatchesTutored         GnBatch[]          @relation("GnBatchTutor")
+  gnBatchesTutored         Batch[]            @relation("BatchTutor")
+  tutorFeesEarned          TutorFee[]         @relation("TutorFeeEarner")
   gnRecordingsPosted       GnRecording[]      @relation("GnRecordingPostedBy")
   gnRecordingWatches       GnRecordingWatch[] @relation("GnRecordingWatchUser")
-  gnEventsCreated          GnEvent[]          @relation("GnEventCreatedBy")
+  gnEventsCreated          ClassSession[]     @relation("GnEventCreatedBy")
   gnPosts                  GnPost[]           @relation("GnPostAuthor")
   gnComments               GnComment[]        @relation("GnCommentAuthor")
   gnLikes                  GnLike[]           @relation("GnLikeUser")
@@ -316,6 +322,12 @@ model Income {
   programLevel   String // Level.code (was ProgramLevel enum)
   paymentType    PaymentType
   paymentMethod  PaymentMethod
+  // Instalment plan details — asked only when paymentType = INSTALMENT. The count is how many
+  // instalments the fee is split into; the extras are the surcharge added for choosing the plan
+  // (informational — the received amounts above stay the money that actually arrived).
+  instalmentCount         Int?
+  instalmentExtraInrMinor BigInt @default(0) // paise
+  instalmentExtraEurMinor BigInt @default(0) // cents
   notes          String?
   source         Source        @default(MANUAL)
   manualOverride Boolean       @default(false)
@@ -376,9 +388,28 @@ model PendingPayment {
   studentName      String
   studentId        String?
   student          Student?             @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  /// ER v2 `ENROLLMENT ||--|| EMI_PLAN` (Track E). PendingPayment + Instalment already IS the
+  /// EMI plan; what it lacked was the link saying which enrollment it bills.
+  enrollmentId     String?
+  enrollment       Enrollment?          @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   programLevel     String // Level.code (was ProgramLevel enum)
+  /// ER v2 EMI_PLAN.num_emis / levels_taken. INPUTS the founder sets when building the plan
+  /// (the spec's "2 EMIs per level" rule), not outputs — which is why they are stored rather
+  /// than counted off Instalment rows that may not all exist yet.
+  numEmis          Int?
+  levelsTaken      Int?
   totalFeeInrMinor BigInt               @default(0)
   totalFeeEurMinor BigInt               @default(0)
+  /// The surcharge for paying in instalments, priced per plan length in the Founder Console
+  /// (AppSetting "instalmentPlans"). Kept SEPARATE from totalFee so the agreed fee keeps its
+  /// original meaning — "total to collect" is fee + this, computed, never a restated fee.
+  /// Snapshotted when the plan is generated: re-pricing the table must not silently move the
+  /// balance on a plan the student already signed up to.
+  planExtraInrMinor BigInt              @default(0)
+  planExtraEurMinor BigInt              @default(0)
+  /// Days between instalments used to build this plan's schedule — stored so the plan can be
+  /// explained ("every 30 days") after the config default has since changed.
+  intervalDays     Int?
   fxRateUsed       Decimal              @db.Decimal(14, 6)
   nextDueDate      DateTime?            @db.Date
   status           PendingPaymentStatus @default(ACTIVE)
@@ -393,6 +424,7 @@ model PendingPayment {
   instalments      Instalment[]
 
   @@index([status, nextDueDate])
+  @@index([enrollmentId])
   @@index([deletedAt])
   @@map("pending_payment")
 }
@@ -505,6 +537,11 @@ model Lead {
   assignedToId   String?
   assignedTo     User?         @relation("LeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
   contactedAt    DateTime?
+  /// ER v2 `MARKETING_SOURCE ||--o{ LEAD` (Track F). `leadSource` above stays as the coarse
+  /// CHANNEL; this is the campaign beneath it. SetNull — retiring a campaign must not orphan
+  /// or delete the leads it produced.
+  marketingSourceId String?
+  marketingSource   MarketingSource? @relation(fields: [marketingSourceId], references: [id], onDelete: SetNull)
   enteredById    String?
   enteredBy      User?         @relation("LeadEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
@@ -535,6 +572,9 @@ model Lead {
   messages            Message[]
   workflowEnrollments WorkflowEnrollment[]
   consents            ConsentRecord[]
+  answers             LeadAnswer[]
+  enrollments         Enrollment[]           @relation("EnrollmentLead")
+  workshopRegistrations WorkshopRegistration[]
 
   @@unique([source, externalRef])
   @@index([stage])
@@ -542,6 +582,7 @@ model Lead {
   @@index([leadSource])
   @@index([assignedToId])
   @@index([companyId])
+  @@index([marketingSourceId])
   @@index([deletedAt])
   @@map("lead")
 }
@@ -636,6 +677,26 @@ model CallLog {
   outcome   CallLogOutcome
   notes     String?
   createdAt DateTime       @default(now())
+
+  // ── Offline capture ────────────────────────────────────────────────────────
+  // A telecaller on a phone loses signal mid-shift and keeps working; the outcome is
+  // queued on the device and posted when the connection returns. `calledAt` then holds
+  // the DEVICE's clock — the only record of when the call actually happened — which is
+  // the one place in this app a client-supplied timestamp is trusted at all.
+  //
+  // That trust is bounded, and deliberately visible:
+  //   • `syncedAt` is the SERVER's receipt instant. Non-null means "this row arrived after
+  //     the fact, and `calledAt` came from the device". Null means it was logged live and
+  //     `calledAt` is server-stamped as it always was.
+  //   • `clientKey` is generated on the device and unique, so a retry, a double-tap or two
+  //     tabs flushing the same queue collapse to ONE row instead of inflating the counts.
+  //
+  // Why it matters: `calledAt` drives the 5-minute connection rate on the L1 desk — a JD
+  // target people are reviewed against. Without `syncedAt` a device clock set back an hour
+  // would silently manufacture a "connected in 4 minutes" that nobody could later disprove.
+  // With it, every late row carries its own evidence.
+  clientKey String?   @unique
+  syncedAt  DateTime?
 
   // [userId, calledAt] serves "my calls today"; [leadId, calledAt] serves "when was this
   // lead last called" — the two questions the desk asks on every load.
@@ -1354,6 +1415,14 @@ model BookingRequest {
   bantScore     Int          @default(0)
   bantAvg       Float?
   bantVerdict   BantVerdict?
+  /// Track D cutover instrumentation. `bantShadowAvg` is what the CONFIGURABLE question
+  /// catalogue would have scored this submission — written alongside the column-based score
+  /// during the shadow phase and compared, never read by any decision. A disagreement is a
+  /// seeding bug, and the flip to the catalogue is gated on there being none.
+  /// `bantConfigVersion` records which catalogue produced a verdict once the flip happens,
+  /// so a re-tune can never be mistaken for what THIS prospect was judged on.
+  bantShadowAvg     Float?
+  bantConfigVersion Int?
 
   // Confirmation loop (Module E). A booked call must be confirmed before it happens; if the
   // prospect never confirms, the auto-cancel engine (booking-automation.ts) releases the slot and
@@ -1372,6 +1441,7 @@ model BookingRequest {
 
   whatsappMessages WhatsAppMessage[]
   outreachJourney  OutreachJourney?
+  answers          LeadAnswer[]
 
   @@index([status, createdAt])
   @@index([bantScore])
@@ -1607,11 +1677,13 @@ model Student {
   incomes            Income[]
   pendingPayments    PendingPayment[]
   satisfactionScores SatisfactionScore[]
-  gnMemberships      GnBatchMember[]
+  gnMemberships      BatchMember[]
   pendingJoins       GnPendingJoiner[]
   bookOrders         BookOrder[]
   whatsappMessages   WhatsAppMessage[]
   agreements         Agreement[]
+  taskCompletions    SessionTaskCompletion[]
+  resumes            Resume[]
 
   @@index([fullName])
   @@map("student")
@@ -1621,6 +1693,16 @@ model Enrollment {
   id              String          @id @default(cuid())
   studentId       String
   student         Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// ER v2 `LEAD ||--o| ENROLLMENT`. Direct, rather than only via Student.leadId — a student
+  /// who came back through a second campaign has two acquisition stories, and attribution
+  /// needs the one for THIS sale.
+  leadId          String?
+  lead            Lead?           @relation("EnrollmentLead", fields: [leadId], references: [id], onDelete: SetNull)
+  /// ER v2 `ENROLLMENT }o--|| BATCH` (Track A). Nullable and expected to stay that way for
+  /// coaching if D2 comes back "1:1" — the column costs nothing in that case, and German
+  /// Note seats populate it immediately.
+  batchId         String?
+  batch           Batch?          @relation(fields: [batchId], references: [id], onDelete: SetNull)
   programLevel    String // Level.code — SOLO / GUIDED / ELITE only for B2 (service-validated)
   enrollmentDate  DateTime        @db.Date
   duration        ProgramDuration
@@ -1654,11 +1736,17 @@ model Enrollment {
   signalChanges   SignalChangeLog[]
   sprintWeeks     SprintWeek[]
   jobApplications JobApplication[]
+  milestoneProgress MilestoneProgress[]
+  agreements      Agreement[]
+  bookOrders      BookOrder[]
+  pendingPayments PendingPayment[]
 
   @@index([studentId])
   @@index([status, programLevel])
   @@index([signalColour])
   @@index([closerId])
+  @@index([batchId])
+  @@index([leadId])
   @@map("enrollment")
 }
 
@@ -1677,6 +1765,12 @@ model JobApplication {
   id           String               @id @default(cuid())
   enrollmentId String
   enrollment   Enrollment           @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  /// ER v2 `JOB_APPLICATION.cv_id / jd_id` (Track H). Both SetNull and both optional: the
+  /// company/role/jobUrl strings above stay as the record of what was applied to, so an
+  /// application whose JD was later retired still reads correctly.
+  resumeId         String?
+  jobDescriptionId String?
+  jobDescription   JobDescription? @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
   company      String
   role         String
   jobUrl       String?
@@ -1690,6 +1784,7 @@ model JobApplication {
 
   @@index([enrollmentId, status])
   @@index([status, statusAt])
+  @@index([jobDescriptionId])
   @@map("job_application")
 }
 
@@ -1862,6 +1957,17 @@ enum GnBatchStatus {
   ARCHIVED
 }
 
+/// Which business line a batch belongs to (ER v2 Track A, decision D1).
+///
+/// D1 was "one Batch table or two". Unify: German Note already ran TWO batch worlds — real
+/// `gn_batch` rows for the LMS, and free-text labels ("B26") typed onto
+/// GnWorkshopConversion.batchA1/A2/B1. A separate B2 coaching batch would have made three.
+/// One table, discriminated here, keeps "which batch is this person in" a single question.
+enum BatchLine {
+  B2 // coaching tiers — SOLO / GUIDED / ELITE
+  GERMAN_NOTE // GN_A1 … GN_C2
+}
+
 enum GnVideoProvider {
   FATHOM // primary: classes are recorded by fathom.ai, tutor pastes the share link
   YOUTUBE
@@ -1869,28 +1975,54 @@ enum GnVideoProvider {
   GDRIVE
 }
 
-model GnBatch {
+/// A cohort, for EITHER business line (ER v2 `BATCH`; was `GnBatch`/`gn_batch`).
+///
+/// Renamed rather than recreated — the migration is an `ALTER TABLE ... RENAME`, so every
+/// existing German Note batch, its roster, its recordings and its community posts survive
+/// untouched. `line` defaults to GERMAN_NOTE precisely because every pre-existing row is one.
+///
+/// B2 coaching seats arrive through `Enrollment.batchId`; German Note seats keep arriving
+/// through `BatchMember` (which references Student, so Admin can seat someone before any
+/// portal login exists). That asymmetry is deliberate: a B2 seat IS the enrollment, whereas a
+/// GN student may sit in a batch for a level they were gifted or repeated.
+model Batch {
   id        String        @id @default(cuid())
+  /// Which business this cohort belongs to. Guards level-kind compatibility at the service
+  /// layer (COACHING_TIER → B2, GERMAN_LEVEL/GERMAN_BUNDLE → GERMAN_NOTE).
+  line      BatchLine     @default(GERMAN_NOTE)
+  /// The founders' own label — "A1", "B10", "B26". Nullable because pre-existing rows have
+  /// none, unique because it is the human key they use on calls and in the workbooks.
+  code      String?       @unique
   name      String // "A1 Evening — July 2026"
-  level     String // Level.code — GN_A1..GN_B2 only (service-validated, like B2_LEVELS)
+  level     String // Level.code — service-validated against `line`
   tutorId   String?
-  tutor     User?         @relation("GnBatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
+  tutor     User?         @relation("BatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
   status         GnBatchStatus @default(ACTIVE)
   targetStrength Int           @default(8) // target class size (spec: ~8 per batch)
+  /// ER v2 BATCH.start_date. Nullable: the GN batches that already exist were never asked for one.
+  startDate      DateTime?     @db.Date
+  endDate        DateTime?     @db.Date
   notes          String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  members    GnBatchMember[]
+  members    BatchMember[]
+  enrollments    Enrollment[]
   pendingJoiners GnPendingJoiner[]
   recordings GnRecording[]
   posts      GnPost[]
   modules    GnModule[]
-  events     GnEvent[]
+  events     ClassSession[]
+  tutorFees      TutorFee[]
+  /// Workshop conversions whose per-level batch label resolved to this row (Track A backfill).
+  conversionsA1  GnWorkshopConversion[] @relation("ConversionBatchA1")
+  conversionsA2  GnWorkshopConversion[] @relation("ConversionBatchA2")
+  conversionsB1  GnWorkshopConversion[] @relation("ConversionBatchB1")
 
   @@index([status])
   @@index([tutorId])
-  @@map("gn_batch")
+  @@index([line, status])
+  @@map("batch")
 }
 
 // Classroom curriculum: an ordered section grouping a batch's lessons
@@ -1898,7 +2030,7 @@ model GnBatch {
 model GnModule {
   id         String   @id @default(cuid())
   batchId    String
-  batch      GnBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch      Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
   title      String
   orderIndex Int      @default(0)
   createdAt  DateTime @default(now())
@@ -1922,46 +2054,121 @@ enum GnEventType {
   OTHER
 }
 
-// Scheduled live classes (calendar). Students see upcoming + a join link;
-// the recording gets posted afterwards as a GnRecording.
-model GnEvent {
+/// ER v2 `SESSION` (was `GnEvent`/`gn_event`). A scheduled class or coaching session on a
+/// batch's calendar. Students see upcoming + a join link; the recording is posted afterwards.
+///
+/// NAMED `ClassSession`, NOT `Session`: `model Session` is Better Auth's login-session table
+/// (`@@map("session")`). Same collision, same resolution as `LedgerAccount` vs Better Auth's
+/// `Account` — see the note on that model. The table is `class_session`.
+///
+/// `GnEventType` already carried the diagram's exact session vocabulary
+/// (KICKOFF / COACHING / LINKEDIN / QA / OPEN_MARKET), so the enum is reused verbatim.
+model ClassSession {
   id           String      @id @default(cuid())
   batchId      String
-  batch        GnBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch        Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
   title        String
   type         GnEventType @default(LIVE_CLASS)
   startsAt     DateTime
   durationMins Int?
   joinUrl      String?
   notes        String?
+  /// ER v2 `SESSION ||--o| RECORDING`. Set when the tutor posts the class recording, so
+  /// "which session is this video of" stops being inferred from the date.
+  recordingId  String?      @unique
+  recording    GnRecording? @relation("SessionRecording", fields: [recordingId], references: [id], onDelete: SetNull)
   createdById  String?
   createdBy    User?    @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  tasks SessionTask[]
+
   @@index([batchId, startsAt])
-  @@map("gn_event")
+  @@map("class_session")
+}
+
+/// What a session's coursework asks the student to do (ER v2 TASK.type).
+enum SessionTaskType {
+  WATCH_VIDEO
+  APPLY_JOB
+  HOMEWORK
+  OTHER
+}
+
+/// ER v2 `TASK`. Coursework hung off a session.
+///
+/// DELIBERATELY NOT `ContactTask`. That model is the CRM to-do on a *Lead* ("call Priya back
+/// Thursday"); this is what a *student* was assigned in class. Collapsing them would put a
+/// sales follow-up in someone's homework list and a homework item on the sales board.
+model SessionTask {
+  id          String          @id @default(cuid())
+  sessionId   String
+  session     ClassSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type        SessionTaskType @default(HOMEWORK)
+  title       String
+  description String?
+  dueAt       DateTime?
+  /// For WATCH_VIDEO: which recording. Completion can then be derived from watch progress
+  /// rather than taken on trust (see lib/video-progress.ts).
+  recordingId String?
+  recording   GnRecording?    @relation("TaskRecording", fields: [recordingId], references: [id], onDelete: SetNull)
+  orderIndex  Int             @default(0)
+  createdById String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  completions SessionTaskCompletion[]
+
+  @@index([sessionId, orderIndex])
+  @@index([recordingId])
+  @@map("session_task")
+}
+
+/// ER v2 `TASK_COMPLETION`. One row per (task × student), MATERIALISED when the task is
+/// assigned rather than computed on read.
+///
+/// Materialised on purpose: a derived "students who haven't done it" set cannot answer
+/// "what did I miss while I was away", because it has no memory of what was outstanding
+/// when. Seating a student into a batch backfills their missing rows.
+model SessionTaskCompletion {
+  id          String         @id @default(cuid())
+  taskId      String
+  task        SessionTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status      TaskCompletion @default(PENDING) // reuses the existing YES / NO / PENDING enum
+  completedAt DateTime?
+  /// True when the status was derived from watch progress rather than ticked by the student.
+  autoCompleted Boolean      @default(false)
+  note        String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([taskId, studentId])
+  @@index([studentId, status])
+  @@map("session_task_completion")
 }
 
 // Members reference Student (not User) so Admin can add people before any
 // portal login exists; the existing createStudentLogin flow links a User later.
-model GnBatchMember {
+model BatchMember {
   id        String   @id @default(cuid())
   batchId   String
-  batch     GnBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch     Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
   studentId String
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   addedAt   DateTime @default(now())
 
   @@unique([batchId, studentId])
   @@index([studentId])
-  @@map("gn_batch_member")
+  @@map("batch_member")
 }
 
 model GnRecording {
   id         String          @id @default(cuid())
   batchId    String
-  batch      GnBatch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch      Batch           @relation(fields: [batchId], references: [id], onDelete: Cascade)
   moduleId   String? // classroom section; null = default "Class recordings"
   module     GnModule?       @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   title      String
@@ -1976,6 +2183,10 @@ model GnRecording {
   updatedAt  DateTime        @updatedAt
 
   watches GnRecordingWatch[]
+  /// The scheduled session this is the recording OF (ER v2 SESSION ||--o| RECORDING).
+  session ClassSession?     @relation("SessionRecording")
+  /// WATCH_VIDEO tasks pointing at this clip.
+  tasks   SessionTask[]     @relation("TaskRecording")
 
   @@index([batchId, classDate])
   @@index([moduleId])
@@ -2027,7 +2238,7 @@ enum GnPostCategory {
 model GnPost {
   id               String         @id @default(cuid())
   batchId          String? // null = global GN community feed; set = batch discussion
-  batch            GnBatch?       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch            Batch?         @relation(fields: [batchId], references: [id], onDelete: Cascade)
   authorId         String?
   author           User?          @relation("GnPostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   title            String? // Skool posts lead with a bold title; optional for quick questions
@@ -2127,31 +2338,90 @@ enum GnWorkshopSource {
   ORGANIC
 }
 
-model GnWorkshop {
+/// ER v2 `WORKSHOP` (was `GnWorkshop`/`gn_workshop`). Generalised beyond German Note by
+/// `line`, and given the three fields the diagram asks for and the founders actually use:
+/// the landing page the ad points at, the WhatsApp group registrants are pushed into, and
+/// the instant the taster runs (distinct from `month`, which is the intake period).
+model Workshop {
   id        String           @id @default(cuid())
+  line      BatchLine        @default(GERMAN_NOTE)
   name      String // "May 2026"
   month     DateTime         @db.Date // first of the intake month — drives ordering
   status    GnWorkshopStatus @default(ACTIVE)
+  landingPageUrl    String?
+  whatsappGroupLink String?
+  scheduledAt       DateTime?
   notes     String?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
   conversions GnWorkshopConversion[]
-  adSets      GnWorkshopAdSet[]
+  adSets      AdSpend[]
+  registrations WorkshopRegistration[]
   pendingJoiners GnPendingJoiner[]
 
   @@index([status])
-  @@map("gn_workshop")
+  @@index([line, month])
+  @@map("workshop")
 }
 
-// One ad-set's performance for a workshop (May ran two, March one). Drives the
-// ad-performance panel: attendance %, CTR, CPC, conversion % and ROAS.
-model GnWorkshopAdSet {
+/// ER v2 `WORKSHOP_REGISTRATION` — one row per PERSON who registered, linked to their Lead.
+///
+/// Why this had to exist: attendance was an integer typed onto the ad set, and only people
+/// who *converted* got a row. "Who attended and didn't buy, and can we re-target them" was
+/// therefore unanswerable — despite the pipeline carrying SENT_TO_WORKSHOP and
+/// WORKSHOP_FOLLOWUP stages built for exactly that motion.
+///
+/// `leadId` is SetNull, not Cascade: a registration is evidence that someone turned up, and
+/// must survive the lead being merged or archived.
+model WorkshopRegistration {
+  id         String    @id @default(cuid())
+  workshopId String
+  workshop   Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  leadId     String?
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  /// Snapshotted at registration — the lead row may later be corrected or merged.
+  name       String
+  email      String?
+  phone      String?
+  registeredAt DateTime @default(now())
+  attended   Boolean   @default(false)
+  attendedAt DateTime?
+  source     Source    @default(NATIVE_FORM)
+  externalRef String?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  conversion GnWorkshopConversion?
+
+  /// One registration per lead per workshop — makes a replayed webhook idempotent.
+  @@unique([workshopId, leadId])
+  @@index([workshopId, attended])
+  @@index([leadId])
+  @@map("workshop_registration")
+}
+
+/// ER v2 `AD_SPEND` (was `GnWorkshopAdSet`/`gn_workshop_adset`). Generalised twice over:
+///   - `sourceId` lets spend attach to a MarketingSource (a campaign) and not only a
+///     workshop, so "what did the Instagram campaign cost per enrolment" is answerable;
+///   - dual currency, because the diagram asks for EUR|INR and the old model was INR-only
+///     even though B2 runs euro ad accounts.
+/// `workshopId` stays so the German Note ad-performance panel keeps working unchanged.
+model AdSpend {
   id              String     @id @default(cuid())
-  workshopId      String
-  workshop        GnWorkshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  workshopId      String?
+  workshop        Workshop?  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  sourceId        String?
+  source          MarketingSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   label           String? // "Set A", optional
+  /// Kept as the INR field the GN panel already reads; `amountEurMinor` + `fxRateUsed` are
+  /// the additive half, defaulted so every historical row keeps its exact meaning.
   adSpendInrMinor BigInt     @default(0) // paise
+  amountEurMinor  BigInt     @default(0) // cents
+  fxRateUsed      Decimal?   @db.Decimal(14, 6)
+  periodStart     DateTime?  @db.Date
+  periodEnd       DateTime?  @db.Date
   reach           Int        @default(0)
   linkClicks      Int        @default(0)
   attended        Int        @default(0) // registrations / attendees on the taster
@@ -2160,7 +2430,8 @@ model GnWorkshopAdSet {
   createdAt       DateTime   @default(now())
 
   @@index([workshopId])
-  @@map("gn_workshop_adset")
+  @@index([sourceId, periodStart])
+  @@map("ad_spend")
 }
 
 // One client who converted from the workshop into a level course.
@@ -2169,19 +2440,33 @@ model GnWorkshopAdSet {
 model GnWorkshopConversion {
   id                        String             @id @default(cuid())
   workshopId                String
-  workshop                  GnWorkshop         @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  workshop                  Workshop           @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  /// The registration this sale came from (Track G). Nullable + unique: historical rows were
+  /// entered straight from the workbook with no registration behind them, and one
+  /// registration can convert at most once.
+  registrationId            String?               @unique
+  registration              WorkshopRegistration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
   fullName                  String
   email                     String?
   phone                     String?
   address                   String?
   product                   GnWorkshopProduct
   dayType                   GnWorkshopDayType  @default(WEEKDAY)
-  // per-level batch assignment (label + time), free-text like the sheet ("B26", "7:00 AM")
+  // per-level batch assignment (label + time), free-text like the sheet ("B26", "7:00 AM").
+  // Kept as the historical SNAPSHOT of what the workbook said; the *Id columns beside them
+  // are the resolved links the Track A backfill writes. A label the backfill could not
+  // resolve stays here with a null Id and is surfaced in the UI as "unlinked" — never guessed.
   batchA1                   String?
+  batchA1Id                 String?
+  batchA1Ref                Batch?             @relation("ConversionBatchA1", fields: [batchA1Id], references: [id], onDelete: SetNull)
   timeA1                    String?
   batchA2                   String?
+  batchA2Id                 String?
+  batchA2Ref                Batch?             @relation("ConversionBatchA2", fields: [batchA2Id], references: [id], onDelete: SetNull)
   timeA2                    String?
   batchB1                   String?
+  batchB1Id                 String?
+  batchB1Ref                Batch?             @relation("ConversionBatchB1", fields: [batchB1Id], references: [id], onDelete: SetNull)
   timeB1                    String?
   source                    GnWorkshopSource   @default(AD) // AD = from the workshop ad campaign; ORGANIC = referral / carry-over / free
   status                    GnConversionStatus @default(CONFIRMED)
@@ -2549,6 +2834,10 @@ model Agreement {
   student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
   leadId    String?
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  /// ER v2 `ENROLLMENT ||--|| AGREEMENT` (Track E). Additive; `studentId` stays. Which LEVEL
+  /// this contract governs was previously only readable out of the frozen `data` blob.
+  enrollmentId String?
+  enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
 
   data       Json // frozen AgreementData — validated by agreementDataSchema, never re-joined
   dataSha256 String // canonical-JSON hash of (data + templateVersion)
@@ -2598,6 +2887,7 @@ model Agreement {
   @@index([status, createdAt])
   @@index([studentId])
   @@index([leadId])
+  @@index([enrollmentId])
   @@index([expiresAt])
   @@map("agreement")
 }
@@ -2666,6 +2956,10 @@ enum LedgerSourceType {
   // needs no change (see migrations/20260710143908_ledger_source_guard).
   INVOICE
   PAYMENT
+  /// ER v2 Track C. An APPROVED tutor fee accrues Dr COGS / Cr Accounts-payable. Adding the
+  /// value is additive and safe for the same reason INVOICE/PAYMENT were:
+  /// forbid_duplicate_live_source() keys off (sourceType, sourceId) generically.
+  TUTOR_FEE
 }
 
 // Chart of accounts, seeded for B2 in `prisma/chart-of-accounts.ts` (SPEC §10.1).
@@ -2850,21 +3144,32 @@ model Resume {
   ownerUserId String?
   ownerName   String? // denormalised creator name for the list
   leadId      String? // optional soft link to a CRM lead/contact
+  /// ER v2 `STUDENT ||--o{ CV` (Track H). A real FK, unlike ownerUserId/leadId which stay
+  /// soft references — a coach building a CV for a student needs it on the student's record,
+  /// and "how many of our students have a CV" was previously unanswerable.
+  studentId   String?
+  student     Student?       @relation(fields: [studentId], references: [id], onDelete: SetNull)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   reviews     ResumeReview[]
 
   @@index([ownerUserId])
   @@index([leadId])
+  @@index([studentId])
   @@map("resume")
 }
 
 // One ATS review of a resume against a JD. provider = "ai" (Claude) or
 // "deterministic" (the offline analyser fallback). result = structured findings JSON.
+/// This model IS ER v2's `CV_JD_MATCH` (match_score + suggestions). Track H adds the optional
+/// link to a reusable JobDescription; `jdText` STAYS as the frozen snapshot, because a JD can
+/// be edited afterwards and the review must show what was actually matched against.
 model ResumeReview {
   id           String   @id @default(cuid())
   resumeId     String
   resume       Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  jobDescriptionId String?
+  jobDescription   JobDescription? @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
   jdText       String
   provider     String   @default("ai")
   model        String?
@@ -2873,6 +3178,7 @@ model ResumeReview {
   createdAt    DateTime @default(now())
 
   @@index([resumeId])
+  @@index([jobDescriptionId])
   @@map("resume_review")
 }
 
@@ -3150,12 +3456,12 @@ model GnPendingJoiner {
   preferredTime String?
   /// Which workshop they came out of, so "this workshop produced 1 joiner" stays answerable.
   workshopId    String?
-  workshop      GnWorkshop?      @relation(fields: [workshopId], references: [id], onDelete: SetNull)
+  workshop      Workshop?        @relation(fields: [workshopId], references: [id], onDelete: SetNull)
   notes         String?
 
   /// Exit fields. Null while waiting; stamped when seated.
   assignedBatchId String?
-  assignedBatch   GnBatch?  @relation(fields: [assignedBatchId], references: [id], onDelete: SetNull)
+  assignedBatch   Batch?    @relation(fields: [assignedBatchId], references: [id], onDelete: SetNull)
   assignedAt      DateTime?
 
   createdAt DateTime @default(now())
@@ -3214,6 +3520,13 @@ model BookOrder {
   id        String       @id @default(cuid())
   studentId String
   student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// ER v2 `ENROLLMENT ||--o{ BOOK_ORDER` (Track E, decision D6). ADDITIVE — `studentId`
+  /// stays and remains required. For a student on three German levels, "which level were
+  /// these books for" was previously inferred from `level` alone; this makes it a link.
+  /// Nullable because existing rows have no enrollment to point at, and the backfill leaves
+  /// ambiguous matches null rather than guessing.
+  enrollmentId String?
+  enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   level     String // Level.code (was ProgramLevel enum)
   vendorId  String?
   vendor    Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
@@ -3246,5 +3559,240 @@ model BookOrder {
   @@unique([studentId, level])
   @@index([status])
   @@index([vendorId])
+  @@index([enrollmentId])
   @@map("book_order")
+}
+
+// ═══════════════════ ER v2 Track C — Tutor fees as a record ═══════════════════
+//
+// The RULE already existed and was tested (`lib/tutor-fee.ts`: rate = students >= 5 ? ₹7,000
+// : ₹8,000, per level, per head). What did not exist was the RECORD, so "what did this
+// trainer earn for this batch, and have we paid it" had no answer.
+//
+// This model persists the OUTPUT of that pure function. It does not re-implement it.
+
+enum TutorFeeStatus {
+  DRAFT // recomputed freely; a headcount change updates it in place
+  APPROVED // founder signed off — frozen, and optionally accrued to the ledger
+  PAID
+  CANCELLED
+}
+
+model TutorFee {
+  id        String  @id @default(cuid())
+  batchId   String
+  batch     Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  /// SetNull, like every other money-adjacent actor link: deleting a user must never delete
+  /// the record of what they were owed.
+  trainerId String?
+  trainer   User?   @relation("TutorFeeEarner", fields: [trainerId], references: [id], onDelete: SetNull)
+  level     String // Level.code, snapshotted off the batch at compute time
+
+  /// SNAPSHOTS, not joins. A student joining next month must not silently re-price a fee the
+  /// founder has already approved — the same reason Agreement.data and BookOrder.shipToAddress
+  /// are frozen. `headcount` is also the evidence for WHY the ₹7,000 vs ₹8,000 band applied.
+  headcount           Int
+  ratePerHeadInrMinor BigInt
+  amountInrMinor      BigInt
+
+  /// Founder override for a genuine exception. Null = use `amountInrMinor`. A reason is
+  /// required by the action when this is set — an unexplained override is indistinguishable
+  /// from a typo six months later.
+  overrideAmountInrMinor BigInt?
+  overrideReason         String?
+
+  status     TutorFeeStatus @default(DRAFT)
+  computedAt DateTime       @default(now())
+  approvedAt DateTime?
+  paidAt     DateTime?
+  /// The Dr COGS-tutor-fees / Cr Accounts-payable accrual, when
+  /// `financePosting.tutorFeeAccrual` is on. Null = reported but not accrued.
+  postedEntryId String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  /// One fee per batch per level (D3: the rate is per level per batch, not monthly). A batch
+  /// running A1 then A2 produces two rows; a recompute updates the DRAFT one in place.
+  @@unique([batchId, level])
+  @@index([trainerId, status])
+  @@index([status, computedAt])
+  @@map("tutor_fee")
+}
+
+// ═════════════ ER v2 Track D — Configurable qualification questions ═════════════
+//
+// Was: 18 hardcoded columns on BookingRequest with the weights buried in lib/bant.ts, so the
+// founders could not add, remove or reweight a question without shipping a migration — even
+// though the resulting BANT verdict decides who gets called.
+//
+// D5 was answered VERSIONED. A question's wording and scoring are the evidence for why a
+// verdict was taken; editing one in place would rewrite the reason we called someone months
+// after the fact. An edit therefore creates version N+1 and leaves the answered version alone.
+
+enum BantDimension {
+  BUDGET
+  AUTHORITY
+  NEED
+  TIMELINE
+  NONE // asked for context, scores nothing
+}
+
+enum QuestionKind {
+  TEXT
+  LONG_TEXT
+  SELECT
+  MULTI_SELECT
+  BOOLEAN
+  NUMBER
+}
+
+model QualificationQuestion {
+  id      String @id @default(cuid())
+  /// Stable slug, deliberately equal to the existing BookingRequest column name
+  /// ("readyToInvest", "decisionMaking", …) so the seed reproduces today's form exactly and
+  /// the dual-write phase can map answers back to columns with no lookup table.
+  key     String
+  version Int    @default(1)
+
+  text     String // the wording shown on the form — this IS the evidence
+  helpText String?
+  kind     QuestionKind  @default(SELECT)
+  /// [{ value, label, score }] — score is the 0–5 weighted layer the BANT average is taken
+  /// over. Null for free-text kinds, which score nothing.
+  options  Json?
+  dimension BantDimension @default(NONE)
+  weight    Int           @default(1)
+  required  Boolean       @default(false)
+  orderIndex Int          @default(0)
+  /// Config tables retire, they do not delete — history points at them.
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  answers LeadAnswer[]
+
+  @@unique([key, version])
+  @@index([active, orderIndex])
+  @@map("qualification_question")
+}
+
+model LeadAnswer {
+  id               String  @id @default(cuid())
+  leadId           String
+  lead             Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  /// The submission this answer came in on. Nullable so an answer captured outside the
+  /// booking form (a call, an import) still has a home.
+  bookingRequestId String?
+  bookingRequest   BookingRequest? @relation(fields: [bookingRequestId], references: [id], onDelete: Cascade)
+  /// Points at a specific (key, version) — pinning WHICH wording was answered.
+  questionId String
+  question   QualificationQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  answerRaw String
+  /// 0–5, resolved from `options` AT SUBMIT TIME. Stored rather than re-derived so a later
+  /// reweight cannot retroactively change what this answer was worth.
+  score     Int?
+  createdAt DateTime @default(now())
+
+  @@unique([bookingRequestId, questionId])
+  @@index([leadId])
+  @@index([questionId])
+  @@map("lead_answer")
+}
+
+// ═════════ ER v2 Track F — Marketing source (campaign-level attribution) ═════════
+//
+// `LeadSource` is the CHANNEL taxonomy and stays exactly as it is. This adds the campaign
+// beneath it, so "what did this campaign cost us per enrolled student" becomes answerable.
+// `INSIGHT` is deliberately NOT a model — see server/insights-metrics.ts; it is a division.
+
+model MarketingSource {
+  id          String     @id @default(cuid())
+  channel     LeadSource
+  campaign    String
+  /// Meta campaign id / UTM campaign value — the join key for imported spend.
+  externalRef String?
+  /// Which business this campaign sells. Null = both / unknown.
+  line        BatchLine?
+  active      Boolean    @default(true)
+  notes       String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  leads    Lead[]
+  adSpends AdSpend[]
+
+  @@unique([channel, campaign])
+  @@index([active])
+  @@map("marketing_source")
+}
+
+// ═════════════ ER v2 Track H — Job descriptions + CV linkage ═════════════
+
+model JobDescription {
+  id       String  @id @default(cuid())
+  title    String
+  company  String
+  location String?
+  url      String?
+  language String  @default("EN")
+  text     String
+  active   Boolean @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  applications JobApplication[]
+  reviews      ResumeReview[]
+
+  @@index([active, createdAt])
+  @@map("job_description")
+}
+
+// ═════════════ ER v2 Track I — Per-program milestones ═════════════
+//
+// The `Milestone` enum stays as the stable key and `MilestoneLog` stays as the append-only
+// audit trail — nothing here weakens either. What this adds is the diagram's `target_day`,
+// per program level, so the at-risk radar has a real deadline instead of a vibe.
+
+enum MilestoneProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ACHIEVED
+}
+
+model ProgramMilestone {
+  id        String    @id @default(cuid())
+  levelCode String // Level.code — per program, as the diagram asks
+  key       Milestone // reuse the shipped 7-value enum rather than inventing a parallel one
+  name      String
+  targetDay Int // day-N of the 90/120-day tracker
+  orderIndex Int      @default(0)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  progress MilestoneProgress[]
+
+  @@unique([levelCode, key])
+  @@index([levelCode, orderIndex])
+  @@map("program_milestone")
+}
+
+model MilestoneProgress {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  milestoneId  String
+  milestone    ProgramMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  status       MilestoneProgressStatus @default(NOT_STARTED)
+  achievedAt   DateTime?
+  note         String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([enrollmentId, milestoneId])
+  @@index([status])
+  @@map("milestone_progress")
 }

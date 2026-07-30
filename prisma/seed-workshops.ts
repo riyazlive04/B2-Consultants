@@ -137,7 +137,7 @@ async function seedWorkshop(opts: {
   specs: Spec[];
   adSets: { label: string; adSpend: number; reach: number; linkClicks: number; attended: number; conversions: number }[];
 }) {
-  await prisma.gnWorkshop.create({
+  await prisma.workshop.create({
     data: {
       name: opts.name,
       month: day(opts.month),
@@ -161,7 +161,7 @@ async function seedWorkshop(opts: {
 
 async function main() {
   console.log("Seeding German Note workshops…");
-  await prisma.gnWorkshop.deleteMany({ where: { name: { in: ["March 2026", "May 2026"] } } });
+  await prisma.workshop.deleteMany({ where: { name: { in: ["March 2026", "May 2026"] } } });
 
   await seedWorkshop({
     name: "March 2026",

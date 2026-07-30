@@ -6,6 +6,7 @@ import { GripVertical } from "lucide-react";
 import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { moveLeadStage } from "@/server/pipeline-actions";
 import { toast } from "@/components/ui/feedback";
+import { SelectMenu } from "@/components/ui/SelectMenu";
 
 /**
  * The drag-and-drop pipeline (spec Part 2 §9, offered as an alternative to rules-driven).
@@ -108,20 +109,18 @@ export function KanbanBoard({ leads, stages }: { leads: KanbanLead[]; stages: st
                       </div>
                     </div>
 
-                    {/* The keyboard path to the same action. */}
+                    {/* The keyboard path to the same action — now the app's own Select (§5.5)
+                        rather than an OS dropdown sitting on every card. */}
                     {lead.canMove && (
-                      <select
-                        aria-label={`Move ${lead.name} to another stage`}
-                        value={lead.stage}
-                        onChange={(e) => void move(lead.id, e.target.value)}
-                        className="mt-2 w-full rounded-btn border border-line bg-surface-2 px-1.5 py-1 text-xs text-ink-2"
-                      >
-                        {stages.map((s) => (
-                          <option key={s} value={s}>
-                            {LEAD_STAGE_LABELS[s] ?? s}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="mt-2">
+                        <SelectMenu
+                          size="sm"
+                          aria-label={`Move ${lead.name} to another stage`}
+                          value={lead.stage}
+                          onChange={(e) => void move(lead.id, e.target.value)}
+                          options={stages.map((s) => ({ value: s, label: LEAD_STAGE_LABELS[s] ?? s }))}
+                        />
+                      </div>
                     )}
                   </article>
                 ))}

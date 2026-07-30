@@ -4,9 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { istMinutesOfDay, istMonthRange, istToday } from "@/lib/dates";
 import { formatIstMinutes } from "@/lib/config-schema";
 import { getDailyLogEod } from "./founder-config";
-import { formatDate, formatInrMinor } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import type { NotificationAmount } from "@/lib/notification-text";
+import { getTodayInrPerEur } from "@/lib/fx";
 import type { AppRole } from "@/lib/rbac";
-import { aggInrMinor } from "@/lib/money";
+import { aggEurMinor, aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
 import { parseMentions } from "@/lib/gn-mentions";
 import { getPendingRows } from "./finance-metrics";
@@ -36,6 +38,17 @@ export type Notification = {
   title: string;
   body: string;
   href: string;
+  /**
+   * Amounts referenced from `title`/`body` as `{m0}`, `{m1}`… — money is NOT baked into the
+   * string here.
+   *
+   * These lines are read on a page with a ₹/€ toggle, and a notification that said "₹3,25,500"
+   * while every figure beside it said euros was simply wrong. Formatting cannot happen on the
+   * server (it has no access to the reader's currency), so the amount travels as both aggregates
+   * and `renderNotificationText` (lib/notification-text — isomorphic, because both readers of a
+   * notification are client components) substitutes it at render time.
+   */
+  amounts?: NotificationAmount[];
 };
 
 function istHourNow(): number {
@@ -346,6 +359,40 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   // ── Head + Admin: student signals + early-warning radar ──
   if (role === "ADMIN" || role === "HEAD") {
     const fourteenDaysAgo = new Date(today.getTime() - 14 * 86400000);
+
+    /**
+     * Prospects the intake auto-disqualified in the last 24h (Error Log L8).
+     *
+     * A BANT "CANCEL" at submission cancels the booking and emails the prospect a rejection —
+     * but NOBODY internally was told. A caller who had been working that prospect found out
+     * when the prospect asked why, which is the "awkward" the client reported. The spec's own
+     * remedy is "notify the caller before the cancellation fires"; the cancellation is
+     * synchronous at intake, so the honest version is to surface it the moment it happens.
+     *
+     * Counted from the CANCELLED booking rather than the lead's stage: a lead can reach LOST
+     * for many reasons, and only this one owes somebody an explanation.
+     */
+    const autoDisqualified = await prisma.bookingRequest.count({
+      where: {
+        status: "CANCELLED",
+        slotId: null, // the auto-disqualify path never claims a slot
+        createdAt: { gte: new Date(Date.now() - 86400000) },
+        lead: { is: { stage: "LOST" } },
+      },
+    });
+    if (autoDisqualified > 0) {
+      items.push({
+        id: "auto-disqualified",
+        severity: "watch",
+        title: `${autoDisqualified} prospect${autoDisqualified === 1 ? "" : "s"} auto-disqualified at intake`,
+        body:
+          autoDisqualified === 1
+            ? "A booking was declined automatically on its BANT score and the prospect has been emailed. Check it was the right call before they ask."
+            : "Bookings were declined automatically on their BANT score and those prospects have been emailed. Check they were the right calls before they ask.",
+        href: "/bookings",
+      });
+    }
+
     const [redCount, checkInsDue, radarCount] = await Promise.all([
       prisma.enrollment.count({ where: { status: "ACTIVE", signalColour: "RED" } }),
       prisma.enrollment.count({ where: { status: "ACTIVE", nextCheckInDate: { lte: today } } }),
@@ -416,6 +463,11 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
 
   // ── Admin-only: money + team health ──
   const month = istMonthRange(today);
+  // Today's rate, for the few figures the database only holds in rupees (the monthly target,
+  // payables). Everything income- or receivable-derived carries a real EUR aggregate instead.
+  const fx = await getTodayInrPerEur();
+  const fxRate = Number(fx.rate);
+  const inrOnlyPair = (inr: number) => ({ inr, eur: fxRate > 0 ? inr / fxRate : 0 });
   const [pendingRows, runway, missingLoggers, monthIncomes, target, payablesDueSoon, weekSnapshot] =
     await Promise.all([
       getPendingRows(),
@@ -462,13 +514,19 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
 
   const overdue = pendingRows.filter((p) => p.overdue && p.balance.inr > 0);
   if (overdue.length > 0) {
-    const total = overdue.reduce((a, p) => a + p.balance.inr, 0);
+    // Both aggregates — every receivable already carries its EUR balance from its own stamped
+    // rate, so this figure is exact in either currency rather than converted on read.
+    const total = overdue.reduce(
+      (a, p) => ({ inr: a.inr + p.balance.inr, eur: a.eur + p.balance.eur }),
+      { inr: 0, eur: 0 },
+    );
     items.push({
       id: "overdue-receivables",
       severity: "risk",
-      title: `${overdue.length} overdue payment${overdue.length > 1 ? "s" : ""} - ${formatInrMinor(total, { compact: true })}`,
+      title: `${overdue.length} overdue payment${overdue.length > 1 ? "s" : ""} - {m0}`,
       body: `${overdue[0].studentName}${overdue.length > 1 ? ` and ${overdue.length - 1} more` : ""} past the due date.`,
       href: "/finance",
+      amounts: [total],
     });
   }
 
@@ -522,6 +580,10 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
     (a, i) => a + Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
     0,
   );
+  const revenueEur = monthIncomes.reduce(
+    (a, i) => a + Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
+    0,
+  );
   const targetInr = Number(target?.targetInrMinor ?? BigInt(80000000));
   const pct = targetInr > 0 ? (revenueInr / targetInr) * 100 : 0;
   if (pct >= 100) {
@@ -529,8 +591,10 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       id: "target-hit",
       severity: "win",
       title: "Monthly revenue target hit 🎉",
-      body: `${formatInrMinor(revenueInr, { compact: true })} of ${formatInrMinor(targetInr, { compact: true })} - new high score.`,
+      body: `{m0} of {m1} - new high score.`,
       href: "/pipeline",
+      // Revenue is exact in both; the target is rupee-only, so its euro side is today's rate.
+      amounts: [{ inr: revenueInr, eur: revenueEur }, inrOnlyPair(targetInr)],
     });
   } else if (today.getUTCDate() > 15 && pct < 50) {
     items.push({
@@ -548,8 +612,10 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       id: "payables-due",
       severity: "info",
       title: `${payablesDueSoon.length} payable${payablesDueSoon.length > 1 ? "s" : ""} due within 7 days`,
-      body: `${formatInrMinor(total, { compact: true })} committed - ${payablesDueSoon.map((p) => p.name).join(", ")}.`,
+      body: `{m0} committed - ${payablesDueSoon.map((p) => p.name).join(", ")}.`,
       href: "/cash",
+      // Payables are recorded in rupees only — euro side at today's rate.
+      amounts: [inrOnlyPair(total)],
     });
   }
 

@@ -16,47 +16,9 @@ import { pickFirstCaller } from "./assignment";
 import { logActivity, diffFields } from "./activity-log";
 import { isKnownLevel } from "./levels";
 import type { ActionResult } from "./finance-actions";
-import { archiveData, restoreData } from "@/lib/soft-delete";
-
-/**
- * Reverse write-through for issue 1.5: when the Pipeline board changes a lead's stage, move that
- * lead's opportunity ON THE DEFAULT SALES PIPELINE to the column bridged to the new stage (and set
- * its status), so `/pipeline` and `/opportunities` never show the same deal in two places. Mirror
- * of opportunities-actions.moveOpportunity's opp→lead direction, sharing statusForLegacyStage.
- * No-ops when the lead has no opportunity, or when no default-pipeline column is bridged to this
- * stage; custom pipelines are a separate view and are left untouched.
- */
-async function syncDefaultOpportunity(
-  tx: Prisma.TransactionClient,
-  leadId: string,
-  newStage: LeadStage,
-): Promise<void> {
-  const opps = await tx.opportunity.findMany({
-    where: { leadId, pipeline: { isDefault: true, deletedAt: null } },
-    select: { id: true, stageId: true, wonAt: true },
-  });
-  if (!opps.length) return;
-  const target = await tx.pipelineStage.findFirst({
-    where: { pipeline: { isDefault: true, deletedAt: null }, legacyStage: newStage, deletedAt: null },
-    select: { id: true },
-  });
-  if (!target) return;
-  const status = statusForLegacyStage(newStage);
-  const max = await tx.opportunity.aggregate({ where: { stageId: target.id }, _max: { position: true } });
-  let pos = (max._max.position ?? -1) + 1;
-  for (const o of opps) {
-    if (o.stageId === target.id) continue; // already in the right column
-    await tx.opportunity.update({
-      where: { id: o.id },
-      data: {
-        stageId: target.id,
-        status,
-        wonAt: status === "WON" ? o.wonAt ?? new Date() : null,
-        position: pos++,
-      },
-    });
-  }
-}
+import { ACTIVE, archiveData, restoreData } from "@/lib/soft-delete";
+import { syncDefaultOpportunity } from "./opportunity-sync";
+import { extractCallNote, type ExtractionOutcome } from "./call-note-extract";
 
 /**
  * Pipeline entry is for Asma/Nilofer (USER) + Admin (PRD1 §5.1).
@@ -91,6 +53,16 @@ const leadSchema = z.object({
 function firstError(e: z.ZodError): string {
   return e.issues[0]?.message ?? "Invalid input";
 }
+
+/**
+ * The most leads one hand-out may assign. Roughly a week at the JD's ~30-dials-a-day quota.
+ *
+ * Deliberately low. Nothing technical stops a bulk assign of all 23,430 unassigned leads, and
+ * that is exactly the failure to design against: a queue that cannot be finished is a graveyard,
+ * and a caller who is handed one stops trusting the list. Hand out a day or two at a time and
+ * top up when it is cleared.
+ */
+const MAX_HANDOUT = 200;
 
 /** Reads the diff back as a sentence the founder can scan: "changed Stage, Payment plan". */
 const FIELD_LABELS: Record<string, string> = {
@@ -307,6 +279,101 @@ export async function assignLead(id: string, userId: string): Promise<ActionResu
   });
   revalidatePath("/pipeline");
   return { ok: true };
+}
+
+const assignBatchSchema = z.object({
+  userId: z.string().min(1, "Pick who these leads go to"),
+  count: z.number().int().min(1).max(MAX_HANDOUT),
+  /** Blank = any source. */
+  leadSource: z.string().trim().max(64).optional(),
+  /** Newest first is the default: a lead that arrived yesterday converts far better than one from March. */
+  oldestFirst: z.boolean().default(false),
+});
+
+/**
+ * Hand a batch of unassigned leads to one caller.
+ *
+ * WHY THIS EXISTS. Assignment was one lead at a time — `assignLead(id, userId)` behind a
+ * dropdown on a single row — and `pickFirstCaller`'s rotation only fires on NEW intake. Neither
+ * touches an imported backlog. The result, live on 29 Jul 2026: **23,430 of 23,435 leads are
+ * unassigned**, Nilofer's desk holds 3 leads and Asma's holds 2.
+ *
+ * That is the true reason My Desk reads as empty. The desk is not broken and its queue is not
+ * unbounded — `l1-desk-metrics.ts` already scopes to `assignedToId` and caps the backlog at 200,
+ * ordered oldest-first. There is simply nothing assigned to anyone, and no screen in the app
+ * could have changed that at a rate above one lead per click.
+ *
+ * The cap is the point as much as the batch is. 23,435 leads is not a work queue, it is a
+ * graveyard; the JD's quota is ~30 dials a day. Handing someone a day's work at a time is what
+ * makes the queue mean something — so this refuses to hand out more than {@link MAX_HANDOUT}.
+ */
+export async function assignLeadBatch(input: unknown): Promise<ActionResult & { assigned?: number }> {
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
+  const parsed = assignBatchSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { userId, count, leadSource, oldestFirst } = parsed.data;
+
+  const assignee = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, status: true },
+  });
+  if (!assignee) return { ok: false, error: "That person no longer exists." };
+  if (assignee.status !== "ACTIVE") return { ok: false, error: "That account is suspended." };
+
+  /**
+   * The callable slice, matching `l1-desk-metrics.ts` exactly. A lead the desk would never show
+   * must not be handed out — assigning a WON deal or a number-less contact would inflate the
+   * caller's queue with rows they cannot action, which is how a work list stops being trusted.
+   */
+  const candidates = await prisma.lead.findMany({
+    where: {
+      ...ACTIVE,
+      assignedToId: null,
+      stage: { notIn: ["WON", "LOST"] },
+      phone: { not: null },
+      ...(leadSource ? { leadSource: leadSource as never } : {}),
+    },
+    select: { id: true },
+    orderBy: { createdAt: oldestFirst ? "asc" : "desc" },
+    take: count,
+  });
+  if (!candidates.length) return { ok: false, error: "No unassigned, callable leads match that filter." };
+
+  const ids = candidates.map((c) => c.id);
+  // Re-assert `assignedToId: null` in the write: between the read and here, another admin's
+  // hand-out may have claimed some of these. Whoever got there first keeps them.
+  const res = await prisma.lead.updateMany({
+    where: { id: { in: ids }, assignedToId: null },
+    data: { assignedToId: userId },
+  });
+
+  await logActivity(session, {
+    action: "lead.assign.batch",
+    section: "pipeline",
+    entityType: "Lead",
+    entityId: userId,
+    summary: `Handed ${res.count} lead${res.count === 1 ? "" : "s"} to ${assignee.name}`,
+    meta: { assignedToId: userId, requested: count, assigned: res.count, leadSource: leadSource ?? null, oldestFirst },
+  });
+
+  revalidatePath("/pipeline");
+  revalidatePath("/my-desk");
+  return { ok: true, assigned: res.count };
+}
+
+/** How many unassigned, callable leads are left to hand out — the denominator for the panel. */
+export async function countAssignableLeads(leadSource?: string): Promise<number> {
+  await requireSection("pipeline");
+  return prisma.lead.count({
+    where: {
+      ...ACTIVE,
+      assignedToId: null,
+      stage: { notIn: ["WON", "LOST"] },
+      phone: { not: null },
+      ...(leadSource ? { leadSource: leadSource as never } : {}),
+    },
+  });
 }
 
 const outcomeSchema = z.object({
@@ -581,4 +648,30 @@ export async function moveLeadStage(id: string, toStage: string): Promise<Action
   revalidatePath("/pipeline");
   revalidatePath("/opportunities"); // the linked opp may have moved (1.5)
   return { ok: true };
+}
+
+// ──────────────────────────── call-note extraction ───────────────────────────
+
+/**
+ * Read a call note and SUGGEST the structured fields (outcome, BANT, follow-up date).
+ *
+ * Read-only: it writes nothing, logs no activity, and its result is applied to the form for
+ * the human to confirm — the save still goes through `createOutcome`/`updateOutcome` with
+ * every guard those already carry, `highlyQualified` included.
+ *
+ * Gated to the same section as the form it serves. The rate-limit key is the caller's id, so
+ * one person leaning on the button can't spend the whole team's budget.
+ */
+export async function suggestOutcomeFromNote(payload: {
+  note: string;
+  callDate: string;
+}): Promise<{ ok: true; result: ExtractionOutcome } | { ok: false; error: string }> {
+  const session = await requireSection("pipeline");
+  const note = typeof payload?.note === "string" ? payload.note : "";
+  const callDate = typeof payload?.callDate === "string" ? payload.callDate : "";
+  // The call date anchors every relative date in the note, so a malformed one is a hard stop
+  // rather than something to paper over with today's date.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(callDate)) return { ok: false, error: "Set the call date first" };
+  const result = await extractCallNote(note, callDate, session.user.id);
+  return { ok: true, result };
 }

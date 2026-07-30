@@ -13,10 +13,14 @@ import {
   coerceCommissionRulesConfig,
   coercePipelineConfig,
   coerceTutorFeeConfig,
+  coerceInstalmentPlanConfig,
+  instalmentPlanConfigSchema,
   coerceDailyLogEod,
   coerceDailyLogTargets,
   coerceGamificationConfig,
   coerceSectionsConfig,
+  coerceSlotPatternConfig,
+  slotPatternConfigSchema,
   bookOrderConfigSchema,
   commissionRulesConfigSchema,
   pipelineConfigSchema,
@@ -43,15 +47,21 @@ import {
   PIPELINE_KEY,
   SECTIONS_KEY,
   TUTOR_FEE_KEY,
+  INSTALMENT_PLAN_KEY,
+  SLOT_PATTERN_KEY,
+  SSS_PATTERN_KEY,
   writeAgreementWorkflow,
   writeBookOrderConfig,
   writeCommissionRulesConfig,
   writePipelineConfig,
   writeTutorFeeConfig,
+  writeInstalmentPlanConfig,
   writeDailyLogEod,
   writeDailyLogTargets,
   writeGamificationConfig,
   writeSectionsConfig,
+  writeSlotPatternConfig,
+  writeSssPatternConfig,
 } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
 import { syncRewardGrants } from "./rewards";
@@ -691,6 +701,39 @@ export async function saveTutorFee(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Price the instalment plans (Founder Console → Instalment Plans): what each plan length costs
+ * extra, and how many days apart the instalments fall by default.
+ *
+ * Existing plans are NOT re-priced. Each receivable snapshots its surcharge when its schedule is
+ * generated, so a change here only affects plans built after it — the same discipline as
+ * TutorFee.ratePerHead. Finance revalidates so the EMI generator offers the new numbers at once.
+ */
+export async function saveInstalmentPlanConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = instalmentPlanConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const before = coerceInstalmentPlanConfig(await settingValue(INSTALMENT_PLAN_KEY));
+  await writeInstalmentPlanConfig(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "console.instalment-plans.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: INSTALMENT_PLAN_KEY,
+      summary: "Changed the instalment plan pricing",
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  revalidatePath("/finance");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
 /** When a book order releases to the publisher (§9.2, Part 2 §4.4; threshold open per §18.3). */
 export async function saveBookOrderConfig(input: unknown): Promise<ActionResult> {
   const session = await requireAdmin();
@@ -735,6 +778,78 @@ export async function savePipelineConfig(input: unknown): Promise<ActionResult> 
     });
   }
   revalidatePath("/pipeline");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+/**
+ * Standing weekly availability for the public /book calendar.
+ *
+ * THIS ACTION IS THE POINT. `ensureBookingSlots()` — a correct, idempotent, hourly job — had no
+ * writer anywhere in the codebase: `SLOT_PATTERN_KEY` was read in two places and written in
+ * none, so the config sat on its `enabled: false, weekdays: []` default forever and the job
+ * returned `{ran: false, reason: "slot pattern disabled"}` on every tick. The fix for the empty
+ * booking calendar shipped in a state where it could not be switched on. This is the switch.
+ */
+export async function saveSlotPatternConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = slotPatternConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  // A pattern with no weekday generates nothing, so "on" with an empty week is a trap, not a
+  // valid state — refuse it here rather than letting the job silently no-op like the default did.
+  if (parsed.data.enabled && parsed.data.weekdays.length === 0) {
+    return { ok: false, error: "Pick at least one weekday, or switch the pattern off." };
+  }
+  const before = coerceSlotPatternConfig(await settingValue(SLOT_PATTERN_KEY));
+  await writeSlotPatternConfig(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "console.slot-pattern.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: SLOT_PATTERN_KEY,
+      summary: parsed.data.enabled
+        ? `Set standing booking availability — ${parsed.data.weekdays.join(", ")} ${parsed.data.startTime}–${parsed.data.endTime}`
+        : "Switched off standing booking availability",
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  revalidatePath("/bookings");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+/** The same, for the founder's SSS (sales) diary — see `sss-topup.ts`. */
+export async function saveSssPatternConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = slotPatternConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  if (parsed.data.enabled && parsed.data.weekdays.length === 0) {
+    return { ok: false, error: "Pick at least one weekday, or switch the pattern off." };
+  }
+  const before = coerceSlotPatternConfig(await settingValue(SSS_PATTERN_KEY));
+  await writeSssPatternConfig(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "console.sss-pattern.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: SSS_PATTERN_KEY,
+      summary: parsed.data.enabled
+        ? `Set standing SSS availability — ${parsed.data.weekdays.join(", ")} ${parsed.data.startTime}–${parsed.data.endTime}`
+        : "Switched off standing SSS availability",
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  revalidatePath("/bookings");
   revalidatePath("/console");
   return { ok: true };
 }

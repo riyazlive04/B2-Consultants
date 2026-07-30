@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { channelStates } from "@/lib/env";
 
 /**
  * Liveness + readiness probe for the container platform and the reverse proxy.
@@ -11,6 +12,11 @@ import { prisma } from "@/lib/prisma";
  * Public by design (registered in middleware's PUBLIC_PREFIXES) and returns no
  * data: just ok/degraded plus a latency number. Nothing here is worth
  * authenticating, and nothing here leaks schema, counts or config.
+ *
+ * `channels` reports whether each outbound channel is armed — a booleans-only summary, no
+ * endpoints, tokens or counts, so it stays safe to expose unauthenticated. It exists because
+ * "off" and "on but broken" are indistinguishable from outside the app, and that ambiguity is
+ * how agreement OTPs went undelivered for weeks while every screen looked fine.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +30,7 @@ export async function GET() {
       status: "ok",
       db: "up",
       latencyMs: Date.now() - started,
+      channels: channelStates(),
     });
   } catch {
     // 503 so Caddy/Docker mark the container unhealthy rather than routing to it.

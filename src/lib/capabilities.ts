@@ -111,6 +111,34 @@ export const CAPABILITIES = [
     actions: "german-note Financials tab · german-note/workshops/[id] — read-only; creating & editing workshops stays Admin-only",
     roles: ["ADMIN"],
   },
+  /**
+   * ER v2 Track A. Seating is a delivery decision, not a finance one: the Head coach
+   * plausibly decides which cohort a student joins, without being handed the Students board's
+   * other write powers. Distinct from `pipeline.configure` for that reason.
+   *
+   * Creating and archiving BATCHES stays `requireAdmin()` — this key buys the right to move
+   * people between existing cohorts, never to invent one.
+   */
+  {
+    key: "batches.manage",
+    name: "Seat students in batches",
+    description: "Move enrollments between existing cohorts",
+    actions: "batch-actions (seatEnrollment, unseatEnrollment); creating & archiving batches stays Admin-only",
+    roles: ["ADMIN"],
+  },
+  /**
+   * ER v2 Track D. Editing the qualification catalogue changes the BANT verdict that decides
+   * WHO GETS CALLED, which is why it is a key of its own rather than folded into
+   * `pipeline.configure`: someone who may reassign leads should not thereby be able to
+   * silently re-tune what "qualified" means for everyone.
+   */
+  {
+    key: "qualification.manage",
+    name: "Edit qualification questions",
+    description: "Add, reword and reweight the booking form's BANT questions",
+    actions: "qualification-actions (create, update → new version, reorder, retire)",
+    roles: ["ADMIN"],
+  },
 ] as const satisfies readonly CapabilityDef[];
 
 export type CapabilityKey = (typeof CAPABILITIES)[number]["key"];

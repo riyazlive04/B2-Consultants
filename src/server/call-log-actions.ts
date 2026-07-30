@@ -5,6 +5,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { logActivity } from "./activity-log";
+import { stageAfterCall } from "@/lib/call-outcome";
+import { syncDefaultOpportunity } from "./opportunity-sync";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -57,8 +59,12 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
 
-  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, name: true } });
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, name: true, stage: true } });
   if (!lead) return { ok: false, error: "Lead not found" };
+
+  // Error Log L4: logging an outcome left the board untouched. Only unambiguous outcomes
+  // move the card — see lib/call-outcome.ts for why SPOKE deliberately does not.
+  const nextStage = stageAfterCall(lead.stage, d.outcome);
 
   const row = await prisma.$transaction(async (tx) => {
     const created = await tx.callLog.create({
@@ -77,6 +83,18 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
         where: { id: leadId, contactedAt: null },
         data: { contactedAt: new Date() },
       });
+    }
+    // The stage move rides in the SAME transaction as the call log: a logged call that
+    // failed to move the card is the bug being fixed, and two separate writes would just
+    // reintroduce it under a narrower race.
+    if (nextStage && nextStage !== lead.stage) {
+      await tx.lead.update({ where: { id: leadId }, data: { stage: nextStage } });
+      await tx.leadStageHistory.create({
+        data: { leadId, fromStage: lead.stage, toStage: nextStage, changedById: session.user.id },
+      });
+      // Without this the Opportunities board keeps showing the deal in its old column —
+      // the same drift every other stage-writing path calls this to avoid.
+      await syncDefaultOpportunity(tx, leadId, nextStage);
     }
     return created;
   });

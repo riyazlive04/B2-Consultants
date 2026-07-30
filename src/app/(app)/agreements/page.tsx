@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileSignature, Plus } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { StudentName } from "@/components/ui/StudentName";
 import { requireSection } from "@/lib/rbac";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { effectiveAgreementStatus } from "@/lib/agreement";
@@ -70,7 +71,20 @@ export default async function AgreementsPage() {
                           {r.documentNo}
                         </Link>
                       </td>
-                      <td className="px-4 py-3">{d?.student.fullName ?? r.student?.fullName ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        {/* The name may come from the frozen document snapshot (`d`), which is
+                            the legally meaningful version; the code comes from the live student
+                            record, since the snapshot predates codes existing. */}
+                        {d?.student.fullName ?? r.student?.fullName ? (
+                          <StudentName
+                            name={d?.student.fullName ?? r.student?.fullName ?? ""}
+                            // Resolved server-side: direct link, else the lead's sole student.
+                            code={r.studentCode}
+                          />
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-muted">{d?.batch.number ?? "—"}</td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {d ? formatInrMinor(BigInt(d.payment.totalInrMinor)) : "—"}

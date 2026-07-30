@@ -152,9 +152,9 @@ function PostingCard({ config }: { config: FinancePostingConfig }) {
       <h4 className="text-h3 text-ink">Ledger auto-posting</h4>
       <Hint>
         Both write to the real double-entry ledger, so both ship <strong>off</strong>. Issuance posting
-        makes Accounts receivable two-sided (Dr AR / Cr Income when an invoice is issued). Commission
-        accrual books Dr Team-salaries / Cr Accounts-payable when you record a payout run — an accrual,
-        not a cash payment.
+        makes Accounts receivable two-sided (Dr AR / Cr Income when an invoice is issued). Recording
+        commission as owed books Dr Team-salaries / Cr Accounts-payable when you record a payout run —
+        it logs the cost as money owed, not as cash leaving the bank.
       </Hint>
       <div className="mt-4 space-y-4">
         <Toggle
@@ -165,7 +165,7 @@ function PostingCard({ config }: { config: FinancePostingConfig }) {
         <Toggle
           checked={draft.commissionAccrual.enabled}
           onChange={(b) => setDraft((d) => ({ ...d, commissionAccrual: { enabled: b } }))}
-          label="Accrue commission payout runs to the ledger"
+          label="Record commission payout runs as money owed"
         />
       </div>
       <SaveBar dirty={dirty} onSave={save} onReset={() => setDraft(DEFAULT_FINANCE_POSTING_CONFIG)} busy={busy} error={error} />
@@ -197,16 +197,16 @@ function ReportCard({ config }: { config: ScheduledReportConfig }) {
     <Card>
       <h4 className="text-h3 text-ink">Scheduled founder digest</h4>
       <Hint>
-        Emails you the numbers on a cadence over the existing Resend channel. Ships off, and never sends
+        Emails you the numbers on a schedule over the existing Resend channel. Ships off, and never sends
         with no recipients. Needs email configured &amp; armed (WhatsApp/Email settings) to actually
         deliver.
       </Hint>
       <div className="mt-4 space-y-4">
         <Toggle checked={draft.enabled} onChange={(b) => patch({ enabled: b })} label="Send a scheduled digest" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Cadence">
+          <Field label="How often">
             <Picker
-              ariaLabel="Cadence"
+              ariaLabel="How often"
               value={draft.cadence}
               onChange={(v) => patch({ cadence: v as "WEEKLY" | "MONTHLY" })}
               options={[
@@ -268,9 +268,10 @@ function CommissionPayoutCard() {
     <Card>
       <h4 className="text-h3 text-ink">Commission payout run</h4>
       <Hint>
-        Snapshots this month&apos;s deal-team commission totals into a durable payout record. If ledger
-        accrual is on above, it also posts Dr Team-salaries / Cr Accounts-payable for the total — an
-        accrual, never a cash payment, so it can&apos;t overstate the bank. Idempotent per month.
+        Snapshots this month&apos;s deal-team commission totals into a durable payout record. If
+        recording as money owed is on above, it also posts Dr Team-salaries / Cr Accounts-payable for
+        the total — money owed, never a cash payment, so it can&apos;t overstate the bank. Idempotent
+        per month.
       </Hint>
       <div className="mt-4">
         <Btn onClick={run} disabled={busy}>

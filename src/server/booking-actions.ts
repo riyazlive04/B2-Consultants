@@ -14,10 +14,12 @@ import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/cons
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { activityStamp } from "@/lib/activity-actions";
+import { slotStartsForRange, WEEKDAY_KEYS } from "@/lib/slot-plan";
 import { BOOKING_RULES_KEY, getBookingRulesConfig, writeBookingRulesConfig } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
 import { emitTrigger } from "./automation";
 import { upsertIntakeLead } from "./lead-intake";
+import { shadowScore } from "./qualification";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
 import { promoteIntoFreedSlot, runBookingConfirmations } from "./booking-automation";
 import { sendEmailMessage } from "./messaging";
@@ -143,6 +145,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
 
   const rules = await getBookingRulesConfig();
   const bant = computeBant(d);
+  const shadow = await shadowScore(d);
   const utm = d.utm ? sanitizeUtm(d.utm) : null;
 
   // The evidence half of the gate above. Written inside whichever transaction ends up
@@ -202,6 +205,14 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     commitment: clean(d.commitment),
     howKnowUs: clean(d.howKnowUs),
     ...bant,
+    // ER v2 Track D — SHADOW ONLY. What the configurable question catalogue would have
+    // scored this submission. Recorded beside the live verdict and read by nothing: the
+    // decision below still comes from `bant`, exactly as it did before the catalogue
+    // existed. `shadowScore` swallows its own errors and returns nulls, because a
+    // measurement that could break a prospect's booking is worse than no measurement.
+    // The flip is gated on prisma/replay-bant.ts reporting zero disagreements.
+    bantShadowAvg: shadow.shadowAvg,
+    bantConfigVersion: shadow.configVersion,
   };
 
   // ── Auto-disqualify ──────────────────────────────────────────────────────────
@@ -366,14 +377,6 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
 
 // ─────────────────────────── Admin: slot + booking management ───────────────────────────
 
-const WEEKDAY_KEYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] as const;
-type WeekdayKey = (typeof WEEKDAY_KEYS)[number];
-// Date#getUTCDay() on a UTC-midnight calendar date (parseDateInput's encoding) gives the
-// correct civil weekday regardless of IST offset - see dates.ts's istToday for the same trick.
-const WEEKDAY_FROM_JSDAY: Record<number, WeekdayKey> = {
-  0: "SUN", 1: "MON", 2: "TUE", 3: "WED", 4: "THU", 5: "FRI", 6: "SAT",
-};
-
 const slotGenSchema = z.object({
   startDate: z.string().min(10, "Pick a start date"),
   endDate: z.string().min(10, "Pick an end date"),
@@ -415,23 +418,18 @@ export async function generateSlots(form: FormData): Promise<ActionResult> {
   }
 
   const rules = await getBookingRulesConfig();
-  // Buffer sits on top of the admin's chosen interval, so consecutive slots keep a real gap
-  // instead of sitting back-to-back with zero gap whenever interval === duration.
-  const stepMs = (d.intervalMins + rules.bufferMinutes) * 60_000;
 
-  const starts: Date[] = [];
-  for (let i = 0; i <= daySpan; i++) {
-    const day = new Date(startDateObj);
-    day.setUTCDate(startDateObj.getUTCDate() + i);
-    if (!d.weekdays.includes(WEEKDAY_FROM_JSDAY[day.getUTCDay()])) continue;
-
-    const dateStr = toDateInputValue(day);
-    const dayStartUtc = istWallToUtc(dateStr, d.startTime).getTime();
-    const dayEndUtc = istWallToUtc(dateStr, d.endTime).getTime();
-    for (let t = dayStartUtc; t + d.durationMins * 60_000 <= dayEndUtc + 1; t += stepMs) {
-      starts.push(new Date(t));
-    }
-  }
+  // Shared with the daily `ensureBookingSlots` cron so a hand-generated range and an
+  // auto-topped-up horizon land on exactly the same instants and dedupe against each other.
+  const starts = slotStartsForRange({
+    startDate: d.startDate,
+    endDate: d.endDate,
+    pattern: d,
+    bufferMinutes: rules.bufferMinutes,
+    istWallToUtc,
+    parseDate: parseDateInput,
+    formatDate: toDateInputValue,
+  });
   if (!starts.length) {
     return { ok: false, error: "That window fits no slots - widen it, add weekdays, or shorten the duration" };
   }
@@ -551,6 +549,23 @@ const BOOKING_STATUSES = ["BOOKED", "RESCHEDULED", "CANCELLED", "COMPLETED", "NO
  * NO_SHOW for the pipeline's deal-risk view. On a CANCELLED, the freed slot is offered to the next
  * same-caller/same-day call (promote-next), if that toggle is on.
  */
+/**
+ * What status a released slot should take (Error Log M2).
+ *
+ * OPEN only when someone could actually book it. The public form refuses anything inside
+ * `minNoticeHours`, so releasing a slot that starts within the hour publishes capacity that
+ * does not exist — the calendar shows a free slot the booking page will reject. Inside the
+ * window it is BLOCKED instead: still not sold, but honestly unusable.
+ *
+ * Shared by cancel/no-show and by reschedule, because both hand a slot back and both had the
+ * same phantom.
+ */
+function releasedSlotStatus(startsAt: Date | null, minNoticeHours: number): "OPEN" | "BLOCKED" {
+  if (!startsAt) return "OPEN";
+  const hoursUntil = (startsAt.getTime() - Date.now()) / 3_600_000;
+  return hoursUntil >= minNoticeHours ? "OPEN" : "BLOCKED";
+}
+
 export async function setBookingStatus(id: string, status: string): Promise<ActionResult> {
   const session = await requireSection("bookings");
   if (!(BOOKING_STATUSES as readonly string[]).includes(status)) {
@@ -558,11 +573,31 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
   }
   const booking = await prisma.bookingRequest.findUnique({
     where: { id },
-    select: { slotId: true, leadId: true, name: true, status: true },
+    // `slot.startsAt` decides whether the freed slot is genuinely re-bookable (M2).
+    select: {
+      slotId: true, leadId: true, name: true, status: true,
+      slot: { select: { startsAt: true } },
+    },
   });
   if (!booking) return { ok: false, error: "Booking not found" };
 
   const freesSlot = (status === "CANCELLED" || status === "NO_SHOW") && !!booking.slotId;
+
+  /**
+   * M2: a freed slot only returns to availability if someone could actually take it.
+   *
+   * The public booking form refuses anything inside `minNoticeHours`, so releasing a slot that
+   * starts in one hour used to publish a slot nobody can book — the calendar showed capacity
+   * that did not exist, and the founder had no way to tell the difference. Inside the notice
+   * window the slot is BLOCKED instead: still not sold, but honestly marked as unusable.
+   *
+   * The cancellation itself is never refused. Spec §M2 frames this as "require cancellation
+   * 12–24 hours before", but blocking a late cancel would force a call that is not happening to
+   * stay marked BOOKED — which corrupts the show-rate the L2 desk reports on. Recording reality
+   * beats enforcing a policy the calendar cannot undo.
+   */
+  const rules = await getBookingRulesConfig();
+  const freedSlotStatus = releasedSlotStatus(booking.slot?.startsAt ?? null, rules.minNoticeHours);
 
   await prisma.$transaction(async (tx) => {
     await tx.bookingRequest.update({
@@ -574,7 +609,7 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
     });
 
     if (freesSlot && booking.slotId) {
-      await tx.appointmentSlot.update({ where: { id: booking.slotId }, data: { status: "OPEN" } });
+      await tx.appointmentSlot.update({ where: { id: booking.slotId }, data: { status: freedSlotStatus } });
     }
     if (status === "NO_SHOW" && booking.leadId) {
       const lead = await tx.lead.findUnique({ where: { id: booking.leadId }, select: { stage: true } });
@@ -647,7 +682,7 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
   const session = await requireSection("bookings");
   const booking = await prisma.bookingRequest.findUnique({
     where: { id: bookingId },
-    select: { slotId: true, status: true, name: true },
+    select: { slotId: true, status: true, name: true, slot: { select: { startsAt: true } } },
   });
   if (!booking) return { ok: false, error: "Booking not found" };
   if (booking.status === "CANCELLED") return { ok: false, error: "This booking is cancelled — it can't be moved" };
@@ -670,9 +705,13 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
         where: { id: bookingId },
         data: { slotId: newSlotId, status: "BOOKED", confirmedAt: null, confirmSentAt: null },
       });
-      // …then release the old slot back to OPEN.
+      // …then release the old slot — OPEN only if it is still far enough out to be re-booked.
       if (booking.slotId) {
-        await tx.appointmentSlot.update({ where: { id: booking.slotId }, data: { status: "OPEN" } });
+        const rules = await getBookingRulesConfig();
+        await tx.appointmentSlot.update({
+          where: { id: booking.slotId },
+          data: { status: releasedSlotStatus(booking.slot?.startsAt ?? null, rules.minNoticeHours) },
+        });
       }
     });
   } catch (e) {

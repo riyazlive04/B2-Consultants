@@ -78,14 +78,14 @@ export default async function StudentsPage() {
           icon={<Smile size={18} />}
         />
         <MetricCard
-          label="Avg NPS"
+          label="Avg recommend score"
           value={avgNps === null ? "-" : avgNps.toFixed(1)}
           secondary="out of 10"
           progress={avgNps === null ? undefined : avgNps / 10}
           icon={<Star size={18} />}
         />
         <MetricCard
-          label="Highest LTV student"
+          label="Top paying student"
           value={
             ltvSummary.highest ? (
               <span className="text-2xl">{ltvSummary.highest.name}</span>
@@ -99,7 +99,7 @@ export default async function StudentsPage() {
       </div>
 
       <p className="text-sm text-muted">
-        <span className="font-medium text-ink">Average LTV:</span>{" "}
+        <span className="font-medium text-ink">Average paid:</span>{" "}
         Solo {formatInrMinor(ltvSummary.avgSolo, { compact: true })} · Guided{" "}
         {formatInrMinor(ltvSummary.avgGuided, { compact: true })} · Elite{" "}
         {formatInrMinor(ltvSummary.avgElite, { compact: true })} ·{" "}
@@ -175,7 +175,7 @@ export default async function StudentsPage() {
             label: `90/120-day tracker${tracker.some((t) => t.signalColour === "RED") ? " ⚠" : ""}`,
             content: <TrackerTable rows={tracker} isAdmin={isAdmin} waStatus={waByStudent} />,
           },
-          { label: "All students & LTV", content: <StudentsPanel rows={students} isAdmin={isAdmin} today={today} /> },
+          { label: "All students & totals", content: <StudentsPanel rows={students} isAdmin={isAdmin} today={today} /> },
           ...(isAdmin
             ? [
                 {

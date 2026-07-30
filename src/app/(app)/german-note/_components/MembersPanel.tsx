@@ -50,7 +50,7 @@ export function MembersPanel({
         <h3 className="font-display text-h2 font-semibold">Batch members</h3>
         <p className="text-xs text-muted">
           Pick a batch, then add students — existing ones from anywhere in the system, or quick-create a new
-          German Note learner (no B2 enrollment needed).
+          German Note learner (no B2 enrolment needed).
         </p>
       </div>
 

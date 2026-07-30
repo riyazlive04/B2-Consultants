@@ -1,57 +1,44 @@
-import Link from "next/link";
-import { Building2 } from "lucide-react";
+"use client";
+
 import { BUSINESS_LINE_LABELS, type BusinessLineView } from "@/lib/business-line";
-import { formatInrMinor } from "@/lib/format";
+import { formatEurMinor, formatInrMinor } from "@/lib/format";
+import { SegmentToggle } from "@/components/ui/SegmentToggle";
+import { useFinanceCcy } from "./FinanceCurrency";
 
 /**
- * B2 · German Note · Combined (§1.1).
+ * Finance's segment control — the shared `SegmentToggle` with each line's revenue printed
+ * inside its button.
  *
- * URL-driven (`?line=`) rather than client state, for three reasons: every server-rendered
- * card on the page switches together with no prop-drilling, the choice survives a reload,
- * and a particular view can be linked to someone. Same pattern as the Reports pivot.
+ * A wrapper rather than props on the shared component because those totals follow the page's
+ * ₹/€ toggle, which lives in a client context (`useFinanceCcy`). Only Finance has that
+ * context, so only Finance can format the figures; every other screen renders the plain control.
  *
- * Each button carries its own revenue so the split is legible without switching at all —
- * §1.2 asked to SEE the split (B2 ₹2,00,000 + German Note ₹47,000 = ₹2,47,000), not merely
- * to be able to filter to it.
+ * The split is shown WITHOUT switching (Error Log E2): the ask was to see
+ * B2 ₹2,00,000 + German Note ₹47,000 = ₹2,47,000 at a glance, not merely to filter to each.
+ *
+ * It used to be `<Link href="?line=">`, which reset the moment you navigated away. The
+ * selection is now a cookie written by the shared toggle, so it follows you across the app
+ * (E1/E4) — while an explicit `?line=` still wins on arrival, keeping shared links working
+ * (see server/business-line-view.ts).
  */
 export function BusinessLineSwitch({
   active,
-  totals,
+  totalsInr,
+  totalsEur,
 }: {
   active: BusinessLineView;
-  totals: Record<BusinessLineView, number>;
+  totalsInr: Record<BusinessLineView, number>;
+  totalsEur: Record<BusinessLineView, number>;
 }) {
-  const views: BusinessLineView[] = ["ALL", "B2", "GERMAN_NOTE"];
+  const { ccy } = useFinanceCcy();
+  const money = (v: BusinessLineView) =>
+    ccy === "INR"
+      ? formatInrMinor(totalsInr[v], { compact: true })
+      : formatEurMinor(totalsEur[v], { compact: true });
 
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <p className="flex items-center gap-1.5 text-caption text-muted">
-        <Building2 size={13} /> Business line
-      </p>
-      <div
-        className="flex flex-wrap items-center gap-0.5 rounded-full border border-line-strong bg-surface-2 p-0.5"
-        role="group"
-        aria-label="Filter finance by business line"
-      >
-        {views.map((v) => {
-          const on = v === active;
-          return (
-            <Link
-              key={v}
-              href={v === "ALL" ? "/finance" : `/finance?line=${v}`}
-              aria-current={on ? "page" : undefined}
-              className={`press flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold transition-colors ${
-                on ? "bg-primary text-on-accent" : "text-ink-2 hover:text-ink"
-              }`}
-            >
-              {BUSINESS_LINE_LABELS[v]}
-              <span className={`tnum text-caption font-medium ${on ? "opacity-80" : "text-muted"}`}>
-                {formatInrMinor(totals[v], { compact: true })}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
-  );
+  const totals = Object.fromEntries(
+    (Object.keys(BUSINESS_LINE_LABELS) as BusinessLineView[]).map((v) => [v, money(v)]),
+  ) as Partial<Record<BusinessLineView, string>>;
+
+  return <SegmentToggle active={active} totals={totals} />;
 }

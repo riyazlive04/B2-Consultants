@@ -24,11 +24,11 @@ export function FunnelMetricsTable({ months }: { months: Month[] }) {
     { label: "Awareness → lead rate", value: (m) => formatPct(pct(m.leads, m.awareness)) },
     { label: "Lead → call rate", value: (m) => formatPct(pct(m.calls, m.leads)) },
     { label: "Call → proposal rate", value: (m) => formatPct(pct(m.proposals, m.calls)) },
-    { label: "Proposal → enrollment rate", value: (m) => formatPct(pct(m.enrollTotal, m.proposals)) },
+    { label: "Proposal → enrolment rate", value: (m) => formatPct(pct(m.enrollTotal, m.proposals)) },
     { label: "Overall conversion rate", value: (m) => formatPct(pct(m.enrollTotal, m.leads)) },
-    { label: "Solo enrollment %", value: (m) => formatPct(pct(m.enrollSolo, m.enrollTotal)) },
-    { label: "Guided enrollment %", value: (m) => formatPct(pct(m.enrollGuided, m.enrollTotal)) },
-    { label: "Elite enrollment %", value: (m) => formatPct(pct(m.enrollElite, m.enrollTotal)) },
+    { label: "Solo enrolment %", value: (m) => formatPct(pct(m.enrollSolo, m.enrollTotal)) },
+    { label: "Guided enrolment %", value: (m) => formatPct(pct(m.enrollGuided, m.enrollTotal)) },
+    { label: "Elite enrolment %", value: (m) => formatPct(pct(m.enrollElite, m.enrollTotal)) },
     { label: "Ghosted Blueprint → call rate", value: (m) => formatPct(pct(m.gbCallsCompleted, m.ghostedDownloads)) },
     {
       label: "Revenue per lead",
@@ -47,8 +47,8 @@ export function FunnelMetricsTable({ months }: { months: Month[] }) {
           {row.label === "Overall conversion rate" && (
             <span
               tabIndex={0}
-              aria-label="Enrollments ÷ leads captured in the month — how much of the top of the funnel becomes paying students."
-              title="Enrollments ÷ leads captured in the month — how much of the top of the funnel becomes paying students."
+              aria-label="Enrolments ÷ leads captured in the month — how much of the top of the funnel becomes paying students."
+              title="Enrolments ÷ leads captured in the month — how much of the top of the funnel becomes paying students."
               className="ml-1.5 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line bg-surface-2 text-caption leading-none text-muted"
             >
               i
@@ -93,7 +93,7 @@ export function FunnelSnapshotsTable({ snapshots }: { snapshots: SnapshotRow[] }
     { key: "leads", header: "Leads", align: "right", sortable: false, cell: (s) => s.leadsCaptured },
     { key: "calls", header: "Calls", align: "right", sortable: false, cell: (s) => s.callsCompleted },
     { key: "proposals", header: "Proposals", align: "right", sortable: false, cell: (s) => s.proposalsSent },
-    { key: "enrollments", header: "Enrollments", align: "right", sortable: false, cell: (s) => s.enrollments },
+    { key: "enrollments", header: "Enrolments", align: "right", sortable: false, cell: (s) => s.enrollments },
     { key: "gb", header: "GB downloads", align: "right", sortable: false, cell: (s) => s.ghostedDownloads },
     { key: "workshop", header: "Workshop", align: "right", sortable: false, cell: (s) => s.workshopAttendees },
     { key: "notes", header: "Notes", sortable: false, cell: (s) => <span className="max-w-64 truncate text-muted">{s.notes ?? ""}</span> },

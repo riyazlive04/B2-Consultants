@@ -20,7 +20,7 @@ export function RecordButton() {
         type="button"
         onClick={() => setOpen(true)}
         title="Record income or expense"
-        className="press flex h-10 items-center gap-1.5 rounded-full bg-primary px-3.5 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong sm:px-4"
+        className="press flex h-10 flex-none items-center gap-1.5 rounded-full bg-primary px-3.5 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong sm:px-4"
       >
         <Plus size={17} className="flex-none" />
         <span className="hidden sm:inline">Record</span>

@@ -7,7 +7,7 @@ import { toast } from "@/components/ui/feedback";
 import { runRemindersNow, syncWhatsAppStatuses } from "@/server/whatsapp-actions";
 
 /**
- * Two header actions: trigger the reminder cadence, and reconcile our statuses against WATI's own
+ * Two header actions: trigger the reminder schedule, and reconcile our statuses against WATI's own
  * log (a "Sent" row only means WATI accepted it — Meta may have rejected it afterwards).
  */
 export function RunRemindersButton() {

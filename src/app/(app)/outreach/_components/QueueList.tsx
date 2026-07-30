@@ -13,6 +13,7 @@ import {
   Video,
 } from "lucide-react";
 import { fieldKindProps } from "@/components/ui/field-base";
+import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import type { QueueRow, QueueStep } from "@/server/outreach-metrics";
 import {
   markStepSent,
@@ -48,7 +49,7 @@ function SlaClock({ sla }: { sla: NonNullable<QueueRow["sla"]> }) {
         className="flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold"
         style={{ background: "var(--risk-soft)", color: "var(--risk)" }}
       >
-        <AlarmClock size={11} /> SLA missed — Step 10 path
+        <AlarmClock size={11} /> Response time missed — Step 10 path
       </span>
     );
   }
@@ -318,13 +319,10 @@ function ProspectCard({ row }: { row: QueueRow }) {
               <input type="hidden" name="journeyId" value={row.journeyId} />
               <label className="text-xs">
                 <span className="mb-1 block font-medium text-muted">Time contacted (IST)</span>
-                {/* datetime-local: native popup (theme-corrected via color-scheme) with
-                    app field chrome + themed picker indicator (.dateish-native). */}
-                <input
-                  type="datetime-local"
-                  name="at"
-                  className="dateish-native h-8 w-full rounded-field border border-line-strong bg-surface px-2.5 text-xs text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-soft"
-                />
+                {/* The app's own date+time popover (§5.5) — was a raw native input, which opened
+                    the browser's own panel in the platform font. `size="sm"` keeps this dense
+                    inline row at its 32px height. */}
+                <DateTimePicker name="at" size="sm" />
               </label>
               <button
                 type="submit"

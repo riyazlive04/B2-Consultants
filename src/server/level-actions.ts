@@ -160,7 +160,7 @@ async function levelUsageCount(code: string): Promise<number> {
     prisma.pendingPayment.count({ where: { programLevel: code } }),
     prisma.lead.count({ where: { wonLevel: code } }),
     prisma.enrollment.count({ where: { programLevel: code } }),
-    prisma.gnBatch.count({ where: { level: code } }),
+    prisma.batch.count({ where: { level: code } }),
     prisma.gnPendingJoiner.count({ where: { level: code } }),
     prisma.bookOrder.count({ where: { level: code } }),
   ]);

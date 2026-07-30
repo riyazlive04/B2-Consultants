@@ -8,6 +8,22 @@ import { getGamificationConfig } from "./founder-config";
 
 /** Students dashboards (PRD2 §4): counts, 90/120 tracker, satisfaction, LTV. */
 
+/**
+ * `studentId → "B2-0001"`, for any screen that shows a denormalised `studentName`.
+ *
+ * Extracted rather than copied: Finance built this inline, and Cash Health needs the same map
+ * for its age analysis (Error Log G3). A second copy of the query is how one screen ends up
+ * showing codes and another silently stops — which matters because a name alone is not an
+ * identifier here. Two students called "Anna Smith" is a real case and has already caused a
+ * payment to be credited to the wrong one (Error Log I1).
+ *
+ * Students with no code yet are simply absent from the map; callers render the bare name.
+ */
+export async function getStudentCodeMap(): Promise<Record<string, string>> {
+  const rows = await prisma.student.findMany({ select: { id: true, code: true } });
+  return Object.fromEntries(rows.flatMap((s) => (s.code ? [[s.id, s.code] as const] : [])));
+}
+
 const dayDiff = (a: Date, b: Date) => Math.floor((a.getTime() - b.getTime()) / 86400000);
 const dateKeyOf = (d: Date) => d.toISOString().slice(0, 10);
 /** Timestamps → the IST business day they happened on. */
@@ -315,6 +331,10 @@ export async function getStudentDetail(id: string) {
   return {
     id: student.id,
     fullName: student.fullName,
+    // "B2-0042" — shown beside the name in the profile header. The detail page is where
+    // someone confirms they have the right person before ringing them, so the identifier
+    // that distinguishes two "Anna Smith"s belongs here most of all (Error Log I1).
+    code: student.code,
     email: student.email,
     phone: student.phone,
     industry: student.industry,

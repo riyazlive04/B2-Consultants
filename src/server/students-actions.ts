@@ -524,14 +524,14 @@ export async function saveSprintWeek(weekId: string, form: FormData): Promise<Ac
   return { ok: true };
 }
 
-// ── Satisfaction / NPS (Admin, manual - PRD2 §4.5) ─────────────
+// ── Satisfaction / recommend score (Admin, manual - PRD2 §4.5) ─────────────
 
 const satisfactionSchema = z.object({
   date: z.string().min(10),
   // Digits-only + bounded, matching the form's `kind="int"` boxes. These stay STRING schemas
   // (that's what intInRange returns) — the create below is what turns them into Ints.
   satisfactionScore: intInRange(1, 10, "Satisfaction score must be"),
-  npsScore: intInRange(0, 10, "NPS score must be"),
+  npsScore: intInRange(0, 10, "Recommend score must be"),
   testimonialReceived: z.string().optional(),
   outcomeAchieved: z.enum(["JOB_OFFER_RECEIVED", "INTERVIEWS_ONLY", "APPLICATIONS_STAGE", "NO_OUTCOME_YET"]),
   notes: optionalRule("text"),
@@ -562,7 +562,7 @@ export async function addSatisfactionScore(studentId: string, form: FormData): P
     section: "students",
     entityType: "SatisfactionScore",
     entityId: score.id,
-    summary: `Recorded ${score.student.fullName}'s satisfaction ${satisfactionScore}/10, NPS ${npsScore}/10`,
+    summary: `Recorded ${score.student.fullName}'s satisfaction ${satisfactionScore}/10, would recommend ${npsScore}/10`,
     meta: {
       satisfactionScore,
       npsScore,

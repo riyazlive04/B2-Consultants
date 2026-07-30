@@ -220,7 +220,10 @@ export function Popover({
         minWidth: pos?.minWidth,
         // invisible until measured, so it never flashes at (0,0) before placement
         visibility: pos ? "visible" : "hidden",
-        zIndex: 60,
+        // Above every container a picker can open INSIDE — Modal z-[90] (Record, Add student…)
+        // and the palette z-[95] — but below toasts/confirms (z-[99]+), which must outrank
+        // everything. At the old 60 a select inside any modal opened BEHIND the dialog.
+        zIndex: 96,
       }}
       className={`rounded-field border border-line-strong bg-surface p-1 shadow-e-2 ${className}`}
     >

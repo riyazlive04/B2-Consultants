@@ -67,13 +67,27 @@ export const getPendingRows = cache(async () => {
       inr: Number(aggInrMinor(p.totalFeeInrMinor, p.totalFeeEurMinor, p.fxRateUsed)),
       eur: Number(aggEurMinor(p.totalFeeInrMinor, p.totalFeeEurMinor, p.fxRateUsed)),
     };
+    /**
+     * The instalment-plan surcharge, priced per plan length in the Console and snapshotted onto
+     * the row when its schedule was generated (0 for a row with no plan). It is added here
+     * rather than folded into `totalFee` so the agreed fee keeps meaning "the fee we agreed" —
+     * `toCollect` is the figure that has to arrive, and it is what the BALANCE is measured from.
+     */
+    const planExtra = {
+      inr: Number(aggInrMinor(p.planExtraInrMinor, p.planExtraEurMinor, p.fxRateUsed)),
+      eur: Number(aggEurMinor(p.planExtraInrMinor, p.planExtraEurMinor, p.fxRateUsed)),
+    };
+    const toCollect = { inr: fee.inr + planExtra.inr, eur: fee.eur + planExtra.eur };
     // Id-linked rows NEVER fall back to name matching: two students sharing a
     // name would otherwise cross-credit payments and silently zero a real
     // receivable. Name matching is only for rows with no student link at all.
     const paid = p.studentId
       ? paidByStudentId.get(p.studentId) ?? { inr: 0, eur: 0 }
       : paidByName.get(nameKey(p.studentName)) ?? { inr: 0, eur: 0 };
-    const balance = { inr: Math.max(0, fee.inr - paid.inr), eur: Math.max(0, fee.eur - paid.eur) };
+    const balance = {
+      inr: Math.max(0, toCollect.inr - paid.inr),
+      eur: Math.max(0, toCollect.eur - paid.eur),
+    };
     // A receivable is overdue when it is still owed and past its due date. It used to require
     // status === "ACTIVE", which is backwards: once the nightly sweep (or a manual edit) escalated
     // a row to the OVERDUE *status*, this flag flipped to FALSE, so the most-overdue payments
@@ -91,6 +105,12 @@ export const getPendingRows = cache(async () => {
       totalFee: fee,
       totalFeeInrRaw: p.totalFeeInrMinor.toString(),
       totalFeeEurRaw: p.totalFeeEurMinor.toString(),
+      planExtra,
+      planExtraInrRaw: p.planExtraInrMinor.toString(),
+      planExtraEurRaw: p.planExtraEurMinor.toString(),
+      /** Fee + plan surcharge — what actually has to be collected. Balance measures from this. */
+      toCollect,
+      intervalDays: p.intervalDays,
       paidSoFar: paid,
       balance,
       nextDueDate: p.nextDueDate?.toISOString() ?? null,
@@ -147,7 +167,11 @@ export async function getFinanceOverview() {
       prisma.expense.findMany({ where: ACTIVE, orderBy: { date: "desc" }, take: 5000 }),
       prisma.income.findMany({
         where: { ...ACTIVE, date: { gte: prevMonthStart, lt: prevSameDayEnd } },
-        select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
+        // `programLevel` rides along so revenue-by-level can be compared month over month.
+        // Without it the breakdown could only ever say "share of THIS month", which answers
+        // "how is the mix split" but never "which level is actually growing" — and the second
+        // is the question that moves where the founder spends selling time.
+        select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true, programLevel: true },
       }),
       prisma.expense.findMany({
         where: { ...ACTIVE, date: { gte: prevMonthStart, lt: prevSameDayEnd } },
@@ -170,16 +194,33 @@ export async function getFinanceOverview() {
   // Bucket by the level's KIND, not a "GN_" name-prefix: a German level added with any code
   // (e.g. "C1") still rolls into German Note. Coaching tiers keep their own columns.
   const kindByLevel = await levelKinds();
+  const bucketFor = (programLevel: string): keyof typeof byLevel => {
+    const kind = kindByLevel.get(programLevel);
+    if (kind === "GERMAN_LEVEL" || kind === "GERMAN_BUNDLE") return "GERMAN_NOTE";
+    return programLevel === "SOLO" || programLevel === "GUIDED" || programLevel === "ELITE"
+      ? programLevel
+      : "OTHER";
+  };
   for (const i of monthIncomes) {
-    const kind = kindByLevel.get(i.programLevel);
-    const bucket =
-      kind === "GERMAN_LEVEL" || kind === "GERMAN_BUNDLE"
-        ? "GERMAN_NOTE"
-        : i.programLevel === "SOLO" || i.programLevel === "GUIDED" || i.programLevel === "ELITE"
-          ? i.programLevel
-          : "OTHER";
+    const bucket = bucketFor(i.programLevel);
     byLevel[bucket].inr += Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
     byLevel[bucket].eur += Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
+  }
+
+  /**
+   * The same split over the SAME-DAY window into last month.
+   *
+   * Same-day, not whole-month, for the reason `prevSameDay` already exists: comparing a
+   * part-month against a full one always shows a fall, on the 3rd of every month, in every level.
+   */
+  const prevByLevel: Record<keyof typeof byLevel, Money2> = {
+    SOLO: { inr: 0, eur: 0 }, GUIDED: { inr: 0, eur: 0 }, ELITE: { inr: 0, eur: 0 },
+    GERMAN_NOTE: { inr: 0, eur: 0 }, OTHER: { inr: 0, eur: 0 },
+  };
+  for (const i of prevIncomes) {
+    const bucket = bucketFor(i.programLevel);
+    prevByLevel[bucket].inr += Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
+    prevByLevel[bucket].eur += Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
   }
 
   // ── Business-line segmentation (§1): B2 vs German Note vs Combined ──────────
@@ -214,15 +255,43 @@ export async function getFinanceOverview() {
     l.ytd.eur += Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
   }
 
+  /**
+   * A day's takings in both currencies. Each record contributes at ITS OWN stored rate
+   * (`sumAgg` does the same), so the chart's closing cumulative equals the revenue KPI
+   * above it to the minor unit. Converting an INR total at today's rate instead would put
+   * two different EUR numbers for the same month on one screen.
+   */
+  type DayTakings = { inr: number; eur: number; count: number };
+  const addTakings = (m: Map<string, DayTakings>, key: string, i: (typeof monthIncomes)[number]) => {
+    const at = m.get(key) ?? { inr: 0, eur: 0, count: 0 };
+    at.inr += Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
+    at.eur += Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
+    // How many receipts made up the day. ₹1,00,000 from one payment and ₹1,00,000 from eight are
+    // different days, and the chart's hover readout is the only place that distinction can live.
+    at.count += 1;
+    m.set(key, at);
+  };
+
+  /** Walk a run of dates carrying both running totals — the combined and per-line series are the
+   *  same shape over different day maps, so they share this rather than repeating the loop. */
+  const cumulate = (dates: readonly string[], byDay: Map<string, DayTakings>) => {
+    let inr = 0;
+    let eur = 0;
+    return dates.map((date) => {
+      const at = byDay.get(date) ?? { inr: 0, eur: 0, count: 0 };
+      inr += at.inr;
+      eur += at.eur;
+      return { date, inr: at.inr, cumulativeInr: inr, eur: at.eur, cumulativeEur: eur, count: at.count };
+    });
+  };
+
   // Daily series per line, on the same continuous calendar as the combined series.
-  const dailyByLine: Record<BusinessLine, Map<string, number>> = {
+  const dailyByLine: Record<BusinessLine, Map<string, DayTakings>> = {
     B2: new Map(),
     GERMAN_NOTE: new Map(),
   };
   for (const i of monthIncomes) {
-    const m = dailyByLine[lineOfLevel(i.programLevel)];
-    const k = i.date.toISOString().slice(0, 10);
-    m.set(k, (m.get(k) ?? 0) + Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)));
+    addTakings(dailyByLine[lineOfLevel(i.programLevel)], i.date.toISOString().slice(0, 10), i);
   }
 
   const receivableRows = pendingRows.filter(
@@ -246,20 +315,15 @@ export async function getFinanceOverview() {
   // three consecutive good days. The series is now continuous, one entry per calendar
   // day from the 1st to today, so gaps read as the gaps they are. `cumulativeInr`
   // rides along because the running total is what gets compared to the target.
-  const daily = new Map<string, number>();
+  const daily = new Map<string, DayTakings>();
   for (const i of monthIncomes) {
-    const k = i.date.toISOString().slice(0, 10);
-    daily.set(k, (daily.get(k) ?? 0) + Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)));
+    addTakings(daily, i.date.toISOString().slice(0, 10), i);
   }
   const daysElapsed = today.getUTCDate();
-  let running = 0;
-  const revenueSeries = Array.from({ length: daysElapsed }, (_, idx) => {
-    const d = new Date(Date.UTC(month.start.getUTCFullYear(), month.start.getUTCMonth(), idx + 1));
-    const key = d.toISOString().slice(0, 10);
-    const inr = daily.get(key) ?? 0;
-    running += inr;
-    return { date: key, inr, cumulativeInr: running };
-  });
+  const monthDates = Array.from({ length: daysElapsed }, (_, idx) =>
+    new Date(Date.UTC(month.start.getUTCFullYear(), month.start.getUTCMonth(), idx + 1)).toISOString().slice(0, 10),
+  );
+  const revenueSeries = cumulate(monthDates, daily);
   const revenueSpark = revenueSeries.map((p) => p.inr);
 
   // Per-line view models. Shared costs follow revenue share, so B2 + German Note always
@@ -291,12 +355,7 @@ export async function getFinanceOverview() {
     };
     const netLine = { inr: l.revenue.inr - allocExpenses.inr, eur: l.revenue.eur - allocExpenses.eur };
     const grossLine = { inr: l.revenue.inr - allocCogs.inr, eur: l.revenue.eur - allocCogs.eur };
-    let run = 0;
-    const series = revenueSeries.map((p) => {
-      const v = dailyByLine[line].get(p.date) ?? 0;
-      run += v;
-      return { date: p.date, inr: v, cumulativeInr: run };
-    });
+    const series = cumulate(monthDates, dailyByLine[line]);
     return {
       revenue: l.revenue,
       ytdRevenue: l.ytd,
@@ -309,8 +368,10 @@ export async function getFinanceOverview() {
       revenueSharePct: share * 100,
       /** Costs tagged to this line outright — the part that is measured, not apportioned. */
       directCostInr: Number(own.inr),
+      directCostEur: Number(own.eur),
       /** This line's slice of the SHARED pool — the part that is an estimate. */
       sharedCostInr: Number(sharedExpenses.inr) * share,
+      sharedCostEur: Number(sharedExpenses.eur) * share,
       revenueSeries: series,
     };
   };
@@ -325,16 +386,23 @@ export async function getFinanceOverview() {
       net: toMoney2(net),
       marginPct: margin,
       byLevel,
+      prevByLevel,
       receivables,
       ytdRevenue: toMoney2(sumAgg(yearIncomes)),
       revenueSpark,
       revenueSeries,
       segments,
-      // last month, cut off at the SAME day-of-month — for honest MoM deltas
+      // last month, cut off at the SAME day-of-month — for honest MoM deltas.
+      // Both currencies: the ₹/€ toggle flips the "was X by this day last month" line too, and
+      // an INR-only comparator would have forced a read-time conversion — the one thing the
+      // dual-aggregate design exists to avoid.
       prevSameDay: {
         revenueInr: Number(sumAgg(prevIncomes).inr),
+        revenueEur: Number(sumAgg(prevIncomes).eur),
         expensesInr: Number(sumAgg(prevExpenses).inr),
+        expensesEur: Number(sumAgg(prevExpenses).eur),
         netInr: Number(sumAgg(prevIncomes).inr) - Number(sumAgg(prevExpenses).inr),
+        netEur: Number(sumAgg(prevIncomes).eur) - Number(sumAgg(prevExpenses).eur),
       },
     },
     incomes: monthAllIncomeRows(incomeList),
@@ -375,6 +443,9 @@ function monthAllIncomeRows(
     programLevel: i.programLevel,
     paymentType: i.paymentType,
     paymentMethod: i.paymentMethod,
+    instalmentCount: i.instalmentCount,
+    instalmentExtraInrRaw: i.instalmentExtraInrMinor.toString(),
+    instalmentExtraEurRaw: i.instalmentExtraEurMinor.toString(),
     notes: i.notes,
     source: i.source,
   }));

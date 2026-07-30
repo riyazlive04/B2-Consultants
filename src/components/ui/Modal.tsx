@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { lockBodyScroll } from "@/lib/scroll-lock";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -22,6 +23,15 @@ const FOCUSABLE =
  * globals.css, but a modal should not depend on every ancestor staying untransformed
  * forever — one `hover:scale` added upstream years from now would break it again.
  */
+/*
+ * Scroll locking goes through the SHARED counter in lib/scroll-lock — not a private one here.
+ * A counter local to Modal fixed modal-over-modal (the greeting + new-lead pair on My Desk)
+ * but still stranded the lock whenever a NON-modal overlay interleaved: the Ctrl-K palette,
+ * askConfirm and the nav drawer each kept their own save/restore copy, and a palette opened
+ * over a modal then closed after it wrote `overflow: hidden` back onto an empty page. One
+ * counter, five callers, no ordering problem — see lib/scroll-lock.ts.
+ */
+
 export function Modal({
   open,
   onClose,
@@ -43,14 +53,34 @@ export function Modal({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  /**
+   * Open/close lifecycle: scroll lock, initial focus, and handing focus back on close.
+   *
+   * Deliberately keyed on `open` ALONE. Callers pass an inline `onClose` (`() => setX(null)`),
+   * whose identity changes on every parent render — folding these into the keydown effect
+   * below meant they were torn down and re-run on renders where nothing opened or closed,
+   * which churned the scroll lock and yanked focus back to the trigger mid-typing.
+   */
   useEffect(() => {
     if (!open) return;
     const trigger = document.activeElement as HTMLElement | null;
+    const releaseScroll = lockBodyScroll();
 
     // initial focus: first field in the panel, else the close button
     const focusables = () =>
       Array.from(panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
     (focusables().find((el) => el.matches("input, select, textarea")) ?? focusables()[0])?.focus();
+
+    return () => {
+      releaseScroll();
+      trigger?.focus?.(); // hand focus back to whatever opened the dialog
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const focusables = () =>
+      Array.from(panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -71,13 +101,7 @@ export function Modal({
       }
     };
     window.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-      trigger?.focus?.(); // hand focus back to whatever opened the dialog
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   if (!open || !mounted) return null;

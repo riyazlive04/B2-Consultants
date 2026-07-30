@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection, requireAdmin, capabilityCheck } from "@/lib/rbac";
 import { runDueWorkflows } from "./automation";
+import { dryRunWorkflow, DRY_RUN_WINDOWS, type DryRunReport } from "./automation-dryrun";
 import { logActivity, diffFields } from "./activity-log";
 import type { WorkflowAction, TriggerType, TriggerConfig } from "@/lib/automation-types";
 import { workflowSettingsSchema, type WorkflowSettings } from "@/lib/config-schema";
@@ -405,6 +406,42 @@ export async function saveWorkflowSettings(settings: WorkflowSettings): Promise<
   revalidatePath("/automation");
   revalidatePath("/automation/settings");
   return { ok: true };
+}
+
+// ──────────────────────────── dry run ───────────────────────────
+
+/**
+ * Preview: replay this definition over the last `windowDays` days of real history and report what
+ * it WOULD have done. Read-only — no enrollment, no send, no row touched, and deliberately no
+ * activity-feed entry either (a preview isn't a thing the workflow did).
+ *
+ * The definition comes from the client, not the database, so the builder can preview unsaved
+ * edits — the whole value of the feature is checking before you commit. It is validated here all
+ * the same: this is a server action, so "the UI only sends valid shapes" is not a guarantee.
+ */
+export async function previewWorkflow(payload: {
+  triggerType: TriggerType;
+  triggerConfig: TriggerConfig;
+  actions: WorkflowAction[];
+  windowDays: number;
+}): Promise<{ ok: true; report: DryRunReport } | { ok: false; error: string }> {
+  await requireSection("automation");
+  if (!TRIGGER_TYPES.includes(payload.triggerType)) return { ok: false, error: "Invalid trigger" };
+  if (!Array.isArray(payload.actions)) return { ok: false, error: "Invalid workflow" };
+  if (payload.actions.length === 0) return { ok: false, error: "Add an action first — there's nothing to preview yet" };
+  if (payload.actions.length > 200) return { ok: false, error: "That's too many steps to preview" };
+  if (!DRY_RUN_WINDOWS.includes(payload.windowDays as (typeof DRY_RUN_WINDOWS)[number])) {
+    return { ok: false, error: "Pick one of the offered windows" };
+  }
+  const report = await dryRunWorkflow(
+    {
+      triggerType: payload.triggerType,
+      triggerConfig: payload.triggerConfig ?? {},
+      actions: payload.actions,
+    },
+    payload.windowDays,
+  );
+  return { ok: true, report };
 }
 
 /** Admin "Run now" — resume every due enrollment immediately (also what the cron calls). */

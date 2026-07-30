@@ -93,6 +93,8 @@ export function AgreementClientPicker({
       commit(shown.flat[active]);
     } else if (e.key === "Escape") {
       e.preventDefault();
+      // stopPropagation: Escape closes only the picker, not a Modal hosting it (see SelectMenu)
+      e.stopPropagation();
       setOpen(false);
       triggerRef.current?.focus();
     }

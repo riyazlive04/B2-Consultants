@@ -13,8 +13,8 @@ import { formatInrMinor } from "@/lib/format";
 // (formatDate/formatEurMinor moved into JournalList with the entry rendering)
 import { requireSection } from "@/lib/rbac";
 import { getJournal, getTrialBalance, verifyAuditChain } from "@/server/ledger";
-import { TrialBalanceTable } from "./_components/TrialBalanceTable";
 import { JournalList } from "./_components/JournalList";
+import { JournalSearch } from "./_components/JournalSearch";
 
 export const dynamic = "force-dynamic";
 
@@ -28,17 +28,29 @@ const PAGE_SIZE = 25;
  * this page is editable — corrections happen in Finance and arrive here as a void plus a
  * restated entry, which is why voided entries stay visible rather than disappearing.
  */
-export default async function LedgerPage({ searchParams }: { searchParams: { page?: string } }) {
+export default async function LedgerPage({
+  searchParams,
+}: {
+  searchParams: { page?: string; q?: string };
+}) {
   await requireSection("ledger");
 
+  const query = (searchParams.q ?? "").trim();
   const page = Math.max(1, Number(searchParams.page ?? 1) || 1);
   const [trial, journal, chain] = await Promise.all([
     getTrialBalance(),
-    getJournal({ take: PAGE_SIZE, skip: (page - 1) * PAGE_SIZE }),
+    getJournal({ take: PAGE_SIZE, skip: (page - 1) * PAGE_SIZE, q: query || undefined }),
     verifyAuditChain(),
   ]);
 
   const pages = Math.max(1, Math.ceil(journal.total / PAGE_SIZE));
+  // Keep the active search on the pagination links so paging never silently drops the filter.
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    params.set("page", String(p));
+    return `/ledger?${params.toString()}`;
+  };
 
   return (
     <div className="w-full space-y-6">
@@ -94,36 +106,26 @@ export default async function LedgerPage({ searchParams }: { searchParams: { pag
         </div>
       )}
 
-      <section>
-        <h3 className="mb-1 flex items-center gap-2 font-display text-h3 text-ink">
-          <span className="text-primary"><Scale size={17} /></span>
-          Trial balance
-        </h3>
-        <p className="mb-3 text-caption text-muted">All entries, including voided ones and their reversals — which cancel each other out.</p>
-        {trial.rows.length === 0 ? (
-          <EmptyState
-            title="Nothing posted yet"
-            body="Record an income or expense in Finance, or run `npm run db:ledger` to backfill existing rows."
-          />
-        ) : (
-          <>
-            <TrialBalanceTable rows={trial.rows} />
-            <p className="mt-2 text-xs text-muted">
-              Total: <span className="tnum font-semibold text-ink">{formatInrMinor(trial.totalDebit)} debit</span> ·{" "}
-              <span className="tnum font-semibold text-ink">{formatInrMinor(trial.totalCredit)} credit</span>
-            </p>
-          </>
-        )}
-      </section>
-
       <Card
         title={<CardTitle icon={<Scale size={17} />}>Journal</CardTitle>}
-        subtitle={`${journal.total} entries · newest first`}
+        subtitle={
+          query
+            ? `${journal.total} ${journal.total === 1 ? "match" : "matches"} for “${query}” · newest first`
+            : `${journal.total} entries · newest first`
+        }
+        actions={<JournalSearch initialQuery={query} />}
         flush
       >
         {journal.entries.length === 0 ? (
           <div className="p-6">
-            <EmptyState title="No journal entries" body="Finance writes here on every income and expense." />
+            {query ? (
+              <EmptyState
+                title="No matching entries"
+                body={`Nothing in the journal matches “${query}”. Try a narration, an account name or code, or who posted it.`}
+              />
+            ) : (
+              <EmptyState title="No journal entries" body="Finance writes here on every income and expense." />
+            )}
           </div>
         ) : (
           <JournalList entries={journal.entries} />
@@ -136,12 +138,12 @@ export default async function LedgerPage({ searchParams }: { searchParams: { pag
             </span>
             <div className="flex gap-2">
               {page > 1 && (
-                <Link href={`/ledger?page=${page - 1}`} className="text-primary-strong hover:underline">
+                <Link href={pageHref(page - 1)} className="text-primary-strong hover:underline">
                   ← Newer
                 </Link>
               )}
               {page < pages && (
-                <Link href={`/ledger?page=${page + 1}`} className="text-primary-strong hover:underline">
+                <Link href={pageHref(page + 1)} className="text-primary-strong hover:underline">
                   Older →
                 </Link>
               )}

@@ -445,13 +445,18 @@ export async function setUserPassword(userId: string, form: FormData): Promise<A
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not update password" };
   }
+  // O4 — the admin chose this password, so the owner must replace it on next sign-in. Sessions
+  // are also cleared so the change takes effect immediately (they re-authenticate with the
+  // temporary password, then hit /change-password before any app route).
+  await prisma.user.update({ where: { id: userId }, data: { mustChangePassword: true } });
+  await prisma.session.deleteMany({ where: { userId } });
   // That it happened and who did it — never the password or its hash.
   await logActivity(session, {
     action: "user.password.update",
     section: "people",
     entityType: "User",
     entityId: userId,
-    summary: `Set a new password for ${target.name}`,
+    summary: `Set a new password for ${target.name} (they must change it on next sign-in)`,
     meta: { role: target.role },
   });
   revalidatePath("/people");

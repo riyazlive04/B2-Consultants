@@ -62,16 +62,83 @@ const schema = z.object({
 });
 
 /**
+ * Half-configured outbound channels.
+ *
+ * Same principle as the schema above — refuse to boot rather than fail silently — but these are
+ * OPT-IN: an unset channel is a legitimate deployment, so absence is never an error. What IS an
+ * error is asking for a channel and not giving it what it needs, because the send path then
+ * records a SKIPPED row and returns success. Nothing throws, nothing alerts, and the message
+ * simply never arrives.
+ *
+ * This is not hypothetical. On 23 Jul 2026 production had 18 WhatsApp messages: 2 delivered, 3
+ * failed, and 13 SKIPPED — five of them agreement OTPs, which is the code a student must receive
+ * to sign. Signing had been impossible for weeks and the app looked entirely healthy.
+ */
+const CHANNELS: { flag: string; needs: string[]; consequence: string }[] = [
+  {
+    flag: "WATI_ENABLED",
+    needs: ["WATI_API_ENDPOINT", "WATI_ACCESS_TOKEN"],
+    consequence: "every WhatsApp send (agreement OTPs included) would record as SKIPPED",
+  },
+  {
+    flag: "EMAIL_ENABLED",
+    needs: ["RESEND_API_KEY"],
+    consequence: "every outbound email would be dropped",
+  },
+  {
+    flag: "SMS_ENABLED",
+    needs: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"],
+    consequence: "every outbound SMS would be dropped",
+  },
+];
+
+/**
+ * Per-channel arming state for the health probe: "off" (flag down — a valid deployment),
+ * "armed" (flag up, credentials present), or "misconfigured" (flag up, credentials missing —
+ * the state that fails silently). Booleans only; never the values themselves.
+ */
+export function channelStates(): Record<string, "off" | "armed" | "misconfigured"> {
+  const on = (v: string | undefined) => v?.trim().toLowerCase() === "true";
+  return Object.fromEntries(
+    CHANNELS.map((c) => [
+      c.flag.replace(/_ENABLED$/, "").toLowerCase(),
+      !on(process.env[c.flag])
+        ? ("off" as const)
+        : c.needs.every((k) => process.env[k]?.trim())
+          ? ("armed" as const)
+          : ("misconfigured" as const),
+    ]),
+  );
+}
+
+function channelProblems(): string[] {
+  const on = (v: string | undefined) => v?.trim().toLowerCase() === "true";
+  const problems: string[] = [];
+  for (const c of CHANNELS) {
+    if (!on(process.env[c.flag])) continue;
+    const missing = c.needs.filter((k) => !process.env[k]?.trim());
+    if (missing.length) {
+      problems.push(`  - ${c.flag} is true but ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} unset — ${c.consequence}`);
+    }
+  }
+  return problems;
+}
+
+/**
  * Validates and throws on failure. Production-only by design: local dev deliberately
  * runs on http://localhost:3000 with a loose .env, and this must not break that.
  */
 export function validateEnv(): void {
   const result = schema.safeParse(process.env);
-  if (result.success) return;
+  const channels = channelProblems();
+  if (result.success && !channels.length) return;
 
-  const problems = result.error.issues
-    .map((i) => `  - ${i.path.join(".") || "(root)"} ${i.message}`)
-    .join("\n");
+  const problems = [
+    ...(result.success
+      ? []
+      : result.error.issues.map((i) => `  - ${i.path.join(".") || "(root)"} ${i.message}`)),
+    ...channels,
+  ].join("\n");
 
   // Never interpolate the values themselves — this lands in container logs.
   throw new Error(

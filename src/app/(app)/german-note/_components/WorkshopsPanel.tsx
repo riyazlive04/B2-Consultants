@@ -11,6 +11,7 @@ import {
 } from "@/server/german-note-workshop-actions";
 import type { GnWorkshopSummary } from "@/server/german-note-workshops";
 import { formatMonth } from "@/lib/format";
+import { signedColor } from "@/lib/signals";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
@@ -173,7 +174,7 @@ export function WorkshopsPanel({
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat label="Conversions" value={String(w.rollup.conversions)} sub={w.rollup.freeSeats ? `${w.rollup.paying} paid · ${w.rollup.freeSeats} free` : undefined} icon={<Users size={13} />} />
               <Stat label="Revenue" value={inr(w.rollup.revenue, true)} sub={`${inr(w.rollup.cashCollected, true)} collected`} />
-              <Stat label="Net profit" value={inr(w.rollup.netProfit, true)} sub={w.rollup.roas !== null ? `ROAS ${w.rollup.roas.toFixed(1)}×` : undefined} icon={<TrendingUp size={13} />} />
+              <Stat label="Net profit" value={inr(w.rollup.netProfit, true)} signedValue={w.rollup.netProfit} sub={w.rollup.roas !== null ? `ROAS ${w.rollup.roas.toFixed(1)}×` : undefined} icon={<TrendingUp size={13} />} />
               <div className="flex items-end">
                 <Link href={`/german-note/workshops/${w.id}`} className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline">
                   Open <ArrowRight size={14} />
@@ -208,11 +209,30 @@ export function WorkshopsPanel({
   );
 }
 
-function Stat({ label, value, sub, icon }: { label: string; value: string; sub?: string; icon?: React.ReactNode }) {
+function Stat({
+  label,
+  value,
+  sub,
+  icon,
+  signedValue,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  icon?: React.ReactNode;
+  /** Raw number, when its sign is a verdict. See the note on FounderStats' Tile (Error Log D1). */
+  signedValue?: number;
+}) {
+  const tone = signedValue !== undefined ? signedColor(signedValue) : undefined;
   return (
     <div>
       <p className="flex items-center gap-1 text-caption text-muted">{icon}{label}</p>
-      <p className="mt-0.5 font-display text-[15px] font-semibold tnum">{value}</p>
+      <p
+        className="mt-0.5 font-display text-[15px] font-semibold tnum"
+        style={tone ? { color: tone } : undefined}
+      >
+        {value}
+      </p>
       {sub && <p className="text-caption text-muted">{sub}</p>}
     </div>
   );

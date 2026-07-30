@@ -68,13 +68,13 @@ async function main() {
   }
 
   // Add to the first ACTIVE A1 batch if she isn't already a member (unique [batchId, studentId]).
-  const batch = await prisma.gnBatch.findFirst({ where: { level: "GN_A1", status: "ACTIVE" }, orderBy: { createdAt: "asc" } });
+  const batch = await prisma.batch.findFirst({ where: { level: "GN_A1", status: "ACTIVE" }, orderBy: { createdAt: "asc" } });
   if (batch) {
-    const existing = await prisma.gnBatchMember.findUnique({
+    const existing = await prisma.batchMember.findUnique({
       where: { batchId_studentId: { batchId: batch.id, studentId: student.id } },
     });
     if (!existing) {
-      await prisma.gnBatchMember.create({ data: { batchId: batch.id, studentId: student.id } });
+      await prisma.batchMember.create({ data: { batchId: batch.id, studentId: student.id } });
       console.log(`  added Meghna to batch "${batch.name}"`);
     } else {
       console.log(`  Meghna already in batch "${batch.name}"`);

@@ -4,6 +4,7 @@ import {
   Timer, Trophy, Wallet, Waypoints,
 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { CurrencyToggle, Money } from "@/components/ui/CurrencyToggle";
 import { PageHeader, SectionHeading, ViewAll } from "@/components/ui/kit";
 import { OnboardingWalkthrough } from "@/components/onboarding/OnboardingWalkthrough";
 import { WorkTracker } from "./_components/WorkTracker";
@@ -17,6 +18,14 @@ import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { signalForRunway } from "@/lib/signals";
 import { parseKpiRange, istToday } from "@/lib/dates";
 import { requireSession } from "@/lib/rbac";
+import { getBusinessLineView } from "@/server/business-line-view";
+import type { BusinessLineView } from "@/lib/business-line";
+import { DashboardSwitcher } from "./_components/DashboardSwitcher";
+import { FunnelHealthRow } from "./_components/FunnelHealthRow";
+import { getFunnelHealth } from "@/server/funnel-health";
+import { HeadCoachStudents } from "./_components/HeadCoachStudents";
+import { getHeadCoachSnapshot } from "@/server/head-coach-snapshot";
+import { GermanNoteDashboard } from "./_components/GermanNoteDashboard";
 import { getRunwaySnapshot } from "@/server/cash-metrics";
 import { getPendingRows } from "@/server/finance-metrics";
 import { getPipelineSnapshot } from "@/server/pipeline-metrics";
@@ -25,6 +34,27 @@ import { getGnHomeSnapshot } from "@/server/german-note-metrics";
 import { computeNotifications } from "@/server/notifications";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The "This month" money block, for one business line.
+ *
+ * Rendered once per line so DashboardSwitcher can flip between Combined and B2 with no server
+ * round-trip — the two differ only in these figures, and MonthHero's own reads are small
+ * (its heavy dependencies are all React-cached and therefore shared between the two).
+ */
+function MoneySection({ line }: { line: BusinessLineView }) {
+  return (
+    <section className="space-y-4">
+      <SectionHeading
+        icon={<Wallet size={18} />}
+        title="This month"
+        description="Collections against target, and where the rest comes from"
+        action={<ViewAll href="/finance">View finance</ViewAll>}
+      />
+      <MonthHero line={line} />
+    </section>
+  );
+}
 
 export default async function Home({
   searchParams,
@@ -47,9 +77,12 @@ export default async function Home({
   // KPI grid date-range control (This Month / Last Month / QTD) — a URL search param so
   // it works via a plain server-component re-render, no client state needed.
   const range = parseKpiRange(searchParams.range);
+  // Sticky across navigation (Error Log E1/E4). Only the money section reads it — pipeline,
+  // arena and the German Note tile are not segmented figures.
+  const line = await getBusinessLineView();
   const rangeLabel = range === "last-month" ? "Last Month" : range === "qtd" ? "QTD" : "This Month";
 
-  const [fx, runway, notifications, game, teamGame, pipeline, pendingRows, gn] = await Promise.all([
+  const [fx, runway, notifications, game, teamGame, pipeline, pendingRows, gn, funnelHealth, headCoach] = await Promise.all([
     getTodayInrPerEur(),
     isAdmin ? getRunwaySnapshot(range) : Promise.resolve(null),
     computeNotifications(session.role, session.user.id),
@@ -61,15 +94,33 @@ export default async function Home({
     isAdmin ? getPendingRows() : Promise.resolve(null),
     // Head oversees the LMS read-only (getGnAccess `isViewer`), so both roles get the tile.
     isAdmin || isHead ? getGnHomeSnapshot() : Promise.resolve(null),
+    // Row 5 (spec §4). Admin only — §3 gives the funnel to Owner/Admin, and it carries
+    // stage-by-stage conversion the telecaller tiers are not meant to see across the whole team.
+    isAdmin ? getFunnelHealth() : Promise.resolve(null),
+    // Head Coach dashboard (spec §5). Carries no money — §5 forbids it and §3 keeps Finance
+    // away from the head.
+    isHead ? getHeadCoachSnapshot() : Promise.resolve(null),
   ]);
 
   const months = runway?.runwayMonths ?? null;
+
+  /**
+   * Pipeline value is priced from an INR average fee (and a rupee founder fallback), so it has no
+   * stored EUR counterpart. Pair it at today's rate so the card still follows the ₹/€ toggle —
+   * it is an estimate of future revenue either way, not a recorded amount.
+   */
+  const inrOnly = (inr: number) => ({ inr, eur: Number(fx.rate) > 0 ? inr / Number(fx.rate) : 0 });
 
   // Overdue receivables — money already earned that hasn't arrived (Admin only).
   const overdueRows = (pendingRows ?? []).filter(
     (p) => p.status === "ACTIVE" && p.overdue && p.balance.inr > 0,
   );
-  const overdueInr = overdueRows.reduce((a, p) => a + p.balance.inr, 0);
+  // Both aggregates: this card follows the ₹/€ toggle, and every receivable already carries
+  // its EUR figure from its own stamped rate — so nothing is converted at read time.
+  const overdue = overdueRows.reduce(
+    (a, p) => ({ inr: a.inr + p.balance.inr, eur: a.eur + p.balance.eur }),
+    { inr: 0, eur: 0 },
+  );
   const oldestOverdueDays = overdueRows.reduce((a, p) => Math.max(a, p.daysOverdue), 0);
   const firstName = session.user.name.split(" ")[0];
 
@@ -80,14 +131,17 @@ export default async function Home({
       label="Pipeline value"
       value={
         pipeline.avgFeeKnown
-          ? formatInrMinor(pipeline.pipelineValueInr, { compact: true })
+          ? <Money amount={inrOnly(pipeline.pipelineValueInr)} />
           : `${pipeline.interestedLeads} deals`
       }
       secondary={
         !pipeline.avgFeeKnown
           ? "No income history yet to price open deals"
           : pipeline.forecast30Inr > 0
-            ? `${pipeline.interestedLeads} open deal${pipeline.interestedLeads === 1 ? "" : "s"} · ${formatInrMinor(pipeline.forecast30Inr, { compact: true })} expected in 30d`
+            ? <>
+                {pipeline.interestedLeads} open deal{pipeline.interestedLeads === 1 ? "" : "s"} ·{" "}
+                <Money amount={inrOnly(pipeline.forecast30Inr)} /> expected in 30d
+              </>
             : `${pipeline.interestedLeads} open deal${pipeline.interestedLeads === 1 ? "" : "s"} · no closes yet to forecast from`
       }
       tooltip="Open deals in strategy-call → deposit stages × the average program fee from real income history. The 30-day forecast applies this month's close rate. This is next month's revenue — before it happens."
@@ -150,6 +204,8 @@ export default async function Home({
   );
 
   return (
+    /* The ₹/€ provider lives in the (app) layout — one instance for the whole shell, so the
+       toggle here and the notification bell above it are never on different currencies. */
     <div className="w-full space-y-8">
       <OnboardingWalkthrough
         userId={session.user.id}
@@ -161,7 +217,16 @@ export default async function Home({
         eyebrow="Dashboard"
         title={`Welcome back, ${firstName}`}
         subtitle={`Here is where things stand — ${formatDate(istToday())}.`}
-        actions={(isAdmin || isHead) && <KpiRangeSwitch active={range} />}
+        actions={
+          (isAdmin || isHead) && (
+            <div className="flex flex-wrap items-center gap-3">
+              <KpiRangeSwitch active={range} />
+              {/* Same preference as Finance (one storage key), so the currency you picked there
+                  is the currency this page opens in. */}
+              {isAdmin && <CurrencyToggle label={false} />}
+            </div>
+          )
+        }
       />
 
       {/* 1 — Actionable first: everything that needs a decision, lifted to the top. */}
@@ -169,17 +234,16 @@ export default async function Home({
 
       {isAdmin ? (
         <>
-          {/* 2 — Money: the pace-to-target question that leads the day. */}
-          <section className="space-y-4">
-            <SectionHeading
-              icon={<Wallet size={18} />}
-              title="This month"
-              description="Collections against target, and where the rest comes from"
-              action={<ViewAll href="/finance">View finance</ViewAll>}
-            />
-            <MonthHero />
-          </section>
-
+          {/* 2 — The business switch (Error Log E1/E3/E4). All three views are built here, on
+              the server, and DashboardSwitcher shows one — so changing business is instant
+              rather than a round-trip. The choice persists in a cookie. */}
+          <DashboardSwitcher
+            initial={line}
+            combined={<MoneySection line="ALL" />}
+            b2={<MoneySection line="B2" />}
+            germanNote={<GermanNoteDashboard />}
+            shared={
+              <>
           {/* 3 — Momentum: deals in motion and what they're worth. */}
           <section className="space-y-4">
             <SectionHeading
@@ -215,7 +279,7 @@ export default async function Home({
               />
               <MetricCard
                 label="Overdue receivables"
-                value={overdueRows.length === 0 ? "None" : formatInrMinor(overdueInr, { compact: true })}
+                value={overdueRows.length === 0 ? "None" : <Money amount={overdue} />}
                 signal={overdueRows.length === 0 ? "ok" : "risk"}
                 secondary={
                   overdueRows.length === 0
@@ -248,9 +312,21 @@ export default async function Home({
 
           {/* 5 — Recent wins: the celebratory timeline (renders only when there's news). */}
           <RecentWins />
+              </>
+            }
+          />
+
+          {/* 6 — Funnel health (spec §4 Row 5). OUTSIDE the switcher on purpose: this is the B2
+              outreach funnel, so showing it under the German Note view would attach it to the
+              wrong business. */}
+          {funnelHealth && <FunnelHealthRow health={funnelHealth} />}
         </>
       ) : isHead ? (
         <>
+          {/* Spec §5 opens on "which students need me?" — so that comes before the pipeline,
+              which is oversight rather than the head's own work. */}
+          {headCoach && <HeadCoachStudents snapshot={headCoach} />}
+
           <section className="space-y-4">
             <SectionHeading
               icon={<Waypoints size={18} />}
@@ -266,15 +342,11 @@ export default async function Home({
 
           <section className="space-y-4">
             <SectionHeading icon={<LayoutGrid size={18} />} title="At a glance" description="Your day and standings" />
+            {/* The static "Students — Open board" tile that sat here is gone: the section above
+                now carries real student numbers and names, so keeping it would say the same
+                thing twice, worse. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {dailyLogCard}
-              <MetricCard
-                label="Students"
-                value="Open board"
-                secondary="Journeys, signals and check-ins"
-                icon={<GraduationCap size={18} />}
-                href="/students"
-              />
               {germanNoteCard}
               {arenaMeCard}
             </div>

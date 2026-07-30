@@ -109,17 +109,9 @@ export function SectionHeading({
 
 /** The section-header "View all →" affordance — one styled link, so every section
  *  drills down the same way. Reads as a quiet text link that tints on hover. */
-export function ViewAll({ href, children = "View all" }: { href: string; children?: ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1 rounded-field px-2.5 py-1.5 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft"
-    >
-      {children}
-      <ArrowRight size={15} className="flex-none" />
-    </Link>
-  );
-}
+/** Re-exported so existing `from "@/components/ui/kit"` imports keep working; the component
+ *  itself is a client component (it checks section access). See ui/ViewAll.tsx. */
+export { ViewAll } from "./ViewAll";
 
 /**
  * The one card. `flush` drops the body padding for tables and lists that draw

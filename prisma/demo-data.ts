@@ -586,14 +586,14 @@ async function seedGermanNote(ids: Ids) {
   await prisma.student.update({ where: { id: sid["Meghna Suresh"] }, data: { userId: meghnaUserId } });
 
   // Two batches, both taught by Lena
-  const a1 = await prisma.gnBatch.create({
+  const a1 = await prisma.batch.create({
     data: {
       name: "A1 Evening — July 2026", level: "GN_A1", tutorId,
       notes: "Mon/Wed/Fri 7–8:30 PM IST · Zoom link pinned in the batch discussion",
       members: { create: [{ studentId: sid["Meghna Suresh"] }, { studentId: sid["Sandeep Rao"] }] },
     },
   });
-  const b1 = await prisma.gnBatch.create({
+  const b1 = await prisma.batch.create({
     data: {
       name: "B1 Weekend — Pflege track", level: "GN_B1", tutorId,
       notes: "Sat/Sun 10 AM–1 PM IST",
@@ -625,7 +625,7 @@ async function seedGermanNote(ids: Ids) {
 
   // Calendar — next live classes (with join links) + one past class
   const evt = (batchId: string, dAgoOrAhead: number, hh: number, title: string, joinUrl: string | null, notes?: string) =>
-    prisma.gnEvent.create({
+    prisma.classSession.create({
       data: {
         batchId, title, startsAt: at(dAgoOrAhead >= 0 ? daysAhead(dAgoOrAhead) : daysAgo(-dAgoOrAhead), hh),
         durationMins: 90, joinUrl, notes: notes ?? null, createdById: tutorId,

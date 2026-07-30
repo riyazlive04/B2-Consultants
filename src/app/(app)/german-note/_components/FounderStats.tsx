@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertCircle, BarChart3, TrendingUp, Users, Wallet } from "lucide-react";
 import type { GnFounderStats } from "@/server/german-note-workshops";
 import { formatDate } from "@/lib/format";
+import { signedColor } from "@/lib/signals";
 import { inr, pct } from "./workshopFormat";
 
 /**
@@ -38,6 +39,7 @@ export function FounderStats({ stats }: { stats: GnFounderStats }) {
           icon={<TrendingUp size={15} />}
           label="Net profit (cash)"
           value={inr(stats.netProfitCash, true)}
+          signedValue={stats.netProfitCash}
           sub={`${inr(r.netProfit, true)} on quoted · NP ${pct(r.npMargin)}`}
         />
         <Tile
@@ -117,13 +119,36 @@ export function FounderStats({ stats }: { stats: GnFounderStats }) {
   );
 }
 
-function Tile({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
+function Tile({
+  icon,
+  label,
+  value,
+  sub,
+  signedValue,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+  /**
+   * Pass the raw number when its SIGN is a verdict — a net profit, a margin, a balance.
+   * Omit it for always-positive figures like cash collected or a headcount: if every
+   * number on the row is green the colour stops carrying information, which is the
+   * cognitive-load problem the rule was meant to solve (Error Log D1).
+   */
+  signedValue?: number;
+}) {
+  const tone = signedValue !== undefined ? signedColor(signedValue) : undefined;
   return (
     <div className="rounded-card border border-line bg-surface p-4 shadow-card">
       <p className="flex items-center gap-1.5 text-caption font-medium text-muted">
         <span className="text-[var(--lvl-gn)]">{icon}</span> {label}
       </p>
-      <p className="mt-1 font-display text-2xl font-bold tnum">{value}</p>
+      {/* The colour goes on the DIGITS, not the card — a red card with a black number is
+          the exact signal that was being missed. */}
+      <p className="mt-1 font-display text-2xl font-bold tnum" style={tone ? { color: tone } : undefined}>
+        {value}
+      </p>
       {sub && <p className="mt-0.5 text-caption text-muted">{sub}</p>}
     </div>
   );

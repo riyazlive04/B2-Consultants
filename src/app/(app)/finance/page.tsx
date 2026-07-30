@@ -1,26 +1,16 @@
-import {
-  TrendingUp,
-  Wallet,
-  ArrowDownLeft,
-  ArrowUpRight,
-  ArrowLeftRight,
-  BarChart3,
-  PieChart,
-  Trophy,
-  CalendarRange,
-  Users,
-} from "lucide-react";
-import { BarRows, Donut } from "@/components/ui/charts";
-import { RevenueChart } from "./_components/RevenueChart";
+import { Wallet, BarChart3, CalendarRange, Users } from "lucide-react";
+import { AllocationNote, FinanceBento } from "./_components/FinanceBento";
 import { BusinessLineSwitch } from "./_components/BusinessLineSwitch";
+import { FinanceCurrencyProvider, CurrencyToggle } from "./_components/FinanceCurrency";
 import { AnnualChart } from "./_components/AnnualChart";
+import { CumulativeTrackingChart } from "./_components/CumulativeTrackingChart";
 import { getAnnualPerformance, getClientMovement } from "@/server/annual-metrics";
 import { ClientMovementChart } from "./_components/ClientMovementChart";
 import { BUSINESS_LINE_LABELS, lineForKind, type BusinessLineView } from "@/lib/business-line";
 import { Tabs } from "@/components/ui/Tabs";
-import { Card, CardTitle, EmptyState, PageHeader, Pill } from "@/components/ui/kit";
+import { Card, CardTitle, PageHeader, Pill } from "@/components/ui/kit";
 import { toDateInputValue, istToday } from "@/lib/dates";
-import { formatDate, formatEurMinor, formatInrMinor, formatMonth, formatPct } from "@/lib/format";
+import { formatInrMinor, formatMonth, formatPct } from "@/lib/format";
 import { PROGRAM_LEVEL_LABELS, PAYMENT_METHOD_LABELS, EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { signedColor } from "@/lib/signals";
@@ -30,6 +20,8 @@ import { getFinanceOverview } from "@/server/finance-metrics";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { getCommissionReport } from "@/server/commission-metrics";
 import { getActiveLevels } from "@/server/levels";
+import { getStudentCodeMap } from "@/server/students-metrics";
+import { resolveBusinessLine } from "@/server/business-line-view";
 import { levelOptions } from "@/lib/levels";
 import { CommissionSection } from "./_components/CommissionSection";
 import { ExpenseSection } from "./_components/ExpenseSection";
@@ -43,9 +35,6 @@ import {
 } from "@/server/finance-actions";
 
 export const dynamic = "force-dynamic";
-
-const inr = (m: { inr: number }) => formatInrMinor(m.inr, { compact: true });
-const eurLine = (m: { eur: number }) => `${formatEurMinor(m.eur, { compact: true })} aggregated`;
 
 // Categorical chart palette (validated, fixed order); neutral gray tail for "Other".
 const CAT_SHADES = [
@@ -96,9 +85,8 @@ export default async function FinancePage({
     label: s.fullName,
     hint: s.code ?? undefined,
   }));
-  const studentCodeById: Record<string, string> = Object.fromEntries(
-    studentRows.flatMap((s) => (s.code ? [[s.id, s.code] as const] : [])),
-  );
+  // Shared with Cash Health's age analysis — see getStudentCodeMap for why it isn't inline.
+  const studentCodeById = await getStudentCodeMap();
   const activeLevels = await getActiveLevels();
   const levelOpts = levelOptions(activeLevels); // income/pending accept any level (incl. bundles)
 
@@ -106,9 +94,10 @@ export default async function FinancePage({
   //    anyone who never touches the switch. An unknown ?line= falls back to ALL.
   const kindByLevel = new Map(activeLevels.map((l) => [l.code, l.kind as string]));
   const lineOfLevel = (code: string) => lineForKind(kindByLevel.get(code));
-  const requested = searchParams?.line;
-  const line: BusinessLineView =
-    requested === "B2" || requested === "GERMAN_NOTE" ? requested : "ALL";
+  // Sticky across navigation via cookie, but an explicit `?line=` in the URL still wins —
+  // linking a colleague a specific view was a deliberate property of the old design
+  // (Error Log E1/E4). See server/business-line-view.ts.
+  const line: BusinessLineView = await resolveBusinessLine(searchParams?.line);
   const seg = line === "ALL" ? null : metrics.segments[line];
   const [annual, clientMovement] = await Promise.all([
     getAnnualPerformance(line === "ALL" ? null : line),
@@ -127,29 +116,33 @@ export default async function FinancePage({
     ytdRevenue: seg ? seg.ytdRevenue : metrics.ytdRevenue,
     revenueSeries: seg ? seg.revenueSeries : metrics.revenueSeries,
   };
-  const lineTotals: Record<BusinessLineView, number> = {
+  const lineTotalsInr: Record<BusinessLineView, number> = {
     ALL: metrics.revenue.inr,
     B2: metrics.segments.B2.revenue.inr,
     GERMAN_NOTE: metrics.segments.GERMAN_NOTE.revenue.inr,
   };
-  // Say plainly which part of this P&L is measured and which part is an estimate.
-  const allocNote =
-    seg &&
-    `Revenue and receivables are exact for this line. ${formatInrMinor(seg.directCostInr, {
-      compact: true,
-    })} of costs are tagged to it directly; shared costs add a further ${formatInrMinor(
-      seg.sharedCostInr,
-      { compact: true },
-    )} at its ${Math.round(seg.revenueSharePct)}% share of revenue. Tag more costs on the Expenses tab to sharpen this.`;
+  const lineTotalsEur: Record<BusinessLineView, number> = {
+    ALL: metrics.revenue.eur,
+    B2: metrics.segments.B2.revenue.eur,
+    GERMAN_NOTE: metrics.segments.GERMAN_NOTE.revenue.eur,
+  };
+  // Which part of this P&L is measured and which part is an estimate. Rendered by
+  // <AllocationNote> (a client component) so its figures follow the ₹/€ toggle.
 
-  // Revenue by programme level - horizontal magnitude bars
+  // Revenue by programme level — ranked bars, each carrying where that level stood by this same
+  // day last month. Programme colours are FIXED app-wide (§1.3) so the eye learns them: the bar
+  // for Guided is the same violet as the Guided chip everywhere else.
+  // Raw dual-currency rows: the ₹/€ formatting happens in FinanceBento, which can read the
+  // toggle. Pre-formatting here is what used to pin this card to INR.
   const levelItems = (
     [
-      ["Solo", metrics.byLevel.SOLO],
-      ["Guided", metrics.byLevel.GUIDED],
-      ["Elite", metrics.byLevel.ELITE],
-      ["German Note", metrics.byLevel.GERMAN_NOTE],
-      ["Other", metrics.byLevel.OTHER],
+      ["Solo", metrics.byLevel.SOLO, metrics.prevByLevel.SOLO, "var(--lvl-solo)"],
+      ["Guided", metrics.byLevel.GUIDED, metrics.prevByLevel.GUIDED, "var(--lvl-guided)"],
+      ["Elite", metrics.byLevel.ELITE, metrics.prevByLevel.ELITE, "var(--lvl-elite)"],
+      ["German Note", metrics.byLevel.GERMAN_NOTE, metrics.prevByLevel.GERMAN_NOTE, "var(--lvl-gn)"],
+      // "Other" is a residue bucket, not a programme — it gets the neutral, so it can never be
+      // mistaken for a fifth product line.
+      ["Other", metrics.byLevel.OTHER, metrics.prevByLevel.OTHER, "var(--ink-3)"],
     ] as const
   )
     // A German-Note view has no Solo/Guided/Elite rows, and vice versa.
@@ -157,35 +150,42 @@ export default async function FinancePage({
       line === "ALL" ? true : line === "GERMAN_NOTE" ? label === "German Note" : label !== "German Note",
     )
     .filter(([label, m]) => label !== "Other" || m.inr > 0)
-    .map(([label, m]) => ({ label, value: m.inr, display: formatInrMinor(m.inr, { compact: true }) }));
+    .map(([label, m, prev, color]) => ({
+      key: label,
+      label,
+      amount: { inr: m.inr, eur: m.eur },
+      compare: { inr: prev.inr, eur: prev.eur },
+      color,
+    }));
 
   // Expenses by category (this month) - top 5 + Other tail
   const shortCat = (c: string) => (EXPENSE_CATEGORY_LABELS[c] ?? c).split(" (")[0].split(" - ")[0];
-  const catTotals = new Map<string, number>();
+  // Both aggregates are carried through so the donut can flip currency with the toggle.
+  const catTotals = new Map<string, { inr: number; eur: number }>();
   for (const e of expenses.filter((e) => e.date.slice(0, 7) === monthKey)) {
-    catTotals.set(e.category, (catTotals.get(e.category) ?? 0) + e.agg.inr);
+    const cur = catTotals.get(e.category) ?? { inr: 0, eur: 0 };
+    catTotals.set(e.category, { inr: cur.inr + e.agg.inr, eur: cur.eur + e.agg.eur });
   }
   // With a line selected, categories are scaled by the same revenue share as the
   // allocated expense total, so the donut still sums to the number on the card.
   const catShare = seg ? seg.revenueSharePct / 100 : 1;
-  for (const [k, v] of catTotals) catTotals.set(k, v * catShare);
-  const catSorted = [...catTotals.entries()].sort((a, b) => b[1] - a[1]);
-  const catRest = catSorted.slice(5).reduce((s, [, v]) => s + v, 0);
+  for (const [k, v] of catTotals) catTotals.set(k, { inr: v.inr * catShare, eur: v.eur * catShare });
+  const catSorted = [...catTotals.entries()].sort((a, b) => b[1].inr - a[1].inr);
+  const catRest = catSorted.slice(5).reduce(
+    (s, [, v]) => ({ inr: s.inr + v.inr, eur: s.eur + v.eur }),
+    { inr: 0, eur: 0 },
+  );
   const catSlices = [
     ...catSorted.slice(0, 5).map(([c, v], i) => ({
+      key: c,
       label: shortCat(c),
-      value: v,
-      display: formatInrMinor(v, { compact: true }),
+      amount: v,
       color: CAT_SHADES[i],
     })),
-    ...(catRest > 0
-      ? [{ label: "Other", value: catRest, display: formatInrMinor(catRest, { compact: true }), color: CAT_SHADES[5] }]
+    ...(catRest.inr > 0
+      ? [{ key: "__other", label: "Other", amount: catRest, color: CAT_SHADES[5] }]
       : []),
   ];
-
-  // Money in vs money out - two magnitude bars on a shared scale (a 2-slice donut
-  // hides the comparison; bars on one axis ARE the comparison)
-  const flowMax = Math.max(1, view.revenue.inr, view.expenses.inr);
 
   // Honest MoM deltas: this month-to-date vs the SAME days of last month
   // Only meaningful on the combined view — prevSameDay is not split by line.
@@ -215,7 +215,8 @@ export default async function FinancePage({
       detailRows: [
         { label: "Revenue (money in)", inrMinor: view.revenue.inr, eurMinor: view.revenue.eur },
         { label: "All costs (money out)", inrMinor: view.revenue.inr - view.net.inr, eurMinor: view.revenue.eur - view.net.eur },
-        { label: "Net by this day last month", text: formatInrMinor(metrics.prevSameDay.netInr, { compact: true }) },
+        // Dual-currency, so the popup flips with the toggle like every other row in it.
+        { label: "Net by this day last month", inrMinor: metrics.prevSameDay.netInr, eurMinor: metrics.prevSameDay.netEur },
       ],
     },
     {
@@ -257,7 +258,7 @@ export default async function FinancePage({
       detailTitle: "Expenses — this month",
       detailNote: "By category, largest first.",
       detailRows: catSlices.length
-        ? catSlices.map((c) => ({ label: c.label, text: c.display }))
+        ? catSlices.map((c) => ({ label: c.label, inrMinor: c.amount.inr, eurMinor: c.amount.eur }))
         : [{ label: "No expenses yet this month", text: "—" }],
     },
     {
@@ -277,7 +278,7 @@ export default async function FinancePage({
       detailTitle: "Revenue this year to date",
       detailNote: "Programme-level revenue mix (this month).",
       detailRows: levelItems.length
-        ? levelItems.map((l) => ({ label: l.label, text: l.display }))
+        ? levelItems.map((l) => ({ label: l.label, inrMinor: l.amount.inr, eurMinor: l.amount.eur }))
         : [{ label: "No revenue yet", text: "—" }],
     },
   ];
@@ -287,7 +288,7 @@ export default async function FinancePage({
       <PageHeader
         icon={<Wallet size={20} />}
         title="Finance"
-        subtitle="Big number = INR aggregate (entry-stamped FX); EUR aggregate beneath."
+        subtitle="Every figure carries both currencies — the ₹/€ toggle picks which one leads; the other sits beneath."
         actions={
           <Pill>
             {line === "ALL" ? "" : `${BUSINESS_LINE_LABELS[line]} · `}This month · {monthLabel}
@@ -295,144 +296,62 @@ export default async function FinancePage({
         }
       />
 
-      {/* KPI cards: §4.4's nine figures, now with a ₹/€ primary-currency toggle and a
-          click-to-expand breakdown behind each number (FinanceKpis owns both). */}
-      <div className="space-y-2">
-        <BusinessLineSwitch active={line} totals={lineTotals} />
-        {allocNote && <p className="text-caption text-muted">{allocNote}</p>}
-      </div>
+      {/* The ₹/€ toggle heads the page and now wraps EVERYTHING below it — the business-line
+          totals, the KPI cards, the bento grid AND the Income / Expenses / Pending / Commission
+          tables. It began life inside the KPI header (only the KPIs flipped), then covered the
+          top block; a figure that stayed in rupees while the toggle said EUR was the complaint.
 
-      <FinanceKpis kpis={kpis} />
+          The two ANNUAL cards are the deliberate exception and stay in ₹: they plot a target, and
+          `MonthlyTarget` stores `targetInrMinor` only, so converting it at today's rate would make
+          a fixed target drift every time the ECB moves. Their cards say so. Making them flip
+          honestly needs a EUR target column — a decision, not a formatting change.
 
-      {/* Bento grid - hero + breakdowns left, top payments right */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card title={<CardTitle icon={<TrendingUp size={16} />}>Revenue</CardTitle>}>
-          <p className="font-display text-4xl font-bold tracking-tight">{inr(view.revenue)}</p>
-          <p className="mt-1 text-xs text-muted">
-            {eurLine(view.revenue)} · daily, this month · hover any day for the amount
-            {momRevenuePct !== null && (
-              <>
-                {" · "}
-                <span
-                  className="tnum font-semibold"
-                  style={{ color: momRevenuePct >= 0 ? "var(--ok)" : "var(--risk)" }}
-                >
-                  {momRevenuePct >= 0 ? "▲" : "▼"} {formatPct(Math.abs(momRevenuePct))}
-                </span>{" "}
-                vs same day last month
-              </>
-            )}
-          </p>
-          <div className="mt-4">
-            <RevenueChart points={view.revenueSeries} height={170} />
+          The provider emits no DOM node, so widening it changes no layout. */}
+      <FinanceCurrencyProvider>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <BusinessLineSwitch active={line} totalsInr={lineTotalsInr} totalsEur={lineTotalsEur} />
+            <CurrencyToggle />
           </div>
-        </Card>
-
-        <Card
-          title={<CardTitle icon={<BarChart3 size={16} />}>Revenue by programme level</CardTitle>}
-          subtitle="This month, share of total revenue."
-        >
-          <BarRows items={levelItems} />
-        </Card>
-
-        <Card
-          className="lg:row-span-2"
-          title={<CardTitle icon={<Trophy size={16} />}>Top 5 payments</CardTitle>}
-          subtitle="Largest income entries this month."
-        >
-          {topPayments.length === 0 ? (
-            <EmptyState title="No income yet this month" body="Entries you add under the Income tab show up here." />
-          ) : (
-            <ol className="divide-y divide-line">
-              {topPayments.map((p, i) => (
-                <li key={p.id} className="flex items-center gap-3 py-3.5 first:pt-0">
-                  <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-primary-soft font-display text-sm font-bold text-primary-strong">
-                    {i + 1}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline gap-1.5 truncate text-sm font-semibold">
-                      <span className="truncate">{p.studentName}</span>
-                      {p.studentId && studentCodeById[p.studentId] && (
-                        <span className="tnum flex-none text-caption font-medium text-ink-3">
-                          {studentCodeById[p.studentId]}
-                        </span>
-                      )}
-                    </span>
-                    <span className="block truncate text-xs text-muted">
-                      {PROGRAM_LEVEL_LABELS[p.programLevel] ?? p.programLevel} ·{" "}
-                      {PAYMENT_METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod} · {formatDate(p.date)}
-                    </span>
-                  </span>
-                  <span className="flex-none font-display text-h2 font-bold text-ink">
-                    {formatInrMinor(p.agg.inr, { compact: true })}
-                  </span>
-                </li>
-              ))}
-            </ol>
+          {seg && (
+            <AllocationNote
+              lineLabel={BUSINESS_LINE_LABELS[line]}
+              directCost={{ inr: seg.directCostInr, eur: seg.directCostEur }}
+              sharedCost={{ inr: seg.sharedCostInr, eur: seg.sharedCostEur }}
+              revenueSharePct={seg.revenueSharePct}
+            />
           )}
-        </Card>
+        </div>
 
-        <Card
-          title={<CardTitle icon={<PieChart size={16} />}>Expenses by category</CardTitle>}
-          subtitle="This month, top categories."
-        >
-          <Donut slices={catSlices} centerLabel="This month" centerValue={inr(view.expenses)} />
-        </Card>
+        <FinanceKpis kpis={kpis} />
 
-        <Card
-          title={<CardTitle icon={<ArrowLeftRight size={16} />}>Money in vs money out</CardTitle>}
-          subtitle="This month, on one scale — the gap is the profit."
-        >
-          <p
-            className="font-display text-3xl font-bold tracking-tight"
-            style={{ color: signedColor(view.net.inr) ?? "var(--ink)" }}
-          >
-            {inr(view.net)}
-          </p>
-          <p className="text-xs text-muted">
-            net this month · {metrics.prevSameDay.netInr !== 0 && (
-              <span className="tnum">
-                was {formatInrMinor(metrics.prevSameDay.netInr, { compact: true })} by this day last month
-              </span>
-            )}
-          </p>
-          <div className="mt-5 space-y-4">
-            {(
-              [
-                { label: "Money in", value: view.revenue.inr, icon: <ArrowDownLeft size={16} />, color: "var(--ok)", soft: "var(--ok-soft)" },
-                { label: "Money out", value: view.expenses.inr, icon: <ArrowUpRight size={16} />, color: "var(--risk)", soft: "var(--risk-soft)" },
-              ] as const
-            ).map((row) => (
-              <div key={row.label} className="flex items-center gap-3">
-                <span
-                  className="grid h-9 w-9 flex-none place-items-center rounded-full"
-                  style={{ background: row.soft, color: row.color }}
-                >
-                  {row.icon}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-sm font-medium">{row.label}</span>
-                    <span className="text-sm font-semibold tnum">{formatInrMinor(row.value, { compact: true })}</span>
-                  </div>
-                  <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-surface-2">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${(row.value / flowMax) * 100}%`, background: row.color }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+        {/* Bento grid — hero + breakdowns left, top payments right. A client component, so every
+            figure in it answers to the ₹/€ toggle (it used to be inline here and therefore INR). */}
+        <FinanceBento
+          revenue={view.revenue}
+          expenses={view.expenses}
+          net={view.net}
+          revenueSeries={view.revenueSeries}
+          momRevenuePct={momRevenuePct}
+          prevNet={{ inr: metrics.prevSameDay.netInr, eur: metrics.prevSameDay.netEur }}
+          levelRows={levelItems}
+          categoryRows={catSlices}
+          topPayments={topPayments.map((p) => ({
+            id: p.id,
+            studentName: p.studentName,
+            studentCode: p.studentId ? studentCodeById[p.studentId] ?? null : null,
+            levelLabel: PROGRAM_LEVEL_LABELS[p.programLevel] ?? p.programLevel,
+            methodLabel: PAYMENT_METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod,
+            date: p.date,
+            agg: p.agg,
+          }))}
+        />
 
       {/* §3.2/§3.3 — the year view the dashboard never had: cumulative target vs
           achieved across Jan–Dec, with a run-rate projection to year-end. */}
       <Card
         title={<CardTitle icon={<CalendarRange size={16} />}>Month on month — {annual.year}</CardTitle>}
-        subtitle="Cumulative target vs achieved, with a projection to year-end. Hover any month."
+        subtitle="Cumulative target vs achieved, with a projection to year-end. Hover any month. Shown in ₹ — the monthly target is set in rupees."
       >
         <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
@@ -461,6 +380,17 @@ export default async function FinancePage({
           ))}
         </div>
         <AnnualChart months={annual.months} currentMonth={istToday().getUTCMonth()} />
+      </Card>
+
+      {/* F1 — the founder's own tracking sheet, rebuilt. Bars against plan, with the three
+          reference horizontals (plan total, actual total, annualised run rate). Sits beside
+          the line chart above on purpose: lines answer "where is this heading", bars answer
+          "where are we against plan" — the sheet this replaces is a bar chart. */}
+      <Card
+        title={<CardTitle icon={<BarChart3 size={16} />}>Cumulative tracking — {annual.year}</CardTitle>}
+        subtitle="Forecast vs actual, month by month. Months still to come are left blank rather than shown as zero. Shown in ₹ — the plan is set in rupees."
+      >
+        <CumulativeTrackingChart data={annual} />
       </Card>
 
       {/* §3.4 — recurring-revenue movement: is the client base under the revenue
@@ -515,6 +445,7 @@ export default async function FinancePage({
           },
         ]}
       />
+      </FinanceCurrencyProvider>
     </div>
   );
 }

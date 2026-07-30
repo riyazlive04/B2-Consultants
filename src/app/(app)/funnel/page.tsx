@@ -6,6 +6,7 @@ import { requireSection } from "@/lib/rbac";
 import { getFunnelOverview } from "@/server/funnel-metrics";
 import { SnapshotForm } from "./_components/SnapshotForm";
 import { FunnelMetricsTable, FunnelAttributionTable, FunnelSnapshotsTable } from "./_components/FunnelTables";
+import { FunnelTrend } from "./_components/FunnelTrend";
 
 export const dynamic = "force-dynamic";
 
@@ -121,6 +122,10 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
         </div>
       </Card>
 
+      {/* The direction of travel, between the "where is it leaking now" funnel above and the
+          "what were the numbers" table below. See FunnelTrend for why it plots rates. */}
+      <FunnelTrend months={data.months} />
+
       {/* Metrics table - this month + last 3 side by side */}
       <FunnelMetricsTable months={data.months} />
 
@@ -131,7 +136,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
           <MetricCard label="Downloads all time" value={gb.totalDownloadsAllTime.toLocaleString("en-IN")} icon={<Download size={18} />} />
           <MetricCard label="Downloads this month" value={gb.downloadsThisMonth.toLocaleString("en-IN")} icon={<Download size={18} />} />
           <MetricCard label="→ Discovery call" value={formatPct(gb.downloadsToCallPct)} icon={<PhoneCall size={18} />} />
-          <MetricCard label="→ Enrollment" value={formatPct(gb.downloadsToEnrollmentPct)} icon={<GraduationCap size={18} />} />
+          <MetricCard label="→ Enrolment" value={formatPct(gb.downloadsToEnrollmentPct)} icon={<GraduationCap size={18} />} />
           <MetricCard
             label="→ Guided specifically"
             value={formatPct(gb.downloadsToGuidedPct)}
@@ -151,7 +156,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
       {/* Source → enrollment attribution (report §3.D): which channel pays the bills */}
       {data.attribution.length > 0 && (
         <section>
-          <h3 className="mb-1 font-display text-h3">Source → enrollment attribution</h3>
+          <h3 className="mb-1 font-display text-h3">Source → enrolment attribution</h3>
           <p className="mb-3 text-xs text-muted">
             All time, from lead source tags on leads and students. Ad spend per channel isn’t
             captured yet, so CAC needs manual math - flagged as the accepted fallback.

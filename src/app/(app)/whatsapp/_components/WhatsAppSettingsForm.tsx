@@ -99,9 +99,9 @@ export function WhatsAppSettingsForm({
         </div>
       </section>
 
-      {/* Cadence */}
+      {/* Reminder schedule */}
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h3 className="font-display text-base font-semibold">Automatic cadence</h3>
+        <h3 className="font-display text-base font-semibold">Automatic reminder schedule</h3>
         <p className="mt-1 text-xs text-muted">Controls the scheduled reminder run (hit by the cron endpoint / “Run reminders now”).</p>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <NumField name="discoFirstDelayHours" label="Disco: first delay (hrs)" defaultValue={c.discoFirstDelayHours} hint="Wait after a lead arrives before the 1st nudge." />

@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, Contact, GitBranch, Receipt, CornerDownLeft, ArrowRight } from "lucide-react";
+import { Search, Loader2, Contact, GitBranch, GraduationCap, Receipt, CornerDownLeft, ArrowRight } from "lucide-react";
 import { useModKey } from "@/lib/use-mod-key";
+import { lockBodyScroll } from "@/lib/scroll-lock";
 
 /**
  * Global ⌘K / Ctrl+K command palette (BUILD_CHECKLIST.md §3) across Contacts, Opportunities and
@@ -20,24 +21,26 @@ export function openCommandPalette() {
   window.dispatchEvent(new Event("app:command-palette-open"));
 }
 
-type ItemType = "page" | "contact" | "opportunity" | "invoice";
+type ItemType = "page" | "contact" | "student" | "opportunity" | "invoice";
 type PaletteItem = { id: string; label: string; sublabel: string | null; type: ItemType; href: string };
 export type PaletteSection = { label: string; href: string };
 
 const TYPE_LABEL: Record<ItemType, string> = {
   page: "Go to",
   contact: "Contacts",
+  student: "Students",
   opportunity: "Opportunities",
   invoice: "Invoices",
 };
 const TYPE_ICON: Record<ItemType, typeof Contact> = {
   page: ArrowRight,
   contact: Contact,
+  student: GraduationCap,
   opportunity: GitBranch,
   invoice: Receipt,
 };
 // Fixed render order so the same categories always land in the same place.
-const TYPE_ORDER: ItemType[] = ["page", "contact", "opportunity", "invoice"];
+const TYPE_ORDER: ItemType[] = ["page", "contact", "student", "opportunity", "invoice"];
 
 /** Cheap fuzzy score: prefix match beats substring beats subsequence beats no match (-1). */
 function score(item: PaletteItem, q: string): number {
@@ -123,11 +126,13 @@ export function CommandPalette({ sections = [] }: { sections?: PaletteSection[] 
       setQuery("");
       setActiveIndex(0);
       const t = setTimeout(() => inputRef.current?.focus(), 0);
-      const prevOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
+      // Shared counter (lib/scroll-lock.ts). The palette's private save/restore was one half
+      // of the "sometimes My Desk won't scroll" pair: opened over the daily-greeting modal and
+      // closed after it, it restored the modal's `hidden` onto a page with nothing on it.
+      const releaseScroll = lockBodyScroll();
       return () => {
         clearTimeout(t);
-        document.body.style.overflow = prevOverflow;
+        releaseScroll();
       };
     }
   }, [open]);
@@ -206,7 +211,7 @@ export function CommandPalette({ sections = [] }: { sections?: PaletteSection[] 
         <div id="cmdk-list" ref={listRef} className="flex-1 overflow-y-auto p-2">
           {error && <p className="px-3 py-4 text-sm text-risk">{error}</p>}
           {!error && !loading && results.length === 0 && query.trim() && (
-            <p className="px-3 py-8 text-center text-sm text-muted">No matches for "{query}".</p>
+            <p className="px-3 py-8 text-center text-sm text-muted">No matches for &ldquo;{query}&rdquo;.</p>
           )}
           {groups.map((g) => {
             const Icon = TYPE_ICON[g.type];

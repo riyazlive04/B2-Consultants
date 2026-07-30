@@ -394,7 +394,7 @@ export type GnWorkshopSummary = {
 };
 
 export const getGnWorkshops = cache(async (): Promise<GnWorkshopSummary[]> => {
-  const workshops = await prisma.gnWorkshop.findMany({
+  const workshops = await prisma.workshop.findMany({
     orderBy: [{ status: "asc" }, { month: "desc" }],
     include: { conversions: true, adSets: true },
   });
@@ -471,7 +471,7 @@ export type GnFounderStats = {
  * workshop keeps its own ad-spend allocation (ads are split per workshop in `buildRows`).
  */
 export const getGnFounderStats = cache(async (): Promise<GnFounderStats> => {
-  const workshops = await prisma.gnWorkshop.findMany({
+  const workshops = await prisma.workshop.findMany({
     include: { conversions: true, adSets: true },
   });
 
@@ -549,7 +549,7 @@ export type GnWorkshopDetail = {
 };
 
 export const getGnWorkshopDetail = cache(async (workshopId: string): Promise<GnWorkshopDetail | null> => {
-  const w = await prisma.gnWorkshop.findUnique({
+  const w = await prisma.workshop.findUnique({
     where: { id: workshopId },
     include: {
       conversions: { orderBy: { createdAt: "asc" } },

@@ -171,6 +171,13 @@ export async function getAnnualPerformance(line: BusinessLine | null = null): Pr
       label: new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(
         new Date(Date.UTC(today.getUTCFullYear(), m, 1)),
       ),
+      // A future month has achieved NOTHING YET — which is not the same as having achieved
+      // zero, and Error Log F4 is explicit that future periods must never render as a zero
+      // (or as the source spreadsheet's `#WERT!`). The 0 here is a placeholder, and
+      // `isFuture` is the flag every consumer MUST branch on before displaying these two —
+      // AnnualChart already does (no data point, and the tooltip says "projected" instead of
+      // "achieved"). Read them without that guard and you will print a zero the client
+      // specifically asked never to see.
       achievedInr: isFuture ? 0 : achieved,
       targetInr: target,
       cumAchievedInr: isFuture ? 0 : cumAchieved,

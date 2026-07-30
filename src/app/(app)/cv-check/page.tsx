@@ -1,7 +1,7 @@
 import { FileSearch } from "lucide-react";
 import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
-import { listResumes, getResumeTemplate, getAiStatus } from "@/server/resume-metrics";
+import { listResumes, getResumeTemplate, getAiStatus, resumeScope } from "@/server/resume-metrics";
 import { CvStudio } from "./_components/CvStudio";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,11 @@ export const dynamic = "force-dynamic";
 export default async function CvCheckPage() {
   const session = await requireSection("cv-check");
   const isAdmin = session.role === "ADMIN";
-  const [resumes, template, aiStatus] = await Promise.all([listResumes(), getResumeTemplate(), getAiStatus()]);
+  const [resumes, template, aiStatus] = await Promise.all([
+    listResumes(resumeScope(session)),
+    getResumeTemplate(),
+    getAiStatus(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-[1500px] space-y-6">

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import {
   coerceAgreementWorkflow,
   coerceBookingRulesConfig,
+  coerceSlotPatternConfig,
   coerceCommissionRulesConfig,
   coerceDailyLogEod,
   coerceDailyLogTargets,
@@ -15,12 +16,14 @@ import {
   coerceBookOrderConfig,
   coercePipelineConfig,
   coerceTutorFeeConfig,
+  coerceInstalmentPlanConfig,
   coerceWorkflowSettings,
   coerceMaintenanceConfig,
   coerceScheduledReportConfig,
   coerceFinancePostingConfig,
   DEFAULT_AGREEMENT_WORKFLOW,
   DEFAULT_BOOKING_RULES_CONFIG,
+  DEFAULT_SLOT_PATTERN_CONFIG,
   DEFAULT_COMMISSION_RULES_CONFIG,
   DEFAULT_DAILY_LOG_EOD,
   DEFAULT_DAILY_LOG_TARGETS,
@@ -28,12 +31,14 @@ import {
   DEFAULT_BOOK_ORDER_CONFIG,
   DEFAULT_PIPELINE_CONFIG,
   DEFAULT_TUTOR_FEE_CONFIG,
+  DEFAULT_INSTALMENT_PLAN_CONFIG,
   DEFAULT_WORKFLOW_SETTINGS,
   DEFAULT_MAINTENANCE_CONFIG,
   DEFAULT_SCHEDULED_REPORT_CONFIG,
   DEFAULT_FINANCE_POSTING_CONFIG,
   type AgreementWorkflowConfig,
   type BookingRulesConfig,
+  type SlotPatternConfig,
   type CommissionRulesConfig,
   type DailyLogEodConfig,
   type DailyLogTargets,
@@ -42,6 +47,7 @@ import {
   type BookOrderConfig,
   type PipelineConfig,
   type TutorFeeConfig,
+  type InstalmentPlanConfig,
   type WorkflowSettings,
   type MaintenanceConfig,
   type ScheduledReportConfig,
@@ -65,6 +71,8 @@ import { resolveSections, type ResolvedSection, type SectionsConfig } from "@/li
 export const SECTIONS_KEY = "sectionsConfig";
 export const GAMIFICATION_KEY = "gamificationRulesets";
 export const BOOKING_RULES_KEY = "bookingRulesConfig";
+export const SLOT_PATTERN_KEY = "slotPatternConfig";
+export const SSS_PATTERN_KEY = "sssPatternConfig";
 export const WORKFLOW_SETTINGS_KEY = "workflowSettings";
 export const COMMISSION_RULES_KEY = "commissionRules";
 export const SSS_CONFIG_KEY = "sssConfig";
@@ -77,6 +85,7 @@ export const PIPELINE_KEY = "pipelineConfig";
 export const MAINTENANCE_KEY = "maintenanceConfig";
 export const SCHEDULED_REPORT_KEY = "scheduledReport";
 export const FINANCE_POSTING_KEY = "financePosting";
+export const INSTALMENT_PLAN_KEY = "instalmentPlans";
 
 export const getSectionsConfig = cache(async (): Promise<SectionsConfig | null> => {
   const row = await prisma.appSetting.findUnique({ where: { key: SECTIONS_KEY } });
@@ -98,6 +107,42 @@ export const getBookingRulesConfig = cache(async (): Promise<BookingRulesConfig>
   return row ? coerceBookingRulesConfig(row.value) : DEFAULT_BOOKING_RULES_CONFIG;
 });
 
+/** Standing weekly availability, replayed forward nightly by `ensureBookingSlots`. */
+export const getSlotPatternConfig = cache(async (): Promise<SlotPatternConfig> => {
+  const row = await prisma.appSetting.findUnique({ where: { key: SLOT_PATTERN_KEY } });
+  return row ? coerceSlotPatternConfig(row.value) : DEFAULT_SLOT_PATTERN_CONFIG;
+});
+
+export async function writeSlotPatternConfig(config: SlotPatternConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: SLOT_PATTERN_KEY },
+    create: { key: SLOT_PATTERN_KEY, value },
+    update: { value },
+  });
+}
+
+/**
+ * The same standing-availability shape, for the founder's SSS (sales) calendar.
+ *
+ * It reuses `SlotPatternConfig` rather than inventing a parallel one, with two fields ignored:
+ * the owner comes from `sssConfig.ownerId` and the call length from `sssConfig.slotDurationMins`,
+ * because an SSS slot already stores both and they must not be able to disagree.
+ */
+export const getSssPatternConfig = cache(async (): Promise<SlotPatternConfig> => {
+  const row = await prisma.appSetting.findUnique({ where: { key: SSS_PATTERN_KEY } });
+  return row ? coerceSlotPatternConfig(row.value) : DEFAULT_SLOT_PATTERN_CONFIG;
+});
+
+export async function writeSssPatternConfig(config: SlotPatternConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: SSS_PATTERN_KEY },
+    create: { key: SSS_PATTERN_KEY, value },
+    update: { value },
+  });
+}
+
 /** Global Workflow Settings — read by the automation engine on every trigger/resume. */
 export const getWorkflowSettings = cache(async (): Promise<WorkflowSettings> => {
   const row = await prisma.appSetting.findUnique({ where: { key: WORKFLOW_SETTINGS_KEY } });
@@ -115,6 +160,21 @@ export const getTutorFeeConfig = cache(async (): Promise<TutorFeeConfig> => {
   const row = await prisma.appSetting.findUnique({ where: { key: TUTOR_FEE_KEY } });
   return row ? coerceTutorFeeConfig(row.value) : DEFAULT_TUTOR_FEE_CONFIG;
 });
+
+/** Instalment-plan pricing + default gap — read by the EMI generator on Finance → Pending. */
+export const getInstalmentPlanConfig = cache(async (): Promise<InstalmentPlanConfig> => {
+  const row = await prisma.appSetting.findUnique({ where: { key: INSTALMENT_PLAN_KEY } });
+  return row ? coerceInstalmentPlanConfig(row.value) : DEFAULT_INSTALMENT_PLAN_CONFIG;
+});
+
+export async function writeInstalmentPlanConfig(config: InstalmentPlanConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: INSTALMENT_PLAN_KEY },
+    create: { key: INSTALMENT_PLAN_KEY, value },
+    update: { value },
+  });
+}
 
 /** Book-order trigger — read when a payment lands and by the Book Orders panel. */
 export const getBookOrderConfig = cache(async (): Promise<BookOrderConfig> => {

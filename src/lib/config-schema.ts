@@ -316,6 +316,56 @@ export function coerceBookingRulesConfig(value: unknown): BookingRulesConfig {
   return parsed.success ? parsed.data : DEFAULT_BOOKING_RULES_CONFIG;
 }
 
+// ──────────────────── rolling booking-slot pattern ────────────────────
+
+/**
+ * The founder's standing weekly availability, replayed forward by the daily cron so the public
+ * /book calendar never runs dry.
+ *
+ * WHY THIS EXISTS: slots were only ever created by a one-off "generate for this range" form. On
+ * 23 Jul 2026 the last slot was 15 Jul — the booking page, the top of the entire funnel, had
+ * been showing an empty calendar for 8 days and nothing anywhere said so. A one-off batch cannot
+ * fail safe; a pattern the cron replays can.
+ *
+ * `enabled` ships FALSE like every other engine here: turning it on is the founder's decision,
+ * and an un-configured pattern must never start writing rows into a live calendar. But unlike
+ * the other engines this one is INERT rather than destructive — it only ever creates OPEN slots
+ * on instants that have none, and never touches a BOOKED or BLOCKED row.
+ */
+export const slotPatternConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  weekdays: z.array(z.enum(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"])).default([]),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/).default("15:00"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/).default("18:00"),
+  intervalMins: z.number().int().min(15).max(240).default(30),
+  durationMins: z.number().int().refine((v) => v === 30 || v === 60).default(30),
+  /**
+   * How many days ahead to keep stocked. Capped at `maxAdvanceDays` by the job itself —
+   * generating past the window the public page will show is pure waste.
+   */
+  horizonDays: z.number().int().min(1).max(120).default(21),
+  /** Blank = unassigned, exactly as in the manual generator. */
+  assignedToId: z.string().trim().max(64).default(""),
+});
+
+export type SlotPatternConfig = z.infer<typeof slotPatternConfigSchema>;
+
+export const DEFAULT_SLOT_PATTERN_CONFIG: SlotPatternConfig = {
+  enabled: false,
+  weekdays: [],
+  startTime: "15:00",
+  endTime: "18:00",
+  intervalMins: 30,
+  durationMins: 30,
+  horizonDays: 21,
+  assignedToId: "",
+};
+
+export function coerceSlotPatternConfig(value: unknown): SlotPatternConfig {
+  const parsed = slotPatternConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_SLOT_PATTERN_CONFIG;
+}
+
 // ──────────────────── global workflow settings (Automation) ────────────────────
 
 /**
@@ -464,6 +514,72 @@ export const DEFAULT_TUTOR_FEE_CONFIG: TutorFeeConfig = {
 export function coerceTutorFeeConfig(value: unknown): TutorFeeConfig {
   const parsed = tutorFeeConfigSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_TUTOR_FEE_CONFIG;
+}
+
+// ─────────────────────────── instalment plans ───────────────────────────
+
+/**
+ * What paying in instalments COSTS, and how far apart the instalments fall — founder-editable
+ * via AppSetting("instalmentPlans"), read by the EMI generator on the Finance → Pending tab.
+ *
+ * One row per plan length: "3 instalments → ₹600" means a 3-part plan adds ₹600 ONCE to the
+ * agreed fee (not ₹600 per instalment). A length with no row, or a row at 0, adds nothing —
+ * which is the default for every length except the one the founder named, because a surcharge
+ * that appears without being typed is the one mistake this table must not make.
+ *
+ * Amounts are minor units (paise / cents) like every other money field in the app, and both
+ * currencies are configurable: a €-billed student's plan can't inherit a rupee surcharge.
+ */
+export const INSTALMENT_COUNT_MIN = 2; // 1 instalment is a full payment
+export const INSTALMENT_COUNT_MAX = 24;
+
+const instalmentTierSchema = z.object({
+  count: z.number().int().min(INSTALMENT_COUNT_MIN).max(INSTALMENT_COUNT_MAX),
+  extraInrMinor: z.number().int().min(0).max(100_000_000), // ≤ ₹10,00,000
+  extraEurMinor: z.number().int().min(0).max(100_000_000), // ≤ €10,00,000
+});
+
+export type InstalmentTier = z.infer<typeof instalmentTierSchema>;
+
+export const instalmentPlanConfigSchema = z.object({
+  /** Days between instalments when a plan is generated. Overridable per plan. */
+  defaultIntervalDays: z.number().int().min(1).max(180),
+  tiers: z
+    .array(instalmentTierSchema)
+    .max(INSTALMENT_COUNT_MAX - INSTALMENT_COUNT_MIN + 1)
+    // Two rows for the same length would make the surcharge depend on array order —
+    // silently, and differently for whoever read it last.
+    .superRefine((tiers, ctx) => {
+      const seen = new Set<number>();
+      for (const t of tiers) {
+        if (seen.has(t.count)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `There are two rows for ${t.count} instalments — keep one`,
+          });
+          return;
+        }
+        seen.add(t.count);
+      }
+    }),
+});
+
+export type InstalmentPlanConfig = z.infer<typeof instalmentPlanConfigSchema>;
+
+export const DEFAULT_INSTALMENT_PLAN_CONFIG: InstalmentPlanConfig = {
+  defaultIntervalDays: 30,
+  tiers: [
+    { count: 2, extraInrMinor: 0, extraEurMinor: 0 },
+    // The one figure the founder stated: a 3-part plan costs ₹600 extra.
+    { count: 3, extraInrMinor: 60_000, extraEurMinor: 0 },
+    { count: 4, extraInrMinor: 0, extraEurMinor: 0 },
+    { count: 6, extraInrMinor: 0, extraEurMinor: 0 },
+  ],
+};
+
+export function coerceInstalmentPlanConfig(value: unknown): InstalmentPlanConfig {
+  const parsed = instalmentPlanConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_INSTALMENT_PLAN_CONFIG;
 }
 
 // ───────────────────────────── book orders ─────────────────────────────
@@ -835,10 +951,17 @@ export function coerceScheduledReportConfig(value: unknown): ScheduledReportConf
  *     Cr Accounts-payable for the month's total (an accrual, NOT a cash payment — so it never
  *     asserts money left the bank). Read by `server/commission-actions.ts`. With this OFF the
  *     payout run is still recorded as a snapshot; only the ledger posting is withheld.
+ *   tutorFeeAccrual — when a tutor fee is APPROVED, post Dr COGS-Tutor-fees / Cr
+ *     Accounts-payable (ER v2 Track C). Also an accrual: the CASH leg is the Expense row the
+ *     founder records when they actually pay the trainer, which hits a different account —
+ *     that separation is what stops the fee being counted twice. Read by
+ *     `server/tutor-fee-actions.ts`. With this OFF the fee report is still complete and
+ *     correct; only the ledger posting is withheld.
  */
 export const financePostingConfigSchema = z.object({
   invoiceIssuancePosting: z.object({ enabled: z.boolean() }),
   commissionAccrual: z.object({ enabled: z.boolean() }),
+  tutorFeeAccrual: z.object({ enabled: z.boolean() }).default({ enabled: false }),
 });
 
 export type FinancePostingConfig = z.infer<typeof financePostingConfigSchema>;
@@ -846,6 +969,7 @@ export type FinancePostingConfig = z.infer<typeof financePostingConfigSchema>;
 export const DEFAULT_FINANCE_POSTING_CONFIG: FinancePostingConfig = {
   invoiceIssuancePosting: { enabled: false },
   commissionAccrual: { enabled: false },
+  tutorFeeAccrual: { enabled: false },
 };
 
 export function coerceFinancePostingConfig(value: unknown): FinancePostingConfig {

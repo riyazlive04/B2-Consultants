@@ -126,11 +126,11 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
           </div>
         </div>
 
-        {/* SLA windows */}
+        {/* Response-time windows */}
         <div className="border-t border-line pt-4">
           <h4 className="font-display text-sm font-semibold">Timing</h4>
           <p className="mt-0.5 text-xs text-muted">
-            The SOP&apos;s windows. Editable so the SLAs can be tuned without a code change — the
+            The SOP&apos;s windows. Editable so the response times can be tuned without a code change — the
             defaults are exactly what the document specifies.
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -205,7 +205,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
           The engine has no clock of its own — an external cron must hit{" "}
           <code className="rounded bg-surface-2 px-1">/api/cron/outreach</code> with{" "}
           <code className="rounded bg-surface-2 px-1">CRON_SECRET</code>. Point it at every minute:
-          the 5-minute reaction SLA can only be reported as accurately as the cron ticks.
+          the 5-minute response time can only be reported as accurately as the cron ticks.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button

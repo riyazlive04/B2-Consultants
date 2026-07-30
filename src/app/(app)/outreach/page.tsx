@@ -43,7 +43,7 @@ export default async function OutreachPage() {
           <div>
             <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Outreach</h1>
             <p className="text-xs text-muted">
-              The Outreach Specialist SOP, steps 1–23 — opt-in to SSS confirmation.
+              The Outreach Specialist SOP.
             </p>
           </div>
         </div>
@@ -66,7 +66,7 @@ export default async function OutreachPage() {
           icon={<ListTodo size={18} />}
         />
         <MetricCard
-          label="Reaction SLA at risk"
+          label="Response time at risk"
           value={queue.counts.breaching}
           secondary="Opted in, not yet contacted"
           tooltip="SOP Step 2: contact within 5 minutes of opt-in to stay on the Step 3 path. Past that, the SOP skips the WhatsApp intro and goes straight to the Step 10 booking check."

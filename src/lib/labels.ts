@@ -17,6 +17,18 @@ export const PAYMENT_TYPE_LABELS: Record<string, string> = {
   INSTALMENT: "Instalment",
 };
 
+/** German Note book-order status (Prisma `BookOrderStatus`). Every enum value has a label, so a
+ *  new status can never fall through to a raw string on any screen that reads this. */
+export const BOOK_ORDER_STATUS_LABELS: Record<string, string> = {
+  DEFERRED: "Held — payment",
+  QUOTE_REQUESTED: "Quote requested",
+  QUOTED: "Quoted",
+  ORDERED: "Ordered",
+  PAID: "Paid",
+  COURIERED: "Couriered",
+  CANCELLED: "Cancelled",
+};
+
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   BANK_TRANSFER_INR: "Bank transfer (INR)",
   BANK_TRANSFER_EUR: "Bank transfer (EUR)",
@@ -135,6 +147,17 @@ export const LEAD_STAGE_LABELS: Record<string, string> = {
   LOST: "Lost",
   NO_SHOW: "No show",
 };
+
+/**
+ * Funnel order for a DataTable `order` prop — the LABELS, because a stage column's sort
+ * value is its label (it also feeds CSV export and the text filter, both of which want
+ * "New lead", not "NEW_LEAD").
+ *
+ * Derived from LEAD_STAGE_LABELS rather than retyped, so the two can never disagree: the
+ * map is already written in funnel order and that order IS the spec. Module-level so the
+ * array identity is stable across renders.
+ */
+export const LEAD_STAGE_LABEL_ORDER: readonly string[] = Object.values(LEAD_STAGE_LABELS);
 
 export const PAYMENT_PLAN_LABELS: Record<string, string> = {
   SPLIT_PAY: "Split pay",

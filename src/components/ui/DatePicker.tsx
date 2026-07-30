@@ -144,7 +144,8 @@ export function DatePicker({
       case "PageDown": { e.preventDefault(); const n = new Date(focusDay); n.setMonth(n.getMonth() + 1); setFocusDay(n); setView(n); return; }
       case "Enter":
       case " ": e.preventDefault(); return commit(focusDay);
-      case "Escape": e.preventDefault(); setOpen(false); triggerRef.current?.focus(); return;
+      // stopPropagation: Escape closes only the calendar, not a Modal hosting it (see SelectMenu)
+      case "Escape": e.preventDefault(); e.stopPropagation(); setOpen(false); triggerRef.current?.focus(); return;
     }
   }
 

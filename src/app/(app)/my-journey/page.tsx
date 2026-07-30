@@ -1,9 +1,12 @@
 import Link from "next/link";
 import {
-  BadgeCheck, CalendarClock, FileSearch, Mic2, Rocket, Send, Target,
+  BadgeCheck, CalendarClock, FileSearch, FileSignature, Mic2, Rocket, Send, Target,
 } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { getMyStudentPortal, type PortalEnrollment } from "@/server/student-portal";
+import { getMyAgreements } from "@/server/student-agreements";
+import { getMyPayments } from "@/server/student-payments";
+import { MyPayments } from "./_components/MyPayments";
 import { BadgeChip, JourneyRing, MomentumChip } from "@/components/ui/gamification";
 import { Card, PageHeader } from "@/components/ui/kit";
 import { OnboardingWalkthrough } from "@/components/onboarding/OnboardingWalkthrough";
@@ -25,7 +28,11 @@ export default async function MyJourneyPage({
   searchParams?: { onboarding?: string };
 }) {
   const session = await requireSection("my-journey");
-  const portal = await getMyStudentPortal(session.user.id);
+  const [portal, agreements, payments] = await Promise.all([
+    getMyStudentPortal(session.user.id),
+    getMyAgreements(session.user.id),
+    getMyPayments(session.user.id),
+  ]);
   // Home forwards ?onboarding=1 here for STUDENT before it can redirect this far.
   const onboarding = (
     <OnboardingWalkthrough
@@ -73,6 +80,53 @@ export default async function MyJourneyPage({
       {ordered.map((e, idx) => (
         <EnrollmentJourney key={e.id} e={e} lead={idx === 0} />
       ))}
+
+      {/* Spec §10: the student's own agreement — view, download, signature status. Until now the
+          only route to their contract was the WhatsApp token link; signing in was no way back. */}
+      {agreements.length > 0 && (
+        <Card title="Your agreement">
+          <ul className="space-y-3">
+            {agreements.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  <span className="flex items-center gap-2 font-medium text-ink">
+                    <FileSignature size={15} className="text-primary" />
+                    {a.signedAt ? "Signed" : "Awaiting your signature"}
+                  </span>
+                  <span className="mt-0.5 block text-caption text-muted">
+                    {a.signedAt
+                      ? `Signed ${formatDate(a.signedAt)}`
+                      : a.issuedAt
+                        ? `Sent to you ${formatDate(a.issuedAt)}`
+                        : "Not yet sent"}
+                  </span>
+                </span>
+                {a.canDownload && (
+                  <span className="flex gap-2">
+                    <Link
+                      href={`/api/agreements/${a.id}/pdf`}
+                      target="_blank"
+                      className="press inline-flex h-9 items-center rounded-field border border-line-strong px-3 text-sm font-semibold text-ink hover:bg-surface-2"
+                    >
+                      View
+                    </Link>
+                    <Link
+                      href={`/api/agreements/${a.id}/pdf?download=1`}
+                      className="press inline-flex h-9 items-center rounded-field bg-primary px-3 text-sm font-semibold text-on-accent"
+                    >
+                      Download
+                    </Link>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Spec §10: the student's own payment plan, balance and receipts. Own records only —
+          scoped to this login server-side; no margin, LTV or other students' figures. */}
+      <MyPayments payments={payments} />
 
       {/* CV diagnostic — the self-serve tool students can use any time */}
       <Card>

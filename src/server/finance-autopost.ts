@@ -2,7 +2,7 @@ import "server-only";
 import type { PaymentMethod, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
-import { postEntry, voidEntryForSource } from "./ledger";
+import { postEntry, restatedDate, voidEntryForSource } from "./ledger";
 import { expenseEntryDraft } from "./finance-posting";
 
 /**
@@ -74,10 +74,11 @@ export async function syncPayoutExpense(
       };
       if (existing) {
         const updated = await tx.expense.update({ where: { id: existing.id }, data });
-        await voidEntryForSource(tx, "EXPENSE", existing.id, {
+        const voided = await voidEntryForSource(tx, "EXPENSE", existing.id, {
           reason: "telecaller payout edited", actorId, on: istToday(),
         });
-        await postEntry(tx, expenseEntryDraft(updated));
+        const draft = expenseEntryDraft(updated);
+        await postEntry(tx, { ...draft, date: restatedDate(voided, draft.date) });
       } else {
         const created = await tx.expense.create({
           data: { ...data, source: "MANUAL", externalRef: ref },

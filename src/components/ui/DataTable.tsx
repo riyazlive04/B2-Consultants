@@ -14,6 +14,19 @@ export type Column<T> = {
   value?: (row: T) => string | number | null;
   sortable?: boolean;
   align?: "left" | "right";
+  /**
+   * Sort position for an ENUM column, most-significant first — e.g. the funnel order of
+   * LeadStage, or DRAFT → SENT → SIGNED.
+   *
+   * Without it a stage column sorts by its LABEL: "Won, Sent to Workshop, Proposal sent,
+   * New lead…" — alphabetical, and read by the client as the funnel running backwards
+   * (Error Log L1). Alphabetical order is meaningless for anything whose values have a
+   * natural sequence, and every such column in this app has one.
+   *
+   * Values absent from the array sort after every listed value, so adding an enum member
+   * without updating the list degrades to "last" rather than throwing off the whole column.
+   */
+  order?: readonly string[];
 };
 
 /**
@@ -47,6 +60,7 @@ export function DataTable<T>({
   selection,
   toolbarExtra,
   hideFilter = false,
+  defaultSort,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -63,9 +77,22 @@ export function DataTable<T>({
    * on one screen search different scopes and users type in the wrong one.
    */
   hideFilter?: boolean;
+  /**
+   * The column the table is sorted by before anyone touches a header, so a list that is
+   * already ordered SAYS so. The payables list was ordered by due date ascending and read
+   * as arbitrary purely because nothing on screen claimed an order (Error Log H1).
+   *
+   * Pass the key alone for ascending, or `{ key, dir }`. The caller is responsible for the
+   * rows arriving in that order; this only declares it, so the arrow and `aria-sort` match
+   * what the user is looking at.
+   */
+  defaultSort?: string | { key: string; dir?: "asc" | "desc" };
 }) {
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const initialSort = typeof defaultSort === "string" ? { key: defaultSort, dir: "asc" as const } : defaultSort;
+  const [sortKey, setSortKey] = useState<string | null>(initialSort?.key ?? null);
+  // Ascending first. Descending-on-first-click put every enum column in reverse order and
+  // every date column latest-first, which is what both L1 and H1 were reporting.
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(initialSort?.dir ?? "asc");
   const [filter, setFilter] = useState("");
   // The heavy filter+sort runs on a DEFERRED copy of the query, so typing stays smooth
   // even over a few thousand in-memory rows (INP): the input updates every keystroke
@@ -91,13 +118,23 @@ export function DataTable<T>({
     if (sortKey) {
       const col = columns.find((c) => c.key === sortKey);
       if (col) {
+        // An enum column ranks by declared position; anything unlisted sorts last (see `order`).
+        const rank = col.order
+          ? (v: string | number) => {
+              const i = col.order!.indexOf(String(v));
+              return i === -1 ? col.order!.length : i;
+            }
+          : null;
         out = [...out].sort((a, b) => {
           const va = raw(a, col);
           const vb = raw(b, col);
+          // Blanks sink to the bottom in BOTH directions — a missing due date is not
+          // "the earliest" just because the arrow points the other way.
           if (va === null || va === undefined) return 1;
           if (vb === null || vb === undefined) return -1;
-          const cmp =
-            typeof va === "number" && typeof vb === "number"
+          const cmp = rank
+            ? rank(va) - rank(vb)
+            : typeof va === "number" && typeof vb === "number"
               ? va - vb
               : String(va).localeCompare(String(vb));
           return sortDir === "asc" ? cmp : -cmp;
@@ -148,7 +185,9 @@ export function DataTable<T>({
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
-      setSortDir("desc");
+      // Ascending, so a first click reads the way the column is named: stages run down the
+      // funnel, dates run earliest-first, IDs count up. Descending is one more click away.
+      setSortDir("asc");
     }
     setPage(0);
   };

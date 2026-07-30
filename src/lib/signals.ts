@@ -3,6 +3,29 @@
  *   GREEN = healthy · AMBER = watch · RED = at risk.
  * Every Green/Amber/Red rule in the PRDs resolves through these thresholds, so the
  * colours read identically across Finance, OKRs, Students, Runway and the target bar.
+ *
+ * ─────────────────────────── PUBLISHED THRESHOLDS (Error Log D2) ───────────────────────────
+ * D2 asked for one documented palette rather than per-screen judgement calls. This is it —
+ * every threshold the product applies, in one reviewable place:
+ *
+ *   Metric                        Green        Amber        Red        Source
+ *   ───────────────────────────────────────────────────────────────────────────────────────
+ *   OKR / target completion %     ≥ 80%        50–79%       < 50%      signalForPercent
+ *   Cash runway (months)          ≥ 6          3–6          < 3        signalForRunway
+ *   Speed to lead                 ≤ 5 min      6–60 min     —          signalForSpeedToLead
+ *   Signed figures (profit,       > 0          —            < 0        signedColor
+ *     margin, balance, variance)               (0 = neutral, no verdict claimed)
+ *   Student signal                manual GREEN / AMBER / RED, set by the coach   signalForStudent
+ *   L1 outreach targets           per JD — see L1_TARGETS in lib/outreach-sla.ts
+ *   L2 discovery targets          per JD — see L2_TARGETS in lib/outreach-sla.ts
+ *
+ * COLOUR TOKENS. Never hardcode a status colour. `--good` / `--warn` / `--bad` (and their
+ * `-bg` fills) adapt to the theme; `--good-on-ink` / `--bad-on-ink` are the variants for chart
+ * tooltips, which sit on a dark surface in BOTH themes. Two charts carried raw hex for this and
+ * have been moved onto the tokens.
+ *
+ * A colour that does not come from this file is a bug — it means one screen has quietly decided
+ * a different number is "healthy", which is precisely the inconsistency D2 reported.
  */
 
 export type SignalLevel = "ok" | "watch" | "risk";

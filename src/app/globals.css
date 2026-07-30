@@ -62,6 +62,16 @@
   --bad: #cb2a31;
   --bad-bg: #fce7e8;
 
+  /* Status text on a chart tooltip. The tooltip surface is `var(--ink)`, and `--ink` INVERTS
+     with the theme (near-black in light, near-white in dark) — so these must invert too, in
+     the opposite direction to the rest of the palette. Light mode: pale tones on a near-black
+     tooltip, because `--good`/`--bad` are tuned against the page and would vanish there.
+     Dark mode (see the dark block): the tooltip is near-white, so these fall back to the
+     page-tuned dark tones. Added for Error Log D2 — the chart tooltips were carrying these
+     as raw hex, which is exactly the "no consistent palette" the item is about. */
+  --good-on-ink: #7ee2b0;
+  --bad-on-ink: #ff9ea2;
+
   /* data-viz — calm, blue-led; use in slot order */
   --viz-1: #4b93f7;
   --viz-2: #3fc0b7;
@@ -170,6 +180,11 @@
   --warn-bg: #352915;
   --bad: #f26d72;
   --bad-bg: #3a1e22;
+  /* The tooltip surface is `var(--ink)`, which is near-WHITE here — so status text on it needs
+     the dark, page-tuned tones (the light theme's `--good`/`--bad`), not the pale ones. Without
+     this override the light-block values render mint-on-white at roughly 1.6:1. */
+  --good-on-ink: #197e50;
+  --bad-on-ink: #cb2a31;
   --viz-grid: #23314b;
   --bg-frost: rgba(255, 255, 255, 0.07);
   --e-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 1px 3px rgba(0, 0, 0, 0.34);
@@ -207,6 +222,22 @@ body {
   font-family: var(--font-body), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* ── sr-only, contained ──
+   Tailwind's `.sr-only` is `position: absolute` with NO offsets, so the box lands at its STATIC
+   position. With no positioned ancestor that position is in page coordinates: the box is clipped by
+   nothing and its offset counts towards the document's scroll width. A hidden "up"/"down" label
+   inside a horizontally scrolled table, or a visually-hidden chart data table, therefore made the
+   whole page scroll sideways into blank space — invisible content, real scrollbar.
+
+   Pinning the NON-FOCUSABLE ones to their containing block's origin costs nothing (they are 1px and
+   clipped) and can no longer widen anything. Focusable sr-only controls are deliberately excluded:
+   they keep their static position so that focusing one does not jump the scroll to the corner, and
+   their wrappers carry `relative` instead (form.tsx, controls.tsx, console/_components/kit.tsx). */
+:is(span, div, p, li, label, table, caption, legend, h1, h2, h3, h4).sr-only {
+  left: 0;
+  top: 0;
 }
 
 /* horizontally-scrollable pill row with no visible scrollbar */
@@ -319,9 +350,9 @@ button:disabled,
   cursor: not-allowed;
 }
 
-/* Native date-ish fields (time / month / datetime-local) that TextInput leaves native:
-   make the OS picker indicator themeable and clickable. color-scheme (set on :root and
-   the dark theme) already flips the glyph light/dark; this just tidies the affordance. */
+/* Native date-ish fields that TextInput still leaves native (`week` only — date, month, time
+   and datetime-local all have their own popovers now): make the OS picker indicator themeable
+   and clickable. color-scheme already flips the glyph light/dark; this tidies the affordance. */
 .dateish-native {
   cursor: pointer;
 }
@@ -332,6 +363,32 @@ button:disabled,
 }
 .dateish-native::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
+}
+
+/* Horizontally scrolling strips (components/ui/HScroll — the opportunity + pipeline boards).
+   The platform's OVERLAY scrollbar only appears mid-gesture, which is precisely why a board
+   with stages off the right edge looked like a board that ended there. This one is always
+   present, in the app's own tokens, and thin enough not to read as chrome. */
+.hscroll-bar {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--border-strong) transparent;
+}
+.hscroll-bar::-webkit-scrollbar {
+  height: 10px;
+}
+.hscroll-bar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hscroll-bar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  /* A transparent border shrinks the visible thumb without shrinking the grab target. */
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.hscroll-bar::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+  background-clip: content-box;
 }
 
 /* clickable cards give a small press response */
@@ -596,6 +653,65 @@ tbody tr:hover {
 .row-in {
   animation: rise-in var(--dur-base) var(--ease-out) backwards;
   animation-delay: calc(var(--i, 0) * 22ms);
+}
+
+/* ── Ranked bars (components/ui/chart/RankedBars.tsx) ──
+   A CONTAINER query, not a viewport one. The same chart is dropped into a full-width
+   Reports card AND a 367px bento cell on Finance; a `sm:` viewport breakpoint is true in both,
+   because the viewport is 1440 either way. That kept the share / delta / chevron columns on
+   inside the narrow cell, and their fixed widths crushed the bar track to zero — the card
+   rendered as a list of numbers with no bars at all.
+
+   `container-type: inline-size` makes the list measure ITSELF, so the columns drop out when
+   THIS component is narrow, wherever it happens to be. Everything is authored narrow-first, so
+   a browser without container-query support degrades to the compact layout rather than the
+   broken one. */
+.bar-rows {
+  container-type: inline-size;
+  container-name: barrows;
+}
+.bar-rows .bar-row__label {
+  width: 6rem;
+}
+.bar-rows .bar-row__share,
+.bar-rows .bar-row__delta,
+.bar-rows .bar-row__chev {
+  display: none;
+}
+/* Roomy enough for the label to breathe and the share column to return. */
+@container barrows (min-width: 26rem) {
+  .bar-rows .bar-row__label {
+    width: 10rem;
+  }
+  .bar-rows .bar-row__share {
+    display: block;
+  }
+}
+/* The label column GROWS with the container, because some callers carry full sentences as
+   labels: the L1 desk's rows are job-description metric names ("BANT qualification accuracy",
+   "Lead → booked discovery call") plus an inline target and an info chip. Held at 10rem they
+   truncated to "BANT qualification acc…" — which is the same defect the eight-card grid this
+   replaced was already working around. A fixed (not flexible) width at each step is deliberate:
+   every bar must start at the same x, or the rows stop being comparable, which is the whole
+   point of ranking them. */
+@container barrows (min-width: 44rem) {
+  .bar-rows .bar-row__label {
+    width: 15rem;
+  }
+}
+@container barrows (min-width: 62rem) {
+  .bar-rows .bar-row__label {
+    width: 20rem;
+  }
+}
+/* Only now is there room for a comparison chip without starving the track. */
+@container barrows (min-width: 34rem) {
+  .bar-rows .bar-row__delta {
+    display: flex;
+  }
+  .bar-rows .bar-row__chev {
+    display: block;
+  }
 }
 
 /* ── Press ──

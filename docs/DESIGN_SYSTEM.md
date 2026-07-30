@@ -1,8 +1,9 @@
 # B2 Founder Dashboard — Design System
 
 **Design language: "Daylight"** — light blue on half-white. Calm, confident, money-grade.
-**Version 1.2 — July 2026** — §6 Motion rewritten with a real scale (chrome moves, data doesn't);
-§5.5 controls de-nativised. Reference implementation: the Founder Console.
+**Version 1.3 — July 2026** — §5.8 Charts rewritten: charts are now a shared, accessible layer
+(`lib/chart.ts` + `ui/chart/`), chosen by data shape. Hand-rolled chart SVG is closed.
+*v1.2 — §6 Motion rewritten with a real scale (chrome moves, data doesn't); §5.5 controls de-nativised.*
 *v1.1 — palette re-tuned to meet the §7 contrast floor; dark mode shipped.*
 
 This is the single source of truth for every colour, font, spacing value, and component in
@@ -281,15 +282,76 @@ The workhorse of every dashboard.
   health row from the People section.
 
 ### 5.8 Charts
-- **Funnel** (Phase 3): five stacked blocks narrowing downward, each = stage name + count, width
-  ∝ count. Biggest drop-off block outlined/filled `--bad`. Static, clean, no animation.
-- **Line** (cash position, 12 weeks): single `--primary` line, soft `--primary-tint` area fill,
-  gridlines `viz-grid`, dots on hover with tooltip.
-- **Bar** (weekly rollups, revenue by level): use program-fixed colours; rounded bar tops (`4px`).
-- **Target / progress bar** (monthly revenue target): track `--bg-surface-2`, fill colour-banded
-  — **red <50%, amber 50–80%, green >80%** (PRD). Label shows `₹x of ₹8,00,000 (62%)`.
-- **Runway gauge**: the hero box; big number + months, background band coloured by the runway rule
-  (green ≥6, amber 3–6, red <3).
+
+**Version 1.3 — July 2026.** Charts are now a shared layer, not a per-page craft. Everything below
+is built once in `src/lib/chart.ts` (pure geometry, unit-tested) and `src/components/ui/chart/`
+(the React half). **Do not hand-roll another SVG chart.** Five existed before this and each had
+re-solved the same problems differently — three of them wrongly:
+
+| Defect that shipped | Where | Why the shared layer can't repeat it |
+|---|---|---|
+| Tooltip `fill="#fff"` on a `var(--ink)` surface — invisible in dark mode (§1.4) | `CashChart` | The tooltip is HTML and uses `text-surface` |
+| Axis text at `fontSize` 8–9.5 against the §7 12px floor | `CashChart`, `Columns` | The frame measures a **pixel** box, so 12px is 12px |
+| Gridlines at `[min, mid, max]` → labels like `₹3,47,912` | `CashChart` | `niceTicks` puts them on the 1 / 2 / 5 ladder |
+| `preserveAspectRatio="none"` distorting strokes | `AreaChart` | Nothing scales; geometry is computed per measured box |
+
+#### Pick by data shape, not by taste
+| Component | Use when | Never |
+|---|---|---|
+| `TimeSeriesChart mode="line"` | a continuous quantity read for **direction** over many periods | across categories — a line asserts continuity |
+| `TimeSeriesChart mode="area"` | one series where distance from zero is also the point | with 2+ series — overlapping fills are unreadable |
+| `TimeSeriesChart mode="column"` | few discrete periods being **compared** (≤ 6) | for 14+ buckets — it becomes a picket fence |
+| `RankedBars` | named categories: "which is biggest, and is it growing?" | as a pie — angle comparison is the slowest read |
+| `ChartFrame` | a genuinely bespoke plot | as an excuse to skip the states/a11y below |
+
+Reports encodes this as a function (`chartShapeFor`) rather than a chart-type picker, deliberately:
+a dropdown lets a user plot a ranking as a line.
+
+#### Extensions (July 2026 — added for the Finance migrations and the specialist desks)
+- **Variance band** (`TimeSeriesChart band=`): shades the gap between two series — green where
+  ahead, red where behind — with crossings *interpolated* (`splitAtCrossings`), so the colour
+  flips exactly where the lines meet, never at the next data point. For target-vs-actual, where
+  the gap IS the answer.
+- **Sign-aware columns** (`TimeSeries.signedColors`): one signed series drawn as a diverging
+  chart — gains green above the axis, losses red below. One series, not two opposed ones, so the
+  net stays readable.
+- **Reference line** (`referenceLine=`): a labelled horizontal rule at a fixed value — break-even,
+  a JD floor. Always labelled inline; an unlabelled extra line is a puzzle.
+- **Derived tooltip rows** (`extraTooltipRows=`): readout-only figures (a running month total)
+  that belong in the tooltip without being plotted. They carry no swatch — a colour dot would
+  promise a mark the reader then hunts for.
+- **`RankedBars` markers / `barColor` / `hint`**: arbitrary reference ticks (target, amber floor)
+  on each row's track, signal-coloured bars, and an `InfoHint` definition per row. Together these
+  make it a true bullet chart — see `my-desk/_components/TargetAttainment.tsx`, which uses
+  `attainmentPct` to normalise metrics with different targets onto one comparable scale
+  (the pattern that replaced the eight-KPI-card grids on both specialist desks).
+
+#### Rules every chart obeys
+- **Baseline at zero** for bars/areas — a floating baseline exaggerates every difference. Lines may
+  fit their own domain (`zeroBased={false}`) where the question is direction, not magnitude.
+- **A null is a gap, not a zero.** Lines break; no rate is invented for an empty denominator.
+- **Comparison series is dashed** (line) or **hollow** (column), and the bullet marker on
+  `RankedBars` is a tick on the same track — never a paired bar. Identity survives greyscale (§7).
+- **Long tails roll up** to one "Other" past 12 rows, and the table beneath always keeps every row.
+- **Money**: compact on the axis (`₹3.5L`), full grouped figure in the tooltip (§3).
+- **States are not optional**: `ready | loading | empty | error`, all in `ChartFrame`.
+- **Accessibility**: the plot is focusable, arrow keys walk the points, and the data is exposed as
+  an `sr-only` `<table>` — an `aria-label` naming the chart tells a screen-reader user a chart
+  exists and nothing about what it says.
+- **Motion**: charts still do not animate in (§6.3). Hover/focus states are chrome and may move.
+- **Container queries, not viewport ones.** `RankedBars` sits in both a full-width card and a 367px
+  bento cell; a `sm:` breakpoint is true in both and crushed the bar track to zero. See `.bar-rows`
+  in `globals.css`.
+
+#### Still single-purpose (no frame needed — they have no axis)
+- **Donut** (`ui/charts.tsx`): part-of-whole, ≤ 5 slices, where "what share" is literally the question.
+- **Gauge / runway ring**: the hero box; big number + months, band coloured by the runway rule
+  (green ≥ 6, amber 3–6, red < 3).
+- **Sparkline**: trend shape inside a KPI card, no axis, no readout.
+- **Funnel** (Phase 3): five blocks narrowing downward, each = stage name + count, width ∝ count.
+  Biggest drop-off block outlined/filled `--bad`. Static.
+- **Target / progress bar**: track `--bg-surface-2`, fill colour-banded — **red <50%, amber 50–80%,
+  green >80%** (PRD). Label shows `₹x of ₹8,00,000 (62%)`.
 
 ### 5.9 Tooltip, modal, toast, confirm
 - **Tooltip**: `--ink` bg, white text, `caption`, `r-sm`, `e-2`. Used for all `(i)` definitions.

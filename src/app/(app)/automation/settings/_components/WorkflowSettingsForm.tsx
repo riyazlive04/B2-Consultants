@@ -67,14 +67,14 @@ export default function WorkflowSettingsForm({ settings }: { settings: WorkflowS
               onChange={(v) => patch({ engineEnabled: v })}
             />
             <SwitchRow
-              title="Allow re-enrollment"
+              title="Allow re-enrolment"
               description="On (default): a contact who has finished a workflow can go through it again if it re-triggers. Off: each contact may enter a given workflow only once, ever."
               checked={draft.allowReEnrollment}
               onChange={(v) => patch({ allowReEnrollment: v })}
             />
             <Field
-              label="Enrollments resumed per run"
-              hint="How many waiting enrollments each scheduled run picks up. Raise it if waits are firing late; lower it if runs are heavy."
+              label="Enrolments resumed per run"
+              hint="How many waiting enrolments each scheduled run picks up. Raise it if waits are firing late; lower it if runs are heavy."
             >
               <Select
                 options={BATCH_OPTS}

@@ -17,7 +17,7 @@ import { PhoneField } from "@/components/ui/PhoneField";
 import { formatDate, formatDuration } from "@/lib/format";
 import { signalForSpeedToLead } from "@/lib/signals";
 import {
-  LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, optionsFrom, PAYMENT_PLAN_LABELS, PROGRAM_LEVEL_LABELS,
+  LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, LEAD_STAGE_LABEL_ORDER, optionsFrom, PAYMENT_PLAN_LABELS, PROGRAM_LEVEL_LABELS,
 } from "@/lib/labels";
 
 // Split/full pay applies once a deposit is in (client notes: "Split Pay / Full Pay").
@@ -126,6 +126,9 @@ export function LeadSection({
         </span>
       ),
       value: (r) => LEAD_STAGE_LABELS[r.stage],
+      // Without this the column sorts alphabetically — "Won" first, "New lead" near the
+      // end — which is the reversed funnel the client reported (Error Log L1).
+      order: LEAD_STAGE_LABEL_ORDER,
     },
     {
       key: "assignedTo", header: "Assigned to",

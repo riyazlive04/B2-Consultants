@@ -185,7 +185,7 @@ export async function runRemindersNow(): Promise<WhatsAppActionResult> {
     section: "whatsapp",
     entityType: "AppSetting",
     entityId: "watiConfig",
-    summary: `Ran the WhatsApp reminder cadence — ${sent} sent, ${skipped} skipped, ${failed} failed`,
+    summary: `Ran the WhatsApp reminder schedule — ${sent} sent, ${skipped} skipped, ${failed} failed`,
     meta: { sent, skipped, failed },
   });
   return {

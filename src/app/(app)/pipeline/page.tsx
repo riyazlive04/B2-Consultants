@@ -12,12 +12,12 @@ import {
   BarChart3,
 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { Columns } from "@/components/ui/charts";
+import { LeadFlowChart } from "./_components/LeadFlowChart";
 import { Tabs } from "@/components/ui/Tabs";
 import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
 import { sendLeadReminder } from "@/server/whatsapp-actions";
 import { istMonthRange, istToday, toDateInputValue } from "@/lib/dates";
-import { formatInrMinor, formatPct } from "@/lib/format";
+import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { hasCapability, requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { getActiveLevels } from "@/server/levels";
@@ -27,41 +27,20 @@ import { getPipelineOverview, getKanbanLeads, getPipelineAging, KANBAN_STAGES } 
 import { getPipelineConfig } from "@/server/founder-config";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { getFirstCallSplit } from "@/server/assignment";
+import { countAssignableLeads } from "@/server/pipeline-actions";
 import { LeadSection } from "./_components/LeadSection";
+import { HandOutLeads } from "./_components/HandOutLeads";
 import { KanbanBoard } from "./_components/KanbanBoard";
 import { OutcomeSection } from "./_components/OutcomeSection";
 import { StageChart } from "./_components/StageChart";
 import { TargetBar } from "./_components/TargetBar";
 import { AgingSection } from "./_components/AgingSection";
 import { ArchivedGroups } from "@/components/ui/ArchivedGroups";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { getArchivedLeads } from "@/server/archive-metrics";
 import { restoreLead, purgeLead } from "@/server/contacts-actions";
 
 export const dynamic = "force-dynamic";
-
-/**
- * Keyboard- and touch-reachable definition affordance (§5.3 mandates one on
- * conversion/close rate). Pure CSS hover/focus — mirrors the MetricCard tooltip so
- * the gauge card reads identically to the show-up / HQ-rate MetricCards beside it.
- */
-function InfoTip({ text }: { text: string }) {
-  return (
-    <span className="group/tip relative ml-1 inline-flex align-middle" tabIndex={0} aria-label={text}>
-      <span
-        aria-hidden
-        className="inline-flex h-4 w-4 flex-none cursor-help items-center justify-center rounded-full border border-line bg-surface-2 text-caption leading-none text-muted"
-      >
-        i
-      </span>
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 w-56 -translate-x-1/2 whitespace-normal rounded-field bg-ink px-2.5 py-1.5 text-left text-caption font-normal normal-case leading-snug tracking-normal text-surface opacity-0 shadow-soft transition-opacity group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
-      >
-        {text}
-      </span>
-    </span>
-  );
-}
 
 export default async function PipelinePage() {
   const session = await requireSection("pipeline");
@@ -107,11 +86,13 @@ export default async function PipelinePage() {
   // ── Wave 2: the only two reads that genuinely depend on Wave 1's results —
   // WhatsApp status needs the lead IDs, and the Kanban read is opt-in (Founder Console →
   // Operations), gated on the config mode so we don't pay for it unless it's chosen.
-  const [waByLead, kanbanLeads] = await Promise.all([
+  const [waByLead, kanbanLeads, assignableCount] = await Promise.all([
     getWhatsAppStatusMap("leadId", leads.map((l) => l.id)),
     pipelineMode === "drag_drop"
       ? getKanbanLeads(session.role, session.user.id)
       : Promise.resolve([] as Awaited<ReturnType<typeof getKanbanLeads>>),
+    // Only the people who can assign need the figure, and it is a count over a growth table.
+    canConfigure ? countAssignableLeads() : Promise.resolve(0),
   ]);
   const showLeads = isAdmin || viewerVariant === null || viewerVariant === "APPOINTMENT_SETTER";
   const showOutcomes = isAdmin || viewerVariant === null || viewerVariant === "DISCOVERY_SPECIALIST";
@@ -129,23 +110,27 @@ export default async function PipelinePage() {
   const t = istToday();
   const dayKey = (d: Date) => d.toISOString().slice(0, 10);
   const countOn = (k: string) => leads.filter((l) => l.dateIn.slice(0, 10) === k).length;
+  const weekdayFmt = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
   const dayItems = Array.from({ length: 7 }, (_, idx) => {
     const d = new Date(t);
     d.setUTCDate(t.getUTCDate() - (6 - idx));
     const count = countOn(dayKey(d));
+    // The SAME weekday one week earlier. Lead flow is strongly day-of-week shaped — a quiet
+    // Sunday against a busy Saturday reads as a collapse, against last Sunday it reads as normal.
+    // This is the honest comparator, and it is why the compare series is offset by exactly 7 days
+    // rather than being the previous 7-day block slid along.
+    const prior = new Date(t);
+    prior.setUTCDate(t.getUTCDate() - (6 - idx) - 7);
     return {
-      label: new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(d),
+      label: weekdayFmt.format(d),
+      fullLabel: formatDate(d),
       value: count,
+      priorValue: countOn(dayKey(prior)),
       display: String(count),
     };
   });
   const last7 = dayItems.reduce((s, i) => s + i.value, 0);
-  let prior7 = 0;
-  for (let i = 13; i >= 7; i--) {
-    const d = new Date(t);
-    d.setUTCDate(t.getUTCDate() - i);
-    prior7 += countOn(dayKey(d));
-  }
+  const prior7 = dayItems.reduce((s, i) => s + i.priorValue, 0);
   const weekDeltaPct = prior7 > 0 ? Math.round(((last7 - prior7) / prior7) * 100) : null;
 
   // close-rate gauge (ring fills with close rate; centre = won count)
@@ -255,7 +240,10 @@ export default async function PipelinePage() {
                 </div>
                 <p className="mt-2 text-xs text-muted">
                   Close rate {formatPct(metrics.closePct)}
-                  <InfoTip text="Deals won ÷ discovery calls conducted this month — the share of completed calls that turned into paying students." />
+                  <InfoHint
+                    className="ml-1"
+                    text="Deals won ÷ discovery calls conducted this month — the share of completed calls that turned into paying students."
+                  />
                   {" · "}Solo {conv.SOLO} · Guided {conv.GUIDED} · Elite {conv.ELITE}
                 </p>
                 <p className="tnum mt-1 text-caption text-ink-3">typical 2026 month ≈ 4 wins (range 2–7)</p>
@@ -277,7 +265,7 @@ export default async function PipelinePage() {
                 ) : undefined
               }
             >
-              <Columns items={dayItems} height={150} />
+              <LeadFlowChart items={dayItems} />
             </Card>
 
             <Card
@@ -439,7 +427,14 @@ export default async function PipelinePage() {
           ...(showLeads
             ? [{
                 label: "Leads",
-                content: <LeadSection rows={leads} today={today} isAdmin={canConfigure} assignees={assignees} levelOptions={levelOpts} waStatus={waByLead} />,
+                content: (
+                  <div className="space-y-5">
+                    {/* Above the table on purpose: with 23,430 leads unowned, giving someone a
+                        day's work is the first thing to do here, not a per-row afterthought. */}
+                    {canConfigure && <HandOutLeads assignees={assignees} available={assignableCount} />}
+                    <LeadSection rows={leads} today={today} isAdmin={canConfigure} assignees={assignees} levelOptions={levelOpts} waStatus={waByLead} />
+                  </div>
+                ),
               }]
             : []),
           ...(showOutcomes

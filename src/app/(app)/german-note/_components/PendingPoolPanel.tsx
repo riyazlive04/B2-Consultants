@@ -167,20 +167,22 @@ export function PendingPoolPanel({
                       {options.length === 0 ? (
                         <span className="text-xs text-muted">No {r.level} batch with room</span>
                       ) : (
-                        <select
-                          aria-label={`Seat ${r.fullName} into a batch`}
-                          disabled={busyId === r.id}
-                          defaultValue=""
-                          onChange={(e) => seat(r.id, e.target.value)}
-                          className="rounded-btn border border-line bg-surface px-2 py-1 text-xs text-ink"
-                        >
-                          <option value="">Choose…</option>
-                          {options.map((b) => (
-                            <option key={b.id} value={b.id}>
-                              {b.name} ({b.filled}/{b.targetStrength})
-                            </option>
-                          ))}
-                        </select>
+                        // The app's own Select (§5.5), `size="sm"` for a dense table row. The
+                        // placeholder is the empty option, so "Choose…" still reads as unset.
+                        <span className="block w-44">
+                          <Select
+                            size="sm"
+                            aria-label={`Seat ${r.fullName} into a batch`}
+                            disabled={busyId === r.id}
+                            value=""
+                            placeholder="Choose…"
+                            onChange={(e) => seat(r.id, e.target.value)}
+                            options={options.map((b) => ({
+                              value: b.id,
+                              label: `${b.name} (${b.filled}/${b.targetStrength})`,
+                            }))}
+                          />
+                        </span>
                       )}
                     </td>
                     <td className="py-2">

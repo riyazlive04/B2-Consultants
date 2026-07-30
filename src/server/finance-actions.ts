@@ -8,8 +8,8 @@ import { capabilityCheck } from "@/lib/rbac";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { formatDate, formatEurMinor, formatInrMinor, majorStringToMinor } from "@/lib/format";
 import { istToday, parseDateInput } from "@/lib/dates";
-import { optionalRule, rule } from "@/lib/field-rules";
-import { appendAudit, LedgerError, postEntry, voidEntryForSource } from "./ledger";
+import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
+import { appendAudit, LedgerError, postEntry, restatedDate, voidEntryForSource } from "./ledger";
 import { expenseEntryDraft, incomeEntryDraft } from "./finance-posting";
 import { isKnownLevel, levelIncomeAccounts } from "./levels";
 import { logActivity, diffFields } from "./activity-log";
@@ -54,9 +54,33 @@ const incomeSchema = z.object({
   paymentMethod: z.enum([
     "BANK_TRANSFER_INR", "BANK_TRANSFER_EUR", "PAYPAL", "RAZORPAY", "CASH", "UPI", "CREDIT_CARD", "OTHER",
   ]),
+  // Instalment plan — the count is required the moment INSTALMENT is picked (enforced in
+  // instalmentFields below, where paymentType is known); the extra surcharge may be zero.
+  instalmentCount: blankToUndefined(intInRange(2, 36, "Number of instalments must be")),
+  instalmentExtraInr: moneyInput,
+  instalmentExtraEur: moneyInput,
   studentId: z.string().optional(), // optional link → student LTV (CONTEXT §7)
   notes: optionalRule("text"),
 });
+
+/**
+ * The instalment answers only mean something for an INSTALMENT entry — switching a row back to
+ * full payment clears them rather than leaving a stale "3 instalments" on a full payment.
+ * Returns the error string instead of throwing so the caller can hand it to the form.
+ */
+function instalmentFields(d: z.infer<typeof incomeSchema>):
+  | { error: string }
+  | { instalmentCount: number | null; instalmentExtraInrMinor: bigint; instalmentExtraEurMinor: bigint } {
+  if (d.paymentType !== "INSTALMENT") {
+    return { instalmentCount: null, instalmentExtraInrMinor: BigInt(0), instalmentExtraEurMinor: BigInt(0) };
+  }
+  if (!d.instalmentCount) return { error: "Enter how many instalments the fee is split into" };
+  return {
+    instalmentCount: Number(d.instalmentCount),
+    instalmentExtraInrMinor: d.instalmentExtraInr?.trim() ? majorStringToMinor(d.instalmentExtraInr) : BigInt(0),
+    instalmentExtraEurMinor: d.instalmentExtraEur?.trim() ? majorStringToMinor(d.instalmentExtraEur) : BigInt(0),
+  };
+}
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -88,6 +112,9 @@ function incomeDiffShape(row: Income) {
     programLevel: row.programLevel as string,
     paymentType: row.paymentType as string,
     paymentMethod: row.paymentMethod as string,
+    instalmentCount: row.instalmentCount,
+    instalmentExtraInrMinor: row.instalmentExtraInrMinor.toString(),
+    instalmentExtraEurMinor: row.instalmentExtraEurMinor.toString(),
     studentId: row.studentId,
     notes: row.notes,
   };
@@ -125,6 +152,8 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
   const d = parsed.data;
   const amountError = requireSomeAmount(d.amountInr, d.amountEur);
   if (amountError) return { ok: false, error: amountError };
+  const instalment = instalmentFields(d);
+  if ("error" in instalment) return { ok: false, error: instalment.error };
   if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
 
   const fx = await getTodayInrPerEur();
@@ -142,6 +171,7 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
           programLevel: d.programLevel,
           paymentType: d.paymentType,
           paymentMethod: d.paymentMethod,
+          ...instalment,
           studentId: d.studentId || null,
           notes: d.notes || null,
           enteredById: session.user.id,
@@ -174,6 +204,7 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
         programLevel: row.programLevel,
         paymentType: row.paymentType,
         paymentMethod: row.paymentMethod,
+        instalmentCount: row.instalmentCount,
       },
     });
   }
@@ -192,6 +223,8 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
   const d = parsed.data;
   const amountError = requireSomeAmount(d.amountInr, d.amountEur);
   if (amountError) return { ok: false, error: amountError };
+  const instalment = instalmentFields(d);
+  if ("error" in instalment) return { ok: false, error: instalment.error };
   if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
 
   const existing = await prisma.income.findUnique({ where: { id } });
@@ -212,6 +245,7 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
           programLevel: d.programLevel,
           paymentType: d.paymentType,
           paymentMethod: d.paymentMethod,
+          ...instalment,
           studentId: d.studentId || null,
           notes: d.notes || null,
           manualOverride: existing.source !== "MANUAL" ? true : existing.manualOverride,
@@ -219,18 +253,21 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
       });
 
       // Void before posting: the ledger permits only one live entry per source row.
-      const reversalId = await voidEntryForSource(tx, "INCOME", id, {
+      const voided = await voidEntryForSource(tx, "INCOME", id, {
         reason: "income edited",
         actorId: session.user.id,
         on: istToday(),
       });
-      const entryId = await postEntry(tx, incomeEntryDraft(income, incomeAccounts));
+      // `restatedDate` keeps both halves of the correction in one period — normally the record's
+      // own date, but today's if the original sat in a month that has since been locked.
+      const draft = incomeEntryDraft(income, incomeAccounts);
+      const entryId = await postEntry(tx, { ...draft, date: restatedDate(voided, draft.date) });
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "income.update",
         entityType: "Income",
         entityId: id,
-        payload: { reversalId, entryId, studentName: income.studentName },
+        payload: { reversalId: voided?.reversalId ?? null, entryId, studentName: income.studentName },
       });
       updated = income;
     });
@@ -270,7 +307,7 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
   let removed: Income | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
-      const reversalId = await voidEntryForSource(tx, "INCOME", id, {
+      const voided = await voidEntryForSource(tx, "INCOME", id, {
         reason: "income archived",
         actorId: session.user.id,
         on: istToday(),
@@ -281,7 +318,7 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
         action: "income.archive",
         entityType: "Income",
         entityId: id,
-        payload: { reversalId },
+        payload: { reversalId: voided?.reversalId ?? null },
       });
       removed = income;
     });
@@ -481,18 +518,19 @@ export async function updateExpense(id: string, form: FormData): Promise<ActionR
         },
       });
 
-      const reversalId = await voidEntryForSource(tx, "EXPENSE", id, {
+      const voided = await voidEntryForSource(tx, "EXPENSE", id, {
         reason: "expense edited",
         actorId: session.user.id,
         on: istToday(),
       });
-      const entryId = await postEntry(tx, expenseEntryDraft(expense));
+      const draft = expenseEntryDraft(expense);
+      const entryId = await postEntry(tx, { ...draft, date: restatedDate(voided, draft.date) });
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "expense.update",
         entityType: "Expense",
         entityId: id,
-        payload: { reversalId, entryId, vendor: expense.vendor },
+        payload: { reversalId: voided?.reversalId ?? null, entryId, vendor: expense.vendor },
       });
       updated = expense;
     });
@@ -527,7 +565,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
   let removed: Expense | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
-      const reversalId = await voidEntryForSource(tx, "EXPENSE", id, {
+      const voided = await voidEntryForSource(tx, "EXPENSE", id, {
         reason: "expense archived",
         actorId: session.user.id,
         on: istToday(),
@@ -538,7 +576,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
         action: "expense.archive",
         entityType: "Expense",
         entityId: id,
-        payload: { reversalId },
+        payload: { reversalId: voided?.reversalId ?? null },
       });
       removed = expense;
     });

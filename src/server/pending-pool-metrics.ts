@@ -65,7 +65,7 @@ export const getPendingPoolData = cache(async (minToOpen: number = DEFAULT_MIN_T
         workshop: { select: { name: true } },
       },
     }),
-    prisma.gnBatch.findMany({
+    prisma.batch.findMany({
       where: { status: "ACTIVE" },
       orderBy: { createdAt: "asc" },
       select: {
@@ -140,7 +140,7 @@ const LEVEL_TO_FEE_LEVEL: Record<string, TutorFeeLevel | undefined> = {
  */
 export const getBatchCosts = cache(async (): Promise<BatchCostRow[]> => {
   const [batches, config] = await Promise.all([
-    prisma.gnBatch.findMany({
+    prisma.batch.findMany({
       where: { status: "ACTIVE" },
       orderBy: [{ level: "asc" }, { name: "asc" }],
       select: {

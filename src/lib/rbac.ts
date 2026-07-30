@@ -52,7 +52,13 @@ export const requireSession = cache(async () => {
   // overrides live on the user row so Admin changes take effect on next request
   const row = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { sectionAccess: true, capabilities: true, status: true, themePreference: true },
+    select: {
+      sectionAccess: true,
+      capabilities: true,
+      status: true,
+      themePreference: true,
+      mustChangePassword: true,
+    },
   });
 
   // Suspension takes effect on the very next request. Suspending already deletes the
@@ -61,6 +67,13 @@ export const requireSession = cache(async () => {
   if (row?.status === "SUSPENDED") {
     await prisma.session.deleteMany({ where: { userId: session.user.id } });
     redirect("/login?error=suspended");
+  }
+
+  // O4 — an admin set this person's password, so they must replace it before anything else
+  // renders. /change-password fetches the session directly (not through this guard), so it is
+  // the one authenticated page that does NOT loop here. Cleared the moment they change it.
+  if (row?.mustChangePassword) {
+    redirect("/change-password");
   }
 
   const overrides = (row?.sectionAccess as SectionOverrides | null) ?? null;

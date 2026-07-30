@@ -100,7 +100,9 @@ export function SelectMenu({
       case "End": e.preventDefault(); setActive(step(options.length, -1)); return;
       case "Enter":
       case " ": e.preventDefault(); commit(active); return;
-      case "Escape": e.preventDefault(); setOpen(false); triggerRef.current?.focus(); return;
+      // stopPropagation: inside a Modal, Escape must close the LIST only — the modal's own
+      // window-level Escape listener would otherwise fire too and take the half-filled form.
+      case "Escape": e.preventDefault(); e.stopPropagation(); setOpen(false); triggerRef.current?.focus(); return;
       case "Tab": setOpen(false); return;
       default:
         if (e.key.length === 1) {

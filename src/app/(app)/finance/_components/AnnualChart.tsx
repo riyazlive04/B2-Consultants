@@ -166,15 +166,15 @@ export function AnnualChart({
               return (
                 <g transform={`translate(${tx - boxW / 2}, 4)`}>
                   <rect width={boxW} height={h.isFuture ? 40 : 52} rx="6" fill="var(--ink)" opacity="0.94" />
-                  <text x={boxW / 2} y="14" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff">
+                  <text x={boxW / 2} y="14" textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--on-accent)">
                     {h.label} {h.isFuture ? "(projected)" : ""}
                   </text>
-                  <text x={boxW / 2} y="26" textAnchor="middle" fontSize="9" fill="#fff" opacity="0.8">
+                  <text x={boxW / 2} y="26" textAnchor="middle" fontSize="9" fill="var(--on-accent)" opacity="0.8">
                     {h.isFuture
                       ? `on pace: ${formatInrMinor(h.cumProjectedInr, { compact: true })}`
                       : `achieved ${formatInrMinor(h.cumAchievedInr, { compact: true })}`}
                   </text>
-                  <text x={boxW / 2} y="37" textAnchor="middle" fontSize="9" fill="#fff" opacity="0.8">
+                  <text x={boxW / 2} y="37" textAnchor="middle" fontSize="9" fill="var(--on-accent)" opacity="0.8">
                     target {formatInrMinor(h.cumTargetInr, { compact: true })}
                   </text>
                   {!h.isFuture && (
@@ -184,7 +184,7 @@ export function AnnualChart({
                       textAnchor="middle"
                       fontSize="9"
                       fontWeight="700"
-                      fill={variance >= 0 ? "#7ee2b0" : "#ff9ea2"}
+                      fill={variance >= 0 ? "var(--good-on-ink)" : "var(--bad-on-ink)"}
                     >
                       {variance >= 0 ? "ahead " : "behind "}
                       {formatInrMinor(Math.abs(variance), { compact: true })}

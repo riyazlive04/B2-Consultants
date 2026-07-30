@@ -51,7 +51,7 @@ export const GUIDES: GuideEntry[] = [
       "Overdue rows turn red on their own. Metric cards at the top are always this-month, auto-calculated.",
       "Commission tab: each student-linked payment splits automatically - 5% when one person did both calls, 3% each when first call and discovery were split.",
     ],
-    tip: "Link income entries to a student (optional dropdown) - that powers LTV and the commission report.",
+    tip: "Link income entries to a student (optional dropdown) - that powers total paid and the commission report.",
   },
   {
     section: "pipeline", icon: "📞", title: "Pipeline", href: "/pipeline",
@@ -67,10 +67,14 @@ export const GUIDES: GuideEntry[] = [
   },
   {
     section: "daily-log", icon: "📝", title: "My Daily Log", href: "/daily-log",
-    what: "Your numbers for today, once per day, before 7 PM.",
+    what: "Your numbers for today, once per day, before the day's deadline - most of them counted for you.",
     steps: [
-      "Open the page - fields you already did in the system today are pre-filled (auto-captured).",
-      "Adjust, add notes/blockers, submit. One log per day; corrections go through Admin.",
+      "Fields tagged “Auto” are already counted from what you did in the app today - check them, correct anything that reads wrong, add your notes and blockers, and submit. Notes are never auto-filled.",
+      "Discovery Specialist: calls completed, highly qualified and no-shows come from the discovery outcomes you entered today; proposals from your stage moves to Proposal sent; follow-ups from the calls you marked “follow-up needed”.",
+      "Appointment Setter: leads contacted, appointments set and pipeline adds are counted for you - follow-up messages have no record anywhere, so that one is always typed by hand.",
+      "Delivery Coach: sessions delivered counts every enrollment whose last session date is today, at-risk flags counts the students you turned red today. Check-ins and assignments reviewed have no source at all - always type those.",
+      "One log per day. With the end-of-day rules on, the day closes at the cutoff Admin sets in Console (9:00 PM by default) and no new log can be started after it; the page always shows the deadline you're working to. Corrections go through Admin.",
+      "Miss that cutoff and the end-of-day job saves what your activity showed, stamped auto-saved rather than submitted by you. It is incomplete by construction - anything it couldn't see is left blank, never zeroed - so it stays open for you to amend (until the next day by default); fill in the rest and it becomes your own log and locks like any other.",
       "Update your OKR progress right below the form - takes ten seconds, keeps your circles green.",
     ],
     tip: "Submit daily to grow your 🔥 streak - 7, 14 and 30-day milestones are tracked.",
@@ -101,7 +105,7 @@ export const GUIDES: GuideEntry[] = [
   },
   {
     section: "students", icon: "🎓", title: "Students", href: "/students",
-    what: "Every B2 student, their 90/120-day journey, signals, satisfaction and LTV.",
+    what: "Every B2 student, their 90/120-day journey, signals, satisfaction and total paid.",
     steps: [
       "Create a student when they pay - duration and end date derive from the program level.",
       "The tracker lists active Guided/Elite students: day number, milestone, signal dot, days since session.",
@@ -109,7 +113,7 @@ export const GUIDES: GuideEntry[] = [
       "Generate the sprint plan on a Guided/Elite enrollment (13 or 18 weeks), set weekly targets, and record the weekend check-in as Achieved or Missed.",
       "The Early-warning radar on top flags drifting students - missed sprint weeks show up here too.",
     ],
-    tip: "Upgrades = add a second enrollment on the same student; LTV sums across all of them.",
+    tip: "Upgrades = add a second enrollment on the same student; total paid sums across all of them.",
   },
   {
     section: "my-journey", icon: "🗺️", title: "My Journey", href: "/my-journey",

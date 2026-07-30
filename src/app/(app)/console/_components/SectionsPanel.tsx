@@ -15,7 +15,7 @@ import {
   type SectionsConfig,
 } from "@/lib/sections";
 import { FallbackIcon, SECTION_ICONS } from "@/components/shell/section-icons";
-import { Card, ColHead, ColRow, Hint, Picker, SaveBar, TextIn, Toggle, type Cols } from "./kit";
+import { Card, ColHead, ColRow, ColScroll, Hint, Picker, SaveBar, TextIn, Toggle, type Cols } from "./kit";
 
 /**
  * Every nav section: rename it, re-icon it, move it, group it, switch it off, and
@@ -108,6 +108,7 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
       title="Sections"
       subtitle="Rename, reorder, regroup, switch off, and set which roles see each section by default."
     >
+      <ColScroll>
       <ColHead cols={SECTION_COLS} labels={["", "", "Label", "Icon", "Group", "Path", "Status"]} />
       <div className="space-y-1.5">
         {rows.map((s, i) => {
@@ -200,6 +201,7 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
           );
         })}
       </div>
+      </ColScroll>
 
       <div className="mt-4 space-y-1">
         <Hint>

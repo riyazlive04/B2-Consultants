@@ -1,0 +1,35 @@
+# Runs the SHIPPED production stack (docker-compose.prod.yml) on a local machine,
+# against the production Supabase database. Overlay only — every service, healthcheck,
+# read-only mount and dependency ordering comes from the prod file unchanged.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.local.yml \
+#     --env-file .env.production up -d --build
+#
+# Two deliberate differences from a VPS deploy, both about the ORIGIN, not the app:
+#   1. Caddy issues its own cert (Caddyfile.local, `local_certs`) because there is no
+#      public DNS record for the ACME challenge to answer.
+#   2. The app is published on loopback for host-side debugging (see below).
+#
+# THE DATABASE IS STILL PRODUCTION. `migrate` runs `prisma migrate deploy` against
+# Supabase and `cron` ticks /api/cron/* against real data on a real schedule.
+
+services:
+  caddy:
+    volumes:
+      # Compose merges `volumes` by target path, so this REPLACES the prod Caddyfile
+      # mount rather than colliding with it.
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  app:
+    ports:
+      # Bound to 127.0.0.1 explicitly, NOT 0.0.0.0. The prod file deliberately leaves the
+      # app unpublished so a public VPS IP can never reach it bypassing TLS; on a laptop
+      # a loopback-only port is unreachable off-machine and makes `curl http://127.0.0.1:3010/api/health`
+      # possible without dealing with the internal CA. Drop this block for exact parity.
+      - "127.0.0.1:3010:3000"
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -113,6 +113,19 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
             title={`Agreement ${row.documentNo}`}
             className="h-[820px] w-full bg-surface-2"
           />
+          {/* iOS and most Android browsers refuse to render a PDF inside an iframe — the founder on
+              a phone gets a blank panel and concludes the preview is broken. The student's signing
+              page has carried this escape hatch since day one; this screen was the one that didn't. */}
+          <div className="border-t border-line px-4 py-2.5 text-center">
+            <a
+              href={`/api/agreements/${row.id}/pdf`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Not showing? Open the PDF in a new tab
+            </a>
+          </div>
         </div>
 
         <div className="space-y-6">

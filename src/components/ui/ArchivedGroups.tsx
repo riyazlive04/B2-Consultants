@@ -4,6 +4,7 @@ import { Archive } from "lucide-react";
 import { EmptyState } from "@/components/ui/kit";
 import { ArchivedPanel } from "@/components/ui/ArchivedPanel";
 import type { ArchivedRow } from "@/server/archive-metrics";
+import { RETENTION_DAYS } from "@/lib/soft-delete";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 type Action = (id: string) => Promise<ActionResult>;
@@ -29,12 +30,19 @@ export function ArchivedGroups({ groups, canPurge }: { groups: ArchivedGroup[]; 
       <EmptyState
         icon={<Archive size={20} />}
         title="Nothing archived"
-        body="Deleted records in this section land here, ready to restore or delete for good."
+        body={`Deleted records in this section land here, ready to restore or delete for good. Anything left here is purged automatically after ${RETENTION_DAYS} days.`}
       />
     );
   }
   return (
     <div className="space-y-6">
+      {/* K5: the retention rule was real but invisible — a 90-day purge cron has been running
+          with nothing on screen saying so, which means "archived" read as "kept forever".
+          Stated once, above the lists, so it is seen before something is relied upon. */}
+      <p className="text-caption text-muted">
+        Archived records are kept for {RETENTION_DAYS} days, then permanently deleted. Restore
+        anything you still need before then.
+      </p>
       {nonEmpty.map((g) => (
         <section key={g.label}>
           <h3 className="mb-2 text-sm font-semibold text-ink-2">

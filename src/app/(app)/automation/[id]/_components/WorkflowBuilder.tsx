@@ -15,6 +15,7 @@ import { Card, Pill } from "@/components/ui/kit";
 import { toast } from "@/components/ui/feedback";
 import { DateText } from "@/components/ui/DateText";
 import { saveWorkflow, togglePublishWorkflow, restoreWorkflow } from "@/server/automation-actions";
+import WorkflowDryRun from "./WorkflowDryRun";
 
 type Pickers = {
   forms: { id: string; name: string }[];
@@ -42,6 +43,12 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
   const [addType, setAddType] = useState<WorkflowActionType>("SEND_EMAIL");
   const [saving, setSaving] = useState(false);
   const isDeleted = workflow.deletedAt !== null;
+  // The dry run previews what's on screen, but Publish arms what's SAVED — so the panel needs to
+  // know when those have drifted apart. Comparing the serialised definition is enough: these are
+  // plain JSON values built in a stable key order by the same setters.
+  const dirty =
+    JSON.stringify([name, triggerType, triggerConfig, actions, folderId || null]) !==
+    JSON.stringify([workflow.name, workflow.triggerType, workflow.triggerConfig, workflow.actions, workflow.folderId]);
 
   function updateAction(i: number, patch: Partial<WorkflowAction>) {
     setActions((as) => as.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
@@ -94,7 +101,7 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
       {isDeleted && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-field border border-risk bg-risk-soft px-4 py-3">
           <p className="text-sm font-medium text-risk">
-            This workflow is deleted. It isn’t triggering, and its in-flight enrollments are paused.
+            This workflow is deleted. It isn’t triggering, and its in-flight enrolments are paused.
           </p>
           <Btn size="sm" icon={<RotateCcw size={15} />} onClick={restore}>Restore</Btn>
         </div>
@@ -179,6 +186,16 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
           ))}
         </div>
       </Card>
+
+      {/* Dry run — sits between the definition and the live enrollments, which is the order the
+          work happens in: build it, check it against real history, then arm it. */}
+      <WorkflowDryRun
+        triggerType={triggerType}
+        triggerConfig={triggerConfig}
+        actions={actions}
+        dirty={dirty}
+        disabled={isDeleted || actions.length === 0}
+      />
 
       {/* Enrollments */}
       {workflow.enrollments.length > 0 && (

@@ -22,6 +22,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { LogEntry, LogMetric, LogStatusKey, StatusTone } from "@/lib/daily-log";
 import { Avatar, EmptyState, Pill, type Tone } from "./kit";
+import { SelectMenu } from "./SelectMenu";
 
 // ── icon maps ──────────────────────────────────────────────────
 
@@ -309,15 +310,19 @@ export function ActivityTimeline({
             </button>
           ))}
         </div>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as "new" | "old")}
-          aria-label="Sort entries"
-          className="ml-auto h-10 rounded-field border border-line bg-surface px-2.5 text-sm text-ink-2 outline-none focus:border-primary"
-        >
-          <option value="new">Newest first</option>
-          <option value="old">Oldest first</option>
-        </select>
+        {/* SelectMenu, not a raw <select>: §5.5 puts every option list in the app's own popover,
+            and this one sat beside custom pickers wearing the OS dropdown. */}
+        <span className="ml-auto w-40">
+          <SelectMenu
+            value={sort}
+            onChange={(e) => setSort(e.target.value as "new" | "old")}
+            aria-label="Sort entries"
+            options={[
+              { value: "new", label: "Newest first" },
+              { value: "old", label: "Oldest first" },
+            ]}
+          />
+        </span>
       </div>
 
       {/* results */}

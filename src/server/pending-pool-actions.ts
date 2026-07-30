@@ -88,7 +88,7 @@ export async function seatPendingJoiner(joinerId: string, batchId: string): Prom
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM gn_batch WHERE id = ${batchId} FOR UPDATE`;
-    const batch = await tx.gnBatch.findUnique({
+    const batch = await tx.batch.findUnique({
       where: { id: batchId },
       select: { name: true, level: true, targetStrength: true },
     });
@@ -104,13 +104,13 @@ export async function seatPendingJoiner(joinerId: string, batchId: string): Prom
       return { ok: false as const, error: `Level mismatch: ${joiner.student.fullName} is waiting for ${joiner.level}, not ${batch.level}` };
     }
 
-    const filled = await tx.gnBatchMember.count({ where: { batchId } });
+    const filled = await tx.batchMember.count({ where: { batchId } });
     if (filled >= batch.targetStrength) {
       return { ok: false as const, error: `"${batch.name}" is full (${filled}/${batch.targetStrength}) — open another batch.` };
     }
 
     // Membership + pool exit commit together: a seated student must never still read as waiting.
-    await tx.gnBatchMember.create({ data: { batchId, studentId: joiner.studentId } });
+    await tx.batchMember.create({ data: { batchId, studentId: joiner.studentId } });
     await tx.gnPendingJoiner.update({
       where: { id: joinerId },
       data: { assignedBatchId: batchId, assignedAt: new Date() },

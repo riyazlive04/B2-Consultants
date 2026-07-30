@@ -80,7 +80,12 @@ export const getTeamGame = cache(async (): Promise<TeamGame> => {
 
   const [profiles, logs, stageHistory, outcomes, milestoneLogs, signalLogs, okrs] = await Promise.all([
     prisma.teamProfile.findMany({
-      where: { userId: { not: null }, dashboardRole: { not: "ADMIN" } },
+      // The Arena ranks the people who COMPETE — the outreach/discovery team (spec §Q4 / plan 3.6:
+      // "leaderboard excludes non-competing roles, head coach promoted out of ranking"). ADMIN was
+      // already out; HEAD is oversight, not a contender, so a head coach who logs a session no
+      // longer lands on the board above the telecallers it exists to motivate. To let the head
+      // compete again, drop HEAD from this list — a one-line reversal.
+      where: { userId: { not: null }, dashboardRole: { notIn: ["ADMIN", "HEAD"] } },
       orderBy: { orderIndex: "asc" },
     }),
     prisma.dailyLog.findMany({ orderBy: { date: "asc" }, take: 3000 }),

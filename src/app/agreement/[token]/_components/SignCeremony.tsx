@@ -14,6 +14,7 @@ import { Btn } from "@/components/ui/controls";
 import { SignaturePad, type SignatureValue } from "@/components/ui/SignaturePad";
 import { describeDevice, type SigningDevice } from "@/lib/device";
 import { declineAgreement, requestSignOtp, signAgreement } from "@/server/agreement-sign";
+import { SignedCopyLinks } from "./SignedCopyLinks";
 
 /**
  * The student's signing ceremony, in the order a signature has to happen:
@@ -99,9 +100,13 @@ export function SignCeremony({
         <h2 className="mt-3 font-display text-h1 text-ink">Agreement signed</h2>
         <p className="mx-auto mt-2 max-w-sm text-body text-ink-2">
           Thank you, {studentName.split(" ")[0]}. {documentNo} is now executed. Your countersigned copy is on
-          its way to you on WhatsApp — if it doesn&apos;t arrive, contact B2 Consultants and they&apos;ll send
-          it over.
+          its way to you on WhatsApp — and you can take it now from here.
         </p>
+        {/* The moment they most want the document is the moment they finish signing. The bytes are
+            already sealed by the time this screen renders (the server seals inside the same write
+            that burns the token), so the copy route is live and does not depend on the WhatsApp
+            send, which is fail-safe and may well have been skipped. */}
+        <SignedCopyLinks token={token} />
       </div>
     );
   }

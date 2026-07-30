@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Field, TextInput, Select, TextArea, SubmitButton, FormError } from "@/components/ui/form";
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { Avatar, EmptyState, Pill } from "@/components/ui/kit";
+import { HScroll, type HScrollHandle } from "@/components/ui/HScroll";
 import { Tabs } from "@/components/ui/Tabs";
 import { DateText } from "@/components/ui/DateText";
 import {
@@ -81,7 +82,10 @@ export default function Board({
   // loop keeps scrolling using the last-seen speed, so it continues even while the cursor is held
   // still at an edge (dragover stops firing when stationary). Listeners are wired only while
   // dragId is set and torn down (with the loop) the moment the drag ends.
-  const boardRef = useRef<HTMLDivElement>(null);
+  // The scrollable strip now belongs to HScroll, which hands it back through this handle — the
+  // auto-scroll below drives exactly the same element it always did.
+  const boardScroll = useRef<HScrollHandle>(null);
+  const boardEl = () => boardScroll.current?.el ?? null;
   const rafRef = useRef<number | null>(null);
   const speedRef = useRef({ x: 0, y: 0 });
 
@@ -91,7 +95,7 @@ export default function Board({
     const MAX = 22; // max px scrolled per frame at the very edge
 
     const tick = () => {
-      const el = boardRef.current;
+      const el = boardEl();
       const { x, y } = speedRef.current;
       if (el && x !== 0) el.scrollLeft += x;
       if (y !== 0) window.scrollBy(0, y);
@@ -107,7 +111,7 @@ export default function Board({
     const ramp = (over: number) => MAX * Math.min(1, over / EDGE);
 
     const onDragOver = (e: DragEvent) => {
-      const el = boardRef.current;
+      const el = boardEl();
       if (!el) return;
       const r = el.getBoundingClientRect();
       let x = 0;
@@ -332,8 +336,13 @@ export default function Board({
         )}
       </div>
 
-      {/* Desktop / tablet: full drag-and-drop board */}
-      <div ref={boardRef} className="hidden gap-3 overflow-x-auto pb-3 md:flex">
+      {/* Desktop / tablet: full drag-and-drop board.
+          HScroll adds the affordance this was missing — edge fades, paging arrows and an
+          always-visible scrollbar — so stages off the right edge announce themselves instead of
+          looking like the end of the board. It exposes the same scroll element the drag
+          auto-scroll below already drives. */}
+      <HScroll ref={boardScroll} label="Pipeline stages" className="hidden pb-1 md:block">
+      <div className="flex gap-3 pb-3">
         {stages.map((stage) => (
           <div
             key={stage.id}
@@ -369,6 +378,7 @@ export default function Board({
           </div>
         ))}
       </div>
+      </HScroll>
 
       {/* Add opportunity */}
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add opportunity" size="md">

@@ -61,6 +61,20 @@ export function istMonthInstantRange(ref = istToday()): { start: Date; end: Date
 }
 
 /**
+ * The IST calendar month a real INSTANT falls in, as "YYYY-MM".
+ *
+ * For bucketing timestamp columns (changedAt / createdAt / qualifiedAt) into months without
+ * running one query per month. Taking the UTC month of the raw instant would push everything
+ * between 00:00 and 05:30 IST on the 1st into the previous month.
+ *
+ * For a `@db.Date` column, use `d.toISOString().slice(0, 7)` directly — those are already
+ * UTC-midnight day boundaries and must NOT be shifted.
+ */
+export function istMonthKeyOf(instant: Date): string {
+  return new Date(instant.getTime() + IST_OFFSET_MS).toISOString().slice(0, 7);
+}
+
+/**
  * Minutes elapsed since IST midnight for a real instant (0..1439). IST is a fixed +05:30
  * with no DST, so this is exact arithmetic rather than a timezone-database lookup.
  * Used by the automation engine's quiet-hours window.
@@ -117,6 +131,49 @@ export function kpiInstantRange(key: KpiRangeKey, ref = istToday()): { start: Da
 }
 
 /** Parse an <input type="date"> value (YYYY-MM-DD) to a UTC-midnight Date. */
+/**
+ * Cash-chart period control (Error Log F6). The chart was hardcoded to 12 weeks, so a founder
+ * asking "how has cash moved this year" had no way to see it.
+ *
+ * NOT the spec's literal list. F6 asks for "last 7 days / 12 weeks / 12 months / 4 quarters",
+ * but a CashPosition is one entry PER WEEK — a 7-day window plots a single point and a straight
+ * line through it, which looks broken rather than informative. These four windows all yield a
+ * readable series from weekly data while covering the same span of intent: recent detail through
+ * to the whole year.
+ */
+export type CashPeriodKey = "12w" | "6m" | "12m" | "4q";
+
+export const CASH_PERIOD_OPTIONS: ReadonlyArray<{ value: CashPeriodKey; label: string }> = [
+  { value: "12w", label: "12 weeks" },
+  { value: "6m", label: "6 months" },
+  { value: "12m", label: "12 months" },
+  { value: "4q", label: "4 quarters" },
+] as const;
+
+export function parseCashPeriod(v: string | string[] | undefined): CashPeriodKey {
+  const raw = Array.isArray(v) ? v[0] : v;
+  return raw === "6m" || raw === "12m" || raw === "4q" ? raw : "12w";
+}
+
+/** Start of the window, as a UTC-midnight date. Exclusive of nothing — callers filter `>=`. */
+export function cashPeriodStart(key: CashPeriodKey, ref = istToday()): Date {
+  const d = new Date(ref);
+  switch (key) {
+    case "6m":
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 6, d.getUTCDate()));
+    case "12m":
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 12, d.getUTCDate()));
+    // 4 quarters IS twelve months of data; it differs in how the reader groups it, not in span.
+    case "4q":
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 12, d.getUTCDate()));
+    default: {
+      const twelveWeeks = new Date(d);
+      twelveWeeks.setUTCDate(d.getUTCDate() - 12 * 7);
+      return twelveWeeks;
+    }
+  }
+}
+
 export function parseDateInput(value: string): Date {
   return new Date(`${value}T00:00:00Z`);
 }

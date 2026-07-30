@@ -1,0 +1,47 @@
+# TLS termination for a LOCAL run of the production stack (docker-compose.local.yml).
+#
+# Same job as the VPS Caddyfile, one difference: there is no public DNS record and no
+# port 80 reachable from the internet, so the ACME HTTP-01 challenge cannot complete.
+# `local_certs` makes Caddy issue the cert from its own internal CA instead.
+#
+# https is NOT cosmetic here. src/lib/env.ts refuses to boot when BETTER_AUTH_URL is
+# http:// or localhost, and better-auth infers secure-cookie behaviour from that scheme —
+# over plain http the session cookie is set Secure and never sent back, so sign-in fails
+# silently. APP_DOMAIN is b2.localtest.me, a public DNS name that resolves to 127.0.0.1,
+# which satisfies the "not localhost" rule without touching the hosts file.
+#
+# The browser will warn once about the untrusted CA (Caddy's local root). Accept it, or
+# trust the root exported from the caddy container at
+# /data/caddy/pki/authorities/local/root.crt.
+
+{
+	local_certs
+	# No `email` global: there is no ACME account to register.
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	tls internal
+
+	# X-Forwarded-Proto / -Host are set by reverse_proxy automatically, and the app
+	# depends on them: users-actions.ts builds invite + reset origins from these headers.
+	reverse_proxy app:3000 {
+		health_uri /api/health
+		health_interval 30s
+		health_timeout 10s
+	}
+
+	# No Strict-Transport-Security here, unlike production: pinning https for a loopback
+	# hostname in the browser's HSTS store outlives this container and is a nuisance to
+	# undo. Everything else (X-Frame-Options, CSP frame-ancestors, nosniff, Referrer-Policy,
+	# Permissions-Policy) is still set per-route by next.config.mjs — do not duplicate it.
+	header {
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

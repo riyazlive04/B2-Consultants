@@ -215,7 +215,10 @@ export function CheckCard({
   return (
     <label
       title={title}
-      className={`flex cursor-pointer items-center gap-3 rounded-field border px-3.5 py-3 text-sm transition-colors ${
+      /* `relative` contains the sr-only input below — absolute with no offsets, so without a
+         positioned ancestor it lands at its static position in page coordinates, unclipped, and
+         widens the document. */
+      className={`relative flex cursor-pointer items-center gap-3 rounded-field border px-3.5 py-3 text-sm transition-colors ${
         checked ? "border-primary bg-primary-soft" : "border-line bg-surface hover:bg-surface-2"
       } ${disabled ? "cursor-not-allowed opacity-70" : ""}`}
     >

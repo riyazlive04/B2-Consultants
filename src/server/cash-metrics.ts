@@ -1,9 +1,10 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { istMonthRange, istToday, kpiDateRange, type KpiRangeKey } from "@/lib/dates";
+import { cashPeriodStart, istMonthRange, istToday, kpiDateRange, type CashPeriodKey, type KpiRangeKey } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
+import { isRecurring, monthlyEquivalentMinor, nextOccurrence } from "@/lib/payable-frequency";
 import { getPendingRows } from "./finance-metrics";
 
 /**
@@ -15,13 +16,7 @@ import { getPendingRows } from "./finance-metrics";
 
 /** Monthly-equivalent of a payable (quarterly/3, annual/12; one-time excluded). */
 function monthlyEquivalentInr(p: { amountInrMinor: bigint; frequency: string }): number {
-  const v = Number(p.amountInrMinor);
-  switch (p.frequency) {
-    case "MONTHLY": return v;
-    case "QUARTERLY": return v / 3;
-    case "ANNUAL": return v / 12;
-    default: return 0;
-  }
+  return monthlyEquivalentMinor(p.amountInrMinor, p.frequency);
 }
 
 /**
@@ -76,17 +71,18 @@ export const getRunwaySnapshot = cache(async (range: KpiRangeKey = "this-month")
   };
 });
 
-export async function getCashOverview() {
+export async function getCashOverview(period: CashPeriodKey = "12w") {
   const today = istToday();
   const month = istMonthRange(today);
-  const twelveWeeksAgo = new Date(today);
-  twelveWeeksAgo.setUTCDate(today.getUTCDate() - 12 * 7);
+  // F6: the chart window is now selectable; 12 weeks stays the default so every existing
+  // caller (and a bare /cash visit) renders exactly what it did before.
+  const chartFrom = cashPeriodStart(period, today);
 
   const [runway, positions, pendingRows, payables, monthIncomes, growthSetting, monthlyRevenue] =
     await Promise.all([
       getRunwaySnapshot(),
       prisma.cashPosition.findMany({
-        where: { date: { gte: twelveWeeksAgo } },
+        where: { date: { gte: chartFrom } },
         orderBy: { date: "asc" },
       }),
       getPendingRows(),
@@ -125,7 +121,15 @@ export async function getCashOverview() {
     rows: active.map((p) => ({
       id: p.id,
       studentName: p.studentName,
+      // `studentId` carries the student CODE through to the age analysis (Error Log G3 /
+      // I1): two students called "Anna Smith" is a real case here and has already caused a
+      // payment to be credited to the wrong one, so a name on its own is not an identifier.
+      studentId: p.studentId,
       balanceInr: p.balance.inr,
+      // The denominator for that student's ageing bar (G2). Without it a bar can only be
+      // scaled against the largest value in the set, which is what made ₹75,000 of an agreed
+      // ₹1,25,000 render as "owes everything".
+      totalFeeInr: p.totalFee.inr,
       nextDueDate: p.nextDueDate,
       overdue: p.overdue,
       daysOverdue: p.daysOverdue,
@@ -135,9 +139,41 @@ export async function getCashOverview() {
   // ── Payables (PRD3 §4.3) ──
   const activePayables = payables.filter((p) => p.status === "ACTIVE");
   const monthlyFixedInr = activePayables.reduce((a, p) => a + monthlyEquivalentInr(p), 0);
-  const dueThisMonth = activePayables.filter(
-    (p) => p.nextDueDate && p.nextDueDate >= month.start && p.nextDueDate < month.end,
-  );
+
+  /**
+   * Money already promised that recurs never — and therefore falls through EVERY other
+   * figure on this page:
+   *
+   *   · break-even  — `monthlyEquivalentMinor` returns 0 for ONE_TIME, correctly: a one-off
+   *                   is not a standing commitment and must not raise the line forever;
+   *   · burn        — burn reads Expense, and a payable becomes an expense only once PAID;
+   *   · due-this-month / dueSoonUnderfunded — both go through `dueOf`, which needs a
+   *                   `nextDueDate`, and a one-time payable is routinely entered without one.
+   *
+   * Each of those rules is right on its own. Together they left a hole exactly where the
+   * largest number sits: a ₹3,00,000 one-time payable against a ₹6,45,000 balance was
+   * invisible while the gauge read 3.4 months. So it gets its own line, and its own runway.
+   *
+   * Deliberately NOT folded into `burnInr`: burn is a RATE (₹/month) and this is a STOCK
+   * (₹, once). Dividing a one-off by a month would understate runway just as badly as
+   * ignoring it overstates it. The honest treatment is to take it off the top of cash.
+   */
+  const committedOneTimeInr = activePayables
+    .filter((p) => !isRecurring(p.frequency))
+    .reduce((a, p) => a + Number(p.amountInrMinor), 0);
+  const cashAfterCommitmentsInr =
+    runway.cashInr === null ? null : runway.cashInr - committedOneTimeInr;
+  const runwayAfterCommitmentsMonths =
+    cashAfterCommitmentsInr !== null && runway.burnInr > 0
+      ? Math.round((cashAfterCommitmentsInr / runway.burnInr) * 10) / 10
+      : null;
+  /** The occurrence every figure below reads, so the table, the KPI and the alert agree (H5). */
+  const dueOf = (p: { nextDueDate: Date | null; frequency: string }) =>
+    p.nextDueDate ? nextOccurrence(p.nextDueDate, p.frequency, today) : null;
+  const dueThisMonth = activePayables.filter((p) => {
+    const due = dueOf(p);
+    return due && due >= month.start && due < month.end;
+  });
   const payableRows = payables.map((p) => ({
     id: p.id,
     name: p.name,
@@ -145,13 +181,17 @@ export async function getCashOverview() {
     amountInr: Number(p.amountInrMinor),
     amountInrRaw: p.amountInrMinor.toString(),
     frequency: p.frequency,
-    nextDueDate: p.nextDueDate?.toISOString() ?? null,
+    // H5: a recurring payable's stored date is the ANCHOR it was set up with, not its next
+    // occurrence — a monthly payable entered in January still read "15 Jan" in July. Rolled
+    // forward at read time so the column tells the truth; the stored row is left untouched, so
+    // the "due on the 15th" fact survives however long the page goes unvisited.
+    nextDueDate: dueOf(p)?.toISOString() ?? null,
     isCogs: p.isCogs,
     status: p.status,
     dueSoonUnderfunded:
-      p.status === "ACTIVE" && !!p.nextDueDate &&
-      p.nextDueDate.getTime() - today.getTime() <= 7 * 86400000 &&
-      p.nextDueDate.getTime() >= today.getTime() &&
+      p.status === "ACTIVE" && !!dueOf(p) &&
+      dueOf(p)!.getTime() - today.getTime() <= 7 * 86400000 &&
+      dueOf(p)!.getTime() >= today.getTime() &&
       runway.cashInr !== null && runway.cashInr < 2 * Number(p.amountInrMinor), // red rule (PRD3 §4.3)
   }));
 
@@ -215,6 +255,13 @@ export async function getCashOverview() {
     receivables,
     payables: payableRows,
     dueThisMonthInr: dueThisMonth.reduce((a, p) => a + Number(p.amountInrMinor), 0),
+    /** Promised, non-recurring, and not yet paid — see the note at the computation. */
+    commitments: {
+      oneTimeInr: committedOneTimeInr,
+      cashAfterInr: cashAfterCommitmentsInr,
+      runwayAfterMonths: runwayAfterCommitmentsMonths,
+      count: activePayables.filter((p) => !isRecurring(p.frequency)).length,
+    },
   };
 }
 

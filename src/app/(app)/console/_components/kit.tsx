@@ -17,6 +17,7 @@ import { Btn, SaveBar, Switch } from "@/components/ui/controls";
 import { Card, Hint } from "@/components/ui/kit";
 import { Check, X } from "lucide-react";
 import { SelectMenu } from "@/components/ui/SelectMenu";
+import { TimePicker } from "@/components/ui/TimePicker";
 import type { ReactNode } from "react";
 
 export { Btn, Card, Hint, SaveBar };
@@ -94,9 +95,10 @@ export function TextIn({
 }
 
 /**
- * A wall-clock time box (HH:MM). Native on purpose: per §5.5 the app wraps selects and dates in
- * custom popovers, but time/month/datetime stay native and are corrected via `color-scheme` —
- * the same call the Telecaller Pay month picker makes. Value is the 24h "21:00" encoding.
+ * A wall-clock time box (HH:MM), on the app's own {@link TimePicker} — the native popup this
+ * used to open was drawn by the browser in the platform's font, which read as a different product
+ * next to the console's own fields. Value is still the 24h "21:00" encoding the EOD cutoff rules
+ * parse (`parseIstMinutes`), because the picker wraps a real `<input type="time">`.
  */
 export function TimeIn({
   value,
@@ -110,12 +112,11 @@ export function TimeIn({
   className?: string;
 }) {
   return (
-    <input
-      type="time"
+    <TimePicker
       aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`${fieldCls} ${className}`}
+      className={className}
     />
   );
 }
@@ -169,14 +170,22 @@ export function Toggle({
 }) {
   return (
     <label
-      className={`group flex select-none items-center gap-2 text-sm ${
+      /* `relative` is not decoration — see the note on the input below. */
+      className={`group relative flex select-none items-center gap-2 text-sm ${
         disabled ? "cursor-not-allowed" : "cursor-pointer"
       }`}
       title={title}
     >
       {/* The real control, hidden but not removed — sr-only keeps it focusable and
           in the tab order, which `display:none` would not. Everything visible below
-          is driven off its :checked / :focus-visible state. */}
+          is driven off its :checked / :focus-visible state.
+
+          `sr-only` is `position: absolute` with no offsets, so the box lands at its STATIC
+          position — and with no positioned ancestor its containing block is the page, which means
+          it is NOT clipped by anything and its position joins the document's scrollable width.
+          Inside a horizontally scrolled editor that static position is hundreds of pixels right of
+          the viewport, so 85 invisible 1px checkboxes were making the console scroll sideways.
+          The `relative` label gives them a containing block inside the page's clip. */}
       <input
         type="checkbox"
         checked={checked}
@@ -213,6 +222,48 @@ export function Toggle({
 export type Cols = string;
 
 /**
+ * The narrowest a `Cols` track list can render, as a rem string.
+ *
+ * Derived from the same string the grid uses, never restated: a hand-written min-width is a second
+ * source of truth that drifts the first time a column is added, and the drift is invisible until
+ * someone opens the console on a small screen. `1fr`, `auto` and `%` contribute nothing — they are
+ * free to collapse; a `minmax()` contributes its floor, which is exactly the width being protected.
+ */
+export function colsMinWidth(cols: Cols, gapRem = 0.5): string {
+  // Split on spaces that are not inside parentheses, so `minmax(7rem, 16rem)` stays one track.
+  const tracks = cols.trim().split(/\s+(?![^(]*\))/);
+  let rem = 0;
+  for (const track of tracks) {
+    const floor = /^minmax\(([^,]+),/.exec(track);
+    const raw = (floor ? floor[1] : track).trim();
+    if (raw.endsWith("rem")) rem += parseFloat(raw);
+    else if (raw.endsWith("px")) rem += parseFloat(raw) / 16;
+  }
+  return `${rem + gapRem * Math.max(0, tracks.length - 1)}rem`;
+}
+
+/**
+ * The horizontal scroller a list editor lives in.
+ *
+ * These editors are grids of rem-sized tracks — Sections needs 36rem, Quests 43rem — so on a phone
+ * or a narrow tablet the tracks are simply wider than the card. They used to spill, which made the
+ * whole page scroll sideways; now that `main` clips (see AppShell), spilling would instead HIDE the
+ * controls, so they need a scroller of their own.
+ *
+ * The header and the rows must share ONE scroller — give each its own and the columns desynchronise
+ * the moment anyone scrolls one of them, which is worse than not scrolling at all. That is why the
+ * width is not set here: `ColHead` and `ColRow` each derive the same `minWidth` from the same `cols`
+ * string, so they stay aligned inside whatever scroller contains them, and a new editor gets this
+ * for free without remembering to pass anything.
+ *
+ * The negative margin lets the scrolled content run to the card's padding edge instead of stopping
+ * short of it, while `px-2` keeps the row borders off that edge.
+ */
+export function ColScroll({ children }: { children: ReactNode }) {
+  return <div className="hscroll-bar -mx-2 overflow-x-auto px-2 pb-1">{children}</div>;
+}
+
+/**
  * The label row for a list editor. Printed once, so the rows below can stay bare.
  *
  * The transparent border is load-bearing: rows carry a 1px border, so without a
@@ -223,7 +274,7 @@ export function ColHead({ cols, labels }: { cols: Cols; labels: ReadonlyArray<st
     <div
       aria-hidden
       className="grid items-end gap-2 border border-transparent px-2 pb-1.5"
-      style={{ gridTemplateColumns: cols }}
+      style={{ gridTemplateColumns: cols, minWidth: colsMinWidth(cols) }}
     >
       {labels.map((l, i) => (
         <span key={i} className="truncate text-label font-semibold uppercase text-ink-3">
@@ -257,8 +308,14 @@ export function ColRow({
       className={`group/row row-lift row-in rounded-field border border-line bg-surface-2 px-2.5 py-2.5 ${
         dim ? "opacity-60" : ""
       }`}
-      // --i is the stagger index; the delay is computed in CSS so the cap lives in one place
-      style={index === undefined ? undefined : ({ "--i": Math.min(index, 14) } as React.CSSProperties)}
+      // --i is the stagger index; the delay is computed in CSS so the cap lives in one place.
+      // minWidth matches ColHead's, so header and row scroll as one inside the shared ColScroll —
+      // and it sits on the BORDERED box, not the inner grid, or the row's border and background
+      // would stop at the viewport edge while its columns carried on past it.
+      style={{
+        minWidth: colsMinWidth(cols),
+        ...(index === undefined ? {} : ({ "--i": Math.min(index, 14) } as React.CSSProperties)),
+      }}
     >
       <div className="grid items-center gap-2" style={{ gridTemplateColumns: cols }}>
         {children}
@@ -292,7 +349,13 @@ export function NameCell({ children, className = "" }: { children: ReactNode; cl
   return <span className={`truncate text-sm text-ink-2 ${className}`}>{children}</span>;
 }
 
-/** Wraps a list editor: heading, hint, the labelled list, and its add button. */
+/**
+ * Wraps a list editor: heading, hint, the labelled list, and its add button.
+ *
+ * The list is the scroller (see {@link ColScroll}) — every editor built on ColHead/ColRow is wider
+ * than a phone, so putting it here means each one is reachable on a small screen by construction
+ * rather than by each panel remembering to wrap itself.
+ */
 export function EditorSection({
   title,
   hint,
@@ -306,7 +369,9 @@ export function EditorSection({
     <section>
       {title && <h4 className="text-h3 text-ink">{title}</h4>}
       {hint && <div className="mt-0.5 max-w-3xl">{hint}</div>}
-      <div className={title || hint ? "mt-3" : ""}>{children}</div>
+      <ColScroll>
+        <div className={title || hint ? "mt-3" : ""}>{children}</div>
+      </ColScroll>
     </section>
   );
 }

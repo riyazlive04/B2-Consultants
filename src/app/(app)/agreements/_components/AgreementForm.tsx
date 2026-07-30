@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Field, FormError, Select, TextArea, TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
+import { Btn } from "@/components/ui/controls";
 import { type AgreementData } from "@/lib/agreement";
 import { formatInrMinor, majorStringToMinor, minorToMajorString } from "@/lib/format";
 import { createAgreement, updateAgreement } from "@/server/agreement-actions";
@@ -23,6 +24,10 @@ type Mode = { kind: "create"; leadId: string | null; studentId: string | null } 
 /** Rupees in the inputs, minor units in the payload — the same split the ledger uses. */
 const toMajor = (minor: string) => minorToMajorString(BigInt(minor)).replace(/\.00$/, "");
 const toMinor = (major: string) => majorStringToMinor(major).toString();
+
+/** Must mirror `agreementDataSchema`'s instalment bounds — the server re-checks these. */
+const MIN_INSTALMENTS = 2;
+const MAX_INSTALMENTS = 6;
 
 /** Prefill field keys (server/agreement-metrics.ts) → what the founder calls them. */
 const PREFILL_FIELD_LABELS: Record<string, string> = {
@@ -74,6 +79,27 @@ export function AgreementForm({
           { amount: "", due: "Before the commencement of 2nd Sprint Week" },
         ],
   );
+
+  /**
+   * Divide the total into equal instalments (German Note's stated rule, Error Log N3).
+   *
+   * Integer paise, remainder onto the FIRST instalment. ₹69,999 over 6 is not a whole number,
+   * so a naive divide loses paise and trips the sum check the moment it is used — which would
+   * make the button worse than useless.
+   */
+  const splitEqually = () => {
+    const totalMinor = majorStringToMinor(total || "0");
+    if (totalMinor <= BigInt(0)) return;
+    const n = BigInt(inst.length);
+    const base = totalMinor / n;
+    const remainder = totalMinor - base * n;
+    setInst((p) =>
+      p.map((r, i) => ({
+        ...r,
+        amount: toMajor(String(i === 0 ? base + remainder : base)),
+      })),
+    );
+  };
 
   const sumMismatch = useMemo(() => {
     if (option !== "INSTALMENT") return null;
@@ -205,7 +231,7 @@ export function AgreementForm({
               onChange={(e) => setOption(e.target.value as "FULL" | "INSTALMENT")}
               options={[
                 { value: "FULL", label: "Option A — Full payment" },
-                { value: "INSTALMENT", label: "Option B — Instalment plan (max 2)" },
+                { value: "INSTALMENT", label: "Option B — Instalment plan (2–6)" },
               ]}
             />
           </Field>
@@ -241,6 +267,41 @@ export function AgreementForm({
                 </Field>
               </div>
             ))}
+            {/* N3: the plan is 2–6 instalments, because that is what the business sells — 4 EMI
+                on a bundle, 6 across three courses, and German Note runs up to 6 equal ones.
+                N4: every amount and milestone stays editable, because offers are negotiated
+                per student rather than picked from a fixed menu. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Btn
+                type="button"
+                variant="soft"
+                size="sm"
+                disabled={inst.length >= MAX_INSTALMENTS}
+                onClick={() =>
+                  setInst((p) => [...p, { amount: "", due: `Instalment ${p.length + 1}` }])
+                }
+              >
+                Add instalment
+              </Btn>
+              <Btn
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={inst.length <= MIN_INSTALMENTS}
+                onClick={() => setInst((p) => p.slice(0, -1))}
+              >
+                Remove last
+              </Btn>
+              {/* German Note's rule is equal distribution, and splitting by hand is where the
+                  sum stops matching the total. The remainder lands on the FIRST instalment so
+                  the paise never vanish. */}
+              <Btn type="button" variant="ghost" size="sm" onClick={splitEqually}>
+                Split equally
+              </Btn>
+              <span className="text-caption text-muted">
+                {inst.length} of {MAX_INSTALMENTS} · minimum {MIN_INSTALMENTS}
+              </span>
+            </div>
             {sumMismatch && (
               <p role="alert" className="rounded-field bg-risk-soft px-3 py-2 text-sm font-medium text-risk">
                 {sumMismatch}

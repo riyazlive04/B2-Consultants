@@ -20,9 +20,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const session = await requireSession();
-  if (!hasCapability(session.role, session.capabilities, "agreements.issue")) {
-    return new NextResponse("Forbidden", { status: 403 });
-  }
+  const isFounder = hasCapability(session.role, session.capabilities, "agreements.issue");
 
   const download = new URL(req.url).searchParams.get("download") === "1";
 
@@ -30,6 +28,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     where: { id: params.id },
     select: {
       id: true,
+      studentId: true,
       documentNo: true,
       templateVersion: true,
       data: true,
@@ -42,6 +41,26 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     },
   });
   if (!row) return new NextResponse("Not found", { status: 404 });
+
+  /**
+   * A signed-in STUDENT may fetch their OWN agreement (rebuild spec §10), and only once it is
+   * sealed. Two conditions, both required:
+   *
+   *   · the agreement's student row belongs to this login — checked as a scoped query rather than
+   *     by comparing an id the caller supplied, so there is nothing to spoof;
+   *   · `signedAt` is set — a student is never served the live DRAFT render, which is the
+   *     founder's unexecuted working copy and carries an UNSIGNED watermark.
+   *
+   * Everyone else without the capability is refused, exactly as before.
+   */
+  if (!isFounder) {
+    const owns =
+      row.studentId !== null &&
+      (await prisma.student.count({ where: { id: row.studentId, userId: session.user.id } })) > 0;
+    if (!owns || !row.signedAt || !row.pdfBytes) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+  }
 
   let bytes: Buffer;
   if (row.pdfBytes && row.signedAt) {

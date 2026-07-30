@@ -6,6 +6,9 @@ import { useFormStatus } from "react-dom";
 import { Check, Loader2 } from "lucide-react";
 import { FieldContext, useControlProps, fieldKindProps } from "./field-base";
 import { DatePicker } from "./DatePicker";
+import { MonthPicker } from "./MonthPicker";
+import { TimePicker } from "./TimePicker";
+import { DateTimePicker } from "./DateTimePicker";
 import { SelectMenu, type SelectOption } from "./SelectMenu";
 import type { FieldKind } from "@/lib/field-rules";
 
@@ -16,9 +19,27 @@ import type { FieldKind } from "@/lib/field-rules";
 
 export { FieldContext } from "./field-base";
 
-// type="date" renders our own calendar; these keep a themed NATIVE popup (color-scheme in
-// globals.css themes it) because a bespoke clock/month grid isn't worth 3 call sites.
-const NATIVE_DATEISH = new Set(["time", "month", "datetime-local", "week"]);
+/**
+ * Every date-ish type now renders one of OUR popovers (§5.5, "fully custom popover").
+ *
+ * `time` / `month` / `datetime-local` used to fall back to a theme-corrected native input on the
+ * grounds that a bespoke clock and month grid weren't worth three call sites. That traded away
+ * more than it saved: the browser draws those popups in the platform's own font with its own
+ * selection colour and its own "Clear / This month" links, and none of it is styleable — so next
+ * to this app's fields they read as a different product. Each is now a sibling of DatePicker,
+ * wrapping the same real hidden input so every form keeps submitting exactly what it did.
+ *
+ * `week` keeps the native input: nothing in the app asks for an ISO week, so a custom picker for
+ * it would be code with no caller. If one ever appears, it belongs here beside the others.
+ */
+const DATEISH_PICKERS = {
+  date: DatePicker,
+  month: MonthPicker,
+  time: TimePicker,
+  "datetime-local": DateTimePicker,
+} as const;
+
+const NATIVE_DATEISH = new Set(["week"]);
 
 export function Field({
   label,
@@ -67,7 +88,7 @@ export function Field({
 /**
  * Ref-forwarding so callers can reach the DOM node (e.g. to hook the form's reset event).
  *
- * `kind` is what makes a field accept only its own characters — `kind="name"` refuses digits,
+ * `kind` is what makes a field accept only its own characters — `kind="name"` refuses symbols,
  * `kind="money"` refuses letters, etc. It also supplies inputMode/autoComplete/maxLength, so it
  * replaces hand-set attributes rather than adding to them. See lib/field-rules.ts.
  */
@@ -75,12 +96,12 @@ export const TextInput = forwardRef<
   HTMLInputElement,
   InputHTMLAttributes<HTMLInputElement> & { kind?: FieldKind }
 >(function TextInput({ kind, ...props }, ref) {
-  // A `type="date"` field gets the app's own calendar (§5.5) — same call site, no
-  // native OS popup. `time`/`month`/`datetime-local` stay native but theme-corrected.
-  if (props.type === "date") {
-    // drop native `type` and `size` (a number) — DatePicker owns both
+  // Any date-ish field gets the app's own popover (§5.5) — same call site, no native OS popup.
+  const Picker = props.type ? DATEISH_PICKERS[props.type as keyof typeof DATEISH_PICKERS] : undefined;
+  if (Picker) {
+    // drop native `type` and `size` (a number) — the picker owns both
     const { type: _t, size: _s, ...rest } = props;
-    return <DatePicker {...rest} />;
+    return <Picker {...rest} />;
   }
   // Pull only the DOM-safe ARIA attrs. useControlProps also returns raw `describedBy`
   // and `invalid` (consumed by the custom Select/DatePicker/PhoneField for styling) —
@@ -143,7 +164,10 @@ export function CheckboxField({ name, label, defaultChecked, hint }: {
 }) {
   return (
     // min-h-10: the whole row is the hit target (§7), not just the 20px box.
-    <label className="group flex min-h-10 cursor-pointer items-start gap-2.5 py-2 text-sm font-medium">
+    // `relative` contains the sr-only input: it is absolutely positioned with no offsets, so
+    // without a positioned ancestor it sits at its static position in the PAGE's coordinate space,
+    // escapes every clip, and adds its offset to the document's scroll width.
+    <label className="group relative flex min-h-10 cursor-pointer items-start gap-2.5 py-2 text-sm font-medium">
       <input type="checkbox" name={name} defaultChecked={defaultChecked} className="peer sr-only" />
       {/* the tick is a descendant, so it's reached with a child selector, not `peer-checked:` */}
       <span

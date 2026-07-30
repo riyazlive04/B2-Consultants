@@ -109,6 +109,9 @@ function KeepOpenToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) 
 
 function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => void }) {
   const [keepOpen, setKeepOpen] = useState(false);
+  // Mirrors IncomeSection: INSTALMENT reveals the plan questions (count + extra surcharge).
+  // createIncome requires the count for instalments, so the quick form must ask too.
+  const [paymentType, setPaymentType] = useState("FULL_PAYMENT");
   const { error, formRef, submit } = useQuickSubmit(
     async (fd) => {
       const res = await createIncome(fd);
@@ -119,13 +122,22 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
     keepOpen,
   );
 
+  // "Keep open" saves then resets the form to defaults — fold the instalment fields away with it.
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const onReset = () => setPaymentType("FULL_PAYMENT");
+    form.addEventListener("reset", onReset);
+    return () => form.removeEventListener("reset", onReset);
+  }, [formRef]);
+
   return (
     <form ref={formRef} action={submit} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Date">
           <TextInput type="date" name="date" required defaultValue={data.today} />
         </Field>
-        <Field label="Student name" hint={data.studentOptions.length > 0 ? "Search to link a student — feeds their LTV" : undefined}>
+        <Field label="Student name" hint={data.studentOptions.length > 0 ? "Search to link a student — feeds their total paid" : undefined}>
           {data.studentOptions.length > 0 ? (
             <ComboBox options={data.studentOptions} nameText="studentName" nameValue="studentId" required placeholder="Search or type who paid" />
           ) : (
@@ -146,8 +158,30 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
           <Select name="programLevel" options={data.levelOptions} defaultValue="GUIDED" />
         </Field>
         <Field label="Payment type">
-          <Select name="paymentType" options={optionsFrom(PAYMENT_TYPE_LABELS)} defaultValue="FULL_PAYMENT" />
+          <Select
+            name="paymentType"
+            options={optionsFrom(PAYMENT_TYPE_LABELS)}
+            defaultValue="FULL_PAYMENT"
+            onChange={(e) => setPaymentType(e.currentTarget.value)}
+          />
         </Field>
+        {paymentType === "INSTALMENT" && (
+          <>
+            <Field label="Number of instalments" hint="How many instalments the fee is split into">
+              <TextInput kind="int" name="instalmentCount" required placeholder="e.g. 3" />
+            </Field>
+            <AmountPair
+              fxRate={data.fxRate}
+              fxStale={data.fxStale}
+              fxDate={data.fxDate}
+              inrName="instalmentExtraInr"
+              eurName="instalmentExtraEur"
+              inrLabel="Extra amount (₹)"
+              eurLabel="Extra amount (€)"
+              baseHint="Added to the fee for paying in instalments"
+            />
+          </>
+        )}
         <Field label="Payment method">
           <Select name="paymentMethod" options={optionsFrom(PAYMENT_METHOD_LABELS)} defaultValue="UPI" />
         </Field>

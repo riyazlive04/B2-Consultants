@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
+import { lockBodyScroll } from "@/lib/scroll-lock";
 
 /**
  * App-wide feedback layer - one <FeedbackHost /> mounted in the shell provides:
@@ -190,10 +191,11 @@ export function FeedbackHost() {
   useEffect(() => {
     if (!confirm) return;
     const opener = document.activeElement as HTMLElement | null;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // Shared counter (lib/scroll-lock.ts) — a confirm routinely opens OVER a modal ("delete"
+    // inside an edit dialog), which is exactly the interleaving a private save/restore loses.
+    const releaseScroll = lockBodyScroll();
     return () => {
-      document.body.style.overflow = prevOverflow;
+      releaseScroll();
       opener?.focus?.();
     };
   }, [confirm]);

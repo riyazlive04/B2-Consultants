@@ -1,139 +1,143 @@
 "use client";
 
-import { useState } from "react";
-import { formatDate, formatInrMinor } from "@/lib/format";
+import { TimeSeriesChart } from "@/components/ui/chart";
+import { formatEurMinor, formatInrMinor, formatPct } from "@/lib/format";
+import { useFinanceCcy } from "./FinanceCurrency";
 
 /**
- * Daily revenue for the current month, one bar per calendar day (§3.1).
+ * Daily revenue for the current month, one column per calendar day (§3.1).
  *
- * Replaces a smoothed area chart that plotted only the days which happened to have
- * income — so a dead week looked exactly like three good days in a row — and carried
- * no readable values at all. Here every day gets a slot (gaps are visible as gaps),
- * and hovering any day reveals that day's takings AND the running month total, which
- * is the number actually being chased.
+ * WHY THIS IS NO LONGER HAND-ROLLED SVG. It used to draw itself into a fixed
+ * `viewBox="0 0 720 220"` stretched to the card. In the Finance bento that card is ~470px wide,
+ * so everything rendered at 470/720 = **65% of its stated size**: the axis figures were declared
+ * `fontSize="9"` and reached the screen at under 6px, against §7's 12px floor. The chart was
+ * legible in the source and illegible on screen. `preserveAspectRatio` then letterboxed the 220-unit
+ * drawing inside a 170px box, costing another ~13px of plot top and bottom.
  *
- * Hand-rolled SVG to match the rest of the app (no charting dependency).
+ * `ChartFrame` (via TimeSeriesChart) hands the plot a real PIXEL box instead of a scaled unit box,
+ * which is the whole reason it exists — so 12px axis text is 12px. The hover readout comes with it
+ * as an HTML tooltip, replacing the 132×50 SVG box whose four lines of 8.5px text rendered at ~5.5px.
+ *
+ * COLUMNS, not the area chart this once was: a day's takings are discrete events, and joining the
+ * 12th to the 14th with a line asserts a revenue *rate* flowing between them that does not exist.
+ * Every elapsed day gets a slot, so a dead week reads as a dead week rather than being skipped —
+ * a month with income on the 2nd, 9th and 20th used to produce a 3-point chart that pretended
+ * those days were adjacent.
+ *
+ * The running month total is deliberately NOT plotted — beside daily bars it would tower over them
+ * and flatten the thing being read — but it IS the number being chased, so it rides in the tooltip
+ * (`extraTooltipRows`, which the chart layer carries for exactly this case).
+ *
+ * Follows the page's ₹/€ toggle (B3). The EUR figures are summed server-side from each record's OWN
+ * stamped rate, so the closing month-to-date here equals the revenue KPI above it exactly;
+ * re-converting an INR total at today's rate would put two different EUR numbers for the same month
+ * on one screen. The annual charts deliberately stay INR — they carry a target, and `MonthlyTarget`
+ * has no EUR column, so a converted target would drift with the ECB.
  */
-export function RevenueChart({
-  points,
-  height = 200,
-}: {
-  points: Array<{ date: string; inr: number; cumulativeInr: number }>;
-  height?: number;
-}) {
-  const [hover, setHover] = useState<number | null>(null);
 
-  if (points.length === 0) {
-    return <p className="py-10 text-center text-sm text-muted">No income recorded yet this month.</p>;
-  }
+/** One calendar day of takings, with the running month total in both currencies. */
+export type RevenuePoint = {
+  date: string;
+  inr: number;
+  cumulativeInr: number;
+  eur: number;
+  cumulativeEur: number;
+  /** Receipts that made up the day — 0 on a day with no collections. */
+  count: number;
+};
 
-  const W = 720;
-  const H = 220;
-  const PAD_L = 46;
-  const PAD_R = 12;
-  const TOP = 14;
-  const BASE = H - 30; // baseline, leaving room for date labels
+/**
+ * Both formatters pin `timeZone: "UTC"`.
+ *
+ * These keys are calendar days, not instants: the server built them with `Date.UTC(y, m, d)` and
+ * sliced the ISO date. Formatting them in the viewer's zone would shift a day backwards for anyone
+ * west of UTC, so the 1st of the month could label itself "30 Jun".
+ */
+const DAY_NUM = new Intl.DateTimeFormat("en-GB", { day: "numeric", timeZone: "UTC" });
+const DAY_LONG = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
 
-  const max = Math.max(1, ...points.map((p) => p.inr));
-  const plotW = W - PAD_L - PAD_R;
-  const slot = plotW / points.length;
-  const barW = Math.max(2, Math.min(22, slot * 0.62));
+export function RevenueChart({ points, height = 200 }: { points: RevenuePoint[]; height?: number }) {
+  const { ccy } = useFinanceCcy();
+  const isInr = ccy === "INR";
 
-  const xCentre = (i: number) => PAD_L + slot * (i + 0.5);
-  const y = (v: number) => TOP + (1 - v / max) * (BASE - TOP);
+  /** Axis: compact, read peripherally. Tooltip: the full grouped figure — that read is deliberate. */
+  const axis = (v: number) =>
+    isInr ? formatInrMinor(v, { compact: true }) : formatEurMinor(v, { compact: true });
+  const full = (v: number) => (isInr ? formatInrMinor(v) : formatEurMinor(v));
+  const other = (p: RevenuePoint) => (isInr ? formatEurMinor(p.eur) : formatInrMinor(p.inr));
+  const dayValue = (p: RevenuePoint) => (isInr ? p.inr : p.eur);
+  const cumulative = (p: RevenuePoint) => (isInr ? p.cumulativeInr : p.cumulativeEur);
 
-  // Three gridlines is enough to read magnitude without turning into a ledger.
-  const ticks = [0, max / 2, max];
-
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mx = ((e.clientX - rect.left) / rect.width) * W;
-    const idx = Math.floor((mx - PAD_L) / slot);
-    setHover(idx >= 0 && idx < points.length ? idx : null);
-  };
-
-  const h = hover !== null ? points[hover] : null;
+  const monthTotal = points.length > 0 ? cumulative(points[points.length - 1]) : 0;
+  const collecting = points.filter((p) => p.count > 0);
+  const best = collecting.reduce<RevenuePoint | null>(
+    (top, p) => (top === null || dayValue(p) > dayValue(top) ? p : top),
+    null,
+  );
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      style={{ width: "100%", height }}
-      className="cursor-crosshair"
-      role="img"
-      aria-label={`Daily revenue for this month. Highest day ${formatInrMinor(max, { compact: true })}.`}
-      onMouseMove={onMove}
-      onMouseLeave={() => setHover(null)}
-    >
-      {ticks.map((v, i) => (
-        <g key={i}>
-          <line x1={PAD_L} x2={W - PAD_R} y1={y(v)} y2={y(v)} stroke="var(--viz-grid)" strokeWidth="1" />
-          <text x={PAD_L - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="var(--viz-ink)">
-            {formatInrMinor(v, { compact: true })}
-          </text>
-        </g>
-      ))}
-
-      {points.map((p, i) => {
-        const isHover = hover === i;
-        const barH = p.inr > 0 ? Math.max(2, BASE - y(p.inr)) : 0;
-        return (
-          <g key={p.date}>
-            {/* full-height hit target so thin bars and zero days are still hoverable */}
-            <rect x={PAD_L + slot * i} y={TOP} width={slot} height={BASE - TOP} fill="transparent" />
-            {barH > 0 && (
-              <rect
-                x={xCentre(i) - barW / 2}
-                y={BASE - barH}
-                width={barW}
-                height={barH}
-                rx="2"
-                fill={isHover ? "var(--primary)" : "var(--chart-1)"}
-              />
-            )}
-            {/* label the 1st, middle and last day only — a label per day is unreadable */}
-            {(i === 0 || i === points.length - 1 || i === Math.floor(points.length / 2)) && (
-              <text x={xCentre(i)} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--viz-ink)">
-                {new Date(p.date).getUTCDate()}
-              </text>
-            )}
-          </g>
-        );
-      })}
-
-      <line x1={PAD_L} x2={W - PAD_R} y1={BASE} y2={BASE} stroke="var(--border-strong)" strokeWidth="1" />
-
-      {h && hover !== null && (
-        <g pointerEvents="none">
-          <line
-            x1={xCentre(hover)}
-            x2={xCentre(hover)}
-            y1={TOP}
-            y2={BASE}
-            stroke="var(--viz-ink)"
-            strokeDasharray="3 3"
-            strokeWidth="1"
-          />
-          {(() => {
-            const boxW = 132;
-            const tx = Math.min(Math.max(xCentre(hover), PAD_L + boxW / 2), W - PAD_R - boxW / 2);
-            const ty = Math.max(y(h.inr) - 46, 2);
-            return (
-              <g transform={`translate(${tx - boxW / 2}, ${ty})`}>
-                <rect width={boxW} height="40" rx="6" fill="var(--ink)" opacity="0.94" />
-                <text x={boxW / 2} y="13" textAnchor="middle" fontSize="10" fill="#fff" opacity="0.75">
-                  {formatDate(h.date)}
-                </text>
-                <text x={boxW / 2} y="25" textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#fff">
-                  {formatInrMinor(h.inr, { compact: true })} that day
-                </text>
-                <text x={boxW / 2} y="35" textAnchor="middle" fontSize="8.5" fill="#fff" opacity="0.75">
-                  {formatInrMinor(h.cumulativeInr, { compact: true })} month to date
-                </text>
-              </g>
-            );
-          })()}
-        </g>
-      )}
-    </svg>
+    <TimeSeriesChart
+      mode="column"
+      height={height}
+      /* Every day being zero is "nothing yet", not a chart of thirty flat bars. The frame's own
+         empty test only fires on all-null, and a zero day is a real measured zero, not a gap. */
+      state={monthTotal === 0 ? "empty" : "ready"}
+      emptyTitle="No income recorded yet this month"
+      emptyBody="Entries added on the Income tab appear here, one column per day."
+      points={points.map((p) => ({
+        label: DAY_NUM.format(new Date(p.date)),
+        fullLabel: DAY_LONG.format(new Date(p.date)),
+      }))}
+      series={[
+        {
+          key: "revenue",
+          label: "Collected",
+          color: "var(--chart-1)",
+          values: points.map(dayValue),
+        },
+      ]}
+      formatValue={axis}
+      formatTooltip={full}
+      extraTooltipRows={(i) => {
+        const p = points[i];
+        if (!p) return [];
+        const v = dayValue(p);
+        return [
+          // No swatch on these: nothing on the plot corresponds to them, and a colour dot would
+          // promise a mark the reader then goes hunting for.
+          { label: isInr ? "In euro" : "In rupees", value: other(p) },
+          {
+            label: "Receipts",
+            value: p.count === 0 ? "none" : `${p.count} payment${p.count === 1 ? "" : "s"}`,
+          },
+          { label: "Month to date", value: full(cumulative(p)) },
+          // A share of nothing is not an insight, and neither is "0% of the month".
+          ...(v > 0 && monthTotal > 0
+            ? [{ label: "Share of month", value: formatPct((v / monthTotal) * 100) }]
+            : []),
+        ];
+      }}
+      footnote={
+        best !== null ? (
+          <>
+            {collecting.length} of {points.length} day{points.length === 1 ? "" : "s"} collected ·
+            best was {DAY_LONG.format(new Date(best.date))} at{" "}
+            <span className="tnum font-semibold text-ink-2">{full(dayValue(best))}</span> ·{" "}
+            <span className="tnum font-semibold text-ink-2">
+              {full(Math.round(monthTotal / Math.max(1, points.length)))}
+            </span>{" "}
+            a day across the month so far
+          </>
+        ) : undefined
+      }
+      srCaption={`Daily revenue this month in ${isInr ? "rupees" : "euro"}`}
+      /* No `yAxisLabel`: it renders as a tooltip footer, and here it would only repeat the
+         "Collected" row two lines above it. */
+    />
   );
 }

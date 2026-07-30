@@ -28,9 +28,11 @@ const messageFor = (k: keyof typeof FIELD_RULES, v: string) => {
   return r.success ? null : r.error.issues[0]?.message;
 };
 
-describe("name — letters only, but every alphabet's letters", () => {
-  test("drops digits and symbols as they are typed", () => {
-    assert.equal(filter("name")("Rahul7 Sharma!@#"), "Rahul Sharma");
+describe("name — every alphabet's letters, plus digits that never stand alone", () => {
+  test("drops symbols as they are typed, but KEEPS digits", () => {
+    // Digits are allowed so "Anna Smith 2" can be typed — appending a number is how the two
+    // real "Anna Smith"s on this roster get told apart by hand (Error Log I1).
+    assert.equal(filter("name")("Rahul7 Sharma!@#"), "Rahul7 Sharma");
   });
 
   test("keeps German umlauts — precomposed and NFD-decomposed alike", () => {
@@ -59,8 +61,25 @@ describe("name — letters only, but every alphabet's letters", () => {
     // Every one of these is a real value sitting in the `name` column today.
     assert.equal(accepts("name", "9442101988"), false);              // phone in the name box
     assert.equal(accepts("name", "Kanaguraj9003@gmail.com"), false); // email in the name box
-    assert.equal(accepts("name", "Ok test ok 1000 123"), false);     // test data
     assert.equal(accepts("name", "Shama🦋"), false);                 // emoji
+  });
+
+  test("a name may carry a digit, but may never be ONLY digits", () => {
+    // The letter requirement — not the character class — is what keeps a phone number out of
+    // the name column (Error Log I2). Allowing digits does not weaken it.
+    assert.equal(accepts("name", "Anna Smith 2"), true);
+    assert.equal(accepts("name", "Elizabeth II"), true);
+    assert.equal(accepts("name", "9442101988"), false);
+    assert.equal(accepts("name", "123 456"), false);
+    assert.equal(accepts("name", "2"), false);
+  });
+
+  test("KNOWN TRADE-OFF: junk containing a digit now passes", () => {
+    // "Ok test ok 1000 123" is a real row in the lead table and used to be refused. No
+    // character-class rule can separate it from "Anna Smith 2" — both are letters plus digits.
+    // Accepted deliberately: blocking the customer's own disambiguation to catch one junk row
+    // is the worse trade. Junk like this is a data-cleanup problem, not a validation one.
+    assert.equal(accepts("name", "Ok test ok 1000 123"), true);
   });
 
   test("a trailing space survives so a second name can be typed", () => {
@@ -68,7 +87,7 @@ describe("name — letters only, but every alphabet's letters", () => {
   });
 
   test("schema names the offending class rather than saying 'invalid'", () => {
-    assert.equal(messageFor("name", "Rahul7"), "Name can only contain letters");
+    assert.equal(messageFor("name", "Rahul@"), "Name can contain letters, digits and . , ' - / only");
   });
 
   test("schema squishes runs of whitespace and trims", () => {
@@ -159,9 +178,13 @@ describe("email / city / url", () => {
     assert.equal(accepts("email", "nope"), false);
   });
 
-  test("city is name-shaped", () => {
-    assert.equal(filter("city")("Pune 411001"), "Pune ");
+  test("city is name-shaped, and Indian localities carry digits", () => {
+    // "Sector 62", "Phase 3", "Pune 411001" are ordinary here. City shares the name filter, so
+    // it necessarily shares the digit rule — the two MUST agree or the browser accepts what the
+    // server rejects.
+    assert.equal(filter("city")("Pune 411001"), "Pune 411001");
     assert.ok(accepts("city", "Baden-Württemberg"));
+    assert.ok(accepts("city", "Sector 62"));
   });
 
   test("url adds the scheme rather than rejecting a lead over it", () => {

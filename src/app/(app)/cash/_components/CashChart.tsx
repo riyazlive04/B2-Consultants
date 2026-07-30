@@ -1,100 +1,69 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo } from "react";
+import { TimeSeriesChart } from "@/components/ui/chart";
+import { compactInrMinor } from "@/lib/chart";
 import { formatDate, formatInrMinor } from "@/lib/format";
 
-/** 12-week bank-balance line chart (PRD3 §4.1) - plain SVG with hover tooltip. */
+/**
+ * Bank-balance trend (PRD3 §4.1, DESIGN §5.8 "Line").
+ *
+ * Now a thin adapter over the shared chart system rather than its own SVG. The hand-rolled
+ * version shipped three defects that the shared frame fixes structurally, not by patching:
+ *
+ *   1. **The tooltip was invisible in dark mode.** It drew `fill="#fff"` on a `var(--ink)`
+ *      surface. `--ink` is near-WHITE under `[data-theme="dark"]`, so the readout was white text
+ *      on a white box — the exact failure DESIGN §1.4 names ("anything that used bg-ink +
+ *      text-white must use text-surface instead"). The shared tooltip is HTML and uses the token.
+ *   2. **Axis text sat at 8–9.5px** against §7's stated 12px floor. Those were viewBox units, so
+ *      the rendered size drifted with the card's width and could not be honoured or even
+ *      measured. The frame measures a real pixel box, so 12px is 12px.
+ *   3. **Gridlines were `[min, mid, max]`** — labels like "₹3,47,912" that no reader recognises.
+ *      `niceTicks` puts them on the 1/2/5 ladder instead.
+ *
+ * It also gains what no bespoke chart had: keyboard access to every point (arrow keys), a
+ * screen-reader data table, and real empty/loading states.
+ *
+ * ZERO-BASED ON PURPOSE. A line chart normally fits its own domain so movement is visible, but
+ * this page's question is survival — "how close to zero is the balance" is the whole thesis of
+ * Cash Health, and a floating baseline hides exactly that.
+ */
 export function CashChart({ points }: { points: Array<{ date: string; balanceInr: number }> }) {
-  const [hover, setHover] = useState<number | null>(null);
-
-  if (points.length < 2) {
-    return (
-      <p className="py-8 text-center text-sm text-muted">
-        Add at least two weekly entries to see the trend.
-      </p>
-    );
-  }
-  const W = 720, H = 200, PAD = 44;
-  const values = points.map((p) => p.balanceInr);
-  const min = Math.min(...values, 0);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const x = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
-  const y = (v: number) => 12 + (1 - (v - min) / span) * (H - 40);
-  const path = points.map((p, i) => `${x(i).toFixed(1)},${y(p.balanceInr).toFixed(1)}`).join(" ");
-
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mx = ((e.clientX - rect.left) / rect.width) * W;
-    const idx = Math.round(((mx - PAD) / (W - PAD * 2)) * (points.length - 1));
-    setHover(Math.max(0, Math.min(points.length - 1, idx)));
-  };
-
-  const h = hover !== null ? points[hover] : null;
+  // `balanceInr` is MINOR units (paise) despite the name — cash-metrics maps it straight off
+  // `bankBalanceInrMinor`. Every formatter here treats it as such.
+  const data = useMemo(
+    () => ({
+      points: points.map((p) => ({ label: shortDate(p.date), fullLabel: formatDate(p.date) })),
+      series: [
+        {
+          key: "balance",
+          label: "Cash in Hand",
+          color: "var(--primary)",
+          values: points.map((p) => p.balanceInr),
+        },
+      ],
+    }),
+    [points],
+  );
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full cursor-crosshair"
-      role="img"
-      aria-label="Bank balance over the last 12 weeks"
-      onMouseMove={onMove}
-      onMouseLeave={() => setHover(null)}
-    >
-      {[min, (min + max) / 2, max].map((v) => (
-        <g key={v}>
-          <line x1={PAD} x2={W - PAD} y1={y(v)} y2={y(v)} stroke="var(--viz-grid)" strokeWidth="1" />
-          <text x={PAD - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="var(--viz-ink)">
-            {formatInrMinor(v, { compact: true })}
-          </text>
-        </g>
-      ))}
-
-      {/* soft area under the line */}
-      <polygon
-        points={`${PAD},${H - 28} ${path} ${W - PAD},${H - 28}`}
-        fill="var(--primary-tint)"
-        opacity="0.45"
-      />
-      <polyline points={path} fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-
-      {points.map((p, i) => (
-        <g key={p.date}>
-          <circle
-            cx={x(i)}
-            cy={y(p.balanceInr)}
-            r={hover === i ? 4.5 : 3}
-            fill={hover === i ? "var(--ink)" : "var(--primary)"}
-          />
-          {(i === 0 || i === points.length - 1 || i === Math.floor(points.length / 2)) && (
-            <text x={x(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="var(--viz-ink)">
-              {formatDate(p.date)}
-            </text>
-          )}
-        </g>
-      ))}
-
-      {/* hover tooltip */}
-      {h && hover !== null && (
-        <g pointerEvents="none">
-          <line x1={x(hover)} x2={x(hover)} y1={12} y2={H - 28} stroke="var(--viz-ink)" strokeDasharray="3 3" strokeWidth="1" />
-          {(() => {
-            const tx = Math.min(Math.max(x(hover), PAD + 60), W - PAD - 60);
-            const ty = Math.max(y(h.balanceInr) - 34, 4);
-            return (
-              <g transform={`translate(${tx - 58}, ${ty})`}>
-                <rect width="116" height="26" rx="6" fill="var(--ink)" opacity="0.92" />
-                <text x="58" y="11" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">
-                  {formatInrMinor(h.balanceInr, { compact: true })}
-                </text>
-                <text x="58" y="21" textAnchor="middle" fontSize="8" fill="#fff" opacity="0.75">
-                  {formatDate(h.date)}
-                </text>
-              </g>
-            );
-          })()}
-        </g>
-      )}
-    </svg>
+    <TimeSeriesChart
+      points={data.points}
+      series={data.series}
+      mode="area"
+      height={240}
+      zeroBased
+      formatValue={(v) => compactInrMinor(v)}
+      formatTooltip={(v) => formatInrMinor(v)}
+      srCaption="Cash in Hand at each weekly position"
+      emptyTitle="Not enough entries yet"
+      emptyBody="Add at least two weekly cash positions to see the trend."
+      footnote="One point per recorded cash position. This is measured balance, not a forecast."
+    />
   );
+}
+
+/** "07/07" — the axis wants a rhythm to count by; the tooltip carries the full DD/MM/YYYY. */
+function shortDate(iso: string): string {
+  return formatDate(iso).slice(0, 5);
 }

@@ -9,8 +9,10 @@ import { Btn } from "@/components/ui/controls";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
+import { moneyInline, moneyValue } from "@/lib/money-display";
 import { EXPENSE_BUSINESS_LINE_LABELS, EXPENSE_CATEGORY_LABELS, optionsFrom } from "@/lib/labels";
 import { AmountPair } from "@/components/ui/AmountPair";
+import { useFinanceCcy } from "./FinanceCurrency";
 
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
@@ -30,6 +32,7 @@ export function ExpenseSection({
   fxStale?: boolean;
   fxDate?: string;
 }) {
+  const { ccy } = useFinanceCcy();
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -70,20 +73,22 @@ export function ExpenseSection({
 
   const columns: Column<ExpenseRow>[] = [
     { key: "date", header: "Date", cell: (r) => formatDate(r.date), value: (r) => r.date.slice(0, 10) },
+    // "Paid ₹" / "Paid €" are as-entered columns — the currency the money actually left in,
+    // dash where none did. Only the aggregate follows the ₹/€ toggle (see IncomeSection).
     {
-      key: "inr", header: "INR", align: "right",
+      key: "inr", header: "Paid ₹", align: "right",
       cell: (r) => (BigInt(r.amountInrRaw) === BigInt(0) ? "-" : formatInrMinor(BigInt(r.amountInrRaw))),
       value: (r) => Number(BigInt(r.amountInrRaw)) / 100,
     },
     {
-      key: "eur", header: "EUR", align: "right",
+      key: "eur", header: "Paid €", align: "right",
       cell: (r) => (BigInt(r.amountEurRaw) === BigInt(0) ? "-" : formatEurMinor(BigInt(r.amountEurRaw))),
       value: (r) => Number(BigInt(r.amountEurRaw)) / 100,
     },
     {
-      key: "agg", header: "Total (₹ · €)", align: "right",
-      cell: (r) => `${formatInrMinor(r.agg.inr, { compact: true })} · ${formatEurMinor(r.agg.eur, { compact: true })}`,
-      value: (r) => r.agg.inr / 100,
+      key: "agg", header: "Total", align: "right",
+      cell: (r) => moneyInline(r.agg, ccy, { compact: true }),
+      value: (r) => moneyValue(r.agg, ccy),
     },
     { key: "category", header: "Category", cell: (r) => EXPENSE_CATEGORY_LABELS[r.category], value: (r) => EXPENSE_CATEGORY_LABELS[r.category] },
     {

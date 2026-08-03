@@ -6,9 +6,16 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
 import { decideBookOrder, initialBookOrderStatus } from "@/lib/book-order";
+import {
+  bookOrderBodySummary,
+  buildBookOrderVars,
+  nextBookOrderRef,
+  parseBookOrderRefSeq,
+} from "@/lib/book-order-message";
 import { getBookOrderConfig } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
-import { isKnownLevel } from "./levels";
+import { isKnownLevel, levelLabels } from "./levels";
+import { sendWhatsApp } from "./whatsapp";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -221,6 +228,127 @@ export async function advanceBookOrder(orderId: string, form: FormData): Promise
     });
   }
   revalidatePath("/students");
+  return { ok: true };
+}
+
+// ── Messaging the publisher ────────────────────────────────────
+
+/**
+ * Give this order its human-quotable reference, allocating one only if it doesn't have it yet.
+ *
+ * Lazy on purpose: a number is spent when we actually tell a publisher about the order, so an
+ * order that is opened and cancelled never burns one and the sequence stays readable.
+ *
+ * The retry exists because two admins pressing the button at the same second would both read the
+ * same maximum. The UNIQUE index is what actually prevents the collision; this just turns the
+ * resulting 23505 into a second attempt rather than an error the user sees.
+ */
+async function ensureOrderRef(orderId: string, current: string | null): Promise<string> {
+  if (current) return current;
+  const year = Number(
+    new Intl.DateTimeFormat("en-GB", { year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()),
+  );
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    // Only this year's refs matter to the allocator, but the column holds every year — filtering
+    // in SQL keeps the read small as the table grows.
+    const rows = await prisma.bookOrder.findMany({
+      where: { orderRef: { startsWith: `BO-${year}-` } },
+      select: { orderRef: true },
+    });
+    const ref = nextBookOrderRef(
+      rows.map((r) => r.orderRef).filter((r): r is string => r !== null && parseBookOrderRefSeq(r, year) !== null),
+      year,
+    );
+    try {
+      await prisma.bookOrder.update({ where: { id: orderId }, data: { orderRef: ref } });
+      return ref;
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
+      throw e;
+    }
+  }
+  throw new Error("Could not allocate a book-order reference");
+}
+
+/**
+ * Send the approved `b2_book_order` template to the publisher.
+ *
+ * MANUAL, not automatic, and deliberately so: this message commits B2 to buying books. Firing it
+ * off a status change would mean a mis-click on a dropdown places a real order with a supplier.
+ * A human presses this.
+ *
+ * The recipient is the VENDOR's number. Every other WhatsApp touchpoint in the app sends to the
+ * person the record is about, so this is the one place that inversion has to be got right — see
+ * lib/book-order-message.ts.
+ */
+export async function messagePublisher(orderId: string, opts?: { dryRun?: boolean }): Promise<ActionResult> {
+  const session = await requireAdmin();
+
+  const order = await prisma.bookOrder.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      orderRef: true,
+      level: true,
+      status: true,
+      shipToAddress: true,
+      shipToPhone: true,
+      studentId: true,
+      student: { select: { fullName: true } },
+      vendor: { select: { name: true, phone: true } },
+    },
+  });
+  if (!order) return { ok: false, error: "Order not found" };
+  if (!order.vendor) return { ok: false, error: "Set the vendor on this order before messaging them" };
+  if (!order.vendor.phone?.trim()) {
+    return { ok: false, error: `${order.vendor.name} has no phone number — add one on the vendor record` };
+  }
+
+  const labels = await levelLabels();
+  // Allocated BEFORE the variable check so `order_ref` is never the thing reported missing —
+  // it is ours to produce, not something the user could go and fill in.
+  const orderRef = await ensureOrderRef(order.id, order.orderRef);
+
+  const built = buildBookOrderVars({
+    publisherName: order.vendor.name,
+    orderRef,
+    levelLabel: labels[order.level] ?? order.level,
+    studentName: order.student.fullName,
+    shipTo: order.shipToAddress,
+    shipPhone: order.shipToPhone,
+  });
+  if (!built.ok) return { ok: false, error: built.message };
+
+  const outcome = await sendWhatsApp({
+    kind: "BOOK_ORDER",
+    to: order.vendor.phone,
+    vars: built.vars,
+    sentById: session.user.id,
+    bodySummary: bookOrderBodySummary(built.vars),
+    // Both links: the order is what it's about, the student is who it's for. Without `studentId`
+    // the message would be invisible on the student's record, where anyone asking "where are
+    // Priya's books" will look first.
+    bookOrderId: order.id,
+    studentId: order.studentId,
+    dryRun: opts?.dryRun ?? false,
+  });
+
+  await logActivity(session, {
+    action: "book-order.message-publisher",
+    section: "students",
+    entityType: "BookOrder",
+    entityId: order.id,
+    summary: outcome.sent
+      ? `Sent ${order.vendor.name} the ${orderRef} book order for ${order.student.fullName}`
+      : `Book order message to ${order.vendor.name} was not sent — ${outcome.error ?? "skipped"}`,
+    meta: { orderRef, status: outcome.status, level: order.level, dryRun: opts?.dryRun ?? false },
+  });
+
+  revalidatePath("/students");
+  // A skip is a real outcome the user must see: the row is written either way, but silently
+  // returning ok would read as "the publisher has been told" when nothing left the building.
+  if (!outcome.sent) return { ok: false, error: outcome.error ?? "The message was not sent" };
   return { ok: true };
 }
 

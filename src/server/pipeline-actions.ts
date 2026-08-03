@@ -12,7 +12,8 @@ import { optionalRule, rule } from "@/lib/field-rules";
 import { statusForLegacyStage } from "@/lib/opportunity-status";
 import { invalidateAvgFeeCache } from "./pipeline-metrics";
 import { findDuplicateLead } from "./lead-intake";
-import { pickFirstCaller } from "./assignment";
+import { pickFirstCaller, getFirstCallSplit } from "./assignment";
+import { allocateByShare } from "@/lib/call-distribution";
 import { logActivity, diffFields } from "./activity-log";
 import { isKnownLevel } from "./levels";
 import type { ActionResult } from "./finance-actions";
@@ -278,16 +279,23 @@ export async function assignLead(id: string, userId: string): Promise<ActionResu
     meta: { assignedToId: lead.assignedToId },
   });
   revalidatePath("/pipeline");
+  revalidatePath("/my-desk");
   return { ok: true };
 }
 
 const assignBatchSchema = z.object({
+  /**
+   * Ignored when `splitByShare` is set — the rotation decides instead. Still required, because
+   * making it conditional would let a mis-wired form silently hand a batch to nobody.
+   */
   userId: z.string().min(1, "Pick who these leads go to"),
   count: z.number().int().min(1).max(MAX_HANDOUT),
   /** Blank = any source. */
   leadSource: z.string().trim().max(64).optional(),
   /** Newest first is the default: a lead that arrived yesterday converts far better than one from March. */
   oldestFirst: z.boolean().default(false),
+  /** Share the batch across the rotation in the configured proportions instead of one person. */
+  splitByShare: z.boolean().default(false),
 });
 
 /**
@@ -312,7 +320,17 @@ export async function assignLeadBatch(input: unknown): Promise<ActionResult & { 
   if (!allowed) return denied;
   const parsed = assignBatchSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  const { userId, count, leadSource, oldestFirst } = parsed.data;
+  const { userId, count, leadSource, oldestFirst, splitByShare } = parsed.data;
+
+  /**
+   * Split mode ignores `userId` entirely and shares the batch across the rotation.
+   *
+   * This is where the founder's weighting stops being decorative. `pickFirstCaller` only ever
+   * governed NEW intake, and the backlog dwarfs it — 23,430 unassigned leads against a few dozen
+   * a day — so a share set in Console previously decided almost nothing about who actually calls
+   * whom. The hand-out is the lever that moves the volume.
+   */
+  if (splitByShare) return assignSplitByShare({ count, leadSource, oldestFirst, session });
 
   const assignee = await prisma.user.findUnique({
     where: { id: userId },
@@ -360,6 +378,88 @@ export async function assignLeadBatch(input: unknown): Promise<ActionResult & { 
   revalidatePath("/pipeline");
   revalidatePath("/my-desk");
   return { ok: true, assigned: res.count };
+}
+
+/**
+ * Hand a batch out across the whole rotation, in the configured proportions.
+ *
+ * Separate from the single-assignee path rather than folded into it, because the two differ in
+ * every step that matters: who is eligible, how many each gets, and what the audit line has to
+ * say. Sharing one function would mean a chain of `if (split)` branches through all of it.
+ */
+async function assignSplitByShare(args: {
+  count: number;
+  leadSource?: string;
+  oldestFirst: boolean;
+  session: Awaited<ReturnType<typeof capabilityCheck>>["session"];
+}): Promise<ActionResult & { assigned?: number }> {
+  const { count, leadSource, oldestFirst, session } = args;
+
+  const split = await getFirstCallSplit();
+  // Off today (Saturday) or already at their ceiling — the same eligibility the live rotation
+  // applies, so a hand-out cannot put work somewhere `pickFirstCaller` would refuse to.
+  const eligible = split.members.filter((m) => !m.offToday && !m.atDailyCap);
+  if (!eligible.length) {
+    return {
+      ok: false,
+      error:
+        split.members.length === 0
+          ? "Nobody is in the first-call rotation — set shares in Console → Call Distribution."
+          : "Everyone in the rotation is off today or at their daily cap.",
+    };
+  }
+
+  const candidates = await prisma.lead.findMany({
+    where: {
+      ...ACTIVE,
+      assignedToId: null,
+      stage: { notIn: ["WON", "LOST"] },
+      phone: { not: null },
+      ...(leadSource ? { leadSource: leadSource as never } : {}),
+    },
+    select: { id: true },
+    orderBy: { createdAt: oldestFirst ? "asc" : "desc" },
+    take: count,
+  });
+  if (!candidates.length) return { ok: false, error: "No unassigned, callable leads match that filter." };
+
+  // Allocate against what we ACTUALLY found, not what was asked for — otherwise a request for 200
+  // that matches 50 would hand out shares computed on 200 and over-assign the first person.
+  const allocation = allocateByShare(candidates.length, eligible);
+
+  let cursor = 0;
+  let assigned = 0;
+  const perPerson: { name: string; count: number }[] = [];
+  for (const part of allocation) {
+    const slice = candidates.slice(cursor, cursor + part.count).map((c) => c.id);
+    cursor += part.count;
+    if (!slice.length) continue;
+    // Same concurrency guard as the single path: re-assert `assignedToId: null`, so a
+    // simultaneous hand-out by another admin cannot double-assign.
+    const res = await prisma.lead.updateMany({
+      where: { id: { in: slice }, assignedToId: null },
+      data: { assignedToId: part.userId },
+    });
+    assigned += res.count;
+    if (res.count) perPerson.push({ name: part.name, count: res.count });
+  }
+
+  await logActivity(session, {
+    action: "lead.assign.batch",
+    section: "pipeline",
+    entityType: "Lead",
+    entityId: "split",
+    // Names the actual split in the feed. "Handed out 200 leads" would leave the founder opening
+    // the meta to answer the only question they will have.
+    summary: `Handed ${assigned} lead${assigned === 1 ? "" : "s"} out by share — ${perPerson
+      .map((p) => `${p.name} ${p.count}`)
+      .join(" · ")}`,
+    meta: { mode: "split", requested: count, assigned, perPerson, leadSource: leadSource ?? null, oldestFirst },
+  });
+
+  revalidatePath("/pipeline");
+  revalidatePath("/my-desk");
+  return { ok: true, assigned };
 }
 
 /** How many unassigned, callable leads are left to hand out — the denominator for the panel. */

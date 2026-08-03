@@ -79,6 +79,48 @@ export type TelecallerDesk = {
   worklist: DeskLead[];
 };
 
+/**
+ * Just WHO this person is, for the two callers that only need to branch on it.
+ *
+ * ── Why this is separate from `getTelecallerDesk` ────────────────────────────────
+ * `getTelecallerDesk` builds the entire generic call desk: 500 leads with their last call and a
+ * call count, a month of CallLog rows, every goal with its progress. On the pooled Supabase
+ * connection that is a handful of round trips at ~200ms each.
+ *
+ * Two callers were paying that price for a single enum:
+ *
+ *   • `(app)/layout.tsx` — on EVERY page in the app, to decide whether to render a greeting.
+ *     Suspense kept it off first paint, but it still competed for the connection with the page's
+ *     own queries on every navigation.
+ *   • `my-desk/page.tsx` — to pick which desk to render, and then it built the L1 or L2 desk on
+ *     top. A specialist paid for the generic desk they were never shown.
+ *
+ * This is one indexed lookup on a table with one row per team member. `getTelecallerDesk` still
+ * exists unchanged for the caller that genuinely renders the generic desk.
+ */
+export type DeskIdentity = {
+  name: string;
+  roleTitle: string;
+  logVariant: string;
+  isTelecaller: boolean;
+  dailyCallTarget: number;
+};
+
+export const getDeskIdentity = cache(async (userId: string): Promise<DeskIdentity | null> => {
+  const profile = await prisma.teamProfile.findUnique({
+    where: { userId },
+    select: { fullName: true, roleTitle: true, logVariant: true, dailyCallTarget: true },
+  });
+  if (!profile) return null;
+  return {
+    name: profile.fullName,
+    roleTitle: profile.roleTitle,
+    logVariant: profile.logVariant,
+    isTelecaller: (TELECALLER_VARIANTS as readonly string[]).includes(profile.logVariant),
+    dailyCallTarget: profile.dailyCallTarget,
+  };
+});
+
 /** The IST day as real UTC instants — calledAt is a timestamp, so boundaries must be instants. */
 function istTodayInstantRange(): { start: Date; end: Date } {
   const today = istToday();
@@ -211,10 +253,28 @@ export const getTelecallerDesk = cache(async (userId: string): Promise<Telecalle
 });
 
 /**
- * Just the number for the login popup / header badge — avoids building the whole desk.
- * Shares the request cache with getTelecallerDesk, so calling both costs one query set.
+ * Just the number, as ONE count.
+ *
+ * Was `getTelecallerDesk(userId).today.toCall`, which built the entire desk — 500 lead rows with
+ * a nested last-call lookup and a call count each, plus a month of CallLog rows and every goal —
+ * to end up returning `worklist.length`. The shell renders this on every page, so that cost was
+ * paid on every navigation.
+ *
+ * `callLogs: { none: ... }` is exactly the worklist's own predicate: the worklist keeps a lead
+ * whose LAST call is before today, and a lead's last call is before today precisely when it has
+ * no call today. Expressing it as a NOT EXISTS lets Postgres answer it without materialising a
+ * single lead row — and, incidentally, fixes an old cap: the worklist stopped at 500 leads, so a
+ * caller owed more than that was told they were owed exactly 500.
  */
 export async function getCallsDueToday(userId: string): Promise<number> {
-  const desk = await getTelecallerDesk(userId);
-  return desk?.today.toCall ?? 0;
+  const day = istTodayInstantRange();
+  return prisma.lead.count({
+    where: {
+      ...ACTIVE,
+      assignedToId: userId,
+      stage: { in: [...OPEN_STAGES] },
+      phone: { not: null },
+      callLogs: { none: { calledAt: { gte: day.start, lt: day.end } } },
+    },
+  });
 }

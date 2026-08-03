@@ -29,6 +29,9 @@ import {
   unresolvedVars,
   stepBody,
   coerceOutreachConfig,
+  DEFAULT_OUTREACH_CONFIG,
+  INSTANT_INTRO_SOURCES,
+  isInstantIntroSource,
   OUTREACH_STEPS,
 } from "../outreach-sop";
 import type { OutreachStep } from "@prisma/client";
@@ -559,8 +562,23 @@ describe("Templates", () => {
       "[Prospect’s First Name]": "Priya",
       "[Your Name]": "Nilofer",
     });
-    assert.ok(out.startsWith("Hi Priya\nNilofer here from B2 Consultants."));
+    // Both names on ONE line with static text between them. The SOP originally had them on
+    // consecutive lines, which becomes two adjacent {{…}} parameters at submission — a shape Meta
+    // rejects outright. Changed with founder sign-off on 2026-08-03; see TPL_INTRO.
+    assert.ok(out.startsWith("Hi Priya, this is Nilofer from B2 Consultants."));
     assert.deepEqual(unresolvedVars(out), []);
+  });
+
+  test("the intro offers a call rather than promising one", () => {
+    // Once this message auto-sends at opt-in, "I'll give you a quick call now" is a promise the
+    // system does not keep — under firstCallMode "after_check" a caller only rings if the
+    // prospect does NOT book. The offer stays; the assertion of an imminent call does not.
+    const body = stepBody("INTRO_WHATSAPP")!;
+    assert.ok(!body.includes("quick call now"), "must not promise an immediate call");
+    assert.ok(body.includes("reply here and one of our team will call you"));
+    // Everything between the first and last line is untouched SOP text.
+    assert.ok(body.includes("book a 20 min *FREE* Personalized Discovery Call"));
+    assert.ok(body.includes("https://optin.b2consultants.de/apply"));
   });
 
   test("unresolved placeholders are detected — never reach the send step", () => {
@@ -617,5 +635,182 @@ describe("Config", () => {
   test("valid overrides survive", () => {
     assert.equal(coerceOutreachConfig({ sla: { reactionMinutes: 10 } }).sla.reactionMinutes, 10);
     assert.equal(coerceOutreachConfig({ enabled: true }).enabled, true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// firstCallMode — when a human is actually spent
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * `"after_check"` exists so the intro message gets a chance to work on its own. Every prospect who
+ * books off the message alone never reaches a caller at all; only those who ignored it do.
+ *
+ * The risk being tested is the failure that would make the mode pointless in opposite directions:
+ * raising the call too early (no better than the SOP), or never raising it at all (leads rot
+ * silently, which is worse than either).
+ */
+const AFTER = { firstCallMode: "after_check" as const };
+
+function plan(state: JourneyState, now: Date, opts?: { firstCallMode?: "immediate" | "after_check" }) {
+  return planJourney(state, now, DEFAULT_SLA, opts);
+}
+const hasStep = (p: ReturnType<typeof plan>, s: OutreachStep) => p.materialise.some((m) => m.step === s);
+
+describe("firstCallMode — deferring the first call until a booking check comes back empty", () => {
+  /** The intro has gone out but no check has run yet. */
+  const introSent = () => done(base({ contactedAt: at(1 * MIN) }), "INTRO_WHATSAPP", at(1 * MIN));
+
+  test("immediate (the default) still raises the call straight after the intro", () => {
+    const p = plan(introSent(), at(2 * MIN));
+    assert.ok(hasStep(p, "FIRST_CALL"), "the SOP as written must be unchanged by default");
+  });
+
+  test("after_check does NOT raise a call on the intro alone", () => {
+    const p = plan(introSent(), at(2 * MIN), AFTER);
+    assert.ok(!hasStep(p, "FIRST_CALL"), "the message has not had its window yet");
+    // …but the booking check must still be scheduled, or nothing would ever raise the call.
+    assert.ok(hasStep(p, "CHECK_1"), "the check is what eventually triggers the call");
+  });
+
+  test("after_check anchors the check on the intro, since no call precedes it", () => {
+    const p = plan(introSent(), at(2 * MIN), AFTER);
+    const check = p.materialise.find((m) => m.step === "CHECK_1")!;
+    assert.equal(
+      check.dueAt.getTime(),
+      at(1 * MIN + DEFAULT_SLA.check1Hours * HR).getTime(),
+      "intro actedAt + check1Hours",
+    );
+  });
+
+  test("after_check raises the call once the check reports NOT_BOOKED", () => {
+    let s = introSent();
+    s = done(s, "CHECK_1", at(2 * HR), "NOT_BOOKED");
+    const p = plan(s, at(2 * HR), AFTER);
+
+    assert.ok(hasStep(p, "FIRST_CALL"), "they ignored the message — now a human is worth spending");
+    assert.equal(p.materialise.find((m) => m.step === "FIRST_CALL")!.dueAt.getTime(), at(2 * HR).getTime());
+  });
+
+  test("after_check holds Step 6 behind that call rather than racing it", () => {
+    let s = introSent();
+    s = done(s, "CHECK_1", at(2 * HR), "NOT_BOOKED");
+    // Call raised but not yet made.
+    assert.ok(!hasStep(plan(s, at(2 * HR), AFTER), "FOLLOWUP_WHATSAPP"), "no message while the call is outstanding");
+
+    s = done(s, "FIRST_CALL", at(3 * HR));
+    assert.ok(hasStep(plan(s, at(3 * HR), AFTER), "FOLLOWUP_WHATSAPP"), "after the call, the chase resumes");
+  });
+
+  test("a prospect who books is never handed to a caller", () => {
+    // The check found a booking, so `booked` flips and the whole chase block is skipped. This is
+    // the entire value of the mode — assert it rather than assume it.
+    const s = { ...done(introSent(), "CHECK_1", at(2 * HR), "BOOKED"), booked: true };
+    const p = plan(s, at(2 * HR), AFTER);
+    assert.ok(!hasStep(p, "FIRST_CALL"), "they booked off the message — no call should ever be raised");
+    assert.ok(!hasStep(p, "FOLLOWUP_WHATSAPP"));
+  });
+
+  test("the late-contact branch is unaffected — it never had an intro to wait on", () => {
+    // Past the 5-minute window with no intro sent: the SOP skips Step 3 and checks immediately.
+    // There is no message pending, so deferring the call to "after the message" is meaningless.
+    const s = base({ contactedAt: null });
+    const p = plan(s, at(30 * MIN), AFTER);
+    assert.ok(hasStep(p, "CHECK_1"), "the SLOW branch still checks the booking right away");
+    assert.ok(!hasStep(p, "INTRO_WHATSAPP"), "and still skips the intro");
+  });
+
+  test("re-planning is idempotent in after_check too", () => {
+    let s = introSent();
+    s = done(s, "CHECK_1", at(2 * HR), "NOT_BOOKED");
+    const first = plan(s, at(2 * HR), AFTER);
+    // Materialise what it asked for, then re-plan: nothing new should appear.
+    for (const m of first.materialise) s = { ...s, steps: { ...s.steps, [m.step]: step({ status: "DUE", dueAt: m.dueAt, actedAt: null }) } };
+    assert.deepEqual(plan(s, at(2 * HR), AFTER).materialise, [], "a second run must be a no-op");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Instant intro — the gates that decide whether a real person is messaged
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * This is the only place in the app that messages a stranger with no human in the loop, so these
+ * tests are about the BLAST RADIUS, not the happy path.
+ *
+ * The live database holds 23,500 leads imported from Synamate and spreadsheets. If the source
+ * whitelist ever inverts, or the config ever fails open, the first symptom is thousands of real
+ * WhatsApp messages and a burned business number. Every assertion below is one of those doors.
+ */
+describe("instant intro — source whitelist", () => {
+  test("only the live capture webhooks are eligible", () => {
+    for (const s of ["PABBLY", "FLEXIFUNNELS", "META_LEAD_AD"]) {
+      assert.ok(isInstantIntroSource(s), `${s} arrives from a real opt-in and should send`);
+    }
+  });
+
+  test("imports and back-office entry can NEVER trigger a send", () => {
+    // SYNAMATE and SHEET are how the 23,500 existing leads got here; MANUAL is someone typing a
+    // contact in. None of them represents a person who just asked to hear from B2.
+    for (const s of ["MANUAL", "SYNAMATE", "SHEET", "RAZORPAY", "FATHOM", "NATIVE_FORM"]) {
+      assert.ok(!isInstantIntroSource(s), `${s} must never auto-message — it is not a live opt-in`);
+    }
+  });
+
+  test("someone who already booked is not invited to book", () => {
+    assert.ok(!isInstantIntroSource("BOOKING_FORM"));
+  });
+
+  test("it is a whitelist, so an unknown source is excluded by default", () => {
+    // The property that makes this safe as the app grows: a source added to the enum tomorrow is
+    // silently OFF until someone decides otherwise.
+    assert.ok(!isInstantIntroSource("SOME_FUTURE_IMPORTER"));
+    assert.ok(!isInstantIntroSource(""));
+    assert.equal(INSTANT_INTRO_SOURCES.length, 3, "widening this list is a deliberate act");
+  });
+});
+
+describe("instant intro — the config fails closed", () => {
+  test("ships off", () => {
+    assert.equal(DEFAULT_OUTREACH_CONFIG.instantIntro.enabled, false);
+    assert.equal(coerceOutreachConfig({}).instantIntro.enabled, false);
+    assert.equal(coerceOutreachConfig(null).instantIntro.enabled, false);
+  });
+
+  test("only a literal true arms it", () => {
+    // A half-written config row, a string "yes" from a hand-edited JSON blob, a 1 — none of these
+    // should start messaging people.
+    for (const v of ["yes", "true", 1, {}, []]) {
+      assert.equal(
+        coerceOutreachConfig({ instantIntro: { enabled: v } }).instantIntro.enabled,
+        false,
+        `${JSON.stringify(v)} must not arm unattended sending`,
+      );
+    }
+    assert.equal(coerceOutreachConfig({ instantIntro: { enabled: true } }).instantIntro.enabled, true);
+  });
+
+  test("a missing or nonsensical hourly cap is NOT unlimited", () => {
+    // The one misreading that would turn the circuit breaker into the thing it exists to prevent.
+    const fallback = DEFAULT_OUTREACH_CONFIG.instantIntro.maxPerHour;
+    for (const v of [undefined, 0, -5, "abc", NaN, null]) {
+      assert.equal(
+        coerceOutreachConfig({ instantIntro: { enabled: true, maxPerHour: v } }).instantIntro.maxPerHour,
+        fallback,
+        `${JSON.stringify(v)} must fall back to the default cap, not disable it`,
+      );
+    }
+  });
+
+  test("a real cap survives, floored to a whole number", () => {
+    assert.equal(coerceOutreachConfig({ instantIntro: { maxPerHour: 25 } }).instantIntro.maxPerHour, 25);
+    assert.equal(coerceOutreachConfig({ instantIntro: { maxPerHour: 25.9 } }).instantIntro.maxPerHour, 25);
+  });
+
+  test("firstCallMode fails closed to the SOP as written", () => {
+    for (const v of [undefined, "", "nonsense", "AFTER_CHECK", true]) {
+      assert.equal(coerceOutreachConfig({ firstCallMode: v }).firstCallMode, "immediate");
+    }
+    assert.equal(coerceOutreachConfig({ firstCallMode: "after_check" }).firstCallMode, "after_check");
   });
 });

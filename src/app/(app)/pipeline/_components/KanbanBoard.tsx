@@ -7,6 +7,7 @@ import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { moveLeadStage } from "@/server/pipeline-actions";
 import { toast } from "@/components/ui/feedback";
 import { SelectMenu } from "@/components/ui/SelectMenu";
+import { useNewLeadPoll } from "./useNewLeadPoll";
 
 /**
  * The drag-and-drop pipeline (spec Part 2 §9, offered as an alternative to rules-driven).
@@ -37,6 +38,19 @@ export function KanbanBoard({ leads, stages }: { leads: KanbanLead[]; stages: st
   const [rows, setRows] = useState(leads);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
+
+  // The board is shared (every role sees every open-stage lead), so unlike the leads table
+  // this polls unconditionally — a brand-new webhook lead lands in NEW_LEAD for everyone.
+  useNewLeadPoll("kanban", (fresh) => {
+    const incoming = fresh as unknown as KanbanLead[];
+    setRows((rs) => {
+      const seen = new Set(rs.map((r) => r.id));
+      const added = incoming.filter((l) => !seen.has(l.id));
+      if (!added.length) return rs;
+      added.forEach((l) => toast(`New lead: ${l.name}`));
+      return [...added, ...rs];
+    });
+  });
 
   async function move(id: string, toStage: string) {
     const card = rows.find((r) => r.id === id);

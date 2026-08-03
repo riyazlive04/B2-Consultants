@@ -1,5 +1,5 @@
 /**
- * Generates `WhatsApp_Templates_UTILITY_Submission_Pack.docx` — the full inventory of all 25
+ * Generates `WhatsApp_Templates_UTILITY_Submission_Pack.docx` — the full inventory of all 26
  * WhatsApp templates the application needs WATI/Meta to approve, written to qualify as UTILITY
  * wherever that is honestly possible, each with the sample values Meta requires at submission.
  *
@@ -347,7 +347,11 @@ const TEMPLATES: Tpl[] = [
     body:
       "Hi {{name}}, this is {{sender}} from B2 Consultants. Thanks for registering your interest in finding your next job in Germany.\n\n" +
       "You can book a 20-minute discovery call with our team here: https://optin.b2consultants.de/apply\n\n" +
-      "I'll also give you a quick call shortly to help you get booked.",
+      // Was "I'll also give you a quick call shortly to help you get booked." Changed 3 Aug 2026,
+      // same decision as the acceptedFix in src/lib/whatsapp-submission.ts: this message is now
+      // auto-sent at opt-in and a telecaller only rings if the prospect does NOT book, so promising
+      // a call outright would be a promise the system deliberately does not keep.
+      "Prefer a hand with booking? Just reply here and one of our team will call you.",
     note: {
       warn: true,
       tag: "Cannot be UTILITY",
@@ -517,7 +521,7 @@ const TEMPLATES: Tpl[] = [
   {
     area: "G · Book publisher orders",
     name: "b2_book_order",
-    kind: "BOOK_ORDER  (new — not yet wired)",
+    kind: "BOOK_ORDER",
     sub: "Order for a student's level books, sent to the publisher/vendor",
     category: "UTILITY",
     fires: "When a book order is placed with the publisher for a student's level (BookOrder → ORDERED / QUOTE_REQUESTED). Sent to the Vendor's WhatsApp number.",
@@ -536,9 +540,8 @@ const TEMPLATES: Tpl[] = [
       "Contact on delivery: {{ship_phone}}\n\n" +
       "Kindly confirm the quotation and expected dispatch date. Thank you.",
     note: {
-      warn: true,
-      tag: "New touchpoint — needs building",
-      text: "There is no BOOK_ORDER kind in the app's WhatsAppKind enum yet, and no send path from the Book Orders panel. Approving this template is step one; wiring it (add the kind + a “Message publisher” action on the BookOrder row that fills these variables from the Vendor and BookOrder records) is a small follow-up build. The publisher's number must be a saved WhatsApp contact / opted-in for a business-initiated template to deliver.",
+      tag: "Approved and wired",
+      text: "Approved 3 Aug 2026 and live in the app: Students → Book orders → Update → “Send to publisher”. {{publisher_name}} comes from the Vendor, {{order_ref}} is allocated as BO-YYYY-NNNN on first send, {{level}} is the level's display label, and {{student_name}}/{{ship_to}}/{{ship_phone}} come from the order's snapshot — not live off the Student, so a later address edit cannot rewrite where a past parcel went. Sending is MANUAL by design; a status change never places an order. The publisher's number must be opted-in for a business-initiated template to deliver.",
     },
   },
 ];

@@ -132,23 +132,83 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
       {/* Ghosted Blueprint tracker (PRD3 §3.4) */}
       <section>
         <h3 className="mb-3 font-display text-h3">The Ghosted Blueprint</h3>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <MetricCard label="Downloads all time" value={gb.totalDownloadsAllTime.toLocaleString("en-IN")} icon={<Download size={18} />} />
-          <MetricCard label="Downloads this month" value={gb.downloadsThisMonth.toLocaleString("en-IN")} icon={<Download size={18} />} />
-          <MetricCard label="→ Discovery call" value={formatPct(gb.downloadsToCallPct)} icon={<PhoneCall size={18} />} />
-          <MetricCard label="→ Enrolment" value={formatPct(gb.downloadsToEnrollmentPct)} icon={<GraduationCap size={18} />} />
+        {/* 6-up only where six cards actually fit: at `lg` each was ~150px, which crushed the
+            label to 18px ("DO A…"). Same reason this starts at one column, not two. */}
+        <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
+          <MetricCard
+            label="Downloads all time"
+            value={gb.totalDownloadsAllTime.toLocaleString("en-IN")}
+            icon={<Download size={18} />}
+            detail={{ rows: data.months.map((m) => ({ label: m.label, value: m.ghostedDownloads.toLocaleString("en-IN") })) }}
+          />
+          <MetricCard
+            label="Downloads this month"
+            value={gb.downloadsThisMonth.toLocaleString("en-IN")}
+            icon={<Download size={18} />}
+            detail={{
+              rows: [
+                { label: "Discovery calls booked (GB leads)", value: current.gbCallsCompleted.toLocaleString("en-IN") },
+                { label: "Same-month conversion", value: formatPct(pct(current.gbCallsCompleted, current.ghostedDownloads)) },
+                {
+                  label: `${data.months[data.months.length - 2].label} downloads`,
+                  value: data.months[data.months.length - 2].ghostedDownloads.toLocaleString("en-IN"),
+                },
+              ],
+            }}
+          />
+          <MetricCard
+            label="→ Discovery call"
+            value={formatPct(gb.downloadsToCallPct)}
+            icon={<PhoneCall size={18} />}
+            detail={{
+              rows: [
+                { label: "Downloads (all time)", value: gb.totalDownloadsAllTime.toLocaleString("en-IN") },
+                { label: "Completed a discovery call", value: gb.callsCompleted.toLocaleString("en-IN") },
+                { label: "Conversion rate", value: formatPct(gb.downloadsToCallPct) },
+              ],
+            }}
+          />
+          <MetricCard
+            label="→ Enrolment"
+            value={formatPct(gb.downloadsToEnrollmentPct)}
+            icon={<GraduationCap size={18} />}
+            detail={{
+              rows: [
+                { label: "Downloads (all time)", value: gb.totalDownloadsAllTime.toLocaleString("en-IN") },
+                { label: "Enrolled (any level)", value: gb.enrolled.toLocaleString("en-IN") },
+                { label: "Conversion rate", value: formatPct(gb.downloadsToEnrollmentPct) },
+              ],
+            }}
+          />
           <MetricCard
             label="→ Guided specifically"
             value={formatPct(gb.downloadsToGuidedPct)}
             secondary="the single most important outcome"
             signal={gb.totalDownloadsAllTime > 0 ? (gb.downloadsToGuidedPct >= 2 ? "ok" : "watch") : undefined}
             icon={<Target size={18} />}
+            detail={{
+              rows: [
+                { label: "Enrolled (any level)", value: gb.enrolled.toLocaleString("en-IN") },
+                { label: "Enrolled in Guided", value: gb.guided.toLocaleString("en-IN") },
+                { label: "Guided ÷ downloads", value: formatPct(gb.downloadsToGuidedPct) },
+              ],
+            }}
           />
           <MetricCard
             label="Revenue attributed"
             value={formatInrMinor(gb.revenueInr, { compact: true })}
             secondary="students tagged Ghosted Blueprint"
             icon={<IndianRupee size={18} />}
+            detail={{
+              rows: [
+                { label: "Paying students (Ghosted Blueprint)", value: gb.enrolled.toLocaleString("en-IN") },
+                { label: "Enrolled in Guided", value: gb.guided.toLocaleString("en-IN") },
+                {
+                  label: "Avg. revenue per student",
+                  value: formatInrMinor(gb.enrolled > 0 ? Math.round(gb.revenueInr / gb.enrolled) : 0, { compact: true }),
+                },
+              ],
+            }}
           />
         </div>
       </section>

@@ -6,6 +6,7 @@ import {
   TUTOR_FEE_STATUS_LABELS,
   tutorFeeLevelFromCode,
 } from "@/lib/tutor-fee-record";
+import { attendedHeadcount, type AttendanceStatus } from "@/lib/attendance";
 import type { TutorFeeStatus } from "@prisma/client";
 
 /**
@@ -39,6 +40,19 @@ export type TutorFeeRow = {
   /** True when the batch roster has moved since this DRAFT was computed. */
   stale: boolean;
   currentHeadcount: number;
+  /**
+   * Average students actually PRESENT across this batch's marked classes, or null when no
+   * register has been taken.
+   *
+   * REPORTED, NEVER APPLIED. `headcount` above is the roster, and the fee is priced off it —
+   * that is the founders' rule (spec Part 2 §5) and this column does not change it. It exists
+   * because the gap between the two was previously invisible: the business has been paying per
+   * head enrolled with no record at all of heads present. Whether the fee basis should move is
+   * a pricing decision, and this is the number needed to have that conversation.
+   */
+  attendedAverage: number | null;
+  /** How many of this batch's classes have had a register taken — the confidence in the above. */
+  markedSessions: number;
 };
 
 export const listTutorFees = cache(async (status?: TutorFeeStatus): Promise<TutorFeeRow[]> => {
@@ -51,7 +65,14 @@ export const listTutorFees = cache(async (status?: TutorFeeStatus): Promise<Tuto
       postedEntryId: true,
       trainer: { select: { name: true } },
       batch: {
-        select: { name: true, code: true, _count: { select: { members: true, enrollments: true } } },
+        select: {
+          name: true,
+          code: true,
+          _count: { select: { members: true, enrollments: true } },
+          // Only the statuses, and only for sessions that HAVE a register — enough to average
+          // heads present without pulling a row per student per class into a finance list.
+          events: { select: { attendance: { select: { status: true } } } },
+        },
       },
     },
     orderBy: [{ status: "asc" }, { computedAt: "desc" }],
@@ -59,6 +80,17 @@ export const listTutorFees = cache(async (status?: TutorFeeStatus): Promise<Tuto
 
   return rows.map((f) => {
     const currentHeadcount = f.batch._count.members + f.batch._count.enrollments;
+    const markedSessions = f.batch.events.filter((e) => e.attendance.length > 0);
+    const attendedAverage = markedSessions.length
+      ? Math.round(
+          (markedSessions.reduce(
+            (a, e) => a + attendedHeadcount(e.attendance.map((x) => x.status as AttendanceStatus)),
+            0,
+          ) /
+            markedSessions.length) *
+            10,
+        ) / 10
+      : null;
     return {
       id: f.id,
       batchId: f.batchId,
@@ -83,6 +115,8 @@ export const listTutorFees = cache(async (status?: TutorFeeStatus): Promise<Tuto
       // DESIGN, so flagging it as out of date would read as an error rather than the intent.
       stale: f.status === "DRAFT" && currentHeadcount !== f.headcount,
       currentHeadcount,
+      attendedAverage,
+      markedSessions: markedSessions.length,
     };
   });
 });

@@ -25,8 +25,15 @@
 import type { BantDimension, QuestionKind } from "@prisma/client";
 import { INTAKE_OPTIONS, BANT_ANSWER_SCORES, bantVerdictFor, type BantResult } from "./booking-intake";
 
-/** One option on a SELECT-style question. `score` is the 0–5 weighted layer. */
-export type QuestionOption = { value: string; label: string; score: number };
+/**
+ * One option on a SELECT-style question. `score` is the 0–5 weighted layer.
+ *
+ * `aliases` are additional ANSWER TEXTS an external form may send for this option — the landing
+ * page posts its own wording, not our slug. Optional so every option written before inbound
+ * mapping existed stays valid; `value` and `label` are always accepted without being listed.
+ * See `lib/qualification-inbound.ts` for the matching rules.
+ */
+export type QuestionOption = { value: string; label: string; score: number; aliases?: string[] };
 
 /** The serializable shape of a `QualificationQuestion` row. */
 export type QuestionSpec = {
@@ -36,6 +43,8 @@ export type QuestionSpec = {
   helpText: string | null;
   kind: QuestionKind;
   options: QuestionOption[];
+  /** Field names an external form may use for this question. Empty = match on `key` alone. */
+  inboundKeys: string[];
   dimension: BantDimension;
   weight: number;
   required: boolean;
@@ -99,7 +108,7 @@ export function scoreFromAnswers(answers: AnswerMap, questions: QuestionSpec[]):
  * comments in `booking-intake.ts` — questions absent from BANT_ANSWER_SCORES score nothing
  * and are kept for context, exactly as they are today.
  */
-const DIMENSION_BY_KEY: Record<string, BantDimension> = {
+export const DIMENSION_BY_KEY: Record<string, BantDimension> = {
   readyToInvest: "BUDGET",
   currentIncome: "BUDGET",
   decisionMaking: "AUTHORITY",
@@ -109,7 +118,7 @@ const DIMENSION_BY_KEY: Record<string, BantDimension> = {
 };
 
 /** The founders' wording for each question, as the public form asks it today. */
-const QUESTION_TEXT: Record<string, string> = {
+export const QUESTION_TEXT: Record<string, string> = {
   yearsExperience: "How many years of work experience do you have?",
   highestEducation: "What is your highest qualification?",
   whenStartGermany: "When are you looking to start your move to Germany?",
@@ -150,6 +159,11 @@ export function catalogueFromIntake(): QuestionSpec[] {
         label: o.label,
         score: scores[o.value] ?? 0,
       })),
+      // No seeded inbound mapping. `value` and `label` are accepted implicitly and the folded
+      // match already gets `whenStartGermany` from "when_start_germany" or "When Start Germany"
+      // unaided; anything beyond that is read off a REAL delivery. Seeding guesses here would
+      // look like configuration someone had checked against a live payload when they had not.
+      inboundKeys: [],
       dimension: DIMENSION_BY_KEY[key] ?? ("NONE" as BantDimension),
       weight: 1,
       required: key in DIMENSION_BY_KEY, // the scored questions are the ones we must have

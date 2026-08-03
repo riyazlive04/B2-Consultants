@@ -62,8 +62,8 @@ export function useOfflineCalls(onSynced?: () => void) {
     try {
       const res = await syncOfflineCalls(
         JSON.stringify({
-          entries: sendable.map(({ clientKey, leadId, outcome, notes, recordedAt }) => ({
-            clientKey, leadId, outcome, notes, recordedAt,
+          entries: sendable.map(({ clientKey, leadId, outcome, notes, nextStage, recordedAt }) => ({
+            clientKey, leadId, outcome, notes, nextStage: nextStage ?? "", recordedAt,
           })),
         }),
       );
@@ -93,12 +93,13 @@ export function useOfflineCalls(onSynced?: () => void) {
 
   /** Record a call. Goes straight to the device queue; the flush decides when it travels. */
   const queueCall = useCallback(
-    async (leadId: string, outcome: string, notes: string): Promise<boolean> => {
+    async (leadId: string, outcome: string, notes: string, nextStage = ""): Promise<boolean> => {
       const entry: QueuedCall = {
         clientKey: newClientKey(),
         leadId,
         outcome,
         notes,
+        nextStage,
         recordedAt: new Date().toISOString(),
         attempts: 0,
       };

@@ -7,7 +7,7 @@ import { Prisma, type LeadSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection, capabilityCheck } from "@/lib/rbac";
 import { optionalRule } from "@/lib/field-rules";
-import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
+import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
 import { upsertIntakeLead } from "./lead-intake";
@@ -189,8 +189,18 @@ export type SubmitResult =
   | { ok: false; error: string };
 
 export async function submitPublicForm(slug: string, form: FormData): Promise<SubmitResult> {
+  // Per-IP plus a whole-site ceiling, charged atomically. A form submission costs a row, a
+  // possible automation enrolment and (through that) possible outbound sends — cheaper than a
+  // booking, hence the looser numbers, but still not free.
+  //
+  // Keyed on the SLUG as well as the IP: the per-form bucket means someone hammering one funnel
+  // can't lock every other form on the site, which a single shared `form:<ip>` key did.
   const ip = clientIpFrom(await Promise.resolve(headers()));
-  if (!rateLimitOk(`form:${ip}`, 8, 10 * 60_000)) {
+  const gate = takeTokens([
+    { key: `form:ip:${slug}:${ip}`, rule: RATE_RULES.formPerIp },
+    { key: "form:global", rule: RATE_RULES.formGlobal },
+  ]);
+  if (!gate.ok) {
     return { ok: false, error: "Too many submissions. Please try again in a few minutes." };
   }
   // Honeypot — bots fill hidden fields; humans never see them.

@@ -31,16 +31,25 @@ const SIZES = [10, 25, 50, 100, 200] as const;
 export function HandOutLeads({
   assignees,
   available,
+  splitByShareDefault,
 }: {
   /** Same list the per-row assignee picker uses; the leading "unassigned" entry is dropped. */
   assignees: { value: string; label: string }[];
   available: number;
+  /**
+   * Whether Console → Call Distribution has asked for share-based hand-outs.
+   *
+   * A DEFAULT, not a lock: the founder still needs to be able to give one person a specific batch
+   * without going back to Console to flip a global setting.
+   */
+  splitByShareDefault: boolean;
 }) {
   const router = useRouter();
   const people = assignees.filter((a) => a.value);
   const [userId, setUserId] = useState(people[0]?.value ?? "");
   const [count, setCount] = useState<string>("50");
   const [order, setOrder] = useState<"newest" | "oldest">("newest");
+  const [split, setSplit] = useState(splitByShareDefault);
   const [busy, setBusy] = useState(false);
 
   if (!people.length) return null;
@@ -50,11 +59,22 @@ export function HandOutLeads({
 
   async function handOut() {
     setBusy(true);
-    const res = await assignLeadBatch({ userId, count: n, oldestFirst: order === "oldest" });
+    const res = await assignLeadBatch({
+      userId,
+      count: n,
+      oldestFirst: order === "oldest",
+      splitByShare: split,
+    });
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
-    const who = people.find((p) => p.value === userId)?.label ?? "them";
-    toast(`Handed ${res.assigned} lead${res.assigned === 1 ? "" : "s"} to ${who}`);
+    if (split) {
+      // The per-person breakdown is in the activity feed; the toast just confirms the mode, so
+      // nobody wonders whether the "To" box was silently used.
+      toast(`Handed ${res.assigned} lead${res.assigned === 1 ? "" : "s"} out across the rotation`);
+    } else {
+      const who = people.find((p) => p.value === userId)?.label ?? "them";
+      toast(`Handed ${res.assigned} lead${res.assigned === 1 ? "" : "s"} to ${who}`);
+    }
     router.refresh();
   }
 
@@ -80,13 +100,34 @@ export function HandOutLeads({
 
           {available > 0 && (
             <>
+              {/* The mode picker comes FIRST because it decides whether the "To" box below means
+                  anything — showing a person selector that will be ignored is how a founder
+                  concludes the feature is broken. */}
+              <label className="mt-4 flex items-start gap-2.5 rounded-field border border-line p-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={split}
+                  onChange={(e) => setSplit(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 flex-none"
+                />
+                <span>
+                  <span className="font-medium text-ink">Split across the rotation by share</span>
+                  <span className="mt-0.5 block text-caption text-muted">
+                    Divides the batch in the proportions set in Console → Call Distribution,
+                    skipping anyone off today or at their daily cap. Untick to give the whole batch
+                    to one person.
+                  </span>
+                </span>
+              </label>
+
               <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <Field label="To">
+                <Field label="To" hint={split ? "Ignored — the rotation decides." : undefined}>
                   <SelectMenu
                     aria-label="Assign leads to"
                     value={userId}
                     onChange={(e) => setUserId(e.target.value)}
                     options={people}
+                    disabled={split}
                   />
                 </Field>
                 <Field label="How many">

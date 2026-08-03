@@ -57,6 +57,66 @@ export function closesWithDecision(outcome: string): boolean {
 }
 
 /**
+ * Where a Level 1 conversation can leave a lead — the stages the SETTER is allowed to choose
+ * when logging a call.
+ *
+ * ── Why a short list rather than the whole enum ──────────────────────────────────
+ * `stageAfterCall` refuses to guess what "spoke to them" meant, which is right — but it left
+ * the specialist with no way to say what it meant either, so the card stayed put and the JD's
+ * "pipeline updated by EOD: 100%" target was measured on the desk while the only control that
+ * could move it lived on another screen. This is that control.
+ *
+ * The list is the Level 1 job, not the funnel. A setter's conversation ends in exactly one of
+ * these four places; SSS, proposal, deposit and WON belong to Levels 2 and 3 and are reached by
+ * their own actions. Offering all fifteen stages on a call-logging modal is how a lead gets
+ * filed under "Deposit paid" by a mis-tap — and a wrongly-advanced card is invisible, whereas a
+ * stale one is not.
+ *
+ * WON and LOST are deliberately absent. LOST is already reachable — it is what "Not interested"
+ * and "Wrong number" mean, applied automatically — and WON requires money to have arrived,
+ * which no phone call can establish.
+ */
+export const SETTER_NEXT_STAGES = [
+  "DISCO_BOOKED",
+  "DISCO_NOT_BOOKED",
+  "SENT_TO_WORKSHOP",
+  "WORKSHOP_FOLLOWUP",
+] as const;
+
+export type SetterNextStage = (typeof SETTER_NEXT_STAGES)[number];
+
+export function isSetterNextStage(value: string): value is SetterNextStage {
+  return (SETTER_NEXT_STAGES as readonly string[]).includes(value);
+}
+
+/**
+ * The stage a logged call should leave the lead on, given both the outcome and whatever the
+ * specialist explicitly chose.
+ *
+ * ── Precedence, and why it is this way round ─────────────────────────────────────
+ * The AUTOMATIC move wins. "Not interested" means the lead is dead whatever is sitting in a
+ * select the specialist may not have looked at — and the two outcomes that move automatically
+ * are exactly the two with only one possible meaning. Letting a stale dropdown value override
+ * them would resurrect a lead the specialist had just closed.
+ *
+ * An explicit choice only applies where the app had no opinion, which is the case this exists
+ * for. It is still bounded: `isSetterNextStage` rejects anything outside the Level 1 list, and
+ * the terminal guard means a WON or LOST lead cannot be dragged back by logging a call against
+ * it — the same protection `stageAfterCall` already gives.
+ */
+export function resolveStageAfterCall(
+  current: LeadStage,
+  outcome: string,
+  chosen: string | null | undefined,
+): LeadStage | null {
+  const automatic = stageAfterCall(current, outcome);
+  if (automatic) return automatic;
+  if (TERMINAL_STAGES.has(current)) return null;
+  if (!chosen || !isSetterNextStage(chosen)) return null;
+  return chosen === current ? null : chosen;
+}
+
+/**
  * The stage a DISCOVERY call outcome moves the lead to (rebuild spec §7's routing panel).
  *
  * Unlike a dial outcome, every one of these IS unambiguous — the Discovery Specialist has

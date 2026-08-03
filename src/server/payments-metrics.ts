@@ -15,20 +15,24 @@ export type PaymentsOverview = {
   receivedInr: string;
   overdueInr: string;
   counts: { draft: number; sent: number; paid: number; overdue: number };
+  /** "Received" broken down by how it came in — feeds that card's detail popup. */
+  receivedByMethod: { method: string; amountInr: string }[];
 };
 
 export async function getPaymentsOverview(): Promise<PaymentsOverview> {
   const invoices = await prisma.invoice.findMany({
     where: { ...ACTIVE, kind: "INVOICE" },
-    select: { status: true, totalInrMinor: true, dueDate: true, payments: { select: { amountInrMinor: true } } },
+    select: { status: true, totalInrMinor: true, dueDate: true, payments: { select: { amountInrMinor: true, method: true } } },
   });
   let draft = 0n, due = 0n, received = 0n, overdue = 0n;
   const counts = { draft: 0, sent: 0, paid: 0, overdue: 0 };
+  const byMethod = new Map<string, bigint>();
   const today = new Date();
   for (const i of invoices) {
     const paid = i.payments.reduce((a, p) => a + p.amountInrMinor, 0n);
     const balance = i.totalInrMinor - paid;
     received += paid;
+    for (const p of i.payments) byMethod.set(p.method, (byMethod.get(p.method) ?? 0n) + p.amountInrMinor);
     if (i.status === "DRAFT") { draft += i.totalInrMinor; counts.draft++; }
     else if (i.status === "PAID") { counts.paid++; }
     else if (i.status === "VOID") { /* excluded */ }
@@ -44,6 +48,9 @@ export async function getPaymentsOverview(): Promise<PaymentsOverview> {
     receivedInr: formatInrMinor(received),
     overdueInr: formatInrMinor(overdue),
     counts,
+    receivedByMethod: [...byMethod.entries()]
+      .sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0))
+      .map(([method, amount]) => ({ method: method.charAt(0).toUpperCase() + method.slice(1), amountInr: formatInrMinor(amount) })),
   };
 }
 

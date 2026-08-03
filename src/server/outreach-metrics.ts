@@ -15,7 +15,9 @@ import { readOutreachConfig, projectJourney, renderStep, type JourneyRow } from 
 
 const INCLUDE = {
   steps: true,
-  lead: { select: { id: true, name: true, phone: true, email: true } },
+  // `bantAvg` rides along so a prospect scored on the LANDING PAGE — rather than on our booking
+  // form — still shows a Key Metrics score instead of an em dash.
+  lead: { select: { id: true, name: true, phone: true, email: true, bantAvg: true } },
   booking: { include: { slot: { select: { startsAt: true } } } },
   respTouchpoint: { select: { id: true, name: true } },
   respDisco: { select: { id: true, name: true } },
@@ -121,7 +123,10 @@ function toQueueRow(row: JourneyRow, now: Date, sla: ReturnType<typeof defaultSl
     whatsappConfirmed: row.whatsappConfirmed,
     salesCallConfirmed: row.salesCallConfirmed,
     highlyQualified: row.highlyQualified,
-    bantAvg: row.booking?.bantAvg ?? null,
+    // Booking first, then the lead's opt-in score — the same precedence `bantForQualification`
+    // applies when the engine takes the Step 11 verdict, so the queue shows the number the
+    // verdict was (or will be) based on rather than a different one.
+    bantAvg: row.booking?.bantAvg ?? row.lead.bantAvg ?? null,
     steps,
     next: steps.find((s) => s.actionable) ?? null,
   };
@@ -269,7 +274,10 @@ export async function getKeyMetrics(): Promise<KeyMetricsRow[]> {
       name: row.lead.name,
       email: row.lead.email,
       phone: row.lead.phone,
-      bantScore: row.bantScoreAtQual ?? row.booking?.bantAvg ?? null,
+      // `bantScoreAtQual` first: it is the score the verdict was actually taken on and survives a
+      // later re-tune. Then the booking's, then the LEAD's — the landing page's own answers, for
+      // a prospect whose booking carries no score of its own.
+      bantScore: row.bantScoreAtQual ?? row.booking?.bantAvg ?? row.lead.bantAvg ?? null,
       qualified: row.qualified,
       respTouchpoint: row.respTouchpoint?.name ?? null,
       respDisco: row.respDisco?.name ?? null,

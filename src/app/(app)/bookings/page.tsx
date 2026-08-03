@@ -81,6 +81,12 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
   };
   const nextBooked = slots.find((s) => s.status === "BOOKED" && s.bookedName);
 
+  const openSlotsByAssignee = new Map<string, number>();
+  for (const s of openSlots) {
+    const name = s.assignedToName ?? "Unassigned";
+    openSlotsByAssignee.set(name, (openSlotsByAssignee.get(name) ?? 0) + 1);
+  }
+
   return (
     <div className="w-full space-y-6">
       {/* Header strip */}
@@ -106,8 +112,29 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Open slots (upcoming)" value={kpis.openSlots} secondary="Available to book right now" icon={<CalendarClock size={18} />} />
-        <MetricCard label="Booked this month" value={kpis.bookedThisMonth} icon={<CalendarCheck size={18} />} />
+        <MetricCard
+          label="Open slots (upcoming)"
+          value={kpis.openSlots}
+          secondary="Available to book right now"
+          icon={<CalendarClock size={18} />}
+          detail={{
+            rows: [...openSlotsByAssignee.entries()].map(([name, count]) => ({ label: name, value: count })),
+          }}
+        />
+        <MetricCard
+          label="Booked this month"
+          value={kpis.bookedThisMonth}
+          icon={<CalendarCheck size={18} />}
+          detail={{
+            rows: [
+              { label: BOOKING_STATUS_LABELS.BOOKED, value: kpis.statusCounts.booked },
+              { label: BOOKING_STATUS_LABELS.RESCHEDULED, value: kpis.statusCounts.rescheduled },
+              { label: BOOKING_STATUS_LABELS.CANCELLED, value: kpis.statusCounts.cancelled },
+              { label: BOOKING_STATUS_LABELS.COMPLETED, value: kpis.statusCounts.completed },
+              { label: BOOKING_STATUS_LABELS.NO_SHOW, value: kpis.statusCounts.noShow },
+            ],
+          }}
+        />
         <MetricCard
           label="Avg BANT score"
           value={kpis.avgWeighted !== null ? kpis.avgWeighted.toFixed(1) : kpis.avgBant.toFixed(1)}
@@ -121,6 +148,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                 : kpis.avgBant >= 3 ? "ok" : kpis.avgBant >= 2 ? "watch" : "risk"
           }
           icon={<Target size={18} />}
+          detail={{
+            rows: [
+              { label: "Confirm (avg > 3)", value: kpis.verdicts.confirm },
+              { label: "Doubtful (avg 2-3)", value: kpis.verdicts.doubt },
+              { label: "Cancel (avg < 2)", value: kpis.verdicts.cancel },
+            ],
+          }}
         />
         <MetricCard
           label="BANT verdicts"
@@ -132,6 +166,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
           secondary="Confirm · Doubtful · Cancel - this month"
           signal={kpis.verdicts.cancel > kpis.verdicts.confirm ? "watch" : kpis.verdicts.confirm > 0 ? "ok" : undefined}
           icon={<Flame size={18} />}
+          detail={{
+            rows: [
+              { label: "Confirm call", value: kpis.verdicts.confirm },
+              { label: "Doubtful", value: kpis.verdicts.doubt },
+              { label: "Cancel recommended", value: kpis.verdicts.cancel },
+            ],
+          }}
         />
       </div>
 

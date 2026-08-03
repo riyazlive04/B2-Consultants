@@ -5,6 +5,8 @@ import { istToday } from "@/lib/dates";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { pickFirstCaller } from "./assignment";
 import { notifyNewOptIn } from "./outreach-notify";
+import { scoreLeadAtOptIn } from "./lead-qualification";
+import { sendIntroNow } from "./outreach-instant";
 
 /**
  * Single entry point for every non-manual lead that lands in the system - the two
@@ -40,6 +42,18 @@ export type IntakeLead = {
   externalRef?: string | null;
   utm?: Record<string, string> | null;
   notes?: string | null;
+  /**
+   * The sender's RAW payload, when it may carry qualification answers.
+   *
+   * Application Logic §4.3 stage 1: the landing page asks the band-score questions, so the score
+   * has to be taken here — at opt-in — not only when someone later books. Passed as the whole
+   * payload rather than pre-parsed answers because the mapping from a sender's field names onto
+   * our catalogue is founder-configurable, and that mapping lives behind this boundary
+   * (`server/lead-qualification.ts`), not in each webhook route.
+   *
+   * Omit it and nothing changes: scoring is skipped entirely.
+   */
+  intakePayload?: Record<string, unknown> | null;
 };
 
 export type IntakeResult = { lead: Lead; created: boolean; deduped: "externalRef" | "phone" | null };
@@ -132,7 +146,49 @@ export async function findDuplicateLead(input: {
   return null;
 }
 
+/**
+ * Capture the lead, then score it from the same payload.
+ *
+ * Split from `resolveIntakeLead` below so scoring happens at ONE place instead of at each of its
+ * four exits — and, more to the point, so it applies to a DEDUPED lead too. A prospect who opted
+ * in months ago with no answers and has now filled in the qualification form is the same Lead
+ * row; scoring only the freshly-created ones would leave exactly the returning, most-engaged
+ * prospects unscored.
+ *
+ * The score is AWAITED, unlike `notifyNewOptIn`. That one is an email nobody is blocked on; this
+ * one decides who the SOP puts in front of a caller, and a route handler's response can end the
+ * execution context — a fire-and-forget write would be lost precisely when traffic is heaviest.
+ */
 export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
+  const result = await resolveIntakeLead(rawInput);
+  if (rawInput.intakePayload) {
+    await scoreLeadAtOptIn(result.lead.id, rawInput.intakePayload);
+  }
+
+  /**
+   * SOP Step 3, sent the moment they opt in — the founder's "don't wait for a telecaller".
+   *
+   * ONLY on `created`. A deduped lead is someone we have already met: they may be mid-chase, or
+   * booked, or have asked us to stop months ago, and re-inviting them to book is at best noise.
+   * The dedupe branches return early precisely because that person already has a journey — this
+   * is the one place where "new row" and "new human" mean the same thing.
+   *
+   * AWAITED, unlike `notifyNewOptIn`. A webhook's response can end the execution context, and a
+   * send lost to that would be invisible — no row, no error, just a prospect nobody contacted. It
+   * costs the webhook a second and it never throws (see `sendIntroNow`'s contract), so the caller
+   * cannot be broken by it. Scoring above is awaited for the same reason.
+   *
+   * The source gate lives inside `sendIntroNow` so the whitelist is stated once, next to the
+   * reasoning for it.
+   */
+  if (result.created) {
+    await sendIntroNow(result.lead.id, result.lead.source);
+  }
+
+  return result;
+}
+
+async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
   const input = bound(rawInput);
   const utm = input.utm && Object.keys(input.utm).length ? (input.utm as Prisma.InputJsonValue) : undefined;
 

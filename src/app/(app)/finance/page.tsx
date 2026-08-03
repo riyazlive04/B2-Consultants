@@ -9,11 +9,10 @@ import { ClientMovementChart } from "./_components/ClientMovementChart";
 import { BUSINESS_LINE_LABELS, lineForKind, type BusinessLineView } from "@/lib/business-line";
 import { Tabs } from "@/components/ui/Tabs";
 import { Card, CardTitle, PageHeader, Pill } from "@/components/ui/kit";
-import { toDateInputValue, istToday } from "@/lib/dates";
-import { formatInrMinor, formatMonth, formatPct } from "@/lib/format";
+import { toDateInputValue, istToday, istMonthRange } from "@/lib/dates";
+import { formatMonth, formatPct } from "@/lib/format";
 import { PROGRAM_LEVEL_LABELS, PAYMENT_METHOD_LABELS, EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
-import { signedColor } from "@/lib/signals";
 import { prisma } from "@/lib/prisma";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { getFinanceOverview } from "@/server/finance-metrics";
@@ -28,6 +27,8 @@ import { ExpenseSection } from "./_components/ExpenseSection";
 import { IncomeSection } from "./_components/IncomeSection";
 import { PendingSection } from "./_components/PendingSection";
 import { FinanceKpis, type Kpi } from "./_components/FinanceKpis";
+import { RecognitionCard } from "./_components/RecognitionCard";
+import { getRecognition, recognitionConfidence } from "@/server/revenue-recognition";
 import { ArchivedGroups } from "@/components/ui/ArchivedGroups";
 import { getArchivedIncomes, getArchivedExpenses, getArchivedPendingPayments } from "@/server/archive-metrics";
 import {
@@ -99,9 +100,19 @@ export default async function FinancePage({
   // (Error Log E1/E4). See server/business-line-view.ts.
   const line: BusinessLineView = await resolveBusinessLine(searchParams?.line);
   const seg = line === "ALL" ? null : metrics.segments[line];
-  const [annual, clientMovement] = await Promise.all([
+  const { start: monthStart, end: monthEndExclusive } = istMonthRange();
+  const monthEndInclusive = new Date(monthEndExclusive.getTime() - 86_400_000);
+  const [annual, clientMovement, recognition] = await Promise.all([
     getAnnualPerformance(line === "ALL" ? null : line),
     getClientMovement(),
+    // Deliberately NOT segmented by business line. Recognition is about time, not about which
+    // business a level belongs to, and a per-line split would need the same enrollment link the
+    // confidence note already says is mostly missing — a finer cut of a coarse number.
+    //
+    // `istMonthRange` is HALF-OPEN ([1st, 1st of next month)) while a recognition window's `to`
+    // is INCLUSIVE, so the end is pulled back a day. Passing it straight through would earn one
+    // extra day of every active program into this month, every month.
+    getRecognition(monthStart, monthEndInclusive),
   ]);
 
   // The figures every card below reads — combined, or the selected line's slice.
@@ -187,6 +198,18 @@ export default async function FinancePage({
       : []),
   ];
 
+  // COGS by category (this month) — same shape as catSlices, restricted to isCogs expenses,
+  // so the "COGS this month" card's popup breaks the figure down instead of repeating it.
+  const cogsCatTotals = new Map<string, { inr: number; eur: number }>();
+  for (const e of expenses.filter((e) => e.isCogs && e.date.slice(0, 7) === monthKey)) {
+    const cur = cogsCatTotals.get(e.category) ?? { inr: 0, eur: 0 };
+    cogsCatTotals.set(e.category, { inr: cur.inr + e.agg.inr, eur: cur.eur + e.agg.eur });
+  }
+  for (const [k, v] of cogsCatTotals) cogsCatTotals.set(k, { inr: v.inr * catShare, eur: v.eur * catShare });
+  const cogsCatSlices = [...cogsCatTotals.entries()]
+    .sort((a, b) => b[1].inr - a[1].inr)
+    .map(([c, v]) => ({ label: shortCat(c), amount: v }));
+
   // Honest MoM deltas: this month-to-date vs the SAME days of last month
   // Only meaningful on the combined view — prevSameDay is not split by line.
   const momRevenuePct =
@@ -200,6 +223,18 @@ export default async function FinancePage({
     .filter((i) => (line === "ALL" ? true : lineOfLevel(i.programLevel) === line))
     .sort((a, b) => b.agg.inr - a.agg.inr)
     .slice(0, 5);
+
+  // Receivables worth chasing first: still owed, most overdue days first, then largest
+  // balance. Mirrors the KPI card's "active + still owing" filter (§ receivables above).
+  const priorityReceivables = pendings
+    .filter((p) => (p.status === "ACTIVE" || p.status === "OVERDUE") && p.balance.inr > 0)
+    .filter((p) => (line === "ALL" ? true : lineOfLevel(p.programLevel) === line))
+    .sort((a, b) => {
+      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+      if (a.daysOverdue !== b.daysOverdue) return b.daysOverdue - a.daysOverdue;
+      return b.balance.inr - a.balance.inr;
+    })
+    .slice(0, 6);
 
   // KPI cards: raw dual-currency figures + the breakdown behind each, handed to a client
   // component that owns the ₹/€ toggle and the click-to-expand popups.
@@ -249,8 +284,10 @@ export default async function FinancePage({
       key: "cogs", label: "COGS this month", iconName: "package",
       inrMinor: view.cogs.inr, eurMinor: view.cogs.eur,
       detailTitle: "Cost of delivery — this month",
-      detailNote: "The slice of expenses tagged as a direct cost of delivering the program.",
-      detailRows: [{ label: "Direct delivery cost", inrMinor: view.cogs.inr, eurMinor: view.cogs.eur }],
+      detailNote: "By category, largest first.",
+      detailRows: cogsCatSlices.length
+        ? cogsCatSlices.map((c) => ({ label: c.label, inrMinor: c.amount.inr, eurMinor: c.amount.eur }))
+        : [{ label: "No COGS-tagged expenses yet this month", text: "—" }],
     },
     {
       key: "expenses", label: "Expenses this month", iconName: "card",
@@ -325,6 +362,16 @@ export default async function FinancePage({
 
         <FinanceKpis kpis={kpis} />
 
+        {/* Sits directly under the KPI row because it REFRAMES that row: every figure above is
+            cash, and this says how much of it has actually been earned yet. */}
+        <RecognitionCard
+          monthLabel={monthLabel}
+          cashInrMinor={recognition.cashInrMinor}
+          recognisedInrMinor={recognition.recognisedInrMinor}
+          deferredInrMinor={recognition.deferredInrMinor}
+          confidence={recognitionConfidence(recognition)}
+        />
+
         {/* Bento grid — hero + breakdowns left, top payments right. A client component, so every
             figure in it answers to the ₹/€ toggle (it used to be inline here and therefore INR). */}
         <FinanceBento
@@ -345,41 +392,26 @@ export default async function FinancePage({
             date: p.date,
             agg: p.agg,
           }))}
+          priorityReceivables={priorityReceivables.map((p) => ({
+            id: p.id,
+            studentName: p.studentName,
+            studentCode: p.studentId ? studentCodeById[p.studentId] ?? null : null,
+            levelLabel: PROGRAM_LEVEL_LABELS[p.programLevel] ?? p.programLevel,
+            balance: p.balance,
+            dueDate: p.nextDueDate,
+            overdue: p.overdue,
+            daysOverdue: p.daysOverdue,
+            wa: waByPending[p.id] ?? null,
+          }))}
         />
 
       {/* §3.2/§3.3 — the year view the dashboard never had: cumulative target vs
           achieved across Jan–Dec, with a run-rate projection to year-end. */}
       <Card
         title={<CardTitle icon={<CalendarRange size={16} />}>Month on month — {annual.year}</CardTitle>}
-        subtitle="Cumulative target vs achieved, with a projection to year-end. Hover any month. Shown in ₹ — the monthly target is set in rupees."
+        subtitle="Plan pace, actual and what it now takes to still make the year. Hover any month. Shown in ₹ — the monthly target is set in rupees."
       >
-        <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {[
-            { label: "Achieved to date", value: formatInrMinor(annual.achievedToDateInr, { compact: true }), tone: undefined },
-            { label: "Target to date", value: formatInrMinor(annual.targetToDateInr, { compact: true }), tone: undefined },
-            {
-              label: annual.varianceInr >= 0 ? "Ahead of target" : "Behind target",
-              value: formatInrMinor(Math.abs(annual.varianceInr), { compact: true }),
-              tone: signedColor(annual.varianceInr),
-            },
-            {
-              label: "Projected year-end",
-              value: formatInrMinor(annual.projectedYearEndInr, { compact: true }),
-              tone: signedColor(annual.projectedYearEndInr - annual.fullYearTargetInr),
-            },
-          ].map((t) => (
-            <div key={t.label}>
-              <p className="text-caption font-medium text-ink-2">{t.label}</p>
-              <p
-                className="tnum mt-0.5 font-display text-h2 font-bold tracking-tight"
-                style={t.tone ? { color: t.tone } : undefined}
-              >
-                {t.value}
-              </p>
-            </div>
-          ))}
-        </div>
-        <AnnualChart months={annual.months} currentMonth={istToday().getUTCMonth()} />
+        <AnnualChart data={annual} />
       </Card>
 
       {/* F1 — the founder's own tracking sheet, rebuilt. Bars against plan, with the three

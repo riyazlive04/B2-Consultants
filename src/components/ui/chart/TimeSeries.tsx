@@ -97,7 +97,7 @@ export function TimeSeriesChart({
   toolbar,
   yAxisLabel,
   band,
-  referenceLine,
+  referenceLines,
   extraTooltipRows,
 }: {
   points: readonly TimeSeriesDatum[];
@@ -131,10 +131,14 @@ export function TimeSeriesChart({
   /** Shade the variance between two of the series above. See `TimeSeriesBand`. */
   band?: TimeSeriesBand;
   /**
-   * A horizontal rule at a fixed value — a break-even line, a target floor, a JD threshold.
-   * Labelled inline, because an unlabelled extra line on a chart is a puzzle.
+   * Horizontal rules at fixed values — a plan total, a run-rate projection, a break-even line.
+   * Each is labelled twice over, deliberately redundant: inline beside its own line (with the
+   * OTHER lines' labels pushed clear of it, so a plan total and an annualised figure sitting
+   * close together on the scale never print on top of one another) AND in the legend row above
+   * the chart, which wraps and never collides regardless of card width — the inline label is the
+   * "which line is this" read, the legend is the one guaranteed legible on a phone.
    */
-  referenceLine?: { value: number; label: string; color?: string };
+  referenceLines?: Array<{ value: number; label: string; color?: string }>;
   /**
    * Rows appended to the tooltip for the hovered index — a running total, a share, a delta.
    *
@@ -155,23 +159,42 @@ export function TimeSeriesChart({
     series.length === 0 ||
     series.every((s) => s.values.every((v) => v == null));
 
-  const legend: LegendItem[] = series.map((s, i) => ({
-    label: s.label,
-    color: s.color ?? seriesColor(i),
-    dashed: s.compare,
-  }));
+  const legend: LegendItem[] = [
+    ...series.map((s, i) => ({
+      label: s.label,
+      color: s.color ?? seriesColor(i),
+      dashed: s.compare,
+    })),
+    // Reference lines carry their figure right in the legend — the one place guaranteed to
+    // wrap and stay legible regardless of card width, which the inline plot label is not.
+    ...(referenceLines ?? []).map((rl) => ({
+      label: rl.label,
+      color: rl.color ?? "var(--ink-3)",
+      dashed: true,
+      value: formatValue(rl.value),
+    })),
+  ];
 
   const allValues = useMemo(
-    () => series.flatMap((s) => s.values.filter((v): v is number => v != null)),
-    [series],
+    () => [
+      ...series.flatMap((s) => s.values.filter((v): v is number => v != null)),
+      // A reference line can sit well above every plotted value (a full-year plan against five
+      // months of actuals) — it has to widen the domain itself, or it draws off the top of the
+      // plot and simply never appears.
+      ...(referenceLines ?? []).map((rl) => rl.value),
+    ],
+    [series, referenceLines],
   );
 
   return (
     <ChartFrame
       height={height}
       state={isEmpty && state === "ready" ? "empty" : state}
-      legend={series.length > 1 ? legend : undefined}
-      onLegendHover={setActiveSeries}
+      legend={legend.length > 1 ? legend : undefined}
+      // Reference-line legend rows live past `series.length` in the merged array — dimming is
+      // only meaningful for an actual plotted series, so a reference-line hover is a no-op
+      // rather than fading every series out from under it.
+      onLegendHover={(i) => setActiveSeries(i != null && i < series.length ? i : null)}
       activeSeries={activeSeries}
       emptyTitle={emptyTitle ?? "Nothing to plot yet"}
       emptyBody={emptyBody ?? "This chart fills in as records are created in the selected period."}
@@ -378,29 +401,48 @@ export function TimeSeriesChart({
                   );
                 })()}
 
-              {/* ── reference line ── */}
-              {referenceLine && referenceLine.value >= min && referenceLine.value <= max && (
-                <g>
-                  <line
-                    x1={padLeft}
-                    x2={padLeft + plotW}
-                    y1={y(referenceLine.value)}
-                    y2={y(referenceLine.value)}
-                    stroke={referenceLine.color ?? "var(--ink-3)"}
-                    strokeWidth={1.5}
-                    strokeDasharray="4 3"
-                  />
-                  <text
-                    x={padLeft + plotW}
-                    y={y(referenceLine.value) - 5}
-                    textAnchor="end"
-                    fontSize={12}
-                    fill={referenceLine.color ?? "var(--ink-3)"}
-                  >
-                    {referenceLine.label}
-                  </text>
-                </g>
-              )}
+              {/* ── reference lines ──
+                  Labels are stacked top-to-bottom with a minimum gap rather than pinned each to
+                  its own line: a plan total and a run-rate projection routinely land within a
+                  few pixels of each other on the same scale, and two 12px labels that close
+                  print on top of one another — which is the exact bug this replaces. Sorting by
+                  pixel position and pushing later labels down (never up) keeps every label
+                  readable while leaving the dashed lines themselves at their true value. */}
+              {(() => {
+                const inRange = (referenceLines ?? []).filter((rl) => rl.value >= min && rl.value <= max);
+                const minGap = 13;
+                let prevLabelY = -Infinity;
+                const laid = [...inRange]
+                  .sort((a, b) => y(a.value) - y(b.value))
+                  .map((rl) => {
+                    const rawY = y(rl.value);
+                    const labelY = Math.max(rawY - 5, prevLabelY + minGap, 10);
+                    prevLabelY = labelY;
+                    return { ...rl, rawY, labelY };
+                  });
+                return laid.map((rl, i) => (
+                  <g key={`ref-${i}`}>
+                    <line
+                      x1={padLeft}
+                      x2={padLeft + plotW}
+                      y1={rl.rawY}
+                      y2={rl.rawY}
+                      stroke={rl.color ?? "var(--ink-3)"}
+                      strokeWidth={1.5}
+                      strokeDasharray="4 3"
+                    />
+                    <text
+                      x={padLeft + plotW}
+                      y={rl.labelY}
+                      textAnchor="end"
+                      fontSize={12}
+                      fill={rl.color ?? "var(--ink-3)"}
+                    >
+                      {rl.label} · {formatValue(rl.value)}
+                    </text>
+                  </g>
+                ));
+              })()}
 
               {/* ── series ── */}
               {series.map((s, si) => {

@@ -21,6 +21,15 @@ services:
       - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    # `!override` REPLACES the prod file's port list rather than appending to it.
+    # The prod stack now publishes only 8080:80 because the VPS's shared Traefik owns
+    # 80/443 and terminates TLS upstream. There is no Traefik on a laptop: this Caddy
+    # is the only thing serving b2.localtest.me, so it has to hold 443 itself.
+    # Port 80 stays published for the →https redirect (no ACME here — `local_certs`).
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
 
   app:
     ports:

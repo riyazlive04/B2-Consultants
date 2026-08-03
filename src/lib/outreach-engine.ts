@@ -12,7 +12,12 @@
  */
 
 import type { OutreachPhase, OutreachStep, OutreachStepStatus, QualifiedVerdict } from "@prisma/client";
-import { STEP_BY_KEY, qualifiedContinues, type OutreachSla } from "./outreach-sop";
+import {
+  STEP_BY_KEY,
+  qualifiedContinues,
+  type OutreachConfig,
+  type OutreachSla,
+} from "./outreach-sop";
 
 const MIN = 60_000;
 const HR = 3_600_000;
@@ -131,6 +136,19 @@ function saidNo(state: JourneyState, step: OutreachStep): boolean {
 }
 
 /**
+ * A SYSTEM booking check that ran and found no booking.
+ *
+ * Strictly this is belt-and-braces: the engine runs the Step 10 checks BEFORE planning, so a
+ * prospect who had booked would already have `booked = true` and the whole chase block below
+ * would be skipped. Testing the outcome explicitly means the rule reads the way it is meant —
+ * "they were asked, and they had not booked" — rather than depending on that ordering holding
+ * forever.
+ */
+function checkFoundNoBooking(state: JourneyState, step: OutreachStep): boolean {
+  return (st(state, step)?.outcome ?? "").toUpperCase() === "NOT_BOOKED";
+}
+
+/**
  * Steps 5/7/9 anchor on "2 hours after Step 3/4" — the later of the intro message and the first
  * call, since either may be the last thing the prospect actually experienced.
  */
@@ -170,7 +188,17 @@ export function isTerminal(phase: OutreachPhase): boolean {
  * steps that aren't materialised yet, so re-running it is a no-op once the ladder has caught up.
  * The DB's @@unique([journeyId, step]) is the second line of defence behind that.
  */
-export function planJourney(state: JourneyState, now: Date, sla: OutreachSla): Plan {
+export function planJourney(
+  state: JourneyState,
+  now: Date,
+  sla: OutreachSla,
+  /**
+   * Optional so every existing caller and test keeps the SOP's own behaviour without change.
+   * Only the engine's config read passes it.
+   */
+  opts: { firstCallMode?: OutreachConfig["firstCallMode"] } = {},
+): Plan {
+  const firstCallMode = opts.firstCallMode ?? "immediate";
   const materialise: PlannedStep[] = [];
   const supersede: OutreachStep[] = [];
   const add = (step: OutreachStep, dueAt: Date) => {
@@ -196,7 +224,10 @@ export function planJourney(state: JourneyState, now: Date, sla: OutreachSla): P
 
     if (onIntroPath) {
       add("INTRO_WHATSAPP", state.optInAt);
-      if (acted(state, "INTRO_WHATSAPP")) {
+      // Step 4 straight after Step 3 is the SOP as B2 wrote it: message, then ring, regardless of
+      // whether the prospect has had any chance to act. Under "after_check" the call is deferred
+      // until a booking check has actually come back empty — see the CHECK_1 branch below.
+      if (firstCallMode === "immediate" && acted(state, "INTRO_WHATSAPP")) {
         add("FIRST_CALL", actedAt(state, "INTRO_WHATSAPP") ?? state.optInAt);
       }
     }
@@ -213,7 +244,23 @@ export function planJourney(state: JourneyState, now: Date, sla: OutreachSla): P
 
     // Step 6 — only once Check 1 has actually run and come back "not booked".
     if (acted(state, "CHECK_1")) {
-      add("FOLLOWUP_WHATSAPP", actedAt(state, "CHECK_1") ?? now);
+      if (firstCallMode === "after_check" && checkFoundNoBooking(state, "CHECK_1")) {
+        /**
+         * THE DEFERRED FIRST CALL.
+         *
+         * The intro has been out for `check1Hours`, the booking check has run, and there is still
+         * no booking — which is the moment a human is worth spending. This is the whole point of
+         * the mode: every prospect who books off the message alone never reaches a caller at all.
+         */
+        add("FIRST_CALL", actedAt(state, "CHECK_1") ?? now);
+        // Step 6 waits behind that call rather than racing it. Messaging someone in the same pass
+        // as ringing them reads as pestering, and the SOP's own order is call, then follow-up.
+        if (acted(state, "FIRST_CALL")) {
+          add("FOLLOWUP_WHATSAPP", actedAt(state, "FIRST_CALL") ?? now);
+        }
+      } else {
+        add("FOLLOWUP_WHATSAPP", actedAt(state, "CHECK_1") ?? now);
+      }
     }
 
     // Step 7 — one hour after Step 6.

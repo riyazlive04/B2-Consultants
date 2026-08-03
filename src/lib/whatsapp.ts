@@ -38,6 +38,7 @@ export const WHATSAPP_KINDS = [
   "BOOKING_RESCHEDULED",
   "BOOKING_AUTO_CANCELLED",
   "SSS_RESCHEDULED",
+  "BOOK_ORDER",
 ] as const satisfies readonly WhatsAppKind[];
 
 export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
@@ -67,6 +68,7 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   BOOKING_RESCHEDULED: "Booking · rescheduled notice",
   BOOKING_AUTO_CANCELLED: "Booking · auto-cancelled",
   SSS_RESCHEDULED: "SSS · rescheduled notice",
+  BOOK_ORDER: "Book order to publisher",
 };
 
 /** One-line description of when each touchpoint fires — shown in the settings UI. */
@@ -98,6 +100,7 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   BOOKING_RESCHEDULED: "Bookings confirmation loop — the call was moved to a new time (manual postpone or promoted into a freed earlier slot).",
   BOOKING_AUTO_CANCELLED: "Bookings confirmation loop — no confirmation before the cut-off, so the slot was released; invites them to rebook.",
   SSS_RESCHEDULED: "SSS calendar — the Success Strategy Session was moved to a new time (founder blocked the slot/day, or a manual/drag reschedule).",
+  BOOK_ORDER: "Sent to the book PUBLISHER, not the student — the order for a student's level books. Triggered by hand from Students → Book orders.",
 };
 
 /**
@@ -156,6 +159,10 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   BOOKING_AUTO_CANCELLED: ["name", "booking_url"],
   // SSS calendar. `slot_time` is the NEW SSS time (IST); `sss_url` is the /sss rebook link.
   SSS_RESCHEDULED: ["name", "slot_time", "sss_url"],
+  // Book orders. NOTE there is no `name` here, and that is not an omission: the recipient is the
+  // vendor, so `publisher_name` addresses them and `student_name` is the subject of the order.
+  // Kept equal to BOOK_ORDER_VARS in lib/book-order-message.ts — a test asserts it.
+  BOOK_ORDER: ["publisher_name", "order_ref", "level", "student_name", "ship_to", "ship_phone"],
 };
 
 export const WHATSAPP_STATUS_LABELS: Record<WhatsAppStatus, string> = {
@@ -252,6 +259,20 @@ export type WatiSettings = {
   defaultCountry: string; // ISO-3166 alpha-2, e.g. "IN"
   templates: WatiTemplateMap;
   cadence: WatiCadence;
+  /**
+   * SAFETY VALVE. When set, EVERY outbound WhatsApp message is redirected to this one number
+   * instead of its real recipient — normalized E.164, no '+'.
+   *
+   * This exists because the app holds 23,000+ real phone numbers and the engines that message
+   * them are armed by config. While templates are being wired up, one mis-set toggle is the
+   * difference between a test and messaging the entire lead database. With this set, that
+   * mistake costs one message to your own phone.
+   *
+   * `null` = off, i.e. messages go to their real recipients. It is deliberately NOT a boolean +
+   * number pair: a single nullable field cannot get into the state "test mode on, no number set",
+   * which would either send to nobody or fail open to everybody.
+   */
+  testRecipient: string | null;
 };
 
 /**
@@ -274,7 +295,38 @@ export const DEFAULT_WATI_SETTINGS: WatiSettings = {
   defaultCountry: "IN",
   templates: DEFAULT_TEMPLATE_MAP,
   cadence: DEFAULT_CADENCE,
+  // Off by default: a fresh install must behave normally. Turning it ON is the deliberate act.
+  testRecipient: null,
 };
+
+/**
+ * Where a message is ACTUALLY going, once the test-recipient valve is taken into account.
+ *
+ * Pure and separate from the send path so the one rule that protects 23,000 real phone numbers
+ * can be asserted without a database or a network call.
+ */
+export type WhatsAppDestination =
+  | { redirected: false; number: string }
+  | { redirected: true; number: string; intended: string };
+
+export function resolveDestination(
+  intended: string,
+  testRecipient: string | null | undefined,
+): WhatsAppDestination {
+  const test = testRecipient?.trim();
+  if (!test) return { redirected: false, number: intended };
+  // Already the test number: not a redirect, so the log doesn't claim one happened.
+  if (test === intended) return { redirected: false, number: intended };
+  return { redirected: true, number: test, intended };
+}
+
+/**
+ * Prefix stamped on the stored body when a message was redirected, so the WhatsApp history can
+ * never be mistaken for evidence that a real prospect was contacted.
+ */
+export function redirectedBodyPrefix(intended: string): string {
+  return `[TEST MODE → intended for ${intended}] `;
+}
 
 /** A template as reported by WATI's getMessageTemplates API (cached for the settings dropdown). */
 export type WatiTemplateSummary = {

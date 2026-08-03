@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "test": "node --import tsx --test \"src/**/__tests__/*.test.ts\"",
+    "test": "node --conditions=react-server --import tsx --test \"src/**/__tests__/*.test.ts\"",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
@@ -14,6 +14,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:supabase": "node scripts/migrate-to-supabase.mjs",
     "db:lockdown": "node scripts/migrate-to-supabase.mjs --lockdown-only",
+    "db:backup": "node --env-file=.env scripts/backup-verify.mjs",
+    "db:backup:dump-only": "node --env-file=.env scripts/backup-verify.mjs --no-verify",
     "db:seed": "tsx prisma/seed.ts",
     "db:ledger": "tsx prisma/seed-ledger.ts",
     "db:verify-ledger": "tsx prisma/verify-ledger.ts",

@@ -42,7 +42,11 @@ export type HeadCoachSnapshot = {
   /** How many of those have never had a session logged, or none in over a fortnight. */
   readonly nonResponders: number;
   readonly agreementsAwaitingSignature: number;
+  readonly agreementsSent: number;
+  readonly agreementsViewed: number;
   readonly sessionsDeliveredToday: number;
+  /** Who logged today's sessions, most first — for the KPI card's expand popup. */
+  readonly sessionsByCoach: { name: string; sessions: number }[];
 };
 
 /** A flag phrased in days-since-contact is what "non-responder" means on this dashboard. */
@@ -51,14 +55,18 @@ const NON_RESPONSE = /days since last session|No session recorded yet|Check-in o
 export const getHeadCoachSnapshot = cache(async (): Promise<HeadCoachSnapshot> => {
   const today = istToday();
 
-  const [overview, awaitingSignature, sessionsToday] = await Promise.all([
+  const [overview, agreementsByStatus, sessionRows] = await Promise.all([
     getStudentsOverview(),
     // SENT and VIEWED are both "issued, not signed yet". DRAFT is the founder's queue, not the
     // coach's — nobody is waiting on the student for an agreement that was never sent.
-    prisma.agreement.count({ where: { status: { in: ["SENT", "VIEWED"] } } }),
-    prisma.dailyLog.aggregate({
-      where: { date: today },
-      _sum: { sessionsDelivered: true },
+    prisma.agreement.groupBy({
+      by: ["status"],
+      where: { status: { in: ["SENT", "VIEWED"] } },
+      _count: { _all: true },
+    }),
+    prisma.dailyLog.findMany({
+      where: { date: today, sessionsDelivered: { not: null } },
+      select: { sessionsDelivered: true, user: { select: { name: true } } },
     }),
   ]);
 
@@ -72,6 +80,14 @@ export const getHeadCoachSnapshot = cache(async (): Promise<HeadCoachSnapshot> =
     flags: t.flags,
   }));
 
+  const agreementsSent = agreementsByStatus.find((a) => a.status === "SENT")?._count._all ?? 0;
+  const agreementsViewed = agreementsByStatus.find((a) => a.status === "VIEWED")?._count._all ?? 0;
+
+  const sessionsByCoach = new Map<string, number>();
+  for (const r of sessionRows) {
+    sessionsByCoach.set(r.user.name, (sessionsByCoach.get(r.user.name) ?? 0) + (r.sessionsDelivered ?? 0));
+  }
+
   return {
     activeStudents: overview.counts.totalActive,
     activeGuided: overview.counts.activeGuided,
@@ -82,7 +98,12 @@ export const getHeadCoachSnapshot = cache(async (): Promise<HeadCoachSnapshot> =
     avgSatisfaction: overview.avgSatisfaction,
     atRisk,
     nonResponders: atRisk.filter((s) => s.flags.some((f) => NON_RESPONSE.test(f))).length,
-    agreementsAwaitingSignature: awaitingSignature,
-    sessionsDeliveredToday: sessionsToday._sum.sessionsDelivered ?? 0,
+    agreementsAwaitingSignature: agreementsSent + agreementsViewed,
+    agreementsSent,
+    agreementsViewed,
+    sessionsDeliveredToday: [...sessionsByCoach.values()].reduce((a, n) => a + n, 0),
+    sessionsByCoach: [...sessionsByCoach.entries()]
+      .map(([name, sessions]) => ({ name, sessions }))
+      .sort((a, b) => b.sessions - a.sessions),
   };
 });

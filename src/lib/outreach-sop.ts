@@ -7,6 +7,13 @@
  * spaces. The QA checklist (§S) requires a character-diff against the SOP to pass, so DO NOT
  * "tidy" this text: straightening a quote or trimming a line is a real regression.
  *
+ * ONE DOCUMENTED EXCEPTION, and it is deliberate: `TPL_INTRO` (Step 3) carries two founder-approved
+ * wording changes made on 2026-08-03 — one because the transcribed opening could never have passed
+ * Meta's adjacent-parameter rule, one because auto-sending the message made its closing promise
+ * untrue. Both are explained on the constant, and the original transcription is kept beside it as
+ * `TPL_INTRO_SUPERSEDED`. That is the bar for changing any body here: a stated reason, founder
+ * sign-off, and the superseded text preserved. Anything less is the "tidying" this rule forbids.
+ *
  * Isomorphic — no prisma, no server-only, no secrets. The settings UI, the queue UI and the
  * server engine all import from here. The DB-facing engine lives in `src/server/outreach.ts`;
  * the pure ladder maths lives in `src/lib/outreach-engine.ts`.
@@ -66,8 +73,53 @@ export function unresolvedVars(rendered: string): OutreachVar[] {
 
 // ─────────────────────────────── Templates (VERBATIM) ───────────────────────────────
 
-/** Step 3 — Outreach WhatsApp Message: Introduction. */
-const TPL_INTRO = `Hi [Prospect’s First Name]
+/**
+ * Step 3 — Outreach WhatsApp Message: Introduction.
+ *
+ * ── THE ONE TEMPLATE THAT IS NOT VERBATIM ────────────────────────────────────────
+ * Two lines differ from the SOP document. Both changes were put to the founder and accepted on
+ * 2026-08-03; `TPL_INTRO_SUPERSEDED` below holds the original transcription so the provenance
+ * this file exists to protect is not lost. Nothing else in the body moved.
+ *
+ * 1. THE OPENING. The SOP put `[Prospect’s First Name]` and `[Your Name]` on consecutive lines,
+ *    which becomes two ADJACENT `{{…}}` parameters at submission. Meta rejects templates whose
+ *    parameters are adjacent with no static text between them, and a newline does not count as
+ *    text — so the message as transcribed could never have been approved. The replacement is not
+ *    invented wording: it is exactly how the SOP itself opens Step 13, so the intro adopts B2's
+ *    own house phrasing rather than something new.
+ *
+ * 2. THE CLOSING. It read "I’ll give you a quick call now to help you get booked!". Once this
+ *    message is sent automatically at opt-in, that promise is false — under
+ *    `firstCallMode: "after_check"` a caller only rings if the prospect does NOT book. A message
+ *    that promises a call the system will not make is worse than a colder one, so the offer is
+ *    kept but made the prospect's to take up.
+ *
+ * Why the constant changed rather than only the submission pack: this text is ALSO what the app
+ * shows a specialist in the manual copy-and-send flow. Fixing only the submitted body would mean
+ * the queue shows one message while an auto-send delivers another.
+ */
+const TPL_INTRO = `Hi [Prospect’s First Name], this is [Your Name] from B2 Consultants.
+
+Thanks for showing interest in finding your next job in Germany 🇩🇪
+
+To help you further, we would like to invite you to book a 20 min *FREE* Personalized Discovery Call to understand your requirements and current situation.
+
+Please use this link to book a *FREE* Personalized Discovery Call with our team here: https://optin.b2consultants.de/apply
+
+If you have questions about our coaching program, I request you to watch this short video where Ameen explains 3 mistakes that people usually make, as well as 3 secrets to overcome them: https://optin.b2consultants.de/lang
+
+Prefer a hand with booking? Just reply here and one of our team will call you.`;
+
+/**
+ * The Step 3 body EXACTLY as transcribed from Script_for_Outreach_Specialist.docx, before the
+ * two changes documented on `TPL_INTRO`.
+ *
+ * Kept, not deleted. The whole point of the verbatim rule is that the transcription is evidence
+ * of what the team agreed to say; a change to it is only defensible if the thing it replaced is
+ * still readable. Referenced by the submission pack so the Word document tells Meta's reviewer —
+ * and B2 — what changed and why.
+ */
+export const TPL_INTRO_SUPERSEDED = `Hi [Prospect’s First Name]
 [Your Name] here from B2 Consultants.
 
 Thanks for showing interest in finding your next job in Germany 🇩🇪
@@ -542,6 +594,45 @@ export type OutreachConfig = {
   defaultSpecialistName: string;
   /** Safety cap: the most steps one engine run will materialise or auto-send. */
   maxPerRun: number;
+  /**
+   * WHEN the first telecaller call is raised.
+   *
+   * `"immediate"` — the SOP as written. Step 4 follows Step 3 unconditionally: the intro goes out
+   * and a caller rings straight away, whether or not the prospect has had a chance to book.
+   *
+   * `"after_check"` — the caller is only pulled in once a booking check has come back NOT_BOOKED.
+   * The intro gets its `check1Hours` window to work on its own, and a human is spent only on the
+   * prospects who did not act on it.
+   *
+   * The default stays `"immediate"` because that is the process B2 actually wrote down, and the
+   * ladder here is a transcription of it. Switching to `"after_check"` is a real change to how the
+   * team works, so it is an explicit, reversible choice rather than something a code change
+   * decided for them — and it only becomes sensible once the intro is auto-sending, since
+   * otherwise nothing happens until a human sends the message anyway.
+   */
+  firstCallMode: "immediate" | "after_check";
+  /**
+   * Send Step 3 the INSTANT a lead is captured, rather than on the next engine tick.
+   *
+   * Separate from `autoSend.INTRO_WHATSAPP`, and the two compose deliberately. This one fires
+   * inline at capture — seconds, not up to a cron interval — which is what the SOP's 5-minute
+   * reaction window actually asks for. `autoSend` remains the cron path, so a lead whose instant
+   * send was skipped (WATI briefly down, hourly cap reached) is retried by the engine instead of
+   * being stranded.
+   */
+  instantIntro: {
+    enabled: boolean;
+    /**
+     * Hard ceiling on instant intros in any rolling hour.
+     *
+     * A circuit breaker, not a throttle for normal traffic — B2's real intake is a few dozen a
+     * day. It exists for the failure that would otherwise be unrecoverable: a webhook stuck in a
+     * retry loop, or a bulk import routed through a capture endpoint, messaging thousands of real
+     * people before anyone noticed. On reaching the cap the engine stops sending and leaves the
+     * steps DUE, so nothing is lost — a human just picks them up.
+     */
+    maxPerHour: number;
+  };
 };
 
 export const DEFAULT_OUTREACH_CONFIG: OutreachConfig = {
@@ -550,6 +641,8 @@ export const DEFAULT_OUTREACH_CONFIG: OutreachConfig = {
   sla: DEFAULT_SLA,
   defaultSpecialistName: "B2 Consultants",
   maxPerRun: 200,
+  firstCallMode: "immediate",
+  instantIntro: { enabled: false, maxPerHour: 200 },
 };
 
 /** Coerce stored JSON into a config, filling every gap with a default. Never throws. */
@@ -567,7 +660,46 @@ export function coerceOutreachConfig(raw: unknown): OutreachConfig {
     sla,
     defaultSpecialistName: v.defaultSpecialistName?.trim() || DEFAULT_OUTREACH_CONFIG.defaultSpecialistName,
     maxPerRun: Number.isFinite(Number(v.maxPerRun)) && Number(v.maxPerRun) > 0 ? Number(v.maxPerRun) : 200,
+    // Fail-closed to the SOP as written: only the exact string opts out of Step 4, so a typo or a
+    // half-written config row leaves the documented process running rather than silently
+    // suppressing the team's first call.
+    firstCallMode: v.firstCallMode === "after_check" ? "after_check" : "immediate",
+    instantIntro: {
+      // Fail-closed, like `enabled`: only an explicit `true` arms unattended messaging.
+      enabled: v.instantIntro?.enabled === true,
+      // A missing, zero or negative cap must NOT mean "unlimited" — that is the one misreading
+      // that turns a safety valve into the thing it was meant to prevent.
+      maxPerHour:
+        Number.isFinite(Number(v.instantIntro?.maxPerHour)) && Number(v.instantIntro?.maxPerHour) > 0
+          ? Math.floor(Number(v.instantIntro!.maxPerHour))
+          : DEFAULT_OUTREACH_CONFIG.instantIntro.maxPerHour,
+    },
   };
+}
+
+/**
+ * The only lead provenances that may trigger an UNATTENDED WhatsApp at capture.
+ *
+ * A whitelist, not a blacklist, and that direction is the whole safety property: an import path,
+ * a backfill script or a seeding tool added later is silently EXCLUDED until someone deliberately
+ * adds it here. A blacklist has the opposite default and would eventually be wrong exactly once —
+ * expensively, and to thousands of real people at the same moment.
+ *
+ * Concretely, this is what stands between the instant intro and the 23,500 leads already in the
+ * table: they arrived as `SYNAMATE`/`SHEET` imports, and no amount of switching the feature on can
+ * reach them.
+ *
+ * `BOOKING_FORM` is absent on purpose — that person has already booked, so inviting them to book
+ * is nonsense.
+ *
+ * Kept HERE, in the pure module, rather than beside the sender: it is the rule most worth having a
+ * test on, and `server/outreach-instant.ts` imports `server-only`, which cannot be loaded from a
+ * test runner.
+ */
+export const INSTANT_INTRO_SOURCES = ["PABBLY", "FLEXIFUNNELS", "META_LEAD_AD"] as const;
+
+export function isInstantIntroSource(source: string): boolean {
+  return (INSTANT_INTRO_SOURCES as readonly string[]).includes(source);
 }
 
 // ─────────────────────────────── BANT → Qualified ───────────────────────────────

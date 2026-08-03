@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getWatiRuntime, readTemplateCatalog } from "@/lib/wati";
 import type { WhatsAppDirection, WhatsAppKind, WhatsAppStatus } from "@prisma/client";
-import type { WatiSettings, WatiTemplateSummary } from "@/lib/whatsapp";
+import { WHATSAPP_KIND_LABELS, type WatiSettings, type WatiTemplateSummary } from "@/lib/whatsapp";
 
 /** Serializable data for the /whatsapp Admin page (status + settings + history + opt-outs). */
 
@@ -37,6 +37,12 @@ export type WhatsAppAdminData = {
   messages: WhatsAppMessageRow[];
   optOuts: { phone: string; reason: string | null; createdAt: string }[];
   counts: Record<WhatsAppStatus, number> & { total: number };
+  /** Top touchpoint kinds behind the Sent / Replied / Failed tiles, for their expand popups. */
+  kindBreakdown: {
+    sent: { label: string; value: number }[];
+    replied: { label: string; value: number }[];
+    failed: { label: string; value: number }[];
+  };
 };
 
 export async function getWhatsAppAdminData(): Promise<WhatsAppAdminData> {
@@ -54,7 +60,7 @@ export async function getWhatsAppAdminData(): Promise<WhatsAppAdminData> {
       },
     }),
     prisma.whatsAppOptOut.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.whatsAppMessage.groupBy({ by: ["status"], _count: { _all: true } }),
+    prisma.whatsAppMessage.groupBy({ by: ["status", "kind"], _count: { _all: true } }),
   ]);
 
   const counts = {
@@ -62,9 +68,23 @@ export async function getWhatsAppAdminData(): Promise<WhatsAppAdminData> {
     SKIPPED: 0, QUEUED: 0, SENT: 0, DELIVERED: 0, READ: 0, REPLIED: 0, FAILED: 0,
   } as WhatsAppAdminData["counts"];
   for (const g of grouped) {
-    counts[g.status] = g._count._all;
+    counts[g.status] = (counts[g.status] ?? 0) + g._count._all;
     counts.total += g._count._all;
   }
+
+  // Which touchpoints make up a status bucket, for that tile's expand popup — top 4 + "Other".
+  const kindBreakdown = (statuses: WhatsAppStatus[], limit = 4) => {
+    const byKind = new Map<WhatsAppKind, number>();
+    for (const g of grouped) {
+      if (!statuses.includes(g.status)) continue;
+      byKind.set(g.kind, (byKind.get(g.kind) ?? 0) + g._count._all);
+    }
+    const sorted = [...byKind.entries()].sort((a, b) => b[1] - a[1]);
+    const rows = sorted.slice(0, limit).map(([kind, n]) => ({ label: WHATSAPP_KIND_LABELS[kind], value: n }));
+    const rest = sorted.slice(limit).reduce((sum, [, n]) => sum + n, 0);
+    if (rest > 0) rows.push({ label: "Other touchpoints", value: rest });
+    return rows;
+  };
 
   return {
     status: {
@@ -94,5 +114,10 @@ export async function getWhatsAppAdminData(): Promise<WhatsAppAdminData> {
     })),
     optOuts: optOuts.map((o) => ({ phone: o.phone, reason: o.reason, createdAt: o.createdAt.toISOString() })),
     counts,
+    kindBreakdown: {
+      sent: kindBreakdown(["SENT"]),
+      replied: kindBreakdown(["REPLIED"]),
+      failed: kindBreakdown(["FAILED"]),
+    },
   };
 }

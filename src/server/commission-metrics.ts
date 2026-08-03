@@ -185,7 +185,15 @@ export async function getCommissionReport() {
       rule,
       attributed: payouts.length > 0,
       offDayReview,
-      payouts: payouts.map((p) => ({ name: p.name, pct: p.pct, amountInrMinor: p.amountInrMinor })),
+      // `userId` rides along so a per-person view can filter EXACTLY. Matching on `name` would
+      // pay the wrong person the moment two team members share a first name, and a commission
+      // figure shown to the wrong human is not a display bug.
+      payouts: payouts.map((p) => ({
+        userId: p.userId,
+        name: p.name,
+        pct: p.pct,
+        amountInrMinor: p.amountInrMinor,
+      })),
     };
   });
 
@@ -212,3 +220,88 @@ export async function getCommissionReport() {
 
 export type CommissionReport = Awaited<ReturnType<typeof getCommissionReport>>;
 export type CommissionRow = CommissionReport["rows"][number];
+
+// ───────────────────────── One person's own commission ─────────────────────────
+
+/**
+ * What ONE specialist earned this month — rebuild spec §6/§7, "own commission only,
+ * including split percentages where a lead was shared".
+ *
+ * ── Why this reuses `getCommissionReport` instead of querying its own ────────────
+ * The attribution rules here are genuinely intricate: both-calls vs split, the substitute
+ * cover that divides the discovery leg rather than adding one, the closer merge, and rounding
+ * that must make the halves sum back to the leg. A second implementation would agree on the
+ * day it was written and drift afterwards — and a desk that quietly disagrees with the payout
+ * board about someone's own pay is worse than no desk figure at all. So there is exactly one
+ * engine, and this filters its output.
+ *
+ * The cost is loading the month's income rows to keep a handful — acceptable: it is one
+ * month, it is already `include`-shaped for this, and the alternative risks paying on two
+ * different sets of numbers.
+ *
+ * ── What is deliberately NOT returned ───────────────────────────────────────────
+ * Other people's amounts. A shared deal names the colleague (the spec asks for the split to be
+ * visible) and states the rule, but never their figure. Their own line is inherently derivable
+ * from a percentage and an amount — that is unavoidable in any "show me my commission" view and
+ * is exactly the exposure §3 permits ("financial figures are never exposed to L1/L2/L3 BEYOND
+ * their own commission"). Listing a colleague's payout outright is not.
+ */
+export type OwnCommissionLine = {
+  incomeId: string;
+  date: string;
+  studentName: string;
+  programLevel: string | null;
+  /** This person's percentage on this payment. */
+  pct: number;
+  /** This person's cut, in INR minor units. */
+  amountInrMinor: number;
+  /** How the deal was attributed, e.g. "Split - 3% each". */
+  rule: string;
+  /** Colleagues who share this deal — names only, never their amounts. */
+  sharedWith: string[];
+};
+
+export type OwnCommission = {
+  month: string;
+  lines: OwnCommissionLine[];
+  totalInrMinor: number;
+  /** Deals contributing, i.e. `lines.length` — named so the card doesn't do arithmetic. */
+  deals: number;
+  /**
+   * Payments this month that NOBODY could be paid on, because the lead has no owner or the
+   * discovery outcome was never recorded.
+   *
+   * Shown to the specialist on purpose. It is the one number on the desk that is not about
+   * their performance but about their admin: an unattributed payment is money that went past
+   * without crediting anyone, and the fix (own the lead, record the outcome) is theirs.
+   */
+  unattributedDeals: number;
+};
+
+export async function getOwnCommission(userId: string): Promise<OwnCommission> {
+  const report = await getCommissionReport();
+
+  const lines: OwnCommissionLine[] = [];
+  for (const row of report.rows) {
+    const mine = row.payouts.find((p) => p.userId === userId);
+    if (!mine) continue;
+    lines.push({
+      incomeId: row.id,
+      date: row.date,
+      studentName: row.studentName,
+      programLevel: row.programLevel,
+      pct: mine.pct,
+      amountInrMinor: mine.amountInrMinor,
+      rule: row.rule,
+      sharedWith: row.payouts.filter((p) => p.userId !== userId).map((p) => p.name),
+    });
+  }
+
+  return {
+    month: report.month,
+    lines,
+    totalInrMinor: lines.reduce((n, l) => n + l.amountInrMinor, 0),
+    deals: lines.length,
+    unattributedDeals: report.unattributed,
+  };
+}

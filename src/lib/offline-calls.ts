@@ -103,6 +103,15 @@ export type QueuedCall = {
   leadId: string;
   outcome: string;
   notes: string;
+  /**
+   * The stage the specialist chose on the form, or "" for leave-as-is.
+   *
+   * Queued with the call rather than dropped: losing it would mean a caller working offline —
+   * the exact person this module exists for — silently fails the JD's "pipeline updated by
+   * EOD" target for work they actually did. Optional so entries queued by an older build still
+   * parse after a deploy; the server re-validates it against the allowed list regardless.
+   */
+  nextStage?: string;
   /** ISO of when the telecaller recorded it, from the device clock. */
   recordedAt: string;
   /** Flush attempts so far, so a permanently-failing entry can be reported not retried forever. */

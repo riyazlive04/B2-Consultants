@@ -91,11 +91,17 @@ export async function getPeopleOverview(monthStr?: string) {
     firstCallSharePct: p.firstCallSharePct,
     worksSaturdays: p.worksSaturdays,
     dailyCallTarget: p.dailyCallTarget,
-    logsDaily: p.dashboardRole !== "ADMIN" && p.status === "ACTIVE",
+    // Offboarding state, so the org chart can move former members into their own list rather
+    // than presenting them as current team.
+    terminatedAt: p.terminatedAt?.toISOString() ?? null,
+    terminationReason: p.terminationReason,
+    // A departed person never "owes" a daily log — leaving them in the missing-log count would
+    // make the board permanently red for someone who no longer works here.
+    logsDaily: p.dashboardRole !== "ADMIN" && p.status === "ACTIVE" && !p.terminatedAt,
     submittedToday: p.userId ? submittedUserIds.has(p.userId) : false,
     streak: streakFor(p.userId),
     missingLogBadge:
-      badgeTime && p.dashboardRole !== "ADMIN" && p.status === "ACTIVE" &&
+      badgeTime && p.dashboardRole !== "ADMIN" && p.status === "ACTIVE" && !p.terminatedAt &&
       !!p.userId && !submittedUserIds.has(p.userId),
     okrs: okrs
       .filter((o) => o.teamProfileId === p.id)

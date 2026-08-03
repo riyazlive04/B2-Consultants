@@ -68,3 +68,8 @@ next-env.d.ts
 # local dev noise — runtime logs never belong in the repo (dev server, cron, verify runs)
 *.log
 scripts/tmp/
+
+# Verified backups (scripts/backup-verify.mjs). Each .dump is a full plaintext-equivalent
+# copy of production: lead PII, student records, the ledger. Same reasoning as /.migration/ —
+# never commit, and keep them off any machine that doesn't need them.
+/backups/

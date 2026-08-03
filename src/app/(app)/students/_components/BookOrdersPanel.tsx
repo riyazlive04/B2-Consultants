@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Plus, Truck } from "lucide-react";
+import { BookOpen, Plus, Send, Truck } from "lucide-react";
 import type { BookOrderRow, StudentOption, VendorRow } from "@/server/book-order-metrics";
 import type { LevelOption } from "@/lib/levels";
-import { advanceBookOrder, createBookOrder, upsertVendor } from "@/server/book-order-actions";
+import { advanceBookOrder, createBookOrder, messagePublisher, upsertVendor } from "@/server/book-order-actions";
 import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
@@ -42,6 +42,31 @@ const STATUS_TONE: Record<string, string> = {
 
 const inr = (n: number | null) => (n === null ? "—" : `₹${n.toLocaleString("en-IN")}`);
 
+/**
+ * What is stopping this order going to the publisher, in the words of the thing to go and fix.
+ *
+ * Mirrors the server's own check (lib/book-order-message.ts), which stays authoritative — this
+ * exists so the button explains itself instead of failing after a click. `order_ref` is never
+ * listed: it is allocated on send, so it is not the user's to supply.
+ */
+function publisherBlockers(r: BookOrderRow): string[] {
+  const missing: string[] = [];
+  if (!r.vendorId) missing.push("a vendor");
+  else if (!r.vendorPhone?.trim()) missing.push("a phone number on the vendor");
+  if (!r.shipToAddress?.trim()) missing.push("a ship-to address");
+  if (!r.shipToPhone?.trim()) missing.push("a delivery contact number");
+  return missing;
+}
+
+function PublisherField({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="flex gap-2">
+      <dt className="w-32 shrink-0 text-ink-3">{label}</dt>
+      <dd className={value ? "text-ink-2" : "text-warn"}>{value || "missing"}</dd>
+    </div>
+  );
+}
+
 export function BookOrdersPanel({
   rows,
   vendors,
@@ -60,6 +85,7 @@ export function BookOrdersPanel({
   const [addingVendor, setAddingVendor] = useState(false);
   const [editing, setEditing] = useState<BookOrderRow | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState<"live" | "dry" | null>(null);
 
   async function create(form: FormData) {
     setError(null);
@@ -86,6 +112,22 @@ export function BookOrdersPanel({
     if (!res.ok) return setError(res.error);
     setEditing(null);
     toast("Order updated");
+    router.refresh();
+  }
+
+  /**
+   * Message the publisher. A dry run rehearses every check and writes the row proving what WOULD
+   * have gone out, without calling WATI — the only safe way to try a real supplier message.
+   */
+  async function toPublisher(dryRun: boolean) {
+    if (!editing) return;
+    setError(null);
+    setSending(dryRun ? "dry" : "live");
+    const res = await messagePublisher(editing.id, { dryRun });
+    setSending(null);
+    if (!res.ok) return setError(res.error);
+    toast(dryRun ? "Dry run written to the WhatsApp log" : `Order sent to ${editing.vendorName}`);
+    setEditing(null);
     router.refresh();
   }
 
@@ -136,6 +178,7 @@ export function BookOrdersPanel({
                 <th className="py-2 pr-4 font-medium">Paid so far</th>
                 <th className="py-2 pr-4 font-medium">Quoted</th>
                 <th className="py-2 pr-4 font-medium">Vendor</th>
+                <th className="py-2 pr-4 font-medium">Publisher told</th>
                 <th className="py-2 font-medium" />
               </tr>
             </thead>
@@ -163,6 +206,25 @@ export function BookOrdersPanel({
                   </td>
                   <td className="py-2 pr-4 text-ink-2">{inr(r.quotedRupees)}</td>
                   <td className="py-2 pr-4 text-ink-2">{r.vendorName ?? "—"}</td>
+                  <td className="py-2 pr-4 text-ink-2">
+                    {r.publisherMessageSent ? (
+                      <>
+                        <span className="text-xs font-medium text-ok">
+                          {new Date(r.publisherMessagedAt!).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </span>
+                        {r.orderRef && <span className="ml-1.5 text-xs text-muted">{r.orderRef}</span>}
+                      </>
+                    ) : r.publisherMessagedAt ? (
+                      // A row exists but nothing left the building — say so rather than showing
+                      // a date that would read as "ordered".
+                      <span className="text-xs text-warn">attempted</span>
+                    ) : (
+                      <span className="text-xs text-ink-3">—</span>
+                    )}
+                  </td>
                   <td className="py-2">
                     <Btn variant="ghost" onClick={() => { setEditing(r); setError(null); }}>
                       Update
@@ -248,6 +310,66 @@ export function BookOrdersPanel({
             <Field label="Courier reference" hint="Required before you can mark it couriered.">
               <TextInput name="courierRef" defaultValue={editing.courierRef ?? ""} />
             </Field>
+
+            {/* ── Publisher message ──────────────────────────────────────────────────
+                Deliberately its own block below the form fields, and deliberately manual: this
+                sends a real order to a supplier, so it must never be a side-effect of saving a
+                status dropdown. */}
+            <div className="rounded-field border border-line bg-surface-2 p-3">
+              <p className="text-sm font-semibold text-ink">Message the publisher</p>
+              <p className="mt-0.5 text-xs text-muted">
+                Sends the approved order template to{" "}
+                <strong>{editing.vendorName ?? "the vendor"}</strong>
+                {editing.vendorPhone ? ` on ${editing.vendorPhone}` : ""} — not to the student.
+              </p>
+
+              <dl className="mt-2.5 space-y-1 text-xs">
+                <PublisherField label="Reference" value={editing.orderRef ?? "allocated on send"} />
+                <PublisherField label="Level" value={editing.level} />
+                <PublisherField label="Student" value={editing.studentName} />
+                <PublisherField label="Ship to" value={editing.shipToAddress} />
+                <PublisherField label="Contact on delivery" value={editing.shipToPhone} />
+              </dl>
+
+              {publisherBlockers(editing).length > 0 ? (
+                <p className="mt-2.5 text-xs text-warn">
+                  Add {publisherBlockers(editing).join(", ")} before sending.
+                </p>
+              ) : (
+                editing.publisherMessageSent && (
+                  <p className="mt-2.5 text-xs text-muted">
+                    Already sent on{" "}
+                    {new Date(editing.publisherMessagedAt!).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                    . Sending again places the order a second time.
+                  </p>
+                )
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  disabled={sending !== null || publisherBlockers(editing).length > 0}
+                  busy={sending === "dry"}
+                  onClick={() => toPublisher(true)}
+                >
+                  Dry run
+                </Btn>
+                <Btn
+                  size="sm"
+                  disabled={sending !== null || publisherBlockers(editing).length > 0}
+                  busy={sending === "live"}
+                  onClick={() => toPublisher(false)}
+                >
+                  <Send size={14} /> Send to publisher
+                </Btn>
+              </div>
+            </div>
+
             <FormError message={error} />
             <div className="flex justify-end gap-2">
               <Btn variant="ghost" onClick={() => setEditing(null)}>Cancel</Btn>

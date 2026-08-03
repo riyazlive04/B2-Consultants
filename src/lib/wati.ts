@@ -9,7 +9,7 @@ import {
   type WatiTemplateConfig,
   type WatiTemplateSummary,
 } from "@/lib/whatsapp";
-import { toCountry } from "@/lib/phone";
+import { normalizeWhatsappNumber, toCountry } from "@/lib/phone";
 
 /**
  * WATI (WhatsApp Business API) — server-only config + HTTP client.
@@ -81,11 +81,19 @@ function coerceSettings(raw: unknown): WatiSettings {
   // No stored mapping yet → seed the agreed defaults. A stored (even empty) mapping is the
   // Admin's explicit choice and is never overwritten.
   const templates = v.templates === undefined ? DEFAULT_WATI_SETTINGS.templates : coerceTemplates(v.templates);
+  const defaultCountry = toCountry(typeof v.defaultCountry === "string" ? v.defaultCountry : null);
   return {
     paused: typeof v.paused === "boolean" ? v.paused : DEFAULT_WATI_SETTINGS.paused,
-    defaultCountry: toCountry(typeof v.defaultCountry === "string" ? v.defaultCountry : null),
+    defaultCountry,
     templates,
     cadence: coerceCadence(v.cadence),
+    // Re-normalized on READ, not trusted as stored. The valve only protects anything if the
+    // number is one WATI will accept — a value that fails to normalize would otherwise be sent
+    // as-is, fail, and leave someone believing test mode was on.
+    testRecipient:
+      typeof v.testRecipient === "string" && v.testRecipient.trim()
+        ? normalizeWhatsappNumber(v.testRecipient, defaultCountry)
+        : null,
   };
 }
 

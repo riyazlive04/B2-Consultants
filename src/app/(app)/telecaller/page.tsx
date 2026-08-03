@@ -44,18 +44,26 @@ export default async function TelecallerPage({
           value={compact(totals.totalInrMinor)}
           secondary={`${formatEurMinor(totals.totalEurMinor, { compact: true })} · ${board.monthLabel}`}
           icon={<Wallet size={18} />}
+          detail={{
+            rows: [
+              { label: "Bonuses", value: compact(totals.bonusInrMinor) },
+              { label: "Commission", value: compact(totals.commInrMinor) },
+            ],
+          }}
         />
         <MetricCard
           label="Bonuses"
           value={compact(totals.bonusInrMinor)}
           secondary={`${totals.rewardedCount} telecaller${totals.rewardedCount === 1 ? "" : "s"} rewarded`}
           icon={<Gift size={18} />}
+          detail={{ rows: board.bonusBreakdown.map((b) => ({ label: b.name, value: compact(b.inr) })) }}
         />
         <MetricCard
           label="Commission"
           value={compact(totals.commInrMinor)}
           secondary="from calls / criteria"
           icon={<Percent size={18} />}
+          detail={{ rows: board.commBreakdown.map((c) => ({ label: c.name, value: compact(c.inr) })) }}
         />
         <MetricCard
           label="Not yet paid"
@@ -63,6 +71,7 @@ export default async function TelecallerPage({
           secondary={`${compact(totals.paidInrMinor)} already paid`}
           signal={totals.pendingInrMinor > 0 ? "watch" : "ok"}
           icon={<Clock size={18} />}
+          detail={{ rows: board.pendingBreakdown.map((p) => ({ label: p.name, value: compact(p.inr) })) }}
         />
       </div>
 

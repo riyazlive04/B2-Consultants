@@ -161,20 +161,28 @@ export function Toggle({
   label,
   disabled,
   title,
+  hideLabel,
+  className = "",
 }: {
   checked: boolean;
   onChange: (b: boolean) => void;
   label: string;
   disabled?: boolean;
   title?: string;
+  /** Sink the label to `sr-only` — for a grid of role columns where the header already names it. */
+  hideLabel?: boolean;
+  className?: string;
 }) {
   return (
     <label
-      /* `relative` is not decoration — see the note on the input below. */
+      /* `relative` is not decoration — see the note on the input below. It also gives the
+         hidden-label span below a containing block, so an `hideLabel` checkbox in a cramped
+         grid cell can't join the document's scrollable width the way the sr-only INPUT below
+         once did (see the note on it). */
       className={`group relative flex select-none items-center gap-2 text-sm ${
         disabled ? "cursor-not-allowed" : "cursor-pointer"
-      }`}
-      title={title}
+      } ${className}`}
+      title={title ?? (hideLabel ? label : undefined)}
     >
       {/* The real control, hidden but not removed — sr-only keeps it focusable and
           in the tab order, which `display:none` would not. Everything visible below
@@ -207,7 +215,7 @@ export function Toggle({
           className="scale-0 transition-transform duration-150 [transition-timing-function:var(--ease-spring)]"
         />
       </span>
-      <span className={disabled ? "text-ink-disabled" : "text-ink-2"}>{label}</span>
+      <span className={hideLabel ? "sr-only" : disabled ? "text-ink-disabled" : "text-ink-2"}>{label}</span>
     </label>
   );
 }
@@ -269,7 +277,16 @@ export function ColScroll({ children }: { children: ReactNode }) {
  * The transparent border is load-bearing: rows carry a 1px border, so without a
  * matching one here the header's content box is 2px wider and every column drifts.
  */
-export function ColHead({ cols, labels }: { cols: Cols; labels: ReadonlyArray<string> }) {
+export function ColHead({
+  cols,
+  labels,
+  titles,
+}: {
+  cols: Cols;
+  labels: ReadonlyArray<string>;
+  /** Full text for a column whose header had to be abbreviated to fit its track — shown on hover. */
+  titles?: ReadonlyArray<string | undefined>;
+}) {
   return (
     <div
       aria-hidden
@@ -277,7 +294,7 @@ export function ColHead({ cols, labels }: { cols: Cols; labels: ReadonlyArray<st
       style={{ gridTemplateColumns: cols, minWidth: colsMinWidth(cols) }}
     >
       {labels.map((l, i) => (
-        <span key={i} className="truncate text-label font-semibold uppercase text-ink-3">
+        <span key={i} title={titles?.[i]} className="truncate text-label font-semibold uppercase text-ink-3">
           {l}
         </span>
       ))}

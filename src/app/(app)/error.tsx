@@ -10,6 +10,10 @@ import { Btn } from "@/components/ui/controls";
  * App-wide error boundary for the authenticated cockpit. Without one, any thrown
  * error on a money surface fails to a blank screen. Reuses the kit so it matches
  * the rest of the app (card on --bg-surface, r-lg, e-1).
+ *
+ * It also REPORTS. Until now this boundary logged to the browser console and told nobody, so a
+ * broken screen reached the founders only when a client emailed about it — the exact gap the
+ * observability work exists to close.
  */
 export default function AppError({
   error,
@@ -20,6 +24,20 @@ export default function AppError({
 }) {
   useEffect(() => {
     console.error(error);
+
+    // Fire-and-forget, and swallowed on failure: a user already looking at an error screen must
+    // not be shown a second error because the report of the first one didn't send.
+    void fetch("/api/observability/client-error", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        message: error?.message ?? "Unknown client error",
+        stack: error?.stack,
+        digest: error?.digest,
+        path: window.location.pathname,
+      }),
+      keepalive: true,
+    }).catch(() => {});
   }, [error]);
 
   return (

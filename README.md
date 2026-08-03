@@ -93,3 +93,29 @@ Do **not** run `db:demo` on the real deployment — it resets business data by d
   flag-gated; with it off every send is a no-op logged as `SKIPPED`. See the WhatsApp section
   (`/whatsapp`), `src/lib/wati.ts`, `src/server/whatsapp.ts`, and the `/api/cron/whatsapp` +
   `/api/wati/webhook` routes. No outbound **email** yet.
+
+## Tests
+
+```bash
+npm test
+```
+
+Node's built-in runner over `src/**/__tests__/*.test.ts`, via `tsx`. No test framework, no mocks —
+the rules of this app live in pure modules under `src/lib/` precisely so they can be exercised
+without a database, a session or a running server.
+
+**The `--conditions=react-server` flag in the test script matters.** It resolves the `server-only`
+marker package to its no-op entry point, which is what makes `server-only` modules importable from
+a test at all (`lib/rate-limit.ts` is the first one that needed it).
+
+The trade-off, and it is a sharp edge: under that flag `react` resolves to its shared-subset
+build, which **throws on import** —
+
+```
+Error: This entry point is not yet supported outside of experimental channels
+```
+
+So a test cannot (transitively) import a module that calls React's `cache()` — which includes
+`server/founder-config.ts` and anything importing it. If you hit that error, that is why. The fix
+is the same one the codebase already follows everywhere: put the logic being tested in a pure
+module under `src/lib/` and leave the Prisma/`cache` wiring in `src/server/`.

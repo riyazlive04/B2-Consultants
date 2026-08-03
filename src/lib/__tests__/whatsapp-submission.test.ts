@@ -144,12 +144,13 @@ describe("Submission pack — Meta's mechanical rules", () => {
   });
 
   /**
-   * The one template with a known, deliberate issue is `b2_sop_intro`: the SOP's own first two
-   * lines put {{name}} and {{sender}} back to back. We do NOT auto-fix it — changing what a
-   * prospect reads is B2's call — so it carries a `proposedFix` instead.
+   * A template may lint dirty ONLY while it openly carries the fix it needs.
    *
-   * This test therefore asserts the ONLY acceptable state: an issue may exist, but only on a
-   * template that openly proposes a fix for it. A NEW lint failure anywhere else fails the build.
+   * Until 2026-08-03 the one such template was `b2_sop_intro`, whose SOP-transcribed opening put
+   * {{name}} and {{sender}} back to back. That fix has now been approved and applied, so the
+   * expectation is stricter: nothing should lint dirty at all. The `proposedFix` escape hatch
+   * stays, because the next template that needs a wording decision should be able to sit here
+   * openly rather than silently failing the build.
    */
   test("any template that lints dirty must carry a proposed fix", () => {
     for (const t of SUBMISSION_TEMPLATES) {
@@ -163,17 +164,56 @@ describe("Submission pack — Meta's mechanical rules", () => {
     }
   });
 
-  test("the intro's known adjacency issue is still surfaced (regression guard)", () => {
+  /**
+   * The inverse of the guard this test used to be.
+   *
+   * It previously asserted the intro's adjacency issue was STILL reported, to stop anyone
+   * believing it had been handled. B2 approved the fix on 2026-08-03, so the same test now holds
+   * the opposite line: the issue must stay fixed, and the template must be submittable as-is.
+   */
+  test("the intro's adjacency issue is fixed and the template lints clean", () => {
     const intro = SUBMISSION_TEMPLATES.find((t) => t.step === "INTRO_WHATSAPP")!;
     const { issues } = lintTemplate(intro);
-    assert.ok(
-      issues.some((i) => i.includes("adjacent")),
-      "the intro's adjacent-variable risk must keep being reported until the wording changes",
+
+    assert.deepEqual(issues, [], `the intro must lint clean:\n  - ${issues.join("\n  - ")}`);
+    assert.equal(intro.proposedFix, undefined, "the fix is applied, so nothing is left to propose");
+    assert.ok(intro.acceptedFix, "…and the applied change must be recorded, not silent");
+
+    // The body Meta will actually see: no adjacent parameters, and it neither opens nor closes on
+    // one. Asserted on the SUBMITTED body rather than the SOP constant, because that substitution
+    // is where an adjacency can reappear.
+    const body = submissionBody(intro);
+    assert.doesNotMatch(body, /\}\}\s*\{\{/, "no two parameters may be adjacent");
+    assert.doesNotMatch(body, /\}\}\s*$/, "must not end on a parameter");
+    assert.match(body, /^Hi \{\{name\}\}, this is \{\{sender\}\} from B2 Consultants\./);
+  });
+
+  /**
+   * The change is only defensible if what it replaced is still readable — that is the condition
+   * the SOP file's verbatim rule was relaxed under.
+   */
+  test("an accepted fix keeps the superseded wording", () => {
+    const intro = SUBMISSION_TEMPLATES.find((t) => t.step === "INTRO_WHATSAPP")!;
+    const fix = intro.acceptedFix!;
+
+    assert.match(fix.decidedOn, /^\d{4}-\d{2}-\d{2}$/, "a decision needs a date");
+    assert.ok(fix.reason.length > 80, "…and a reason someone can act on");
+    // The original opening, exactly as the SOP document has it.
+    assert.match(fix.was, /^Hi \[Prospect’s First Name\]\n\[Your Name\] here from B2 Consultants\./);
+    // And the promise that is no longer true, so the diff explains itself.
+    assert.match(fix.was, /I’ll give you a quick call now/);
+  });
+
+  /** The removed promise must not survive anywhere in what we now send. */
+  test("the intro no longer promises an immediate call", () => {
+    const intro = SUBMISSION_TEMPLATES.find((t) => t.step === "INTRO_WHATSAPP")!;
+    const body = submissionBody(intro);
+    assert.doesNotMatch(
+      body,
+      /quick call now/,
+      "auto-sending at opt-in makes an immediate-call promise false — a caller only rings if they do NOT book",
     );
-    assert.ok(intro.proposedFix, "…and it must keep proposing the fix");
-    // The proposed wording must itself be legal, or we'd be recommending a second rejection.
-    assert.doesNotMatch(intro.proposedFix!.body, /\}\}\s*\{\{/);
-    assert.doesNotMatch(intro.proposedFix!.body, /\}\}\s*$/);
+    assert.match(body, /reply here and one of our team will call you/);
   });
 });
 

@@ -2,6 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
 import { normalizeLevelCode } from "@/lib/levels";
@@ -47,7 +48,63 @@ const questionSchema = z.object({
   required: z.coerce.boolean().default(false),
   /** JSON array of {value,label,score}; ignored for free-text kinds. */
   options: z.string().trim().optional(),
+  /**
+   * Comma- or newline-separated field names an external form may use for this question.
+   * Free text rather than a picker: the founder is transcribing whatever the landing page
+   * builder called the field, and we cannot offer a list of names we have never seen.
+   */
+  inboundKeys: z.string().trim().max(1000).optional(),
+  /** `optionValue: alias, alias` per line — the answer texts the external form sends. */
+  answerAliases: z.string().trim().max(4000).optional(),
 });
+
+/** Split a comma/newline separated list into clean, de-duplicated, bounded entries. */
+function splitList(raw: string, max: number): string[] {
+  const seen = new Set<string>();
+  for (const part of raw.split(/[,\n]/)) {
+    const k = part.trim().slice(0, 200);
+    if (k) seen.add(k);
+    if (seen.size >= max) break;
+  }
+  return [...seen];
+}
+
+function parseInboundKeys(raw: string | undefined): string[] {
+  return raw ? splitList(raw, 25) : [];
+}
+
+/** Prisma's Json column wants `undefined` (leave alone) or a value — never a bare `{}` we built. */
+function aliasesFor(raw: string | undefined, options: QuestionOption[]) {
+  const parsed = parseAnswerAliases(raw, new Set(options.map((o) => o.value)));
+  return Object.keys(parsed).length ? (parsed as never) : Prisma.JsonNull;
+}
+
+/**
+ * Parse the alias editor's `optionValue: alias, alias` lines.
+ *
+ * A line-based mini-format rather than JSON on purpose: this is the field a non-technical
+ * founder edits most often — every time the landing page's wording changes — and a stray comma
+ * in a JSON blob rejects the whole save. Here a malformed line is simply skipped, and options
+ * that were never mentioned keep the aliases they already had (the caller merges).
+ */
+function parseAnswerAliases(
+  raw: string | undefined,
+  validValues: Set<string>,
+): Record<string, string[]> {
+  if (!raw) return {};
+  const out: Record<string, string[]> = {};
+  for (const line of raw.split("\n").slice(0, 60)) {
+    const at = line.indexOf(":");
+    if (at < 1) continue;
+    const value = line.slice(0, at).trim();
+    // Silently drop aliases for options that no longer exist rather than storing orphans that
+    // would never match anything and would confuse the next person reading the config.
+    if (!validValues.has(value)) continue;
+    const aliases = splitList(line.slice(at + 1), 25);
+    if (aliases.length) out[value] = aliases;
+  }
+  return out;
+}
 
 const SCORED_KINDS = ["SELECT", "MULTI_SELECT", "BOOLEAN"];
 
@@ -99,6 +156,8 @@ export async function createQualificationQuestion(form: FormData): Promise<Actio
       helpText: d.helpText || null,
       kind: d.kind,
       options: opts.value.length ? (opts.value as never) : undefined,
+      inboundKeys: parseInboundKeys(d.inboundKeys),
+      answerAliases: aliasesFor(d.answerAliases, opts.value),
       dimension: d.dimension,
       weight: d.weight,
       required: d.required,
@@ -153,13 +212,36 @@ export async function updateQualificationQuestion(questionId: string, form: Form
     helpText: d.helpText || null,
     kind: d.kind,
     options: opts.value.length ? (opts.value as never) : undefined,
+    inboundKeys: parseInboundKeys(d.inboundKeys),
+    answerAliases: aliasesFor(d.answerAliases, opts.value),
     dimension: d.dimension,
     weight: d.weight,
     required: d.required,
   };
 
+  /**
+   * Does this edit change the EVIDENCE, or only how an external form's wording is recognised?
+   *
+   * Only the former earns a new version. Adding "Right away" as an alias for the option that
+   * already meant `immediately` does not change what this prospect was asked or what their
+   * answer scored — it fixes a parsing rule that was wrong from the day the landing page was
+   * reworded. Versioning that would spawn a new question every time marketing edits a label,
+   * and would leave a trail of retired versions that differ from each other in nothing a
+   * reader could see.
+   *
+   * The field list mirrors `forbid_answered_question_edit()` exactly: those are the columns the
+   * database itself refuses to mutate once answered, so anything outside it is by definition
+   * safe to update in place.
+   */
+  const evidenceChanged =
+    current.text !== fields.text ||
+    current.kind !== fields.kind ||
+    current.dimension !== fields.dimension ||
+    current.weight !== fields.weight ||
+    JSON.stringify(current.options ?? null) !== JSON.stringify(opts.value.length ? opts.value : null);
+
   let versioned = false;
-  if (current._count.answers > 0) {
+  if (current._count.answers > 0 && evidenceChanged) {
     // Frozen. New version, old one retired — the answers keep citing what they were given
     // against. Done in one transaction so the catalogue is never momentarily missing the key.
     await prisma.$transaction(async (tx) => {
@@ -186,8 +268,10 @@ export async function updateQualificationQuestion(questionId: string, form: Form
     entityId: questionId,
     summary: versioned
       ? `Revised "${current.key}" to version ${current.version + 1} (${current._count.answers} answers kept on v${current.version})`
-      : `Edited the qualification question "${current.key}"`,
-    meta: { versioned, answers: current._count.answers },
+      : evidenceChanged
+        ? `Edited the qualification question "${current.key}"`
+        : `Updated how "${current.key}" is read from inbound forms`,
+    meta: { versioned, evidenceChanged, answers: current._count.answers },
   });
 
   revalidateTag(QUALIFICATION_CACHE_TAG);

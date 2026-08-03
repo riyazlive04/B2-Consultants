@@ -149,6 +149,8 @@ export const SYSTEM_ACTORS = {
   bookings: "Booking engine",
   outreach: "Outreach engine",
   dailyLog: "Daily log engine",
+  dunning: "Dunning engine",
+  alerts: "Alert engine",
 } as const;
 
 export type SystemActor = (typeof SYSTEM_ACTORS)[keyof typeof SYSTEM_ACTORS];

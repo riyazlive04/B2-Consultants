@@ -37,10 +37,49 @@ export default async function AgreementsPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Drafts" value={counts.draft} />
-        <MetricCard label="Awaiting signature" value={counts.awaiting} signal={counts.awaiting > 0 ? "watch" : undefined} />
-        <MetricCard label="Signed" value={counts.signed} signal={counts.signed > 0 ? "ok" : undefined} />
-        <MetricCard label="Voided / declined / expired" value={counts.other} />
+        <MetricCard
+          label="Drafts"
+          value={counts.draft}
+          detail={{
+            rows: [
+              { label: "Linked to a student", value: counts.draftLinked },
+              { label: "Lead only (not yet linked)", value: counts.draftUnlinked },
+            ],
+          }}
+        />
+        <MetricCard
+          label="Awaiting signature"
+          value={counts.awaiting}
+          signal={counts.awaiting > 0 ? "watch" : undefined}
+          detail={{
+            rows: [
+              { label: "Sent, not yet opened", value: counts.awaitingSent },
+              { label: "Opened by student", value: counts.awaitingViewed },
+            ],
+          }}
+        />
+        <MetricCard
+          label="Signed"
+          value={counts.signed}
+          signal={counts.signed > 0 ? "ok" : undefined}
+          detail={{
+            rows: [
+              { label: "Signed in the last 30 days", value: counts.signedRecent },
+              { label: "Signed earlier", value: counts.signedEarlier },
+            ],
+          }}
+        />
+        <MetricCard
+          label="Voided / declined / expired"
+          value={counts.other}
+          detail={{
+            rows: [
+              { label: "Declined", value: counts.otherDeclined },
+              { label: "Voided", value: counts.otherVoided },
+              { label: "Expired", value: counts.otherExpired },
+            ],
+          }}
+        />
       </div>
 
       <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">

@@ -68,9 +68,16 @@ export async function getBookingsOverview() {
     doubt: monthBookings.filter((b) => b.bantVerdict === "DOUBT").length,
     cancel: monthBookings.filter((b) => b.bantVerdict === "CANCEL").length,
   };
+  const statusCounts = {
+    booked: monthBookings.filter((b) => b.status === "BOOKED").length,
+    rescheduled: monthBookings.filter((b) => b.status === "RESCHEDULED").length,
+    cancelled: monthBookings.filter((b) => b.status === "CANCELLED").length,
+    completed: monthBookings.filter((b) => b.status === "COMPLETED").length,
+    noShow: monthBookings.filter((b) => b.status === "NO_SHOW").length,
+  };
 
   return {
-    kpis: { openSlots, bookedThisMonth, avgBant, avgWeighted, highBant, noShows, verdicts },
+    kpis: { openSlots, bookedThisMonth, avgBant, avgWeighted, highBant, noShows, verdicts, statusCounts },
     slots: upcomingSlots.map((s) => ({
       id: s.id,
       day: istDay.format(s.startsAt),

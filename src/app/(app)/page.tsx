@@ -103,6 +103,9 @@ export default async function Home({
   ]);
 
   const months = runway?.runwayMonths ?? null;
+  const cashOnHandInr = runway?.cashInr ?? null;
+  const avgBurnInr = runway?.burnInr ?? 0;
+  const cashAsOf = runway?.cashDate ?? null;
 
   /**
    * Pipeline value is priced from an INR average fee (and a rupee founder fallback), so it has no
@@ -147,6 +150,14 @@ export default async function Home({
       tooltip="Open deals in strategy-call → deposit stages × the average program fee from real income history. The 30-day forecast applies this month's close rate. This is next month's revenue — before it happens."
       icon={<Waypoints size={18} />}
       href="/pipeline"
+      detail={{
+        rows: [
+          ...pipeline.byStage.map((s) => ({ label: s.label, value: s.count })),
+          ...(pipeline.avgFeeKnown
+            ? [{ label: "Avg. program fee used", value: <Money amount={inrOnly(pipeline.avgFeeInr)} /> }]
+            : []),
+        ],
+      }}
     />
   );
   const pipelineWinsCard = pipeline && (
@@ -161,6 +172,15 @@ export default async function Home({
       tooltip="Deals moved to Won in the selected range, with the close rate from completed discovery calls. The 2026 sheets average ~4 wins a month — the honest yardstick."
       icon={<Medal size={18} />}
       href="/pipeline"
+      detail={{
+        rows: [
+          { label: "Solo", value: pipeline.winsByLevel.SOLO },
+          { label: "Guided", value: pipeline.winsByLevel.GUIDED },
+          { label: "Elite", value: pipeline.winsByLevel.ELITE },
+          ...(pipeline.winsByLevel.OTHER > 0 ? [{ label: "Other", value: pipeline.winsByLevel.OTHER }] : []),
+          { label: "Completed discovery calls", value: pipeline.completedThisMonth },
+        ],
+      }}
     />
   );
 
@@ -172,6 +192,15 @@ export default async function Home({
       secondary={`#${game.me.rankWeek} this week · ${game.me.xpTotal.toLocaleString("en-IN")} XP · 🔥 ${game.me.streak}d`}
       icon={<Trophy size={18} />}
       href="/arena"
+      detail={{
+        rows: [
+          { label: "XP this week", value: game.me.xpWeek.toLocaleString("en-IN") },
+          { label: "XP this month", value: game.me.xpMonth.toLocaleString("en-IN") },
+          { label: "Rank this month", value: `#${game.me.rankMonth}` },
+          { label: "Rank all-time", value: `#${game.me.rankAll}` },
+          { label: "Badges unlocked", value: game.me.unlockedCount },
+        ],
+      }}
     />
   );
   const dailyLogCard = (
@@ -181,6 +210,17 @@ export default async function Home({
       secondary="Add your numbers for today"
       icon={<ClipboardList size={18} />}
       href="/daily-log"
+      detail={
+        game
+          ? {
+              rows: [
+                { label: "Logged today", value: game.me.loggedToday ? "Yes" : "Not yet" },
+                { label: "Current streak", value: `${game.me.streak}d` },
+                { label: "XP this week", value: game.me.xpWeek.toLocaleString("en-IN") },
+              ],
+            }
+          : undefined
+      }
     />
   );
 
@@ -200,6 +240,18 @@ export default async function Home({
       tooltip="Live German Note batches, with the next scheduled class across all of them. Archived batches are excluded — their recordings stay available to students for lifetime."
       icon={<Languages size={18} />}
       href="/german-note"
+      detail={{
+        rows: [
+          { label: "Active batches", value: gn.activeBatches },
+          { label: "Learners enrolled", value: gn.learners },
+          ...(gn.nextEvent
+            ? [{
+                label: "Next class",
+                value: `${gn.nextEvent.title} · ${gn.nextEvent.batch.name} · ${formatDate(gn.nextEvent.startsAt)}`,
+              }]
+            : []),
+        ],
+      }}
     />
   );
 
@@ -276,6 +328,16 @@ export default async function Home({
                 tooltip="Months the bank balance lasts at the current burn: cash ÷ average monthly expenses over the last 3 months. Green ≥ 6, amber 3–6, red < 3."
                 icon={<Gauge size={18} />}
                 href="/cash"
+                detail={{
+                  rows: [
+                    {
+                      label: "Cash on hand",
+                      value: cashOnHandInr != null ? <Money amount={inrOnly(cashOnHandInr)} /> : "Not recorded",
+                    },
+                    { label: "Avg. monthly burn", value: <Money amount={inrOnly(avgBurnInr)} /> },
+                    { label: "As of", value: cashAsOf ? formatDate(cashAsOf) : "—" },
+                  ],
+                }}
               />
               <MetricCard
                 label="Overdue receivables"
@@ -289,6 +351,18 @@ export default async function Home({
                 tooltip="Money already earned that hasn't arrived. Collecting it costs nothing in ad spend or sales calls — chase this before chasing new leads."
                 icon={<ReceiptText size={18} />}
                 href="/finance"
+                detail={{
+                  rows:
+                    overdueRows.length === 0
+                      ? [{ label: "Status", value: "All payments on schedule" }]
+                      : [...overdueRows]
+                          .sort((a, b) => b.balance.inr - a.balance.inr)
+                          .slice(0, 5)
+                          .map((p) => ({
+                            label: p.studentName,
+                            value: <>{p.daysOverdue}d overdue · <Money amount={p.balance} /></>,
+                          })),
+                }}
               />
               <MetricCard
                 label="Live FX (ECB)"
@@ -296,6 +370,13 @@ export default async function Home({
                 secondary={`per €1 · ${formatDate(fx.date)}${fx.stale ? " · cached" : ""}`}
                 icon={<IndianRupee size={18} />}
                 href="/finance"
+                detail={{
+                  rows: [
+                    { label: "1 EUR", value: `₹${fx.rate.toFixed(2)}` },
+                    { label: "1 INR", value: `€${(1 / Number(fx.rate)).toFixed(4)}` },
+                    { label: "Source", value: fx.stale ? "Cached (ECB API unavailable)" : "Live (ECB via frankfurter.app)" },
+                  ],
+                }}
               />
               {teamGame && teamGame.players.length > 0 && (
                 <MetricCard
@@ -304,6 +385,12 @@ export default async function Home({
                   secondary={`${teamGame.players[0].xpWeek.toLocaleString("en-IN")} XP this week · Lv ${teamGame.players[0].level.level}`}
                   icon={<Trophy size={18} />}
                   href="/arena"
+                  detail={{
+                    rows: teamGame.players.slice(0, 3).map((p, i) => ({
+                      label: `#${i + 1} ${p.name}`,
+                      value: `${p.xpWeek.toLocaleString("en-IN")} XP`,
+                    })),
+                  }}
                 />
               )}
               {germanNoteCard}

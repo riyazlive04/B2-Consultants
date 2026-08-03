@@ -42,6 +42,9 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(config.enabled);
+  // Drives the cap field and the "nothing will send yet" warning — both are noise until the
+  // founder has actually ticked instant sending.
+  const [instantIntro, setInstantIntro] = useState(config.instantIntro.enabled);
 
   const messageSteps = OUTREACH_STEPS.filter((s) => s.channel === "WHATSAPP");
 
@@ -124,6 +127,90 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
               </label>
             ))}
           </div>
+        </div>
+
+        {/* ── The top of the funnel, without a human in it ─────────────────────────────
+            Two switches that only make sense together, so they are presented together: send the
+            invite the instant someone opts in, and hold the caller back until a booking check
+            shows they ignored it. Either alone is coherent; the pair is the founder's flow. */}
+        <div className="border-t border-line pt-4">
+          <h4 className="font-display text-sm font-semibold">Hands-off first contact</h4>
+          <p className="mt-0.5 text-xs text-muted">
+            How the first message and the first call happen. Both are off by default — the SOP as
+            written has a specialist send the invite and ring straight away.
+          </p>
+
+          <label className="mt-3 flex items-start gap-3 rounded-field border border-line p-3">
+            <input
+              type="checkbox"
+              name="instantIntro"
+              defaultChecked={config.instantIntro.enabled}
+              onChange={(e) => setInstantIntro(e.target.checked)}
+              className="mt-0.5 h-4 w-4 flex-none"
+            />
+            <span className="text-xs">
+              <span className="block text-sm font-medium text-ink">
+                Send the invite the moment a lead arrives
+              </span>
+              <span className="mt-0.5 block text-muted">
+                Fires inline at capture — seconds, not the next engine tick — so the SOP&apos;s
+                5-minute window isn&apos;t spent waiting. Only for leads arriving from the live
+                capture webhooks; imports and manually-added contacts are never messaged.
+              </span>
+            </span>
+          </label>
+
+          {instantIntro && (
+            <label className="mt-2 block text-xs">
+              <span className="mb-1 block font-medium">Most invites to send in any one hour</span>
+              <input
+                type="number"
+                name="instantIntroMaxPerHour"
+                min={1}
+                max={5000}
+                defaultValue={config.instantIntro.maxPerHour}
+                className="w-32 rounded-field border border-line bg-surface px-2 py-1"
+              />
+              <span className="mt-1 block text-muted">
+                A circuit breaker, not a throttle — normal intake is nowhere near it. If a webhook
+                ever loops or an import is routed through a capture endpoint, this stops it and
+                leaves the rest for a human instead of messaging thousands of people.
+              </span>
+            </label>
+          )}
+
+          <label className="mt-3 flex items-start gap-3 rounded-field border border-line p-3">
+            <input
+              type="checkbox"
+              name="firstCallAfterCheck"
+              defaultChecked={config.firstCallMode === "after_check"}
+              className="mt-0.5 h-4 w-4 flex-none"
+            />
+            <span className="text-xs">
+              <span className="block text-sm font-medium text-ink">
+                Only call if they haven&apos;t booked
+              </span>
+              <span className="mt-0.5 block text-muted">
+                Holds Step 4 back until a booking check has run and come back empty. Anyone who
+                books off the message alone never reaches a caller — which is the point. Off, the
+                SOP&apos;s own order applies: message, then ring regardless.
+              </span>
+            </span>
+          </label>
+
+          {instantIntro && !watiLive && (
+            <p
+              className="mt-2 flex items-start gap-1.5 rounded-field px-3 py-2 text-xs font-medium"
+              style={{ background: "var(--risk-soft)", color: "var(--risk)" }}
+            >
+              <AlertTriangle size={13} className="mt-px flex-none" />
+              <span>
+                Nothing will actually send yet — WhatsApp is not live, or no template is mapped to
+                the SOP intro touchpoint. Each lead&apos;s invite will sit in the queue for manual
+                sending until that is done (WhatsApp → Settings).
+              </span>
+            </p>
+          )}
         </div>
 
         {/* Response-time windows */}

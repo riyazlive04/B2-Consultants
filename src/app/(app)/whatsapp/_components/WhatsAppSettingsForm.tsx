@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/feedback";
-import { Select } from "@/components/ui/form";
+import { Select, TextInput } from "@/components/ui/form";
 import { saveWatiSettings, refreshWatiTemplates } from "@/server/whatsapp-actions";
 import {
   WHATSAPP_KINDS,
@@ -74,6 +74,45 @@ export function WhatsAppSettingsForm({
 
   return (
     <form action={submit} className="space-y-8">
+      {/* ── Test mode ──────────────────────────────────────────────────────────────
+          First on the page and loud when active, because everything below it is
+          meaningless if you don't know where the messages are actually going. */}
+      <section
+        className={`rounded-card border p-5 shadow-card ${
+          settings.testRecipient ? "border-warn bg-warn-soft" : "border-line bg-surface"
+        }`}
+      >
+        <h3 className="font-display text-base font-semibold">
+          {settings.testRecipient ? "⚠ Test mode is ON" : "Test mode"}
+        </h3>
+        {settings.testRecipient ? (
+          <p className="mt-1 text-sm text-ink">
+            Every outbound message — templates, automatic reminders and free-text replies alike — is
+            being redirected to <strong>{settings.testRecipient}</strong>. No prospect, student or
+            vendor is receiving anything. Clear this field to go live.
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-muted">
+            Redirect <em>all</em> outbound WhatsApp to one number while you wire up templates. Real
+            recipients receive nothing, and each message is logged against the contact it was meant
+            for. Leave blank to message people normally.
+          </p>
+        )}
+        <label className="mt-3 block max-w-sm">
+          <span className="text-xs font-medium text-muted">Send everything to this number</span>
+          <TextInput
+            name="testRecipient"
+            defaultValue={settings.testRecipient ?? ""}
+            placeholder="e.g. 7806966124"
+            className="mt-1"
+          />
+          <span className="mt-0.5 block text-caption text-muted">
+            Blank = off. Every check still runs against the real recipient first, so a redirected
+            send proves what a live one would have done.
+          </span>
+        </label>
+      </section>
+
       {/* General */}
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
         <h3 className="font-display text-base font-semibold">General</h3>

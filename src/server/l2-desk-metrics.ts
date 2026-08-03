@@ -1,9 +1,13 @@
 import "server-only";
 import { cache } from "react";
+import type { BantDimension } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ACTIVE } from "@/lib/soft-delete";
 import { istBoundaryToInstant, istMonthInstantRange, istMonthRange, istToday } from "@/lib/dates";
 import { rate } from "@/lib/outreach-sla";
+import { resolveBant, type BantSnapshot } from "@/lib/bant-view";
+import { intakeLabel, INTAKE_OPTIONS } from "@/lib/booking-intake";
+import { DIMENSION_BY_KEY, QUESTION_TEXT } from "@/lib/qualification";
 
 /**
  * Level 2 — Discovery Specialist desk (rebuild spec §7).
@@ -31,6 +35,24 @@ export type L2Call = {
   /** The slot's time has passed, nobody has recorded anything: ring them before judging. */
   needsChase: boolean;
   zoomLink: string | null;
+  /**
+   * What the prospect said when they qualified, and how it scored — the whole reason the
+   * landing page asks the band-score questions.
+   *
+   * Null means genuinely unscored, never zero. `origin` tells the specialist how much evidence
+   * they are looking at: a 3.2 from a full booking form and a 3.2 from a three-question landing
+   * page are not the same claim, and this is the screen where that difference gets acted on.
+   */
+  bant: BantSnapshot | null;
+  /** The individual answers behind the score, in catalogue order. The call prep. */
+  answers: BantAnswerLine[];
+};
+
+/** One answered qualification question, ready to render. */
+export type BantAnswerLine = {
+  question: string;
+  answer: string;
+  dimension: BantDimension;
 };
 
 export type L2Targets = {
@@ -41,8 +63,25 @@ export type L2Targets = {
   pipelineUpdated: number | null;
 };
 
+export type L2Lead = {
+  id: string;
+  name: string;
+  phone: string | null;
+  city: string | null;
+  stage: string;
+  createdAt: string;
+};
+
 export type L2Desk = {
   today: L2Call[];
+  /**
+   * Leads owned by me (first-call rotation, or a manual reassign) that have no booked
+   * slot yet — the only place they are visible on this desk, since `today` only reads
+   * `AppointmentSlot`. Without this list, a lead handed to a Discovery Specialist before
+   * anyone books a call for them is invisible here even though `Lead.assignedToId` is
+   * set correctly.
+   */
+  myLeads: L2Lead[];
   targets: L2Targets;
   now: string;
 };
@@ -53,6 +92,47 @@ function istTodayInstants() {
     start: istBoundaryToInstant(today),
     end: istBoundaryToInstant(new Date(today.getTime() + DAY_MS)),
   };
+}
+
+/** The six scored intake columns, in the order the form asks them. */
+const SCORED_BOOKING_KEYS = [
+  "whenStartGermany", "alreadyApplied", "commitment",
+  "readyToInvest", "currentIncome", "decisionMaking",
+] as const satisfies readonly (keyof typeof INTAKE_OPTIONS)[];
+
+/**
+ * The answers behind the score, as the discovery specialist should read them.
+ *
+ * Booking columns first, falling back to the lead's stored `LeadAnswer` rows — the same
+ * precedence `resolveBant` applies to the score itself, so the number and the answers under it
+ * can never describe different submissions.
+ *
+ * The lead branch reads `question.text`, i.e. the wording THIS prospect was actually shown, not
+ * today's wording. That is the point of Track D's versioning: a specialist reading back "they
+ * said 'Immediately'" needs to know what they were asked.
+ */
+function answerLinesFor(
+  booking: Record<string, unknown> | null,
+  lead: {
+    answers: { answerRaw: string; question: { text: string; dimension: BantDimension } }[];
+  } | null,
+): BantAnswerLine[] {
+  const fromBooking = SCORED_BOOKING_KEYS.flatMap((key) => {
+    const value = booking?.[key];
+    if (typeof value !== "string" || !value) return [];
+    return [{
+      question: QUESTION_TEXT[key] ?? key,
+      answer: intakeLabel(key, value),
+      dimension: DIMENSION_BY_KEY[key] ?? ("NONE" as BantDimension),
+    }];
+  });
+  if (fromBooking.length > 0) return fromBooking;
+
+  return (lead?.answers ?? []).map((a) => ({
+    question: a.question.text,
+    answer: a.answerRaw,
+    dimension: a.question.dimension,
+  }));
 }
 
 export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
@@ -73,7 +153,7 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
   const tomorrowDate = new Date(todayDate.getTime() + DAY_MS);
   const monthDates = istMonthRange();
 
-  const [todaySlots, monthSlots, monthOutcomes] = await Promise.all([
+  const [todaySlots, monthSlots, monthOutcomes, myLeadRows] = await Promise.all([
     prisma.appointmentSlot.findMany({
       where: {
         assignedToId: userId,
@@ -85,9 +165,27 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
         booking: {
           select: {
             id: true, name: true, phone: true, status: true, confirmedAt: true,
+            // The booking's own score + the six scored answers, for the call-prep panel.
+            bantAvg: true, bantScore: true, bantVerdict: true,
+            bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true,
+            readyToInvest: true, currentIncome: true, decisionMaking: true,
+            alreadyApplied: true, commitment: true, whenStartGermany: true,
             lead: {
               select: {
                 id: true,
+                // The landing page's score, for a prospect who never filled our booking form —
+                // this is the case that used to arrive here blank.
+                bantAvg: true, bantScore: true, bantVerdict: true, bantSource: true,
+                bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true,
+                // The opt-in answers, pinned to the question wording they were given against.
+                answers: {
+                  where: { bookingRequestId: null },
+                  select: {
+                    answerRaw: true,
+                    question: { select: { text: true, dimension: true, orderIndex: true } },
+                  },
+                  orderBy: { question: { orderIndex: "asc" } },
+                },
                 outreachJourney: { select: { zoomLink: true } },
                 // Today's outcome, if one has already been recorded for this lead.
                 outcomes: {
@@ -124,6 +222,16 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
         lead: { select: { outreachJourney: { select: { salesCallConfirmed: true } } } },
       },
     }),
+
+    // Leads I own that have no booked slot yet — NEW_LEAD (fresh, from the first-call
+    // rotation or a manual reassign) or DISCO_NOT_BOOKED (a booking that fell through and
+    // was reopened). Anything already booked shows up in `today`/`monthSlots` instead, via
+    // the AppointmentSlot it claimed, not via this stage-based list.
+    prisma.lead.findMany({
+      where: { ...ACTIVE, assignedToId: userId, stage: { in: ["NEW_LEAD", "DISCO_NOT_BOOKED"] } },
+      select: { id: true, name: true, phone: true, city: true, stage: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
   const today: L2Call[] = todaySlots
@@ -144,6 +252,8 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
         // call before this can be called a no-show.
         needsChase: !recorded && s.startsAt < now && b.status !== "COMPLETED",
         zoomLink: b.lead?.outreachJourney?.zoomLink ?? null,
+        bant: resolveBant(b, b.lead),
+        answers: answerLinesFor(b, b.lead),
       };
     });
 
@@ -164,8 +274,18 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
   const callsToday = today.filter((c) => c.recorded).length;
   const dueToday = today.filter((c) => new Date(c.startsAt) < now).length;
 
+  const myLeads: L2Lead[] = myLeadRows.map((l) => ({
+    id: l.id,
+    name: l.name,
+    phone: l.phone,
+    city: l.city,
+    stage: l.stage,
+    createdAt: l.createdAt.toISOString(),
+  }));
+
   return {
     today,
+    myLeads,
     targets: {
       callsToday,
       showRate: rate(showHit, showTotal),

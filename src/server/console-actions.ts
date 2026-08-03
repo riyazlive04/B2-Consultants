@@ -9,6 +9,8 @@ import { majorStringToMinor } from "@/lib/format";
 import {
   agreementWorkflowSchema,
   coerceAgreementWorkflow,
+  callDistributionSchema,
+  coerceCallDistribution,
   coerceBookOrderConfig,
   coerceCommissionRulesConfig,
   coercePipelineConfig,
@@ -39,6 +41,7 @@ import type { GamificationConfig } from "@/lib/gamification";
 import type { SectionsConfig } from "@/lib/sections";
 import {
   AGREEMENT_WORKFLOW_KEY,
+  CALL_DISTRIBUTION_KEY,
   BOOK_ORDER_KEY,
   COMMISSION_RULES_KEY,
   DAILY_LOG_EOD_KEY,
@@ -50,7 +53,9 @@ import {
   INSTALMENT_PLAN_KEY,
   SLOT_PATTERN_KEY,
   SSS_PATTERN_KEY,
+  revalidateFounderConfig,
   writeAgreementWorkflow,
+  writeCallDistribution,
   writeBookOrderConfig,
   writeCommissionRulesConfig,
   writePipelineConfig,
@@ -178,6 +183,85 @@ export async function saveCommissionRules(input: unknown): Promise<ActionResult>
 }
 
 /**
+ * Call distribution: the rules AND each person's share, saved together.
+ *
+ * ── Why one action writes two different places ───────────────────────────────────
+ * The rules live in `AppSetting("callDistribution")`; each individual's share lives on their
+ * `TeamProfile`, because it belongs to them and follows them through the org chart. From the
+ * founder's side that distinction is invisible and uninteresting — they are looking at one screen
+ * called "who gets what", and a Save that persisted half of it would be indefensible.
+ *
+ * The shares are written in one transaction so a partial apply cannot leave the rotation in a
+ * state nobody chose. The AppSetting write is separate and goes SECOND: if it fails, the shares
+ * are still consistent with each other, which is the safer half to have landed.
+ */
+const shareRowSchema = z.object({
+  profileId: z.string().min(1),
+  // Same bounds the team-profile form enforces, re-checked here — this is a second door onto the
+  // same column and a client can post whatever it likes.
+  sharePct: z.number().int().min(0).max(100),
+});
+
+const callDistributionInputSchema = z.object({
+  config: callDistributionSchema,
+  shares: z.array(shareRowSchema).max(100),
+});
+
+export async function saveCallDistribution(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = callDistributionInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { config, shares } = parsed.data;
+
+  const before = coerceCallDistribution(await settingValue(CALL_DISTRIBUTION_KEY));
+  const profilesBefore = await prisma.teamProfile.findMany({
+    where: { id: { in: shares.map((s) => s.profileId) } },
+    select: { id: true, fullName: true, firstCallSharePct: true },
+  });
+  const wasById = new Map(profilesBefore.map((p) => [p.id, p]));
+
+  const changedShares = shares.filter((s) => wasById.get(s.profileId)?.firstCallSharePct !== s.sharePct);
+  if (changedShares.length) {
+    await prisma.$transaction(
+      changedShares.map((s) =>
+        prisma.teamProfile.update({ where: { id: s.profileId }, data: { firstCallSharePct: s.sharePct } }),
+      ),
+    );
+  }
+
+  await writeCallDistribution(config);
+
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    config as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0 || changedShares.length > 0) {
+    // The share change is spelled out by NAME. "changed shares" would send the founder to the
+    // meta blob to answer the only question the entry raises.
+    const shareSummary = changedShares
+      .map((s) => `${wasById.get(s.profileId)?.fullName ?? "?"} ${wasById.get(s.profileId)?.firstCallSharePct ?? 0}→${s.sharePct}`)
+      .join(", ");
+    await logActivity(session, {
+      action: "console.call-distribution.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: CALL_DISTRIBUTION_KEY,
+      summary: changedShares.length
+        ? `Changed call distribution — ${shareSummary}`
+        : "Changed the call distribution rules",
+      meta: { changed: diff.changed, before: diff.before, after: diff.after, shares: changedShares },
+    });
+  }
+
+  // Both surfaces the weights drive, plus the roster they were edited from.
+  revalidatePath("/console");
+  revalidatePath("/pipeline");
+  revalidatePath("/my-desk");
+  revalidatePath("/people");
+  return { ok: true };
+}
+
+/**
  * Choose when the Agreement module starts PROMPTING "ready to send".
  *
  * This is a nudge threshold, not a gate: whatever is saved here, the founder can still draft and
@@ -297,6 +381,8 @@ export async function saveSectionsConfig(form: FormData): Promise<ActionResult> 
 export async function resetSectionsConfig(): Promise<ActionResult> {
   const session = await requireAdmin();
   const { count } = await prisma.appSetting.deleteMany({ where: { key: "sectionsConfig" } });
+  // Deleting the row bypasses the write* helpers, so drop the cached copy by hand.
+  revalidateFounderConfig();
   if (count > 0) {
     await logActivity(session, {
       action: "console.sections.restore",
@@ -339,6 +425,8 @@ export async function saveGamificationConfig(form: FormData): Promise<ActionResu
 export async function resetGamificationConfig(): Promise<ActionResult> {
   const session = await requireAdmin();
   const { count } = await prisma.appSetting.deleteMany({ where: { key: "gamificationRulesets" } });
+  // Same as the sections reset above — a raw delete has no write helper to invalidate for it.
+  revalidateFounderConfig();
   if (count > 0) {
     await logActivity(session, {
       action: "console.gamification.restore",

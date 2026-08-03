@@ -15,7 +15,12 @@
  */
 
 import type { WhatsAppKind } from "@prisma/client";
-import { STEP_BY_KEY, renderOutreachTemplate, type OutreachVars } from "./outreach-sop";
+import {
+  STEP_BY_KEY,
+  TPL_INTRO_SUPERSEDED,
+  renderOutreachTemplate,
+  type OutreachVars,
+} from "./outreach-sop";
 import type { OutreachStep } from "@prisma/client";
 
 /** Meta's two relevant template categories. AUTHENTICATION doesn't apply to any SOP message. */
@@ -56,6 +61,19 @@ export type SubmissionTemplate = {
    * the team, and changing what a prospect reads is a business decision, not a lint fix.
    */
   proposedFix?: { reason: string; body: string };
+  /**
+   * A wording change that HAS been approved and is already live in the SOP constant.
+   *
+   * The counterpart to `proposedFix`, and the distinction matters at submission time: a
+   * `proposedFix` is a question still open — the pack prints the SOP body and asks B2 to decide.
+   * An `acceptedFix` is a decision already taken, so the pack prints the NEW body as the thing to
+   * submit and carries the old one as an explanatory note.
+   *
+   * `was` is the superseded text, kept so the Word pack can show a reviewer (and the next person
+   * to read this file) exactly what changed and why, rather than a body that silently disagrees
+   * with the SOP document B2 also has on file.
+   */
+  acceptedFix?: { reason: string; decidedOn: string; was: string };
 };
 
 const V = {
@@ -142,14 +160,15 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
       "Promotes a free discovery call to someone who just opted in. Not tied to an existing transaction → MARKETING.",
     vars: [V.name("Priya"), V.sender("Nilofer")],
     notes: [
-      "REJECTION RISK: the SOP's first two lines put {{name}} and {{sender}} back to back with only a line break between them. Meta rejects templates whose parameters are adjacent with no static text in between, and a newline does not count as text. See the proposed fix — B2 must approve it before submitting.",
       "Both links are literal text, not variables — Meta reviews them once at approval.",
-      "Sent within 5 minutes of opt-in (SOP Step 2), so the opt-in is fresh and provable.",
+      "Sent automatically within seconds of opt-in (SOP Step 2), so the opt-in is fresh and provable.",
+      "The closing line no longer promises an immediate call. Under the instant-intro flow a caller only rings if the prospect does NOT book, so the message offers a call on request instead of asserting one.",
     ],
-    proposedFix: {
+    acceptedFix: {
+      decidedOn: "2026-08-03",
       reason:
-        "Puts static text between the two variables so Meta will accept it. The wording is not invented — it is exactly how the SOP itself opens Step 13 (“Hi [Prospect’s First Name], this is [Your Name] from B2 Consultants”), so the intro simply adopts B2’s own house phrasing. Everything after the first two lines is untouched.",
-      body: "Hi {{name}}, this is {{sender}} from B2 Consultants.",
+        "Two changes, both approved by B2. (1) The SOP's first two lines put {{name}} and {{sender}} back to back with only a line break between them; Meta rejects adjacent parameters with no static text between, and a newline does not count — as transcribed, this template could never have been approved. The replacement is exactly how the SOP itself opens Step 13, so the intro adopts B2's own house phrasing rather than new wording. (2) The closing line promised “I’ll give you a quick call now”, which became untrue once the message is auto-sent at opt-in and the call is conditional on NOT booking. Everything between those two lines is untouched.",
+      was: TPL_INTRO_SUPERSEDED,
     },
   },
   {

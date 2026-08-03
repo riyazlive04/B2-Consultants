@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { moveProfile, saveTeamProfile } from "@/server/people-actions";
+import { loadTerminationReport, reinstateTeamMember } from "@/server/users-actions";
+import type { TerminationReport } from "@/server/termination-report";
 import type { MemberRow } from "@/server/people-metrics";
+import { TerminateDialog } from "./TerminateDialog";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { toast } from "@/components/ui/feedback";
 import { Card, Pill } from "@/components/ui/kit";
@@ -22,10 +25,34 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
   const [editing, setEditing] = useState<MemberRow | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offboarding, setOffboarding] = useState<TerminationReport | null>(null);
+  const [loadingReport, setLoadingReport] = useState<string | null>(null);
 
-  const top = members.filter((m) => m.dashboardRole === "ADMIN");
-  const team = members.filter((m) => m.dashboardRole !== "ADMIN");
+  // Former members leave the chart entirely and get their own list below. Keeping them in the
+  // org chart would misrepresent the team to everyone who opens this page.
+  const current = members.filter((m) => !m.terminatedAt);
+  const former = members.filter((m) => m.terminatedAt);
+  const top = current.filter((m) => m.dashboardRole === "ADMIN");
+  const team = current.filter((m) => m.dashboardRole !== "ADMIN");
   const showForm = adding || editing;
+
+  // Anyone still here can take over — offering a departed or suspended colleague would just move
+  // the orphaned-work problem along.
+  const successors = current.map((m) => ({ value: m.id, label: `${m.fullName} · ${m.roleTitle}` }));
+
+  async function openOffboarding(m: MemberRow) {
+    setLoadingReport(m.id);
+    const res = await loadTerminationReport(m.id);
+    setLoadingReport(null);
+    if (!res.ok) return toast(res.error, "error");
+    setOffboarding(res.report);
+  }
+
+  async function bringBack(m: MemberRow) {
+    const res = await reinstateTeamMember(m.id);
+    if (!res.ok) return toast(res.error, "error");
+    toast(`${m.fullName} is back on the team`);
+  }
 
   const submit = async (form: FormData) => {
     setError(null);
@@ -64,6 +91,16 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
             </IconButton>
           </>
         )}
+        {/* Last in the row and quiet: offboarding is rare and irreversible-feeling, so it should
+            never sit where "Edit" is expected. */}
+        <Btn
+          variant="ghost"
+          size="sm"
+          onClick={() => openOffboarding(m)}
+          disabled={loadingReport === m.id}
+        >
+          {loadingReport === m.id ? "Opening…" : "Offboard"}
+        </Btn>
       </div>
     </div>
   );
@@ -82,6 +119,50 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
         {team.length > 0 && <div className="h-6 w-px bg-line" aria-hidden />}
         <div className="flex flex-wrap justify-center gap-4">{team.map((m) => card(m, true))}</div>
       </div>
+
+      {/* ── Former team members ──────────────────────────────────────────────────────
+          Not the app's `deletedAt` archive: that one is purged after 90 days, and an employment
+          record must outlive that — their name has to keep resolving on every call, commission
+          and audit row they ever produced. Permanent, and restorable. */}
+      {former.length > 0 && (
+        <details className="rounded-card border border-line bg-surface p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-ink">
+            Former team members ({former.length})
+          </summary>
+          <ul className="mt-3 divide-y divide-line">
+            {former.map((m) => (
+              <li key={m.id} className="flex flex-wrap items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-ink">
+                    {m.fullName} <span className="font-normal text-muted">· {m.roleTitle}</span>
+                  </p>
+                  <p className="text-xs text-muted">
+                    Left {m.terminatedAt ? formatDate(m.terminatedAt) : "—"}
+                    {m.terminationReason ? ` · ${m.terminationReason}` : ""}
+                  </p>
+                </div>
+                <a
+                  href={`/api/people/${m.id}/termination-report`}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  Record (PDF)
+                </a>
+                <Btn variant="ghost" size="sm" onClick={() => bringBack(m)}>
+                  Bring back
+                </Btn>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {offboarding && (
+        <TerminateDialog
+          report={offboarding}
+          successors={successors.filter((s) => s.value !== offboarding.profile.id)}
+          onClose={() => setOffboarding(null)}
+        />
+      )}
 
       {showForm && (
         <Card

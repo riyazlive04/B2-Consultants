@@ -12,6 +12,8 @@ import { OutreachSettings } from "./_components/OutreachSettings";
 
 export const dynamic = "force-dynamic";
 
+const CHANNEL_LABELS: Record<string, string> = { WHATSAPP: "WhatsApp", CALL: "Call", SYSTEM: "System" };
+
 /**
  * The Outreach Specialist SOP (Script_for_Outreach_Specialist.docx, Steps 1–23), as a screen.
  *
@@ -32,6 +34,20 @@ export default async function OutreachPage() {
     readOutreachConfig(),
     getWatiRuntime(),
   ]);
+
+  const dueByChannel = new Map<string, number>();
+  for (const r of queue.due) {
+    const ch = r.next?.channel ?? "SYSTEM";
+    dueByChannel.set(ch, (dueByChannel.get(ch) ?? 0) + 1);
+  }
+  const breachedCount = queue.due.concat(queue.upcoming, queue.waiting).filter((r) => r.sla?.breached).length;
+  const approachingCount = queue.due
+    .concat(queue.upcoming, queue.waiting)
+    .filter((r) => r.sla?.approaching && !r.sla?.breached).length;
+  const upcomingByPhase = new Map<string, number>();
+  for (const r of queue.upcoming) upcomingByPhase.set(r.phase, (upcomingByPhase.get(r.phase) ?? 0) + 1);
+  const waitingByPhase = new Map<string, number>();
+  for (const r of queue.waiting) waitingByPhase.set(r.phase, (waitingByPhase.get(r.phase) ?? 0) + 1);
 
   return (
     <div className="w-full space-y-6">
@@ -64,6 +80,12 @@ export default async function OutreachPage() {
           secondary="Steps waiting on you"
           signal={queue.counts.due > 0 ? "watch" : "ok"}
           icon={<ListTodo size={18} />}
+          detail={{
+            rows: [...dueByChannel.entries()].map(([ch, count]) => ({
+              label: CHANNEL_LABELS[ch] ?? ch,
+              value: count,
+            })),
+          }}
         />
         <MetricCard
           label="Response time at risk"
@@ -72,18 +94,36 @@ export default async function OutreachPage() {
           tooltip="SOP Step 2: contact within 5 minutes of opt-in to stay on the Step 3 path. Past that, the SOP skips the WhatsApp intro and goes straight to the Step 10 booking check."
           signal={queue.counts.breaching > 0 ? "risk" : "ok"}
           icon={<AlarmClock size={18} />}
+          detail={{
+            rows: [
+              { label: "Already breached", value: breachedCount },
+              { label: "Approaching (SLA warning)", value: approachingCount },
+            ],
+          }}
         />
         <MetricCard
           label="Scheduled"
           value={queue.counts.upcoming}
           secondary="Materialised, not yet due"
           icon={<CheckCircle2 size={18} />}
+          detail={{
+            rows: [...upcomingByPhase.entries()].map(([phase, count]) => ({
+              label: OUTREACH_PHASE_LABELS[phase] ?? phase,
+              value: count,
+            })),
+          }}
         />
         <MetricCard
           label="In flight"
           value={queue.counts.waiting}
           secondary="Waiting on the prospect or Discovery"
           icon={<MessageCircle size={18} />}
+          detail={{
+            rows: [...waitingByPhase.entries()].map(([phase, count]) => ({
+              label: OUTREACH_PHASE_LABELS[phase] ?? phase,
+              value: count,
+            })),
+          }}
         />
       </div>
 

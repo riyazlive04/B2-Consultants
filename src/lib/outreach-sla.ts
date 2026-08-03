@@ -144,6 +144,10 @@ export function slaFor(optInAt: Date, connectedAt: Date | null, now: Date): SlaV
  */
 export const QUEUE_BUCKETS = [
   "FIVE_MINUTE",
+  // Second only to the 5-minute clock: the prospect has already had the message, ignored it, and
+  // the SOP has formally raised a call. Everything below is work the specialist chooses when to
+  // do; this is work the process has decided is due now.
+  "NOT_BOOKED_AFTER_MESSAGE",
   "DAY_DUE",
   "NIGHT_DUE",
   "EARLY_DUE",
@@ -162,6 +166,11 @@ export const QUEUE_BUCKET_META: Record<
     title: "New — under 5 minutes",
     why: "Ring these before anything else. The clock is running.",
     target: "90% connected within 5 minutes",
+  },
+  NOT_BOOKED_AFTER_MESSAGE: {
+    title: "Messaged, didn't book — call now",
+    why: "They got the booking link and haven't used it. The SOP has raised a call for you.",
+    target: "30–40% of leads booked",
   },
   DAY_DUE: {
     title: "Daytime leads, not yet connected",

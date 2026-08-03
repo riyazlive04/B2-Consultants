@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronRight, PauseCircle } from "lucide-react";
 import { EmptyState } from "@/components/ui/kit";
 import { SIGNAL_META } from "@/lib/signals";
 import type { DeskTask, OwnerDesk as OwnerDeskData } from "@/server/owner-desk";
@@ -14,7 +14,7 @@ import type { DeskTask, OwnerDesk as OwnerDeskData } from "@/server/owner-desk";
  */
 
 function TaskRow({ task }: { task: DeskTask }) {
-  const clear = task.count === 0;
+  const clear = !task.disabled && task.count === 0;
   const tone = SIGNAL_META[task.tone];
 
   return (
@@ -25,21 +25,25 @@ function TaskRow({ task }: { task: DeskTask }) {
       <span
         className="tnum flex h-11 w-11 flex-none items-center justify-center rounded-field font-display text-lg font-bold"
         style={
-          clear
-            ? { color: "var(--ink-3)", background: "var(--bg-surface-2)" }
-            : { color: tone.color, background: tone.soft }
+          task.disabled
+            ? { color: "var(--muted)", background: "var(--bg-surface-2)" }
+            : clear
+              ? { color: "var(--ink-3)", background: "var(--bg-surface-2)" }
+              : { color: tone.color, background: tone.soft }
         }
         aria-hidden
       >
-        {clear ? <CheckCircle2 size={18} /> : task.count}
+        {task.disabled ? <PauseCircle size={18} /> : clear ? <CheckCircle2 size={18} /> : task.count}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block font-semibold text-ink">
           {task.label}
-          <span className="sr-only">: {clear ? "nothing waiting" : `${task.count} waiting`}</span>
+          <span className="sr-only">
+            : {task.disabled ? "turned off" : clear ? "nothing waiting" : `${task.count} waiting`}
+          </span>
         </span>
         <span className="mt-0.5 block text-caption text-muted">
-          {clear ? "Nothing waiting." : task.detail}
+          {task.disabled ? task.detail : clear ? "Nothing waiting." : task.detail}
         </span>
       </span>
       <ChevronRight size={18} className="flex-none text-ink-3" aria-hidden />
@@ -57,11 +61,17 @@ export function OwnerDesk({ desk }: { desk: OwnerDeskData }) {
     );
   }
 
+  // A stopped process (the Outreach engine, off) is a decision waiting on the founder even
+  // though its count reads 0 — "everything is clear" must not be true while one of those sits here.
+  const stopped = desk.tasks.some((t) => t.disabled);
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-2">
-        {desk.total === 0 ? (
+        {desk.total === 0 && !stopped ? (
           <>Everything is clear — nothing is waiting on you right now.</>
+        ) : desk.total === 0 ? (
+          <>Nothing is queued, but something below is switched off — worth a look.</>
         ) : (
           <>
             <span className="tnum font-semibold text-ink">{desk.total}</span>{" "}
@@ -71,9 +81,9 @@ export function OwnerDesk({ desk }: { desk: OwnerDeskData }) {
       </p>
 
       <div className="space-y-3">
-        {/* Sorted so anything outstanding rises above what is already clear. */}
+        {/* Sorted so anything outstanding — or switched off — rises above what is already clear. */}
         {[...desk.tasks]
-          .sort((a, b) => (b.count > 0 ? 1 : 0) - (a.count > 0 ? 1 : 0))
+          .sort((a, b) => Number(b.count > 0 || !!b.disabled) - Number(a.count > 0 || !!a.disabled))
           .map((t) => (
             <TaskRow key={t.key} task={t} />
           ))}

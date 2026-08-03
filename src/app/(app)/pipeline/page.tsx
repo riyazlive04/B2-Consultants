@@ -23,8 +23,9 @@ import { prisma } from "@/lib/prisma";
 import { getActiveLevels } from "@/server/levels";
 import { levelOptions } from "@/lib/levels";
 import { Card, CardTitle, PageHeader, Pill } from "@/components/ui/kit";
+import { LEAD_SOURCE_LABELS } from "@/lib/labels";
 import { getPipelineOverview, getKanbanLeads, getPipelineAging, KANBAN_STAGES } from "@/server/pipeline-metrics";
-import { getPipelineConfig } from "@/server/founder-config";
+import { getPipelineConfig, getCallDistribution } from "@/server/founder-config";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { getFirstCallSplit } from "@/server/assignment";
 import { countAssignableLeads } from "@/server/pipeline-actions";
@@ -57,8 +58,16 @@ export default async function PipelinePage() {
   //   · aging (1.7) is founder-facing — a non-admin only sees their own board, so a global
   //     aging table would surface leads that aren't theirs. Admin-only, like the split card.
   //   · the viewer's log variant is only needed for a non-admin (admins see both tabs).
-  const [archLeads, overview, callSplit, aging, activeLevels, pipelineConfig, viewerProfile] =
-    await Promise.all([
+  const [
+    archLeads,
+    overview,
+    callSplit,
+    aging,
+    activeLevels,
+    pipelineConfig,
+    viewerProfile,
+    callDistribution,
+  ] = await Promise.all([
       getArchivedLeads(),
       getPipelineOverview(session.user.id, isAdmin),
       isAdmin ? getFirstCallSplit() : Promise.resolve(null),
@@ -71,6 +80,7 @@ export default async function PipelinePage() {
             where: { userId: session.user.id },
             select: { logVariant: true },
           }),
+      getCallDistribution(),
     ]);
 
   const archivedCount = archLeads.length;
@@ -318,8 +328,29 @@ export default async function PipelinePage() {
 
           {/* Remaining KPIs not already on a bento card */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <MetricCard label="Leads this week" value={metrics.leadsThisWeek} icon={<UserPlus size={18} />} />
-            <MetricCard label="Calls booked" value={metrics.booked} icon={<PhoneCall size={18} />} />
+            <MetricCard
+              label="Leads this week"
+              value={metrics.leadsThisWeek}
+              icon={<UserPlus size={18} />}
+              detail={{
+                rows: metrics.leadsThisWeekBySource.map((s) => ({
+                  label: LEAD_SOURCE_LABELS[s.source] ?? s.source,
+                  value: s.count,
+                })),
+              }}
+            />
+            <MetricCard
+              label="Calls booked"
+              value={metrics.booked}
+              icon={<PhoneCall size={18} />}
+              detail={{
+                rows: [
+                  { label: "Completed", value: metrics.completed },
+                  { label: "No-show", value: metrics.noShows },
+                  { label: "Awaiting outcome", value: Math.max(0, metrics.booked - metrics.completed - metrics.noShows) },
+                ],
+              }}
+            />
             {/* Rate tiles carry the 2026 sheet benchmarks (SALES-LOGIC §4) — a rate
                 without its normal range is just a number. Signals band vs the range,
                 not vs generic 50/80 cutoffs. */}
@@ -332,6 +363,13 @@ export default async function PipelinePage() {
               progress={metrics.showUpPct / 100}
               icon={<Percent size={18} />}
               signal={metrics.booked === 0 ? undefined : metrics.showUpPct >= 52 ? "ok" : metrics.showUpPct >= 40 ? "watch" : "risk"}
+              detail={{
+                rows: [
+                  { label: "Completed", value: metrics.completed },
+                  { label: "Booked", value: metrics.booked },
+                  { label: "No-show", value: metrics.noShows },
+                ],
+              }}
             />
             <MetricCard
               label="No-show rate"
@@ -341,6 +379,13 @@ export default async function PipelinePage() {
               progress={metrics.noShowPct / 100}
               icon={<PhoneOff size={18} />}
               signal={metrics.booked === 0 ? undefined : metrics.noShowPct <= 20 ? "ok" : metrics.noShowPct <= 40 ? "watch" : "risk"}
+              detail={{
+                rows: [
+                  { label: "No-shows", value: metrics.noShows },
+                  { label: "Booked", value: metrics.booked },
+                  { label: "Completed", value: metrics.completed },
+                ],
+              }}
             />
             <MetricCard
               label="Highly qualified rate"
@@ -351,6 +396,13 @@ export default async function PipelinePage() {
               progress={metrics.hqPct / 100}
               icon={<Award size={18} />}
               signal={metrics.monthOutcomes === 0 ? undefined : metrics.hqPct >= 27 ? "ok" : metrics.hqPct >= 15 ? "watch" : "risk"}
+              detail={{
+                rows: [
+                  { label: "Highly qualified", value: metrics.hqOutcomes },
+                  { label: "Completed calls", value: metrics.monthOutcomes },
+                  { label: "Not highly qualified", value: Math.max(0, metrics.monthOutcomes - metrics.hqOutcomes) },
+                ],
+              }}
             />
             <MetricCard
               label="Conversions by level"
@@ -361,6 +413,14 @@ export default async function PipelinePage() {
               }
               secondary="Won this month: Solo · Guided · Elite"
               icon={<Trophy size={18} />}
+              detail={{
+                rows: [
+                  { label: "Solo", value: conv.SOLO },
+                  { label: "Guided", value: conv.GUIDED },
+                  { label: "Elite", value: conv.ELITE },
+                  { label: "Other", value: conv.OTHER },
+                ],
+              }}
             />
           </div>
 
@@ -372,7 +432,7 @@ export default async function PipelinePage() {
                   First-call split - last {callSplit.lookbackDays} days
                 </CardTitle>
               }
-              subtitle="New leads are auto-assigned toward each person's target share; reassign any lead below. Configure shares on People → team profiles."
+              subtitle="New leads are auto-assigned toward each person's target share; reassign any lead below. Set the shares and the rules in Console → Call Distribution."
               actions={
                 callSplit.isSaturday && callSplit.members.some((m) => m.offToday) ? (
                   <Pill tone="warn">
@@ -387,6 +447,16 @@ export default async function PipelinePage() {
                 </p>
               ) : (
                 <div className="space-y-3">
+                  {/* The engine normalises the shares, so a set that doesn't total 100 still works
+                      — it just doesn't mean what the raw numbers say. This card used to print the
+                      raw figure, so 5 and 2 read as "5% target / 2% target" while the engine ran
+                      71/29. Say so rather than quietly showing a number nothing uses. */}
+                  {callSplit.sharesNormalised && (
+                    <p className="rounded-field bg-surface-2 px-3 py-2 text-xs text-muted">
+                      The configured shares don&apos;t total 100, so they are treated as relative
+                      weights. The percentages below are what the rotation actually targets.
+                    </p>
+                  )}
                   {callSplit.members.map((m) => (
                     <div key={m.userId} className="flex items-center gap-3">
                       <span className="w-24 flex-none truncate text-sm font-medium sm:w-32">{m.name}</span>
@@ -397,13 +467,15 @@ export default async function PipelinePage() {
                         />
                         <span
                           aria-hidden
-                          title={`Target ${m.sharePct}%`}
+                          title={`Target ${Math.round(m.effectivePct)}%`}
                           className="absolute top-[-2px] h-4 w-0.5 rounded bg-ink/50"
-                          style={{ left: `${Math.min(100, m.sharePct)}%` }}
+                          style={{ left: `${Math.min(100, m.effectivePct)}%` }}
                         />
                       </div>
-                      <span className="w-40 flex-none text-right text-xs text-muted tnum">
-                        {Math.round(m.actualPct)}% actual · {m.sharePct}% target · {m.assigned30d} lead{m.assigned30d === 1 ? "" : "s"}
+                      <span className="w-48 flex-none text-right text-xs text-muted tnum">
+                        {Math.round(m.actualPct)}% actual · {Math.round(m.effectivePct)}% target ·{" "}
+                        {m.assignedInWindow} lead{m.assignedInWindow === 1 ? "" : "s"}
+                        {m.atDailyCap && <span className="ml-1 text-warn">· at daily cap</span>}
                       </span>
                     </div>
                   ))}
@@ -431,7 +503,13 @@ export default async function PipelinePage() {
                   <div className="space-y-5">
                     {/* Above the table on purpose: with 23,430 leads unowned, giving someone a
                         day's work is the first thing to do here, not a per-row afterthought. */}
-                    {canConfigure && <HandOutLeads assignees={assignees} available={assignableCount} />}
+                    {canConfigure && (
+                      <HandOutLeads
+                        assignees={assignees}
+                        available={assignableCount}
+                        splitByShareDefault={callDistribution.handOutSplitsByShare}
+                      />
+                    )}
                     <LeadSection rows={leads} today={today} isAdmin={canConfigure} assignees={assignees} levelOptions={levelOpts} waStatus={waByLead} />
                   </div>
                 ),

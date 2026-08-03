@@ -12,7 +12,7 @@ import { formatMonth } from "@/lib/format";
 import { istToday } from "@/lib/dates";
 import { requireSession, visibleSections, type AppRole } from "@/lib/rbac";
 import { getRunwaySnapshot } from "@/server/cash-metrics";
-import { getTelecallerDesk } from "@/server/telecaller-desk-metrics";
+import { getCallsDueToday, getDeskIdentity } from "@/server/telecaller-desk-metrics";
 import { computeNotifications } from "@/server/notifications";
 
 /**
@@ -40,14 +40,21 @@ async function BellSlot({ role, userId }: { role: AppRole; userId: string }) {
  * Suspended like the other slots so it never delays the shell.
  */
 async function CallsGreetingSlot({ userId }: { userId: string }) {
-  const desk = await getTelecallerDesk(userId);
-  if (!desk?.isTelecaller) return null;
+  // Identity FIRST, and alone. This slot renders on every page in the app, and for everyone who
+  // is not a caller — most of the org — it renders nothing at all. It used to reach that
+  // conclusion by building the entire telecaller desk: 500 leads with nested call lookups, a
+  // month of CallLog rows, all goals. One indexed row now answers "should this render", and the
+  // count below runs only for the people it actually renders for.
+  const who = await getDeskIdentity(userId);
+  if (!who?.isTelecaller) return null;
+
+  const count = await getCallsDueToday(userId);
   return (
     <CallsTodayGreeting
       userId={userId}
-      count={desk.today.toCall}
-      target={desk.today.target}
-      name={desk.name.split(" ")[0]}
+      count={count}
+      target={who.dailyCallTarget}
+      name={who.name.split(" ")[0]}
       todayKey={istToday().toISOString().slice(0, 10)}
     />
   );

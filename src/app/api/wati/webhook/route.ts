@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import type { WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
+import { takeToken, tooManyRequests, RATE_RULES } from "@/lib/rate-limit";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { readWatiSettings } from "@/lib/wati";
 
@@ -208,9 +208,13 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  if (!rateLimitOk(`wati:${clientIpFrom(req.headers)}`, 300, 60_000)) {
-    return new Response("Too many requests", { status: 429 });
-  }
+  // Endpoint-keyed, not IP-keyed — every callback comes from WATI's own egress, so a per-IP
+  // bucket was a global bucket that would silently reset on a vendor IP change. High ceiling
+  // because this route is chatty by design (a delivery-status callback per message), and
+  // `Retry-After` so a throttled callback is retried rather than dropped: losing a status
+  // callback is how a SENT message quietly stays SENT forever.
+  const gate = takeToken("webhook:wati", RATE_RULES.watiWebhook);
+  if (!gate.ok) return tooManyRequests(gate.retryAfterSec);
 
   let body: Record<string, unknown>;
   try {

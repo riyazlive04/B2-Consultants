@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { upsertIntakeLead } from "@/server/lead-intake";
-import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
+import { takeToken, tooManyRequests, RATE_RULES } from "@/lib/rate-limit";
 import { extractContact, extractUtm, secretMatches, unwrap } from "@/server/webhook-payload";
 
 /**
@@ -28,10 +28,10 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // Even authenticated senders get a generous flood brake (bad Zapier loop etc.).
-  if (!rateLimitOk(`ff:${clientIpFrom(req.headers)}`, 120, 60_000)) {
-    return new Response("Too many requests", { status: 429 });
-  }
+  // Even authenticated senders get a generous flood brake (bad Zapier loop etc.). Endpoint-keyed
+  // and `Retry-After`-bearing for the same reasons as the Pabbly route — see the note there.
+  const gate = takeToken("webhook:flexifunnels", RATE_RULES.leadWebhook);
+  if (!gate.ok) return tooManyRequests(gate.retryAfterSec);
 
   let body: Record<string, unknown>;
   try {
@@ -70,6 +70,10 @@ export async function POST(req: NextRequest) {
     externalRef,
     utm: Object.keys(utm).length ? utm : null,
     notes: "Captured from FlexiFunnels / landing page",
+    // Same as the Pabbly relay: a funnel page that asks the band-score questions gets scored at
+    // opt-in. The mapping is founder-editable, so this route hands over the whole payload rather
+    // than deciding which fields are answers.
+    intakePayload: f,
   });
 
   return NextResponse.json({ ok: true, created, deduped });

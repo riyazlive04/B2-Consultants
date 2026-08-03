@@ -21,6 +21,7 @@ import {
 } from "@/server/maintenance-actions";
 import { runCommissionPayout } from "@/server/commission-actions";
 import { Btn, Card, Hint, NumInput, Picker, SaveBar, TextIn, TimeIn, Toggle } from "./kit";
+import { SystemHealthPanel, type CronRowView, type ErrorRowView } from "./SystemHealthPanel";
 
 /**
  * Founder Console → Maintenance. One screen for the automations the app never had a clock to run
@@ -33,11 +34,20 @@ export function MaintenancePanel({
   report,
   posting,
   cronArmed,
+  health,
 }: {
   maintenance: MaintenanceConfig;
   report: ScheduledReportConfig;
   posting: FinancePostingConfig;
   cronArmed: boolean;
+  health: {
+    crons: CronRowView[];
+    errors: ErrorRowView[];
+    errorsLastHour: number;
+    trackingArmed: boolean;
+    heartbeatArmed: boolean;
+    environment: string;
+  };
 }) {
   return (
     <div className="space-y-6">
@@ -48,6 +58,10 @@ export function MaintenancePanel({
           cron stack) to arm them.
         </p>
       )}
+      {/* Health goes FIRST, above the switches. Reading "the digest is on" is misleading if the
+          job that would send it hasn't been called in a week — the state has to be visible before
+          the settings it governs. */}
+      <SystemHealthPanel {...health} />
       <MaintenanceCard config={maintenance} />
       <PostingCard config={posting} />
       <ReportCard config={report} />
@@ -245,6 +259,28 @@ function ReportCard({ config }: { config: ScheduledReportConfig }) {
             }
           />
         </Field>
+        <Field
+          label="Also send to WhatsApp"
+          hint="Comma-separated numbers with country code. Sent IN ADDITION to email, never instead of it — see below."
+        >
+          <TextIn
+            ariaLabel="WhatsApp recipients"
+            value={draft.whatsappRecipients.join(", ")}
+            placeholder="919876543210"
+            onChange={(s) =>
+              patch({ whatsappRecipients: s.split(",").map((x) => x.trim()).filter(Boolean) })
+            }
+          />
+        </Field>
+        {draft.whatsappRecipients.length > 0 && (
+          <p className="rounded-field bg-warn-soft px-3 py-2 text-xs font-medium text-warn">
+            The WhatsApp copy goes out as a <strong>session message</strong>, which Meta only
+            allows inside the 24 hours after that number last messaged the business. If nobody has
+            messaged recently it will be logged as skipped and the emailed copy is what you&apos;ll
+            get. Making this reliable needs a WhatsApp template approved by Meta for the digest —
+            one doesn&apos;t exist yet.
+          </p>
+        )}
       </div>
       <SaveBar dirty={dirty} onSave={save} onReset={() => setDraft(DEFAULT_SCHEDULED_REPORT_CONFIG)} busy={busy} error={error} />
     </Card>

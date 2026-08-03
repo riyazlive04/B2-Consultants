@@ -7,7 +7,7 @@ import { LeadSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
-import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
+import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { computeBant, INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { qualifiedFromBant } from "@/lib/outreach-sop";
 import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/consent";
@@ -19,6 +19,7 @@ import { BOOKING_RULES_KEY, getBookingRulesConfig, writeBookingRulesConfig } fro
 import { logActivity, diffFields } from "./activity-log";
 import { emitTrigger } from "./automation";
 import { upsertIntakeLead } from "./lead-intake";
+import { mirrorBookingScoreToLead } from "./lead-qualification";
 import { shadowScore } from "./qualification";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
 import { promoteIntoFreedSlot, runBookingConfirmations } from "./booking-automation";
@@ -116,12 +117,24 @@ function clean(v: string | undefined): string | null {
 }
 
 export async function submitBooking(form: FormData): Promise<ActionResult> {
-  // Public endpoint: throttle per IP so one client can't exhaust the open slots
-  // or flood the pipeline with junk leads. 5 attempts / 10 min is generous for a
-  // human correcting form errors.
+  // Public endpoint, and the most expensive one here: a submission consumes a finite calendar
+  // slot AND fires a WATI confirmation. Two dimensions, charged atomically:
+  //
+  //   per-IP    5 burst then 5 / 10 min — generous for a human correcting form errors, and
+  //             tight enough that one client can't exhaust the open slots.
+  //   global    40 burst then 40 / 10 min — the per-IP rule does nothing against a hundred
+  //             IPs each politely taking their allowance until the calendar is empty. The
+  //             booking diary is a shared resource, so it needs a shared ceiling.
+  //
+  // The global bucket sits well above any plausible real day (the calendar top-up ships a
+  // handful of slots a week), so it only ever bites during an attack.
   const hdrs = await Promise.resolve(headers());
   const ip = clientIpFrom(hdrs);
-  if (!rateLimitOk(`book:${ip}`, 5, 10 * 60_000)) {
+  const gate = takeTokens([
+    { key: `book:ip:${ip}`, rule: RATE_RULES.bookPerIp },
+    { key: "book:global", rule: RATE_RULES.bookGlobal },
+  ]);
+  if (!gate.ok) {
     return { ok: false, error: "Too many booking attempts - please try again in a few minutes." };
   }
   const userAgent = hdrs.get("user-agent");
@@ -266,6 +279,12 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
       }
     });
 
+    // Application Logic §4.3 stage 2 — the booking form's verdict supersedes whatever the
+    // landing page scored at opt-in. Mirrored even on the disqualify path: "why was this lead
+    // closed" is answered by the score that closed it, and reading it off the Lead is what every
+    // pipeline surface does.
+    await mirrorBookingScoreToLead(lead.id, bant);
+
     // Founder-editable rejection template; renders {{name}} tokens and logs a Message row.
     // Never let an email failure surface into the prospect's submit result.
     try {
@@ -360,6 +379,12 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     }
     throw e;
   }
+
+  // Application Logic §4.3 stage 2 — the fuller booking intake supersedes the landing page's
+  // opt-in score on the Lead. Outside the transaction: the authoritative copy is already
+  // committed on `BookingRequest`, so this is a convenience mirror for the pipeline surfaces and
+  // must not be able to roll a confirmed booking back.
+  await mirrorBookingScoreToLead(lead.id, bant);
 
   // Tell the automation engine a booking happened, the same way moveOpportunity fires
   // STAGE_CHANGED after its own transaction commits. Previously nothing called this for a

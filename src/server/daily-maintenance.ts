@@ -2,12 +2,13 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import { prewarmTodayFx } from "@/lib/fx";
+import { captureException } from "@/lib/observability";
 import { getMaintenanceConfig } from "./founder-config";
 import { runOverdueSweep } from "./overdue-sweep";
 import { runRetentionSweep } from "./retention";
 import { runScheduledReport } from "./scheduled-report";
 import { backfillInvoiceIssuance } from "./invoice-posting";
-import { runPaymentDueEmails } from "./payment-email-reminders";
+import { runDunning } from "./dunning";
 import { ensureBookingSlots } from "./slot-topup";
 import { ensureSssSlots } from "./sss-topup";
 
@@ -46,6 +47,10 @@ export async function runDailyMaintenance(): Promise<DailyMaintenanceRun> {
       jobs[name] = await fn();
     } catch (e) {
       jobs[name] = { error: e instanceof Error ? e.message : String(e) };
+      // The isolation above is the point of this wrapper — one failing sub-job must not stop the
+      // others. But storing the message in a response body that goes nowhere is how a broken job
+      // stayed broken silently. Reporting it costs nothing and keeps the isolation intact.
+      await captureException(e, { where: `maintenance:${name}`, fingerprint: ["maintenance", name] });
     }
   };
 
@@ -73,12 +78,15 @@ export async function runDailyMaintenance(): Promise<DailyMaintenanceRun> {
     await safe("retentionSweep", runRetentionSweep);
   }
 
-  // Payment due-date reminders by email (§8.3). Once per IST day: the engine carries its
-  // own 72-hour per-recipient cooldown, but how often a student gets chased must not depend
-  // on how frequently the cron happens to be wired. Fail-closed inside — sends nothing
-  // unless email is armed and configured, and logs who WOULD have been mailed either way.
-  if (!(await alreadyRanToday("maintenance.paymentEmails.lastRun"))) {
-    await safe("paymentDueEmails", runPaymentDueEmails);
+  // The three-stage dunning ladder (§8.3). Once per IST day — not because the engine is unsafe
+  // to run more often (a stage can only ever fire once, enforced by a unique key), but because
+  // the per-run cap is a DAILY drip. Running hourly would drain the backlog 24× faster than
+  // intended and undo the point of capping it.
+  //
+  // Ships OFF and no-ops until the founders arm it. This replaces the old single-stage
+  // `runPaymentDueEmails`, which deduped by string-matching its own subject line.
+  if (!(await alreadyRanToday("maintenance.dunning.lastRun"))) {
+    await safe("dunning", runDunning);
   }
 
   // Self-guarded to fire once per period.

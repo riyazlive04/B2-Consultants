@@ -89,10 +89,39 @@ export default async function WhatsAppPage() {
 
       {/* Volume */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Sent" value={counts.SENT} secondary="Accepted by WATI" icon={<Send size={18} />} />
-        <MetricCard label="Delivered / read" value={counts.DELIVERED + counts.READ} icon={<CheckCircle2 size={18} />} />
-        <MetricCard label="Replied" value={counts.REPLIED} secondary="WhatsApp confirmed" signal={counts.REPLIED > 0 ? "ok" : undefined} icon={<Reply size={18} />} />
-        <MetricCard label="Failed" value={counts.FAILED} signal={counts.FAILED > 0 ? "risk" : undefined} icon={<XCircle size={18} />} />
+        <MetricCard
+          label="Sent"
+          value={counts.SENT}
+          secondary="Accepted by WATI"
+          icon={<Send size={18} />}
+          detail={{ rows: data.kindBreakdown.sent }}
+        />
+        <MetricCard
+          label="Delivered / read"
+          value={counts.DELIVERED + counts.READ}
+          icon={<CheckCircle2 size={18} />}
+          detail={{
+            rows: [
+              { label: "Delivered", value: counts.DELIVERED },
+              { label: "Read", value: counts.READ },
+            ],
+          }}
+        />
+        <MetricCard
+          label="Replied"
+          value={counts.REPLIED}
+          secondary="WhatsApp confirmed"
+          signal={counts.REPLIED > 0 ? "ok" : undefined}
+          icon={<Reply size={18} />}
+          detail={{ rows: data.kindBreakdown.replied }}
+        />
+        <MetricCard
+          label="Failed"
+          value={counts.FAILED}
+          signal={counts.FAILED > 0 ? "risk" : undefined}
+          icon={<XCircle size={18} />}
+          detail={{ rows: data.kindBreakdown.failed }}
+        />
       </div>
 
       <Tabs

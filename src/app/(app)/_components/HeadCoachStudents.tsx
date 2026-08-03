@@ -59,6 +59,15 @@ export function HeadCoachStudents({ snapshot }: { snapshot: HeadCoachSnapshot })
   const named = snapshot.atRisk.slice(0, NAMED_LIMIT);
   const more = snapshot.atRisk.length - named.length;
 
+  const atRiskBySignal = snapshot.atRisk.reduce(
+    (acc, s) => {
+      const key = s.signalColour ?? "UNSET";
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+
   return (
     <section className="space-y-4">
       <SectionHeading
@@ -75,6 +84,13 @@ export function HeadCoachStudents({ snapshot }: { snapshot: HeadCoachSnapshot })
           secondary={`${snapshot.activeGuided} guided · ${snapshot.activeElite} elite · ${snapshot.activeSolo} solo`}
           icon={<GraduationCap size={18} />}
           href="/students"
+          detail={{
+            rows: [
+              { label: "Guided", value: snapshot.activeGuided },
+              { label: "Elite", value: snapshot.activeElite },
+              { label: "Solo", value: snapshot.activeSolo },
+            ],
+          }}
         />
         <MetricCard
           label="Needing attention"
@@ -88,12 +104,25 @@ export function HeadCoachStudents({ snapshot }: { snapshot: HeadCoachSnapshot })
           tooltip="Students the early-warning radar has flagged: no recent session, an overdue check-in, a missed sprint target, or the guarantee window closing without interview-stage progress."
           icon={<TriangleAlert size={18} />}
           href="/students"
+          detail={{
+            rows: [
+              { label: "Red", value: atRiskBySignal.RED ?? 0 },
+              { label: "Amber", value: atRiskBySignal.AMBER ?? 0 },
+              { label: "Green (flagged for another reason)", value: atRiskBySignal.GREEN ?? 0 },
+              { label: "Not yet assessed", value: atRiskBySignal.UNSET ?? 0 },
+              { label: "Not responding", value: snapshot.nonResponders },
+            ],
+          }}
         />
         <MetricCard
           label="Sessions delivered today"
           value={String(snapshot.sessionsDeliveredToday)}
           secondary="Auto-populated from the daily log"
           href="/daily-log"
+          detail={{
+            rows: snapshot.sessionsByCoach.map((c) => ({ label: c.name, value: c.sessions })),
+            note: snapshot.sessionsByCoach.length === 0 ? "No sessions logged yet today." : undefined,
+          }}
         />
         <MetricCard
           label="Agreements awaiting signature"
@@ -105,6 +134,12 @@ export function HeadCoachStudents({ snapshot }: { snapshot: HeadCoachSnapshot })
               : "Sent to the student, not signed yet"
           }
           href="/agreements"
+          detail={{
+            rows: [
+              { label: "Sent, not yet opened", value: snapshot.agreementsSent },
+              { label: "Viewed, not signed", value: snapshot.agreementsViewed },
+            ],
+          }}
         />
       </div>
 

@@ -11,6 +11,7 @@ import { getTodayInrPerEur } from "@/lib/fx";
 import { signedColor } from "@/lib/signals";
 import { getGnHomeSnapshot } from "@/server/german-note-metrics";
 import { getGnFounderStats } from "@/server/german-note-workshops";
+import { PRODUCT_LABELS } from "@/app/(app)/german-note/_components/workshopFormat";
 
 /**
  * The German Note dashboard (Error Log E3) — the second business, which had no dashboard of
@@ -71,6 +72,13 @@ export async function GermanNoteDashboard() {
             tooltip="Money actually received across every workshop. The quoted figure is what was agreed — the gap is what is still owed."
             icon={<Wallet size={18} />}
             href="/german-note/manage"
+            detail={{
+              rows: recentWorkshops.map((w) => ({ label: w.name, value: compact(w.rollup.cashCollected) })),
+              note:
+                stats.perWorkshop.length > recentWorkshops.length
+                  ? `Newest ${recentWorkshops.length} of ${stats.perWorkshop.length} workshops — see Manage for all.`
+                  : undefined,
+            }}
           />
           <MetricCard
             label="Net profit (cash)"
@@ -81,6 +89,15 @@ export async function GermanNoteDashboard() {
             href="/german-note/manage"
             // Sign is a verdict here, so it colours the number itself (Error Log D1).
             signal={stats.netProfitCash < 0 ? "risk" : undefined}
+            detail={{
+              rows: [
+                { label: "Revenue (quoted)", value: compact(r.revenue) },
+                { label: "COGS (books + tutor)", value: compact(r.cogs) },
+                { label: "Ad spend", value: compact(r.ads) },
+                { label: "Referral payouts", value: compact(r.referral) },
+                { label: "Net profit (cash)", value: compact(stats.netProfitCash) },
+              ],
+            }}
           />
           <MetricCard
             label="Still owed"
@@ -94,6 +111,13 @@ export async function GermanNoteDashboard() {
             tooltip="Tuition agreed but not yet received, across all workshops."
             icon={<AlertCircle size={18} />}
             href="/german-note/manage"
+            detail={{
+              rows: topDues.map((d) => ({ label: d.fullName, value: compact(d.owed) })),
+              note:
+                stats.dues.length > topDues.length
+                  ? `Largest ${topDues.length} of ${stats.dues.length} — full list below.`
+                  : undefined,
+            }}
           />
           <MetricCard
             label="Conversions"
@@ -102,6 +126,9 @@ export async function GermanNoteDashboard() {
             tooltip="Everyone who took a seat from a workshop, across every intake."
             icon={<GraduationCap size={18} />}
             href="/german-note/manage"
+            detail={{
+              rows: stats.byProduct.map((p) => ({ label: PRODUCT_LABELS[p.product], value: p.count })),
+            }}
           />
         </div>
       </section>
@@ -121,6 +148,11 @@ export async function GermanNoteDashboard() {
             secondary={snap.activeBatches === 0 ? "Nothing running" : `${snap.learners} learner${snap.learners === 1 ? "" : "s"} enrolled`}
             icon={<Users size={18} />}
             href="/german-note"
+            detail={{
+              rows: snap.byLevel
+                .filter((b) => b.count > 0)
+                .map((b) => ({ label: b.level, value: b.count })),
+            }}
           />
           <MetricCard
             label="Next class"
@@ -128,6 +160,13 @@ export async function GermanNoteDashboard() {
             secondary={snap.nextEvent ? `${snap.nextEvent.title} · ${snap.nextEvent.batch.name}` : undefined}
             icon={<CalendarClock size={18} />}
             href="/german-note"
+            detail={{
+              rows: snap.upcoming.map((e) => ({
+                label: `${e.batch.name} · ${e.title}`,
+                value: formatDate(e.startsAt),
+              })),
+              note: snap.upcoming.length === 0 ? "Nothing scheduled yet." : undefined,
+            }}
           />
           <MetricCard
             label="Seats by level"
@@ -139,6 +178,11 @@ export async function GermanNoteDashboard() {
             tooltip="A bundle counts once per level it enrols into, so these add up to more than the conversion count."
             icon={<BookOpen size={18} />}
             href="/german-note/manage"
+            detail={{
+              rows: stats.seats
+                .filter((s) => s.seats > 0)
+                .map((s) => ({ label: s.level, value: `${s.seats} seat${s.seats === 1 ? "" : "s"}` })),
+            }}
           />
         </div>
       </section>

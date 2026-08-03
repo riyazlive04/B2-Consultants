@@ -47,6 +47,19 @@ export default function ReportSummary({
         ? "No records in the previous period"
         : undefined;
 
+  // Per-card breakdowns for the expand popup, each ranked by the field that card is actually
+  // about — a "matched" count and a "pipeline value" total don't agree on which group is #1.
+  const byCount = [...result.rows].sort((a, b) => b.count - a.count).slice(0, 8);
+  const byValue = result.rows
+    .filter((r): r is typeof r & { sumMinor: number } => r.sumMinor != null)
+    .sort((a, b) => b.sumMinor - a.sumMinor)
+    .slice(0, 8);
+  const byWinRate = result.rows
+    .filter((r): r is typeof r & { winRatePct: number } => r.winRatePct != null)
+    .sort((a, b) => b.winRatePct - a.winRatePct)
+    .slice(0, 8);
+  const groupRows = result.rows.slice(0, 10);
+
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
       <MetricCard
@@ -56,6 +69,7 @@ export default function ReportSummary({
         delta={deltaFor(result.totalCount, result.prevTotalCount)}
         secondary={noCompareNote(result.prevTotalCount)}
         tooltip={`Records of this object created inside the selected period. Archived records are excluded everywhere in this report.`}
+        detail={{ rows: byCount.map((r) => ({ label: r.label, value: r.count.toLocaleString("en-IN") })) }}
       />
 
       {result.totalSumMinor !== null && (
@@ -66,6 +80,7 @@ export default function ReportSummary({
           delta={deltaFor(result.totalSumMinor, result.prevTotalSumMinor)}
           secondary={noCompareNote(result.prevTotalSumMinor) ?? formatInrMinor(result.totalSumMinor)}
           tooltip="The sum of the money field on every matched record. Opportunity value is the deal's own figure, not collected cash — Finance is where cash lives."
+          detail={{ rows: byValue.map((r) => ({ label: r.label, value: formatInrMinor(r.sumMinor, { compact: true }) })) }}
         />
       )}
 
@@ -77,6 +92,7 @@ export default function ReportSummary({
           delta={deltaFor(result.overallWinRatePct, result.prevOverallWinRatePct)}
           secondary={noCompareNote(result.prevOverallWinRatePct)}
           tooltip="Won ÷ all matched opportunities in the period. Read it beside the count — a 100% win rate off one deal and off forty are the same number and very different facts."
+          detail={{ rows: byWinRate.map((r) => ({ label: r.label, value: formatPct(r.winRatePct) })) }}
         />
       )}
 
@@ -90,6 +106,10 @@ export default function ReportSummary({
             : "Distinct values of the group-by field"
         }
         tooltip="How many buckets this grouping produced. A grouping with one bucket is telling you the field is empty on almost every record."
+        detail={{
+          rows: groupRows.map((r) => ({ label: r.label, value: r.count.toLocaleString("en-IN") })),
+          note: result.rows.length > groupRows.length ? `+${result.rows.length - groupRows.length} more not shown` : undefined,
+        }}
       />
     </div>
   );

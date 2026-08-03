@@ -42,10 +42,55 @@ export default async function PaymentsPage() {
       <ListHeader title="Payments" subtitle="Invoices, estimates, products & subscriptions" />
 
       <Grid cols={4}>
-        <MetricCard label={`Draft (${overview.counts.draft})`} value={overview.draftInr} />
-        <MetricCard label={`Due (${overview.counts.sent})`} value={overview.dueInr} signal="watch" />
-        <MetricCard label="Received" value={overview.receivedInr} signal="ok" />
-        <MetricCard label={`Overdue (${overview.counts.overdue})`} value={overview.overdueInr} signal={overview.counts.overdue > 0 ? "risk" : undefined} />
+        <MetricCard
+          label={`Draft (${overview.counts.draft})`}
+          value={overview.draftInr}
+          detail={{
+            rows: invoices.filter((i) => i.status === "DRAFT").length
+              ? invoices.filter((i) => i.status === "DRAFT").slice(0, 5).map((i) => ({ label: i.customerName, value: i.totalDisplay }))
+              : [{ label: "No draft invoices", value: "—" }],
+            note: overview.counts.draft > 5 ? `Showing 5 of ${overview.counts.draft}.` : undefined,
+          }}
+        />
+        <MetricCard
+          label={`Due (${overview.counts.sent})`}
+          value={overview.dueInr}
+          signal="watch"
+          detail={{
+            rows: invoices.filter((i) => i.status !== "DRAFT" && i.status !== "PAID" && i.status !== "VOID").length
+              ? invoices
+                  .filter((i) => i.status !== "DRAFT" && i.status !== "PAID" && i.status !== "VOID")
+                  .slice(0, 5)
+                  .map((i) => ({ label: i.customerName, value: i.balanceDisplay }))
+              : [{ label: "Nothing due", value: "—" }],
+            note: overview.counts.sent > 5 ? `Showing 5 of ${overview.counts.sent}.` : undefined,
+          }}
+        />
+        <MetricCard
+          label="Received"
+          value={overview.receivedInr}
+          signal="ok"
+          detail={{
+            rows: overview.receivedByMethod.length
+              ? overview.receivedByMethod.map((m) => ({ label: m.method, value: m.amountInr }))
+              : [{ label: "No payments received yet", value: "—" }],
+            note: "By payment method.",
+          }}
+        />
+        <MetricCard
+          label={`Overdue (${overview.counts.overdue})`}
+          value={overview.overdueInr}
+          signal={overview.counts.overdue > 0 ? "risk" : undefined}
+          detail={{
+            rows: invoices.filter((i) => i.status !== "DRAFT" && i.status !== "PAID" && i.status !== "VOID" && i.dueDate && i.dueDate < new Date()).length
+              ? invoices
+                  .filter((i) => i.status !== "DRAFT" && i.status !== "PAID" && i.status !== "VOID" && i.dueDate && i.dueDate < new Date())
+                  .slice(0, 5)
+                  .map((i) => ({ label: i.customerName, value: i.balanceDisplay }))
+              : [{ label: "Nothing overdue", value: "—" }],
+            note: overview.counts.overdue > 5 ? `Showing 5 of ${overview.counts.overdue}.` : undefined,
+          }}
+        />
       </Grid>
 
       <Tabs

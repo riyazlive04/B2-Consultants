@@ -119,24 +119,45 @@ export async function getStudentsOverview() {
   // ── Count dashboard (PRD2 §4.2) ──
   const active = enrollments.filter((e) => e.status === "ACTIVE");
   const activeStudentIds = new Set(active.map((e) => e.studentId));
+  const completedThisMonthRows = enrollments.filter(
+    (e) => e.status === "COMPLETED" && e.statusChangedAt >= month.start && e.statusChangedAt < month.end,
+  );
+  const droppedThisMonthRows = enrollments.filter(
+    (e) => e.status === "DROPPED" && e.statusChangedAt >= month.start && e.statusChangedAt < month.end,
+  );
+  const byLevel = (rows: typeof enrollments) => ({
+    SOLO: rows.filter((e) => e.programLevel === "SOLO").length,
+    GUIDED: rows.filter((e) => e.programLevel === "GUIDED").length,
+    ELITE: rows.filter((e) => e.programLevel === "ELITE").length,
+  });
   const counts = {
     totalActive: activeStudentIds.size,
     activeSolo: active.filter((e) => e.programLevel === "SOLO").length,
     activeGuided: active.filter((e) => e.programLevel === "GUIDED").length,
     activeElite: active.filter((e) => e.programLevel === "ELITE").length,
-    completedThisMonth: enrollments.filter(
-      (e) => e.status === "COMPLETED" && e.statusChangedAt >= month.start && e.statusChangedAt < month.end,
-    ).length,
-    droppedThisMonth: enrollments.filter(
-      (e) => e.status === "DROPPED" && e.statusChangedAt >= month.start && e.statusChangedAt < month.end,
-    ).length,
+    completedThisMonth: completedThisMonthRows.length,
+    completedThisMonthByLevel: byLevel(completedThisMonthRows),
+    droppedThisMonth: droppedThisMonthRows.length,
+    droppedThisMonthByLevel: byLevel(droppedThisMonthRows),
     totalAllTime: students.length,
+    totalCompletedAllTime: enrollments.filter((e) => e.status === "COMPLETED").length,
+    totalDroppedAllTime: enrollments.filter((e) => e.status === "DROPPED").length,
   };
 
   // ── Satisfaction averages (always visible, PRD2 §4.5) ──
   const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
   const avgSatisfaction = avg(satisfaction.map((s) => s.satisfactionScore));
   const avgNps = avg(satisfaction.map((s) => s.npsScore));
+  const satisfactionBreakdown = {
+    sampleSize: satisfaction.length,
+    testimonialsReceived: satisfaction.filter((s) => s.testimonialReceived).length,
+    jobOffersReceived: satisfaction.filter((s) => s.outcomeAchieved === "JOB_OFFER_RECEIVED").length,
+  };
+  const npsBreakdown = {
+    promoters: satisfaction.filter((s) => s.npsScore >= 9).length,
+    passives: satisfaction.filter((s) => s.npsScore >= 7 && s.npsScore <= 8).length,
+    detractors: satisfaction.filter((s) => s.npsScore <= 6).length,
+  };
 
   // ── 90/120 tracker rows: ACTIVE Guided + Elite only (PRD2 §4.3) ──
   const tracker = trackerRows
@@ -274,6 +295,8 @@ export async function getStudentsOverview() {
     counts,
     avgSatisfaction,
     avgNps,
+    satisfactionBreakdown,
+    npsBreakdown,
     tracker,
     momentumBoard,
     atRiskRadar,

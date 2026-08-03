@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertCircle,
   ArrowDownLeft,
   ArrowLeftRight,
   ArrowUpRight,
@@ -12,6 +13,11 @@ import {
 import { Donut } from "@/components/ui/charts";
 import { RankedBars } from "@/components/ui/chart";
 import { Card, CardTitle, EmptyState } from "@/components/ui/kit";
+import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
+import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
+import { SignalBadge } from "@/components/ui/SignalBadge";
+import { sendPaymentReminderMsg } from "@/server/whatsapp-actions";
+import type { WhatsAppStatusCell } from "@/server/whatsapp";
 import { formatDate, formatPct } from "@/lib/format";
 import { money, moneyAlt, type MoneyAgg } from "@/lib/money-display";
 import { signedColor } from "@/lib/signals";
@@ -79,6 +85,19 @@ export type TopPayment = {
   agg: MoneyAgg;
 };
 
+/** A receivable worth chasing first — sorted most-overdue and largest-balance to the top. */
+export type PriorityReceivable = {
+  id: string;
+  studentName: string;
+  studentCode?: string | null;
+  levelLabel: string;
+  balance: MoneyAgg;
+  dueDate: string | null;
+  overdue: boolean;
+  daysOverdue: number;
+  wa: WhatsAppStatusCell | null;
+};
+
 export function FinanceBento({
   revenue,
   expenses,
@@ -89,6 +108,7 @@ export function FinanceBento({
   levelRows,
   categoryRows,
   topPayments,
+  priorityReceivables,
 }: {
   revenue: MoneyAgg;
   expenses: MoneyAgg;
@@ -99,6 +119,7 @@ export function FinanceBento({
   levelRows: MixRow[];
   categoryRows: MixRow[];
   topPayments: TopPayment[];
+  priorityReceivables: PriorityReceivable[];
 }) {
   const { ccy } = useFinanceCcy();
   const c = { compact: true } as const;
@@ -256,6 +277,61 @@ export function FinanceBento({
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card
+        className="lg:col-span-3"
+        title={<CardTitle icon={<AlertCircle size={16} />}>Priority collections</CardTitle>}
+        subtitle="Students who still owe fees — most overdue and largest balances first. Collect with them first."
+      >
+        {priorityReceivables.length === 0 ? (
+          <EmptyState
+            title="Nothing pending"
+            body="Every active receivable is fully collected. New balances from the Pending payments tab show up here."
+          />
+        ) : (
+          <ol className="divide-y divide-line">
+            {priorityReceivables.map((p, i) => (
+              <li
+                key={p.id}
+                className="flex flex-wrap items-center gap-3 py-3.5 first:pt-0 sm:flex-nowrap"
+              >
+                <span
+                  className={`grid h-9 w-9 flex-none place-items-center rounded-full font-display text-sm font-bold ${
+                    p.overdue ? "bg-risk-soft text-risk" : "bg-primary-soft text-primary-strong"
+                  }`}
+                >
+                  {i + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-baseline gap-1.5 text-sm font-semibold">
+                    <span className="truncate">{p.studentName}</span>
+                    {p.studentCode && (
+                      <span className="tnum flex-none text-caption font-medium text-ink-3">{p.studentCode}</span>
+                    )}
+                    {p.overdue && <SignalBadge level="risk" size="sm" label={`${p.daysOverdue}d overdue`} />}
+                  </span>
+                  <span className="block truncate text-xs text-muted">
+                    {p.levelLabel} · {p.dueDate ? `due ${formatDate(p.dueDate)}` : "no due date set"}
+                  </span>
+                </span>
+                <span className="flex-none text-right">
+                  <span className="block font-display text-h2 font-bold text-ink">{money(p.balance, ccy, c)}</span>
+                  <span className="tnum block text-caption text-muted">{moneyAlt(p.balance, ccy, c)}</span>
+                </span>
+                <span className="flex flex-none items-center gap-2">
+                  {p.wa && <WhatsAppStatusBadge status={p.wa.status} kind={p.wa.kind} at={p.wa.at} />}
+                  <SendWhatsAppButton
+                    action={() => sendPaymentReminderMsg(p.id)}
+                    label="Remind"
+                    variant="button"
+                    lastSentAt={p.wa?.at ?? null}
+                  />
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
       </Card>
     </div>
   );

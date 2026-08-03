@@ -53,6 +53,9 @@ export type TelecallerBoard = {
   telecallers: TelecallerRow[];
   teamOptions: { value: string; label: string }[];
   payouts: PayoutRow[];
+  bonusBreakdown: { name: string; inr: number }[]; // per telecaller, this month, desc
+  commBreakdown: { name: string; inr: number }[];
+  pendingBreakdown: { name: string; inr: number }[]; // per telecaller, PENDING payouts only
   totals: {
     bonusInrMinor: number;
     commInrMinor: number;
@@ -128,12 +131,33 @@ export async function getTelecallerBoard(month?: string): Promise<TelecallerBoar
     Number(aggEurMinor(p.bonusInrMinor + p.commInrMinor, p.bonusEurMinor + p.commEurMinor, p.fxRateUsed));
 
   const assignedByProfile = new Map<string, { inr: number; count: number }>();
+  const bonusByProfile = new Map<string, { name: string; inr: number }>();
+  const commByProfile = new Map<string, { name: string; inr: number }>();
+  const pendingByProfile = new Map<string, { name: string; inr: number }>();
   for (const p of payouts) {
     const cur = assignedByProfile.get(p.teamProfileId) ?? { inr: 0, count: 0 };
     cur.inr += rowAggInr(p);
     cur.count += 1;
     assignedByProfile.set(p.teamProfileId, cur);
+
+    const bonusInr = Number(aggInrMinor(p.bonusInrMinor, p.bonusEurMinor, p.fxRateUsed));
+    const commInr = Number(aggInrMinor(p.commInrMinor, p.commEurMinor, p.fxRateUsed));
+    const bonus = bonusByProfile.get(p.teamProfileId) ?? { name: p.teamProfile.fullName, inr: 0 };
+    bonus.inr += bonusInr;
+    bonusByProfile.set(p.teamProfileId, bonus);
+    const comm = commByProfile.get(p.teamProfileId) ?? { name: p.teamProfile.fullName, inr: 0 };
+    comm.inr += commInr;
+    commByProfile.set(p.teamProfileId, comm);
+    if (p.status === "PENDING") {
+      const pending = pendingByProfile.get(p.teamProfileId) ?? { name: p.teamProfile.fullName, inr: 0 };
+      pending.inr += rowAggInr(p);
+      pendingByProfile.set(p.teamProfileId, pending);
+    }
   }
+  const byInrDesc = (a: { inr: number }, b: { inr: number }) => b.inr - a.inr;
+  const bonusBreakdown = [...bonusByProfile.values()].filter((b) => b.inr > 0).sort(byInrDesc);
+  const commBreakdown = [...commByProfile.values()].filter((c) => c.inr > 0).sort(byInrDesc);
+  const pendingBreakdown = [...pendingByProfile.values()].filter((p) => p.inr > 0).sort(byInrDesc);
 
   const telecallerRows: TelecallerRow[] = telecallers.map((t) => {
     const acc = t.userId ? callsByUser.get(t.userId) ?? {} : {};
@@ -192,6 +216,9 @@ export async function getTelecallerBoard(month?: string): Promise<TelecallerBoar
     telecallers: telecallerRows,
     teamOptions: telecallers.map((t) => ({ value: t.id, label: t.fullName })),
     payouts: payoutRows,
+    bonusBreakdown,
+    commBreakdown,
+    pendingBreakdown,
     totals,
   };
 }

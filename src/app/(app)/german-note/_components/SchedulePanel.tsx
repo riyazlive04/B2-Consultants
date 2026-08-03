@@ -2,7 +2,8 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, CalendarPlus, ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { CalendarClock, CalendarPlus, ClipboardCheck, ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { AttendanceSheetModal } from "./AttendanceSheet";
 import { deleteGnEvent, scheduleGnEvent, updateGnEvent } from "@/server/german-note-actions";
 import type { GnEventRow } from "@/server/german-note-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";
@@ -58,8 +59,9 @@ function EventFields({ event }: { event?: GnEventRow }) {
   );
 }
 
-function EventCard({ e, canManage, onEdit, onChanged }: {
+function EventCard({ e, canManage, onEdit, onChanged, onTakeRegister }: {
   e: GnEventRow; canManage: boolean; onEdit: (e: GnEventRow) => void; onChanged: () => void;
+  onTakeRegister: (e: GnEventRow) => void;
 }) {
   return (
     <div className={`rounded-card border bg-surface p-4 shadow-card ${e.isPast ? "opacity-70" : "border-[var(--lvl-gn)]"} ${e.isPast ? "border-line" : ""}`}>
@@ -90,12 +92,24 @@ function EventCard({ e, canManage, onEdit, onChanged }: {
         {formatDateTimeInZone(e.startsAt, "Asia/Kolkata")} IST{e.durationMins ? ` · ${e.durationMins} min` : ""}
       </p>
       {e.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{e.notes}</p>}
-      {!e.isPast && e.joinUrl && (
-        <a href={e.joinUrl} target="_blank" rel="noopener noreferrer"
-          className="mt-3 inline-flex items-center gap-1.5 rounded-btn bg-[var(--lvl-gn)] px-3 py-1.5 text-sm font-semibold text-ink hover:opacity-90">
-          <ExternalLink size={14} /> Join class
-        </a>
-      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {!e.isPast && e.joinUrl && (
+          <a href={e.joinUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-btn bg-[var(--lvl-gn)] px-3 py-1.5 text-sm font-semibold text-ink hover:opacity-90">
+            <ExternalLink size={14} /> Join class
+          </a>
+        )}
+        {/* The register sits on PAST classes only. Marking a class that hasn't happened is a
+            misclick, and a sheet full of absences for a future date would turn every student
+            red — the action re-checks this server-side rather than trusting the hidden button. */}
+        {canManage && e.isPast && (
+          <button type="button"
+            className="inline-flex items-center gap-1.5 rounded-btn border border-line-strong px-3 py-1.5 text-sm font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink"
+            onClick={() => onTakeRegister(e)}>
+            <ClipboardCheck size={14} /> Attendance
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -105,6 +119,7 @@ export function SchedulePanel({ batchId, events, canManage }: { batchId: string;
   const [, startTransition] = useTransition();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<GnEventRow | null>(null);
+  const [register, setRegister] = useState<GnEventRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const addRef = useRef<HTMLFormElement>(null);
 
@@ -150,13 +165,13 @@ export function SchedulePanel({ batchId, events, canManage }: { batchId: string;
       {upcoming.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Upcoming</p>
-          {upcoming.map((e) => <EventCard key={e.id} e={e} canManage={canManage} onEdit={(ev) => { setEditing(ev); setError(null); }} onChanged={refresh} />)}
+          {upcoming.map((e) => <EventCard key={e.id} e={e} canManage={canManage} onEdit={(ev) => { setEditing(ev); setError(null); }} onChanged={refresh} onTakeRegister={setRegister} />)}
         </div>
       )}
       {past.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Past</p>
-          {past.map((e) => <EventCard key={e.id} e={e} canManage={canManage} onEdit={(ev) => { setEditing(ev); setError(null); }} onChanged={refresh} />)}
+          {past.map((e) => <EventCard key={e.id} e={e} canManage={canManage} onEdit={(ev) => { setEditing(ev); setError(null); }} onChanged={refresh} onTakeRegister={setRegister} />)}
         </div>
       )}
 
@@ -178,6 +193,16 @@ export function SchedulePanel({ batchId, events, canManage }: { batchId: string;
           </form>
         )}
       </Modal>
+
+      {register && (
+        <AttendanceSheetModal
+          sessionId={register.id}
+          sessionTitle={register.title}
+          open
+          onClose={() => setRegister(null)}
+          onSaved={refresh}
+        />
+      )}
     </div>
   );
 }

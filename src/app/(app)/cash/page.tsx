@@ -82,6 +82,14 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
   // TopReceivablesTable/ReceivablesTable (Client Components) below — see CashTables.tsx.
   const topRows = [...receivables.rows].sort((a, b) => b.balanceInr - a.balanceInr).slice(0, 10);
 
+  // Balances due within 30 days, not yet overdue — feeds the "Expected in next 30 days" card's detail popup.
+  const dueSoonRows = receivables.rows.filter((r) => {
+    if (r.overdue || !r.nextDueDate) return false;
+    const due = new Date(r.nextDueDate).getTime();
+    const now = istToday().getTime();
+    return due >= now && due <= now + 30 * 86400000;
+  });
+
   const cashSpark = data.chart.map((p) => p.balanceInr);
 
   const kpiChip = (bg: string, color: string, icon: React.ReactNode) => (
@@ -314,13 +322,47 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
             content: (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                  <MetricCard label="Total receivables" value={formatInrMinor(receivables.totalInr, { compact: true })} />
+                  <MetricCard
+                    label="Total receivables"
+                    value={formatInrMinor(receivables.totalInr, { compact: true })}
+                    detail={{
+                      rows: [
+                        { label: "Past due", value: compact(receivables.overdueInr) },
+                        { label: "Due within 30 days", value: compact(receivables.next30Inr) },
+                        { label: "Due later", value: compact(laterInr) },
+                      ],
+                      note: `${receivables.countWithBalance} student(s) with an open balance.`,
+                    }}
+                  />
                   <MetricCard
                     label="Overdue"
                     value={formatInrMinor(receivables.overdueInr, { compact: true })}
                     signal={receivables.overdueInr > 0 ? "risk" : undefined}
+                    detail={{
+                      rows: ageRows.length
+                        ? [...ageRows]
+                            .sort((a, b) => b.balanceInr - a.balanceInr)
+                            .slice(0, 5)
+                            .map((r) => ({ label: r.studentName, value: compact(r.balanceInr) }))
+                        : [{ label: "No overdue balances", value: "—" }],
+                      note: receivables.oldestOverdue
+                        ? `${ageRows.length} student(s) overdue · oldest ${receivables.oldestOverdue.daysOverdue}d (${receivables.oldestOverdue.name}).`
+                        : undefined,
+                    }}
                   />
-                  <MetricCard label="Expected in next 30 days" value={formatInrMinor(receivables.next30Inr, { compact: true })} />
+                  <MetricCard
+                    label="Expected in next 30 days"
+                    value={formatInrMinor(receivables.next30Inr, { compact: true })}
+                    detail={{
+                      rows: dueSoonRows.length
+                        ? [...dueSoonRows]
+                            .sort((a, b) => b.balanceInr - a.balanceInr)
+                            .slice(0, 5)
+                            .map((r) => ({ label: r.studentName, value: compact(r.balanceInr) }))
+                        : [{ label: "No dues in the next 30 days", value: "—" }],
+                      note: `${dueSoonRows.length} student(s) due within 30 days.`,
+                    }}
+                  />
                   <MetricCard
                     label="Oldest overdue"
                     value={
@@ -330,6 +372,14 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
                     }
                     secondary={receivables.oldestOverdue ? `${receivables.oldestOverdue.daysOverdue} days overdue` : "none"}
                     signal={receivables.oldestOverdue && receivables.oldestOverdue.daysOverdue > 14 ? "risk" : undefined}
+                    detail={{
+                      rows: ageRows.length
+                        ? [...ageRows]
+                            .sort((a, b) => b.daysOverdue - a.daysOverdue)
+                            .slice(0, 5)
+                            .map((r) => ({ label: r.studentName, value: `${r.daysOverdue}d · ${compact(r.balanceInr)}` }))
+                        : [{ label: "No overdue balances", value: "—" }],
+                    }}
                   />
                 </div>
                 <ReceivablesTable rows={receivables.rows} />

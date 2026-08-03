@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
+import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { logActivity } from "./activity-log";
-import { stageAfterCall } from "@/lib/call-outcome";
+import { resolveStageAfterCall } from "@/lib/call-outcome";
 import { syncDefaultOpportunity } from "./opportunity-sync";
 import type { ActionResult } from "./finance-actions";
 
@@ -33,6 +34,15 @@ const CALL_OUTCOMES = [
 const callSchema = z.object({
   outcome: z.enum(CALL_OUTCOMES),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
+  /**
+   * Where the conversation left the lead, when the specialist says so.
+   *
+   * Optional and permissive here on purpose: an empty string is the "leave it where it is"
+   * default the form posts, and an unrecognised value is rejected downstream by
+   * `resolveStageAfterCall` rather than failing the whole call log. Losing the RECORD of a call
+   * because a stage select disagreed would be a strictly worse outcome than not moving the card.
+   */
+  nextStage: z.string().trim().max(40).optional().or(z.literal("")),
 });
 
 const OUTCOME_LABELS: Record<string, string> = {
@@ -62,9 +72,11 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
   const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, name: true, stage: true } });
   if (!lead) return { ok: false, error: "Lead not found" };
 
-  // Error Log L4: logging an outcome left the board untouched. Only unambiguous outcomes
-  // move the card — see lib/call-outcome.ts for why SPOKE deliberately does not.
-  const nextStage = stageAfterCall(lead.stage, d.outcome);
+  // Error Log L4: logging an outcome left the board untouched. Unambiguous outcomes move the
+  // card by themselves; for everything else the specialist can now say where the conversation
+  // landed, on this same form. See lib/call-outcome.ts for why SPOKE cannot be inferred, and
+  // why the automatic move takes precedence over the select.
+  const nextStage = resolveStageAfterCall(lead.stage, d.outcome, d.nextStage);
 
   const row = await prisma.$transaction(async (tx) => {
     const created = await tx.callLog.create({
@@ -104,8 +116,13 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
     section: "pipeline",
     entityType: "CallLog",
     entityId: row.id,
-    summary: `Logged a call with ${lead.name} — ${outcomeLabel(d.outcome)}`,
-    meta: { outcome: d.outcome, leadId },
+    // The stage move is named in the summary, not just the meta: this is the one action that
+    // both records a call AND moves a card, and the founder's activity feed should not make
+    // someone open the row to find out which happened.
+    summary: nextStage
+      ? `Logged a call with ${lead.name} — ${outcomeLabel(d.outcome)}, moved to ${LEAD_STAGE_LABELS[nextStage] ?? nextStage}`
+      : `Logged a call with ${lead.name} — ${outcomeLabel(d.outcome)}`,
+    meta: { outcome: d.outcome, leadId, ...(nextStage ? { toStage: nextStage } : {}) },
   });
 
   revalidatePath("/my-desk");

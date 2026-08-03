@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { channelStates } from "@/lib/env";
+import { cronHealth } from "@/server/uptime";
+import { errorCountLastHour, observabilityRuntime } from "@/lib/observability";
 
 /**
  * Liveness + readiness probe for the container platform and the reverse proxy.
@@ -17,6 +19,15 @@ import { channelStates } from "@/lib/env";
  * endpoints, tokens or counts, so it stays safe to expose unauthenticated. It exists because
  * "off" and "on but broken" are indistinguishable from outside the app, and that ambiguity is
  * how agreement OTPs went undelivered for weeks while every screen looked fine.
+ *
+ * `crons` extends that same idea to the schedulers. In this app EVERY engine is cron-ticked, so a
+ * container that is up while nothing is calling its cron routes is healthy and useless at the same
+ * time. Ages and failure counts only — no business data. `errors` is a count, never the messages.
+ *
+ * IMPORTANT: a stale cron does NOT make the probe 503. This endpoint is what Caddy and Docker use
+ * to decide whether to route traffic here, and "the scheduler on the host stopped" is not a reason
+ * to take the web app out of rotation. Staleness is reported for a human (and the external monitor)
+ * to act on; only an unreachable database degrades the status.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,11 +37,25 @@ export async function GET() {
   try {
     // Cheapest possible round-trip that still proves the pooler is answering.
     await prisma.$queryRaw`SELECT 1`;
+
+    const crons = await cronHealth();
+    const obs = observabilityRuntime();
+
     return NextResponse.json({
       status: "ok",
       db: "up",
       latencyMs: Date.now() - started,
       channels: channelStates(),
+      errorTracking: obs.armed ? "armed" : "off",
+      errorsLastHour: errorCountLastHour(),
+      crons: crons.map((c) => ({
+        job: c.job,
+        ageMinutes: c.ageMinutes,
+        stale: c.stale,
+        neverRun: c.neverRun,
+        consecutiveFailures: c.consecutiveFailures,
+      })),
+      cronsStale: crons.filter((c) => c.stale || c.neverRun).map((c) => c.job),
     });
   } catch {
     // 503 so Caddy/Docker mark the container unhealthy rather than routing to it.

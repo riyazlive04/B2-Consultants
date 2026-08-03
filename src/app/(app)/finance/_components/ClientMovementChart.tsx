@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChartFrame } from "@/components/ui/chart";
 import type { ClientMovementMonth } from "@/server/annual-metrics";
 
 /**
@@ -16,20 +17,20 @@ import type { ClientMovementMonth } from "@/server/annual-metrics";
  * churn bars, so the one thing the movement is supposed to be read against was buried under the
  * movement itself, and drifted into the month labels whenever the roster was small. Two stacked
  * panels on a shared x-axis keep "how big is the base" and "what moved it" legible at once.
+ *
+ * DRAWN IN MEASURED PIXELS, NOT A `viewBox` (§5.8). It used to be `viewBox="0 0 720 286"`
+ * stretched to the card with `fontSize="9"` — but a viewBox unit is only 9px when the card is
+ * 720px wide. In the Finance column on a 320px phone the card is 238px, so every label rendered
+ * at 9 × (238/720) = **3px**: the Jan–Dec axis was a row of grey dashes. Taking the width from
+ * `ChartFrame` means one SVG unit is one CSS pixel, so the 12px below is actually 12px at every
+ * size — the same fix `AnnualChart` and `CashChart` already had.
  */
 
-const W = 720;
-const H = 286;
-const PAD_L = 40;
 const PAD_R = 14;
-
-// Recurring-base panel.
-const BASE_TOP = 18;
-const BASE_BOT = 108;
-
-// Diverging bars panel — MID is their zero line, BAR_MAX the tallest bar each way.
-const MID = 190;
-const BAR_MAX = 64;
+/** §7's type floor. Real pixels now, so it survives a narrow card. */
+const AXIS_FONT = 12;
+/** Room under the plot for the month row. */
+const AXIS_H = 20;
 
 export function ClientMovementChart({
   months,
@@ -40,17 +41,90 @@ export function ClientMovementChart({
 }) {
   const [hover, setHover] = useState<number | null>(null);
 
-  const plotW = W - PAD_L - PAD_R;
-  const slot = plotW / 12;
-  const barW = Math.min(20, slot * 0.42);
+  const elapsed = months.filter((m) => !m.isFuture);
+  const maxActive = Math.max(1, ...elapsed.map((m) => m.activeEnd));
   const maxBar = Math.max(1, ...months.map((m) => Math.max(m.gained, m.lost)));
+  const current = elapsed.length ? elapsed[elapsed.length - 1].activeEnd : 0;
+
+  return (
+    <ChartFrame
+      height={height}
+      state={months.length === 0 ? "empty" : "ready"}
+      emptyTitle="No client movement yet"
+      emptyBody="Enrolments and drops will chart here once the first one is recorded."
+      srCaption="Clients gained and lost each month against the active client baseline"
+      legend={[
+        { label: "clients gained", color: "var(--good)" },
+        { label: "clients lost (dropped)", color: "var(--bad)" },
+        { label: "active clients", color: "var(--primary)", value: `${current} now` },
+      ]}
+      data={{
+        columns: ["Month", "Gained", "Lost", "Net", "Active at end"],
+        rows: elapsed.map((m) => [
+          m.label,
+          String(m.gained),
+          String(m.lost),
+          String(m.gained - m.lost),
+          String(m.activeEnd),
+        ]),
+      }}
+    >
+      {({ width: W, height: H }) => (
+        <Plot
+          months={months}
+          elapsed={elapsed}
+          maxActive={maxActive}
+          maxBar={maxBar}
+          W={W}
+          H={H}
+          hover={hover}
+          setHover={setHover}
+        />
+      )}
+    </ChartFrame>
+  );
+}
+
+function Plot({
+  months,
+  elapsed,
+  maxActive,
+  maxBar,
+  W,
+  H,
+  hover,
+  setHover,
+}: {
+  months: ClientMovementMonth[];
+  elapsed: ClientMovementMonth[];
+  maxActive: number;
+  maxBar: number;
+  W: number;
+  H: number;
+  hover: number | null;
+  setHover: (i: number | null) => void;
+}) {
+  // The gutter only has to hold the two base-band figures ("0" and the peak), so it shrinks on a
+  // narrow card instead of spending 40px of a 238px chart on whitespace.
+  const PAD_L = W < 380 ? 28 : 40;
+
+  const plotH = H - AXIS_H;
+  const BASE_TOP = 14;
+  const BASE_BOT = Math.round(plotH * 0.38);
+  const MID = Math.round(plotH * 0.72);
+  const BAR_MAX = Math.max(24, Math.round(plotH * 0.24));
+
+  const plotW = Math.max(1, W - PAD_L - PAD_R);
+  const slot = plotW / 12;
+  const barW = Math.max(4, Math.min(20, slot * 0.42));
   const scale = BAR_MAX / maxBar;
 
   const xC = (i: number) => PAD_L + slot * (i + 0.5);
-
-  const elapsed = months.filter((m) => !m.isFuture);
-  const maxActive = Math.max(1, ...elapsed.map((m) => m.activeEnd));
   const yBase = (v: number) => BASE_BOT - (v / maxActive) * (BASE_BOT - BASE_TOP);
+
+  // Twelve months at a readable 12px need ~26px each; below that the labels would collide, so
+  // the axis thins to every 2nd or 3rd month rather than shrinking the type past the floor.
+  const every = slot >= 26 ? 1 : slot >= 17 ? 2 : 3;
 
   // Indexed by m.month, not by position in `elapsed` — future months only ever fall at the end
   // today, but keying off the real month survives that ordering changing.
@@ -61,7 +135,6 @@ export function ClientMovementChart({
         elapsed[elapsed.length - 1].month,
       ).toFixed(1)},${BASE_BOT} Z`
     : "";
-  const current = elapsed.length ? elapsed[elapsed.length - 1].activeEnd : 0;
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -75,21 +148,20 @@ export function ClientMovementChart({
   return (
     <div>
       <svg
-        viewBox={`0 0 ${W} ${H}`}
-        style={{ width: "100%", height }}
+        width={W}
+        height={H}
         className="cursor-crosshair"
-        role="img"
-        aria-label={`Clients gained and lost each month against the active client baseline, currently ${current} active clients`}
+        aria-hidden
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
       >
         {/* recurring base — its own band, with a scale so the number is readable without hovering */}
         <line x1={PAD_L} x2={W - PAD_R} y1={BASE_TOP} y2={BASE_TOP} stroke="var(--line)" strokeWidth="1" />
         <line x1={PAD_L} x2={W - PAD_R} y1={BASE_BOT} y2={BASE_BOT} stroke="var(--line)" strokeWidth="1" />
-        <text x={PAD_L - 8} y={BASE_TOP + 3} textAnchor="end" fontSize="9" fill="var(--muted)">
+        <text x={PAD_L - 6} y={BASE_TOP + 4} textAnchor="end" fontSize={AXIS_FONT} fill="var(--muted)">
           {maxActive}
         </text>
-        <text x={PAD_L - 8} y={BASE_BOT + 3} textAnchor="end" fontSize="9" fill="var(--muted)">
+        <text x={PAD_L - 6} y={BASE_BOT + 4} textAnchor="end" fontSize={AXIS_FONT} fill="var(--muted)">
           0
         </text>
 
@@ -148,9 +220,11 @@ export function ClientMovementChart({
                   opacity={on ? 1 : 0.85}
                 />
               )}
-              <text x={xC(i)} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--viz-ink)">
-                {m.label}
-              </text>
+              {i % every === 0 && (
+                <text x={xC(i)} y={H - 6} textAnchor="middle" fontSize={AXIS_FONT} fill="var(--viz-ink)">
+                  {m.label}
+                </text>
+              )}
             </g>
           );
         })}
@@ -172,23 +246,26 @@ export function ClientMovementChart({
         {h && hover !== null && !h.isFuture && (
           <g pointerEvents="none">
             {(() => {
-              const boxW = 128;
-              const tx = Math.min(Math.max(xC(hover), PAD_L + boxW / 2), W - PAD_R - boxW / 2);
+              // Clamped to the plot so the bubble cannot hang off a narrow card — at 238px wide
+              // the old fixed 128px box left no room to sit either side of a late-year month.
+              const boxW = Math.min(128, Math.max(96, W - 16));
+              const half = boxW / 2;
+              const tx = Math.min(Math.max(xC(hover), PAD_L + half), Math.max(PAD_L + half, W - PAD_R - half));
               const net = h.gained - h.lost;
               return (
-                <g transform={`translate(${tx - boxW / 2}, 2)`}>
-                  <rect width={boxW} height="50" rx="6" fill="var(--ink)" opacity="0.94" />
+                <g transform={`translate(${tx - half}, 2)`}>
+                  <rect width={boxW} height="56" rx="6" fill="var(--ink)" opacity="0.94" />
                   {/* --on-accent, not #fff: --ink inverts between themes, so the label has to invert with it */}
-                  <text x={boxW / 2} y="14" textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--on-accent)">
+                  <text x={half} y="16" textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--on-accent)">
                     {h.label}
                   </text>
-                  <text x={boxW / 2} y="26" textAnchor="middle" fontSize="9" fill="var(--good-on-ink)">
+                  <text x={half} y="29" textAnchor="middle" fontSize="11" fill="var(--good-on-ink)">
                     +{h.gained} joined
                   </text>
-                  <text x={boxW / 2} y="36" textAnchor="middle" fontSize="9" fill="var(--bad-on-ink)">
+                  <text x={half} y="40" textAnchor="middle" fontSize="11" fill="var(--bad-on-ink)">
                     −{h.lost} left
                   </text>
-                  <text x={boxW / 2} y="46" textAnchor="middle" fontSize="9" fill="var(--on-accent)" opacity="0.8">
+                  <text x={half} y="51" textAnchor="middle" fontSize="11" fill="var(--on-accent)" opacity="0.8">
                     net {net >= 0 ? "+" : ""}{net} · {h.activeEnd} active
                   </text>
                 </g>
@@ -197,21 +274,6 @@ export function ClientMovementChart({
           </g>
         )}
       </svg>
-
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-caption font-medium text-ink-2">
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "var(--good)" }} />
-          clients gained
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "var(--bad)" }} />
-          clients lost (dropped)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden className="inline-block w-4 border-t-2" style={{ borderColor: "var(--primary)" }} />
-          active clients — {current} now
-        </span>
-      </div>
     </div>
   );
 }

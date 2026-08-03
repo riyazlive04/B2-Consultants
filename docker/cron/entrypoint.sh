@@ -26,6 +26,9 @@ fi
 #   workflows  — every 5 min    (automation enrollments due-check)
 #   whatsapp   — every 15 min   (also drives booking confirmations)
 #   daily-log  — every 15 min   (idempotent EOD auto-save; no-op before the cutoff)
+#   alerts     — every 5 min    (speed-to-lead; a 15-minute SLA cannot be policed hourly, and
+#                                the engine's own cooldown decides how often anything is SENT —
+#                                so a tight tick makes the alert timelier, not noisier)
 #   retention  — once a day      (purge archived records past the 90-day window; idempotent)
 #   daily      — hourly          (FX prewarm, OVERDUE sweep, invoice-issuance backfill, growth-table
 #                                 retention once/day, scheduled digest; every sub-job idempotent +
@@ -35,12 +38,13 @@ cat > /etc/crontabs/root <<'EOF'
 */5 * * * * /usr/local/bin/tick.sh workflows
 */15 * * * * /usr/local/bin/tick.sh whatsapp
 */15 * * * * /usr/local/bin/tick.sh daily-log
+*/5 * * * * /usr/local/bin/tick.sh alerts
 0 3 * * * /usr/local/bin/tick.sh retention
 0 * * * * /usr/local/bin/tick.sh daily
 EOF
 chmod 600 /etc/crontabs/root
 
-echo "cron: TZ=${TZ:-UTC} target=${APP_URL:-http://app:3000} — outreach 1m, workflows 5m, whatsapp/daily-log 15m, retention daily, daily 1h"
+echo "cron: TZ=${TZ:-UTC} target=${APP_URL:-http://app:3000} — outreach 1m, workflows/alerts 5m, whatsapp/daily-log 15m, retention daily, daily 1h"
 
 # -f foreground (PID 1), -d 8 logs each job to stderr so `docker compose logs cron` works.
 exec crond -f -d 8

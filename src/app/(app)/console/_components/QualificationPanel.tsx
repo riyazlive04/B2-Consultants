@@ -6,6 +6,7 @@ import { Card, Hint } from "@/components/ui/kit";
 import { SelectMenu } from "@/components/ui/SelectMenu";
 import { toast } from "@/components/ui/feedback";
 import { DIMENSION_LABELS, type QuestionOption } from "@/lib/qualification";
+import type { IntakeMappingReport } from "@/server/intake-inspection";
 import type { BantDimension, QuestionKind } from "@prisma/client";
 import {
   createQualificationQuestion,
@@ -37,6 +38,8 @@ export type AdminQuestion = {
   helpText: string | null;
   kind: QuestionKind;
   options: QuestionOption[];
+  /** Field names an external form may use for this question — see the mapping fieldset. */
+  inboundKeys: string[];
   dimension: BantDimension;
   weight: number;
   required: boolean;
@@ -47,12 +50,110 @@ export type AdminQuestion = {
 
 export type ShadowStatus = { total: number; scored: number; disagreements: number; readyToFlip: boolean };
 
+/**
+ * What the landing page actually sent, and what we failed to read.
+ *
+ * This panel is the reason the mapping is maintainable at all. Without it the founder is asked
+ * to configure field names for a form they cannot see from here, and a mistake shows up only as
+ * scores that are quietly too low — the failure mode that never gets reported because nothing
+ * looks broken.
+ */
+function InboundReport({ report }: { report: IntakeMappingReport }) {
+  const nothingWrong = report.unresolved.length === 0 && report.unmapped.length === 0;
+
+  return (
+    <Card>
+      <p className="text-caption font-semibold uppercase text-ink-3">
+        What the landing page is sending
+      </p>
+      <p className="mt-1 text-caption text-ink-3">
+        {report.inspected === 0 ? (
+          <>
+            No opt-in submissions with qualification answers have arrived yet. Once Pabbly
+            delivers one, its fields appear here.
+          </>
+        ) : (
+          <>
+            Last {report.inspected} submissions with answers · <strong>{report.scored}</strong>{" "}
+            produced a score
+            {report.lastCaptureAt && (
+              <> · most recent {new Date(report.lastCaptureAt).toLocaleDateString("en-GB")}</>
+            )}
+          </>
+        )}
+      </p>
+
+      {report.inspected > 0 && nothingWrong && (
+        <p className="mt-3 rounded-field border border-ok bg-ok-soft px-3 py-2 text-sm text-ok-ink">
+          <strong>Every field is being read.</strong> Nothing arrived that we could not map.
+        </p>
+      )}
+
+      {/* Answers that matched a question but no OPTION. Listed first: these leads DO have a
+          score and it is too low, because the dimension scored nothing for want of an alias.
+          An unmapped field is visible; a wrong score is not. */}
+      {report.unresolved.length > 0 && (
+        <div className="mt-3 rounded-field border border-warn bg-warn-soft p-3">
+          <p className="text-sm font-semibold text-warn-ink">
+            Answers we could not recognise — these prospects are scoring too low
+          </p>
+          <p className="mt-0.5 text-caption text-warn-ink">
+            The question matched, the answer did not. Paste each value into that question&apos;s
+            &ldquo;Answer wording&rdquo; box against the option it means.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {report.unresolved.map((u) => (
+              <li key={u.questionKey} className="text-caption">
+                <code className="font-semibold text-ink">{u.questionKey}</code>{" "}
+                <span className="text-ink-3">({u.count} lead{u.count === 1 ? "" : "s"})</span>
+                <span className="mt-0.5 flex flex-wrap gap-1">
+                  {u.values.map((v) => (
+                    <span key={v} className="rounded-full bg-surface px-2 py-0.5 font-mono text-ink-2">
+                      {v}
+                    </span>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {report.unmapped.length > 0 && (
+        <details className="mt-3" open={report.unresolved.length === 0}>
+          <summary className="cursor-pointer text-sm font-medium text-ink">
+            Fields we are not reading ({report.unmapped.length})
+          </summary>
+          <p className="mt-1 text-caption text-ink-3">
+            The form posts these and no question claims them. If one is a qualification answer,
+            add its name to that question&apos;s &ldquo;Field names&rdquo; box. Most will be
+            legitimate extras and can be ignored.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {report.unmapped.map((f) => (
+              <li key={f.key} className="flex flex-wrap items-baseline gap-2 text-caption">
+                <code className="font-semibold text-ink">{f.key}</code>
+                <span className="text-ink-3">×{f.count}</span>
+                {f.samples.length > 0 && (
+                  <span className="truncate text-ink-3">e.g. &ldquo;{f.samples.join('", "')}&rdquo;</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </Card>
+  );
+}
+
 export function QualificationPanel({
   questions,
   shadow,
+  inbound,
 }: {
   questions: AdminQuestion[];
   shadow: ShadowStatus;
+  inbound: IntakeMappingReport;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -121,6 +222,8 @@ export function QualificationPanel({
           </>
         )}
       </div>
+
+      <InboundReport report={inbound} />
 
       <Card>
         <div className="flex items-center justify-between">
@@ -218,6 +321,23 @@ export function QualificationPanel({
 const DIMENSIONS: BantDimension[] = ["BUDGET", "AUTHORITY", "NEED", "TIMELINE", "NONE"];
 const KINDS: QuestionKind[] = ["SELECT", "MULTI_SELECT", "BOOLEAN", "TEXT", "LONG_TEXT", "NUMBER"];
 
+/**
+ * Aliases are merged onto the options for reading, but stored in their own column — so the
+ * Options JSON box must show them stripped, or a save would round-trip them back into the
+ * frozen `options` value and the version guard would reject the next edit.
+ */
+function stripAliases(options: QuestionOption[]): Omit<QuestionOption, "aliases">[] {
+  return options.map(({ value, label, score }) => ({ value, label, score }));
+}
+
+/** The alias editor's text form: one `value: alias, alias` line per option that has any. */
+function aliasesToText(options: QuestionOption[]): string {
+  return options
+    .filter((o) => o.aliases?.length)
+    .map((o) => `${o.value}: ${o.aliases!.join(", ")}`)
+    .join("\n");
+}
+
 function QuestionForm({
   question,
   onSubmit,
@@ -299,10 +419,46 @@ function QuestionForm({
         <textarea
           name="options"
           rows={4}
-          defaultValue={JSON.stringify(question?.options ?? [], null, 0)}
+          defaultValue={JSON.stringify(stripAliases(question?.options ?? []), null, 0)}
           className="mt-1 w-full rounded-field border border-line bg-surface px-2 py-1 font-mono text-caption text-ink"
         />
       </label>
+
+      {/* ── Inbound mapping ───────────────────────────────────────────────────────────────
+          Editable even on an ANSWERED question without spawning a new version: these two fields
+          change how an external form's wording is RECOGNISED, not what was asked or what it
+          scored. See `updateQualificationQuestion`. */}
+      <fieldset className="grid gap-3 rounded-field border border-line bg-surface p-3">
+        <legend className="px-1 text-caption font-semibold uppercase text-ink-3">
+          Landing-page mapping
+        </legend>
+        <p className="text-caption text-ink-3">
+          What this question is called, and what its answers are called, on the form that feeds
+          Pabbly. Capitalisation, spaces, dashes and underscores are ignored — only add an entry
+          when the wording genuinely differs.
+        </p>
+
+        <label className="text-caption uppercase text-ink-3">
+          Field names on the external form
+          <input
+            name="inboundKeys"
+            defaultValue={(question?.inboundKeys ?? []).join(", ")}
+            placeholder="when_start, timeline, When are you looking to start?"
+            className="mt-1 w-full rounded-field border border-line bg-surface-2 px-2 py-1 font-mono text-caption text-ink"
+          />
+        </label>
+
+        <label className="text-caption uppercase text-ink-3">
+          Answer wording — one option per line, <code>value: text, text</code>
+          <textarea
+            name="answerAliases"
+            rows={Math.max(3, question?.options.length ?? 3)}
+            defaultValue={aliasesToText(question?.options ?? [])}
+            placeholder={"immediately: Right away, ASAP\n3_months: Within 3 months"}
+            className="mt-1 w-full rounded-field border border-line bg-surface-2 px-2 py-1 font-mono text-caption text-ink"
+          />
+        </label>
+      </fieldset>
 
       <div className="flex items-center gap-3">
         <button

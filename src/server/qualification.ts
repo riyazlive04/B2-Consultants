@@ -25,6 +25,29 @@ import { computeBant, type BantInput } from "@/lib/booking-intake";
 
 export const QUALIFICATION_CACHE_TAG = "qualification-questions";
 
+/**
+ * Fold the separately-stored `answerAliases` back onto each option.
+ *
+ * They are stored apart because `options` is frozen once answered (the DB's version guard), and
+ * an inbound alias is a parsing rule rather than evidence — see the schema comment. Every reader
+ * downstream wants them as one object, so the join happens here, once, rather than in the mapper
+ * and again in the admin panel.
+ */
+export function withAliases(
+  options: QuestionOption[],
+  answerAliases: unknown,
+): QuestionOption[] {
+  const map =
+    answerAliases && typeof answerAliases === "object" && !Array.isArray(answerAliases)
+      ? (answerAliases as Record<string, unknown>)
+      : {};
+  return options.map((o) => {
+    const raw = map[o.value];
+    const aliases = Array.isArray(raw) ? raw.filter((a): a is string => typeof a === "string") : [];
+    return aliases.length ? { ...o, aliases } : o;
+  });
+}
+
 const readActive = async (): Promise<QuestionSpec[]> => {
   const rows = await prisma.qualificationQuestion.findMany({
     where: { active: true },
@@ -36,7 +59,8 @@ const readActive = async (): Promise<QuestionSpec[]> => {
     text: r.text,
     helpText: r.helpText,
     kind: r.kind,
-    options: (r.options as QuestionOption[] | null) ?? [],
+    options: withAliases((r.options as QuestionOption[] | null) ?? [], r.answerAliases),
+    inboundKeys: r.inboundKeys,
     dimension: r.dimension,
     weight: r.weight,
     required: r.required,
@@ -72,7 +96,8 @@ export const getAllQualificationQuestions = cache(async () => {
     text: r.text,
     helpText: r.helpText,
     kind: r.kind,
-    options: (r.options as QuestionOption[] | null) ?? [],
+    options: withAliases((r.options as QuestionOption[] | null) ?? [], r.answerAliases),
+    inboundKeys: r.inboundKeys,
     dimension: r.dimension,
     weight: r.weight,
     required: r.required,

@@ -97,28 +97,69 @@ export async function getAgreementDetail(id: string) {
   return { ...row, parsed: agreementDataSchema.safeParse(row.data) };
 }
 
-export type AgreementCounts = { draft: number; awaiting: number; signed: number; other: number };
+export type AgreementCounts = {
+  draft: number;
+  awaiting: number;
+  signed: number;
+  other: number;
+  draftLinked: number; // draft already has a student attached, not just a lead
+  draftUnlinked: number;
+  awaitingSent: number; // sent, not yet opened
+  awaitingViewed: number; // student has opened the link at least once
+  signedRecent: number; // signed in the last 30 days
+  signedEarlier: number;
+  otherDeclined: number;
+  otherVoided: number;
+  otherExpired: number;
+};
 
 export async function getAgreementCounts(): Promise<AgreementCounts> {
   // A groupBy on the STORED status cannot see expiry — it would count a fortnight-dead link as
-  // "awaiting signature" forever. Agreements are low-volume and this selects two thin columns
+  // "awaiting signature" forever. Agreements are low-volume and this selects a few thin columns
   // (never pdfBytes), so read and derive: the tiles then agree with the rows.
-  const rows = await prisma.agreement.findMany({ select: { status: true, expiresAt: true } });
-  const counts: AgreementCounts = { draft: 0, awaiting: 0, signed: 0, other: 0 };
+  const rows = await prisma.agreement.findMany({
+    select: { status: true, expiresAt: true, studentId: true, signedAt: true },
+  });
+  const counts: AgreementCounts = {
+    draft: 0,
+    awaiting: 0,
+    signed: 0,
+    other: 0,
+    draftLinked: 0,
+    draftUnlinked: 0,
+    awaitingSent: 0,
+    awaitingViewed: 0,
+    signedRecent: 0,
+    signedEarlier: 0,
+    otherDeclined: 0,
+    otherVoided: 0,
+    otherExpired: 0,
+  };
+  const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   for (const r of rows) {
-    switch (effectiveAgreementStatus(r)) {
+    const status = effectiveAgreementStatus(r);
+    switch (status) {
       case "DRAFT":
         counts.draft++;
+        if (r.studentId) counts.draftLinked++;
+        else counts.draftUnlinked++;
         break;
       case "SENT":
       case "VIEWED":
         counts.awaiting++;
+        if (status === "SENT") counts.awaitingSent++;
+        else counts.awaitingViewed++;
         break;
       case "SIGNED":
         counts.signed++;
+        if (r.signedAt && r.signedAt.getTime() >= recentCutoff) counts.signedRecent++;
+        else counts.signedEarlier++;
         break;
-      default:
-        counts.other++; // DECLINED / VOIDED / EXPIRED
+      default: // DECLINED / VOIDED / EXPIRED
+        counts.other++;
+        if (status === "DECLINED") counts.otherDeclined++;
+        else if (status === "VOIDED") counts.otherVoided++;
+        else counts.otherExpired++;
     }
   }
   return counts;

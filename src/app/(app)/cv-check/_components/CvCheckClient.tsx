@@ -73,6 +73,12 @@ export function CvCheckClient() {
               secondary="weighted keyword coverage"
               signal={signalForPercent(result.matchScore)}
               icon={<Target size={18} />}
+              detail={{
+                rows: [
+                  { label: "Matched keywords", value: result.matched.length },
+                  { label: "Missing keywords", value: result.missing.length },
+                ],
+              }}
             />
             <MetricCard
               label="Template match"
@@ -80,12 +86,24 @@ export function CvCheckClient() {
               secondary="B2 resume-template conformance"
               signal={signalForPercent(result.conformance)}
               icon={<LayoutTemplate size={18} />}
+              detail={{
+                rows: TEMPLATE_GROUP_ORDER.map((group) => {
+                  const items = result.templateChecks.filter((c) => c.group === group);
+                  return { label: group, value: `${items.filter((c) => c.present).length}/${items.length}` };
+                }),
+              }}
             />
             <MetricCard
               label="Bullets found"
               value={result.stats.bullets}
               secondary={`${result.stats.quantifiedBullets} carry a number`}
               icon={<List size={18} />}
+              detail={{
+                rows: [
+                  { label: "Quantified", value: result.stats.quantifiedBullets },
+                  { label: "Not quantified", value: result.stats.bullets - result.stats.quantifiedBullets },
+                ],
+              }}
             />
             <MetricCard
               label="Missing keywords"
@@ -93,6 +111,18 @@ export function CvCheckClient() {
               secondary="top JD terms absent"
               signal={result.missing.length > 8 ? "risk" : result.missing.length > 3 ? "watch" : "ok"}
               icon={<Search size={18} />}
+              detail={{
+                body:
+                  result.missing.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {result.missing.map((k) => (
+                        <Pill key={k} tone="warn">
+                          {k}
+                        </Pill>
+                      ))}
+                    </div>
+                  ) : undefined,
+              }}
             />
           </div>
 

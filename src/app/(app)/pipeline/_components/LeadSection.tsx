@@ -10,6 +10,7 @@ import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
 import { sendLeadReminder } from "@/server/whatsapp-actions";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
 import { toast, toastUndo } from "@/components/ui/feedback";
+import { useNewLeadPoll } from "./useNewLeadPoll";
 import { Card } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
@@ -52,6 +53,30 @@ export function LeadSection({
   // owner the instant it's picked, and reverts to the prior owner if the server rejects.
   const [assignVal, setAssignVal] = useState<Record<string, string>>({});
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Local copy of the table so a freshly-polled lead can be spliced in without waiting on
+  // router.refresh(). Resynced whenever the server sends a fresh `rows` prop (a mutation's
+  // revalidatePath, a navigation) so polled-in rows and the authoritative DB state converge.
+  const [localRows, setLocalRows] = useState(rows);
+  useEffect(() => setLocalRows(rows), [rows]);
+
+  // Admin-only: a webhook lead has no enteredById, so a non-admin's table (scoped to leads
+  // THEY entered) would never gain a row from this feed — polling it would just be wasted
+  // requests every tick.
+  useNewLeadPoll(
+    "table",
+    (fresh) => {
+      const incoming = fresh as unknown as LeadRow[];
+      setLocalRows((rs) => {
+        const seen = new Set(rs.map((r) => r.id));
+        const added = incoming.filter((l) => !seen.has(l.id));
+        if (!added.length) return rs;
+        added.forEach((l) => toast(`New lead: ${l.name}`));
+        return [...added, ...rs];
+      });
+    },
+    { enabled: isAdmin },
+  );
 
   const ownerOf = (row: LeadRow) => assignVal[row.id] ?? row.assignedToId ?? "";
 
@@ -243,7 +268,7 @@ export function LeadSection({
       </Card>
 
       <DataTable
-        rows={rows}
+        rows={localRows}
         columns={columns}
         csvName={isAdmin ? "leads" : undefined}
         filterPlaceholder="Filter leads…"

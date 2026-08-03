@@ -3,7 +3,12 @@ import { Prisma, type WhatsAppKind, type WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import { formatDate, formatDateTimeInZone, formatInrMinor } from "@/lib/format";
-import { WHATSAPP_KIND_LABELS, type WatiTemplateConfig } from "@/lib/whatsapp";
+import {
+  WHATSAPP_KIND_LABELS,
+  redirectedBodyPrefix,
+  resolveDestination,
+  type WatiTemplateConfig,
+} from "@/lib/whatsapp";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import type { SectionKey } from "@/lib/sections";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
@@ -50,6 +55,7 @@ export type WhatsAppTarget = {
   bookingRequestId?: string | null;
   pendingPaymentId?: string | null;
   agreementId?: string | null;
+  bookOrderId?: string | null;
 };
 
 export type SendWhatsAppInput = WhatsAppTarget & {
@@ -135,6 +141,7 @@ async function writeRow(input: {
       bookingRequestId: input.target.bookingRequestId ?? null,
       pendingPaymentId: input.target.pendingPaymentId ?? null,
       agreementId: input.target.agreementId ?? null,
+      bookOrderId: input.target.bookOrderId ?? null,
     },
     select: { id: true },
   });
@@ -153,6 +160,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
       bookingRequestId: input.bookingRequestId,
       pendingPaymentId: input.pendingPaymentId,
       agreementId: input.agreementId,
+      bookOrderId: input.bookOrderId,
     } satisfies WhatsAppTarget,
   };
 
@@ -211,17 +219,26 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
     return { messageId, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
   }
 
+  // THE SAFETY VALVE. Applied last, after every check has run against the REAL recipient — so a
+  // redirected send still proves what a live one would have done (their opt-out, their template
+  // variables), rather than testing a path nobody uses.
+  const dest = resolveDestination(number!, runtime.settings.testRecipient);
+  const loggedBody = dest.redirected ? redirectedBodyPrefix(dest.intended) + body : body;
+  const loggedParams = (
+    dest.redirected ? { template: template?.name ?? null, vars, redirectedFrom: dest.intended } : paramsJson
+  ) as Prisma.InputJsonValue;
+
   // Would have sent. Rehearsal stops exactly here — after every check has passed for real,
   // and before the only line that touches the outside world.
   if (dryRun) {
-    const reason = `DRY RUN — not sent. Would have gone to ${number} via template "${template!.name}".`;
+    const reason = `DRY RUN — not sent. Would have gone to ${dest.number} via template "${template!.name}".`;
     const messageId = await writeRow({
       kind,
       status: "SKIPPED",
-      toNumber: number!,
+      toNumber: dest.number,
       templateName: template!.name,
-      body,
-      params: paramsJson,
+      body: loggedBody,
+      params: loggedParams,
       error: reason,
       sentById,
       target,
@@ -233,7 +250,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
   const result = await sendTemplateMessage({
     endpoint: runtime.endpoint!,
     token: runtime.token!,
-    whatsappNumber: number!,
+    whatsappNumber: dest.number,
     templateName: template!.name,
     broadcastName: template!.broadcastName,
     parameters: (built as { ok: true; params: WatiParameter[] }).params,
@@ -243,10 +260,10 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
   const messageId = await writeRow({
     kind,
     status,
-    toNumber: number!,
+    toNumber: dest.number,
     templateName: template!.name,
-    body,
-    params: paramsJson,
+    body: loggedBody,
+    params: loggedParams,
     watiMessageId: result.watiMessageId,
     error: result.ok ? null : result.error ?? "Send failed",
     sentById,
@@ -907,17 +924,21 @@ export async function sendFreeFormMessage(
     return { messageId, status: "SKIPPED", sent: false, skipped: true, error: skip };
   }
 
+  // The same valve as the template path. A free-text reply is still a real message to a real
+  // person, so it must not be the one route that escapes test mode.
+  const dest = resolveDestination(number!, runtime.settings.testRecipient);
   const result = await sendSessionMessage({
     endpoint: runtime.endpoint!,
     token: runtime.token!,
-    whatsappNumber: number!,
+    whatsappNumber: dest.number,
     messageText: text,
   });
 
   const status: WhatsAppStatus = result.ok ? "SENT" : "FAILED";
   const messageId = await writeRow({
-    kind: "MANUAL", status, toNumber: number!, templateName: null,
-    body: text.slice(0, 500), params: noParams,
+    kind: "MANUAL", status, toNumber: dest.number, templateName: null,
+    body: (dest.redirected ? redirectedBodyPrefix(dest.intended) : "") + text.slice(0, 500),
+    params: (dest.redirected ? { redirectedFrom: dest.intended } : noParams) as Prisma.InputJsonValue,
     watiMessageId: result.watiMessageId,
     error: result.ok ? null : result.error ?? "Send failed",
     sentById, target,

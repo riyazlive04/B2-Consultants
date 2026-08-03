@@ -21,6 +21,8 @@ import {
 import { INVITE_TTL_DAYS, mintInviteToken, unguessablePlaceholderPassword } from "@/lib/invite-token";
 import { rule } from "@/lib/field-rules";
 import { consumeAccessRequest } from "./access-requests";
+import { getOwnershipInventory, migrateOwnership } from "./termination";
+import { getTerminationReport, type TerminationReport } from "./termination-report";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
@@ -333,6 +335,198 @@ export async function resetUserAccess(userId: string): Promise<ActionResult> {
 }
 
 // ───────────────────────────── lifecycle ─────────────────────────────
+
+/**
+ * Load the offboarding review for the dialog.
+ *
+ * A server action rather than a page-level fetch because the report walks a dozen tables per
+ * person, and the People page lists everyone — computing it up front would mean paying for a
+ * report nobody opens on every render.
+ */
+export async function loadTerminationReport(
+  profileId: string,
+): Promise<{ ok: true; report: TerminationReport } | { ok: false; error: string }> {
+  const { allowed, denied } = await capabilityCheck("users.manage");
+  if (!allowed) return { ok: false, error: denied.error };
+  const report = await getTerminationReport(profileId);
+  if (!report) return { ok: false, error: "That team member no longer exists" };
+  return { ok: true, report };
+}
+
+/**
+ * Offboard a team member: hand their open work to a successor, then close the account.
+ *
+ * ── Why this is not just "suspend + reassign" ────────────────────────────────────
+ * Suspending stops them signing in and does nothing else — their leads, their future calls and
+ * their outreach threads stay pointed at an account nobody is behind. That is the actual failure:
+ * work silently owned by someone who has left, invisible on every desk because it is on THEIR
+ * desk. So the reassignment is part of the same act, not a follow-up someone might forget.
+ *
+ * What moves and what does not is decided in `server/termination.ts` — the short version is that
+ * open work moves and history never does, because commission is derived from historical
+ * attribution at read time.
+ *
+ * The successor is REQUIRED whenever there is anything to hand over. Allowing "terminate without
+ * a successor" would recreate the exact orphaned-work problem this exists to prevent.
+ */
+export async function terminateUser(input: {
+  profileId: string;
+  successorProfileId: string | null;
+  reason: string;
+}): Promise<ActionResult & { migrated?: Record<string, number> }> {
+  const { allowed, denied, session } = await capabilityCheck("users.manage");
+  if (!allowed) return denied;
+
+  const profile = await prisma.teamProfile.findUnique({
+    where: { id: input.profileId },
+    select: { id: true, fullName: true, userId: true, terminatedAt: true },
+  });
+  if (!profile) return { ok: false, error: "That team member no longer exists" };
+  if (profile.terminatedAt) return { ok: false, error: `${profile.fullName} has already been offboarded.` };
+  if (profile.userId && profile.userId === session.user.id) {
+    return { ok: false, error: "You cannot terminate your own account" };
+  }
+
+  // The same privilege rails suspension uses — a delegate must not be able to offboard an Admin,
+  // and the last active Admin must never be removable.
+  if (profile.userId) {
+    const target = await prisma.user.findUnique({
+      where: { id: profile.userId },
+      select: { id: true, name: true, role: true, capabilities: true },
+    });
+    if (target) {
+      const rail = privilegeError(session, target, target.role, {});
+      if (rail) return { ok: false, error: rail };
+      if (target.role === "ADMIN") {
+        const err = await lastAdminError(profile.userId, null);
+        if (err) return { ok: false, error: err };
+      }
+    }
+  }
+
+  const holds = profile.userId
+    ? await getOwnershipInventory(profile.userId)
+    : { categories: [], total: 0 };
+
+  let successorUserId: string | null = null;
+  let successorName = "";
+  if (input.successorProfileId) {
+    const successor = await prisma.teamProfile.findUnique({
+      where: { id: input.successorProfileId },
+      select: { id: true, fullName: true, userId: true, status: true, terminatedAt: true, user: { select: { status: true } } },
+    });
+    if (!successor) return { ok: false, error: "That successor no longer exists" };
+    if (successor.id === profile.id) return { ok: false, error: "Someone cannot succeed themselves" };
+    // Handing work to a suspended or already-departed account would move the problem, not fix it.
+    if (successor.terminatedAt || successor.status !== "ACTIVE" || successor.user?.status !== "ACTIVE") {
+      return { ok: false, error: `${successor.fullName} is not an active team member.` };
+    }
+    if (!successor.userId) {
+      return { ok: false, error: `${successor.fullName} has no login linked, so work cannot be assigned to them.` };
+    }
+    successorUserId = successor.userId;
+    successorName = successor.fullName;
+  } else if (holds.total > 0) {
+    return {
+      ok: false,
+      error: `${profile.fullName} still holds ${holds.total} open item${holds.total === 1 ? "" : "s"} — choose who takes them over.`,
+    };
+  }
+
+  const migrated =
+    successorUserId && profile.userId ? await migrateOwnership(profile.userId, successorUserId) : {};
+
+  /**
+   * Close the account and stamp the record together.
+   *
+   * `User.status` and `TeamProfile.status` are written in the SAME transaction because nothing
+   * else in the app keeps them in sync, and different modules filter on different ones — the pay
+   * board reads TeamStatus, every assignee dropdown reads UserStatus. Setting one without the
+   * other is how a departed person keeps appearing in half the pickers.
+   */
+  await prisma.$transaction([
+    prisma.teamProfile.update({
+      where: { id: profile.id },
+      data: {
+        status: "INACTIVE",
+        terminatedAt: new Date(),
+        terminatedById: session.user.id,
+        terminationReason: input.reason.trim().slice(0, 500) || null,
+        successorProfileId: input.successorProfileId,
+        // Out of the first-call rotation immediately. `pickFirstCaller` already filters on
+        // ACTIVE status, but leaving a share behind would make the Console roster misleading.
+        firstCallSharePct: 0,
+      },
+    }),
+    ...(profile.userId
+      ? [
+          prisma.user.update({ where: { id: profile.userId }, data: { status: "SUSPENDED" as never } }),
+          // Evicted before the button settles, matching `suspendUser`.
+          prisma.session.deleteMany({ where: { userId: profile.userId } }),
+        ]
+      : []),
+  ]);
+
+  const moved = Object.entries(migrated).filter(([, n]) => n > 0);
+  await logActivity(session, {
+    action: "user.terminate",
+    section: "people",
+    entityType: "TeamProfile",
+    entityId: profile.id,
+    // The full manifest in the summary, not just the meta: this is the entry someone reads months
+    // later asking "where did all of Nilofer's leads go".
+    summary: moved.length
+      ? `Offboarded ${profile.fullName} — ${moved.map(([k, n]) => `${n} ${k}`).join(", ")} moved to ${successorName}`
+      : `Offboarded ${profile.fullName} — nothing outstanding to hand over`,
+    meta: { migrated, successorProfileId: input.successorProfileId, reason: input.reason || null },
+  });
+
+  revalidatePath("/people");
+  revalidatePath("/pipeline");
+  revalidatePath("/my-desk");
+  revalidatePath("/console");
+  return { ok: true, migrated };
+}
+
+/**
+ * Bring a former team member back. Their history was never touched, so this is genuinely a
+ * reversal — but the work that moved to a successor stays there, because it has been being
+ * worked in the meantime.
+ */
+export async function reinstateTeamMember(profileId: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("users.manage");
+  if (!allowed) return denied;
+
+  const profile = await prisma.teamProfile.findUnique({
+    where: { id: profileId },
+    select: { id: true, fullName: true, userId: true, terminatedAt: true },
+  });
+  if (!profile) return { ok: false, error: "That team member no longer exists" };
+  if (!profile.terminatedAt) return { ok: false, error: `${profile.fullName} is not offboarded.` };
+
+  await prisma.$transaction([
+    prisma.teamProfile.update({
+      where: { id: profile.id },
+      // The reason and successor are KEPT: they explain a period this person was gone, and
+      // erasing them would make the gap in their history unexplained.
+      data: { status: "ACTIVE", terminatedAt: null, terminatedById: null },
+    }),
+    ...(profile.userId
+      ? [prisma.user.update({ where: { id: profile.userId }, data: { status: "ACTIVE" as never } })]
+      : []),
+  ]);
+
+  await logActivity(session, {
+    action: "user.reinstate.team",
+    section: "people",
+    entityType: "TeamProfile",
+    entityId: profile.id,
+    summary: `Brought ${profile.fullName} back — their share and open work are not restored automatically`,
+    meta: {},
+  });
+  revalidatePath("/people");
+  return { ok: true };
+}
 
 export async function suspendUser(userId: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("users.manage");

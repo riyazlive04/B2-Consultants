@@ -56,6 +56,24 @@ function mapFields(fd: FieldDatum[]): { name: string; phone: string; email?: str
   return { name, phone, email, city };
 }
 
+/**
+ * Meta's `field_data` as a flat object, so the qualification mapper can read it like any other
+ * sender's payload.
+ *
+ * A Lead Ad form can carry the band-score questions too, and its field NAMES are whatever the
+ * form author typed — which is exactly what the founder-editable inbound mapping is for. Multi
+ * answers join on ", " to match the mapper's own array handling.
+ */
+function flattenFields(fd: FieldDatum[]): Record<string, unknown> {
+  const flat: Record<string, unknown> = {};
+  for (const f of fd) {
+    if (!f?.name) continue;
+    const value = (f.values ?? []).map((v) => String(v).trim()).filter(Boolean).join(", ");
+    if (value) flat[f.name] = value;
+  }
+  return flat;
+}
+
 export async function POST(req: NextRequest) {
   const raw = await req.text();
   const appSecret = process.env.META_APP_SECRET;
@@ -105,6 +123,7 @@ export async function POST(req: NextRequest) {
         source: "META_LEAD_AD",
         externalRef: id,
         notes: "Captured from Meta Lead Ad",
+        intakePayload: flattenFields(data.field_data ?? []),
       });
       captured += 1;
     } catch {

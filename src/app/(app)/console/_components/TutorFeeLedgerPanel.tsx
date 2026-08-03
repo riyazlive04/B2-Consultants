@@ -149,6 +149,19 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
                           frozen at {f.headcount} (roster now {f.currentHeadcount})
                         </div>
                       )}
+                      {/* The fee is priced off the ROSTER — that is the founders' rule and this
+                          does not change it. It shows heads PRESENT beside heads enrolled because
+                          the gap was previously invisible: the business paid per enrolment with
+                          no record of attendance at all. Whether the basis should move is a
+                          pricing decision, and this is the number for that conversation. */}
+                      {f.attendedAverage !== null && (
+                        <div
+                          className={`text-caption ${f.attendedAverage < f.headcount ? "text-ink-2" : "text-ink-3"}`}
+                          title={`Averaged over ${f.markedSessions} class${f.markedSessions === 1 ? "" : "es"} with a register taken`}
+                        >
+                          ~{f.attendedAverage} actually attending
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 pr-4 text-right">
                       <div className="font-semibold text-ink">{inr(f.payableInrMinor)}</div>

@@ -17,19 +17,15 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "80:80"    # required: Let's Encrypt HTTP-01 challenge + the →https redirect
-      - "443:443"
-      - "443:443/udp" # HTTP/3
+      # Plain HTTP only — Traefik (host-shared, owns 80/443) terminates TLS and
+      # forwards here. See Caddyfile for why auto_https is off.
+      - "8080:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # Named volumes, not bind mounts: caddy_data holds the issued certificates and
-      # the ACME account key. Lose it and every restart re-requests a cert, which hits
-      # Let's Encrypt's rate limit (5 identical certs/week) and then serves TLS errors.
       - caddy_data:/data
       - caddy_config:/config
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN to your domain, e.g. app.b2consultants.in}
-      TLS_EMAIL: ${TLS_EMAIL:?set TLS_EMAIL for Let's Encrypt expiry notices}
     depends_on:
       app:
         condition: service_healthy

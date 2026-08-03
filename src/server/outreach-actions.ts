@@ -594,6 +594,9 @@ export async function runOutreachNow(): Promise<ActionResult> {
 const CONFIG_FIELD_LABELS: Record<string, string> = {
   enabled: "Engine on/off", autoSend: "Auto-send steps", sla: "Response-time windows",
   defaultSpecialistName: "Default specialist", maxPerRun: "Max per run",
+  // Named plainly in the founder's feed: these two decide whether real people get messaged
+  // unattended, so "changed instantIntro" would be the wrong level of detail to record.
+  instantIntro: "Instant invite on opt-in", firstCallMode: "When the first call is raised",
 };
 
 /**
@@ -628,6 +631,10 @@ const outreachConfigSchema = z.object({
   sssCancelLeadHours: slaHours("SSS cancellation"),
   maxPerRun: blankToUndefined(intInRange(1, 1000, "Max journeys per run")),
   defaultSpecialistName: blankToUndefined(z.string().trim().max(80, "Sender name is too long")),
+  // Bounded like every other numeric here. The upper bound is generous but finite on purpose:
+  // an unbounded "cap" is not a cap, and this one is the last line of defence against a runaway
+  // webhook messaging real prospects.
+  instantIntroMaxPerHour: blankToUndefined(intInRange(1, 5000, "Invites per hour")),
 });
 
 export async function saveOutreachConfig(form: FormData): Promise<ActionResult> {
@@ -651,6 +658,17 @@ export async function saveOutreachConfig(form: FormData): Promise<ActionResult> 
     autoSend,
     defaultSpecialistName: d.defaultSpecialistName ?? current.defaultSpecialistName,
     maxPerRun: num(d.maxPerRun, current.maxPerRun),
+    // Two checkboxes, so an absent key means unticked — not "leave as it was". That is the right
+    // reading for a switch that arms unattended messaging: the only way to keep it on is to
+    // deliberately leave it ticked when saving.
+    firstCallMode: form.get("firstCallAfterCheck") === "on" ? "after_check" : "immediate",
+    instantIntro: {
+      enabled: form.get("instantIntro") === "on",
+      // The cap input is hidden while instant sending is off, so a blank must keep the stored
+      // value rather than reset it — otherwise toggling the feature off and on would silently
+      // discard a founder's chosen limit.
+      maxPerHour: num(d.instantIntroMaxPerHour, current.instantIntro.maxPerHour),
+    },
     sla: {
       reactionMinutes: num(d.reactionMinutes, DEFAULT_SLA.reactionMinutes),
       check1Hours: num(d.check1Hours, DEFAULT_SLA.check1Hours),

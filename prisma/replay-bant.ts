@@ -49,6 +49,11 @@ async function main() {
     helpText: r.helpText,
     kind: r.kind,
     options: (r.options as QuestionOption[] | null) ?? [],
+    // The replay scores HISTORICAL booking-form submissions, which post our own option values —
+    // it never reads an external payload, so the inbound mapping is irrelevant here and is
+    // deliberately not merged in. Passing the real aliases would not change a single verdict;
+    // passing them would just imply this path exercises them.
+    inboundKeys: [],
     dimension: r.dimension,
     weight: r.weight,
     required: r.required,

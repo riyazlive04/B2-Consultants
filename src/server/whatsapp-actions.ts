@@ -335,7 +335,15 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
   const defaultCountry = toCountry(String(form.get("defaultCountry") ?? ""));
   const paused = form.get("paused") === "on" || form.get("paused") === "true";
 
-  const settings: WatiSettings = { paused, defaultCountry, templates, cadence };
+  // The test-recipient valve. Normalized here so an unusable number is rejected at the point of
+  // saving rather than silently doing nothing at send time; a blank field clears it.
+  const rawTest = String(form.get("testRecipient") ?? "").trim();
+  const testRecipient = rawTest ? normalizeWhatsappNumber(rawTest, defaultCountry) : null;
+  if (rawTest && !testRecipient) {
+    return { ok: false, message: `"${rawTest}" isn't a valid WhatsApp number — include the country code.` };
+  }
+
+  const settings: WatiSettings = { paused, defaultCountry, templates, cadence, testRecipient };
   await writeWatiSettings(settings);
   const diff = diffFields(before, settings);
   if (diff.changed.length) {

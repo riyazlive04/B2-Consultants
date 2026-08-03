@@ -23,10 +23,15 @@ import {
   getSssPatternConfig,
   getSssConfig,
   getBookingRulesConfig,
+  getSpeedToLeadAlertConfig,
+  getDunningConfig,
+  getAttendanceConfig,
 } from "@/server/founder-config";
 import { getGoalsWithProgress } from "@/server/goals";
 import { listTutorFees } from "@/server/tutor-fees";
 import { getAllQualificationQuestions, shadowAgreement } from "@/server/qualification";
+import { getIntakeMappingReport } from "@/server/intake-inspection";
+import { getCallDistribution } from "@/server/founder-config";
 import { getBookableTeamMembers } from "@/server/booking-metrics";
 import { listRewardGrants, listRewardRules } from "@/server/rewards";
 import { SectionsPanel } from "./_components/SectionsPanel";
@@ -42,9 +47,13 @@ import { TutorFeePanel } from "./_components/TutorFeePanel";
 import { InstalmentPlanPanel } from "./_components/InstalmentPlanPanel";
 import { TutorFeeLedgerPanel } from "./_components/TutorFeeLedgerPanel";
 import { QualificationPanel } from "./_components/QualificationPanel";
+import { CallDistributionPanel } from "./_components/CallDistributionPanel";
 import { OperationsPanel } from "./_components/OperationsPanel";
 import { AvailabilityPanel } from "./_components/AvailabilityPanel";
 import { MaintenancePanel } from "./_components/MaintenancePanel";
+import { AlertsPanel } from "./_components/AlertsPanel";
+import { cronHealth } from "@/server/uptime";
+import { errorCountLastHour, observabilityRuntime, recentErrors } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -96,11 +105,22 @@ export default async function ConsolePage() {
   // ER v2 Tracks C + D. Kept in their own Promise.all rather than appended to the tuple
   // above: that one is already at the length where an added entry silently shifts a
   // destructured name, and these two are unrelated to the config block.
-  const [tutorFeeRows, qualificationQuestions, shadowStatus] = await Promise.all([
-    listTutorFees(),
-    getAllQualificationQuestions(),
-    shadowAgreement(),
-  ]);
+  const [tutorFeeRows, qualificationQuestions, shadowStatus, inboundReport, callDistribution, roster] =
+    await Promise.all([
+      listTutorFees(),
+      getAllQualificationQuestions(),
+      shadowAgreement(),
+      getIntakeMappingReport(),
+      getCallDistribution(),
+      // The rotation roster. ACTIVE only — a former team member must not be offered a share of
+      // future work, and `pickFirstCaller` excludes them anyway, so listing them would show a
+      // control that does nothing.
+      prisma.teamProfile.findMany({
+        where: { status: "ACTIVE", userId: { not: null } },
+        select: { id: true, fullName: true, roleTitle: true, firstCallSharePct: true, worksSaturdays: true },
+        orderBy: [{ firstCallSharePct: "desc" }, { orderIndex: "asc" }],
+      }),
+    ]);
 
   const [
     maintenanceConfig,
@@ -112,6 +132,9 @@ export default async function ConsolePage() {
     bookingRules,
     bookableMembers,
     instalmentPlans,
+    speedToLeadConfig,
+    dunningConfig,
+    attendanceConfig,
   ] = await Promise.all([
     getMaintenanceConfig(),
     getScheduledReportConfig(),
@@ -124,6 +147,9 @@ export default async function ConsolePage() {
     // hand-made path wouldn't.
     getBookableTeamMembers(),
     getInstalmentPlanConfig(),
+    getSpeedToLeadAlertConfig(),
+    getDunningConfig(),
+    getAttendanceConfig(),
   ]);
 
   // The SSS diary's owner is a User (the founder), not a TeamProfile — resolve the name so the
@@ -135,6 +161,23 @@ export default async function ConsolePage() {
   // Auto-save is the only rule here that needs an external clock. Read the seam's real
   // precondition so the panel can warn instead of claiming a rule that can never fire.
   const cronArmed = !!process.env.CRON_SECRET;
+  // Same reasoning as cronArmed: a panel that claims a rule will email someone, when the email
+  // channel is unarmed, is describing something that cannot happen.
+  const emailArmed =
+    process.env.EMAIL_ENABLED?.trim().toLowerCase() === "true" && !!process.env.RESEND_API_KEY?.trim();
+
+  // System health for the Maintenance tab. `cronHealth` hits the database; the error ring buffer
+  // and the runtime flags are in-process reads, so they cost nothing.
+  const [cronRows] = await Promise.all([cronHealth()]);
+  const obs = observabilityRuntime();
+  const health = {
+    crons: cronRows,
+    errors: recentErrors(),
+    errorsLastHour: errorCountLastHour(),
+    trackingArmed: obs.armed,
+    heartbeatArmed: !!process.env.UPTIME_HEARTBEAT_URL,
+    environment: obs.environment,
+  };
 
   // Reward triggers point at badges and quests by key — offer today's, not the code defaults.
   const live = currentRuleset(config, istToday().toISOString().slice(0, 10));
@@ -200,6 +243,21 @@ export default async function ConsolePage() {
             ),
           },
           { label: "Commission", content: <CommissionPanel rules={commissionRules} /> },
+          {
+            label: "Call Distribution",
+            content: (
+              <CallDistributionPanel
+                config={callDistribution}
+                roster={roster.map((r) => ({
+                  profileId: r.id,
+                  name: r.fullName,
+                  roleTitle: r.roleTitle,
+                  sharePct: r.firstCallSharePct,
+                  worksSaturdays: r.worksSaturdays,
+                }))}
+              />
+            ),
+          },
           // Next to Commission because it is the same kind of rule: a money figure the founder
           // sets that Finance then applies to every new deal.
           { label: "Instalment Plans", content: <InstalmentPlanPanel config={instalmentPlans} /> },
@@ -215,7 +273,13 @@ export default async function ConsolePage() {
           },
           {
             label: "Qualification",
-            content: <QualificationPanel questions={qualificationQuestions} shadow={shadowStatus} />,
+            content: (
+              <QualificationPanel
+                questions={qualificationQuestions}
+                shadow={shadowStatus}
+                inbound={inboundReport}
+              />
+            ),
           },
           {
             label: "Operations",
@@ -248,6 +312,21 @@ export default async function ConsolePage() {
           },
           { label: "Agreements", content: <AgreementWorkflowPanel config={agreementWorkflow} /> },
           {
+            // Its own tab rather than a section of Maintenance: these are the rules that decide
+            // when the app TALKS TO SOMEBODY, which is a different kind of decision from
+            // housekeeping and deserves to be found without scrolling past it.
+            label: "Alerts & Chasing",
+            content: (
+              <AlertsPanel
+                speedToLead={speedToLeadConfig}
+                dunning={dunningConfig}
+                attendance={attendanceConfig}
+                cronArmed={cronArmed}
+                emailArmed={emailArmed}
+              />
+            ),
+          },
+          {
             label: "Maintenance",
             content: (
               <MaintenancePanel
@@ -255,6 +334,7 @@ export default async function ConsolePage() {
                 report={scheduledReportConfig}
                 posting={financePostingConfig}
                 cronArmed={cronArmed}
+                health={health}
               />
             ),
           },

@@ -260,6 +260,9 @@ export async function getFunnelOverview(selectedWeek?: string) {
       downloadsToEnrollmentPct: pct(gbEnrolled, totalDownloadsAllTime),
       downloadsToGuidedPct: pct(gbGuided, totalDownloadsAllTime),
       revenueInr: gbRevenueInr,
+      callsCompleted: gbLeadsWithCall,
+      enrolled: gbEnrolled,
+      guided: gbGuided,
     },
     entry: {
       weekStart: week.toISOString().slice(0, 10),

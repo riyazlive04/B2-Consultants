@@ -100,7 +100,7 @@ export function ReviewPanel({
         {note && <p className="mt-3 flex items-start gap-2 rounded-field bg-warn-soft px-3 py-2 text-sm text-warn"><Info size={15} className="mt-0.5 flex-none" />{note}</p>}
       </Card>
 
-      {result && <ReviewResult result={result} />}
+      {result && <ReviewResult result={result} activeRules={activeRules} />}
 
       {resume.reviews.length > 0 && (
         <Card title="Review history" subtitle="Every run is saved so you can watch the ATS score climb as the CV improves.">
@@ -128,14 +128,60 @@ export function ReviewPanel({
   );
 }
 
-function ReviewResult({ result }: { result: AiReviewResult }) {
+function ReviewResult({ result, activeRules }: { result: AiReviewResult; activeRules: number }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="ATS match" value={formatPct(result.atsScore)} secondary="overall, for this JD" signal={signalForPercent(result.atsScore)} icon={<Target size={18} />} />
-        <MetricCard label="Keyword coverage" value={formatPct(result.keywordScore)} secondary="JD terms mirrored" signal={signalForPercent(result.keywordScore)} icon={<FileCheck2 size={18} />} />
-        <MetricCard label="Template conformance" value={formatPct(result.conformanceScore)} secondary="vs B2 template" signal={signalForPercent(result.conformanceScore)} icon={<LayoutTemplate size={18} />} />
-        <MetricCard label="ATS formatting" value={formatPct(result.formattingScore)} secondary="parseability" signal={signalForPercent(result.formattingScore)} icon={<Sparkles size={18} />} />
+        <MetricCard
+          label="ATS match"
+          value={formatPct(result.atsScore)}
+          secondary="overall, for this JD"
+          signal={signalForPercent(result.atsScore)}
+          icon={<Target size={18} />}
+          detail={{
+            rows: [
+              { label: "Keyword coverage", value: formatPct(result.keywordScore) },
+              { label: "Template conformance", value: formatPct(result.conformanceScore) },
+              { label: "ATS formatting", value: formatPct(result.formattingScore) },
+            ],
+          }}
+        />
+        <MetricCard
+          label="Keyword coverage"
+          value={formatPct(result.keywordScore)}
+          secondary="JD terms mirrored"
+          signal={signalForPercent(result.keywordScore)}
+          icon={<FileCheck2 size={18} />}
+          detail={{
+            rows: [
+              { label: "Matched keywords", value: result.matchedKeywords.length },
+              { label: "Missing keywords", value: result.missingKeywords.length },
+            ],
+          }}
+        />
+        <MetricCard
+          label="Template conformance"
+          value={formatPct(result.conformanceScore)}
+          secondary="vs B2 template"
+          signal={signalForPercent(result.conformanceScore)}
+          icon={<LayoutTemplate size={18} />}
+          detail={{
+            note: `Graded against ${activeRules} ATS rule${activeRules === 1 ? "" : "s"} the founder configured for the B2 template.`,
+          }}
+        />
+        <MetricCard
+          label="ATS formatting"
+          value={formatPct(result.formattingScore)}
+          secondary="parseability"
+          signal={signalForPercent(result.formattingScore)}
+          icon={<Sparkles size={18} />}
+          detail={{
+            note:
+              result.findings.length > 0
+                ? `${result.findings.length} finding${result.findings.length === 1 ? "" : "s"} from this review may affect parseability — see Findings below.`
+                : "No findings flagged in this review.",
+          }}
+        />
       </div>
 
       {(result.verdict || result.summary) && (

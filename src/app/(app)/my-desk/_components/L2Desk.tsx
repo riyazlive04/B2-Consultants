@@ -1,21 +1,26 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarClock, PhoneCall, Target, Video } from "lucide-react";
+import { CalendarClock, ClipboardList, PhoneCall, Target, UserPlus, Video } from "lucide-react";
 import { routeDiscoveryCall } from "@/server/discovery-routing";
-import type { L2Call, L2Desk as L2DeskData } from "@/server/l2-desk-metrics";
+import type { L2Call, L2Lead, L2Desk as L2DeskData } from "@/server/l2-desk-metrics";
 import {
   DISCOVERY_ROUTES,
   L2_TARGETS,
   signalForSpec,
   type L2TargetKey,
 } from "@/lib/outreach-sla";
+import { LEAD_STAGE_LABELS } from "@/lib/labels";
+import { BANT_ORIGIN_LABELS } from "@/lib/bant-view";
+import { BantChip } from "@/components/ui/BantChip";
 import { Card, CardTitle, EmptyState, Pill, SectionHeading } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, SubmitButton, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/feedback";
+import { NewLeadWatcher } from "./NewLeadWatcher";
 import { TargetAttainment } from "./TargetAttainment";
 
 /**
@@ -124,12 +129,23 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
           </p>
         )}
 
+        {/* Pre-ticked from what the prospect answered at intake, so this is a CONFIRMATION of
+            evidence we already hold rather than a blank form to fill from memory after a
+            20-minute call. The specialist still owns the verdict — every box is editable, and
+            what they submit is what is stored. The note says where the ticks came from, because
+            a pre-ticked box with no explanation is worse than an empty one. */}
         <fieldset className="grid grid-cols-2 gap-2 border-t border-line pt-3">
           <legend className="mb-1 text-sm font-medium text-ink">BANT</legend>
-          <CheckboxField name="bantBudget" label="Budget" />
-          <CheckboxField name="bantAuthority" label="Authority" />
-          <CheckboxField name="bantNeed" label="Need" />
-          <CheckboxField name="bantTimeline" label="Timeline" />
+          <CheckboxField name="bantBudget" label="Budget" defaultChecked={call.bant?.budget} />
+          <CheckboxField name="bantAuthority" label="Authority" defaultChecked={call.bant?.authority} />
+          <CheckboxField name="bantNeed" label="Need" defaultChecked={call.bant?.need} />
+          <CheckboxField name="bantTimeline" label="Timeline" defaultChecked={call.bant?.timeline} />
+          {call.bant && (
+            <p className="col-span-2 text-caption text-muted">
+              Pre-filled from their intake answers ({call.bant.avg.toFixed(1)}/5{" "}
+              {BANT_ORIGIN_LABELS[call.bant.origin]}). Correct anything the call changed.
+            </p>
+          )}
         </fieldset>
 
         <CheckboxField name="highlyQualified" label="Highly qualified" />
@@ -147,6 +163,58 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
   );
 }
 
+/**
+ * What the prospect already told us, before the specialist dials.
+ *
+ * This is the answer to "the BANT score must be caught from the landing page and passed to the
+ * person doing the discovery call". The score alone is a number to distrust; the score WITH the
+ * answers under it is call prep. Collapsed by default so the calendar stays a calendar.
+ */
+function CallPrep({ call }: { call: L2Call }) {
+  const [open, setOpen] = useState(false);
+  if (!call.bant && call.answers.length === 0) return null;
+
+  return (
+    <div className="mt-2 w-full">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="inline-flex items-center gap-1 text-caption font-medium text-primary hover:underline"
+      >
+        <ClipboardList size={12} aria-hidden />
+        {open ? "Hide" : "Show"} what they told us
+        {call.answers.length > 0 && ` (${call.answers.length})`}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 rounded-card bg-surface-2 p-3">
+          {call.bant && (
+            <p className="text-caption text-muted">
+              {BANT_ORIGIN_LABELS[call.bant.origin]} ·{" "}
+              <span className="font-semibold text-ink">{call.bant.score} of 4</span> dimensions met
+            </p>
+          )}
+          {call.answers.length === 0 ? (
+            <p className="text-caption text-muted">
+              A score was recorded but the individual answers were not — this prospect was scored
+              before their answers were being kept.
+            </p>
+          ) : (
+            <dl className="space-y-1.5">
+              {call.answers.map((a, i) => (
+                <div key={`${a.question}-${i}`} className="text-caption">
+                  <dt className="text-muted">{a.question}</dt>
+                  <dd className="font-medium text-ink">{a.answer}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void }) {
   return (
     <li className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
@@ -160,6 +228,9 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
           ) : (
             <span className="truncate font-medium text-ink">{call.name}</span>
           )}
+          {/* Before the status pill: on this screen the score is what decides how the call is
+              prepared, and the confirmation state is what decides whether it happens at all. */}
+          <BantChip bant={call.bant} />
           {call.recorded ? (
             <Pill tone="good">Recorded</Pill>
           ) : call.needsChase ? (
@@ -171,6 +242,7 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
           )}
         </div>
         <p className="mt-0.5 truncate text-caption text-muted">{call.phone}</p>
+        <CallPrep call={call} />
       </div>
       <div className="flex flex-none items-center gap-2">
         {call.zoomLink && (
@@ -193,7 +265,29 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
   );
 }
 
+function LeadRow({ lead }: { lead: L2Lead }) {
+  return (
+    <li className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/pipeline?lead=${lead.id}`} className="truncate font-medium text-ink hover:underline">
+            {lead.name}
+          </Link>
+          <Pill tone={lead.stage === "DISCO_NOT_BOOKED" ? "warn" : "neutral"}>
+            {LEAD_STAGE_LABELS[lead.stage] ?? lead.stage}
+          </Pill>
+        </div>
+        <p className="mt-0.5 truncate text-caption text-muted">
+          {[lead.phone, lead.city].filter(Boolean).join(" · ") || "No phone on file"}
+        </p>
+      </div>
+      {lead.phone && <DialLink phone={lead.phone} name={lead.name} />}
+    </li>
+  );
+}
+
 export function L2Desk({ desk }: { desk: L2DeskData }) {
+  const router = useRouter();
   const [routing, setRouting] = useState<L2Call | null>(null);
 
   const chase = desk.today.filter((c) => c.needsChase);
@@ -201,6 +295,10 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
 
   return (
     <div className="space-y-8">
+      {/* Polls every 30s and pops any lead newly assigned to me — including one with no
+          booked slot yet, which otherwise has no live signal on this desk at all. */}
+      <NewLeadWatcher onSeen={() => router.refresh()} />
+
       <section className="space-y-4">
         <SectionHeading
           icon={<CalendarClock size={18} />}
@@ -232,6 +330,33 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
             {chase.length} call{chase.length === 1 ? " has" : "s have"} passed without an outcome. Ring the
             prospect directly before recording a no-show — a missed call is not a no-show until you have tried.
           </p>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <SectionHeading
+          icon={<UserPlus size={18} />}
+          title="Your leads"
+          description={
+            desk.myLeads.length === 0
+              ? "Nothing assigned to you without a booked call."
+              : `${desk.myLeads.length} lead${desk.myLeads.length === 1 ? "" : "s"} waiting on a discovery call booking`
+          }
+        />
+
+        {desk.myLeads.length === 0 ? (
+          <EmptyState
+            title="No leads to book"
+            body="Leads assigned to you — from the first-call rotation or a manual reassign — appear here until a discovery call is booked for them."
+          />
+        ) : (
+          <Card>
+            <ul className="-mx-4 -mb-2">
+              {desk.myLeads.map((l) => (
+                <LeadRow key={l.id} lead={l} />
+              ))}
+            </ul>
+          </Card>
         )}
       </section>
 

@@ -80,7 +80,11 @@ export async function ensureJourney(leadId: string, optInAt?: Date) {
 
 const JOURNEY_INCLUDE = {
   steps: true,
-  lead: { select: { id: true, name: true, phone: true, email: true } },
+  // `bantAvg`/`bantSource` ride along so Step 11 can score a prospect who answered the band-score
+  // questions on the LANDING PAGE rather than on our booking form — see `bantForQualification`.
+  lead: {
+    select: { id: true, name: true, phone: true, email: true, bantAvg: true, bantSource: true },
+  },
   booking: { include: { slot: { select: { startsAt: true } } } },
   respTouchpoint: { select: { id: true, name: true } },
   respDisco: { select: { id: true, name: true } },
@@ -90,6 +94,25 @@ export type JourneyRow = Prisma.OutreachJourneyGetPayload<{ include: typeof JOUR
 
 export async function getJourney(journeyId: string): Promise<JourneyRow | null> {
   return prisma.outreachJourney.findUnique({ where: { id: journeyId }, include: JOURNEY_INCLUDE });
+}
+
+/**
+ * The BANT average Step 11 should judge this prospect on, and where it came from.
+ *
+ * Booking first, lead second. The booking form asks more and asks it later, so when both exist
+ * it is the better evidence; the lead's score is the landing page's, taken at opt-in.
+ *
+ * Falling back to the lead is the whole point of scoring at opt-in. Before it, this verdict was
+ * reachable ONLY through a `BookingRequest`, so a prospect who answered every qualification
+ * question on the landing page still arrived at the discovery specialist unqualified — the
+ * engine had a score sitting one join away and no way to read it.
+ */
+export function bantForQualification(
+  row: Pick<JourneyRow, "booking" | "lead">,
+): { avg: number; from: "booking" | "opt-in" } | null {
+  if (row.booking?.bantAvg != null) return { avg: row.booking.bantAvg, from: "booking" };
+  if (row.lead.bantAvg != null) return { avg: row.lead.bantAvg, from: "opt-in" };
+  return null;
 }
 
 /** Project a DB row into the pure engine's input. The only place the two representations meet. */
@@ -329,27 +352,41 @@ export async function runDueOutreach(): Promise<OutreachRun> {
 
     // ── Auto-derive the Qualified verdict from BANT (Step 11). The verdict is a pure function of
     // the score, so the engine can take it; a human can still override it in the UI.
-    if (row.bookingId && row.qualified === null && row.booking?.bantAvg != null) {
-      const verdict = qualifiedFromBant(row.booking.bantAvg);
+    //
+    // The score may now come from the LEAD as well as the booking — a prospect who answered the
+    // band-score questions on the landing page carries one from opt-in. That closes a real hole:
+    // a booking matched by Step 10's cross-check rather than created by our own /book form has no
+    // `bantAvg` of its own, so Step 11 could never fire for it and the prospect reached the
+    // discovery specialist unqualified despite having answered every question.
+    //
+    // Still gated on `bookingId`. Qualified is the SOP's Step 11 verdict and it drives the Step
+    // 13/17 messaging ladder, all of which is gated on `booked` in the pure engine — recording a
+    // verdict for someone still being chased for a booking would put the two out of step.
+    const scored = row.qualified === null ? bantForQualification(row) : null;
+    if (row.bookingId && scored) {
+      const verdict = qualifiedFromBant(scored.avg);
       if (verdict) {
         await prisma.outreachJourney.update({
           where: { id },
-          data: { qualified: verdict, qualifiedAt: now, bantScoreAtQual: row.booking.bantAvg },
+          data: { qualified: verdict, qualifiedAt: now, bantScoreAtQual: scored.avg },
         });
         await logSystemActivity(SYSTEM_ACTORS.outreach, {
           action: "outreach.qualification.record",
           section: "outreach",
           entityType: "OutreachJourney",
           entityId: id,
-          summary: `Scored ${row.lead.name} ${QUALIFIED_LABELS[verdict]} from a BANT average of ${row.booking.bantAvg.toFixed(1)}`,
-          meta: { verdict, bantAvg: row.booking.bantAvg },
+          // Naming the SOURCE matters in the founder's feed: "scored 2.8 from the landing page"
+          // and "scored 2.8 from the booking form" are different amounts of evidence, and the
+          // person reviewing a borderline verdict needs to know which one they are looking at.
+          summary: `Scored ${row.lead.name} ${QUALIFIED_LABELS[verdict]} from a BANT average of ${scored.avg.toFixed(1)} (${scored.from === "opt-in" ? "landing page" : "booking form"})`,
+          meta: { verdict, bantAvg: scored.avg, bantFrom: scored.from },
         });
       }
     }
 
     const fresh = (await getJourney(id))!;
     const state = projectJourney(fresh);
-    const plan = planJourney(state, now, cfg.sla);
+    const plan = planJourney(state, now, cfg.sla, { firstCallMode: cfg.firstCallMode });
 
     // ── Materialise.
     for (const m of plan.materialise) {
@@ -445,22 +482,10 @@ async function autoSendDue(
       continue;
     }
 
-    const kind = mapToWhatsAppKind(s.step);
-    if (!kind) continue; // not a WhatsApp step — nothing to auto-send
+    if (!mapToWhatsAppKind(s.step)) continue; // not a WhatsApp step — nothing to auto-send
 
-    const res = await sendWhatsApp({
-      kind,
-      to: row.lead.phone,
-      leadId: row.leadId,
-      bookingRequestId: row.bookingId ?? undefined,
-      // The pool this touchpoint can offer. WATI substitutes server-side from its own approved
-      // variable list; `body` rides along as bodySummary purely as the audit record.
-      vars: whatsappVarsFor(row, s.step, specialist),
-      bodySummary: body,
-      // sentById stays null: an auto-send has no human author, matching the existing convention
-      // in whatsapp.ts where null = automatic.
-      logSkips: false,
-    });
+    // Shared with the instant-intro path. See `sopWhatsAppSend` for why this is one function.
+    const res = await sopWhatsAppSend(row, s.step, specialist, body);
 
     if (res.sent) {
       await markSent(s.id, body, null, res.messageId);
@@ -485,6 +510,37 @@ async function autoSendDue(
   }
 
   return out;
+}
+
+/**
+ * Send one SOP step through the WATI layer.
+ *
+ * Extracted from `autoSendDue` so the INSTANT intro path (`outreach-instant.ts`) sends through
+ * exactly the same call rather than assembling its own. The variable pool, the audit body, the
+ * null `sentById` convention and `logSkips: false` are all load-bearing details that would drift
+ * the moment there were two copies of them — and drifting here means sending a prospect the wrong
+ * template, which no type would catch.
+ *
+ * Returns the raw send outcome; the caller decides what to do with a skip. It never marks the step
+ * SENT — that stays the caller's job, because only the caller knows which step row it holds.
+ */
+export async function sopWhatsAppSend(
+  row: JourneyRow,
+  step: OutreachStep,
+  specialistName: string,
+  body: string,
+) {
+  const kind = mapToWhatsAppKind(step);
+  if (!kind) return { sent: false, status: "SKIPPED" as const, error: "not a WhatsApp step", messageId: null };
+  return sendWhatsApp({
+    kind,
+    to: row.lead.phone,
+    leadId: row.leadId,
+    bookingRequestId: row.bookingId ?? undefined,
+    vars: whatsappVarsFor(row, step, specialistName),
+    bodySummary: body,
+    logSkips: false,
+  });
 }
 
 /**
@@ -563,7 +619,7 @@ export async function refreshJourney(journeyId: string): Promise<void> {
   if (!row) return;
 
   const now = new Date();
-  const plan = planJourney(projectJourney(row), now, cfg.sla);
+  const plan = planJourney(projectJourney(row), now, cfg.sla, { firstCallMode: cfg.firstCallMode });
 
   for (const m of plan.materialise) {
     try {

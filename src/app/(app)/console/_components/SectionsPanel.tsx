@@ -37,12 +37,38 @@ const ROLE_LABELS: Record<AppRole, string> = {
   TUTOR: "Tutor",
 };
 
+/** Column-header form of the same roles — a checkbox track is 3.5rem, too narrow for "Head coach". */
+const ROLE_COL_LABELS: Record<AppRole, string> = {
+  ADMIN: "Admin",
+  HEAD: "Head",
+  USER: "Tele",
+  STUDENT: "Student",
+  TUTOR: "Tutor",
+};
+
 /**
  * Shared by the header and every row — see the note in kit.tsx. The path column takes
  * the slack rather than the label: a section name is two words, and letting the label
  * absorb it left a 400px input holding "Finance".
+ *
+ * The five role checkboxes are columns here, not a second wrapped line under every row —
+ * this is the same "roles once across the top, one cell per row" shape the Access Matrix
+ * tab next door already uses. Repeating "Admin / Head coach / Telecaller / Student / Tutor"
+ * as text on all eighteen rows was most of what read as cluttered.
  */
-const SECTION_COLS: Cols = "1.25rem 1.25rem minmax(7rem,16rem) minmax(7rem,9.5rem) minmax(6rem,8rem) minmax(5rem,1fr) 5.5rem";
+const SECTION_COLS: Cols =
+  "1.5rem 1.25rem minmax(7rem,13rem) minmax(6.5rem,8rem) minmax(6rem,7.5rem) 4rem 4rem 4rem 4rem 4rem minmax(5rem,1fr) 4.75rem";
+const SECTION_HEAD_LABELS = ["", "", "Label", "Icon", "Group", ...APP_ROLES.map((r) => ROLE_COL_LABELS[r]), "Path", "Status"];
+const SECTION_HEAD_TITLES = [
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  ...APP_ROLES.map((r) => ROLE_LABELS[r]),
+  undefined,
+  undefined,
+];
 
 export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
   const [rows, setRows] = useState<ResolvedSection[]>(sections);
@@ -109,38 +135,12 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
       subtitle="Rename, reorder, regroup, switch off, and set which roles see each section by default."
     >
       <ColScroll>
-      <ColHead cols={SECTION_COLS} labels={["", "", "Label", "Icon", "Group", "Path", "Status"]} />
+      <ColHead cols={SECTION_COLS} labels={SECTION_HEAD_LABELS} titles={SECTION_HEAD_TITLES} />
       <div className="space-y-1.5">
         {rows.map((s, i) => {
           const Icon = SECTION_ICONS[s.icon] ?? FallbackIcon;
           return (
-            <ColRow
-              key={s.key}
-              cols={SECTION_COLS}
-              index={i}
-              dim={!s.enabled}
-              sub={
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <span className="text-label font-semibold uppercase text-ink-3">Default access</span>
-                  {APP_ROLES.map((role) => (
-                    <Toggle
-                      key={role}
-                      checked={s.roles.includes(role)}
-                      disabled={s.locked || !s.enabled}
-                      onChange={() => toggleRole(s.key, role)}
-                      label={ROLE_LABELS[role]}
-                      title={
-                        s.locked
-                          ? "Locked to Admin"
-                          : !s.enabled
-                            ? "Switch the section on to change its roles"
-                            : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              }
-            >
+            <ColRow key={s.key} cols={SECTION_COLS} index={i} dim={!s.enabled}>
               <div className="flex flex-col">
                 <button
                   type="button"
@@ -181,6 +181,25 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
                 onChange={(group) => update(s.key, { group: group as SectionGroup })}
                 options={GROUP_OPTIONS}
               />
+
+              {APP_ROLES.map((role) => (
+                <Toggle
+                  key={role}
+                  checked={s.roles.includes(role)}
+                  disabled={s.locked || !s.enabled}
+                  onChange={() => toggleRole(s.key, role)}
+                  label={`${ROLE_LABELS[role]} — default access to ${s.label}`}
+                  hideLabel
+                  className="justify-self-center"
+                  title={
+                    s.locked
+                      ? "Locked to Admin"
+                      : !s.enabled
+                        ? "Switch the section on to change its roles"
+                        : ROLE_LABELS[role]
+                  }
+                />
+              ))}
 
               <span className="truncate font-mono text-caption text-ink-3" title={s.href}>
                 {s.href}

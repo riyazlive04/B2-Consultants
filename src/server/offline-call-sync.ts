@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { clampCalledAt } from "@/lib/offline-calls";
-import { stageAfterCall } from "@/lib/call-outcome";
+import { resolveStageAfterCall } from "@/lib/call-outcome";
 import { logActivity } from "./activity-log";
 import { syncDefaultOpportunity } from "./opportunity-sync";
 
@@ -37,6 +37,11 @@ const entrySchema = z.object({
   leadId: z.string().min(1),
   outcome: z.enum(CALL_OUTCOMES),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
+  // Permissive here, validated by `resolveStageAfterCall` — an unrecognised stage must leave
+  // the card alone, never reject the whole entry. A rejected entry is a call the telecaller
+  // has already moved on from and can no longer recover, which is the trade this module
+  // explicitly refuses to make. Optional so entries queued before this field existed still sync.
+  nextStage: z.string().trim().max(40).optional().or(z.literal("")),
   recordedAt: z.string().datetime(),
 });
 
@@ -78,7 +83,7 @@ export async function syncOfflineCalls(payloadJson: string): Promise<SyncResult>
       continue;
     }
 
-    const nextStage = stageAfterCall(lead.stage, e.outcome);
+    const nextStage = resolveStageAfterCall(lead.stage, e.outcome, e.nextStage);
 
     try {
       await prisma.$transaction(async (tx) => {

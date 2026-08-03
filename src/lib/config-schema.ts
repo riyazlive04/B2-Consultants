@@ -920,6 +920,20 @@ export const scheduledReportConfigSchema = z.object({
   weekday: z.number().int().min(1).max(7),
   monthday: z.number().int().min(1).max(28),
   sendAtMinutes: istMinuteOfDay,
+  /**
+   * WhatsApp numbers to also send the digest to (E.164-ish, country code required).
+   *
+   * WHY THIS IS A SEPARATE LIST AND NOT A "channel" SWITCH: the founders read WhatsApp and not
+   * email, so this is the delivery that actually gets read — but it comes with a real constraint.
+   * Meta only permits a business-initiated WhatsApp message via a PRE-APPROVED TEMPLATE, and no
+   * template exists for a six-number digest (drafting and submitting one is its own piece of
+   * work). So this send goes out as a free-form SESSION message, which only lands if the
+   * recipient has messaged the business in the last 24 hours.
+   *
+   * That makes it genuinely useful for a founder who chats with the business number regularly,
+   * and useless otherwise — which is why email is never turned off in exchange for it. Both go.
+   */
+  whatsappRecipients: z.array(z.string().trim().min(8).max(20)).max(5),
 });
 
 export type ScheduledReportConfig = z.infer<typeof scheduledReportConfigSchema>;
@@ -931,6 +945,7 @@ export const DEFAULT_SCHEDULED_REPORT_CONFIG: ScheduledReportConfig = {
   weekday: 1, // Monday
   monthday: 1,
   sendAtMinutes: 9 * 60, // 9:00 AM IST
+  whatsappRecipients: [],
 };
 
 export function coerceScheduledReportConfig(value: unknown): ScheduledReportConfig {
@@ -975,4 +990,228 @@ export const DEFAULT_FINANCE_POSTING_CONFIG: FinancePostingConfig = {
 export function coerceFinancePostingConfig(value: unknown): FinancePostingConfig {
   const parsed = financePostingConfigSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_FINANCE_POSTING_CONFIG;
+}
+
+// ───────────────────────────── call distribution ─────────────────────────────
+
+/**
+ * How work is shared out, and which lead is worked first — the founder's two dials.
+ *
+ * WHAT LIVES HERE vs ON THE PERSON. Each individual's SHARE stays on `TeamProfile`
+ * (`firstCallSharePct`), because it belongs to them and follows them through the org chart. What
+ * lives here is everything that was previously hardcoded in `server/assignment.ts` and
+ * `server/pipeline-metrics.ts`: the fairness window, the daily ceiling, whether the bulk hand-out
+ * honours the shares at all, and the ranking weights.
+ *
+ * The distinction matters when someone leaves: their share vanishes with their profile, but the
+ * rules the team runs under do not.
+ */
+export const callDistributionSchema = z.object({
+  /**
+   * Rolling window the fairness maths looks back over when deciding who is furthest behind.
+   *
+   * Short windows react fast and swing hard after one person's day off; long ones are stable but
+   * take weeks to correct a drift. 30 days is what the engine used before this was configurable.
+   */
+  lookbackDays: z.number().int().min(1).max(365),
+  /**
+   * Most leads one person may be AUTO-assigned in an IST day. 0 = no ceiling.
+   *
+   * Distinct from `TeamProfile.dailyCallTarget`, which is an expectation shown on their desk.
+   * This is a hard stop on intake: past it, the rotation skips them and the lead goes to the next
+   * eligible person rather than piling onto a queue that cannot be worked.
+   */
+  dailyCapPerPerson: z.number().int().min(0).max(500),
+  /**
+   * Whether "Hand out leads" splits the batch across the rotation by share.
+   *
+   * Off = the historical behaviour: everything goes to one named person. That is where the volume
+   * actually is — the backlog dwarfs live intake — so leaving this off means the configured
+   * weighting governs only a trickle.
+   */
+  handOutSplitsByShare: z.boolean(),
+  /** Ranking weights. Shape mirrors `PriorityWeights` in lib/lead-priority.ts. */
+  priority: z.object({
+    bantPerPoint: z.number().min(0).max(50),
+    highlyQualifiedBonus: z.number().min(0).max(100),
+    freshWithinDays: z.number().int().min(0).max(90),
+    freshBonus: z.number().min(0).max(100),
+    idleAfterDays: z.number().int().min(0).max(365),
+    idlePenaltyPerDay: z.number().min(0).max(20),
+    idlePenaltyMax: z.number().min(0).max(200),
+  }),
+});
+
+export type CallDistributionConfig = z.infer<typeof callDistributionSchema>;
+
+/**
+ * Shipped defaults = today's behaviour exactly.
+ *
+ * `lookbackDays: 30` is `assignment.ts`'s old `LOOKBACK_DAYS`; the priority block equals the old
+ * hardcoded pipeline formula; the hand-out split is OFF so nothing about the existing button
+ * changes until the founder asks for it.
+ */
+export const DEFAULT_CALL_DISTRIBUTION: CallDistributionConfig = {
+  lookbackDays: 30,
+  dailyCapPerPerson: 0,
+  handOutSplitsByShare: false,
+  priority: {
+    bantPerPoint: 10,
+    highlyQualifiedBonus: 15,
+    freshWithinDays: 7,
+    freshBonus: 10,
+    idleAfterDays: 7,
+    idlePenaltyPerDay: 1,
+    idlePenaltyMax: 20,
+  },
+};
+
+export function coerceCallDistribution(value: unknown): CallDistributionConfig {
+  const parsed = callDistributionSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_CALL_DISTRIBUTION;
+}
+
+// ───────────────────────── speed-to-lead alert ─────────────────────────
+
+/**
+ * "Tell someone when leads are sitting unanswered." Founder-editable via
+ * AppSetting("speedToLeadAlert"); read + sent by server/speed-to-lead-alert.ts on the
+ * /api/cron/alerts tick.
+ *
+ * Ships OFF — it sends real email.
+ *
+ * THE DEFAULTS ARE SHAPED BY THE BACKLOG. Production holds ~23,435 leads, essentially none ever
+ * contacted. An alert defined as "any lead past its deadline" would fire on all of them, on every
+ * tick, forever — and be muted within two days, which is worse than no alert because it also
+ * carries the false assurance of having been configured. So:
+ *
+ *   lookbackMinutes  only leads that arrived in the last N minutes are alertable. The standing
+ *                    backlog is reported as a number in the digest, never as an alert. 120 min.
+ *   thresholdMinutes how late is late. 15, not 5: the JD's five-minute clock is a TARGET to be
+ *                    measured against, and alerting exactly on it would page someone about a
+ *                    lead a caller is very likely already dialling.
+ *   minBreaches      one late lead is a Tuesday; several at once is a situation. 3.
+ *   cooldownMinutes  how long after an alert before another may go out. 60.
+ */
+export const speedToLeadAlertSchema = z.object({
+  enabled: z.boolean(),
+  thresholdMinutes: z.number().int().min(1).max(1440),
+  lookbackMinutes: z.number().int().min(5).max(10080),
+  minBreaches: z.number().int().min(1).max(500),
+  cooldownMinutes: z.number().int().min(5).max(1440),
+  recipients: z.array(emailAddress).max(10),
+});
+
+export type SpeedToLeadAlertConfig = z.infer<typeof speedToLeadAlertSchema>;
+
+export const DEFAULT_SPEED_TO_LEAD_ALERT: SpeedToLeadAlertConfig = {
+  enabled: false,
+  thresholdMinutes: 15,
+  lookbackMinutes: 120,
+  minBreaches: 3,
+  cooldownMinutes: 60,
+  recipients: [],
+};
+
+export function coerceSpeedToLeadAlert(value: unknown): SpeedToLeadAlertConfig {
+  const parsed = speedToLeadAlertSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_SPEED_TO_LEAD_ALERT;
+}
+
+// ───────────────────────── dunning ladder ─────────────────────────
+
+/** Which channel a dunning stage goes out on. */
+export const dunningChannelSchema = z.enum(["EMAIL", "WHATSAPP", "BOTH"]);
+export type DunningChannel = z.infer<typeof dunningChannelSchema>;
+
+/**
+ * The three-stage payment-chase ladder, keyed off each instalment's own due date.
+ * Founder-editable via AppSetting("dunning"); run by server/dunning.ts from the daily cron.
+ *
+ * Ships OFF: it emails and WhatsApps paying students, which is the highest-consequence outbound
+ * this app has.
+ *
+ * `dayOffset` is relative to the due date — NEGATIVE is before it. The defaults (-3 / +1 / +7)
+ * are a nudge, a miss and a final notice.
+ *
+ * `perRunCap` is not a performance setting. The first armed run faces the entire standing
+ * backlog at once; without a cap that is a mailbomb with the founders' name on it. 50 turns it
+ * into a queue that drains over days, which is also simply how a human would have done it.
+ */
+export const dunningStageSchema = z.object({
+  enabled: z.boolean(),
+  dayOffset: z.number().int().min(-60).max(180),
+  channel: dunningChannelSchema,
+});
+
+export const dunningConfigSchema = z.object({
+  enabled: z.boolean(),
+  stages: z.object({
+    upcoming: dunningStageSchema,
+    missed: dunningStageSchema,
+    final: dunningStageSchema,
+  }),
+  /** Copied on the final stage so the founder sees the escalation without being the sender. */
+  founderCc: z.union([emailAddress, z.literal("")]),
+  perRunCap: z.number().int().min(1).max(1000),
+});
+
+export type DunningConfig = z.infer<typeof dunningConfigSchema>;
+
+export const DEFAULT_DUNNING_CONFIG: DunningConfig = {
+  enabled: false,
+  stages: {
+    upcoming: { enabled: true, dayOffset: -3, channel: "EMAIL" },
+    missed: { enabled: true, dayOffset: 1, channel: "EMAIL" },
+    final: { enabled: true, dayOffset: 7, channel: "EMAIL" },
+  },
+  founderCc: "",
+  perRunCap: 50,
+};
+
+export function coerceDunningConfig(value: unknown): DunningConfig {
+  const parsed = dunningConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_DUNNING_CONFIG;
+}
+
+// ───────────────────────── attendance ─────────────────────────
+
+/**
+ * When a student's attendance becomes a concern. Founder-editable via AppSetting("attendance");
+ * read by lib/attendance.ts (pure) through server/attendance.ts.
+ *
+ * These are thresholds on a RECORDED fact, so unlike the engines above there is nothing to ship
+ * "off" — the signal is a read, not a send. What ships off is acting on it.
+ *
+ * `amberRatePct` / `redRatePct` are attendance percentages, so LOWER is worse. `consecutiveMissed`
+ * is the separate alarm: a student at 80% overall who has missed the last three classes in a row
+ * is the one about to drop, and an average cannot see that.
+ */
+export const attendanceConfigSchema = z
+  .object({
+    amberRatePct: z.number().int().min(0).max(100),
+    redRatePct: z.number().int().min(0).max(100),
+    consecutiveMissedForRed: z.number().int().min(1).max(20),
+    /** Sessions attended below this count leave the signal UNKNOWN rather than green. */
+    minSessionsForSignal: z.number().int().min(1).max(20),
+  })
+  .refine((c) => c.redRatePct <= c.amberRatePct, {
+    message: "The red threshold must be at or below the amber one",
+    path: ["redRatePct"],
+  });
+
+export type AttendanceConfig = z.infer<typeof attendanceConfigSchema>;
+
+export const DEFAULT_ATTENDANCE_CONFIG: AttendanceConfig = {
+  amberRatePct: 80,
+  redRatePct: 60,
+  consecutiveMissedForRed: 3,
+  // Two sessions is the smallest sample where a rate means anything. Below it the honest
+  // answer is "we don't know yet", not "green".
+  minSessionsForSignal: 2,
+};
+
+export function coerceAttendanceConfig(value: unknown): AttendanceConfig {
+  const parsed = attendanceConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_ATTENDANCE_CONFIG;
 }

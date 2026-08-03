@@ -33,7 +33,7 @@ export const dynamic = "force-dynamic";
 export default async function StudentsPage() {
   const session = await requireSection("students"); // Admin full, Head view (PRD2 §2)
   const isAdmin = session.role === "ADMIN";
-  const { counts, avgSatisfaction, avgNps, tracker, momentumBoard, atRiskRadar, ltvSummary, students } =
+  const { counts, avgSatisfaction, avgNps, satisfactionBreakdown, npsBreakdown, tracker, momentumBoard, atRiskRadar, ltvSummary, students } =
     await getStudentsOverview();
   const waByStudent = await getWhatsAppStatusMap("studentId", tracker.map((t) => t.studentId));
   const today = toDateInputValue(istToday());
@@ -55,8 +55,21 @@ export default async function StudentsPage() {
       />
 
       {/* Count dashboard (PRD2 §4.2) + always-visible satisfaction averages (§4.5) */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        <MetricCard label="Total active students" value={counts.totalActive} icon={<Users size={18} />} />
+      {/* One card per row until ~480px: two KPI cards on a 320-375px phone left each label
+          about 19px of width, so every one of these eight read as "TO A…" / "AC B…". */}
+      <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+        <MetricCard
+          label="Total active students"
+          value={counts.totalActive}
+          icon={<Users size={18} />}
+          detail={{
+            rows: [
+              { label: "Solo", value: counts.activeSolo },
+              { label: "Guided", value: counts.activeGuided },
+              { label: "Elite", value: counts.activeElite },
+            ],
+          }}
+        />
         <MetricCard
           label="Active by level"
           value={
@@ -66,16 +79,65 @@ export default async function StudentsPage() {
           }
           secondary="Solo · Guided · Elite"
           icon={<Layers size={18} />}
+          detail={{
+            rows: [
+              { label: "Solo", value: counts.activeSolo },
+              { label: "Guided", value: counts.activeGuided },
+              { label: "Elite", value: counts.activeElite },
+            ],
+          }}
         />
-        <MetricCard label="Completed this month" value={counts.completedThisMonth} signal={counts.completedThisMonth > 0 ? "ok" : undefined} icon={<GraduationCap size={18} />} />
-        <MetricCard label="Dropped this month" value={counts.droppedThisMonth} signal={counts.droppedThisMonth > 0 ? "risk" : undefined} icon={<UserMinus size={18} />} />
-        <MetricCard label="Enrolled all time" value={counts.totalAllTime} icon={<UserCheck size={18} />} />
+        <MetricCard
+          label="Completed this month"
+          value={counts.completedThisMonth}
+          signal={counts.completedThisMonth > 0 ? "ok" : undefined}
+          icon={<GraduationCap size={18} />}
+          detail={{
+            rows: [
+              { label: "Solo", value: counts.completedThisMonthByLevel.SOLO },
+              { label: "Guided", value: counts.completedThisMonthByLevel.GUIDED },
+              { label: "Elite", value: counts.completedThisMonthByLevel.ELITE },
+            ],
+          }}
+        />
+        <MetricCard
+          label="Dropped this month"
+          value={counts.droppedThisMonth}
+          signal={counts.droppedThisMonth > 0 ? "risk" : undefined}
+          icon={<UserMinus size={18} />}
+          detail={{
+            rows: [
+              { label: "Solo", value: counts.droppedThisMonthByLevel.SOLO },
+              { label: "Guided", value: counts.droppedThisMonthByLevel.GUIDED },
+              { label: "Elite", value: counts.droppedThisMonthByLevel.ELITE },
+            ],
+          }}
+        />
+        <MetricCard
+          label="Enrolled all time"
+          value={counts.totalAllTime}
+          icon={<UserCheck size={18} />}
+          detail={{
+            rows: [
+              { label: "Active", value: counts.totalActive },
+              { label: "Completed", value: counts.totalCompletedAllTime },
+              { label: "Dropped", value: counts.totalDroppedAllTime },
+            ],
+          }}
+        />
         <MetricCard
           label="Avg satisfaction"
           value={avgSatisfaction === null ? "-" : avgSatisfaction.toFixed(1)}
           secondary="out of 10, completed students"
           progress={avgSatisfaction === null ? undefined : avgSatisfaction / 10}
           icon={<Smile size={18} />}
+          detail={{
+            rows: [
+              { label: "Sample size", value: satisfactionBreakdown.sampleSize },
+              { label: "Testimonials received", value: satisfactionBreakdown.testimonialsReceived },
+              { label: "Job offers received", value: satisfactionBreakdown.jobOffersReceived },
+            ],
+          }}
         />
         <MetricCard
           label="Avg recommend score"
@@ -83,6 +145,13 @@ export default async function StudentsPage() {
           secondary="out of 10"
           progress={avgNps === null ? undefined : avgNps / 10}
           icon={<Star size={18} />}
+          detail={{
+            rows: [
+              { label: "Promoters (9-10)", value: npsBreakdown.promoters },
+              { label: "Passives (7-8)", value: npsBreakdown.passives },
+              { label: "Detractors (0-6)", value: npsBreakdown.detractors },
+            ],
+          }}
         />
         <MetricCard
           label="Top paying student"
@@ -95,6 +164,14 @@ export default async function StudentsPage() {
           }
           secondary={ltvSummary.highest ? formatInrMinor(ltvSummary.highest.ltvInr, { compact: true }) : "no linked income yet"}
           icon={<Crown size={18} />}
+          detail={{
+            rows: [
+              { label: "Avg paid — Solo", value: formatInrMinor(ltvSummary.avgSolo, { compact: true }) },
+              { label: "Avg paid — Guided", value: formatInrMinor(ltvSummary.avgGuided, { compact: true }) },
+              { label: "Avg paid — Elite", value: formatInrMinor(ltvSummary.avgElite, { compact: true }) },
+              { label: "Upgrade rate", value: formatPct(ltvSummary.upgradeRatePct) },
+            ],
+          }}
         />
       </div>
 

@@ -7,6 +7,7 @@ import { CalendarClock, CloudOff, CloudUpload, PhoneCall, Target, Timer } from "
 import { logCall } from "@/server/call-log-actions";
 import type { L1Desk as L1DeskData, L1QueueLead } from "@/server/l1-desk-metrics";
 import { syncLagLabel } from "@/lib/offline-calls";
+import { SETTER_NEXT_STAGES } from "@/lib/call-outcome";
 import {
   L1_TARGETS,
   QUEUE_BUCKETS,
@@ -15,6 +16,7 @@ import {
   type QueueBucket,
 } from "@/lib/outreach-sla";
 import { Card, CardTitle, EmptyState, Pill, SectionHeading } from "@/components/ui/kit";
+import { BantChip } from "@/components/ui/BantChip";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
@@ -106,6 +108,9 @@ function DialLink({ phone, name }: { phone: string; name: string }) {
   );
 }
 
+/** The outcomes that close the lead by themselves — see `stageAfterCall`. */
+const AUTO_CLOSING = new Set(["NOT_INTERESTED", "WRONG_NUMBER"]);
+
 function LogOutcomeModal({
   lead,
   onClose,
@@ -114,10 +119,13 @@ function LogOutcomeModal({
 }: {
   lead: L1QueueLead;
   onClose: () => void;
-  queueCall: (leadId: string, outcome: string, notes: string) => Promise<boolean>;
+  queueCall: (leadId: string, outcome: string, notes: string, nextStage?: string) => Promise<boolean>;
   online: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
+  // Mirrors the form's own default so the stage control's visibility tracks the select.
+  const [outcome, setOutcome] = useState("SPOKE");
+  const autoCloses = AUTO_CLOSING.has(outcome);
   return (
     <Modal open onClose={onClose} title={`Log outcome — ${lead.name}`} subtitle={lead.phone ?? undefined}>
       <form
@@ -125,6 +133,9 @@ function LogOutcomeModal({
           setError(null);
           const outcome = String(form.get("outcome") ?? "");
           const notes = String(form.get("notes") ?? "");
+          // Read here rather than from component state: the offline branch below needs the
+          // same value the online branch posts, and the form is the single source of truth.
+          const nextStage = String(form.get("nextStage") ?? "");
 
           /**
            * The online action stays the primary path — it is the one that has been exercised,
@@ -137,7 +148,7 @@ function LogOutcomeModal({
            * this feature exists for.
            */
           const queueIt = async (reason: string) => {
-            const stored = await queueCall(lead.id, outcome, notes);
+            const stored = await queueCall(lead.id, outcome, notes, nextStage);
             if (!stored) {
               return setError(
                 "No connection, and this device cannot store the call offline. Please note it down and log it when you are back online.",
@@ -163,14 +174,47 @@ function LogOutcomeModal({
         className="space-y-4"
       >
         <Field label="What happened?">
-          <Select name="outcome" options={OUTCOME_OPTIONS} defaultValue="SPOKE" />
+          <Select
+            name="outcome"
+            options={OUTCOME_OPTIONS}
+            defaultValue="SPOKE"
+            onChange={(e) => setOutcome(e.currentTarget.value)}
+          />
         </Field>
+
+        {/* ── Where the conversation left them ──────────────────────────────────────────
+            The JD scores this person on "pipeline updated before end of day: 100%", and until
+            now the only control that could move a card lived on the Pipeline screen — so the
+            desk measured something it did not let them do. This is that control, on the form
+            they are already filling in.
+
+            Hidden for the two outcomes that close the lead by themselves: offering a "next
+            stage" beside "Not interested" invites a contradiction the server would then have to
+            resolve silently. Its default is "leave as is", so the old behaviour is still one
+            submit away for anyone who does not want to decide yet. */}
+        {!autoCloses && (
+          <Field label="Where did that leave them? (optional)">
+            <Select
+              name="nextStage"
+              defaultValue=""
+              options={[
+                { value: "", label: "Leave the stage as it is" },
+                ...SETTER_NEXT_STAGES.map((s) => ({
+                  value: s,
+                  label: LEAD_STAGE_LABELS[s] ?? s,
+                })),
+              ]}
+            />
+          </Field>
+        )}
+
         <Field label="Notes (optional)">
           <TextInput kind="text" name="notes" maxLength={500} placeholder="What did they say?" />
         </Field>
         <p className="text-caption text-muted">
-          &ldquo;Not interested&rdquo; and &ldquo;Wrong number&rdquo; close the lead automatically. Anything else
-          leaves the stage for you to set — only you know whether the conversation ended in a booking.
+          {autoCloses
+            ? "This closes the lead automatically — no stage to set."
+            : "Setting a stage here moves the card on the pipeline too, so you don't have to do it twice."}
         </p>
         <div className="flex items-center justify-between gap-3">
           <FormError message={error} />
@@ -200,6 +244,10 @@ function QueueRow({
           {bucket === "FIVE_MINUTE" && (
             <FiveMinuteCountdown deadline={lead.fiveMinuteBy} initialMsLeft={lead.msToFiveMinute} />
           )}
+          {/* Only when there IS a score. A "Not scored" chip on every row of a 25-row queue is
+              noise — most leads have never been asked, and that is the normal case, not a
+              finding. The chip earns its place by being rare. */}
+          {lead.bant && <BantChip bant={lead.bant} />}
           {lead.state === "OVERDUE" && (
             <Pill tone="bad">Past deadline</Pill>
           )}
@@ -230,7 +278,9 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
   const [logging, setLogging] = useState<L1QueueLead | null>(null);
   const offline = useOfflineCalls(() => router.refresh());
 
-  const totalDue = QUEUE_BUCKETS.reduce((n, b) => n + desk.queue[b].length, 0);
+  // `desk.total`, not the array lengths: the server trims each bucket to what is rendered, so
+  // the arrays no longer answer "how many are waiting".
+  const totalDue = QUEUE_BUCKETS.reduce((n, b) => n + desk.total[b], 0);
 
   return (
     <div className="space-y-8">
@@ -302,7 +352,8 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
           <div className="space-y-4">
             {QUEUE_BUCKETS.map((bucket) => {
               const leads = desk.queue[bucket];
-              if (leads.length === 0) return null;
+              const count = desk.total[bucket];
+              if (count === 0) return null;
               const meta = QUEUE_BUCKET_META[bucket];
               return (
                 <Card
@@ -311,20 +362,20 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
                     <CardTitle icon={bucket === "FIVE_MINUTE" ? <Timer size={18} /> : <PhoneCall size={18} />}>
                       {meta.title}
                       <span className="ml-2 text-caption font-normal text-muted">
-                        {leads.length}
+                        {count}
                       </span>
                     </CardTitle>
                   }
                   subtitle={`${meta.why} · ${meta.target}`}
                 >
                   <ul className="-mx-4 -mb-2">
-                    {leads.slice(0, 25).map((l) => (
+                    {leads.map((l) => (
                       <QueueRow key={l.id} lead={l} bucket={bucket} onLog={setLogging} />
                     ))}
                   </ul>
-                  {leads.length > 25 && (
+                  {count > leads.length && (
                     <p className="mt-3 text-caption text-muted">
-                      Showing the 25 most urgent of {leads.length}. Work these first — the rest move up as you clear them.
+                      Showing the {leads.length} most urgent of {count}. Work these first — the rest move up as you clear them.
                     </p>
                   )}
                 </Card>
@@ -342,7 +393,18 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
           description="Confirm these today — bookings inside 8 hours are blocked, so an unconfirmed call must be cancelled early to free the slot."
         />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <MetricCard label="Booked" value={String(desk.tomorrow.booked)} icon={<CalendarClock size={18} />} href="/bookings" />
+          <MetricCard
+            label="Booked"
+            value={String(desk.tomorrow.booked)}
+            icon={<CalendarClock size={18} />}
+            href="/bookings"
+            detail={{
+              rows: [
+                { label: "Confirmed", value: desk.tomorrow.confirmed },
+                { label: "Unconfirmed", value: desk.tomorrow.unconfirmed.length },
+              ],
+            }}
+          />
           <MetricCard
             label="Confirmed"
             value={String(desk.tomorrow.confirmed)}
@@ -355,6 +417,12 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
             }
             icon={<CalendarClock size={18} />}
             href="/bookings"
+            detail={{
+              rows: [
+                { label: "Booked (total)", value: desk.tomorrow.booked },
+                { label: "Still to confirm", value: desk.tomorrow.unconfirmed.length },
+              ],
+            }}
           />
           <MetricCard
             label="Unconfirmed"
@@ -363,6 +431,21 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
             secondary={desk.tomorrow.unconfirmed.length > 0 ? "Chase these today" : "All confirmed"}
             icon={<CalendarClock size={18} />}
             href="/bookings"
+            detail={{
+              rows: desk.tomorrow.unconfirmed.slice(0, 6).map((b) => ({
+                label: b.name,
+                value: new Date(b.startsAt).toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata",
+                  weekday: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+              })),
+              note:
+                desk.tomorrow.unconfirmed.length > 6
+                  ? `Showing 6 of ${desk.tomorrow.unconfirmed.length} — full chase list below.`
+                  : undefined,
+            }}
           />
         </div>
 

@@ -9,6 +9,8 @@ import {
 import { aggInrMinor, sumAgg } from "@/lib/money";
 import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { ACTIVE } from "@/lib/soft-delete";
+import { priorityScore } from "@/lib/lead-priority";
+import { getCallDistribution } from "./founder-config";
 
 /**
  * Pipeline dashboard (PRD1 §5.4). Booked / completed / won counts come from the
@@ -168,8 +170,12 @@ export function invalidateAvgFeeCache(): void {
  */
 export const getPipelineSnapshot = cache(async (range: KpiRangeKey = "this-month") => {
   const ts = kpiInstantRange(range);
-  const [interestedLeads, fee, wonRows, completedRows] = await Promise.all([
-    prisma.lead.count({ where: { ...ACTIVE, stage: { in: INTERESTED_STAGES as unknown as never[] } } }),
+  const [stageRows, fee, wonRows, completedRows] = await Promise.all([
+    prisma.lead.groupBy({
+      by: ["stage"],
+      where: { ...ACTIVE, stage: { in: INTERESTED_STAGES as unknown as never[] } },
+      _count: { _all: true },
+    }),
     getEffectiveAvgFee(),
     prisma.leadStageHistory.findMany({
       where: { toStage: "WON", changedAt: { gte: ts.start, lt: ts.end } },
@@ -183,19 +189,41 @@ export const getPipelineSnapshot = cache(async (range: KpiRangeKey = "this-month
     }),
   ]);
 
+  const interestedLeads = stageRows.reduce((a, r) => a + r._count._all, 0);
+  // Open-deal breakdown for the "Pipeline value" card's detail popup.
+  const byStage = INTERESTED_STAGES.map((stage) => ({
+    stage,
+    label: LEAD_STAGE_LABELS[stage] ?? stage,
+    count: stageRows.find((r) => String(r.stage) === stage)?._count._all ?? 0,
+  })).filter((r) => r.count > 0);
+
   const winsThisMonth = wonRows.length;
   const completed = completedRows.length;
   const closePct = completed > 0 ? (winsThisMonth / completed) * 100 : 0;
   const pipelineValueInr = interestedLeads * fee.avgFeeInr;
 
+  // Wins-by-level breakdown for the "Wins this month" card's detail popup.
+  const wonLeadIds = wonRows.map((r) => r.leadId);
+  const wonLeads = wonLeadIds.length
+    ? await prisma.lead.findMany({ where: { id: { in: wonLeadIds } }, select: { wonLevel: true } })
+    : [];
+  const winsByLevel = { SOLO: 0, GUIDED: 0, ELITE: 0, OTHER: 0 };
+  for (const l of wonLeads) {
+    const k = l.wonLevel === "SOLO" || l.wonLevel === "GUIDED" || l.wonLevel === "ELITE" ? l.wonLevel : "OTHER";
+    winsByLevel[k] += 1;
+  }
+
   return {
     interestedLeads,
     avgFeeKnown: fee.known,
+    avgFeeInr: fee.avgFeeInr,
     pipelineValueInr,
     forecast30Inr: pipelineValueInr * (closePct / 100),
     winsThisMonth,
     completedThisMonth: completed,
     closePct,
+    byStage,
+    winsByLevel,
   };
 });
 
@@ -220,6 +248,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   const [
     leadsThisWeek, leadsThisMonth, booked, completed, noShows, wonRows,
     hqOutcomes, monthOutcomes, interestedLeads, monthIncomes, fee, targetRow,
+    leadsThisWeekBySourceRaw,
   ] = await Promise.all([
     prisma.lead.count({ where: { ...ACTIVE, dateIn: { gte: week.start, lt: week.end }, ...ownLeadWhere } }),
     prisma.lead.count({ where: { ...ACTIVE, dateIn: { gte: mStart, lt: mEnd }, ...ownLeadWhere } }),
@@ -242,7 +271,16 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
     }),
     getEffectiveAvgFee(),
     prisma.monthlyTarget.findUnique({ where: { month: mStart } }),
+    prisma.lead.groupBy({
+      by: ["leadSource"],
+      where: { ...ACTIVE, dateIn: { gte: week.start, lt: week.end }, ...ownLeadWhere },
+      _count: { _all: true },
+    }),
   ]);
+  const leadsThisWeekBySource = leadsThisWeekBySourceRaw.map((r) => ({
+    source: r.leadSource as string,
+    count: r._count._all,
+  }));
 
   const wonLeadIds = wonRows.map((r) => r.leadId);
   const wonLeads = wonLeadIds.length
@@ -289,7 +327,11 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   // ids — the unscoped groupBy walked the entire stage history on every render.
   const openLeads = await prisma.lead.findMany({
     where: { ...ACTIVE, stage: { in: OPEN_STAGES as unknown as never[] }, ...ownLeadWhere },
-    select: { id: true, name: true, phone: true, stage: true, dateIn: true, createdAt: true },
+    select: {
+      id: true, name: true, phone: true, stage: true, dateIn: true, createdAt: true,
+      // The intake score, for leads with no discovery call yet — see the ranking below.
+      bantScore: true, bantAvg: true,
+    },
   });
   const openLeadIds = openLeads.map((l) => l.id);
   const [lastChanges, openOutcomes] = await Promise.all([
@@ -311,20 +353,49 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   const latestOutcome = new Map<string, (typeof openOutcomes)[number]>();
   for (const o of openOutcomes) if (!latestOutcome.has(o.leadId)) latestOutcome.set(o.leadId, o);
 
-  const nowMs = Date.now();
+  const now = new Date();
+  const nowMs = now.getTime();
   const dayMs = 86400000;
+  // Founder-set ranking weights. Read once for the whole pass rather than per lead.
+  const priorityWeights = (await getCallDistribution()).priority;
   const scored = openLeads.map((l) => {
     const o = latestOutcome.get(l.id);
-    const bant = o ? [o.bantBudget, o.bantAuthority, o.bantNeed, o.bantTimeline].filter(Boolean).length : 0;
-    const idleDays = Math.floor((nowMs - (lastChangeAt.get(l.id) ?? l.createdAt).getTime()) / dayMs);
-    const freshDays = Math.floor((nowMs - l.dateIn.getTime()) / dayMs);
+    /**
+     * BANT for the ranking: the DISCOVERY SPECIALIST's assessment first, the lead's intake score
+     * second.
+     *
+     * That precedence is the opposite of `resolveBant`'s, and deliberately so. This is not a
+     * display of "what do we know about them" but an input to "who should be rung next", and a
+     * specialist who has spoken to the prospect for twenty minutes outranks any form. The intake
+     * score only fills the gap BEFORE that call happens — which, on a "call these first" list, is
+     * most of it. Until now that gap read as BANT 0 for every lead, so the ranking was driven
+     * almost entirely by stage weight and age.
+     */
+    const bant = o
+      ? [o.bantBudget, o.bantAuthority, o.bantNeed, o.bantTimeline].filter(Boolean).length
+      : l.bantScore;
+    const bantFromIntake = !o && l.bantScore != null;
 
-    let score = STAGE_WEIGHT[l.stage] ?? 0;
-    const reasons: string[] = [];
-    if (bant > 0) { score += bant * 10; reasons.push(`BANT ${bant}/4`); }
-    if (o?.highlyQualified) { score += 15; reasons.push("Highly qualified"); }
-    if (freshDays <= 7) { score += 10; reasons.push("New this week"); }
-    if (idleDays > 7) { score -= Math.min(idleDays - 7, 20); }
+    // One scorer, shared with the L1 desk, weighted by Console → Call Distribution. The shipped
+    // weights reproduce this block's previous hardcoded arithmetic exactly.
+    const { score, reasons } = priorityScore(
+      {
+        bantScore: bant,
+        arrivedAt: l.dateIn,
+        lastActivityAt: lastChangeAt.get(l.id) ?? null,
+        highlyQualified: o?.highlyQualified ?? false,
+        stageWeight: STAGE_WEIGHT[l.stage] ?? 0,
+      },
+      priorityWeights,
+      now,
+    );
+    if (bantFromIntake && bant != null && bant > 0) {
+      // Say WHERE the score came from — a form the prospect filled in themselves is weaker
+      // evidence than a specialist's verdict, and the reader should be able to tell them apart.
+      const i = reasons.indexOf(`BANT ${bant}/4`);
+      if (i !== -1) reasons[i] = `BANT ${bant}/4 at intake`;
+    }
+    const idleDays = Math.floor((nowMs - (lastChangeAt.get(l.id) ?? l.createdAt).getTime()) / dayMs);
     reasons.push(STAGE_WEIGHT[l.stage] >= 25 ? "Late stage" : `Stage: ${l.stage.replace(/_/g, " ").toLowerCase()}`);
 
     // Deal-risk rules
@@ -383,8 +454,9 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   return {
     metrics: {
       leadsThisWeek, leadsThisMonth,
-      booked, completed,
+      booked, completed, noShows,
       showUpPct, closePct, noShowPct, hqPct,
+      hqOutcomes,
       pipelineValueInr, forecast30Inr,
       conversionsByLevel,
       avgFeeKnown,
@@ -392,6 +464,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
       avgFeeByLevel, // per-level average program fee (₹ minor), null where no income
       avgFeeInrMajor: Math.round(effectiveFeeInr / 100), // blended fee used for open leads
       monthOutcomes,
+      leadsThisWeekBySource,
     },
     target: {
       month: mStart.toISOString().slice(0, 7),

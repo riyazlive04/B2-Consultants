@@ -70,6 +70,9 @@ model User {
   sessions                 Session[]
   accounts                 Account[]
   teamProfile              TeamProfile?
+  /// Terminations this person carried out. SetNull like every other actor link — an admin
+  /// leaving must not erase the record of who offboarded whom.
+  terminationsPerformed    TeamProfile[]      @relation("TeamProfileTerminatedBy")
   studentProfile           Student?           @relation("StudentAccount")
   incomesEntered           Income[]           @relation("IncomeEnteredBy")
   expensesEntered          Expense[]          @relation("ExpenseEnteredBy")
@@ -91,6 +94,7 @@ model User {
   gnRecordingsPosted       GnRecording[]      @relation("GnRecordingPostedBy")
   gnRecordingWatches       GnRecordingWatch[] @relation("GnRecordingWatchUser")
   gnEventsCreated          ClassSession[]     @relation("GnEventCreatedBy")
+  attendanceMarked         SessionAttendance[] @relation("AttendanceMarkedBy")
   gnPosts                  GnPost[]           @relation("GnPostAuthor")
   gnComments               GnComment[]        @relation("GnCommentAuthor")
   gnLikes                  GnLike[]           @relation("GnLikeUser")
@@ -454,9 +458,57 @@ model Instalment {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
+  dunningEvents    DunningEvent[]
+
   @@unique([pendingPaymentId, seq])
   @@index([status, dueDate])
   @@map("instalment")
+}
+
+/// The rungs of the payment-chase ladder.
+///
+/// UPCOMING is a nudge before the due date, MISSED is the first chase after it, FINAL is the
+/// last automated word before a human takes over. Named for what they mean to the student, not
+/// "stage 1/2/3" — the offsets are founder-configurable, so a numeric name would stop matching
+/// the day someone moves one.
+enum DunningStage {
+  UPCOMING
+  MISSED
+  FINAL
+}
+
+/// One rung, sent once.
+///
+/// WHY THIS TABLE EXISTS: the single reminder this replaced deduped by string-matching its own
+/// subject line against the Message table (`subject: { startsWith: "Payment reminder" }`). That
+/// works right up until someone rewords a subject, at which point every student who ever received
+/// the old wording is chased again. Whether a rung has been climbed is a fact, and facts belong
+/// in a row.
+///
+/// The unique key is what makes the ladder safe to run on any cadence: a stage that has fired
+/// cannot fire twice, so the daily cron, a manual run and a retry after a crash all converge on
+/// the same outcome.
+model DunningEvent {
+  id           String       @id @default(cuid())
+  instalmentId String
+  instalment   Instalment   @relation(fields: [instalmentId], references: [id], onDelete: Cascade)
+  stage        DunningStage
+  /// EMAIL / WHATSAPP / BOTH, as configured for the stage at the time it fired. Snapshotted
+  /// rather than read live, because "why did this go by email" must stay answerable after the
+  /// config changes.
+  channel      String
+  sentAt       DateTime     @default(now())
+  /// Whether anything actually left the building. A stage recorded with `delivered: false` still
+  /// blocks a re-send — the ladder moved on, and re-chasing on a Resend outage would flood a
+  /// student the moment service came back.
+  delivered    Boolean      @default(false)
+  /// The Message row, when there was one. Null when the channel was off and the send was skipped.
+  messageId    String?
+  note         String?
+
+  @@unique([instalmentId, stage])
+  @@index([sentAt])
+  @@map("dunning_event")
 }
 
 // Monthly revenue target for the Pipeline target bar (PRD1 §5.4). Default ₹8,00,000.
@@ -544,6 +596,38 @@ model Lead {
   marketingSource   MarketingSource? @relation(fields: [marketingSourceId], references: [id], onDelete: SetNull)
   enteredById    String?
   enteredBy      User?         @relation("LeadEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+
+  /// ── BANT AT OPT-IN ────────────────────────────────────────────────────────────────
+  /// The band score as of the LANDING PAGE, not the booking.
+  ///
+  /// Application Logic §4.3 specifies two scoring stages — "at opt-in, the moment answers are
+  /// captured, so unqualified leads never enter outreach" and again at booking. Only the second
+  /// was ever built: BANT lived solely on `BookingRequest`, which only the in-app /book form
+  /// creates. A landing-page lead relayed by Pabbly therefore arrived with its qualification
+  /// answers in the payload and nowhere to put them, so every downstream consumer — the SOP's
+  /// Qualified verdict, Key Metrics, the pipeline ranking, the discovery specialist's screen —
+  /// saw an unscored lead. These columns are that missing home.
+  ///
+  /// ALL NULLABLE, including the four dimension booleans, on purpose. `BookingRequest` defaults
+  /// them to `false`, which is safe there because a row only exists once a form was submitted.
+  /// Here, most leads will never be scored at all, and "we have no evidence for Budget" must not
+  /// read as "they have no budget" — that distinction decides who gets called.
+  bantBudget    Boolean?
+  bantAuthority Boolean?
+  bantNeed      Boolean?
+  bantTimeline  Boolean?
+  bantScore     Int?
+  bantAvg       Float?
+  bantVerdict   BantVerdict?
+  bantScoredAt  DateTime?
+  bantSource    BantSource?
+  /// The qualification answers exactly as the sender posted them, before any mapping.
+  ///
+  /// This is the evidence, and it is also the debugging surface: when a landing-page question is
+  /// reworded and stops matching the catalogue, the raw keys are still here, so Console can show
+  /// the founder which fields arrived unrecognised instead of the score silently reading 0.
+  intakeAnswers Json?
+
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
@@ -581,6 +665,11 @@ model Lead {
   @@index([dateIn])
   @@index([leadSource])
   @@index([assignedToId])
+  // The L1 desk's working set is "my open leads, newest first" and its month targets are "my
+  // leads created this month" — both filter on assignedToId AND range/order on createdAt. The
+  // single-column assignedToId index above could only narrow to the owner and then had to sort
+  // the remainder, which after the 23,430-lead hand-out is most of the table per caller.
+  @@index([assignedToId, createdAt])
   @@index([companyId])
   @@index([marketingSourceId])
   @@index([deletedAt])
@@ -1307,6 +1396,18 @@ enum SlotStatus {
   BLOCKED
 }
 
+/// WHICH stage produced a lead's band score (Application Logic §4.3's two-stage scoring).
+///
+/// Recorded rather than inferred because the three carry different authority. OPT_IN is the
+/// landing page's own answers — the earliest and least verified. BOOKING is the fuller intake
+/// form and supersedes it. MANUAL is a human's judgement and supersedes BOTH: a redelivered
+/// webhook must never overwrite what a specialist typed after speaking to the person.
+enum BantSource {
+  OPT_IN // landing page / relayed opt-in form (Pabbly, FlexiFunnels, Meta)
+  BOOKING // the /book qualification form
+  MANUAL // set by a specialist in the back office
+}
+
 // Weighted-BANT recommendation (avg of the four 0–5 dimension scores).
 enum BantVerdict {
   CONFIRM // avg > 3 — confirm the call
@@ -1505,6 +1606,25 @@ model TeamProfile {
   // Deliberately NOT a Goal: GoalPeriod has no DAY, and a daily bar is a working-day
   // notion (Saturdays follow worksSaturdays) that the monthly Goal engine doesn't model.
   dailyCallTarget     Int             @default(0)
+
+  /// ── TERMINATION ───────────────────────────────────────────────────────────────────
+  /// Set when someone leaves. `status` goes INACTIVE and the linked `User` is SUSPENDED in the
+  /// same transaction — the two statuses were previously never kept in sync by any code path,
+  /// and different modules filter on different ones.
+  ///
+  /// DELIBERATELY NOT the `deletedAt` soft-delete pattern used by the nine core record types.
+  /// Archived records are purged by the 90-day retention cron (`server/retention.ts`), and a
+  /// person's employment record must never be purged — their name has to keep resolving on every
+  /// call, commission and audit row they ever produced. "Former team member" is a permanent,
+  /// restorable state, not a staging area for deletion.
+  terminatedAt       DateTime?
+  terminatedById     String?
+  terminatedBy       User?     @relation("TeamProfileTerminatedBy", fields: [terminatedById], references: [id], onDelete: SetNull)
+  terminationReason  String?
+  /// Who picked up their open work. Recorded so "why does Asma own this lead" stays answerable
+  /// years later — the reassignment itself leaves no trace on the row it moved.
+  successorProfileId String?
+
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
@@ -1683,6 +1803,7 @@ model Student {
   whatsappMessages   WhatsAppMessage[]
   agreements         Agreement[]
   taskCompletions    SessionTaskCompletion[]
+  attendance         SessionAttendance[]
   resumes            Resume[]
 
   @@index([fullName])
@@ -2083,6 +2204,7 @@ model ClassSession {
   updatedAt    DateTime @updatedAt
 
   tasks SessionTask[]
+  attendance SessionAttendance[]
 
   @@index([batchId, startsAt])
   @@map("class_session")
@@ -2148,6 +2270,69 @@ model SessionTaskCompletion {
   @@unique([taskId, studentId])
   @@index([studentId, status])
   @@map("session_task_completion")
+}
+
+/// Was this student in the room?
+///
+/// LATE and EXCUSED are separate from PRESENT and ABSENT because they answer different
+/// questions and a two-value enum forces one of them to be a lie. A student who joined 20
+/// minutes late attended; a student excused for a funeral did not attend but is not at risk.
+/// Collapsing either into ABSENT would put them in the drop-risk list, which is the one list
+/// this data exists to produce.
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  EXCUSED
+}
+
+/// Who actually showed up to a class.
+///
+/// THE GAP THIS CLOSES: tutor fees are computed against `Batch._count.members +
+/// _count.enrollments` — the ROSTER. So the business pays per head enrolled while having no
+/// record at all of heads present, and two other things sit blocked behind that absence: a
+/// drop-risk signal derived from behaviour rather than hand-set by a coach, and a no-show rate.
+///
+/// MATERIALISED when a session's sheet is opened, exactly like `SessionTaskCompletion` above and
+/// for the same reason: a derived "who is missing" set has no memory of who was EXPECTED at a
+/// session whose roster has since changed. A student who left the batch in September must still
+/// appear as absent from August's class, and only a stored row can say that.
+///
+/// NOTE ON THE FEE: this model deliberately does NOT change how tutor fees are computed. Moving a
+/// fee from roster-based to attendance-based is a pricing decision for the founders, not a
+/// side-effect of recording attendance. The fee row now shows both numbers so the gap is visible.
+model SessionAttendance {
+  id        String       @id @default(cuid())
+  sessionId String
+  session   ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// PENDING has no representation here on purpose. A sheet that has never been opened has no
+  /// rows at all, which is a different (and honest) state from "we looked and they were absent" —
+  /// and it keeps an unmarked session from silently counting against every student's rate.
+  status AttendanceStatus
+
+  /// Optional richer signal for a video class where the platform reports it. Null when the tutor
+  /// simply ticked a box, which is the normal case.
+  minutesAttended Int?
+  note            String?
+
+  /// SetNull like every other actor link on a record that matters: removing a tutor's login must
+  /// never delete the evidence of who marked a register.
+  markedById String?
+  markedBy   User?    @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+  markedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One verdict per student per session — the register, not a log of edits. A correction
+  /// updates the row; the activity log carries the history.
+  @@unique([sessionId, studentId])
+  @@index([studentId, status])
+  @@index([sessionId])
+  @@map("session_attendance")
 }
 
 // Members reference Student (not User) so Admin can add people before any
@@ -2714,6 +2899,10 @@ enum WhatsAppKind {
   BOOKING_AUTO_CANCELLED // no confirmation in time — slot released, invite to rebook
   // ── SSS (sales) call calendar. The founder-run session; server/sss-slots.ts.
   SSS_RESCHEDULED // their SSS was moved to a new time (founder blocked the slot/day, or a manual/drag move)
+  // ── Book publisher orders. The ONLY touchpoint whose recipient is not a prospect or student:
+  // this one goes to the VENDOR's number. That is why its variables carry the student's name and
+  // ship-to rather than addressing the recipient as the subject.
+  BOOK_ORDER // order for a student's level books, sent to the publisher/vendor
 }
 
 enum WhatsAppStatus {
@@ -2752,6 +2941,8 @@ model WhatsAppMessage {
   pendingPayment   PendingPayment? @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
   agreementId      String?
   agreement        Agreement?      @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  bookOrderId      String?
+  bookOrder        BookOrder?      @relation(fields: [bookOrderId], references: [id], onDelete: SetNull)
 
   sentById String? // the admin/user who triggered a manual send (null = automatic)
   sentBy   User?   @relation("WhatsAppSentBy", fields: [sentById], references: [id], onDelete: SetNull)
@@ -2765,6 +2956,7 @@ model WhatsAppMessage {
   @@index([bookingRequestId])
   @@index([pendingPaymentId])
   @@index([agreementId])
+  @@index([bookOrderId])
   @@index([watiMessageId])
   @@index([toNumber])
   @@map("whatsapp_message")
@@ -3531,6 +3723,15 @@ model BookOrder {
   vendorId  String?
   vendor    Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
 
+  /// Human-quotable reference, e.g. `BO-2026-0087` — the `{{order_ref}}` the approved WATI
+  /// template sends to the publisher, and what the publisher quotes back at us. Deliberately not
+  /// the cuid: a vendor has to be able to read it down a phone line.
+  ///
+  /// Nullable because rows created before this existed have none. It is allocated lazily on the
+  /// first publisher message, so an order only takes a number once it is actually ordered —
+  /// nothing burns a sequence number by being opened and cancelled.
+  orderRef String? @unique
+
   status BookOrderStatus @default(DEFERRED)
 
   /// Money in integer paise, like every other amount in this schema.
@@ -3551,6 +3752,10 @@ model BookOrder {
   orderedAt   DateTime?
   paidAt      DateTime?
   courieredAt DateTime?
+
+  /// Publisher messages sent about this order — what makes "have we actually told them?"
+  /// answerable on the row instead of by trawling the WhatsApp log by phone number.
+  messages WhatsAppMessage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3661,6 +3866,26 @@ model QualificationQuestion {
   /// [{ value, label, score }] — score is the 0–5 weighted layer the BANT average is taken
   /// over. Null for free-text kinds, which score nothing.
   options  Json?
+  /// ── INBOUND MAPPING ─────────────────────────────────────────────────────────────────
+  /// How an EXTERNAL form's vocabulary is recognised as this question. Both founder-editable at
+  /// Console → Qualification: the landing page posts its own field names and its own answer
+  /// wording, and both change whenever marketing rewrites the page.
+  ///
+  /// DELIBERATELY NOT INSIDE `options`. The `qualification_question_version_guard` trigger
+  /// treats `options` as immutable once answered — it is the evidence for a verdict already
+  /// acted on — so an alias stored there could only be added by spawning a new question
+  /// version. But recognising that the page now says "Right away" for an option that already
+  /// meant `immediately` changes nothing about what was asked or what it scored; it is a
+  /// parsing rule, not evidence. Keeping the two apart is what lets a mapping be fixed in place
+  /// while the wording stays frozen.
+  ///
+  /// Field names this question may arrive under, e.g. ["when_start", "timeline"]. Matched case-
+  /// and punctuation-insensitively, so "When_Start_Germany" and "when start germany" both hit
+  /// without being listed. Empty means: match on the question `key` alone.
+  inboundKeys String[] @default([])
+  /// Answer texts per option: { "<option value>": ["Immediately", "Right away"] }. `value` and
+  /// `label` are always accepted without being listed here.
+  answerAliases Json?
   dimension BantDimension @default(NONE)
   weight    Int           @default(1)
   required  Boolean       @default(false)

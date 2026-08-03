@@ -268,6 +268,9 @@ function templateSection(t: SubmissionTemplate, index: number): (Paragraph | Tab
     p("Why this category", { bold: true, size: 20 }),
     p(t.categoryNote, { size: 19, color: MUTED, spacing: 120 }),
 
+    // An OPEN question ("as the SOP writes it today") vs a settled one. With an acceptedFix the
+    // body below IS the approved text, so it gets the plain paste-this heading — the note further
+    // down explains what it replaced.
     p(t.proposedFix ? "Body — as the SOP writes it today" : "Body — paste exactly as shown", {
       bold: true,
       size: 20,
@@ -275,6 +278,35 @@ function templateSection(t: SubmissionTemplate, index: number): (Paragraph | Tab
     ...bodyBox(body),
     spacer(140),
   ];
+
+  /**
+   * A wording change that has ALREADY been approved and is live in the SOP constant.
+   *
+   * Printed in green as settled, not in red as a question — the body above is the approved one,
+   * so asking the submitter to decide again would be misleading. The superseded text is shown
+   * underneath because B2 also holds the original SOP document: without it, someone comparing
+   * the two would find a discrepancy and no explanation for it.
+   */
+  if (t.acceptedFix) {
+    out.push(
+      new Paragraph({
+        spacing: { before: 60, after: 80 },
+        children: [
+          new TextRun({
+            text: `✓  Approved wording change — decided ${t.acceptedFix.decidedOn}. The body above is the one to submit.`,
+            size: 21,
+            bold: true,
+            color: ACCENT,
+            font: FONT,
+          }),
+        ],
+      }),
+    );
+    out.push(p(t.acceptedFix.reason, { size: 19, color: MUTED, spacing: 100 }));
+    out.push(p("It replaces this earlier wording from the SOP document:", { size: 19, bold: true }));
+    out.push(...bodyBox(t.acceptedFix.was));
+    out.push(spacer(140));
+  }
 
   // A wording change that needs a human's sign-off before submission. Shown as a diff-in-words:
   // what's wrong, what to change it to, and why — never applied silently.

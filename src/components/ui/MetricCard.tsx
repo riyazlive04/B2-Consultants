@@ -116,7 +116,7 @@ export function MetricCard({
       )}
       {/* header: icon chip + label (left) · target / arrow / expand hint (right) */}
       <div className="relative flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {icon && (
             <span
               aria-hidden
@@ -131,8 +131,22 @@ export function MetricCard({
               "Total active students" into "TOTAL ACTI…" and "Top paying student" into
               "TOP PAYING…" — a KPI whose name you cannot read is not a KPI. Two lines is the cap
               (`line-clamp-2`), so a pathological label still can't push the figure out of sight,
-              and grid rows equalise height anyway so the row just gets a few pixels taller. */}
-          <span className="flex min-w-0 items-start gap-1.5 text-label uppercase text-ink-3">
+              and grid rows equalise height anyway so the row just gets a few pixels taller.
+
+              WIDTH IS THE CARD'S, NOT THE VIEWPORT'S — which is why this self-heals with flex
+              rather than a breakpoint. `min-w-0` alone let the label collapse to ~19px (a 2-up
+              KPI row on a 320px phone, and equally the 6-up row on /funnel at 1024px), so the
+              text was clipped to "TO A…" with no viewport rule able to describe it. The floor
+              below is `min(7rem, 100%)`: ask for 7rem, and when the card cannot give it, the
+              group WRAPS and the label takes the whole next line instead of being crushed. The
+              `100%` half of that min() is what stops the floor from overflowing a card narrower
+              than 7rem. On a card with room, nothing about the old layout changes.
+
+              7rem is the measured break-even, not a guess: ~112px leaves the text ~90px next to
+              the `i` chip, which fits a typical KPI name across the two clamped lines. A larger
+              floor (9rem was tried) also wrapped the 4-up row at 1440px, where the old
+              icon-beside-label layout had room and looked right. */}
+          <span className="flex min-w-[min(7rem,100%)] flex-1 items-start gap-1.5 text-label uppercase text-ink-3">
             <span className="line-clamp-2 min-w-0">{label}</span>
             {tooltip && (
               // keyboard- and touch-reachable (§5.9): the definition shows on

@@ -199,16 +199,24 @@ export type GnBatchDetail = {
  * rather than the viewer's own. Callers must gate it by role; it does no checking.
  */
 export const getGnHomeSnapshot = cache(async () => {
-  const [activeBatches, learners, nextEvent] = await Promise.all([
+  const [activeBatches, learners, upcoming, byLevel] = await Promise.all([
     prisma.batch.count({ where: { status: "ACTIVE" } }),
     prisma.batchMember.count({ where: { batch: { status: "ACTIVE" } } }),
-    prisma.classSession.findFirst({
+    prisma.classSession.findMany({
       where: { startsAt: { gte: new Date() }, batch: { status: "ACTIVE" } },
       orderBy: { startsAt: "asc" },
+      take: 5,
       select: { title: true, startsAt: true, batch: { select: { name: true } } },
     }),
+    prisma.batch.groupBy({ by: ["level"], where: { status: "ACTIVE" }, _count: { _all: true } }),
   ]);
-  return { activeBatches, learners, nextEvent };
+  return {
+    activeBatches,
+    learners,
+    nextEvent: upcoming[0] ?? null,
+    upcoming,
+    byLevel: byLevel.map((b) => ({ level: b.level, count: b._count._all })),
+  };
 });
 
 export const getGnAccess = cache(async (role: AppRole, userId: string): Promise<GnAccess> => {

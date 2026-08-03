@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { upsertIntakeLead } from "@/server/lead-intake";
-import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
+import { takeToken, tooManyRequests, RATE_RULES } from "@/lib/rate-limit";
 import {
   cap,
   extractContact,
@@ -41,9 +41,17 @@ export async function POST(req: NextRequest) {
 
   // Even an authenticated sender gets a flood brake — a misconfigured Pabbly workflow can
   // retry-loop, and lead capture is not a place to discover that via the DB.
-  if (!rateLimitOk(`pabbly:${clientIpFrom(req.headers)}`, 120, 60_000)) {
-    return new Response("Too many requests", { status: 429 });
-  }
+  //
+  // Keyed on the ENDPOINT, not the caller's IP. Every delivery arrives from Pabbly's egress
+  // address, so a per-IP bucket here was already a global bucket wearing a disguise — and one
+  // that silently resets to a fresh allowance the day Pabbly changes IP. Naming it what it is
+  // makes the ceiling honest.
+  //
+  // The 429 now carries `Retry-After`. That is the substantive fix: Pabbly honours it and
+  // REDELIVERS. The previous bare 429 told it nothing, so a throttled lead was simply lost —
+  // a rate limiter that drops real leads is worse than no rate limiter.
+  const gate = takeToken("webhook:pabbly", RATE_RULES.leadWebhook);
+  if (!gate.ok) return tooManyRequests(gate.retryAfterSec);
 
   let body: Record<string, unknown>;
   try {
@@ -91,6 +99,12 @@ export async function POST(req: NextRequest) {
     externalRef,
     utm: Object.keys(utm).length ? utm : null,
     notes: campaign ? `Captured via Pabbly — ${campaign}` : "Captured via Pabbly",
+    // The landing page asks the band-score questions and Pabbly relays them in this same body.
+    // Handing over the WHOLE payload rather than a hand-picked subset is the point: which fields
+    // are answers is a founder-editable mapping (Console → Qualification), so this route must not
+    // decide it. Everything unrecognised is recorded as evidence and reported, never silently
+    // dropped — which is what happened to every landing-page score before this line existed.
+    intakePayload: f,
   });
 
   return NextResponse.json({ ok: true, created, deduped, leadSource: leadSource ?? "OTHER" });

@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   const utm = extractUtm(f);
 
-  const { created, deduped } = await upsertIntakeLead({
+  const { created, deduped, reopened } = await upsertIntakeLead({
     name,
     phone,
     email,
@@ -76,5 +76,5 @@ export async function POST(req: NextRequest) {
     intakePayload: f,
   });
 
-  return NextResponse.json({ ok: true, created, deduped });
+  return NextResponse.json({ ok: true, created, deduped, reopened });
 }

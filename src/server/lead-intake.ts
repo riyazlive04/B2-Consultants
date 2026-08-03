@@ -7,6 +7,7 @@ import { pickFirstCaller } from "./assignment";
 import { notifyNewOptIn } from "./outreach-notify";
 import { scoreLeadAtOptIn } from "./lead-qualification";
 import { sendIntroNow } from "./outreach-instant";
+import { planReturningOptIn } from "@/lib/returning-opt-in";
 
 /**
  * Single entry point for every non-manual lead that lands in the system - the two
@@ -56,7 +57,17 @@ export type IntakeLead = {
   intakePayload?: Record<string, unknown> | null;
 };
 
-export type IntakeResult = { lead: Lead; created: boolean; deduped: "externalRef" | "phone" | null };
+export type IntakeResult = {
+  lead: Lead;
+  created: boolean;
+  deduped: "externalRef" | "phone" | null;
+  /**
+   * A dedupe matched a DORMANT lead and this opt-in put it back in front of a caller — stage
+   * re-opened, owner assigned, and/or the journey clock restarted. Always false on `created`
+   * (a brand-new lead was never dormant) and false when the match was already live and owned.
+   */
+  reopened: boolean;
+};
 
 /** Defence-in-depth: every caller is external-facing (webhooks, public form), so
  *  hard-cap the field sizes here too - the columns are unbounded Postgres text. */
@@ -188,6 +199,90 @@ export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResu
   return result;
 }
 
+/**
+ * A person we already have has just opted in again.
+ *
+ * Keeping the single row is right — see the dedup comments below. What was missing is everything
+ * else: the old code returned the matched row untouched, so a lead that went LOST in June and
+ * re-applied today gained no owner, no queue entry, no notification, and not even a bumped
+ * `updatedAt`. There was no trace they came back, because assignment and the journey only ever ran
+ * on the create path.
+ *
+ * `planReturningOptIn` (pure, tested) decides; this applies. Blank contact fields are filled
+ * either way, on the same fill-blanks-only contract as the redelivery branch — a human's manual
+ * correction must survive a webhook.
+ */
+async function acceptReturningOptIn(
+  existing: Lead,
+  input: IntakeLead,
+  utm: Prisma.InputJsonValue | undefined,
+): Promise<{ lead: Lead; reopened: boolean }> {
+  const journey = await prisma.outreachJourney.findUnique({
+    where: { leadId: existing.id },
+    select: { phase: true, bookingId: true },
+  });
+  const plan = planReturningOptIn({
+    stage: existing.stage,
+    assignedToId: existing.assignedToId,
+    deletedAt: existing.deletedAt,
+    journey,
+  });
+
+  const fillBlanks = {
+    email: existing.email ?? input.email ?? null,
+    city: existing.city ?? input.city ?? null,
+    industry: existing.industry ?? input.industry ?? null,
+    utm: existing.utm === null && utm !== undefined ? utm : undefined,
+  };
+
+  if (!plan.reopened) {
+    const lead = await prisma.lead.update({ where: { id: existing.id }, data: fillBlanks });
+    return { lead, reopened: false };
+  }
+
+  // Same rotation the create path uses, and failing it must never break capture.
+  const assignedToId = plan.needsOwner ? await pickFirstCaller().catch(() => null) : null;
+  const optInAt = new Date();
+
+  const lead = await prisma.$transaction(async (tx) => {
+    const updated = await tx.lead.update({
+      where: { id: existing.id },
+      data: {
+        ...fillBlanks,
+        ...(plan.reopenStage ? { stage: "NEW_LEAD" as const } : {}),
+        ...(assignedToId ? { assignedToId } : {}),
+      },
+    });
+    // The pipeline's stage metrics read history, not just the current column, so a re-open that
+    // wrote no history row would move the lead without ever showing where it came from.
+    if (plan.reopenStage) {
+      await tx.leadStageHistory.create({
+        data: { leadId: existing.id, fromStage: existing.stage, toStage: "NEW_LEAD" },
+      });
+    }
+    // `upsert`, because the pre-SOP rows (the Synamate import) have no journey at all — and a
+    // journey-less lead is invisible to both the SOP queue and the L1 desk's SLA buckets.
+    //
+    // contactedAt is cleared with the clock ON PURPOSE. It is the Step-2 "time contacted" for the
+    // chase that optInAt starts; leaving a stamp from the previous cycle behind a NEWER optInAt
+    // would make speed-to-lead compute a negative response time.
+    if (plan.restartJourney) {
+      await tx.outreachJourney.upsert({
+        where: { leadId: existing.id },
+        create: { leadId: existing.id, optInAt },
+        update: { optInAt, phase: "OPT_IN", contactedAt: null },
+      });
+    }
+    return updated;
+  });
+
+  // Same treatment as a new opt-in: not awaited, swallows its own errors. Telling someone a cold
+  // lead came back is the entire point of this branch.
+  void notifyNewOptIn(lead.id);
+
+  return { lead, reopened: true };
+}
+
 async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
   const input = bound(rawInput);
   const utm = input.utm && Object.keys(input.utm).length ? (input.utm as Prisma.InputJsonValue) : undefined;
@@ -208,7 +303,10 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
           utm: existing.utm === null && utm !== undefined ? utm : undefined,
         },
       });
-      return { lead: updated, created: false, deduped: "externalRef" };
+      // NOT a returning opt-in: same source AND same record id is the sender redelivering one
+      // submission, not the person coming back. Re-opening on a retry would let a flaky webhook
+      // resurrect leads nobody re-applied to.
+      return { lead: updated, created: false, deduped: "externalRef", reopened: false };
     }
   }
 
@@ -231,7 +329,9 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
     const byPhone = normalized
       ? await findLeadByNormalizedPhone(normalized, phone)
       : await prisma.lead.findFirst({ where: { phone } });
-    if (byPhone) return { lead: byPhone, created: false, deduped: "phone" };
+    if (byPhone) {
+      return { ...(await acceptReturningOptIn(byPhone, input, utm)), created: false, deduped: "phone" };
+    }
   }
 
   // Email is the fallback identity when there is no number to match on. Case-insensitive,
@@ -240,7 +340,9 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
     const byEmail = await prisma.lead.findFirst({
       where: { email: { equals: input.email.trim(), mode: "insensitive" } },
     });
-    if (byEmail) return { lead: byEmail, created: false, deduped: "phone" };
+    if (byEmail) {
+      return { ...(await acceptReturningOptIn(byEmail, input, utm)), created: false, deduped: "phone" };
+    }
   }
 
   // 3. brand-new lead. Auto-assign the first caller per the configured rotation
@@ -285,5 +387,5 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
   // errors, so this cannot produce an unhandled rejection.
   void notifyNewOptIn(lead.id);
 
-  return { lead, created: true, deduped: null };
+  return { lead, created: true, deduped: null, reopened: false };
 }

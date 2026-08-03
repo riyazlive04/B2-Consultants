@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
   const utm = extractUtm(f);
   const campaign = cap(pick(f, "campaign", "campaign_name", "utm_campaign", "form_name"), 120);
 
-  const { created, deduped } = await upsertIntakeLead({
+  const { created, deduped, reopened } = await upsertIntakeLead({
     name,
     phone,
     email,
@@ -107,5 +107,8 @@ export async function POST(req: NextRequest) {
     intakePayload: f,
   });
 
-  return NextResponse.json({ ok: true, created, deduped, leadSource: leadSource ?? "OTHER" });
+  // `reopened` distinguishes the two 200s that used to look identical: a genuine retry, versus a
+  // dormant lead this opt-in just put back in front of a caller. Without it, "we got a 200" said
+  // nothing about whether anyone would ever see the lead.
+  return NextResponse.json({ ok: true, created, deduped, reopened, leadSource: leadSource ?? "OTHER" });
 }

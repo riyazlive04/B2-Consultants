@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { z } from "zod";
 import { Prisma, type LeadSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -15,7 +15,10 @@ import { emitTrigger } from "./automation";
 import { logActivity, diffFields } from "./activity-log";
 import {
   defaultFormFields, defaultFormSettings, slugify, CONTACT_FIELD_KEYS,
-  type FormField, type FormSettings,
+  normaliseItems, normaliseSettings, isStaticItem, isChoiceItem, isMultiItem,
+  reachableItems, validateAnswer, answerToText, pagesOf,
+  OTHER_VALUE, otherFieldName,
+  type FormItem, type FormAnswers, type FormSettings,
 } from "@/lib/sites-types";
 import type { ActionResult } from "./finance-actions";
 
@@ -87,17 +90,68 @@ const formValueSettingsSchema = z.object({
   opportunityValueInr: optionalRule("money"),
 });
 
+/**
+ * Structural checks on the item list that `normaliseItems` cannot make on its own — it sanitises
+ * each item in isolation, whereas these are all statements about the list as a whole.
+ *
+ * Returns the first problem in the author's words, or null.
+ */
+function checkItems(items: FormItem[]): string | null {
+  const questions = items.filter((i) => !isStaticItem(i.type));
+  if (questions.length === 0) return "Add at least one question";
+
+  const keys = questions.map((f) => f.key.trim());
+  if (keys.some((k) => !k)) return "Every question needs a key";
+  if (new Set(keys).size !== keys.length) return "Question keys must be unique";
+
+  for (const q of questions) {
+    if (isChoiceItem(q.type) && (q.options ?? []).length === 0) {
+      return `"${q.label || q.key}" needs at least one option`;
+    }
+    if ((q.options ?? []).some((o) => !o.label.trim())) {
+      return `"${q.label || q.key}" has a blank option`;
+    }
+    if (q.validation?.kind === "regex") {
+      try {
+        new RegExp(q.validation.pattern);
+      } catch {
+        return `"${q.label || q.key}" has a validation pattern that isn't valid`;
+      }
+    }
+  }
+
+  // Branch targets must name a section that comes LATER. Checked here and not only in the picker
+  // because the picker is UX: a stale target left behind by deleting a section would otherwise sit
+  // in the JSON and silently fall through to "next page" for every respondent.
+  const pages = pagesOf(items);
+  const pageOfSection = new Map(pages.filter((p) => p.section).map((p) => [p.section!.id, p.index]));
+  for (const page of pages) {
+    const targets = [
+      ...page.items.flatMap((i) => (i.options ?? []).map((o) => o.goTo)),
+      page.section?.goTo,
+    ].filter((t): t is string => !!t && t !== "submit");
+    for (const t of targets) {
+      const to = pageOfSection.get(t);
+      if (to == null) return "A branch points at a section that no longer exists";
+      if (to <= page.index) return "A branch can only jump forwards, to a later section";
+    }
+  }
+  return null;
+}
+
 export async function saveForm(
   id: string,
-  payload: { name: string; fields: FormField[]; settings: FormSettings },
+  payload: { name: string; fields: FormItem[]; settings: FormSettings },
 ): Promise<ActionResult> {
   const session = await requireSection("forms");
   if (!payload.name.trim()) return { ok: false, error: "Form name is required" };
-  if (!payload.fields.length) return { ok: false, error: "Add at least one field" };
-  // keys must be unique + non-empty
-  const keys = payload.fields.map((f) => f.key.trim());
-  if (keys.some((k) => !k)) return { ok: false, error: "Every field needs a key" };
-  if (new Set(keys).size !== keys.length) return { ok: false, error: "Field keys must be unique" };
+
+  // A server action's argument is wire data, not a typed object — the TypeScript signature above
+  // is a claim about the intended caller, not a guarantee about the actual one. Normalising here
+  // is what makes the length caps and the type whitelist real rather than advisory.
+  const fields = normaliseItems(payload.fields);
+  const problem = checkItems(fields);
+  if (problem) return { ok: false, error: problem };
 
   const values = formValueSettingsSchema.safeParse({
     redirectUrl: payload.settings.redirectUrl ?? "",
@@ -108,14 +162,14 @@ export async function saveForm(
   }
   // Store the NORMALISED values — `url` adds a missing scheme, so what the public page redirects to
   // is the parsed link, not the raw typing.
-  const settings: FormSettings = { ...payload.settings, ...values.data };
+  const settings: FormSettings = { ...normaliseSettings(payload.settings), ...values.data };
 
   const before = await prisma.form.findUnique({ where: { id }, select: { name: true, fields: true, settings: true } });
   await prisma.form.update({
     where: { id },
     data: {
       name: payload.name.trim(),
-      fields: payload.fields as unknown as Prisma.InputJsonValue,
+      fields: fields as unknown as Prisma.InputJsonValue,
       settings: settings as unknown as Prisma.InputJsonValue,
     },
   });
@@ -124,7 +178,7 @@ export async function saveForm(
   const named = diffFields({ name: before?.name ?? "" }, { name: payload.name.trim() });
   const changed = [
     ...named.changed,
-    ...(JSON.stringify(before?.fields ?? null) !== JSON.stringify(payload.fields) ? ["fields"] : []),
+    ...(JSON.stringify(before?.fields ?? null) !== JSON.stringify(fields) ? ["fields"] : []),
     ...(JSON.stringify(before?.settings ?? null) !== JSON.stringify(settings) ? ["settings"] : []),
   ];
   if (changed.length) {
@@ -134,7 +188,7 @@ export async function saveForm(
       entityType: "Form",
       entityId: id,
       summary: `Edited the form "${payload.name.trim()}"`,
-      meta: { changed, before: named.before, after: named.after, fieldCount: payload.fields.length },
+      meta: { changed, before: named.before, after: named.after, fieldCount: fields.length },
     });
   }
   revalidatePath("/forms");
@@ -147,8 +201,7 @@ export async function togglePublishForm(id: string): Promise<ActionResult> {
   const f = await prisma.form.findUnique({ where: { id }, select: { name: true, published: true, fields: true } });
   if (!f) return { ok: false, error: "Form not found" };
   if (!f.published) {
-    const fields = (f.fields as FormField[]) ?? [];
-    const keys = new Set(fields.map((x) => x.key));
+    const keys = new Set(normaliseItems(f.fields).filter((x) => !isStaticItem(x.type)).map((x) => x.key));
     if (!keys.has("name") || !keys.has("phone")) {
       return { ok: false, error: "Publish needs a 'name' and a 'phone' field so captures reach the CRM" };
     }
@@ -188,6 +241,42 @@ export type SubmitResult =
   | { ok: true; message: string; redirectUrl?: string }
   | { ok: false; error: string };
 
+/**
+ * Read one answer per question out of the posted FormData.
+ *
+ * Multi-select posts the same name several times, so it needs `getAll` — `get` would keep the
+ * first box ticked and silently discard the rest, which is the sort of loss nobody notices until
+ * they compare a response against what the person says they chose.
+ *
+ * "Other" arrives as two controls: the option itself posts a sentinel, and the free text posts
+ * under a companion name. They are folded into one answer here so that everything downstream —
+ * validation, storage, the summary charts, the CSV — sees a plain string.
+ */
+function collectAnswers(items: readonly FormItem[], form: FormData): FormAnswers {
+  const out: FormAnswers = {};
+  const clip = (s: string, max = 2000) => s.trim().slice(0, max);
+
+  for (const it of items) {
+    if (isStaticItem(it.type)) continue;
+    const otherText = clip(String(form.get(otherFieldName(it.key)) ?? ""), 500);
+
+    if (isMultiItem(it.type)) {
+      out[it.key] = form
+        .getAll(it.key)
+        .map((v) => clip(String(v), 500))
+        .map((v) => (v === OTHER_VALUE ? otherText : v))
+        .filter(Boolean)
+        .slice(0, 50); // a ceiling on a hand-crafted POST, not a limit anyone can reach by clicking
+    } else if (it.type === "checkbox") {
+      out[it.key] = form.get(it.key) ? "Yes" : "";
+    } else {
+      const raw = clip(String(form.get(it.key) ?? ""));
+      out[it.key] = raw === OTHER_VALUE ? otherText : raw;
+    }
+  }
+  return out;
+}
+
 export async function submitPublicForm(slug: string, form: FormData): Promise<SubmitResult> {
   // Per-IP plus a whole-site ceiling, charged atomically. A form submission costs a row, a
   // possible automation enrolment and (through that) possible outbound sends — cheaper than a
@@ -210,17 +299,37 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
 
   const dbForm = await prisma.form.findUnique({ where: { slug } });
   if (!dbForm || !dbForm.published) return { ok: false, error: "This form is not available." };
-  const fields = (dbForm.fields as FormField[]) ?? [];
-  const settings = (dbForm.settings as FormSettings) ?? { submitText: "Submit", successMessage: "Thanks!", leadSource: "LANDING_PAGE" };
+  const fields = normaliseItems(dbForm.fields);
+  const settings = normaliseSettings(dbForm.settings);
 
-  // Collect + validate answers
-  const data: Record<string, string> = {};
-  for (const f of fields) {
-    const raw = f.type === "checkbox"
-      ? (form.get(f.key) ? "Yes" : "")
-      : String(form.get(f.key) ?? "").trim().slice(0, 2000);
-    if (f.required && !raw) return { ok: false, error: `${f.label} is required` };
-    if (raw) data[f.key] = raw;
+  const jar = await cookies();
+  const seenCookie = `b2f_${dbForm.id}`;
+  if (settings.limitOneResponse && jar.get(seenCookie)) {
+    return { ok: false, error: "You've already sent this form in." };
+  }
+
+  const answers = collectAnswers(fields, form);
+
+  /**
+   * Enforce `required` against the questions this respondent was actually SHOWN.
+   *
+   * With branching, some sections are skipped by design. Validating every declared question would
+   * make a form with a branch permanently unsubmittable for whoever took the short path — and only
+   * for them, so it presents as "some people can't submit", which is about the hardest bug shape
+   * there is to reproduce from a support message.
+   */
+  const asked = reachableItems(fields, answers);
+  for (const item of asked) {
+    const err = validateAnswer(item, answers[item.key]);
+    if (err) return { ok: false, error: err };
+  }
+
+  // Keep only what was asked. A respondent who answers, goes Back, and takes the other branch
+  // would otherwise leave the abandoned page's answers in the record as though they had stood.
+  const data: FormAnswers = {};
+  for (const item of asked) {
+    const v = answers[item.key];
+    if (Array.isArray(v) ? v.length > 0 : (v ?? "").trim() !== "") data[item.key] = v;
   }
 
   // UTM passthrough
@@ -230,17 +339,20 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
     if (v) utm[k] = v.slice(0, 200);
   }
 
-  const name = data["name"];
-  const phone = data["phone"];
+  // The contact record wants scalars. A multi-answer that lands on a contact field (someone can
+  // name a checkboxes question `city`) is flattened rather than dropped.
+  const text = (k: string) => answerToText(data[k]).trim();
+  const name = text("name");
+  const phone = text("phone");
 
   let leadId: string | null = null;
   if (name && phone) {
     const { lead } = await upsertIntakeLead({
       name,
       phone,
-      email: data["email"] ?? null,
-      city: data["city"] ?? null,
-      industry: data["industry"] ?? null,
+      email: text("email") || null,
+      city: text("city") || null,
+      industry: text("industry") || null,
       leadSource: toLeadSource(settings.leadSource),
       source: "NATIVE_FORM",
       externalRef: null,
@@ -251,7 +363,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
     // Custom answers (non-contact keys) → the contact's customFields blob.
     const extra: Record<string, string> = {};
     for (const [k, v] of Object.entries(data)) {
-      if (!(CONTACT_FIELD_KEYS as readonly string[]).includes(k)) extra[k] = v;
+      if (!(CONTACT_FIELD_KEYS as readonly string[]).includes(k)) extra[k] = answerToText(v);
     }
     if (Object.keys(extra).length) {
       const cur = (await prisma.lead.findUnique({ where: { id: leadId }, select: { customFields: true } }))?.customFields as Record<string, string> | null;
@@ -295,12 +407,23 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
       data: {
         formId: dbForm.id,
         leadId,
-        data: data as Prisma.InputJsonObject,
+        data: data as unknown as Prisma.InputJsonObject,
         utm: Object.keys(utm).length ? (utm as Prisma.InputJsonObject) : undefined,
       },
     }),
     prisma.form.update({ where: { id: dbForm.id }, data: { submissionCount: { increment: 1 } } }),
   ]);
+
+  // Set only AFTER the write succeeds: marking the browser as "done" and then failing to record
+  // the response would lock someone out of a form they never actually submitted.
+  if (settings.limitOneResponse) {
+    jar.set(seenCookie, "1", {
+      maxAge: 60 * 60 * 24 * 30,
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+    });
+  }
 
   if (leadId) await emitTrigger("FORM_SUBMITTED", { leadId, formId: dbForm.id });
 

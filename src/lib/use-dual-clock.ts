@@ -64,9 +64,9 @@ export function dateIn(tz: string, now: Date): string {
  * later. React treats that as corrupt markup and throws away the whole boundary. Rendering a
  * placeholder until mounted makes both passes identical.
  *
- * `tickMs` defaults to a minute. The profile card asks for 1000 because it shows seconds; the nav
- * clock does not, and re-rendering the entire app shell once a second to change nothing is a cost
- * with no benefit.
+ * `tickMs` is the DISPLAY resolution, and the tick is aligned to it rather than to the moment the
+ * component happened to mount — see the scheduler below for why that is the difference between a
+ * clock and a stopwatch.
  */
 export function useDualClock(tickMs = 60_000) {
   const [zone, setZone] = useState<Zone>("IN");
@@ -84,12 +84,44 @@ export function useDualClock(tickMs = 60_000) {
       /* ignore — private mode, or storage disabled */
     }
     setZone(stored === "IN" || stored === "DE" ? (stored as Zone) : d);
-    setNow(new Date());
   }, []);
 
+  /**
+   * ── Why this is a self-rescheduling timeout and not `setInterval` ────────────────
+   * `setInterval(…, 60_000)` counts from whenever the component mounted, so a clock mounted at
+   * 14:32:58 changes at 14:33:58 — it spends 58 of every 60 seconds displaying a minute that has
+   * already passed. Watch it for ten seconds and it looks frozen, because it is: it was reported
+   * as "not live" for exactly this reason. Sleeping until the next real boundary
+   * (`tickMs - (t % tickMs)`) makes the digits change WHEN THE WALL CLOCK DOES.
+   *
+   * The visibility/focus resync is the other half. Browsers throttle timers in a hidden tab and
+   * freeze them outright after a few minutes, and a suspended laptop stops them entirely — so the
+   * reading you come back to is stale by however long you were away, and would stay stale until
+   * the next tick fired. Re-reading on the way back costs one render and removes the only case
+   * where this component can display a confidently wrong time.
+   */
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), tickMs);
-    return () => clearInterval(id);
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const t = new Date();
+      setNow(t);
+      // Never schedule 0ms: exactly on a boundary, the next one is a full period away.
+      timer = setTimeout(tick, tickMs - (t.getTime() % tickMs) || tickMs);
+    };
+    tick();
+
+    const resync = () => {
+      if (document.visibilityState !== "visible") return;
+      clearTimeout(timer);
+      tick();
+    };
+    document.addEventListener("visibilitychange", resync);
+    window.addEventListener("focus", resync);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", resync);
+      window.removeEventListener("focus", resync);
+    };
   }, [tickMs]);
 
   /**

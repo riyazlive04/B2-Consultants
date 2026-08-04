@@ -7,6 +7,7 @@ import { ACTIVE } from "@/lib/soft-delete";
 import { parsePeriod, resolvePeriod } from "@/lib/period";
 import { contactsWhere } from "@/server/contacts-metrics";
 import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS } from "@/lib/labels";
+import { answerToText, isStaticItem, normaliseItems, type FormAnswers } from "@/lib/sites-types";
 import { logActivity } from "@/server/activity-log";
 
 /**
@@ -39,7 +40,11 @@ const BATCH = 1_000;
 
 type ExportDef = {
   section: Parameters<typeof requireSection>[0];
-  header: string[];
+  /**
+   * A function when the columns are not knowable until the request arrives — a form's export has
+   * one column per question, and every form has different questions.
+   */
+  header: string[] | ((req: NextRequest) => Promise<string[]>);
   filename: (label: string) => string;
   run: (req: NextRequest, period: { start: Date; endExclusive: Date }) => AsyncIterable<unknown[][]>;
 };
@@ -179,7 +184,63 @@ const EXPORTS: Record<string, ExportDef> = {
       );
     },
   },
+
+  /**
+   * One form's responses — Google Forms' "Download responses (.csv)".
+   *
+   * The columns are the form's own questions, in the order the form asks them, resolved per
+   * request. Answers are keyed by `key` rather than by position, so a question added later does
+   * not shunt every older response one column to the right.
+   */
+  "form-responses": {
+    section: "forms",
+    filename: (label) => `b2-form-responses-${label}.csv`,
+    header: async (req) => {
+      const items = await formQuestions(req.nextUrl.searchParams.get("formId"));
+      return ["Submitted", "Contact", ...items.map((i) => i.label || i.key), "UTM source", "UTM campaign"];
+    },
+    run: (req, period) => {
+      const formId = req.nextUrl.searchParams.get("formId") ?? "";
+      const where: Prisma.FormSubmissionWhereInput = {
+        formId,
+        createdAt: { gte: period.start, lt: period.endExclusive },
+      };
+      // The question list is needed for the row order as well as the header; the header call and
+      // this one are the same cheap single-row read.
+      const itemsPromise = formQuestions(formId);
+      return (async function* () {
+        const items = await itemsPromise;
+        yield* batched(
+          (cursorId, take) =>
+            prisma.formSubmission.findMany({
+              where: cursorId ? { AND: [where, { id: { gt: cursorId } }] } : where,
+              orderBy: { id: "asc" },
+              take,
+              select: { id: true, createdAt: true, data: true, utm: true, lead: { select: { name: true } } },
+            }),
+          (s) => {
+            const answers = (s.data as FormAnswers) ?? {};
+            const utm = (s.utm as Record<string, string> | null) ?? {};
+            return [
+              s.createdAt.toISOString(),
+              s.lead?.name ?? "",
+              ...items.map((i) => answerToText(answers[i.key])),
+              utm.utm_source ?? "",
+              utm.utm_campaign ?? "",
+            ];
+          },
+        );
+      })();
+    },
+  },
 };
+
+/** The answerable questions of one form, in ask order. Empty for a missing or unreadable form. */
+async function formQuestions(formId: string | null) {
+  if (!formId) return [];
+  const form = await prisma.form.findUnique({ where: { id: formId }, select: { fields: true } });
+  return normaliseItems(form?.fields).filter((i) => !isStaticItem(i.type));
+}
 
 export async function GET(req: NextRequest, { params }: { params: { entity: string } }) {
   const def = EXPORTS[params.entity];
@@ -211,5 +272,6 @@ export async function GET(req: NextRequest, { params }: { params: { entity: stri
     meta: { entity: params.entity, period: period.label, filters: Object.fromEntries(req.nextUrl.searchParams) },
   });
 
-  return csvStreamResponse(def.filename(label), def.header, def.run(req, period));
+  const header = typeof def.header === "function" ? await def.header(req) : def.header;
+  return csvStreamResponse(def.filename(label), header, def.run(req, period));
 }

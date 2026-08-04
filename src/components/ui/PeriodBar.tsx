@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { CalendarRange, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   periodIsCurrent,
@@ -13,7 +13,7 @@ import {
 } from "@/lib/period";
 import { DatePicker } from "./DatePicker";
 import { Modal } from "./Modal";
-import { Btn } from "./controls";
+import { Btn, IconButton, SegmentedControl } from "./controls";
 
 /**
  * The one period control. Week / month / quarter / year / custom, plus ‹ › and a "now" reset.
@@ -25,6 +25,23 @@ import { Btn } from "./controls";
  *
  * Every OTHER query param is preserved on navigation, so a period change never silently drops
  * the owner/stage/source filters someone has already set.
+ *
+ * ── Why the buttons are `SegmentedControl` and not their own markup ──────────────
+ * This shipped with hand-rolled pill buttons: `bg-ink text-surface` when active, each segment
+ * sized to its own label. That was wrong twice over. The colour was a one-off — every other
+ * toggle in the app marks its active segment with the primary tint (`bg-primary-soft`), so this
+ * one control invented a dark navy state that appears nowhere else. And five different widths
+ * read as five unrelated buttons rather than one control with five positions. It is now the
+ * app's own component, at `size="sm"` with `grow`, so the segments are identical.
+ *
+ * ── Why the selection is optimistic ─────────────────────────────────────────────
+ * Clicking a segment starts a SERVER round trip, and this app's server is in Mumbai while its
+ * database is in Singapore — a single query costs ~600ms, so a page can take seconds to come
+ * back. The old control repainted only once the server answered, which meant a click did nothing
+ * visible for a second or more and people clicked again. `resolvePeriod` is pure, so the new
+ * selection AND its label can both be computed in the browser the instant the button is pressed;
+ * the transition's `pending` flag then dims the row to show the numbers behind it are still
+ * catching up. Instant feedback, without ever claiming the data has already changed.
  */
 
 const KIND_LABELS: { key: PeriodKind; label: string }[] = [
@@ -65,12 +82,27 @@ export function PeriodBar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [customOpen, setCustomOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
 
-  const resolved = resolvePeriod(spec);
+  /**
+   * What the control SHOWS, which leads what the server has by one round trip.
+   *
+   * Cleared whenever the real `spec` arrives — including when the server resolves to something
+   * other than what was clicked (a clamped custom range, say). The prop is always the authority;
+   * this only covers the gap while it is in flight.
+   */
+  const [optimistic, setOptimistic] = useState<PeriodSpec | null>(null);
+  const shownSpec = optimistic ?? spec;
+  useEffect(() => {
+    setOptimistic(null);
+  }, [spec.kind, spec.anchor, spec.from, spec.to]);
+
+  const resolved = resolvePeriod(shownSpec);
   const atNow = periodIsCurrent(resolved);
   const shown = KIND_LABELS.filter((k) => kinds.includes(k.key));
 
   const go = (next: PeriodSpec) => {
+    setOptimistic(next);
     // Merge, don't replace. `?owner=` and `?stage=` belong to the page's own filter bar and
     // must survive a period change — losing them silently is how a filtered view lies.
     const params = new URLSearchParams(searchParams.toString());
@@ -91,68 +123,60 @@ export function PeriodBar({
     // Any window change starts back at page 1 — a cursor from the previous window points into
     // rows the new `where` clause may not contain at all.
     params.delete("cursor");
-    router.push(`${pathname}?${params.toString()}`);
+    // A transition keeps the OLD page interactive and gives us `pending`, instead of the router
+    // blocking with no signal that anything is happening.
+    startTransition(() => router.push(`${pathname}?${params.toString()}`));
   };
 
   return (
-    <div className={`flex flex-wrap items-center gap-2 ${className ?? ""}`}>
-      <div className="flex rounded-full border border-line bg-surface-2 p-0.5">
-        {shown.map((k) => (
-          <button
-            key={k.key}
-            type="button"
-            aria-pressed={spec.kind === k.key}
-            onClick={() => go({ kind: k.key, anchor: spec.anchor })}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-              spec.kind === k.key ? "bg-ink text-surface" : "text-muted hover:text-ink"
-            }`}
-          >
-            {k.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          aria-pressed={spec.kind === "custom"}
-          onClick={() => setCustomOpen(true)}
-          title="Pick an exact date range"
-          className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-            spec.kind === "custom" ? "bg-ink text-surface" : "text-muted hover:text-ink"
-          }`}
-        >
-          <CalendarRange size={13} /> Custom
-        </button>
-      </div>
+    <div
+      className={`flex flex-wrap items-center gap-2 ${className ?? ""}`}
+      // Dimmed, not disabled: the figures on screen are still last period's, and saying so is
+      // more honest than freezing a control the person has already used correctly.
+      aria-busy={pending}
+      style={pending ? { opacity: 0.65 } : undefined}
+    >
+      <SegmentedControl
+        size="sm"
+        grow
+        ariaLabel="Period"
+        value={shownSpec.kind}
+        onChange={(k) => (k === "custom" ? setCustomOpen(true) : go({ kind: k, anchor: shownSpec.anchor }))}
+        options={[
+          ...shown.map((k) => ({ value: k.key, label: k.label })),
+          {
+            value: "custom" as PeriodKind,
+            label: "Custom",
+            title: "Pick an exact date range",
+            icon: <CalendarRange size={13} />,
+          },
+        ]}
+      />
 
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => go(shiftPeriod(spec, -1))}
-          disabled={spec.kind === "all"}
-          aria-label="Previous period"
-          className="grid h-8 w-8 place-items-center rounded-field border border-line text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+        <IconButton
+          size="sm"
+          label="Previous period"
+          onClick={() => go(shiftPeriod(shownSpec, -1))}
+          disabled={shownSpec.kind === "all"}
         >
           <ChevronLeft size={16} />
-        </button>
+        </IconButton>
         <span className="tnum min-w-36 text-center text-sm font-semibold text-ink">{resolved.label}</span>
-        <button
-          type="button"
-          onClick={() => go(shiftPeriod(spec, 1))}
-          disabled={spec.kind === "all"}
-          aria-label="Next period"
-          className="grid h-8 w-8 place-items-center rounded-field border border-line text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+        <IconButton
+          size="sm"
+          label="Next period"
+          onClick={() => go(shiftPeriod(shownSpec, 1))}
+          disabled={shownSpec.kind === "all"}
         >
           <ChevronRight size={16} />
-        </button>
+        </IconButton>
         {/* Only offered when it would DO something — a live "Today" that is already today is a
             control that teaches people the page ignores them. */}
-        {!atNow && spec.kind !== "all" && (
-          <button
-            type="button"
-            onClick={() => go({ kind: spec.kind, anchor: "" })}
-            className="rounded-field border border-line px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-          >
+        {!atNow && shownSpec.kind !== "all" && (
+          <Btn size="sm" variant="ghost" onClick={() => go({ kind: shownSpec.kind, anchor: "" })}>
             Now
-          </button>
+          </Btn>
         )}
       </div>
 

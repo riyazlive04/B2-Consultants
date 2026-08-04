@@ -254,14 +254,31 @@ export function SegmentedControl<T extends string>({
   options,
   ariaLabel,
   grow = false,
+  size = "md",
 }: {
   value: T;
   onChange: (v: T) => void;
-  options: ReadonlyArray<{ value: T; label: string; disabled?: boolean; title?: string }>;
+  options: ReadonlyArray<{
+    value: T;
+    label: string;
+    disabled?: boolean;
+    title?: string;
+    /** Leading glyph. The segment keeps its width, so an icon never makes one wider than its neighbours. */
+    icon?: ReactNode;
+  }>;
   ariaLabel?: string;
-  /** stretch each segment to fill the row (the role preset row) */
+  /**
+   * Give every segment the SAME width instead of sizing each to its own label.
+   *
+   * Without this a row reading "Week · Month · Quarter · Year · All" renders five different
+   * widths, which reads as five unrelated buttons rather than one control with five positions —
+   * and the eye lands on "Quarter" simply because it is the widest word.
+   */
   grow?: boolean;
+  /** `sm` (36px) for a filter/header strip; `md` (40px, the §7 hit-target floor) elsewhere. */
+  size?: "sm" | "md";
 }) {
+  const sm = size === "sm";
   return (
     <div role="group" aria-label={ariaLabel} className="flex flex-wrap gap-2">
       {options.map((o) => {
@@ -274,14 +291,15 @@ export function SegmentedControl<T extends string>({
             title={o.title}
             aria-pressed={active}
             onClick={() => onChange(o.value)}
-            className={`h-10 rounded-field border px-3 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              grow ? "min-w-28 flex-1" : ""
-            } ${
+            className={`inline-flex items-center justify-center gap-1.5 rounded-field border font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              sm ? "h-9 px-2.5 text-xs" : "h-10 px-3 text-sm"
+            } ${grow ? (sm ? "min-w-20 flex-1" : "min-w-28 flex-1") : ""} ${
               active
                 ? "border-primary bg-primary-soft text-primary-strong"
                 : "border-line bg-surface text-ink-2 hover:bg-surface-2"
             }`}
           >
+            {o.icon}
             {o.label}
           </button>
         );

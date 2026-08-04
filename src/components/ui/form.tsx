@@ -159,8 +159,12 @@ export function Select(
 }
 
 /** §5.5: the box is a styled span; the real input stays `sr-only` so it keeps focus + the tab order. */
-export function CheckboxField({ name, label, defaultChecked, hint }: {
+export function CheckboxField({ name, label, defaultChecked, hint, value, required }: {
   name: string; label: string; defaultChecked?: boolean; hint?: string;
+  /** Submitted instead of "on" when ticked — for consent, where the *wording agreed to* is
+   *  the record, not the fact that a box was ticked. */
+  value?: string;
+  required?: boolean;
 }) {
   return (
     // min-h-10: the whole row is the hit target (§7), not just the 20px box.
@@ -168,7 +172,14 @@ export function CheckboxField({ name, label, defaultChecked, hint }: {
     // without a positioned ancestor it sits at its static position in the PAGE's coordinate space,
     // escapes every clip, and adds its offset to the document's scroll width.
     <label className="group relative flex min-h-10 cursor-pointer items-start gap-2.5 py-2 text-sm font-medium">
-      <input type="checkbox" name={name} defaultChecked={defaultChecked} className="peer sr-only" />
+      <input
+        type="checkbox"
+        name={name}
+        value={value}
+        required={required}
+        defaultChecked={defaultChecked}
+        className="peer sr-only"
+      />
       {/* the tick is a descendant, so it's reached with a child selector, not `peer-checked:` */}
       <span
         aria-hidden

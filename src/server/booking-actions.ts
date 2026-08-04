@@ -116,7 +116,14 @@ function clean(v: string | undefined): string | null {
   return v && v.trim() ? v.trim() : null;
 }
 
-export async function submitBooking(form: FormData): Promise<ActionResult> {
+/**
+ * `declined` marks the auto-disqualify path: the intake was stored, but NO slot was claimed.
+ * The prospect-facing page needs to know, because "we saved your answers" and "you have a call
+ * on Wednesday" are different sentences and only one of them is true here.
+ */
+export type BookingSubmitResult = { ok: true; declined?: boolean } | { ok: false; error: string };
+
+export async function submitBooking(form: FormData): Promise<BookingSubmitResult> {
   // Public endpoint, and the most expensive one here: a submission consumes a finite calendar
   // slot AND fires a WATI confirmation. Two dimensions, charged atomically:
   //
@@ -295,7 +302,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
 
     revalidatePath("/bookings");
     revalidatePath("/book");
-    return { ok: true };
+    return { ok: true, declined: true };
   }
 
   // ── Qualified / doubt / confirm — book the slot ───────────────────────────────

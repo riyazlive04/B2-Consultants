@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CalendarCheck, CalendarDays, CheckCircle2, Clock } from "lucide-react";
+import { ArrowLeft, CalendarCheck, CalendarDays, CheckCircle2, Clock, MailCheck } from "lucide-react";
 import { submitBooking } from "@/server/booking-actions";
-import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { BrandLogo } from "@/components/shell/BrandLogo";
+import { Btn } from "@/components/ui/controls";
+import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { PhoneField } from "@/components/ui/PhoneField";
 import { INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { CONSENT_LABEL, CONSENT_VALUE } from "@/lib/consent";
@@ -61,7 +63,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState<"fwd" | "back">("fwd");
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<SlotOption | null>(null);
+  const [done, setDone] = useState<{ slot: SlotOption | null; declined: boolean } | null>(null);
   const utmRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
@@ -169,17 +171,22 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
     if (!slotId) return setError("Please choose an available time for your call.");
     const res = await submitBooking(form);
     if (!res.ok) return setError(res.error);
-    setDone(chosen);
+    setDone({ slot: chosen, declined: !!res.declined });
   };
 
   /** The standing left-hand card: who the call is with, how long, and when — once known. */
   const asideCard = (
     <aside className="border-b border-line bg-surface-2 p-6 sm:p-8 md:w-80 md:flex-none md:border-b-0 md:border-r">
-      <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary font-display text-base font-bold text-on-accent shadow-soft">
-        B2
-      </span>
+      {/* The real mark plus an HTML wordmark — the lockup every other B2 entry page uses (login,
+          reset, change-password), not a blue square with "B2" typed into it. The SVG's own "full"
+          variant is not used here: its strapline is 10 units in a 100-unit box, so at this size it
+          would render at ~6px, under the §7 text floor. */}
+      <div className="flex items-center gap-2.5">
+        <BrandLogo className="h-11 w-11 flex-none" />
+        <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
+      </div>
       <p className="mt-5 text-caption font-semibold uppercase tracking-wide text-ink-3">Discovery</p>
-      <h1 className="mt-1 font-display text-xl font-bold tracking-tight text-ink sm:text-2xl">
+      <h1 className="mt-1 font-display text-h2 tracking-tight text-ink sm:text-h1">
         Personalized Discovery Call{hostName ? ` with ${hostName}` : ""}
       </h1>
       <dl className="mt-4 space-y-2 text-sm text-ink-2">
@@ -187,7 +194,9 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
           <Clock size={16} aria-hidden className="flex-none text-ink-3" />
           <dd>{durationMins} min</dd>
         </div>
-        {chosenLabel && (
+        {/* Dropped once a submission is declined: no slot was claimed, so a time here would be
+            the same lie the confirmation panel is careful not to tell. */}
+        {chosenLabel && !done?.declined && (
           <div className="flex items-start gap-2">
             <CalendarDays size={16} aria-hidden className="mt-0.5 flex-none text-ink-3" />
             <dd className="font-semibold text-ink">{chosenLabel}</dd>
@@ -209,16 +218,32 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
   );
 
   if (done) {
+    // The auto-disqualify path stores the intake but claims NO slot, so this screen must not
+    // read back a time. Saying "you're booked" there sends someone to a call that isn't in
+    // anyone's diary — and the slot they think they hold is still open to the next visitor.
+    if (done.declined || !done.slot) {
+      return shell(
+        <div className="py-6 text-center">
+          <MailCheck className="mx-auto text-primary" size={40} />
+          <h2 className="mt-3 font-display text-h2">Thanks — we have your answers</h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
+            A call hasn&apos;t been scheduled. Our team will go through what you&apos;ve shared and
+            email you about the best next step.
+          </p>
+        </div>,
+      );
+    }
+    const slot = done.slot;
     return shell(
       <div className="py-6 text-center">
         <CheckCircle2 className="mx-auto text-ok" size={40} />
-        <h2 className="mt-3 font-display text-xl font-semibold">You&apos;re booked in 🎉</h2>
+        <h2 className="mt-3 font-display text-h2">You&apos;re booked in 🎉</h2>
         <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
-          Your {slotTypeLabel(done.durationMins).toLowerCase()} is confirmed for{" "}
-          <strong className="text-ink">{done.day}</strong> at{" "}
-          <strong className="text-ink">{done.time} IST</strong> ({done.cet} CET)
-          {showLocalTz && localTime(done) && (
-            <> · <strong className="text-ink">{localTime(done)}</strong> ({tz})</>
+          Your {slotTypeLabel(slot.durationMins).toLowerCase()} is confirmed for{" "}
+          <strong className="text-ink">{slot.day}</strong> at{" "}
+          <strong className="text-ink">{slot.time} IST</strong> ({slot.cet} CET)
+          {showLocalTz && localTime(slot) && (
+            <> · <strong className="text-ink">{localTime(slot)}</strong> ({tz})</>
           )}
           . Our team will be in touch with the joining details.
         </p>
@@ -257,7 +282,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
       {/* ── Step header ── */}
       <div className="mb-5">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="font-display text-base font-semibold text-ink">{STEPS[step].title}</h2>
+          <h2 className="font-display text-h3 text-ink">{STEPS[step].title}</h2>
           <span className="flex-none text-caption text-ink-3 tnum">
             Step {step + 1} of {STEPS.length}
           </span>
@@ -291,7 +316,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
             <Select name="howKnowUs" options={withPlaceholder(INTAKE_OPTIONS.howKnowUs, "Select…")} defaultValue="" />
           </Field>
         </div>
-        <p className="mt-3 text-xs text-muted">
+        <p className="mt-3 text-caption text-muted">
           By sharing your number you agree to receive your booking confirmation and call reminders on WhatsApp.
           Reply <strong>STOP</strong> anytime to opt out.
         </p>
@@ -365,16 +390,9 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
           refuses unconsented submissions regardless, since a client-side attribute is not a
           compliance control.
         */}
-        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-field border border-line bg-surface-2 p-4 text-sm">
-          <input
-            type="checkbox"
-            name="consent"
-            value={CONSENT_VALUE}
-            required
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]"
-          />
-          <span className="text-muted">{CONSENT_LABEL}</span>
-        </label>
+        <div className="mt-4 rounded-field border border-line bg-surface-2 px-4 py-1">
+          <CheckboxField name="consent" value={CONSENT_VALUE} required label={CONSENT_LABEL} />
+        </div>
       </div>
 
       {/* honeypot - hidden from real users; bots fill it and get silently dropped */}
@@ -391,13 +409,9 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
       {/* ── Wizard controls ── */}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
         {step > 0 ? (
-          <button
-            type="button"
-            onClick={goBack}
-            className="inline-flex h-11 items-center gap-1.5 rounded-btn border border-line px-4 text-sm font-semibold text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
-          >
-            <ArrowLeft size={16} /> Back
-          </button>
+          <Btn variant="ghost" onClick={goBack} icon={<ArrowLeft size={16} />}>
+            Back
+          </Btn>
         ) : (
           <span />
         )}
@@ -407,14 +421,9 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
           {isLast ? (
             <SubmitButton>Confirm my call</SubmitButton>
           ) : (
-            <button
-              type="button"
-              onClick={goNext}
-              disabled={step === 0 && !slotId}
-              className="press inline-flex h-11 items-center justify-center rounded-btn bg-primary px-6 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong disabled:bg-surface-2 disabled:text-ink-disabled"
-            >
+            <Btn variant="primary" onClick={goNext} disabled={step === 0 && !slotId} className="px-6">
               Next
-            </button>
+            </Btn>
           )}
         </div>
       </div>

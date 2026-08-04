@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Globe } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Btn } from "@/components/ui/controls";
+import { Field, Select } from "@/components/ui/form";
 import type { SlotOption } from "./BookingForm";
 
 /**
@@ -13,6 +15,14 @@ import type { SlotOption } from "./BookingForm";
  * is ~90 buttons in one column, and a prospect scrolls past most of the month to find a Thursday.
  * A month grid answers "which days can I even come?" in one glance, then shows only that day's
  * times — the shape everyone already knows from Calendly.
+ *
+ * ── Why it looks like the rest of the app ───────────────────────────────────────
+ * The grid deliberately copies `ui/DatePicker`'s calendar: Monday-first, `Mo Tu We…` headers,
+ * `rounded-btn` day cells, primary fill for the selection and a `--primary-tint` ring for today.
+ * This is the only calendar a prospect ever sees, but it is not the only calendar the *product*
+ * has, and a second dialect of "what a chosen day looks like" is how a design system rots. The
+ * cells are simply bigger here (40px, the §7 hit-target floor) because this one is thumbed on a
+ * phone rather than clicked in a popover.
  *
  * ── The timezone is the load-bearing part ───────────────────────────────────────
  * Slots are stored as UTC instants; IST and CET were previously baked into the markup on the
@@ -32,7 +42,8 @@ const COMMON_ZONES = [
   "America/New_York",
 ];
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** Monday-first, and the same two-letter headers the app's own DatePicker uses. */
+const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
 /** "GMT+5:30" for a zone, read out of Intl rather than kept in a table that drifts with DST. */
 function offsetLabel(tz: string, at = new Date()): string {
@@ -115,7 +126,7 @@ export function SlotCalendar({
     const [y, m] = activeMonth.split("-").map(Number);
     const first = new Date(Date.UTC(y, m - 1, 1));
     const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    const lead = first.getUTCDay();
+    const lead = (first.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
     const cells: (string | null)[] = Array.from({ length: lead }, () => null);
     for (let d = 1; d <= daysInMonth; d++) {
       cells.push(`${activeMonth}-${String(d).padStart(2, "0")}`);
@@ -139,17 +150,20 @@ export function SlotCalendar({
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-[minmax(0,1fr)_180px]">
       {/* ── Month grid ── (the heading lives in the wizard's step header, not here) */}
       <div>
-        <div className="flex items-center justify-center gap-4">
+        {/* Chevrons at the edges of a justify-between header, ghost-styled — DatePicker's
+            arrangement, not a centred pair with one of them filled. A filled control here would
+            read as the primary action on a step whose primary action is picking a day. */}
+        <div className="flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={() => shiftMonth(-1)}
             disabled={!canPrev}
             aria-label="Previous month"
-            className="grid h-9 w-9 place-items-center rounded-full text-ink-2 transition-colors hover:bg-surface-2 disabled:opacity-30 disabled:hover:bg-transparent"
+            className="grid h-9 w-9 place-items-center rounded-btn text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink disabled:text-ink-disabled disabled:hover:bg-transparent"
           >
             <ChevronLeft size={18} />
           </button>
-          <p aria-live="polite" className="min-w-40 text-center text-sm font-semibold text-ink">
+          <p aria-live="polite" className="text-center text-sm font-semibold text-ink">
             {grid.title}
           </p>
           <button
@@ -157,15 +171,15 @@ export function SlotCalendar({
             onClick={() => shiftMonth(1)}
             disabled={!canNext}
             aria-label="Next month"
-            className="grid h-9 w-9 place-items-center rounded-full bg-primary-soft text-primary-strong transition-colors hover:bg-primary-tint disabled:bg-transparent disabled:text-ink-2 disabled:opacity-30"
+            className="grid h-9 w-9 place-items-center rounded-btn text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink disabled:text-ink-disabled disabled:hover:bg-transparent"
           >
             <ChevronRight size={18} />
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-7 gap-y-1 text-center">
+        <div className="mt-3 grid grid-cols-7 gap-1 text-center">
           {WEEKDAYS.map((d) => (
-            <div key={d} className="pb-2 text-caption font-semibold text-ink-3">
+            <div key={d} className="grid h-7 place-items-center text-caption font-medium text-muted">
               {d}
             </div>
           ))}
@@ -176,54 +190,43 @@ export function SlotCalendar({
             const isSelected = key === activeDate;
             const isToday = key === todayKey;
             return (
-              <div key={key} className="flex flex-col items-center py-0.5">
-                <button
-                  type="button"
-                  disabled={!has}
-                  onClick={() => setSelectedDate(key)}
-                  aria-pressed={isSelected}
-                  aria-label={`${dayNum} ${grid.title}${has ? `, ${byDate.get(key)!.length} times available` : ", no times"}`}
-                  className={`grid h-10 w-10 place-items-center rounded-full text-sm transition-colors ${
-                    isSelected
-                      ? "bg-primary font-semibold text-on-accent"
-                      : has
-                        ? "bg-primary-soft font-semibold text-primary-strong hover:bg-primary-tint"
-                        : "text-ink-3"
-                  }`}
-                >
-                  {dayNum}
-                </button>
-                {/* The today marker, as a dot under the number — it must not compete with the
-                    selected-day fill, which carries the more important state. */}
-                <span
-                  aria-hidden
-                  className={`mt-0.5 h-1 w-1 rounded-full ${isToday ? "bg-primary" : "bg-transparent"}`}
-                />
-              </div>
+              <button
+                key={key}
+                type="button"
+                disabled={!has}
+                onClick={() => setSelectedDate(key)}
+                aria-pressed={isSelected}
+                aria-current={isToday ? "date" : undefined}
+                aria-label={`${dayNum} ${grid.title}${has ? `, ${byDate.get(key)!.length} times available` : ", no times"}`}
+                className={[
+                  "grid h-10 w-10 place-items-center justify-self-center rounded-btn text-sm tnum transition-colors",
+                  isSelected
+                    ? "bg-primary font-semibold text-on-accent hover:bg-primary-strong"
+                    : has
+                      ? "bg-primary-soft font-semibold text-primary-strong hover:bg-primary-tint"
+                      : "cursor-not-allowed text-ink-disabled",
+                  // Today reads as a ring, exactly as it does in DatePicker — a marker that
+                  // survives being drawn under any of the three fills above.
+                  isToday && !isSelected ? "ring-1 ring-inset ring-primary-tint" : "",
+                ].join(" ")}
+              >
+                {dayNum}
+              </button>
             );
           })}
         </div>
 
-        <div className="mt-5">
-          <p className="mb-1.5 text-caption font-semibold text-ink-3">Time zone</p>
-          <span className="relative block max-w-xs">
-            <Globe size={15} aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
-            {/* A native select on purpose: this is a stranger's unknown device on the one page
-                where a broken control costs a booking. */}
-            <select
+        {/* The app's own select, not a bare one: every other field in this form is a SelectMenu,
+            and one native dropdown among them is the loudest "unfinished" tell there is. */}
+        <div className="mt-5 max-w-xs">
+          <Field label="Time zone">
+            <Select
+              options={zones.map((z) => ({ value: z, label: `${z.replace(/_/g, " ")} (${offsetLabel(z)})` }))}
               value={tz}
               onChange={(e) => onTzChange(e.target.value)}
               aria-label="Time zone"
-              className="h-11 w-full cursor-pointer appearance-none rounded-field border border-line bg-surface pl-9 pr-9 text-sm text-ink outline-none focus:border-primary"
-            >
-              {zones.map((z) => (
-                <option key={z} value={z}>
-                  {z.replace(/_/g, " ")} ({offsetLabel(z)})
-                </option>
-              ))}
-            </select>
-            <ChevronRight size={15} aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-ink-3" />
-          </span>
+            />
+          </Field>
         </div>
       </div>
 
@@ -237,24 +240,19 @@ export function SlotCalendar({
             : "Times"}
         </p>
         <div className="mt-3 flex max-h-[26rem] flex-col gap-2.5 overflow-y-auto pr-1 sm:mt-0">
-          {dayTimes.map((s) => {
-            const active = s.id === selectedId;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => onSelect(s.id)}
-                aria-pressed={active}
-                className={`h-11 flex-none rounded-field border text-sm font-semibold transition-colors ${
-                  active
-                    ? "border-primary bg-primary text-on-accent"
-                    : "border-primary-tint bg-surface text-primary-strong hover:border-primary hover:bg-primary-soft"
-                }`}
-              >
-                {timeIn(tz, s.startsAtIso)}
-              </button>
-            );
-          })}
+          {/* The kit's own button: `outline` unpicked, `primary` picked — the same pair the app
+              uses everywhere else for "one of these, and you've chosen this one". */}
+          {dayTimes.map((s) => (
+            <Btn
+              key={s.id}
+              variant={s.id === selectedId ? "primary" : "outline"}
+              pressed={s.id === selectedId}
+              onClick={() => onSelect(s.id)}
+              className="w-full tnum"
+            >
+              {timeIn(tz, s.startsAtIso)}
+            </Btn>
+          ))}
           {dayTimes.length === 0 && (
             <p className="text-caption text-muted">No times on this day — pick another highlighted date.</p>
           )}

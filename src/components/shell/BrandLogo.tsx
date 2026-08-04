@@ -7,7 +7,9 @@
  *  - "mark" (default): the framed B² badge — used everywhere a small square
  *    brand badge sits next to the "B2 Consultants" wordmark.
  *  - "full": the complete lockup with "CONSULTANTS" under the B² — used as a
- *    standalone brand where no wordmark follows it.
+ *    standalone brand where no wordmark follows it. Needs room: the strapline is
+ *    10 units against a 100-unit box, so it renders below the §7 12px text floor
+ *    at anything under ~120px. Smaller than that, use "mark" + an HTML wordmark.
  */
 export function BrandLogo({
   variant = "mark",

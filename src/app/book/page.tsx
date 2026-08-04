@@ -61,7 +61,7 @@ export default async function BookPage() {
     // panel, where it stays beside the calendar instead of scrolling away above it.
     <main className="min-h-screen bg-canvas px-4 py-10 sm:py-14">
       <BookingForm slots={slotOptions} hostName={hostName} />
-      <p className="mx-auto mt-6 max-w-5xl text-center text-xs text-muted">
+      <p className="mx-auto mt-6 max-w-5xl text-center text-caption text-muted">
         Your details are private and used only to prepare for your call.
       </p>
     </main>

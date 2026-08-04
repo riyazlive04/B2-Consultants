@@ -52,6 +52,7 @@ export function Btn({
   busy,
   title,
   icon,
+  pressed,
   className = "",
 }: {
   children?: ReactNode;
@@ -63,6 +64,9 @@ export function Btn({
   busy?: boolean;
   title?: string;
   icon?: ReactNode;
+  /** Set when the button is one of a set and holds an on/off state (a picked time slot,
+   *  a filter). Without it a fill is the only cue, which a screen reader never sees. */
+  pressed?: boolean;
   className?: string;
 }) {
   return (
@@ -71,6 +75,7 @@ export function Btn({
       onClick={onClick}
       disabled={disabled || busy}
       title={title}
+      aria-pressed={pressed}
       className={`press inline-flex flex-none items-center justify-center gap-2 rounded-btn font-semibold transition-colors disabled:cursor-not-allowed disabled:border-transparent disabled:bg-surface-2 disabled:text-ink-disabled ${VARIANT[variant]} ${SIZE[size]} ${className}`}
     >
       {busy ? <Loader2 size={15} className="animate-spin" /> : icon}

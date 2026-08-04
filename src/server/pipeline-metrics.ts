@@ -255,10 +255,20 @@ export async function getPipelineOverview(
    */
   const ts = { start: istBoundaryToInstant(mStart), end: istBoundaryToInstant(mEnd) };
 
-  // PRD §2: a User sees only their own data. Admin sees everything. Scope every
-  // dashboard number (and the priority lists below) to the viewer's own leads /
-  // outcomes for non-admins, so no team member's leads leak through the metrics.
-  const ownScope: Prisma.LeadWhereInput | undefined = isAdmin ? undefined : { enteredById: viewerId };
+  /**
+   * PRD §2: a User sees only their own data. Admin sees everything. Scope every dashboard number
+   * (and the priority lists below) to the viewer's own leads, so no team member's leads leak
+   * through the metrics.
+   *
+   * "Own" is `assignedToId` OR `enteredById`, for the reason spelled out at `leadWhere` further
+   * down: `enteredById` alone is only ever set by the hand-entry form, so on live it identifies
+   * 1 lead out of 23,551 and every automated capture is invisible under it. Scoping the KPIs
+   * that way made a telecaller's whole Pipeline read zero — leads this week, leads this month,
+   * pipeline value, the call-first list, all of it — while they owned a hundred live leads.
+   */
+  const ownScope: Prisma.LeadWhereInput | undefined = isAdmin
+    ? undefined
+    : { OR: [{ enteredById: viewerId }, { assignedToId: viewerId }] };
   const ownLeadWhere = ownScope ?? {};
   const ownOutcomeWhere = isAdmin ? {} : { enteredById: viewerId };
 
@@ -432,8 +442,30 @@ export async function getPipelineOverview(
   const callFirst = [...scored].filter((s) => !s.risk).sort((a, b) => b.score - a.score).slice(0, 5);
   const riskDeals = scored.filter((s) => s.risk).sort((a, b) => b.idleDays - a.idleDays).slice(0, 8);
 
-  // Tables - Admin sees all; Users see only their own entries (CONTEXT §2)
-  const leadWhere = isAdmin ? {} : { enteredById: viewerId };
+  /**
+   * Tables — Admin sees all; a member sees the leads that are THEIRS.
+   *
+   * ── Why this is an OR and not `enteredById` alone ────────────────────────────
+   * "Theirs" was read as `enteredById` — the user who typed the lead in by hand. That field is
+   * only ever set when a human uses the New-lead form. Every lead that arrives through the Pabbly
+   * relay, the Meta webhook, a native form or the Synamate import is created with no session, so
+   * `enteredById` is NULL: on live it is set on 1 lead out of 23,551.
+   *
+   * The result was a Pipeline that showed a telecaller ZERO leads while they owned a hundred —
+   * "0 records / No records yet" on a table sitting on top of 15,457 open leads. Nothing was
+   * missing and nothing had failed; the one column the filter used is the one column automated
+   * capture cannot fill.
+   *
+   * Ownership is `assignedToId`. It is what the auto-assign rotation writes, what My Desk reads,
+   * and what commission is paid on. `enteredById` is kept in the OR so someone who hand-enters a
+   * lead still sees it before the rotation gets to it — which is exactly the rule the outcome
+   * form's own lead picker, twenty lines below, has always used. The two disagreed inside a
+   * single function.
+   */
+  const leadWhere = isAdmin ? {} : { OR: [{ enteredById: viewerId }, { assignedToId: viewerId }] };
+  // Outcomes stay on `enteredById`: a discovery outcome is a record of a call SOMEONE LOGGED, and
+  // there the field is genuinely populated — it is written by a signed-in specialist, never by a
+  // webhook. Same-looking rule, different question, so it deliberately does not change.
   const outcomeWhere = isAdmin ? {} : { enteredById: viewerId };
   const [leads, outcomes, leadOptions, assigneeRows] = await Promise.all([
     prisma.lead.findMany({

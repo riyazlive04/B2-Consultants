@@ -28,8 +28,24 @@ export default async function BookPage() {
   const slots = await prisma.appointmentSlot.findMany({
     where: { status: "OPEN", startsAt: { gt: earliest, lte: latest } },
     orderBy: { startsAt: "asc" },
-    take: 80,
+    // A three-week horizon of half-hourly slots is ~90 rows; the calendar groups them by day, so
+    // the cap has to clear a full horizon or the last days would silently show as unavailable.
+    take: 400,
+    include: { assignedTo: { select: { name: true } } },
   });
+
+  /**
+   * Whose diary this is, for "…with Asma" in the header.
+   *
+   * The most common owner across the open slots rather than the first: one covered slot handed to
+   * someone else should not rename the whole page.
+   */
+  const hostTally = new Map<string, number>();
+  for (const s of slots) {
+    const n = s.assignedTo?.name;
+    if (n) hostTally.set(n, (hostTally.get(n) ?? 0) + 1);
+  }
+  const hostName = [...hostTally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
   const slotOptions: SlotOption[] = slots.map((s) => ({
     id: s.id,
@@ -41,28 +57,13 @@ export default async function BookPage() {
   }));
 
   return (
+    // The header that used to sit here — mark, title, blurb — is now the scheduler's own left
+    // panel, where it stays beside the calendar instead of scrolling away above it.
     <main className="min-h-screen bg-canvas px-4 py-10 sm:py-14">
-      <div className="mx-auto w-full max-w-2xl">
-        <header className="mb-8 text-center">
-          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary font-display text-base font-bold text-on-accent shadow-soft">
-            B2
-          </span>
-          <h1 className="mt-4 font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">
-            Book your Germany Career Call
-          </h1>
-          <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-            A free 30-minute discovery call with our team. Tell us a little about your
-            background so we can make the call count - and see if you qualify for our
-            Germany job-placement programs.
-          </p>
-        </header>
-
-        <BookingForm slots={slotOptions} />
-
-        <p className="mt-6 text-center text-xs text-muted">
-          Your details are private and used only to prepare for your call.
-        </p>
-      </div>
+      <BookingForm slots={slotOptions} hostName={hostName} />
+      <p className="mx-auto mt-6 max-w-5xl text-center text-xs text-muted">
+        Your details are private and used only to prepare for your call.
+      </p>
     </main>
   );
 }

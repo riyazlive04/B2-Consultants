@@ -623,6 +623,25 @@ tbody tr:hover {
   animation: panel-in var(--dur-base) var(--ease-out) backwards;
 }
 
+/* ── Booking wizard steps (app/book) ──
+   The steps stay MOUNTED and are hidden with `display:none`, because a hidden input still
+   posts its value while an unmounted one loses whatever was typed into it. That is also what
+   makes these entrances work without a React `key`: an animation does not run on a
+   `display:none` element, so it starts fresh each time a step is revealed.
+
+   Direction-aware on purpose — travelling back should not look identical to travelling
+   forward, or the wizard gives no sense of where you are in it. */
+@keyframes step-in-fwd {
+  from { opacity: 0; transform: translateX(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes step-in-back {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: none; }
+}
+.step-in-fwd { animation: step-in-fwd var(--dur-base) var(--ease-out); }
+.step-in-back { animation: step-in-back var(--dur-base) var(--ease-out); }
+
 /* ── List rows ──
    A settings row is a control, so it may lift; §9's "don't animate like a landing
    page" is about DATA. The lift is the affordance: it says "this row is a thing
@@ -729,6 +748,7 @@ tbody tr:hover {
      still recolour and lift; only the travel and the entrances are removed. */
   .tab-indicator { transition: none; }
   .panel-in, .row-in { animation: none; animation-delay: 0ms; }
+  .step-in-fwd, .step-in-back { animation: none; }
   .row-lift { transition: none; }
   .row-lift:hover, .row-lift:focus-within { transform: none; }
   .press { transition: none; }

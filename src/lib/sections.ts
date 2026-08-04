@@ -48,6 +48,19 @@ type SectionCatalogueEntry = {
   readonly locked?: boolean;
   /** hidden in code: ships disabled by default (nav + route), but the console can still re-enable it */
   readonly hidden?: boolean;
+  /**
+   * OFF THE RAIL, STILL OPEN.
+   *
+   * Distinct from `hidden`, and the distinction matters: `hidden` sets `enabled: false`, which
+   * makes `requireSection` REFUSE the route — a screen nobody can reach. This one only drops the
+   * item from the sidebar. The page still loads, still checks the same role list, and is still
+   * linked from wherever it is surfaced.
+   *
+   * Used to shrink a nav group whose members are reachable somewhere better: Opportunities and
+   * Outreach are tabs on Pipeline, so putting them on the rail as well listed the same job three
+   * times. The founder can put either back with one toggle in Console → Sections.
+   */
+  readonly offRail?: boolean;
 };
 
 export const SECTION_CATALOGUE = [
@@ -70,18 +83,33 @@ export const SECTION_CATALOGUE = [
    * Student on Bookings, and Student on Invoices. `R`/`E`/`F` rows are granted outright; `O` rows
    * are granted only where the section itself is already self-scoped (My Desk, Daily Log).
    */
+  /**
+   * ── The Sales group is THREE entries, not five ──────────────────────────────────
+   * It held Pipeline · Contacts · Opportunities · Bookings · Outreach, two of which are the same
+   * board twice: `/pipeline` is a kanban of `Lead.stage` and `/opportunities` is a kanban of
+   * `Opportunity.stageId` mirrored back onto `Lead.stage`. A telecaller opening the rail saw
+   * five doors into what is, to them, one job.
+   *
+   * Opportunities and Outreach are now `offRail` — off the sidebar, still fully built and still
+   * reachable, because both are surfaced as TABS on Pipeline, which is where they belong:
+   * Outreach is the SOP queue for the pipeline, Opportunities is the same pipeline as a board.
+   * The founder can put either back on the rail from Console → Sections at any time.
+   *
+   * This is presentation only. Nothing is deleted, no route is removed, and no access changes —
+   * merging the two boards into one is a separate, larger piece of work.
+   */
   { key: "pipeline", label: "Pipeline", href: "/pipeline", phase: 1, icon: "git-branch", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // Synamate CRM parity (Phase 1): Contacts (the CRM) + Opportunities (the drag-drop board).
   // Grouped with Pipeline under Sales so the whole lead → contact → deal flow sits together.
   { key: "contacts", label: "Contacts", href: "/contacts", phase: 1, icon: "contact", group: "Sales", roles: ["ADMIN", "USER"] },
-  { key: "opportunities", label: "Opportunities", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
+  { key: "opportunities", label: "Opportunities", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "HEAD", "USER"], offRail: true },
   // §3: Head R · L1/L2/L3 E. Tutor and Student are `O` — their own calls surface on their own
   // screens, and this is the whole-team calendar, so they are not granted it.
   { key: "bookings", label: "Bookings", href: "/bookings", phase: 1, icon: "calendar-check", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // The Outreach Specialist SOP queue (Script_for_Outreach_Specialist.docx, Steps 1–23) + the
   // Key Metrics sheet it feeds. USER is in the default list because the outreach specialist IS a
   // USER — this is their day's work, not an admin report.
-  { key: "outreach", label: "Outreach", href: "/outreach", phase: 1, icon: "message-circle", group: "Sales", roles: ["ADMIN", "USER"] },
+  { key: "outreach", label: "Outreach", href: "/outreach", phase: 1, icon: "message-circle", group: "Sales", roles: ["ADMIN", "USER"], offRail: true },
   // Synamate Payments parity (Phase 3): invoices, estimates, products, subscriptions.
   { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"] },
   // Kept last in the Finance group on purpose: the default sidebar order follows this
@@ -170,6 +198,8 @@ export type ResolvedSection = SectionSetting & {
   href: string;
   phase: number;
   locked: boolean;
+  /** Enabled and reachable, but not listed in the sidebar. See `offRail` on the catalogue. */
+  offRail: boolean;
 };
 
 /**
@@ -183,6 +213,7 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
     // Only some catalogue entries carry `locked` / `hidden`, so the union type doesn't have the keys.
     const locked = "locked" in base && base.locked === true;
     const hiddenByCode = "hidden" in base && base.hidden === true;
+    const offRailByCode = "offRail" in base && base.offRail === true;
     return {
       key: base.key,
       href: base.href,
@@ -195,6 +226,9 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
       // A locked section is never off and never leaves ADMIN, whatever the JSON says.
       // A code-hidden section ships off by default, but an explicit config override still wins.
       enabled: locked ? true : (s?.enabled ?? !hiddenByCode),
+      // Nav-only. A founder who explicitly enables the section in Console puts it back on the
+      // rail too — an explicit "on" should mean what it says.
+      offRail: locked ? false : (s?.enabled === true ? false : offRailByCode),
       roles: locked ? ["ADMIN"] : (s?.roles ?? [...base.roles]),
     };
   }).sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));

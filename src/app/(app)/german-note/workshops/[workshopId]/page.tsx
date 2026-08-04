@@ -6,6 +6,7 @@ import { getGnWorkshopDetail, type GnCapacityRow, type SeatLevel } from "@/serve
 import { formatMonth } from "@/lib/format";
 import { AdSetsPanel } from "../../_components/AdSetsPanel";
 import { ConversionsPanel } from "../../_components/ConversionsPanel";
+import { PageHeader } from "@/components/ui/kit";
 import {
   DAY_TYPE_LABELS,
   inr,
@@ -28,20 +29,20 @@ export default async function WorkshopDetailPage({ params }: { params: { worksho
 
   return (
     <div className="w-full space-y-8">
+      <PageHeader
+        back={{ href: "/german-note", label: "German Note · Financials" }}
+        title={w.name}
+        titleSuffix={
+          <>
+            <span className="text-sm text-muted">{formatMonth(w.month)}</span>
+            {w.status === "ARCHIVED" && (
+              <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-caption font-semibold text-muted">Archived</span>
+            )}
+          </>
+        }
+        subtitle="Workshop taster intake — who converted, into which German level, and the money it made."
+      />
       <div>
-        <Link href="/german-note" className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
-          <ArrowLeft size={13} /> German Note · Financials
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-2.5">
-          <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">{w.name}</h1>
-          <span className="text-sm text-muted">{formatMonth(w.month)}</span>
-          {w.status === "ARCHIVED" && (
-            <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-caption font-semibold text-muted">Archived</span>
-          )}
-        </div>
-        <p className="mt-1 text-sm text-muted">
-          Workshop taster intake — who converted, into which German level, and the money it made.
-        </p>
         {w.notes && <p className="mt-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2">{w.notes}</p>}
       </div>
 

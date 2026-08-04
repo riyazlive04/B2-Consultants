@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Clock, Globe } from "lucide-react";
+import { dateIn, timeIn, useDualClock, ZONES, type Zone } from "@/lib/use-dual-clock";
 
 /**
  * Time-zone preference (profile). Two zones the business actually spans — India (IST) and
@@ -9,84 +9,14 @@ import { Clock, Globe } from "lucide-react";
  * time zone (Intl): open it in India and it lands on Indian time, open it in Germany and it
  * lands on German time. The choice is remembered in localStorage so a manual override sticks.
  *
- * Client-only + localStorage on purpose: this is a display preference, no server round-trip,
- * no schema change. The app's business logic stays IST-anchored (daily-log cutoff, the SOP
- * ladder); this card is the person's own clock.
+ * This is where the preference is CHANGED. The top bar's `NavClock` reads the same hook and
+ * updates the moment a choice is made here — they share `lib/use-dual-clock`, so the zones, the
+ * detection rule and the storage key cannot drift between the two surfaces.
+ *
+ * Seconds tick here (1s) and not in the nav (60s): this card is the one people watch.
  */
-
-type Zone = "IN" | "DE";
-
-const ZONES: Record<Zone, { label: string; tz: string; flag: string; note: string }> = {
-  IN: { label: "Indian time", tz: "Asia/Kolkata", flag: "🇮🇳", note: "IST · UTC+5:30" },
-  DE: { label: "German time", tz: "Europe/Berlin", flag: "🇩🇪", note: "CET/CEST · UTC+1/+2" },
-};
-
-const STORAGE_KEY = "b2_tz_pref";
-
-/** Guess the person's zone from the browser's own time zone. */
-function detectZone(): Zone {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    if (/kolkata|calcutta/i.test(tz)) return "IN";
-    if (/berlin/i.test(tz) || tz.startsWith("Europe/")) return "DE";
-  } catch {
-    /* ignore — fall through to the IST default */
-  }
-  return "IN"; // the app's home zone
-}
-
-function timeIn(tz: string, now: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(now);
-}
-
-function dateIn(tz: string, now: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-  }).format(now);
-}
-
 export function TimeZoneCard() {
-  const [zone, setZone] = useState<Zone>("IN");
-  const [detected, setDetected] = useState<Zone>("IN");
-  const [now, setNow] = useState<Date | null>(null);
-
-  // Resolve the preference on mount: a stored override wins; otherwise auto-detect.
-  useEffect(() => {
-    const d = detectZone();
-    setDetected(d);
-    let stored: string | null = null;
-    try {
-      stored = localStorage.getItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-    setZone(stored === "IN" || stored === "DE" ? (stored as Zone) : d);
-    setNow(new Date());
-  }, []);
-
-  // Tick the clocks once a second.
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const pick = (z: Zone) => {
-    setZone(z);
-    try {
-      localStorage.setItem(STORAGE_KEY, z);
-    } catch {
-      /* ignore */
-    }
-  };
+  const { zone, detected, now, pick } = useDualClock(1000);
 
   return (
     <div className="rounded-card border border-line bg-surface p-6 shadow-card">
@@ -96,7 +26,7 @@ export function TimeZoneCard() {
       <p className="mt-1 text-sm text-muted">
         Auto-selected from your location{" "}
         <span className="font-medium text-ink-2">({ZONES[detected].flag} {ZONES[detected].label})</span> —
-        switch it any time. Your choice is remembered on this device.
+        switch it any time. Your choice is remembered on this device and shows in the top bar.
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -129,7 +59,7 @@ export function TimeZoneCard() {
                 </span>
                 <span className="mt-1 flex items-baseline gap-2">
                   <span className="font-display text-2xl font-bold tabular-nums text-ink">
-                    {now ? timeIn(meta.tz, now) : "—"}
+                    {now ? timeIn(meta.tz, now, true) : "—"}
                   </span>
                 </span>
                 <span className="mt-0.5 block text-caption text-muted">

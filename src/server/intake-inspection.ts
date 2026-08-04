@@ -50,6 +50,17 @@ export type IntakeMappingReport = {
   unresolved: UnresolvedAnswer[];
   /** When the most recent inspected capture arrived, so a stale report is obvious. */
   lastCaptureAt: string | null;
+  /**
+   * Scoring COVERAGE over the last 7 days — every lead captured, not just the ones that left
+   * evidence behind.
+   *
+   * The rest of this report can only describe captures it has evidence for, which means the total
+   * failure — a landing page whose fields match nothing and which therefore produces no mapped
+   * answers at all — used to look identical to "no leads arrived". These two counts are read
+   * straight off the Lead table, so they are true even when `inspected` is 0. When `captured` is
+   * healthy and `scored` is 0, the mapping is broken, and the panel says so.
+   */
+  coverage7d: { captured: number; scored: number };
 };
 
 const SAMPLE_WINDOW = 200;
@@ -69,14 +80,31 @@ type Evidence = {
  * as broken by the deliveries that prompted the fix.
  */
 export const getIntakeMappingReport = cache(async (): Promise<IntakeMappingReport> => {
-  const rows = await prisma.lead.findMany({
-    // `Prisma.DbNull`, not `null`: on a Json column `{ not: null }` means "not the JSON value
-    // null", which is a different question from "the column is set" and would miss rows.
-    where: { ...ACTIVE, intakeAnswers: { not: Prisma.DbNull } },
-    select: { intakeAnswers: true, bantAvg: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
-    take: SAMPLE_WINDOW,
-  });
+  const since7d = new Date(Date.now() - 7 * 86_400_000);
+
+  const [rows, captured7d, scored7d] = await Promise.all([
+    prisma.lead.findMany({
+      // `Prisma.DbNull`, not `null`: on a Json column `{ not: null }` means "not the JSON value
+      // null", which is a different question from "the column is set" and would miss rows.
+      where: { ...ACTIVE, intakeAnswers: { not: Prisma.DbNull } },
+      select: { intakeAnswers: true, bantAvg: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: SAMPLE_WINDOW,
+    }),
+    // Only the sources that can CARRY answers. A manually-typed lead has no landing-page payload,
+    // so counting it as an unscored capture would report a permanent, unfixable shortfall.
+    prisma.lead.count({
+      where: { ...ACTIVE, createdAt: { gte: since7d }, source: { in: ["PABBLY", "META_LEAD_AD", "FLEXIFUNNELS", "NATIVE_FORM"] } },
+    }),
+    prisma.lead.count({
+      where: {
+        ...ACTIVE,
+        createdAt: { gte: since7d },
+        source: { in: ["PABBLY", "META_LEAD_AD", "FLEXIFUNNELS", "NATIVE_FORM"] },
+        bantScoredAt: { not: null },
+      },
+    }),
+  ]);
 
   const unmapped = new Map<string, { count: number; samples: string[] }>();
   const unresolved = new Map<string, { count: number; values: Set<string> }>();
@@ -116,5 +144,6 @@ export const getIntakeMappingReport = cache(async (): Promise<IntakeMappingRepor
       .map(([questionKey, v]) => ({ questionKey, count: v.count, values: [...v.values] }))
       .sort((a, b) => b.count - a.count),
     lastCaptureAt: rows[0]?.createdAt.toISOString() ?? null,
+    coverage7d: { captured: captured7d, scored: scored7d },
   };
 });

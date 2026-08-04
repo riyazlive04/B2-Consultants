@@ -4,10 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CalendarClock, CloudOff, CloudUpload, PhoneCall, Target, Timer } from "lucide-react";
-import { logCall } from "@/server/call-log-actions";
 import type { L1Desk as L1DeskData, L1QueueLead } from "@/server/l1-desk-metrics";
 import { syncLagLabel } from "@/lib/offline-calls";
-import { SETTER_NEXT_STAGES } from "@/lib/call-outcome";
 import {
   L1_TARGETS,
   QUEUE_BUCKETS,
@@ -26,6 +24,8 @@ import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS } from "@/lib/labels";
 import { NewLeadWatcher } from "./NewLeadWatcher";
 import { TargetAttainment } from "./TargetAttainment";
 import { useOfflineCalls } from "./useOfflineCalls";
+// Shared with L2Desk — see LogOutcomeModal.tsx for why it moved out of this file.
+import { LogOutcomeModal } from "./LogOutcomeModal";
 
 /**
  * Level 1 — Outreach Specialist desk (rebuild spec §6).
@@ -105,123 +105,6 @@ function DialLink({ phone, name }: { phone: string; name: string }) {
     >
       <PhoneCall size={14} /> Call
     </a>
-  );
-}
-
-/** The outcomes that close the lead by themselves — see `stageAfterCall`. */
-const AUTO_CLOSING = new Set(["NOT_INTERESTED", "WRONG_NUMBER"]);
-
-function LogOutcomeModal({
-  lead,
-  onClose,
-  queueCall,
-  online,
-}: {
-  lead: L1QueueLead;
-  onClose: () => void;
-  queueCall: (leadId: string, outcome: string, notes: string, nextStage?: string) => Promise<boolean>;
-  online: boolean;
-}) {
-  const [error, setError] = useState<string | null>(null);
-  // Mirrors the form's own default so the stage control's visibility tracks the select.
-  const [outcome, setOutcome] = useState("SPOKE");
-  const autoCloses = AUTO_CLOSING.has(outcome);
-  return (
-    <Modal open onClose={onClose} title={`Log outcome — ${lead.name}`} subtitle={lead.phone ?? undefined}>
-      <form
-        action={async (form) => {
-          setError(null);
-          const outcome = String(form.get("outcome") ?? "");
-          const notes = String(form.get("notes") ?? "");
-          // Read here rather than from component state: the offline branch below needs the
-          // same value the online branch posts, and the form is the single source of truth.
-          const nextStage = String(form.get("nextStage") ?? "");
-
-          /**
-           * The online action stays the primary path — it is the one that has been exercised,
-           * and it keeps working in browsers where IndexedDB is unavailable (private mode,
-           * some embedded webviews). The queue is the FALLBACK, entered either because the
-           * device already knows it is offline or because the call actually failed to travel.
-           *
-           * The catch matters more than the `navigator.onLine` check: a phone with one bar
-           * reports itself online and the request dies anyway, which is precisely the case
-           * this feature exists for.
-           */
-          const queueIt = async (reason: string) => {
-            const stored = await queueCall(lead.id, outcome, notes, nextStage);
-            if (!stored) {
-              return setError(
-                "No connection, and this device cannot store the call offline. Please note it down and log it when you are back online.",
-              );
-            }
-            toast(`Saved on this device — ${reason}. It will sync when you are back online.`);
-            onClose();
-          };
-
-          if (!online) return queueIt("you are offline");
-
-          try {
-            const res = await logCall(lead.id, form);
-            // A rejection from the server is a real answer (bad input, missing lead) — the
-            // request travelled, so queueing it would just fail again later.
-            if (!res.ok) return setError(res.error);
-            toast("Outcome logged");
-            onClose();
-          } catch {
-            await queueIt("the connection dropped");
-          }
-        }}
-        className="space-y-4"
-      >
-        <Field label="What happened?">
-          <Select
-            name="outcome"
-            options={OUTCOME_OPTIONS}
-            defaultValue="SPOKE"
-            onChange={(e) => setOutcome(e.currentTarget.value)}
-          />
-        </Field>
-
-        {/* ── Where the conversation left them ──────────────────────────────────────────
-            The JD scores this person on "pipeline updated before end of day: 100%", and until
-            now the only control that could move a card lived on the Pipeline screen — so the
-            desk measured something it did not let them do. This is that control, on the form
-            they are already filling in.
-
-            Hidden for the two outcomes that close the lead by themselves: offering a "next
-            stage" beside "Not interested" invites a contradiction the server would then have to
-            resolve silently. Its default is "leave as is", so the old behaviour is still one
-            submit away for anyone who does not want to decide yet. */}
-        {!autoCloses && (
-          <Field label="Where did that leave them? (optional)">
-            <Select
-              name="nextStage"
-              defaultValue=""
-              options={[
-                { value: "", label: "Leave the stage as it is" },
-                ...SETTER_NEXT_STAGES.map((s) => ({
-                  value: s,
-                  label: LEAD_STAGE_LABELS[s] ?? s,
-                })),
-              ]}
-            />
-          </Field>
-        )}
-
-        <Field label="Notes (optional)">
-          <TextInput kind="text" name="notes" maxLength={500} placeholder="What did they say?" />
-        </Field>
-        <p className="text-caption text-muted">
-          {autoCloses
-            ? "This closes the lead automatically — no stage to set."
-            : "Setting a stage here moves the card on the pipeline too, so you don't have to do it twice."}
-        </p>
-        <div className="flex items-center justify-between gap-3">
-          <FormError message={error} />
-          <span className="ml-auto"><SubmitButton>Log outcome</SubmitButton></span>
-        </div>
-      </form>
-    </Modal>
   );
 }
 

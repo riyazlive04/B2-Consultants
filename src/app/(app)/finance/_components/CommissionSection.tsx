@@ -56,10 +56,24 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
         r.payouts.length ? (
           <span className="flex flex-wrap gap-1">
             {r.payouts.map((p) => (
-              <span key={p.name} className="tnum whitespace-nowrap rounded-full bg-ok-soft px-2 py-0.5 text-caption font-semibold text-ok">
+              // An INELIGIBLE line is shown greyed with its reason, never dropped. Silently
+              // omitting someone leaves them nothing to query, and "why am I not on this deal"
+              // is exactly what this report exists to answer.
+              <span
+                key={p.name}
+                title={p.notEligible ?? undefined}
+                className={`tnum whitespace-nowrap rounded-full px-2 py-0.5 text-caption font-semibold ${
+                  p.notEligible ? "bg-surface-2 text-muted line-through" : "bg-ok-soft text-ok"
+                }`}
+              >
                 {p.name} {formatInrMinor(p.amountInrMinor, { compact: true })} ({p.pct}%)
               </span>
             ))}
+            {r.payouts.some((p) => p.notEligible) && (
+              <span className="text-caption text-muted">
+                {r.payouts.find((p) => p.notEligible)!.notEligible}
+              </span>
+            )}
           </span>
         ) : (
           <span className="text-xs text-muted">-</span>

@@ -139,6 +139,47 @@ export const CAPABILITIES = [
     actions: "qualification-actions (create, update → new version, reorder, retire)",
     roles: ["ADMIN"],
   },
+  /**
+   * ── WHO EARNS WHICH COMMISSION LEG ──────────────────────────────────────────────
+   * The three keys below are the exception to this file's "privileged writes" framing: they
+   * gate no action at all. They are ELIGIBILITY — read by `getCommissionReport` when it splits
+   * a payment across the deal team.
+   *
+   * Why a capability and not a new config shape: commission rates were global-only
+   * (`bothCallsPct` / `splitPct` / `closerPct` / `substitutePct`), so "Nilofer is first-call
+   * only" existed as an arrangement between people and nowhere in the system — it held only
+   * because she happened not to run discovery calls. The moment she covered one, the report paid
+   * her for it. Per-user overrides already exist (`User.capabilities`, edited from People →
+   * Users & access), so this expresses the rule in the mechanism the app already has rather than
+   * inventing a parallel one.
+   *
+   * DEFAULT: granted to ADMIN and USER, which reproduces today's behaviour exactly — everyone
+   * is eligible for everything until the founder says otherwise. Revoking is the deliberate act.
+   *
+   * An ineligible leg is SHOWN and marked "not eligible", never silently zeroed. An invisible
+   * deduction is how a payout dispute starts.
+   */
+  {
+    key: "commission.firstCall",
+    name: "Earns first-call commission",
+    description: "Eligible for the lead-call leg of a deal split",
+    actions: "commission-metrics (getCommissionReport) — eligibility only, gates no action",
+    roles: ["ADMIN", "USER"],
+  },
+  {
+    key: "commission.discovery",
+    name: "Earns discovery-call commission",
+    description: "Eligible for the discovery-call leg of a deal split",
+    actions: "commission-metrics (getCommissionReport) — eligibility only, gates no action",
+    roles: ["ADMIN", "USER"],
+  },
+  {
+    key: "commission.closer",
+    name: "Earns closer commission",
+    description: "Eligible for the closer's share when a deal is won",
+    actions: "commission-metrics (getCommissionReport) — eligibility only, gates no action",
+    roles: ["ADMIN", "USER"],
+  },
 ] as const satisfies readonly CapabilityDef[];
 
 export type CapabilityKey = (typeof CAPABILITIES)[number]["key"];

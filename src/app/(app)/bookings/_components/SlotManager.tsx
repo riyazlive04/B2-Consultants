@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Ban, LockOpen, Play, Trash2 } from "lucide-react";
+import { Ban, CalendarPlus, LockOpen, Play, Trash2 } from "lucide-react";
 import {
   generateSlots,
   deleteSlot,
@@ -10,6 +10,7 @@ import {
   runBookingAutomationNow,
 } from "@/server/booking-actions";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { Modal } from "@/components/ui/Modal";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { SLOT_DURATION_OPTIONS, SLOT_STATUS_LABELS, slotTypeLabel } from "@/lib/labels";
 import type { SlotRow, TeamMemberOption } from "@/server/booking-metrics";
@@ -123,11 +124,24 @@ export function SlotManager({
   slots,
   teamMembers,
   rules,
+  collapsible = false,
 }: {
   slots: SlotRow[];
   teamMembers: TeamMemberOption[];
   rules: BookingRulesConfig;
+  /**
+   * Render as a "Manage availability" button that opens this whole panel in a modal, instead of
+   * as a flat block.
+   *
+   * This screen is SETUP — generate slots for a date range, set the booking rules, prune the
+   * upcoming list. It was a peer tab next to "Bookings" and "SSS Calendar", which gave a thing
+   * opened once a quarter the same billing as the two views a specialist lives in, and made the
+   * page read as three interchangeable panels. Collapsed, it sits next to the week navigation:
+   * beside the calendar it fills, out of the way until wanted.
+   */
+  collapsible?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const today = toDateInputValue(new Date());
@@ -166,7 +180,7 @@ export function SlotManager({
     ...teamMembers.map((u) => ({ value: u.id, label: u.name })),
   ];
 
-  return (
+  const body = (
     <div className="space-y-4">
       <form
         ref={formRef}
@@ -265,5 +279,30 @@ export function SlotManager({
         )}
       </div>
     </div>
+  );
+
+  if (!collapsible) return body;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-8 items-center gap-1.5 rounded-field border border-line px-3 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+      >
+        <CalendarPlus size={14} /> Manage availability
+      </button>
+      {open && (
+        <Modal
+          open
+          onClose={() => setOpen(false)}
+          title="Manage availability"
+          subtitle="Generate discovery slots, set the booking rules, and prune what is coming up."
+          size="lg"
+        >
+          {body}
+        </Modal>
+      )}
+    </>
   );
 }

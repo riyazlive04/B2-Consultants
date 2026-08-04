@@ -9,6 +9,7 @@ import { parseMentions } from "@/lib/gn-mentions";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { emitTrigger } from "./automation";
 import { findDuplicateLead } from "./lead-intake";
+import { ensureDefaultOpportunity } from "./opportunity-sync";
 import { pickFirstCaller } from "./assignment";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
@@ -102,6 +103,9 @@ export async function createContact(form: FormData): Promise<ActionResult> {
     await tx.leadStageHistory.create({
       data: { leadId: lead.id, fromStage: null, toStage: "NEW_LEAD", changedById: session.user.id },
     });
+    // Onto the board, same as a captured lead. Which door someone came through must not decide
+    // whether the sales team can see them.
+    await ensureDefaultOpportunity(tx, lead.id);
     return lead.id;
   });
   await logActivity(session, {

@@ -12,6 +12,7 @@ import { TutorsPanel } from "../_components/TutorsPanel";
 import { PendingPoolPanel } from "../_components/PendingPoolPanel";
 import { BatchCostsPanel } from "../_components/BatchCostsPanel";
 import { LevelsPanel } from "../_components/LevelsPanel";
+import { PageHeader } from "@/components/ui/kit";
 
 export const dynamic = "force-dynamic";
 
@@ -30,15 +31,11 @@ export default async function GnManagePage() {
 
   return (
     <div className="w-full space-y-6">
-      <div>
-        <Link href="/german-note" className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
-          <ArrowLeft size={13} /> German Note
-        </Link>
-        <h1 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">Manage German Note</h1>
-        <p className="mt-1 text-sm text-muted">
-          Batches, who&apos;s in them, and tutor accounts. Tutors post recordings into their own batches.
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: "/german-note", label: "German Note" }}
+        title="Manage German Note"
+        subtitle="Batches, who's in them, and tutor accounts. Tutors post recordings into their own batches."
+      />
 
       {/* Workshops moved to /german-note → Financials, where the money they make
           already lives. One home per thing. */}

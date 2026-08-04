@@ -6,6 +6,7 @@ import { getAgreementCandidatesGrouped } from "@/server/agreement-state";
 import { getAgreementWorkflow } from "@/server/founder-config";
 import { AgreementClientPicker } from "../_components/AgreementClientPicker";
 import { AgreementForm } from "../_components/AgreementForm";
+import { PageHeader } from "@/components/ui/kit";
 
 export const dynamic = "force-dynamic";
 
@@ -30,15 +31,11 @@ export default async function NewAgreementPage({
 
   return (
     <div className="w-full space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/agreements" className="text-muted transition-colors hover:text-ink">
-          <ArrowLeft size={18} />
-        </Link>
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">New agreement</h1>
-          <p className="text-xs text-muted">Guided Mode — template guided-v3</p>
-        </div>
-      </div>
+      <PageHeader
+        back={{ href: "/agreements", label: "Agreements" }}
+        title="New agreement"
+        subtitle="Guided Mode — template guided-v3"
+      />
 
       {/* The picker stays visible after a pick, so switching client is one click — not a back-button
           hunt. It lists every live deal and every student, not just won leads: the founder decides

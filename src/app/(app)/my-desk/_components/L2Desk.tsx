@@ -22,6 +22,8 @@ import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/feedback";
 import { NewLeadWatcher } from "./NewLeadWatcher";
 import { TargetAttainment } from "./TargetAttainment";
+import { LogOutcomeModal } from "./LogOutcomeModal";
+import { useOfflineCalls } from "./useOfflineCalls";
 
 /**
  * Level 2 — Discovery Specialist desk (rebuild spec §7).
@@ -265,7 +267,7 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
   );
 }
 
-function LeadRow({ lead }: { lead: L2Lead }) {
+function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead) => void }) {
   return (
     <li className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
       <div className="min-w-0 flex-1">
@@ -281,7 +283,15 @@ function LeadRow({ lead }: { lead: L2Lead }) {
           {[lead.phone, lead.city].filter(Boolean).join(" · ") || "No phone on file"}
         </p>
       </div>
-      {lead.phone && <DialLink phone={lead.phone} name={lead.name} />}
+      {/* Two clearly distinct actions, matching L1's row exactly (Error Log L3): "Call" dials,
+          "Log outcome" records. This row used to offer only the dial link — so a discovery
+          specialist could ring one of her own leads and had nowhere to write down what happened.
+          Shown even without a phone number: a call can be returned on WhatsApp or the number can
+          be wrong, and "wrong number" is itself an outcome worth recording. */}
+      <div className="flex flex-none items-center gap-2">
+        {lead.phone && <DialLink phone={lead.phone} name={lead.name} />}
+        <Btn variant="soft" size="sm" onClick={() => onLog(lead)}>Log outcome</Btn>
+      </div>
     </li>
   );
 }
@@ -289,6 +299,15 @@ function LeadRow({ lead }: { lead: L2Lead }) {
 export function L2Desk({ desk }: { desk: L2DeskData }) {
   const router = useRouter();
   const [routing, setRouting] = useState<L2Call | null>(null);
+  /** A lead being logged against from "Your leads" — the chase form, not the routing form. */
+  const [logging, setLogging] = useState<L2Lead | null>(null);
+
+  /**
+   * The same offline queue L1 uses. A discovery specialist makes the same phone calls from the
+   * same phone in the same building; there was no reason her calls were the ones that had to be
+   * re-typed after a dead spot, beyond this desk never having had a logging form at all.
+   */
+  const { online, queueCall } = useOfflineCalls();
 
   const chase = desk.today.filter((c) => c.needsChase);
   const upcoming = desk.today.filter((c) => !c.recorded && !c.needsChase);
@@ -353,7 +372,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
           <Card>
             <ul className="-mx-4 -mb-2">
               {desk.myLeads.map((l) => (
-                <LeadRow key={l.id} lead={l} />
+                <LeadRow key={l.id} lead={l} onLog={setLogging} />
               ))}
             </ul>
           </Card>
@@ -376,6 +395,17 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
       </section>
 
       {routing && <RouteModal call={routing} onClose={() => setRouting(null)} />}
+      {logging && (
+        <LogOutcomeModal
+          lead={{ id: logging.id, name: logging.name, phone: logging.phone }}
+          online={online}
+          queueCall={queueCall}
+          onClose={() => {
+            setLogging(null);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

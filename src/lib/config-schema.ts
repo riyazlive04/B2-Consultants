@@ -624,12 +624,25 @@ export function coerceBookOrderConfig(value: unknown): BookOrderConfig {
  */
 export const pipelineConfigSchema = z.object({
   mode: z.enum(["rules", "drag_drop"]),
+  /**
+   * File every newly captured lead onto the default Opportunity board.
+   *
+   * Defaults ON, which is a deliberate exception to this file's usual off-by-default rule. The
+   * previous behaviour was not a considered "off" — nothing created an opportunity from an
+   * inbound lead at all, which is why production ran with 23,545 leads and one card. Shipping
+   * this switched off would preserve a bug behind a toggle.
+   *
+   * It is a switch rather than unconditional because the board renders every card at once and is
+   * capped at 300 per column; a business with a very high lead volume and a small sales team may
+   * genuinely want the board to hold only hand-picked deals.
+   */
+  autoCreateOpportunity: z.boolean().default(true),
 });
 
 export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;
 
-/** Rules is the shipped behaviour, so it stays the default — the toggle is opt-in. */
-export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = { mode: "rules" };
+/** Rules is the shipped behaviour, so it stays the default — the mode toggle is opt-in. */
+export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = { mode: "rules", autoCreateOpportunity: true };
 
 export function coercePipelineConfig(value: unknown): PipelineConfig {
   const parsed = pipelineConfigSchema.safeParse(value);

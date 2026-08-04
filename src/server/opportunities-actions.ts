@@ -466,6 +466,33 @@ export async function addStage(pipelineId: string, name: string): Promise<Action
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   if (!name.trim()) return { ok: false, error: "Stage name is required" };
+
+  /**
+   * THE DEFAULT PIPELINE TAKES NO NEW COLUMNS.
+   *
+   * A stage created here gets `legacyStage: null`, and `setStageLegacyStage` refuses to map a
+   * default-pipeline stage ("managed by the system"). So an added column on the default board is
+   * permanently unmappable — and an unmapped column is a data trap, not just an oddity: a card
+   * dragged into it silently stops writing through to `Lead.stage`, and `syncDefaultOpportunity`
+   * can never move it back out, because it only targets bridged columns.
+   *
+   * Production had exactly this: columns named "loser" and "Aakash" on the default Sales
+   * pipeline, both unmapped, both able to swallow a deal. Custom pipelines are unaffected —
+   * there, an unmapped column is the deliberate "this board is its own process" case.
+   */
+  const target = await prisma.pipeline.findUnique({
+    where: { id: pipelineId },
+    select: { isDefault: true, name: true },
+  });
+  if (!target) return { ok: false, error: "Pipeline not found" };
+  if (target.isDefault) {
+    return {
+      ok: false,
+      error:
+        "The default Sales pipeline's columns mirror the lead lifecycle and can't be added to — a new column there could never be mapped to a stage, so cards in it would stop syncing. Create a custom pipeline for a separate process.",
+    };
+  }
+
   const max = await prisma.pipelineStage.aggregate({ where: { pipelineId }, _max: { position: true } });
   const stage = await prisma.pipelineStage.create({
     data: { pipelineId, name: name.trim(), position: (max._max.position ?? -1) + 1 },

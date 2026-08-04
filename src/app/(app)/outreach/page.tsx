@@ -1,6 +1,7 @@
 import { AlarmClock, CheckCircle2, ListTodo, MessageCircle, PauseCircle } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Tabs } from "@/components/ui/Tabs";
+import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
 import { OUTREACH_PHASE_LABELS } from "@/lib/outreach-sop";
 import { getWatiRuntime } from "@/lib/wati";
@@ -51,27 +52,21 @@ export default async function OutreachPage() {
 
   return (
     <div className="w-full space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-4 shadow-card">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 flex-none place-items-center rounded-field bg-accent-soft text-accent">
-            <MessageCircle size={20} />
-          </span>
-          <div>
-            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Outreach</h1>
-            <p className="text-xs text-muted">
-              The Outreach Specialist SOP.
-            </p>
-          </div>
-        </div>
-        {!queue.enabled && (
-          <span
-            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
-            style={{ background: "var(--surface-2)", color: "var(--muted)" }}
-          >
-            <PauseCircle size={13} /> Engine off{isAdmin ? " — turn it on in Settings" : ""}
-          </span>
-        )}
-      </div>
+      <PageHeader
+        icon={<MessageCircle size={20} />}
+        title="Outreach"
+        subtitle="The Outreach Specialist SOP."
+        actions={
+          !queue.enabled ? (
+            <span
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+              style={{ background: "var(--surface-2)", color: "var(--muted)" }}
+            >
+              <PauseCircle size={13} /> Engine off{isAdmin ? " — turn it on in Settings" : ""}
+            </span>
+          ) : undefined
+        }
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard

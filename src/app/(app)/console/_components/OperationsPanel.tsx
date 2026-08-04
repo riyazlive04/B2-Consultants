@@ -171,7 +171,7 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
               <Picker
                 ariaLabel="Pipeline mode"
                 value={draft.mode}
-                onChange={(mode) => setDraft({ mode })}
+                onChange={(mode) => setDraft((d) => ({ ...d, mode }))}
                 options={[
                   { value: "rules", label: "Rules-driven (current)" },
                   { value: "drag_drop", label: "Drag and drop" },
@@ -183,6 +183,26 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
             <p className="rounded-field border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
               In drag-and-drop, a card moved by hand stays where it was put — the stage rules
               stop correcting it. That is the trade: control over consistency.
+            </p>
+          )}
+
+          {/* Auto-filing. ON by default: before this existed, NOTHING put an inbound lead on
+              the board, which is why the live board held one card against 23,545 leads. */}
+          <Field
+            label="New leads on the board"
+            hint="A card is created in the column matching the lead's stage, at zero value — nothing has been quoted yet. Switch off only if you want the board to hold hand-picked deals; leads will then never appear on it by themselves."
+          >
+            <Toggle
+              label="Put every new lead on the Opportunities board"
+              checked={draft.autoCreateOpportunity}
+              onChange={(autoCreateOpportunity) => setDraft((d) => ({ ...d, autoCreateOpportunity }))}
+            />
+          </Field>
+          {!draft.autoCreateOpportunity && (
+            <p className="rounded-field border border-warn bg-warn-soft px-4 py-3 text-sm text-warn-ink">
+              With this off, a lead reaches the board only if someone adds it by hand or a native
+              form is configured to create one. That was the old behaviour, and it is why the
+              board looked empty.
             </p>
           )}
         </div>

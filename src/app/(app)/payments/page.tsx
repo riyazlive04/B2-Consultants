@@ -5,6 +5,8 @@ import { Grid } from "@/components/ui/kit";
 import { ListHeader } from "@/components/ui/ListHeader";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Tabs } from "@/components/ui/Tabs";
+import { PeriodBar } from "@/components/ui/PeriodBar";
+import { parsePeriod, resolvePeriod } from "@/lib/period";
 import {
   getPaymentsOverview, getInvoicesList, getProductsList, getSubscriptionsList, getInvoicePickers,
 } from "@/server/payments-metrics";
@@ -17,15 +19,23 @@ import { restoreInvoice, purgeInvoice, restoreProduct, purgeProduct } from "@/se
 
 export const dynamic = "force-dynamic";
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams?: { period?: string; on?: string; from?: string; to?: string; range?: string };
+}) {
   const session = await requireSection("payments");
+  // Defaults to "all" rather than "month": an invoice board whose default hid every invoice
+  // older than the 1st would be a surprising regression for anyone chasing an old debt.
+  const periodSpec = parsePeriod(searchParams ?? {});
+  const period = resolvePeriod(periodSpec);
   const canDelete = hasCapability(session.role, session.capabilities, "finance.write");
 
   const [overview, invoices, estimates, products, subs, pickers, fx, archInvoices, archProducts] =
     await Promise.all([
-      getPaymentsOverview(),
-      getInvoicesList("INVOICE"),
-      getInvoicesList("ESTIMATE"),
+      getPaymentsOverview(period),
+      getInvoicesList("INVOICE", period),
+      getInvoicesList("ESTIMATE", period),
       getProductsList(),
       getSubscriptionsList(),
       getInvoicePickers(),
@@ -39,7 +49,11 @@ export default async function PaymentsPage() {
 
   return (
     <div className="w-full space-y-4">
-      <ListHeader title="Payments" subtitle="Invoices, estimates, products & subscriptions" />
+      <ListHeader
+        title="Payments"
+        subtitle="Invoices, estimates, products & subscriptions"
+        actions={<PeriodBar spec={periodSpec} />}
+      />
 
       <Grid cols={4}>
         <MetricCard

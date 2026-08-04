@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma, LeadStage, LeadSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatInrMinor, formatEurMinor } from "@/lib/format";
+import { resolveBant, type BantSnapshot } from "@/lib/bant-view";
 import { ACTIVE } from "@/lib/soft-delete";
 
 /**
@@ -87,7 +88,15 @@ function dateRangeFilter(from?: string, to?: string): Prisma.DateTimeFilter | un
   return Object.keys(filter).length ? filter : undefined;
 }
 
-function contactsWhere(opts: ContactsListOpts): Prisma.LeadWhereInput {
+/**
+ * Exported so the CSV export route can run the EXACT SAME predicate the screen ran.
+ *
+ * This is the whole point of the export API: the previous export was a client-side dump of the
+ * rows already on screen, so "download all leads for July" produced whatever subset of July had
+ * fitted in the current page. Sharing the `where` builder is what makes the file and the screen
+ * describe the same set — and keeps them describing the same set when a filter is added later.
+ */
+export function contactsWhere(opts: ContactsListOpts): Prisma.LeadWhereInput {
   const search = opts.search?.trim();
   const city = opts.city?.trim();
   const stage = asEnum(opts.stage, Object.values(LeadStage));
@@ -256,6 +265,17 @@ export type ContactDetail = {
     status: string;
     valueDisplay: string;
   }[];
+  /**
+   * The resolved band score, or null for "not scored".
+   *
+   * NULL IS NOT ZERO. An unscored prospect is one nobody has evidence about; rendering them as
+   * 0.0/5 beside genuinely poor prospects is how a good lead gets deprioritised for never having
+   * been asked. See lib/bant-view.ts.
+   */
+  bant: BantSnapshot | null;
+  bantScoredAt: Date | null;
+  /** The individual answers behind the score, in the order the form asked them. */
+  answers: { question: string; dimension: string; answer: string; score: number | null }[];
   timeline: TimelineEvent[];
 };
 
@@ -288,6 +308,19 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
       whatsappMessages: { orderBy: { createdAt: "desc" }, take: 100 },
       outcomes: { orderBy: { callDate: "desc" }, take: 50 },
       bookings: { include: { slot: { select: { startsAt: true } } }, orderBy: { createdAt: "desc" }, take: 50 },
+      /**
+       * The stored answers behind the band score — ER v2 Track D's `LeadAnswer` rows.
+       *
+       * Pinned to the QUESTION VERSION that was answered, so re-tuning a question later cannot
+       * rewrite the reason this person was called. Ordered by the catalogue's own order so the
+       * record reads like the form they filled in.
+       */
+      answers: {
+        where: { bookingRequestId: null },
+        include: { question: { select: { key: true, text: true, dimension: true, orderIndex: true } } },
+        orderBy: { question: { orderIndex: "asc" } },
+        take: 40,
+      },
     },
   });
   if (!lead) return null;
@@ -404,6 +437,27 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
       pipelineName: o.pipeline.name,
       status: o.status,
       valueDisplay: `${formatInrMinor(o.valueInrMinor)} · ${formatEurMinor(o.valueEurMinor)}`,
+    })),
+    /**
+     * The band score, resolved by the app's single rule — the BOOKING's score where one exists,
+     * otherwise the LEAD's own (the landing page's answers, taken at opt-in).
+     *
+     * This screen showed no score at all. It is the "client section" a specialist opens before a
+     * call, and the landing page had been collecting these answers the whole time — so the one
+     * place the score was most useful was the one place it never appeared.
+     *
+     * Null means NOT SCORED, and the UI must render it as that, never as zero.
+     */
+    bant: resolveBant(
+      lead.bookings.find((b) => b.bantAvg !== null) ?? null,
+      lead,
+    ),
+    bantScoredAt: lead.bantScoredAt,
+    answers: lead.answers.map((a) => ({
+      question: a.question.text,
+      dimension: a.question.dimension,
+      answer: a.answerRaw,
+      score: a.score,
     })),
     timeline,
   };

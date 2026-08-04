@@ -18,7 +18,7 @@ import { logActivity, diffFields } from "./activity-log";
 import { isKnownLevel } from "./levels";
 import type { ActionResult } from "./finance-actions";
 import { ACTIVE, archiveData, restoreData } from "@/lib/soft-delete";
-import { syncDefaultOpportunity } from "./opportunity-sync";
+import { ensureDefaultOpportunity, syncDefaultOpportunity } from "./opportunity-sync";
 import { extractCallNote, type ExtractionOutcome } from "./call-note-extract";
 
 /**
@@ -40,6 +40,15 @@ const PAYMENT_PLAN_STAGES = new Set(["DEPOSIT_PAID", "WON"]);
 const leadSchema = z.object({
   name: rule("name"),
   phone: rule("phone"),
+  /**
+   * Optional, and new.
+   *
+   * `Lead.email` has always existed and every capture path fills it; this form was the one entry
+   * point that could not. That made the manual path strictly worse than the webhook — the row it
+   * created could never be matched on email by the dedupe, by the duplicates report, or by a
+   * later opt-in from the same person on a different number.
+   */
+  email: optionalRule("email"),
   leadSource: z.enum([
     "INSTAGRAM", "YOUTUBE", "LINKEDIN", "WHATSAPP", "REFERRAL", "SUMMIT", "WORKSHOP",
     "GHOSTED_BLUEPRINT", "OTHER",
@@ -88,9 +97,16 @@ export async function createLead(form: FormData): Promise<ActionResult> {
   }
   if (d.wonLevel && !(await isKnownLevel(d.wonLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
 
-  // Duplicate check at the point of entry (issue 1.3) — same normalized-phone dedup the capture
-  // path uses, so the same person isn't split across two pipeline rows.
-  const dup = await findDuplicateLead({ phone: d.phone });
+  /**
+   * Duplicate check at the point of entry (issue 1.3) — the same normalized-phone dedup the
+   * capture path uses, so the same person isn't split across two pipeline rows.
+   *
+   * EMAIL IS CHECKED TOO. This passed `{ phone: d.phone }` alone while Contacts' "Add contact"
+   * passed both, so the identical person was blocked on one screen and silently duplicated on
+   * the other — and typing a lead by hand is exactly where someone re-enters a person whose
+   * number they no longer have. `findDuplicateLead` already takes both and prefers phone.
+   */
+  const dup = await findDuplicateLead({ phone: d.phone, email: d.email });
   if (dup) {
     // Re-adding someone who was ARCHIVED: restore them instead of blocking with a confusing
     // "already exists" (the row is hidden from every active view) or splitting them into a
@@ -110,7 +126,10 @@ export async function createLead(form: FormData): Promise<ActionResult> {
     }
     return {
       ok: false,
-      error: `A lead with this phone number already exists — ${dup.lead.name}. Open that lead instead of adding a new one.`,
+      // Name the field that matched. "A lead with this phone number already exists" was shown
+      // even when the collision was on email, which sends the typist to check a number that is
+      // not the problem.
+      error: `A lead with this ${dup.on === "email" ? "email address" : "phone number"} already exists — ${dup.lead.name}. Open that lead instead of adding a new one.`,
     };
   }
   // Auto-assign an owner on creation (issues 1.1/1.2) via the configured first-call rotation;
@@ -122,6 +141,7 @@ export async function createLead(form: FormData): Promise<ActionResult> {
       data: {
         name: d.name,
         phone: d.phone,
+        email: d.email || null,
         leadSource: d.leadSource,
         dateIn: parseDateInput(d.dateIn),
         stage: d.stage,
@@ -135,6 +155,9 @@ export async function createLead(form: FormData): Promise<ActionResult> {
     await tx.leadStageHistory.create({
       data: { leadId: lead.id, fromStage: null, toStage: d.stage, changedById: session.user.id },
     });
+    // A hand-typed lead reaches the board on exactly the same terms as a captured one. Which
+    // door a lead came through should not decide whether the sales team can see it.
+    await ensureDefaultOpportunity(tx, lead.id);
     return lead;
   });
 
@@ -170,6 +193,7 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
   const data = {
     name: d.name,
     phone: d.phone,
+    email: d.email || null,
     leadSource: d.leadSource,
     dateIn: parseDateInput(d.dateIn),
     stage: d.stage,

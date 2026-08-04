@@ -4,6 +4,7 @@ import { ArrowLeft, Users } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { getGnAccess, getGnMembers } from "@/server/german-note-metrics";
 import { MembersDirectory } from "../_components/MembersDirectory";
+import { PageHeader } from "@/components/ui/kit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,17 +16,12 @@ export default async function GnMembersPage() {
 
   return (
     <div className="w-full space-y-6">
-      <div>
-        <Link href="/german-note" className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
-          <ArrowLeft size={13} /> German Note
-        </Link>
-        <h1 className="mt-2 flex items-center gap-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
-          <Users size={26} className="text-[var(--lvl-gn)]" /> Members
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          Everyone in the German Note community — {members.length} member{members.length === 1 ? "" : "s"}. Tap anyone to see their level and activity.
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: "/german-note", label: "German Note" }}
+        icon={<Users size={20} />}
+        title="Members"
+        subtitle={`Everyone in the German Note community — ${members.length} member${members.length === 1 ? "" : "s"}. Tap anyone to see their level and activity.`}
+      />
       <MembersDirectory members={members} />
     </div>
   );

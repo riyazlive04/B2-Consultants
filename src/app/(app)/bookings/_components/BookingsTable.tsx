@@ -12,6 +12,7 @@ import { setBookingStatus, setBookingConfirmed, rescheduleBooking } from "@/serv
 import { sendBookingConfirmationMsg, sendBookingReminderMsg } from "@/server/whatsapp-actions";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
 import { BANT_VERDICT_LABELS, BOOKING_STATUS_LABELS } from "@/lib/labels";
+import { BANT_ORIGIN_LABELS } from "@/lib/bant-view";
 import { formatDate } from "@/lib/format";
 import type { BookingRow, OpenSlotOption, TeamMemberOption } from "@/server/booking-metrics";
 
@@ -23,21 +24,37 @@ const VERDICT_STYLE: Record<string, string> = {
   CANCEL: "bg-risk-soft text-risk",
 };
 
+/**
+ * Reads the ONE resolved snapshot, not the raw columns.
+ *
+ * This used to render `bantAvg ?? bantScore` straight off the BookingRequest, so a prospect who
+ * answered the qualification questions on the landing page but not on the booking form appeared
+ * unscored here while My Desk showed their score. `resolveBant` (applied server-side) answers
+ * "which stored score do I show" once, for every surface.
+ */
 function BantChips({ r }: { r: BookingRow }) {
+  // Null is "nobody has scored them", NOT zero. Rendering 0.0/5 would rank a prospect nobody
+  // asked alongside one who answered badly — see lib/bant-view.ts.
+  if (!r.bant) {
+    return (
+      <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-caption font-medium text-muted" title="Nobody has scored this prospect yet">
+        Not scored
+      </span>
+    );
+  }
+  const b = r.bant;
   const dims: [string, boolean][] = [
-    ["B", r.bantBudget], ["A", r.bantAuthority], ["N", r.bantNeed], ["T", r.bantTimeline],
+    ["B", b.budget], ["A", b.authority], ["N", b.need], ["T", b.timeline],
   ];
   return (
     <span className="inline-flex items-center gap-1">
       <span
-        title={r.bantAvg !== null ? `Weighted average ${r.bantAvg.toFixed(1)}/5` : `${r.bantScore} of 4 dimensions met`}
+        title={`Weighted average ${b.avg.toFixed(1)}/5 · ${BANT_ORIGIN_LABELS[b.origin]}`}
         className={`tnum rounded-full px-1.5 py-0.5 text-caption font-semibold ${
-          r.bantAvg !== null
-            ? r.bantAvg > 3 ? "bg-ok-soft text-ok" : r.bantAvg >= 2 ? "bg-watch-soft text-watch" : "bg-risk-soft text-risk"
-            : r.bantScore >= 3 ? "bg-ok-soft text-ok" : r.bantScore >= 2 ? "bg-watch-soft text-watch" : "bg-risk-soft text-risk"
+          b.avg > 3 ? "bg-ok-soft text-ok" : b.avg >= 2 ? "bg-watch-soft text-watch" : "bg-risk-soft text-risk"
         }`}
       >
-        {r.bantAvg !== null ? `${r.bantAvg.toFixed(1)}/5` : `${r.bantScore}/4`}
+        {b.avg.toFixed(1)}/5
       </span>
       <span className="hidden gap-0.5 sm:inline-flex">
         {dims.map(([k, on]) => (
@@ -138,18 +155,24 @@ export function BookingsTable({
     { key: "role", header: "Role", cell: (r) => r.jobTitle || "-", value: (r) => r.jobTitle },
     { key: "when", header: "Wants to start", cell: (r) => r.whenStart, value: (r) => r.whenStart },
     { key: "invest", header: "Budget", cell: (r) => r.readyToInvest, value: (r) => r.readyToInvest },
-    { key: "bant", header: "BANT", cell: (r) => <BantChips r={r} />, value: (r) => r.bantAvg ?? r.bantScore },
+    {
+      key: "bant", header: "BANT",
+      cell: (r) => <BantChips r={r} />,
+      // -1 for unscored, so a sort puts "not scored" below a genuine 0.0 rather than tying with
+      // it. They are different facts and the ordering should say so.
+      value: (r) => r.bant?.avg ?? -1,
+    },
     {
       key: "verdict", header: "Verdict",
       cell: (r) =>
-        r.bantVerdict ? (
-          <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-caption font-semibold ${VERDICT_STYLE[r.bantVerdict]}`}>
-            {BANT_VERDICT_LABELS[r.bantVerdict]}
+        r.bant ? (
+          <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-caption font-semibold ${VERDICT_STYLE[r.bant.verdict]}`}>
+            {BANT_VERDICT_LABELS[r.bant.verdict]}
           </span>
         ) : (
           <span className="text-xs text-muted">-</span>
         ),
-      value: (r) => (r.bantVerdict ? BANT_VERDICT_LABELS[r.bantVerdict] : ""),
+      value: (r) => (r.bant ? BANT_VERDICT_LABELS[r.bant.verdict] : ""),
     },
     {
       key: "status", header: "Status", sortable: false,

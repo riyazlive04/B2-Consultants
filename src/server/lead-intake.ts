@@ -8,6 +8,8 @@ import { notifyNewOptIn } from "./outreach-notify";
 import { scoreLeadAtOptIn } from "./lead-qualification";
 import { sendIntroNow } from "./outreach-instant";
 import { planReturningOptIn } from "@/lib/returning-opt-in";
+import { ensureDefaultOpportunity } from "./opportunity-sync";
+import { getPipelineConfig } from "./founder-config";
 
 /**
  * Single entry point for every non-manual lead that lands in the system - the two
@@ -60,7 +62,14 @@ export type IntakeLead = {
 export type IntakeResult = {
   lead: Lead;
   created: boolean;
-  deduped: "externalRef" | "phone" | null;
+  /**
+   * WHICH identity matched, when this was not a new row.
+   *
+   * "email" is its own value. The email branch below used to report `"phone"`, so every webhook
+   * response, log line and future dedupe metric attributed an email match to a phone match —
+   * which matters precisely when someone is trying to work out why a lead was or was not merged.
+   */
+  deduped: "externalRef" | "phone" | "email" | null;
   /**
    * A dedupe matched a DORMANT lead and this opt-in put it back in front of a caller — stage
    * re-opened, owner assigned, and/or the journey clock restarted. Always false on `created`
@@ -273,6 +282,15 @@ async function acceptReturningOptIn(
         update: { optInAt, phase: "OPT_IN", contactedAt: null },
       });
     }
+    /**
+     * A re-opened lead goes back on the board too.
+     *
+     * `ensureDefaultOpportunity` is idempotent, so a returning prospect who still has their old
+     * card keeps it exactly where it is; one whose card never existed (every pre-fix lead, and
+     * the entire Synamate import) gets one now. Without this, the returning-opt-in path would
+     * reproduce the original bug for precisely the most engaged prospects.
+     */
+    await ensureDefaultOpportunity(tx, existing.id);
     return updated;
   });
 
@@ -334,20 +352,42 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
     }
   }
 
-  // Email is the fallback identity when there is no number to match on. Case-insensitive,
-  // the same folding findDuplicateLead and the booking form use.
-  if (!phone && input.email?.trim()) {
+  /**
+   * Email as a SECOND identity, not a fallback.
+   *
+   * This used to be gated on `!phone` — email was only consulted when there was no number at
+   * all. That left the commonest real duplicate uncaught: the same person opting in again from
+   * a different number (a new SIM, a work phone, a typo the first time). Their email matches,
+   * their phone does not, and the `!phone` guard meant we never looked — so they became a second
+   * Lead row, splitting their calls, owner, journey and commission exactly as the phone dedupe
+   * exists to prevent.
+   *
+   * Live scale when this was written: 5,889 leads carry no phone at all, so email is the ONLY
+   * identity a quarter of the table has.
+   *
+   * Running it unconditionally is safe because a blank email is skipped the same way a blank
+   * phone is — absence is not evidence of sameness, and `""` would otherwise match every other
+   * email-less lead to each other.
+   */
+  const email = input.email?.trim();
+  if (email) {
     const byEmail = await prisma.lead.findFirst({
-      where: { email: { equals: input.email.trim(), mode: "insensitive" } },
+      // Case-insensitive, the same folding findDuplicateLead and the booking form use.
+      where: { email: { equals: email, mode: "insensitive" } },
     });
     if (byEmail) {
-      return { ...(await acceptReturningOptIn(byEmail, input, utm)), created: false, deduped: "phone" };
+      return { ...(await acceptReturningOptIn(byEmail, input, utm)), created: false, deduped: "email" };
     }
   }
 
   // 3. brand-new lead. Auto-assign the first caller per the configured rotation
   // (80/20 split, Saturday rule) - a failure here must never block lead capture.
   const assignedToId = await pickFirstCaller().catch(() => null);
+  // Read OUTSIDE the transaction — it is a cached config read, and holding a transaction open
+  // across it buys nothing. Defaults to true; a config read that fails must not block capture.
+  const autoCreateOpportunity = await getPipelineConfig()
+    .then((c) => c.autoCreateOpportunity)
+    .catch(() => true);
   const lead = await prisma.$transaction(async (tx) => {
     const created = await tx.lead.create({
       data: {
@@ -378,6 +418,18 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
     await tx.outreachJourney.create({
       data: { leadId: created.id, optInAt: created.createdAt },
     });
+    /**
+     * …and onto the Opportunity board, in the SAME transaction.
+     *
+     * This is what was missing. Nothing in the capture path ever created an opportunity, so
+     * every webhook lead landed in the Lead table and was invisible on the board — 23,545 leads,
+     * one card. Inside the transaction for the same reason the journey is: a lead that exists
+     * without a card is a lead nobody working the board will ever see.
+     *
+     * It cannot fail the capture: `ensureDefaultOpportunity` no-ops when the board is
+     * misconfigured rather than throwing.
+     */
+    if (autoCreateOpportunity) await ensureDefaultOpportunity(tx, created.id);
     return created;
   });
 

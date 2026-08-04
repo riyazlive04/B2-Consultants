@@ -9,7 +9,10 @@ import { ClientMovementChart } from "./_components/ClientMovementChart";
 import { BUSINESS_LINE_LABELS, lineForKind, type BusinessLineView } from "@/lib/business-line";
 import { Tabs } from "@/components/ui/Tabs";
 import { Card, CardTitle, PageHeader, Pill } from "@/components/ui/kit";
-import { toDateInputValue, istToday, istMonthRange } from "@/lib/dates";
+import { toDateInputValue, istToday } from "@/lib/dates";
+import { parsePeriod, resolvePeriod } from "@/lib/period";
+import { PeriodBar } from "@/components/ui/PeriodBar";
+import { ExportButton } from "@/components/ui/ExportButton";
 import { formatMonth, formatPct } from "@/lib/format";
 import { PROGRAM_LEVEL_LABELS, PAYMENT_METHOD_LABELS, EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
@@ -50,14 +53,22 @@ const CAT_SHADES = [
 export default async function FinancePage({
   searchParams,
 }: {
-  searchParams?: { record?: string; line?: string };
+  searchParams?: { record?: string; line?: string; period?: string; on?: string; from?: string; to?: string };
 }) {
   const session = await requireSection("finance");
   // Deep-link from the top-bar "+ Record" CTA lands on Income (0) or Expenses (1).
   const initialTab = searchParams?.record === "expense" ? 1 : 0;
+  /**
+   * WHICH window this page reports on. Previously there was none — every figure was the current
+   * calendar month, hardcoded, with no way to ask for last month or a custom range and therefore
+   * no way to export one either. `parsePeriod` is total: a malformed URL falls back to this month
+   * rather than erroring.
+   */
+  const periodSpec = parsePeriod(searchParams ?? {});
+  const period = resolvePeriod(periodSpec);
   const [{ metrics, incomes, expenses, pendings }, commission, fx, archIncomes, archExpenses, archPendings] =
     await Promise.all([
-      getFinanceOverview(),
+      getFinanceOverview(period),
       getCommissionReport(),
       // Same rate the server actions stamp on save, so the form's ₹↔€ preview
       // matches what actually gets stored.
@@ -73,7 +84,9 @@ export default async function FinancePage({
   const waByPending = await getWhatsAppStatusMap("pendingPaymentId", pendings.map((p) => p.id));
   const today = toDateInputValue(istToday());
   const monthKey = today.slice(0, 7);
-  const monthLabel = formatMonth(istToday());
+  // Follows the SELECTED window, not today — a page showing June that says "July" is worse
+  // than one with no label at all.
+  const monthLabel = period.label;
   // §6.1: the code rides as a `hint` — visible in the dropdown and searchable, but never
   // written into the name field (see ComboBox). `studentCodeById` lets the tables below
   // show the same code beside a denormalised studentName.
@@ -100,7 +113,7 @@ export default async function FinancePage({
   // (Error Log E1/E4). See server/business-line-view.ts.
   const line: BusinessLineView = await resolveBusinessLine(searchParams?.line);
   const seg = line === "ALL" ? null : metrics.segments[line];
-  const { start: monthStart, end: monthEndExclusive } = istMonthRange();
+  const { start: monthStart, endExclusive: monthEndExclusive } = period;
   const monthEndInclusive = new Date(monthEndExclusive.getTime() - 86_400_000);
   const [annual, clientMovement, recognition] = await Promise.all([
     getAnnualPerformance(line === "ALL" ? null : line),
@@ -327,9 +340,14 @@ export default async function FinancePage({
         title="Finance"
         subtitle="Every figure carries both currencies — the ₹/€ toggle picks which one leads; the other sits beneath."
         actions={
-          <Pill>
-            {line === "ALL" ? "" : `${BUSINESS_LINE_LABELS[line]} · `}This month · {monthLabel}
-          </Pill>
+          <div className="flex flex-wrap items-center gap-2">
+            {line !== "ALL" && <Pill>{BUSINESS_LINE_LABELS[line]}</Pill>}
+            {/* A real control, not a label. The old `<Pill>This month</Pill>` looked like one
+                and did nothing — the page could only ever show the current calendar month. */}
+            <PeriodBar spec={periodSpec} />
+            <ExportButton entity="income" label="Income CSV" />
+            <ExportButton entity="expenses" label="Expenses CSV" />
+          </div>
         }
       />
 

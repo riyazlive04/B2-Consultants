@@ -226,6 +226,11 @@ export function LeadSection({
           <Field label="Phone / WhatsApp" hint="Pick country, then number">
             <PhoneField name="phone" required defaultValue={editing?.phone ?? ""} />
           </Field>
+          {/* Optional, but it is the second identity the duplicate check runs on — a person who
+              comes back on a new number is only recognisable by this. */}
+          <Field label="Email" hint="Optional — used to spot duplicates">
+            <TextInput kind="email" name="email" placeholder="name@example.com" defaultValue={editing?.email ?? ""} />
+          </Field>
           <Field label="Lead source">
             <Select name="leadSource" options={optionsFrom(LEAD_SOURCE_LABELS)} defaultValue={editing?.leadSource ?? "INSTAGRAM"} />
           </Field>

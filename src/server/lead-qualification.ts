@@ -61,9 +61,36 @@ export async function scoreLeadAtOptIn(
     const questions = await getQualificationQuestions();
     const mapping = mapInboundAnswers(payload, questions);
 
-    // Nothing recognisable in the payload — the overwhelmingly common case for a bare opt-in
-    // form that only collects a name and a number. Return quietly; this is not a problem.
-    if (mapping.mapped.length === 0) return EMPTY;
+    /**
+     * NOTHING in the payload matched a question.
+     *
+     * This used to `return EMPTY` without writing a row, on the reasoning that a bare opt-in form
+     * collecting only a name and a number is the common case and not a problem. That reasoning is
+     * right about the common case and catastrophic about the other one: it is ALSO what happens
+     * when the landing page renames its fields, and the two are indistinguishable from the
+     * outside. On 4 Aug 2026 production had 23,545 leads, 111 of them from Pabbly with the
+     * qualification form live and 13 questions configured, and NOT ONE scored row — with no
+     * evidence anywhere of what the sender had actually posted.
+     *
+     * The evidence is now always recorded. `intakeAnswers.unrecognisedKeys` is what Console →
+     * Qualification's inbound report reads, so a mapping that matches nothing becomes a screen
+     * that says "here are the field names Pabbly is sending you" instead of a blank panel. That
+     * is the whole difference between a silent failure and a fixable one.
+     *
+     * Still skipped when the payload carries no readable field at all (a truly empty body): there
+     * is no evidence to keep, and writing an empty blob would only dilute the report.
+     */
+    if (mapping.mapped.length === 0) {
+      if (mapping.unrecognisedKeys.length === 0) return EMPTY;
+      await persistEvidence(leadId, payload, mapping);
+      console.warn(
+        `[lead-qualification] lead ${leadId}: NOTHING matched the question catalogue — ` +
+          `${mapping.unrecognisedKeys.length} unrecognised field(s): ` +
+          mapping.unrecognisedKeys.slice(0, 12).map((k) => JSON.stringify(k)).join(", ") +
+          " — map these at Console → Qualification (Inbound field names).",
+      );
+      return { scored: false, skipped: "no-answers", bant: null, mapping };
+    }
 
     if (!mapping.scorable) {
       // Fields matched but no SCORED dimension resolved. Worth recording the evidence — the

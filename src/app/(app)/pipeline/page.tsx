@@ -1,16 +1,4 @@
-import {
-  UserPlus,
-  PhoneCall,
-  PhoneOff,
-  Percent,
-  Award,
-  TrendingUp,
-  Trophy,
-  Phone,
-  AlertTriangle,
-  Workflow,
-  BarChart3,
-} from "lucide-react";
+import { AlertTriangle, Award, BarChart3, Kanban, MessageCircle, Percent, Phone, PhoneCall, PhoneOff, TrendingUp, Trophy, UserPlus, Workflow } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { LeadFlowChart } from "./_components/LeadFlowChart";
 import { Tabs } from "@/components/ui/Tabs";
@@ -38,13 +26,24 @@ import { TargetBar } from "./_components/TargetBar";
 import { AgingSection } from "./_components/AgingSection";
 import { ArchivedGroups } from "@/components/ui/ArchivedGroups";
 import { InfoHint } from "@/components/ui/InfoHint";
+import { PeriodBar } from "@/components/ui/PeriodBar";
+import { SectionLink } from "@/components/ui/SectionLink";
+import { parsePeriod, resolvePeriod } from "@/lib/period";
 import { getArchivedLeads } from "@/server/archive-metrics";
 import { restoreLead, purgeLead } from "@/server/contacts-actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function PipelinePage() {
+export default async function PipelinePage({
+  searchParams,
+}: {
+  searchParams?: { period?: string; on?: string; from?: string; to?: string; range?: string };
+}) {
   const session = await requireSection("pipeline");
+  // The window every "this month" figure below covers. Previously fixed to the current calendar
+  // month, advertised by a `<Pill>This month</Pill>` that was text, not a control.
+  const periodSpec = parsePeriod(searchParams ?? {});
+  const period = resolvePeriod(periodSpec);
   // Two different questions, deliberately answered by two different things:
   //   isAdmin           → WHOSE leads you see (everyone's, or only your own)
   //   canConfigure      → whether you may set the target, reassign, or delete
@@ -69,7 +68,7 @@ export default async function PipelinePage() {
     callDistribution,
   ] = await Promise.all([
       getArchivedLeads(),
-      getPipelineOverview(session.user.id, isAdmin),
+      getPipelineOverview(session.user.id, isAdmin, period),
       isAdmin ? getFirstCallSplit() : Promise.resolve(null),
       isAdmin ? getPipelineAging() : Promise.resolve([] as Awaited<ReturnType<typeof getPipelineAging>>),
       getActiveLevels(),
@@ -155,10 +154,23 @@ export default async function PipelinePage() {
         title="Pipeline"
         subtitle={
           isAdmin
-            ? "Every lead from first contact to paid student - this month, auto-calculated."
+            ? "Every lead from first contact to paid student — auto-calculated for the window you pick."
             : "Enter leads and discovery call outcomes. You see only your own entries."
         }
-        actions={<Pill>This month</Pill>}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Opportunities and Outreach came OFF the sidebar (the Sales group was five entries
+                for what is one job). They are reachable from here — the screen they belong to —
+                so nothing became unreachable, and `requireSection` still gates each one. */}
+            <SectionLink href="/opportunities" sectionKey="opportunities">
+              <Kanban size={14} /> Board view
+            </SectionLink>
+            <SectionLink href="/outreach" sectionKey="outreach">
+              <MessageCircle size={14} /> Outreach queue
+            </SectionLink>
+            <PeriodBar spec={periodSpec} />
+          </div>
+        }
       />
 
       {/* The target bar follows the CAPABILITY, not the role — that's what makes
@@ -198,7 +210,7 @@ export default async function PipelinePage() {
               </div>
               <div className="flex-1 rounded-card border border-line bg-surface p-5 shadow-card">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[13px] font-medium text-muted">Leads this month</p>
+                  <p className="text-[13px] font-medium text-muted">Leads · {period.label}</p>
                   <Pill tone="primary">+{metrics.leadsThisWeek} this week</Pill>
                 </div>
                 <p className="mt-2 font-display text-3xl font-bold tracking-tight">{metrics.leadsThisMonth}</p>
@@ -226,7 +238,7 @@ export default async function PipelinePage() {
               </div>
             </Card>
 
-            <Card title={<CardTitle icon={<Trophy size={18} />}>Won this month</CardTitle>}>
+            <Card title={<CardTitle icon={<Trophy size={18} />}>Won · {period.label}</CardTitle>}>
               <div className="flex flex-col items-center">
                 <div className="relative grid place-items-center">
                   <svg width={156} height={156} viewBox="0 0 156 156" className="-rotate-90">
@@ -252,7 +264,7 @@ export default async function PipelinePage() {
                   Close rate {formatPct(metrics.closePct)}
                   <InfoHint
                     className="ml-1"
-                    text="Deals won ÷ discovery calls conducted this month — the share of completed calls that turned into paying students."
+                    text="Deals won ÷ discovery calls conducted in the selected window — the share of completed calls that turned into paying students."
                   />
                   {" · "}Solo {conv.SOLO} · Guided {conv.GUIDED} · Elite {conv.ELITE}
                 </p>
@@ -411,7 +423,7 @@ export default async function PipelinePage() {
                   {conv.SOLO} · {conv.GUIDED} · {conv.ELITE}
                 </span>
               }
-              secondary="Won this month: Solo · Guided · Elite"
+              secondary={`Won · ${period.label}: Solo · Guided · Elite`}
               icon={<Trophy size={18} />}
               detail={{
                 rows: [

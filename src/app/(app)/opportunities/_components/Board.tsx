@@ -46,12 +46,28 @@ export default function Board({
   board,
   contacts,
   canConfigure,
+  mode,
 }: {
   board: BoardData;
   contacts: { id: string; name: string; phone: string | null }[];
   canConfigure: boolean;
+  /**
+   * The founder's `pipelineConfig.mode`, HONOURED HERE AT LAST.
+   *
+   * The setting has existed since Part 2 §9 and was read by exactly one screen — `/pipeline`.
+   * This board ignored it entirely and was always drag-and-drop, so the two boards over the same
+   * data disagreed about who is allowed to move a card, and switching to "rules-driven" locked
+   * one board while leaving the other wide open.
+   *
+   * In "rules" mode cards are positioned by the rules in `lib/stage-rules.ts` and cannot be
+   * dragged; the edit modal's Stage field still works, because a deliberate correction through a
+   * form is a different act from a drag.
+   */
+  mode: "rules" | "drag_drop";
 }) {
   const router = useRouter();
+  /** In rules mode the board is a VIEW of the rules; dragging would contradict them. */
+  const dragEnabled = mode === "drag_drop";
 
   // Local, optimistic copy of the board's stages/cards. Drag-and-drop and the modal's "Move to
   // stage" select both update this instantly; a failed server call rolls it back. Re-synced
@@ -346,12 +362,24 @@ export default function Board({
         {stages.map((stage) => (
           <div
             key={stage.id}
-            onDragOver={(e) => { e.preventDefault(); setDropStage(stage.id); }}
-            onDrop={() => onDrop(stage.id, stage.cards.length)}
+            onDragOver={dragEnabled ? (e) => { e.preventDefault(); setDropStage(stage.id); } : undefined}
+            onDrop={dragEnabled ? () => onDrop(stage.id, stage.cards.length) : undefined}
             className={`flex w-72 flex-none flex-col rounded-card border bg-surface-2 ${dropStage === stage.id ? "border-primary" : "border-line"}`}
           >
             <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
               <span className="truncate text-sm font-semibold text-ink">{stage.name}</span>
+              {/* A column with no lead stage mapped is a ONE-WAY DOOR: a card dropped in it stops
+                  writing through to Lead.stage, and the stage sync can never move it back out
+                  because it only targets mapped columns. Production had two such columns on the
+                  default board with nothing anywhere saying so. */}
+              {!stage.legacyStage && (
+                <span
+                  title="This column isn't mapped to a lead stage — a card moved here stops updating the lead's stage, and won't be moved back automatically."
+                  className="flex-none rounded-full bg-warn-soft px-1.5 py-0.5 text-caption font-semibold text-warn"
+                >
+                  Unmapped
+                </span>
+              )}
               <span className="flex-none rounded-full bg-surface px-2 py-0.5 text-caption font-semibold text-ink-2">{stage.count}</span>
             </div>
             <StageTotals stage={stage} />
@@ -360,19 +388,24 @@ export default function Board({
                 <OppCard
                   key={card.id}
                   card={card}
-                  draggable
+                  draggable={dragEnabled}
                   dragActive={dragId === card.id}
                   onDragStart={() => setDragId(card.id)}
                   onDragEnd={() => setDragId(null)}
-                  onDropOn={(e) => { e.stopPropagation(); onDrop(stage.id, i); }}
+                  onDropOn={dragEnabled ? (e) => { e.stopPropagation(); onDrop(stage.id, i); } : undefined}
                   onOpen={() => { setEditError(null); setEditCard(card); }}
                 />
               ))}
               {stage.cards.length === 0 && (
                 <p className="rounded-field border border-dashed border-line py-6 text-center text-caption text-ink-3">Drop here</p>
               )}
+              {/* The advice is now actionable: the search box above this board is the "filter"
+                  this message asks for. It previously pointed at a control that did not exist. */}
               {stage.hasMore && (
-                <p className="text-center text-caption text-ink-3">More cards exist in this stage than are shown — filter or split this pipeline.</p>
+                <p className="rounded-field border border-dashed border-line px-2 py-3 text-center text-caption text-ink-3">
+                  Only the first 300 cards in this column are shown — use the search and filters
+                  above to narrow it down.
+                </p>
               )}
             </div>
           </div>

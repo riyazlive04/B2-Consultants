@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { hashInviteToken } from "@/lib/invite-token";
+import { normalizePassword } from "@/lib/credentials";
 
 /**
  * Redeeming an invite. PUBLIC by necessity — the invitee has no session yet — so the
@@ -17,11 +18,25 @@ import { hashInviteToken } from "@/lib/invite-token";
 
 export type AcceptInviteResult = { ok: true } | { ok: false; error: string };
 
+/**
+ * Both password fields are edge-trimmed BEFORE the length check and BEFORE the match check.
+ *
+ * Order matters. Trimming after `.min(8)` would accept "1234567 " as eight characters and then
+ * store seven; trimming after the match check would fail a confirm field that differs only by a
+ * trailing space the person cannot see. Doing it in `transform` puts both on the clean value.
+ *
+ * This is where a stray space is most expensive in the whole app: it is baked into a brand-new
+ * account, so the owner can never reproduce it and their very first sign-in fails.
+ */
 const acceptSchema = z
   .object({
     token: z.string().min(10).max(200),
-    password: z.string().min(8, "Password must be at least 8 characters").max(200),
-    confirm: z.string(),
+    password: z.string().max(200).transform(normalizePassword),
+    confirm: z.string().max(200).transform(normalizePassword),
+  })
+  .refine((d) => d.password.length >= 8, {
+    path: ["password"],
+    message: "Password must be at least 8 characters",
   })
   .refine((d) => d.password === d.confirm, {
     path: ["confirm"],

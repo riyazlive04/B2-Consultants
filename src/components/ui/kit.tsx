@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 /**
  * The app's presentational vocabulary, extracted from the Users & access screen.
@@ -40,17 +40,30 @@ const TONE_CLASS: Record<Tone, string> = {
  */
 export function PageHeader({
   title,
+  titleSuffix,
   subtitle,
   actions,
   eyebrow,
   icon,
+  back,
 }: {
   title: string;
+  /** Rendered inline after the title — a status badge, a month, an "Archived" pill. */
+  titleSuffix?: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
   eyebrow?: string;
   /** a line icon; rendered in the soft primary chip the section headers use */
   icon?: ReactNode;
+  /**
+   * A "back to the list" link above the title.
+   *
+   * Detail and sub-pages (an agreement, a workshop, German Note → Manage) all wanted this and so
+   * all hand-rolled their own header to get it — five of them, each with a slightly different
+   * arrow size, gap and type scale. Making it a prop is what lets a sub-page use the shared
+   * header instead of inventing one, which is the whole point of `page-headers.test.ts`.
+   */
+  back?: { href: string; label: string };
 }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
@@ -61,9 +74,20 @@ export function PageHeader({
           </span>
         )}
         <div className="min-w-0">
+          {back && (
+            <Link
+              href={back.href}
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-ink"
+            >
+              <ArrowLeft size={13} /> {back.label}
+            </Link>
+          )}
           {eyebrow && <p className="mb-1 text-label font-semibold uppercase text-primary">{eyebrow}</p>}
           {/* §2.1 display-l (30/38). The old `sm:text-4xl` bumped to 36px, which is on no scale step. */}
-          <h1 className="font-display text-display-l tracking-tight">{title}</h1>
+          <div className={`flex flex-wrap items-center gap-2.5 ${back ? "mt-1.5" : ""}`}>
+            <h1 className="font-display text-display-l tracking-tight">{title}</h1>
+            {titleSuffix}
+          </div>
           {subtitle && <p className="mt-1 max-w-3xl text-sm text-muted">{subtitle}</p>}
         </div>
       </div>

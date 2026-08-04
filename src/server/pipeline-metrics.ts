@@ -3,7 +3,7 @@ import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
-  istMonthInstantRange, istMonthRange, istToday, istWeekRange,
+  istBoundaryToInstant, istMonthRange, istToday, istWeekRange,
   kpiInstantRange, type KpiRangeKey,
 } from "@/lib/dates";
 import { aggInrMinor, sumAgg } from "@/lib/money";
@@ -227,16 +227,33 @@ export const getPipelineSnapshot = cache(async (range: KpiRangeKey = "this-month
   };
 });
 
-export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
+/**
+ * @param period Which window the "this month" figures cover. Defaults to the current calendar
+ *   month — the behaviour before this took an argument — so existing callers are unchanged.
+ *   The page previously rendered a `<Pill>This month</Pill>` that looked like a control and was
+ *   not one; this is what makes it real.
+ */
+export async function getPipelineOverview(
+  viewerId: string,
+  isAdmin: boolean,
+  period?: { start: Date; endExclusive: Date },
+) {
   const today = istToday();
   const week = istWeekRange(today);
-  const month = istMonthRange(today);
+  const month = period ? { start: period.start, end: period.endExclusive } : istMonthRange(today);
   // @db.Date columns (dateIn, callDate) use the UTC-midnight day boundaries…
   const mStart = month.start;
   const mEnd = month.end;
-  // …but stage changes are true timestamps: query them with the IST instants,
-  // otherwise 00:00–05:30 IST events on the 1st land in the wrong month.
-  const ts = istMonthInstantRange(today);
+  /**
+   * …but stage changes are true timestamps: query them with the IST INSTANTS, otherwise
+   * 00:00–05:30 IST events on the boundary day land in the wrong window.
+   *
+   * Derived from the window's own boundaries rather than from `today`, so a custom or past
+   * window shifts its instant range with it. `istMonthInstantRange(today)` would have silently
+   * kept every stage-history figure pinned to the current month while the date-column figures
+   * moved — the two halves of the same page disagreeing.
+   */
+  const ts = { start: istBoundaryToInstant(mStart), end: istBoundaryToInstant(mEnd) };
 
   // PRD §2: a User sees only their own data. Admin sees everything. Scope every
   // dashboard number (and the priority lists below) to the viewer's own leads /
@@ -328,7 +345,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
   const openLeads = await prisma.lead.findMany({
     where: { ...ACTIVE, stage: { in: OPEN_STAGES as unknown as never[] }, ...ownLeadWhere },
     select: {
-      id: true, name: true, phone: true, stage: true, dateIn: true, createdAt: true,
+      id: true, name: true, phone: true, email: true, stage: true, dateIn: true, createdAt: true,
       // The intake score, for leads with no discovery call yet — see the ranking below.
       bantScore: true, bantAvg: true,
     },
@@ -478,6 +495,7 @@ export async function getPipelineOverview(viewerId: string, isAdmin: boolean) {
       id: l.id,
       name: l.name,
       phone: l.phone,
+      email: l.email,
       leadSource: l.leadSource,
       dateIn: l.dateIn.toISOString(),
       stage: l.stage,

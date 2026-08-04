@@ -24,7 +24,16 @@ export type AccessRequest = {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "HEAD" | "USER";
+  /**
+   * Widened to every app role, and it deliberately still INCLUDES "ADMIN" even though
+   * `submitSchema` no longer accepts one. This is the shape of rows already sitting in the
+   * queue: requests filed before ADMIN was removed are still there, and typing them as
+   * un-representable would make the approval screen crash on exactly the rows an admin most
+   * needs to see in order to decline them.
+   *
+   * New ADMIN requests cannot be created — see `submitSchema`.
+   */
+  role: "ADMIN" | "HEAD" | "USER" | "TUTOR" | "STUDENT";
   note: string;
   requestedAt: string; // ISO
 };
@@ -50,7 +59,16 @@ async function writeQueue(queue: AccessRequest[]): Promise<void> {
 const submitSchema = z.object({
   name: rule("name"),
   email: rule("email"),
-  role: z.enum(["ADMIN", "HEAD", "USER"]),
+  /**
+   * ADMIN IS NOT REQUESTABLE. This enum is the real gate — the login screen's role picker is UX,
+   * and a crafted POST never renders it, so dropping "Founder / Admin" from that list without
+   * narrowing this would have left full finance-and-compliance access one HTTP request away for
+   * anyone who found the endpoint. An admin seat is created BY an admin in People → Users & access.
+   *
+   * TUTOR and STUDENT are accepted: both roles already exist, already have their own dashboards,
+   * and had no way to identify themselves here.
+   */
+  role: z.enum(["HEAD", "USER", "TUTOR", "STUDENT"]),
   note: z.string().trim().max(500).default(""),
 });
 

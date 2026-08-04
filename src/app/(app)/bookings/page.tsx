@@ -10,13 +10,15 @@ import {
   Target,
 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { PageHeader } from "@/components/ui/kit";
 import { Tabs } from "@/components/ui/Tabs";
+import { resolveBant } from "@/lib/bant-view";
 import { istToday, istWeekRange, istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { BOOKING_STATUS_LABELS, slotTypeLabel } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { getBookableTeamMembers, getBookingsOverview, getWeekSlots, type WeekSlot } from "@/server/booking-metrics";
-import { getBookingRulesConfig, getSssConfig } from "@/server/founder-config";
+import { getBookingRulesConfig, getSlotPatternConfig, getSssConfig } from "@/server/founder-config";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { listSssSlots, listSssNeedsScheduling } from "@/server/sss-slots";
 import { SlotManager } from "./_components/SlotManager";
@@ -25,15 +27,35 @@ import { SssCalendar } from "./_components/SssCalendar";
 
 export const dynamic = "force-dynamic";
 
-// Event-card tint per slot state (calendar design: pastel card + solid left edge)
+/**
+ * Event-card tint per slot state (calendar design: pastel card + solid left edge).
+ *
+ * Mixed against `--surface`, NOT against the literal `white`. Hardcoding white produced a
+ * light-blue chip on a dark card in dark mode — which is a large part of why this page "felt
+ * broken": every booked and open slot on the week grid rendered as a bright rectangle nothing
+ * else on the screen matched. `--surface` follows the theme, so the same 10% mix reads as a
+ * subtle tint in both. (Design system §: never hardcode `white`; use the token.)
+ */
 const slotStyle = (s: WeekSlot) => {
   if (s.booking?.status === "NO_SHOW" || s.booking?.status === "CANCELLED") {
     return { bg: "var(--risk-soft)", edge: "var(--risk)" };
   }
-  if (s.status === "BOOKED") return { bg: "color-mix(in srgb, var(--chart-1) 10%, white)", edge: "var(--chart-1)" };
-  if (s.status === "OPEN") return { bg: "color-mix(in srgb, var(--ok) 10%, white)", edge: "var(--ok)" };
+  if (s.status === "BOOKED") return { bg: "color-mix(in srgb, var(--chart-1) 12%, var(--surface))", edge: "var(--chart-1)" };
+  if (s.status === "OPEN") return { bg: "color-mix(in srgb, var(--ok) 12%, var(--surface))", edge: "var(--ok)" };
   return { bg: "var(--surface-2)", edge: "var(--muted)" }; // BLOCKED
 };
+
+/**
+ * One prospect's score as a calendar chip.
+ *
+ * "Not scored" is a first-class result and is NEVER rendered as 0. An unscored prospect is one
+ * nobody has evidence about; showing them as 0.0/5 beside genuinely poor prospects is how a good
+ * lead gets deprioritised for never having been asked. (`lib/bant-view.ts` states the same rule
+ * for every other surface — this page was the one rendering the raw column instead.)
+ */
+function bantLabel(bant: { avg: number; origin: string } | null): string {
+  return bant ? `BANT ${bant.avg.toFixed(1)}/5` : "Not scored";
+}
 
 export default async function BookingsPage({ searchParams }: { searchParams: { week?: string } }) {
   const session = await requireSection("bookings");
@@ -45,17 +67,39 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
   const weekStartUtc = istWallToUtc(toDateInputValue(week.start), "00:00");
   const weekEndUtc = istWallToUtc(toDateInputValue(week.end), "00:00");
 
-  const [{ kpis, slots, bookings, openSlots }, weekSlots, teamMembers, rules, sssSlots, sssNeeds, sssConfig] = await Promise.all([
-    getBookingsOverview(),
-    getWeekSlots(weekStartUtc, weekEndUtc),
-    getBookableTeamMembers(),
-    getBookingRulesConfig(),
-    listSssSlots(weekStartUtc, weekEndUtc),
-    listSssNeedsScheduling(),
-    getSssConfig(),
-  ]);
-  const waByBooking = await getWhatsAppStatusMap("bookingRequestId", bookings.map((b) => b.id));
+  const [{ kpis, slots, bookings, openSlots }, weekSlots, teamMembers, rules, sssSlots, sssNeeds, sssConfig, slotPattern] =
+    await Promise.all([
+      getBookingsOverview(),
+      getWeekSlots(weekStartUtc, weekEndUtc),
+      getBookableTeamMembers(),
+      getBookingRulesConfig(),
+      listSssSlots(weekStartUtc, weekEndUtc),
+      listSssNeedsScheduling(),
+      getSssConfig(),
+      // Read so the page can EXPLAIN an empty calendar instead of just showing one — see the
+      // availability banner below.
+      getSlotPatternConfig(),
+    ]);
+  /**
+   * Depends on `bookings`, so it cannot join the batch above — but it must not be a bare
+   * sequential `await` either. Against Supabase in Singapore every round trip costs ~205ms, and
+   * this one was paying that on every single load for a lookup that is empty whenever there are
+   * no bookings. Skipped entirely in that case.
+   */
+  const waByBooking = bookings.length
+    ? await getWhatsAppStatusMap("bookingRequestId", bookings.map((b) => b.id))
+    : {};
   const bookingUrl = `${process.env.BETTER_AUTH_URL ?? ""}/book`;
+
+  /**
+   * The single most common reason this page looks broken: no availability pattern was ever
+   * configured, so the hourly top-up job short-circuits, no slots exist, `/book` offers a
+   * prospect an empty calendar, and every figure here reads zero with no explanation.
+   *
+   * `DEFAULT_SLOT_PATTERN_CONFIG` ships `enabled: false` with no weekdays, and production ran
+   * that way — 0 slots, 0 bookings, 23,545 leads — because nothing on any screen said so.
+   */
+  const availabilityOff = !slotPattern.enabled || slotPattern.weekdays.length === 0;
 
   const todayKey = toDateInputValue(istToday());
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -89,27 +133,45 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
 
   return (
     <div className="w-full space-y-6">
-      {/* Header strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-4 shadow-card">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 flex-none place-items-center rounded-field bg-accent-soft text-accent">
-            <CalendarCheck size={20} />
-          </span>
-          <div>
-            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Bookings</h1>
-            <p className="text-xs text-muted">
-              Discovery-call bookings and availability - in-house, replacing Synamate.
-            </p>
-          </div>
+      {/* The shared header, not a bespoke strip. This page used to hand-roll its own icon chip,
+          type scale and action slot — one of five pages that did, which is what made the app's
+          dashboards look like five different products. */}
+      <PageHeader
+        icon={<CalendarCheck size={20} />}
+        title="Bookings"
+        subtitle="Discovery-call bookings and availability — in-house, replacing Synamate."
+        actions={
+          <a
+            href="/book"
+            target="_blank"
+            className="flex items-center gap-1.5 rounded-full bg-accent-soft px-3.5 py-1.5 text-xs font-semibold text-accent transition-opacity hover:opacity-80"
+          >
+            <ExternalLink size={13} /> {bookingUrl || "/book"}
+          </a>
+        }
+      />
+
+      {/* ── Why the calendar is empty ────────────────────────────────────────────────────
+          Named cause, named cure, one click away. Without this the page shows four zeroes and
+          an empty week, which reads as "the booking system is broken" rather than "nobody has
+          set the working hours yet" — and the prospect on /book sees the same empty calendar. */}
+      {availabilityOff && (
+        <div role="status" className="rounded-card border border-warn bg-warn-soft p-4">
+          <p className="text-sm font-semibold text-warn-ink">
+            No availability pattern is set — so no slots exist and nobody can book a call.
+          </p>
+          <p className="mt-1 text-caption text-warn-ink">
+            {slotPattern.enabled
+              ? "The pattern is switched on but has no weekdays selected, so it fits no slots."
+              : "Discovery slots are generated hourly from a weekly pattern. Until one is switched on, /book shows prospects an empty calendar."}{" "}
+            Set the weekdays, hours and owner at{" "}
+            <Link href="/console" className="font-semibold underline">
+              Console → Availability
+            </Link>
+            .
+          </p>
         </div>
-        <a
-          href="/book"
-          target="_blank"
-          className="flex items-center gap-1.5 rounded-full bg-accent-soft px-3.5 py-1.5 text-xs font-semibold text-accent transition-opacity hover:opacity-80"
-        >
-          <ExternalLink size={13} /> {bookingUrl || "/book"}
-        </a>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
@@ -228,6 +290,10 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="font-display text-h2 font-semibold">{weekLabel}</h3>
             <div className="flex items-center gap-1">
+              {/* Availability moved out of the tab strip and next to the thing it fills.
+                  A disclosure, not a tab: it is opened to set the working pattern and then
+                  closed for months. */}
+              <SlotManager slots={slots} teamMembers={teamMembers} rules={rules} collapsible />
               <Link href={weekNav(-7)} className="grid h-8 w-8 place-items-center rounded-field border border-line text-muted transition-colors hover:bg-surface-2 hover:text-ink" aria-label="Previous week">
                 <ChevronLeft size={16} />
               </Link>
@@ -263,7 +329,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                             style={{ background: st.bg, borderLeft: `3px solid ${st.edge}` }}
                             title={
                               s.booking
-                                ? `${s.booking.name}${s.assignedToName ? ` · with ${s.assignedToName}` : ""} · ${s.time} IST · ${slotTypeLabel(s.durationMins)} · BANT ${s.booking.bantScore}/4 · ${s.booking.confirmed ? "Confirmed" : "Awaiting confirmation"} · ${BOOKING_STATUS_LABELS[s.booking.status] ?? s.booking.status}`
+                                ? `${s.booking.name}${s.assignedToName ? ` · with ${s.assignedToName}` : ""} · ${s.time} IST · ${slotTypeLabel(s.durationMins)} · ${bantLabel(s.booking.bant)} · ${s.booking.confirmed ? "Confirmed" : "Awaiting confirmation"} · ${BOOKING_STATUS_LABELS[s.booking.status] ?? s.booking.status}`
                                 : `${s.status === "OPEN" ? "Open slot" : "Blocked"}${s.assignedToName ? ` · ${s.assignedToName}` : ""} · ${s.time} IST · ${slotTypeLabel(s.durationMins)}`
                             }
                           >
@@ -286,8 +352,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                             {s.booking ? (
                               <p className="mt-0.5 flex items-center gap-1 text-caption text-muted">
                                 {s.assignedToName && <span className="truncate">with {s.assignedToName}</span>}
-                                <span className="ml-auto rounded-full bg-white/70 px-1.5 py-px font-medium">
-                                  BANT {s.booking.bantScore}/4
+                                {/* `--surface` mix, not `bg-white/70`: a translucent white chip
+                                    on a dark card is unreadable in dark mode. */}
+                                <span
+                                  className="ml-auto flex-none rounded-full px-1.5 py-px font-medium"
+                                  style={{ background: "color-mix(in srgb, var(--surface) 70%, transparent)" }}
+                                >
+                                  {bantLabel(s.booking.bant)}
                                 </span>
                               </p>
                             ) : (
@@ -304,17 +375,37 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
             </div>
             {weekSlots.length === 0 && (
               <p className="py-10 text-center text-sm text-muted">
-                No slots this week - generate availability in the tab below.
+                {availabilityOff ? (
+                  <>
+                    No slots exist at all — no availability pattern is configured. Set one at{" "}
+                    <Link href="/console" className="font-semibold text-accent underline">
+                      Console → Availability
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  <>No slots this week — generate availability under &ldquo;Manage availability&rdquo; above.</>
+                )}
               </p>
             )}
           </div>
         </div>
       </div>
 
+      {/* ── Two tabs, not three ──────────────────────────────────────────────────────────
+          "Bookings" inside a page called "Bookings", sitting under a calendar that also shows
+          bookings, read as the same thing three times. It is not: the calendar shows SLOTS
+          (including empty and blocked ones), this shows BOOKING REQUESTS — the prospect's form,
+          their BANT answers, their WhatsApp confirmation state and the confirm/postpone/cancel
+          actions. Renaming it says so.
+
+          "Availability" left the strip entirely. It is a SETUP screen — generate slots for a
+          date range — not something anyone opens daily, and giving it equal billing with the two
+          working views is what made this page feel like a pile of panels. It now lives behind
+          "Manage availability" beside the week navigation. */}
       <Tabs
         tabs={[
-          { label: "Bookings", content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} /> },
-          { label: "Availability", content: <SlotManager slots={slots} teamMembers={teamMembers} rules={rules} /> },
+          { label: `Booking requests${bookings.length ? ` (${bookings.length})` : ""}`, content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} /> },
           {
             label: "SSS Calendar",
             content: (

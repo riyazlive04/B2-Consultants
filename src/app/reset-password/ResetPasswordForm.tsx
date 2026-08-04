@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { KeyRound, Loader2 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { normalizePassword } from "@/lib/credentials";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { BrandLogo } from "@/components/shell/BrandLogo";
 
@@ -29,13 +30,28 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
-    if (password !== confirm) {
+    /**
+     * Trim BEFORE comparing and before storing.
+     *
+     * Setting a password is where a stray space does the most damage: it is baked into the
+     * account, and the person can then never reproduce it — they type the visible characters
+     * forever and are told they are wrong. Trimming here and at sign-in means the two agree.
+     *
+     * Comparing the TRIMMED values also stops the confirm field failing on an invisible
+     * difference, which reads as "I typed the same thing twice and it says I didn't".
+     */
+    const next = normalizePassword(password);
+    if (next !== normalizePassword(confirm)) {
       setError("The two passwords don't match");
+      return;
+    }
+    if (next.length < 8) {
+      setError("Your password must be at least 8 characters.");
       return;
     }
     setBusy(true);
     setError(null);
-    const { error } = await authClient.resetPassword({ newPassword: password, token });
+    const { error } = await authClient.resetPassword({ newPassword: next, token });
     setBusy(false);
     if (error) {
       // Better Auth reports an expired/consumed/unknown token as a 400.

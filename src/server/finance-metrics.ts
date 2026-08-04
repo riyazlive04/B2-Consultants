@@ -134,20 +134,42 @@ export const getPendingRows = cache(async () => {
   });
 });
 
-export async function getFinanceOverview() {
+/**
+ * @param period Which window to report on. Defaults to the current calendar month, which is
+ *   exactly what this function did before it took an argument — so every existing caller is
+ *   unchanged. Pass a resolved period (see `lib/period.ts`) to report on any other window.
+ *
+ *   The whole screen was hardcoded to `istMonthRange()` with no way to ask for July, which made
+ *   "show me last month's P&L" impossible and capped CSV export at the current month.
+ */
+export async function getFinanceOverview(period?: { start: Date; endExclusive: Date }) {
   const today = istToday();
-  const month = istMonthRange(today);
+  const month = period
+    ? { start: period.start, end: period.endExclusive }
+    : istMonthRange(today);
   const year = istYearRange(today);
 
-  // Same-day window into LAST month (day 1..today's day) — the honest month-over-
-  // month comparator mid-month; comparing a part-month to a full month always lies.
-  const prevMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
-  const prevSameDayEnd = new Date(
-    Math.min(
-      Date.UTC(prevMonthStart.getUTCFullYear(), prevMonthStart.getUTCMonth(), today.getUTCDate() + 1),
-      month.start.getTime(),
-    ),
-  );
+  /**
+   * The comparison window.
+   *
+   * For the CURRENT month this stays the same-day slice of last month (day 1..today's day) —
+   * comparing a part-month against a full month always flatters the past. For any OTHER window
+   * the full preceding window of the same length is the honest comparator, because the window
+   * being reported is itself complete.
+   */
+  const viewingCurrentMonth = today >= month.start && today < month.end;
+  const [prevMonthStart, prevSameDayEnd] = viewingCurrentMonth
+    ? (() => {
+        const s = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+        const e = new Date(
+          Math.min(
+            Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), today.getUTCDate() + 1),
+            month.start.getTime(),
+          ),
+        );
+        return [s, e];
+      })()
+    : [new Date(month.start.getTime() - (month.end.getTime() - month.start.getTime())), month.start];
 
   const [monthIncomes, monthExpenses, yearIncomes, pendingRows, incomeList, expenseList, prevIncomes, prevExpenses] =
     await Promise.all([
@@ -319,10 +341,23 @@ export async function getFinanceOverview() {
   for (const i of monthIncomes) {
     addTakings(daily, i.date.toISOString().slice(0, 10), i);
   }
-  const daysElapsed = today.getUTCDate();
-  const monthDates = Array.from({ length: daysElapsed }, (_, idx) =>
-    new Date(Date.UTC(month.start.getUTCFullYear(), month.start.getUTCMonth(), idx + 1)).toISOString().slice(0, 10),
-  );
+  /**
+   * How many days of the window to plot.
+   *
+   * For the CURRENT month, stop at today — plotting a flat line out to the 31st would read as
+   * "we earned nothing for the rest of the month" rather than "the month hasn't happened yet".
+   * For a window that is already over, plot all of it; and for an arbitrary window (a week, a
+   * quarter, a custom range) walk day-by-day from its own start rather than assuming the 1st.
+   */
+  const spanDays = Math.max(1, Math.round((month.end.getTime() - month.start.getTime()) / 86_400_000));
+  const daysElapsed = viewingCurrentMonth
+    ? Math.max(1, Math.round((today.getTime() - month.start.getTime()) / 86_400_000) + 1)
+    : spanDays;
+  const monthDates = Array.from({ length: Math.min(daysElapsed, spanDays) }, (_, idx) => {
+    const d = new Date(month.start);
+    d.setUTCDate(month.start.getUTCDate() + idx);
+    return d.toISOString().slice(0, 10);
+  });
   const revenueSeries = cumulate(monthDates, daily);
   const revenueSpark = revenueSeries.map((p) => p.inr);
 

@@ -19,6 +19,7 @@ import {
   type UserStatus,
 } from "@/lib/capabilities";
 import { INVITE_TTL_DAYS, mintInviteToken, unguessablePlaceholderPassword } from "@/lib/invite-token";
+import { normalizePassword } from "@/lib/credentials";
 import { rule } from "@/lib/field-rules";
 import { consumeAccessRequest } from "./access-requests";
 import { getOwnershipInventory, migrateOwnership } from "./termination";
@@ -630,7 +631,15 @@ export async function setUserPassword(userId: string, form: FormData): Promise<A
   const rail = privilegeError(session, target, target.role, {});
   if (rail) return { ok: false, error: rail };
 
-  const password = String(form.get("password") ?? "");
+  /**
+   * Trimmed at the SOURCE of the problem.
+   *
+   * This is where an admin types the temporary password they are about to send someone over
+   * WhatsApp. If it is stored with an edge space, no amount of trimming at sign-in helps —
+   * the stored secret itself contains a character nobody will ever type back. Trimming here and
+   * at sign-in means both ends agree on the same string.
+   */
+  const password = normalizePassword(String(form.get("password") ?? ""));
   if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters" };
   try {
     const ctx = await auth.$context;
@@ -701,3 +710,68 @@ export async function listUsers(): Promise<ListedUser[]> {
   }));
 }
 
+
+/**
+ * Flip ONE capability on ONE person — the per-person matrix's write path.
+ *
+ * Deliberately narrow. `updateUserAccess` above takes a whole form and rewrites name, role,
+ * sections and every capability at once, which is right for a dialog and wrong for a grid: a
+ * grid toggle that posted the entire access model would let two admins editing different cells
+ * silently overwrite each other's work.
+ *
+ * Enforces the same rails as the dialog:
+ *   · only ADMIN may reach it (`requireCapability("users.manage")`);
+ *   · you cannot grant a capability you do not hold yourself (`privilegeError`);
+ *   · an ADMIN target is refused outright — admins hold everything by definition, and writing
+ *     an override onto one would be a no-op that reads on screen as a real setting.
+ */
+export async function setUserCapability(
+  userId: string,
+  key: string,
+  granted: boolean,
+): Promise<ActionResult> {
+  const session = await requireCapability("users.manage");
+
+  const cap = CAPABILITIES.find((c) => c.key === key);
+  if (!cap) return { ok: false, error: "Unknown capability" };
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, role: true, capabilities: true },
+  });
+  if (!target) return { ok: false, error: "That user no longer exists" };
+  if (target.role === "ADMIN") {
+    return { ok: false, error: "Admins hold every capability — there is nothing to change." };
+  }
+
+  const before = (target.capabilities as CapabilityOverrides | null) ?? {};
+  const next: CapabilityOverrides = { ...before, [key]: granted };
+
+  const rail = privilegeError(
+    session,
+    { id: target.id, role: target.role as AppRole, capabilities: target.capabilities },
+    target.role as AppRole,
+    next,
+  );
+  if (rail) return { ok: false, error: rail };
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { capabilities: next as Prisma.InputJsonValue },
+  });
+
+  await logActivity(session, {
+    action: "user.access.update",
+    section: "people",
+    entityType: "User",
+    entityId: userId,
+    summary: `${granted ? "Granted" : "Removed"} "${cap.name}" ${granted ? "to" : "from"} ${target.name}`,
+    meta: { capability: key, granted },
+  });
+
+  revalidatePath("/people");
+  revalidatePath("/console");
+  revalidatePath("/finance");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

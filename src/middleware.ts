@@ -34,13 +34,26 @@ import { getSessionCookie } from "better-auth/cookies";
 const PUBLIC_PREFIXES = [
   "/book", "/invite", "/agreement",
   "/api/leads", "/api/wati", "/api/resend", "/api/twilio", "/api/cron", "/api/health",
+  // Direct capture endpoints (landing pages posting straight to us, no relay). Same
+  // fail-closed shared-secret contract as /api/leads — see server/intake-route.ts.
+  // NOT /api/export: that one is session-gated, and a public export of 23,545 contacts
+  // would be the single worst hole this list could open.
+  "/api/intake",
   "/f", "/p", "/i",
   "/forgot-password", "/reset-password",
 ];
 
+/**
+ * The sign-in screens. All three render the same `LoginForm` with different copy — `/portal` for
+ * students, `/tutor` for German Note tutors — and all three must be reachable WITHOUT a session,
+ * or the entry points built for people who have not signed in yet would bounce them to the one
+ * that says "Internal tool".
+ */
+const LOGIN_PATHS = new Set(["/login", "/portal", "/tutor"]);
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isLogin = pathname === "/login";
+  const isLogin = LOGIN_PATHS.has(pathname);
   const isPublic = PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   if (isPublic) return NextResponse.next();
 

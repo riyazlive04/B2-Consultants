@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { normalizeEmail } from "@/lib/credentials";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { BrandLogo } from "@/components/shell/BrandLogo";
 import { fieldKindProps } from "@/components/ui/field-base";
@@ -30,7 +31,10 @@ export default function ForgotPasswordForm() {
     setBusy(true);
     setError(null);
     const { error } = await authClient.requestPasswordReset({
-      email,
+      // Folded exactly as the sign-in form folds it. `User.email` is a lowercase `@unique`
+      // column, so a capitalised address here would quietly match no account — and Better Auth
+      // reports success either way, so the person would wait for an email that was never sent.
+      email: normalizeEmail(email),
       redirectTo: "/reset-password",
     });
     setBusy(false);

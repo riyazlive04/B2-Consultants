@@ -15,6 +15,7 @@ import { StatusBadge } from "../_components/StatusBadge";
 import { AgreementActions } from "./_components/AgreementActions";
 import { DevicePanel } from "./_components/DevicePanel";
 import { AgreementForm } from "../_components/AgreementForm";
+import { PageHeader } from "@/components/ui/kit";
 
 export const dynamic = "force-dynamic";
 
@@ -42,21 +43,12 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
   return (
     <div className="w-full space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link href="/agreements" className="text-muted transition-colors hover:text-ink">
-            <ArrowLeft size={18} />
-          </Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="font-display text-2xl font-bold tracking-tight">{row.documentNo}</h1>
-              <StatusBadge status={status} />
-            </div>
-            <p className="text-xs text-muted">
-              {data.student.fullName} · {data.batch.number} · starts {formatGermanDate(data.batch.startDate)} ·
-              template {row.templateVersion}
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          back={{ href: "/agreements", label: "Agreements" }}
+          title={row.documentNo}
+          titleSuffix={<StatusBadge status={status} />}
+          subtitle={`${data.student.fullName} · ${data.batch.number} · starts ${formatGermanDate(data.batch.startDate)} · template ${row.templateVersion}`}
+        />
         <a
           href={`/api/agreements/${row.id}/pdf?download=1`}
           className="inline-flex h-10 items-center gap-1.5 rounded-btn border border-line px-4 text-sm font-medium transition-colors hover:border-primary hover:text-primary"

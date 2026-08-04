@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { istMonthRange, istToday } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
+import { hasCapability, type CapabilityKey } from "@/lib/capabilities";
+import type { AppRole } from "@/lib/sections";
 import { getCommissionRulesConfig } from "./founder-config";
 
 /**
@@ -22,7 +24,21 @@ import { getCommissionRulesConfig } from "./founder-config";
  * rate is a percentage of the payment actually received — a cut of real cash in, per payment.
  */
 
-type Payout = { userId: string; name: string; pct: number; amountInrMinor: number };
+type Payout = {
+  userId: string;
+  name: string;
+  pct: number;
+  amountInrMinor: number;
+  /**
+   * Set when this person is NOT eligible for the leg they would otherwise have earned — the
+   * amount is then zero and this says which leg and why.
+   *
+   * The line is kept rather than dropped on purpose: a payout report that silently omits
+   * someone gives them nothing to query, and "why am I not on this deal" is exactly the
+   * question a commission report exists to answer.
+   */
+  notEligible?: string;
+};
 
 export async function getCommissionReport() {
   const month = istMonthRange(istToday());
@@ -74,6 +90,33 @@ export async function getCommissionReport() {
     select: { userId: true, worksSaturdays: true },
   });
   const worksSaturdays = new Map(teamProfiles.map((t) => [t.userId!, t.worksSaturdays]));
+
+  /**
+   * ── PER-PERSON ELIGIBILITY ──────────────────────────────────────────────────────
+   * Commission rates were global-only, so "Nilofer is first-call only" existed as an arrangement
+   * between people and nowhere in the system — it held purely because she happened not to run
+   * discovery calls, and the report would have paid her the moment she covered one.
+   *
+   * `eligibleFor` reads the same per-user capability overrides People → Users & access already
+   * edits. Defaults grant every leg to ADMIN and USER, so this changes nothing until a founder
+   * revokes something.
+   *
+   * IMPORTANT: an ineligible leg is still SHOWN, at zero, with a reason (see `notEligible`
+   * below). Silently dropping someone's line is how a payout dispute starts.
+   */
+  const actors = await prisma.user.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true, role: true, capabilities: true },
+  });
+  const actorById = new Map(actors.map((u) => [u.id, u]));
+  const eligibleFor = (userId: string | null | undefined, key: CapabilityKey): boolean => {
+    if (!userId) return true;
+    const u = actorById.get(userId);
+    // Unknown or deactivated user → leave the historical payout alone. Re-deriving a past month
+    // to zero because someone left the company would rewrite what was already paid.
+    if (!u) return true;
+    return hasCapability(u.role as AppRole, u.capabilities as Record<string, boolean> | null, key);
+  };
   // @db.Date is stored as UTC midnight of the calendar day, so the weekday is the UTC weekday —
   // reading it in IST would shift a Saturday date back into Friday. 6 = Saturday.
   const isSaturday = (d: Date) => d.getUTCDay() === 6;
@@ -165,6 +208,38 @@ export async function getCommissionReport() {
       rule = hadPayouts ? `${rule} + closer ${rules.closerPct}%` : `Closer only - ${rules.closerPct}%`;
     }
 
+    /**
+     * ── Apply per-person eligibility ────────────────────────────────────────────
+     * Zeroed, not removed. Each leg is attributed to the person who actually did the work, so
+     * the report still shows WHO ran the call; the capability only decides whether that work
+     * earns money. Dropping the line would make the deal look unattributed instead.
+     *
+     * Legs are identified by who holds them: `first` earns first-call, `disco` (and the
+     * `coveredFor` owner, whose share is a division of the same discovery leg) earns discovery,
+     * `closer` earns the closer's share.
+     */
+    for (const p of payouts) {
+      const legs: [string, CapabilityKey][] = [];
+      if (first?.userId === p.userId) legs.push(["first-call", "commission.firstCall"]);
+      if (disco?.userId === p.userId || coveredFor?.userId === p.userId) {
+        legs.push(["discovery", "commission.discovery"]);
+      }
+      if (closer?.userId === p.userId) legs.push(["closer", "commission.closer"]);
+
+      const blocked = legs.filter(([, key]) => !eligibleFor(p.userId, key)).map(([label]) => label);
+      // Only zero the line when EVERY leg it holds is blocked. Someone eligible for the
+      // first call but not for discovery still earns their first-call share, and splitting a
+      // merged line back apart would need a per-leg ledger this report does not keep — so the
+      // partial case is reported rather than silently mis-split.
+      if (blocked.length > 0 && blocked.length === legs.length) {
+        p.notEligible = `Not eligible for the ${blocked.join(" or ")} share`;
+        p.pct = 0;
+        p.amountInrMinor = 0;
+      } else if (blocked.length > 0) {
+        p.notEligible = `Includes a ${blocked.join(" and ")} share they are not eligible for — review`;
+      }
+    }
+
     // Day-off review flag: a discovery call credited to someone on a Saturday they don't work,
     // where no cover split was recorded. If `coveredFor` IS set, the stand-in situation is
     // already handled, so there is nothing to review.
@@ -193,6 +268,9 @@ export async function getCommissionReport() {
         name: p.name,
         pct: p.pct,
         amountInrMinor: p.amountInrMinor,
+        // `null` rather than omitted: the UI branches on it, and an absent key would make an
+        // eligible line and a serialisation slip look identical.
+        notEligible: p.notEligible ?? null,
       })),
     };
   });

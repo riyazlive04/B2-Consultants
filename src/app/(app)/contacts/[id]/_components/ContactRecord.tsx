@@ -18,6 +18,8 @@ import { toast, askConfirm } from "@/components/ui/feedback";
 import { Avatar, Card, Chip, EmptyState, Pill, type Tone } from "@/components/ui/kit";
 import { Tabs } from "@/components/ui/Tabs";
 import { DateText } from "@/components/ui/DateText";
+import { BANT_ORIGIN_LABELS } from "@/lib/bant-view";
+import { BANT_VERDICT_LABELS } from "@/lib/labels";
 import {
   updateContact, setContactOwner, addContactTag, removeContactTag, setContactCustomField,
   createNote, deleteNote, toggleNotePin, createTask, toggleTask, deleteTask,
@@ -167,6 +169,9 @@ export default function ContactRecord({
 
           {/* Agreement — the next action on this contract, wherever it currently stands. */}
           <AgreementTaskCard summary={agreement} />
+
+          {/* How they qualified — the landing page's own answers. */}
+          <BantCard contact={contact} />
 
           {/* Tags */}
           <Card title="Tags">
@@ -416,5 +421,90 @@ function Opps({ contact }: { contact: ContactDetail }) {
         </Link>
       ))}
     </div>
+  );
+}
+
+/**
+ * How this person qualified — the band score and the answers behind it.
+ *
+ * ── Why this card exists ────────────────────────────────────────────────────────
+ * The contact record showed NO score at all. `resolveBant` was consumed by Bookings, My Desk and
+ * Outreach and by nothing here, so the one screen a specialist opens to prepare for a
+ * conversation was the one screen that never showed what the prospect had already told us. The
+ * landing page had been collecting these answers the whole time.
+ *
+ * ── The rule this card exists to honour ─────────────────────────────────────────
+ * NOT SCORED IS NOT ZERO. An unscored prospect is one nobody has asked; showing them as 0.0/5
+ * would rank them alongside someone who answered badly, and the good lead loses. The empty state
+ * says which of the two it is, and why.
+ */
+function BantCard({ contact }: { contact: ContactDetail }) {
+  const b = contact.bant;
+
+  if (!b) {
+    return (
+      <Card title="Qualification">
+        <p className="text-sm text-ink-3">
+          <span className="font-semibold text-ink-2">Not scored.</span> Nobody has asked this
+          prospect the qualification questions — or the landing page&apos;s answers did not reach
+          us. This is <em>not</em> a low score; it is no evidence either way.
+        </p>
+      </Card>
+    );
+  }
+
+  const tone: Tone = b.avg > 3 ? "good" : b.avg >= 2 ? "warn" : "bad";
+  const dims: [string, string, boolean][] = [
+    ["B", "Budget", b.budget],
+    ["A", "Authority", b.authority],
+    ["N", "Need", b.need],
+    ["T", "Timeline", b.timeline],
+  ];
+
+  return (
+    <Card title="Qualification">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-display text-3xl font-bold tabular-nums text-ink">{b.avg.toFixed(1)}</span>
+        <span className="text-sm text-ink-3">/ 5</span>
+        <Pill tone={tone}>{BANT_VERDICT_LABELS[b.verdict] ?? b.verdict}</Pill>
+      </div>
+      <p className="mt-1 text-caption text-ink-3">
+        {BANT_ORIGIN_LABELS[b.origin]}
+        {contact.bantScoredAt && (
+          <> · scored <DateText date={contact.bantScoredAt} /></>
+        )}
+        {" · "}{b.score} of 4 dimensions met
+      </p>
+
+      <div className="mt-3 flex gap-1.5">
+        {dims.map(([k, full, on]) => (
+          <span
+            key={k}
+            title={`${full}: ${on ? "met" : "not met"}`}
+            className={`grid h-6 w-6 place-items-center rounded text-caption font-bold ${
+              on ? "bg-accent text-on-accent" : "bg-surface-2 text-muted"
+            }`}
+          >
+            {k}
+          </span>
+        ))}
+      </div>
+
+      {contact.answers.length > 0 ? (
+        <dl className="mt-4 space-y-2 border-t border-line pt-3">
+          {contact.answers.map((a, i) => (
+            <div key={`${a.question}-${i}`}>
+              <dt className="text-caption text-ink-3">{a.question}</dt>
+              <dd className="text-sm font-medium text-ink">{a.answer}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="mt-3 border-t border-line pt-3 text-caption text-ink-3">
+          A score was recorded but the individual answers were not kept — this prospect was scored
+          before answers were being stored.
+        </p>
+      )}
+    </Card>
   );
 }

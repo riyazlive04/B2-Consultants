@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileSignature, Plus } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { PageHeader } from "@/components/ui/kit";
 import { StudentName } from "@/components/ui/StudentName";
 import { requireSection } from "@/lib/rbac";
 import { formatDate, formatInrMinor } from "@/lib/format";
@@ -16,25 +17,19 @@ export default async function AgreementsPage() {
 
   return (
     <div className="w-full space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-4 shadow-card">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 flex-none place-items-center rounded-field bg-accent-soft text-accent">
-            <FileSignature size={20} />
-          </span>
-          <div>
-            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Agreements</h1>
-            <p className="text-xs text-muted">
-              Draft, countersign and issue coaching agreements — signed over WhatsApp.
-            </p>
-          </div>
-        </div>
-        <Link
-          href="/agreements/new"
-          className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong"
-        >
-          <Plus size={16} /> New agreement
-        </Link>
-      </div>
+      <PageHeader
+        icon={<FileSignature size={20} />}
+        title="Agreements"
+        subtitle="Draft, countersign and issue coaching agreements — signed over WhatsApp."
+        actions={
+          <Link
+            href="/agreements/new"
+            className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong"
+          >
+            <Plus size={16} /> New agreement
+          </Link>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard

@@ -1,5 +1,7 @@
 import { Users } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
+import { getDuplicatesReport } from "@/server/duplicates-metrics";
+import { DuplicatesPanel } from "./_components/DuplicatesPanel";
 import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
 import { listAccessRequests } from "@/server/access-requests";
@@ -15,12 +17,15 @@ export const dynamic = "force-dynamic";
 
 export default async function PeoplePage() {
   const session = await requireSection("people"); // Admin-only (PRD2 §2)
-  const [{ members, month, weeklyRollup, monthlyRollup, entries }, users, accessRequests, sections] = await Promise.all([
-    getPeopleOverview(),
-    listUsers(),
-    listAccessRequests(),
-    getResolvedSections(),
-  ]);
+  const [{ members, month, weeklyRollup, monthlyRollup, entries }, users, accessRequests, sections, duplicates] =
+    await Promise.all([
+      getPeopleOverview(),
+      listUsers(),
+      listAccessRequests(),
+      getResolvedSections(),
+      getDuplicatesReport(),
+    ]);
+  const duplicateCount = duplicates.leads.length + duplicates.students.length + duplicates.users.length;
   const anyMissing = members.some((m) => m.missingLogBadge);
 
   // Who is doing the granting. The dialog greys out anything they can't hand out —
@@ -43,6 +48,10 @@ export default async function PeoplePage() {
           },
           { label: "OKRs", content: <OkrBoard members={members} month={month} /> },
           { label: "Team & org chart", content: <OrgChart members={members} /> },
+          {
+            label: `Duplicates${duplicateCount ? ` (${duplicateCount})` : ""}`,
+            content: <DuplicatesPanel report={duplicates} canMerge={session.role === "ADMIN"} />,
+          },
           {
             label: `Users & access${accessRequests.length ? ` (${accessRequests.length})` : ""}`,
             content: (

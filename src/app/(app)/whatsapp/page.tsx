@@ -1,6 +1,7 @@
 import { MessageCircle, CheckCircle2, XCircle, Send, Reply } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Tabs } from "@/components/ui/Tabs";
+import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
 import { getWhatsAppAdminData } from "@/server/whatsapp-metrics";
 import { WhatsAppHistory } from "./_components/WhatsAppHistory";
@@ -41,21 +42,12 @@ export default async function WhatsAppPage() {
 
   return (
     <div className="w-full space-y-6">
-      {/* Header strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-4 shadow-card">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 flex-none place-items-center rounded-field bg-accent-soft text-accent">
-            <MessageCircle size={20} />
-          </span>
-          <div>
-            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">WhatsApp</h1>
-            <p className="text-xs text-muted">
-              Outbound reminders via WATI — funnel, bookings, payments &amp; student nudges.
-            </p>
-          </div>
-        </div>
-        <RunRemindersButton />
-      </div>
+      <PageHeader
+        icon={<MessageCircle size={20} />}
+        title="WhatsApp"
+        subtitle="Outbound reminders via WATI — funnel, bookings, payments & student nudges."
+        actions={<RunRemindersButton />}
+      />
 
       {/* Connection status */}
       <div className="rounded-card border border-line bg-surface p-5 shadow-card">

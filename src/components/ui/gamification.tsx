@@ -130,7 +130,32 @@ export function BadgeStrip({ badges, max = 8 }: { badges: UnlockedBadge[]; max?:
 }
 
 /** One weekly quest with live progress. */
-export function QuestCard({ quest }: { quest: QuestProgress }) {
+export function QuestCard({ quest, compact = false }: { quest: QuestProgress; compact?: boolean }) {
+  /**
+   * `compact` is the ADMIN board's row: same component, tighter.
+   *
+   * The Arena's admin branch used to hand-roll its own progress bars — a second, slightly
+   * different rendering of the identical data, which is how two views of one quest start
+   * disagreeing about what "done" looks like. One component, one truth, one variant flag.
+   */
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-5 flex-none text-center" aria-hidden>{quest.icon}</span>
+        <span className="w-32 flex-none truncate" title={quest.title}>{quest.title}</span>
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${quest.pct}%`, background: quest.done ? "var(--ok)" : "var(--accent)" }}
+          />
+        </div>
+        <span className="tnum w-12 flex-none text-right font-semibold">
+          {quest.value}/{quest.target}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`rounded-card border p-4 shadow-card transition-colors ${

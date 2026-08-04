@@ -61,17 +61,53 @@ export type ShadowStatus = { total: number; scored: number; disagreements: numbe
 function InboundReport({ report }: { report: IntakeMappingReport }) {
   const nothingWrong = report.unresolved.length === 0 && report.unmapped.length === 0;
 
+  /**
+   * The total failure, stated first and in plain words.
+   *
+   * Leads ARE arriving from a source that can carry answers, and NONE of them scored. That is not
+   * "no submissions yet" — it is a mapping that matches nothing, and it is invisible in every
+   * other panel because an unscored lead looks exactly like an unqualified one. Production ran
+   * this way for months: 111 Pabbly leads, 13 questions configured, zero scores, nothing on any
+   * screen saying so.
+   */
+  const { captured, scored } = report.coverage7d;
+  const totalMiss = captured > 0 && scored === 0;
+
   return (
     <Card>
       <p className="text-caption font-semibold uppercase text-ink-3">
         What the landing page is sending
       </p>
+
+      {totalMiss && (
+        <p role="alert" className="mt-2 rounded-field border border-bad bg-bad-soft px-3 py-2.5 text-sm text-bad">
+          <strong>No lead has been scored in the last 7 days.</strong> {captured} lead
+          {captured === 1 ? "" : "s"} arrived from a form that should carry qualification answers,
+          and not one produced a band score — so every discovery call is being prepared blind.
+          Either the answers are not reaching us, or the field names below match no question.
+          Start with &ldquo;Fields we are not reading&rdquo;.
+        </p>
+      )}
+      {captured > 0 && scored > 0 && scored < captured && (
+        <p className="mt-2 rounded-field border border-warn bg-warn-soft px-3 py-2 text-caption text-warn-ink">
+          Last 7 days: <strong>{scored}</strong> of <strong>{captured}</strong> captured leads
+          scored. The rest arrived without recognisable answers.
+        </p>
+      )}
+
       <p className="mt-1 text-caption text-ink-3">
         {report.inspected === 0 ? (
-          <>
-            No opt-in submissions with qualification answers have arrived yet. Once Pabbly
-            delivers one, its fields appear here.
-          </>
+          captured === 0 ? (
+            <>
+              No opt-in submissions with qualification answers have arrived yet. Once Pabbly
+              delivers one, its fields appear here.
+            </>
+          ) : (
+            <>
+              No submission has left readable evidence yet — the next delivery will populate this
+              list even if nothing in it maps.
+            </>
+          )
         ) : (
           <>
             Last {report.inspected} submissions with answers · <strong>{report.scored}</strong>{" "}
@@ -83,7 +119,7 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
         )}
       </p>
 
-      {report.inspected > 0 && nothingWrong && (
+      {report.inspected > 0 && nothingWrong && !totalMiss && (
         <p className="mt-3 rounded-field border border-ok bg-ok-soft px-3 py-2 text-sm text-ok-ink">
           <strong>Every field is being read.</strong> Nothing arrived that we could not map.
         </p>

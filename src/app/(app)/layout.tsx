@@ -8,7 +8,6 @@ import { CurrencyProvider } from "@/components/ui/CurrencyToggle";
 import { ThemeSync } from "@/components/shell/ThemeSync";
 import { SkeletonPill } from "@/components/ui/Skeleton";
 import { CallsTodayGreeting } from "@/components/shell/CallsTodayGreeting";
-import { formatMonth } from "@/lib/format";
 import { istToday } from "@/lib/dates";
 import { requireSession, visibleSections, type AppRole } from "@/lib/rbac";
 import { getRunwaySnapshot } from "@/server/cash-metrics";
@@ -63,10 +62,25 @@ async function CallsGreetingSlot({ userId }: { userId: string }) {
 /** Authenticated shell: grouped, collapsible left sidebar + slim top bar. */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
-  const items = (await visibleSections(session.role, session.overrides))
+  const accessible = (await visibleSections(session.role, session.overrides))
     // Admin technically has access to everything, but the student portal is a
     // student-only surface — Admin reviews students via /students instead.
-    .filter((s) => s.key !== "my-journey" || session.role === "STUDENT")
+    .filter((s) => s.key !== "my-journey" || session.role === "STUDENT");
+
+  /**
+   * Two lists, because they answer two different questions.
+   *
+   * `accessible` is what the viewer may OPEN — it feeds `SectionAccessProvider`, so a cross-link
+   * into a section they hold is never stripped. `items` is what the SIDEBAR LISTS, which drops
+   * `offRail` sections: Opportunities and Outreach are surfaced on Pipeline, and listing them on
+   * the rail as well showed a telecaller five doors into one job.
+   *
+   * Deriving the rail from the access list (rather than the other way round) is what keeps an
+   * off-rail section reachable — the previous shape fed the provider from the rail, so removing
+   * an item from the sidebar would also have broken every link to it.
+   */
+  const items = accessible
+    .filter((s) => !s.offRail)
     .map(({ key, label, href, phase, icon, group }) => ({
       key,
       label,
@@ -94,13 +108,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ThemeSync preference={session.themePreference} />
       <AppShell
         items={items}
+        accessibleHrefs={accessible.map((s) => s.href)}
         user={{
           name: session.user.name,
           email: session.user.email,
           role: session.role,
           image: (session.user as { image?: string | null }).image ?? null,
         }}
-        currentMonth={formatMonth(new Date())}
         // Runway on every screen (PRD3 §5) - Admin only; others never see cash data.
         runwaySlot={
           session.role === "ADMIN" ? (

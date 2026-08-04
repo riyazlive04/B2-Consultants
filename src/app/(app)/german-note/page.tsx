@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CalendarClock, CheckCircle2, ExternalLink, Languages, Settings, Users, Video } from "lucide-react";
+import { PageHeader } from "@/components/ui/kit";
 import { Tabs } from "@/components/ui/Tabs";
 import { hasCapability, requireSection } from "@/lib/rbac";
 import { getGnOverview } from "@/server/german-note-metrics";
@@ -189,34 +190,35 @@ export default async function GermanNotePage({
         firstName={session.user.name.split(" ")[0]}
         initialOpen={searchParams?.onboarding === "1"}
       />
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">German Note</h1>
-          <p className="mt-1 text-sm text-muted">
-            {seesBusiness
-              ? "The German Note business — every workshop intake and its money — and the course community."
-              : "Your German course home — class recordings from your batch (yours for lifetime) and the community."}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {isParticipant && (
-            <Link
-              href="/german-note/members"
-              className="inline-flex items-center gap-1.5 rounded-btn border border-line-strong px-3 py-1.5 text-sm font-semibold text-ink-2 hover:bg-surface-2"
-            >
-              <Users size={15} /> Members
-            </Link>
-          )}
-          {access.isAdmin && (
-            <Link
-              href="/german-note/manage"
-              className="inline-flex items-center gap-1.5 rounded-btn border border-line-strong px-3 py-1.5 text-sm font-semibold text-ink-2 hover:bg-surface-2"
-            >
-              <Settings size={15} /> Manage
-            </Link>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        icon={<Languages size={20} />}
+        title="German Note"
+        subtitle={
+          seesBusiness
+            ? "The German Note business — every workshop intake and its money — and the course community."
+            : "Your German course home — class recordings from your batch (yours for lifetime) and the community."
+        }
+        actions={
+          <>
+            {isParticipant && (
+              <Link
+                href="/german-note/members"
+                className="inline-flex items-center gap-1.5 rounded-btn border border-line-strong px-3 py-1.5 text-sm font-semibold text-ink-2 hover:bg-surface-2"
+              >
+                <Users size={15} /> Members
+              </Link>
+            )}
+            {access.isAdmin && (
+              <Link
+                href="/german-note/manage"
+                className="inline-flex items-center gap-1.5 rounded-btn border border-line-strong px-3 py-1.5 text-sm font-semibold text-ink-2 hover:bg-surface-2"
+              >
+                <Settings size={15} /> Manage
+              </Link>
+            )}
+          </>
+        }
+      />
 
       {financialsPanel ? (
         <Tabs

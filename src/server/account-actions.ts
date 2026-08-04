@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { normalizePassword } from "@/lib/credentials";
 import { logActivity } from "./activity-log";
 import type { AppRole } from "@/lib/sections";
 import type { ActionResult } from "./finance-actions";
@@ -25,8 +26,18 @@ export async function changeOwnPassword(form: FormData): Promise<ActionResult> {
   const session = await auth.api.getSession({ headers: hdrs });
   if (!session) return { ok: false, error: "Your session has expired — sign in again." };
 
-  const currentPassword = String(form.get("currentPassword") ?? "");
-  const newPassword = String(form.get("newPassword") ?? "");
+  /**
+   * Both passwords are edge-trimmed, for the same reason the sign-in form trims.
+   *
+   * `currentPassword` is very often PASTED — it is the admin-set password the person was sent
+   * over WhatsApp, and this screen is where a forced change happens — so it carries a trailing
+   * space more often than anywhere else in the app. Untrimmed, that produced "That current
+   * password is incorrect." for the exact credential we had just issued them.
+   *
+   * `newPassword` is trimmed so what is stored is what they can type back tomorrow.
+   */
+  const currentPassword = normalizePassword(String(form.get("currentPassword") ?? ""));
+  const newPassword = normalizePassword(String(form.get("newPassword") ?? ""));
   if (newPassword.length < 8) return { ok: false, error: "New password must be at least 8 characters." };
   if (currentPassword === newPassword) {
     return { ok: false, error: "Choose a password different from your current one." };

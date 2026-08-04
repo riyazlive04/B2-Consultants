@@ -51,9 +51,58 @@ export type BoardData = {
   totalValueInr: string;
   // Only set when at least one stage in the active pipeline has a probability configured.
   weightedTotalValueInr: string | null;
+  /** True when any filter is narrowing the board — the UI says so, and offers to clear it. */
+  filtered: boolean;
 };
 
-export async function getBoard(pipelineId?: string): Promise<BoardData> {
+/**
+ * What may narrow the board.
+ *
+ * The board had NO filter of any kind, while simultaneously telling the user at 300+ cards in a
+ * stage to "filter or split this pipeline" — advice for a control that did not exist. That was
+ * survivable only because production held ONE opportunity; wiring lead capture to the board
+ * (`ensureDefaultOpportunity`) puts thousands of cards on it, so search stopped being optional.
+ *
+ * Applied in SQL, not in the browser. Filtering client-side would filter the already-capped
+ * 300-card slice, so a search for a contact sitting at position 400 would return nothing and
+ * look like "no such deal" rather than "not on this page".
+ */
+export type BoardFilters = {
+  /** Matches the deal name, and the contact's name / phone / email. */
+  search?: string;
+  ownerId?: string;
+  /** OPEN | WON | LOST | ABANDONED. */
+  status?: string;
+};
+
+export async function getBoard(pipelineId?: string, filters: BoardFilters = {}): Promise<BoardData> {
+  const search = filters.search?.trim();
+  const ownerId = filters.ownerId?.trim();
+  const status = filters.status?.trim();
+  const filtered = Boolean(search || ownerId || status);
+
+  /**
+   * The card-level predicate, shared by the display query AND the totals groupBy below.
+   *
+   * They MUST share it: totals computed over an unfiltered set beside a filtered card list is
+   * the classic "the header says ₹40L, I can see two deals" bug.
+   */
+  const cardWhere = {
+    deletedAt: null,
+    lead: { deletedAt: null },
+    ...(ownerId ? { assignedToId: ownerId } : {}),
+    ...(status ? { status: status as never } : {}),
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" as const } },
+            { lead: { deletedAt: null, name: { contains: search, mode: "insensitive" as const } } },
+            { lead: { deletedAt: null, phone: { contains: search } } },
+            { lead: { deletedAt: null, email: { contains: search, mode: "insensitive" as const } } },
+          ],
+        }
+      : {}),
+  };
   const pipelines = await prisma.pipeline.findMany({
     where: { deletedAt: null },
     orderBy: [{ isDefault: "desc" }, { position: "asc" }, { name: "asc" }],
@@ -80,6 +129,7 @@ export async function getBoard(pipelineId?: string): Promise<BoardData> {
       totalCount: 0,
       totalValueInr: formatInrMinor(0n),
       weightedTotalValueInr: null,
+      filtered,
     };
   }
 
@@ -88,8 +138,9 @@ export async function getBoard(pipelineId?: string): Promise<BoardData> {
     orderBy: { position: "asc" },
     include: {
       opps: {
-        // Exclude archived opportunities and deals whose parent contact is archived.
-        where: { deletedAt: null, lead: { deletedAt: null } },
+        // Exclude archived opportunities and deals whose parent contact is archived, then apply
+        // the caller's filters — same predicate the totals below use.
+        where: cardWhere,
         orderBy: { position: "asc" },
         take: STAGE_CARD_LIMIT + 1, // fetch one extra to detect overflow without a second COUNT query
         include: {
@@ -108,7 +159,7 @@ export async function getBoard(pipelineId?: string): Promise<BoardData> {
   // (all statuses) — which is what someone reading a Won/Lost column expects.
   const sums = await prisma.opportunity.groupBy({
     by: ["stageId", "status"],
-    where: { stageId: { in: stages.map((s) => s.id) }, deletedAt: null, lead: { deletedAt: null } },
+    where: { stageId: { in: stages.map((s) => s.id) }, ...cardWhere },
     _sum: { valueInrMinor: true },
   });
   const allByStage = new Map<string, bigint>();
@@ -175,5 +226,6 @@ export async function getBoard(pipelineId?: string): Promise<BoardData> {
     totalCount,
     totalValueInr: formatInrMinor(grandTotal),
     weightedTotalValueInr: anyWeighted ? formatInrMinor(weightedGrandTotal) : null,
+    filtered,
   };
 }

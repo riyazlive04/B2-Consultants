@@ -27,12 +27,16 @@ import { getBookOrderData, getStudentOptions } from "@/server/book-order-metrics
 import { getActiveLevels } from "@/server/levels";
 import { levelOptions } from "@/lib/levels";
 import { TrackerTable } from "./_components/TrackerTable";
+import { TrackerBatchForm } from "./_components/TrackerBatchForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function StudentsPage() {
   const session = await requireSection("students"); // Admin full, Head view (PRD2 §2)
   const isAdmin = session.role === "ADMIN";
+  // Mirrors `updateTracker`'s own `requireAdminOrHead` gate — the weekly-round form is only
+  // offered to people the server will actually accept a write from.
+  const canEditTracker = isAdmin || session.role === "HEAD";
   const { counts, avgSatisfaction, avgNps, satisfactionBreakdown, npsBreakdown, tracker, momentumBoard, atRiskRadar, ltvSummary, students } =
     await getStudentsOverview();
   const waByStudent = await getWhatsAppStatusMap("studentId", tracker.map((t) => t.studentId));
@@ -252,6 +256,33 @@ export default async function StudentsPage() {
             label: `90/120-day tracker${tracker.some((t) => t.signalColour === "RED") ? " ⚠" : ""}`,
             content: <TrackerTable rows={tracker} isAdmin={isAdmin} waStatus={waByStudent} />,
           },
+          /**
+           * The weekly round — the in-app replacement for the Google Form that was being used to
+           * collect tracker updates. Same fields, same audited write path, no sheet to reconcile.
+           * Admin and Head only, matching `updateTracker`'s own `requireAdminOrHead` gate: showing
+           * a form to someone the server will refuse is worse than not showing it.
+           */
+          ...(canEditTracker
+            ? [
+                {
+                  label: "Weekly update",
+                  content: (
+                    <TrackerBatchForm
+                      rows={tracker.map((t) => ({
+                        enrollmentId: t.enrollmentId,
+                        studentName: t.studentName,
+                        programLevel: t.programLevel,
+                        dayNumber: t.dayNumber,
+                        totalDays: t.totalDays,
+                        currentMilestone: t.currentMilestone,
+                        signalColour: t.signalColour,
+                        daysSinceLastSession: t.daysSinceLastSession,
+                      }))}
+                    />
+                  ),
+                },
+              ]
+            : []),
           { label: "All students & totals", content: <StudentsPanel rows={students} isAdmin={isAdmin} today={today} /> },
           ...(isAdmin
             ? [

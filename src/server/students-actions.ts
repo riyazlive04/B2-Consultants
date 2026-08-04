@@ -691,3 +691,84 @@ export async function revokeStudentLogin(studentId: string): Promise<ActionResul
   revalidatePath("/people");
   return { ok: true };
 }
+
+/**
+ * ── BATCH TRACKER UPDATE ────────────────────────────────────────────────────────
+ * One coach, one screen, every student they are updating this week.
+ *
+ * This is what replaces the Google Form. The per-student `updateTracker` above has always
+ * existed and is fine for one student; the reason a form outside the app was being used at all
+ * is that updating twelve students meant opening twelve pages. This takes the whole week's round
+ * in one submit.
+ *
+ * ── Why it reuses `updateTracker` rather than writing its own update ────────────
+ * Every tracker write must append a `MilestoneLog` when the milestone moves and a
+ * `SignalChangeLog` when the colour changes — those two audit trails feed the at-risk radar, the
+ * journey XP and the student's own timeline. A second write path would inevitably drift from
+ * the first, and the drift would be silent: the data would look updated and the history would be
+ * missing. So this is a LOOP over the audited action, not a bulk SQL update.
+ *
+ * ── Partial success is real and is reported ────────────────────────────────────
+ * Each row is independent. One bad row (a stale enrollment, a validation slip) must not discard
+ * eleven good ones, so failures are collected and named rather than thrown. A silent partial
+ * save is the worst outcome available here — the coach would believe the round was recorded.
+ */
+export type BatchTrackerResult =
+  | { ok: true; updated: number; skipped: number; failures: { name: string; error: string }[] }
+  | { ok: false; error: string };
+
+/** Bounded: a coach's weekly round, not an import. Larger sets belong in the CSV importer. */
+const MAX_BATCH_ROWS = 60;
+
+export async function updateTrackerBatch(form: FormData): Promise<BatchTrackerResult> {
+  await requireAdminOrHead();
+
+  /**
+   * The client posts one flat FormData with every field namespaced `<enrollmentId>__<field>`,
+   * plus `touched` listing the rows the coach actually edited.
+   *
+   * `touched` is what makes the "leave it alone" case safe. Submitting every visible row would
+   * re-save a student nobody touched, which is harmless for values but NOT for the audit trail:
+   * a re-saved identical milestone writes no log (the action compares first), but a re-saved row
+   * still bumps `updatedAt` and would make "last updated" useless as a signal of attention.
+   */
+  const touched = form.getAll("touched").map(String).filter(Boolean);
+  if (touched.length === 0) return { ok: true, updated: 0, skipped: 0, failures: [] };
+  if (touched.length > MAX_BATCH_ROWS) {
+    return { ok: false, error: `That is more than ${MAX_BATCH_ROWS} students at once — save in smaller batches.` };
+  }
+
+  const names = new Map(
+    (
+      await prisma.enrollment.findMany({
+        where: { id: { in: touched } },
+        select: { id: true, student: { select: { fullName: true } } },
+      })
+    ).map((e) => [e.id, e.student.fullName]),
+  );
+
+  let updated = 0;
+  const failures: { name: string; error: string }[] = [];
+
+  for (const enrollmentId of touched) {
+    const name = names.get(enrollmentId) ?? "Unknown student";
+    if (!names.has(enrollmentId)) {
+      failures.push({ name, error: "That enrollment no longer exists — reload the page." });
+      continue;
+    }
+
+    // Rebuild this row's own FormData from the namespaced keys.
+    const row = new FormData();
+    const prefix = `${enrollmentId}__`;
+    for (const [key, value] of form.entries()) {
+      if (key.startsWith(prefix)) row.set(key.slice(prefix.length), value);
+    }
+
+    const res = await updateTracker(enrollmentId, row);
+    if (res.ok) updated++;
+    else failures.push({ name, error: res.error });
+  }
+
+  revalidatePath("/students");
+  return { ok: true, updated, skipped: touched.length - updated - failures.length, failures };
+}

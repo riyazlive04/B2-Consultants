@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "./ThemeToggle";
+import { NavClock } from "./NavClock";
 import { RecordButton } from "./RecordButton";
 import { SectionAccessProvider } from "./SectionAccess";
 import { BrandLogo } from "./BrandLogo";
@@ -36,15 +37,24 @@ export type NavItem = {
 
 export function AppShell({
   items,
+  accessibleHrefs,
   user,
-  currentMonth,
   runwaySlot,
   bellSlot,
   children,
 }: {
+  /** What the sidebar LISTS. Excludes `offRail` sections. */
   items: NavItem[];
+  /**
+   * What the viewer may OPEN. A superset of `items` — an `offRail` section (Opportunities,
+   * Outreach) is reachable but not listed, and `useCanNavigate` must say yes to it or every
+   * cross-link into one would be silently stripped from the pages that surface them.
+   *
+   * Access and navigation are genuinely different questions; conflating them is what made
+   * dropping a section from the rail also break the links to it.
+   */
+  accessibleHrefs: string[];
   user: { name: string; email: string; role: string; image?: string | null };
-  currentMonth: string;
   runwaySlot?: ReactNode;
   bellSlot?: ReactNode;
   children: ReactNode;
@@ -408,7 +418,10 @@ export function AppShell({
                 `items` is already the caller's filtered section list, so this asks the same
                 question the sidebar does and cannot drift from it. */}
             {items.some((i) => i.href === "/finance") && <RecordButton />}
-            <span className="hidden flex-none text-sm font-medium text-ink-2 lg:inline">{currentMonth}</span>
+            {/* Both business clocks. It replaces the month label, which was the least-used thing
+                in this strip — the current month is on every dated screen below, whereas "what
+                time is it in Germany" had no answer anywhere except a card on /profile. */}
+            <NavClock />
             {/* Runway is the widest thing in the strip (~84px) and the one figure that is also on
                 the dashboard a tap away, so it is what buys the phone its space back. */}
             <span className="hidden flex-none sm:inline-flex">{runwaySlot}</span>
@@ -458,7 +471,7 @@ export function AppShell({
         >
           {/* O2: any client component below can now ask whether a section link is reachable,
               instead of rendering a link that bounces to /?denied=. */}
-          <SectionAccessProvider hrefs={items.map((i) => i.href)}>{children}</SectionAccessProvider>
+          <SectionAccessProvider hrefs={accessibleHrefs}>{children}</SectionAccessProvider>
         </main>
       </div>
 

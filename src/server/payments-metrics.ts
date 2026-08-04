@@ -19,9 +19,16 @@ export type PaymentsOverview = {
   receivedByMethod: { method: string; amountInr: string }[];
 };
 
-export async function getPaymentsOverview(): Promise<PaymentsOverview> {
+/**
+ * @param period Scope to invoices ISSUED in this window. Omit for every invoice ever, which is
+ *   what this did before — and which is why "how much did we invoice in July" had no answer here.
+ *   Scoped on `issueDate` (a `@db.Date` column, so the UTC-midnight boundaries line up exactly
+ *   with the period's own), NOT on `paidAt`: this board is about what was billed.
+ */
+export async function getPaymentsOverview(period?: { start: Date; endExclusive: Date }): Promise<PaymentsOverview> {
+  const issued = period ? { issueDate: { gte: period.start, lt: period.endExclusive } } : {};
   const invoices = await prisma.invoice.findMany({
-    where: { ...ACTIVE, kind: "INVOICE" },
+    where: { ...ACTIVE, kind: "INVOICE", ...issued },
     select: { status: true, totalInrMinor: true, dueDate: true, payments: { select: { amountInrMinor: true, method: true } } },
   });
   let draft = 0n, due = 0n, received = 0n, overdue = 0n;
@@ -65,9 +72,14 @@ export type InvoiceRow = {
   dueDate: Date | null;
 };
 
-export async function getInvoicesList(kind: InvoiceKind): Promise<InvoiceRow[]> {
+export async function getInvoicesList(
+  kind: InvoiceKind,
+  period?: { start: Date; endExclusive: Date },
+): Promise<InvoiceRow[]> {
   const invoices = await prisma.invoice.findMany({
-    where: { ...ACTIVE, kind },
+    // Same window as the KPI cards above it, or the table and the totals would describe
+    // different sets of invoices on the same screen.
+    where: { ...ACTIVE, kind, ...(period ? { issueDate: { gte: period.start, lt: period.endExclusive } } : {}) },
     orderBy: { createdAt: "desc" },
     include: { payments: { select: { amountInrMinor: true } } },
   });

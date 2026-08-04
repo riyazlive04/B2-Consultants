@@ -2,6 +2,9 @@ import { requireSection } from "@/lib/rbac";
 import { hasCapability } from "@/lib/capabilities";
 import { ListHeader } from "@/components/ui/ListHeader";
 import { Tabs } from "@/components/ui/Tabs";
+import { PeriodBar } from "@/components/ui/PeriodBar";
+import { ExportButton } from "@/components/ui/ExportButton";
+import type { PeriodSpec } from "@/lib/period";
 import {
   getContactsList,
   getContactListFilters,
@@ -41,6 +44,18 @@ export default async function ContactsPage({
   const session = await requireSection("contacts");
   const canConfigure = hasCapability(session.role, session.capabilities, "pipeline.configure");
 
+  /**
+   * Quick week/month shortcuts INTO the from/to filter this page already has.
+   *
+   * `writes="dates"` on purpose — Contacts owns a `from`/`to` date filter in its filter bar, and
+   * adding a `?period=` alongside it would put two competing date mechanisms on one screen. This
+   * way the bar and the filter bar are the same filter, reached two ways.
+   */
+  const periodSpec: PeriodSpec =
+    searchParams.from && searchParams.to
+      ? { kind: "custom", anchor: searchParams.from, from: searchParams.from, to: searchParams.to }
+      : { kind: "all", anchor: "" };
+
   const [contactsPage, filters, companies, customFields, tasks, archLeads, archCompanies, archTasks] =
     await Promise.all([
       getContactsList({
@@ -67,7 +82,17 @@ export default async function ContactsPage({
 
   return (
     <div className="w-full space-y-4">
-      <ListHeader title="Contacts" count={`${filters.total.toLocaleString("en-IN")} contacts`} subtitle="your CRM, in-house" />
+      <ListHeader
+        title="Contacts"
+        count={`${filters.total.toLocaleString("en-IN")} contacts`}
+        subtitle="your CRM, in-house"
+        actions={
+          <>
+            <PeriodBar spec={periodSpec} writes="dates" kinds={["week", "month", "quarter", "year", "all"]} />
+            <ExportButton entity="leads" />
+          </>
+        }
+      />
       <Tabs
         tabs={[
           {

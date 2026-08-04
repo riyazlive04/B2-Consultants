@@ -16,6 +16,7 @@
     "db:lockdown": "node scripts/migrate-to-supabase.mjs --lockdown-only",
     "db:backup": "node --env-file=.env scripts/backup-verify.mjs",
     "db:backup:dump-only": "node --env-file=.env scripts/backup-verify.mjs --no-verify",
+    "backfill:opps": "node --conditions=react-server --import tsx scripts/backfill-opportunities.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:ledger": "tsx prisma/seed-ledger.ts",
     "db:verify-ledger": "tsx prisma/verify-ledger.ts",

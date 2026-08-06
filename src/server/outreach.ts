@@ -300,8 +300,17 @@ export async function runDueOutreach(): Promise<OutreachRun> {
     return run;
   }
 
+  /**
+   * The recency floor. Without it this matched every non-terminal journey ever created, and
+   * `updatedAt asc` below started at the oldest — so arming the engine replayed the SOP across
+   * the entire historical import. See `OutreachConfig.maxAgeDays`.
+   */
+  const oldestOptIn = new Date(Date.now() - cfg.maxAgeDays * 24 * 60 * 60 * 1000);
   const active = await prisma.outreachJourney.findMany({
-    where: { phase: { notIn: ["IGNORED", "CANCELLED", "CLOSED_NOT_HQ", "COMPLETED"] } },
+    where: {
+      phase: { notIn: ["IGNORED", "CANCELLED", "CLOSED_NOT_HQ", "COMPLETED"] },
+      optInAt: { gte: oldestOptIn },
+    },
     // `lead.name` and `bookingId` ride along for the activity log: the founder's feed names the
     // prospect, and the pre-loop link state is what tells a check that FOUND a booking apart from
     // one that merely re-confirmed a link an earlier check already made.

@@ -321,6 +321,7 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
     discoFirstDelayHours: num(form, "discoFirstDelayHours", DEFAULT_CADENCE.discoFirstDelayHours),
     discoRepeatHours: num(form, "discoRepeatHours", DEFAULT_CADENCE.discoRepeatHours),
     discoMaxReminders: num(form, "discoMaxReminders", DEFAULT_CADENCE.discoMaxReminders),
+    discoMaxAgeDays: num(form, "discoMaxAgeDays", DEFAULT_CADENCE.discoMaxAgeDays),
     bookingReminderLeadHours: parseLeadHours(form.get("bookingReminderLeadHours")),
     noShowDelayHours: num(form, "noShowDelayHours", DEFAULT_CADENCE.noShowDelayHours),
     paymentRepeatHours: num(form, "paymentRepeatHours", DEFAULT_CADENCE.paymentRepeatHours),

@@ -543,8 +543,21 @@ export async function runDueReminders(): Promise<ReminderRun> {
   // 1. Discovery-call reminders — un-booked leads.
   if (budget > 0 && hasTemplate("DISCO_REMINDER")) {
     const cutoff = new Date(now - cadence.discoFirstDelayHours * HR);
+    /**
+     * The floor that was missing. `createdAt <= cutoff` alone means "old enough to chase" with
+     * nothing saying "not TOO old", so the query matched every un-booked lead ever created and
+     * `orderBy: createdAt asc` started at the oldest row in the database. See `discoMaxAgeDays`.
+     */
+    const oldest = new Date(now - cadence.discoMaxAgeDays * 24 * HR);
     const leads = await prisma.lead.findMany({
-      where: { ...ACTIVE, stage: { in: ["NEW_LEAD", "DISCO_NOT_BOOKED"] }, createdAt: { lte: cutoff }, phone: { not: "" } },
+      where: {
+        ...ACTIVE,
+        stage: { in: ["NEW_LEAD", "DISCO_NOT_BOOKED"] },
+        createdAt: { gte: oldest, lte: cutoff },
+        phone: { not: "" },
+      },
+      // Oldest first WITHIN the window: those are the ones about to age out of it, so a run that
+      // hits `maxPerRun` spends its budget on the leads that will otherwise never be chased.
       orderBy: { createdAt: "asc" },
       take: Math.min(budget * 2 + 50, 500),
       select: { id: true, name: true, phone: true },

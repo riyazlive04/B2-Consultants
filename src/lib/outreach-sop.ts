@@ -595,6 +595,18 @@ export type OutreachConfig = {
   /** Safety cap: the most steps one engine run will materialise or auto-send. */
   maxPerRun: number;
   /**
+   * Never advance a journey whose opt-in is older than this many days.
+   *
+   * The active-journey query filtered only on phase, so every non-terminal journey ever created
+   * qualified and `orderBy: updatedAt asc` walked from the oldest. Arming the engine therefore
+   * reached back through the whole historical import — the same shape of bug as the discovery
+   * reminder's missing floor (see `discoMaxAgeDays`), and it fired on the same day.
+   *
+   * A journey past the cut-off is simply not picked up; nothing is cancelled or rewritten, so
+   * widening the window again brings them back exactly as they were.
+   */
+  maxAgeDays: number;
+  /**
    * WHEN the first telecaller call is raised.
    *
    * `"immediate"` — the SOP as written. Step 4 follows Step 3 unconditionally: the intro goes out
@@ -641,6 +653,9 @@ export const DEFAULT_OUTREACH_CONFIG: OutreachConfig = {
   sla: DEFAULT_SLA,
   defaultSpecialistName: "B2 Consultants",
   maxPerRun: 200,
+  // Matches the WhatsApp cadence's 30-day floor. The two engines chase the same people; a
+  // prospect who is too cold for one is too cold for the other.
+  maxAgeDays: 30,
   firstCallMode: "immediate",
   instantIntro: { enabled: false, maxPerHour: 200 },
 };
@@ -660,6 +675,10 @@ export function coerceOutreachConfig(raw: unknown): OutreachConfig {
     sla,
     defaultSpecialistName: v.defaultSpecialistName?.trim() || DEFAULT_OUTREACH_CONFIG.defaultSpecialistName,
     maxPerRun: Number.isFinite(Number(v.maxPerRun)) && Number(v.maxPerRun) > 0 ? Number(v.maxPerRun) : 200,
+    maxAgeDays:
+      Number.isFinite(Number(v.maxAgeDays)) && Number(v.maxAgeDays) > 0
+        ? Number(v.maxAgeDays)
+        : DEFAULT_OUTREACH_CONFIG.maxAgeDays,
     // Fail-closed to the SOP as written: only the exact string opts out of Step 4, so a typo or a
     // half-written config row leaves the documented process running rather than silently
     // suppressing the team's first call.

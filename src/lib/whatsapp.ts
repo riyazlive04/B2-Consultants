@@ -199,6 +199,25 @@ export type WatiCadence = {
   discoRepeatHours: number;
   /** Hard cap on discovery reminders per lead. */
   discoMaxReminders: number;
+  /**
+   * Never chase a lead who opted in more than this many days ago.
+   *
+   * ── Why this exists ────────────────────────────────────────────────────────────
+   * The candidate query was `createdAt <= now - discoFirstDelayHours` with NO lower bound, and
+   * ordered OLDEST FIRST. Every un-booked lead ever created therefore qualified, and the engine
+   * started at the very oldest row in the table. Switching WhatsApp on for the first time on
+   * 06/08/2026 sent 98 discovery reminders walking forward from the start of the database —
+   * people who opted in months ago and had long since gone cold.
+   *
+   * The test-recipient valve caught all of them, which is the only reason this reads as an
+   * anecdote rather than an incident. Without it, the first click of the master switch would
+   * have messaged thousands of strangers about a call they never asked about.
+   *
+   * A cap in DAYS, not a row limit: `maxPerRun` only decides how many go out per tick, so an
+   * unbounded window drains the backlog over hours instead of seconds. The question is not how
+   * fast to chase old leads, it is whether to chase them at all.
+   */
+  discoMaxAgeDays: number;
   /** Hours-before-slot at which to send a pre-call reminder (each once). */
   bookingReminderLeadHours: number[];
   /** Delay after a No-show before the rebook nudge. */
@@ -228,6 +247,9 @@ export const DEFAULT_CADENCE: WatiCadence = {
   discoFirstDelayHours: 2,
   discoRepeatHours: 24,
   discoMaxReminders: 3,
+  // 30 days. Long enough to cover a real nurture window, short enough that arming the engine
+  // cannot reach back into a historical import.
+  discoMaxAgeDays: 30,
   bookingReminderLeadHours: [24, 2],
   noShowDelayHours: 2,
   paymentRepeatHours: 72,

@@ -44,6 +44,7 @@ function coerceCadence(raw: unknown): WatiCadence {
     discoFirstDelayHours: num(c.discoFirstDelayHours, DEFAULT_CADENCE.discoFirstDelayHours),
     discoRepeatHours: num(c.discoRepeatHours, DEFAULT_CADENCE.discoRepeatHours),
     discoMaxReminders: num(c.discoMaxReminders, DEFAULT_CADENCE.discoMaxReminders),
+    discoMaxAgeDays: num(c.discoMaxAgeDays, DEFAULT_CADENCE.discoMaxAgeDays),
     bookingReminderLeadHours: leadHours.length ? leadHours : DEFAULT_CADENCE.bookingReminderLeadHours,
     noShowDelayHours: num(c.noShowDelayHours, DEFAULT_CADENCE.noShowDelayHours),
     paymentRepeatHours: num(c.paymentRepeatHours, DEFAULT_CADENCE.paymentRepeatHours),

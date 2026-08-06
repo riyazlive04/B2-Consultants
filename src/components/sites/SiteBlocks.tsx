@@ -77,6 +77,9 @@ function toCss(s: NodeStyle | Partial<NodeStyle> | undefined): CSSProperties {
     borderStyle: s.borderWidth ? "solid" : undefined,
     borderColor: color(s.borderColor),
     maxWidth: px(s.maxWidth),
+    width: px(s.width),
+    height: px(s.height),
+    objectFit: s.objectFit,
     fontSize: px(s.fontSize),
     fontWeight: s.fontWeight,
     lineHeight: s.lineHeight,
@@ -347,7 +350,24 @@ function renderBlock(b: Block, forms: Record<string, PublicFormType>, utm?: Reco
       return b.url ? (
         <div key={b.id} {...attrs} className="relative overflow-hidden rounded-card" style={{ paddingTop: "56.25%", ...style }}>
           <MobileRule b={b} />
-          <iframe src={b.url} className="absolute inset-0 h-full w-full" allowFullScreen title="Video" />
+          {/*
+            `allow` carries the permissions a Vimeo/YouTube player needs to be more than a picture:
+            without `autoplay` a player that was told to start does nothing, and without
+            `encrypted-media` a DRM-protected upload refuses to play at all. This matches the
+            attribute list Vimeo's own embed code ships with, so pasting a plain player URL into
+            this block behaves the same as pasting their full <iframe> into a Custom HTML block.
+
+            `referrerPolicy` is Vimeo's default too — their CDN uses the referrer for domain-level
+            privacy settings, so stripping it can turn a working video into a "not authorised".
+          */}
+          <iframe
+            src={b.url}
+            className="absolute inset-0 h-full w-full"
+            allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allowFullScreen
+            title={b.alt || "Video"}
+          />
         </div>
       ) : null;
     case "button": {

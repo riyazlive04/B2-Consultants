@@ -929,6 +929,17 @@ export type NodeStyle = {
   borderColor?: string;
   /** Container width cap in px. Sections default to a readable measure; 0 means full width. */
   maxWidth?: number;
+  /**
+   * Explicit box size in px, and how an image fills it.
+   *
+   * Needed for the one shape `maxWidth` alone cannot express: a CIRCULAR portrait. `radius` on a
+   * non-square image gives an ellipse, so a round avatar needs equal width and height plus
+   * `objectFit: "cover"` to crop rather than squash. The team photos on the apply page are the
+   * first use; it is a general facility, not a special case for them.
+   */
+  width?: number;
+  height?: number;
+  objectFit?: "cover" | "contain" | "fill";
   fontSize?: number;
   fontWeight?: number;
   lineHeight?: number;

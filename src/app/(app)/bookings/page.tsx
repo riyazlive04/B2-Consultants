@@ -18,7 +18,7 @@ import { formatDate } from "@/lib/format";
 import { BOOKING_STATUS_LABELS, slotTypeLabel } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { getBookableTeamMembers, getBookingsOverview, getWeekSlots, type WeekSlot } from "@/server/booking-metrics";
-import { getBookingRulesConfig, getSlotPatternConfig, getSssConfig } from "@/server/founder-config";
+import { getBookingCalendars, getBookingRulesConfig, getSssConfig } from "@/server/founder-config";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { listSssSlots, listSssNeedsScheduling } from "@/server/sss-slots";
 import { SlotManager } from "./_components/SlotManager";
@@ -78,7 +78,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       getSssConfig(),
       // Read so the page can EXPLAIN an empty calendar instead of just showing one — see the
       // availability banner below.
-      getSlotPatternConfig(),
+      getBookingCalendars(),
     ]);
   /**
    * Depends on `bookings`, so it cannot join the batch above — but it must not be a bare
@@ -96,10 +96,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
    * configured, so the hourly top-up job short-circuits, no slots exist, `/book` offers a
    * prospect an empty calendar, and every figure here reads zero with no explanation.
    *
-   * `DEFAULT_SLOT_PATTERN_CONFIG` ships `enabled: false` with no weekdays, and production ran
-   * that way — 0 slots, 0 bookings, 23,545 leads — because nothing on any screen said so.
+   * Calendars ship as an empty list, and production ran that way — 0 slots, 0 bookings,
+   * 23,545 leads — because nothing on any screen said so.
    */
-  const availabilityOff = !slotPattern.enabled || slotPattern.weekdays.length === 0;
+  const liveCalendars = slotPattern.filter((c) => c.enabled && c.weekdays.length > 0);
+  const availabilityOff = liveCalendars.length === 0;
+  /** Switched on but toothless — the trap the banner below has to name specifically. */
+  const enabledButEmpty = slotPattern.some((c) => c.enabled && c.weekdays.length === 0);
 
   const todayKey = toDateInputValue(istToday());
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -158,12 +161,14 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       {availabilityOff && (
         <div role="status" className="rounded-card border border-warn bg-warn-soft p-4">
           <p className="text-sm font-semibold text-warn-ink">
-            No availability pattern is set — so no slots exist and nobody can book a call.
+            No booking calendar is live — so no slots exist and nobody can book a call.
           </p>
           <p className="mt-1 text-caption text-warn-ink">
-            {slotPattern.enabled
-              ? "The pattern is switched on but has no weekdays selected, so it fits no slots."
-              : "Discovery slots are generated hourly from a weekly pattern. Until one is switched on, /book shows prospects an empty calendar."}{" "}
+            {enabledButEmpty
+              ? "A calendar is switched on but has no weekdays selected, so it fits no slots."
+              : slotPattern.length === 0
+                ? "Discovery slots are generated hourly from named weekly calendars, one per person. Until you add one, /book and every funnel booking page show prospects an empty calendar."
+                : "Every calendar you have is switched off, so the hourly top-up creates nothing."}{" "}
             Set the weekdays, hours and owner at{" "}
             <Link href="/console" className="font-semibold underline">
               Console → Availability

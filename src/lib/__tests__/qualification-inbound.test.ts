@@ -58,10 +58,10 @@ describe("fold — the comparison form", () => {
 describe("mapInboundAnswers — matching without configuration", () => {
   test("reads our own slugs straight through", () => {
     const r = mapInboundAnswers(
-      { whenStartGermany: "immediately", readyToInvest: "ready_now" },
+      { whenStartGermany: "6_months", readyToInvest: "ready_now" },
       CATALOGUE,
     );
-    assert.equal(r.answers.whenStartGermany, "immediately");
+    assert.equal(r.answers.whenStartGermany, "6_months");
     assert.equal(r.answers.readyToInvest, "ready_now");
     assert.equal(r.unresolved.length, 0);
     assert.ok(r.scorable);
@@ -71,53 +71,53 @@ describe("mapInboundAnswers — matching without configuration", () => {
     const r = mapInboundAnswers(
       {
         // Exactly the strings in INTAKE_OPTIONS' labels — a form built from our own wording.
-        whenStartGermany: "In the next 3 months",
+        whenStartGermany: "in 6-12 months.",
         commitment: "Fully committed to moving to Germany",
       },
       CATALOGUE,
     );
-    assert.equal(r.answers.whenStartGermany, "3_months");
+    assert.equal(r.answers.whenStartGermany, "6_12_months");
     assert.equal(r.answers.commitment, "fully");
   });
 
   test("matches a snake_case field name against a camelCase question key, unaided", () => {
-    const r = mapInboundAnswers({ when_start_germany: "Immediately" }, CATALOGUE);
-    assert.equal(r.answers.whenStartGermany, "immediately");
+    const r = mapInboundAnswers({ when_start_germany: "in next 6 months." }, CATALOGUE);
+    assert.equal(r.answers.whenStartGermany, "6_months");
     assert.equal(r.unrecognisedKeys.length, 0, "the field WAS claimed, so it is not unrecognised");
   });
 
   test("matches the full question text as a field name", () => {
     // FlexiFunnels-style: the field name IS the question.
-    const r = mapInboundAnswers({ "When are you looking to start your move to Germany?": "Immediately" }, CATALOGUE);
+    const r = mapInboundAnswers({ "When are you looking to start your move to Germany?": "in next 6 months." }, CATALOGUE);
     assert.equal(r.answers.whenStartGermany, undefined, "the question text is not a key we know");
     // ...until the founder adds it, which is the point of inboundKeys.
     const mapped = mapInboundAnswers(
-      { "When are you looking to start your move to Germany?": "Immediately" },
+      { "When are you looking to start your move to Germany?": "in next 6 months." },
       withMapping("whenStartGermany", { inboundKeys: ["When are you looking to start your move to Germany?"] }),
     );
-    assert.equal(mapped.answers.whenStartGermany, "immediately");
+    assert.equal(mapped.answers.whenStartGermany, "6_months");
   });
 });
 
 describe("mapInboundAnswers — founder-configured mapping", () => {
   test("an alias resolves wording that matches neither value nor label", () => {
-    const questions = withMapping("whenStartGermany", { aliases: { immediately: ["Right away", "ASAP"] } });
+    const questions = withMapping("whenStartGermany", { aliases: { "6_months": ["Right away", "ASAP"] } });
     for (const said of ["Right away", "asap", "A.S.A.P."]) {
       const r = mapInboundAnswers({ whenStartGermany: said }, questions);
-      assert.equal(r.answers.whenStartGermany, "immediately", `"${said}" should resolve`);
+      assert.equal(r.answers.whenStartGermany, "6_months", `"${said}" should resolve`);
     }
   });
 
   test("adding an alias never displaces value or label", () => {
-    const questions = withMapping("whenStartGermany", { aliases: { immediately: ["Right away"] } });
-    assert.equal(mapInboundAnswers({ whenStartGermany: "immediately" }, questions).answers.whenStartGermany, "immediately");
-    assert.equal(mapInboundAnswers({ whenStartGermany: "Immediately" }, questions).answers.whenStartGermany, "immediately");
+    const questions = withMapping("whenStartGermany", { aliases: { "6_months": ["Right away"] } });
+    assert.equal(mapInboundAnswers({ whenStartGermany: "6_months" }, questions).answers.whenStartGermany, "6_months");
+    assert.equal(mapInboundAnswers({ whenStartGermany: "In Next 6 Months." }, questions).answers.whenStartGermany, "6_months");
   });
 
   test("the first inbound key in catalogue order wins when a payload carries both", () => {
     const questions = withMapping("whenStartGermany", { inboundKeys: ["timeline", "when_start"] });
-    const r = mapInboundAnswers({ when_start: "exploring", timeline: "Immediately" }, questions);
-    assert.equal(r.answers.whenStartGermany, "immediately", "`timeline` is listed first");
+    const r = mapInboundAnswers({ when_start: "exploring", timeline: "in next 6 months." }, questions);
+    assert.equal(r.answers.whenStartGermany, "6_months", "`timeline` is listed first");
   });
 });
 
@@ -136,10 +136,10 @@ describe("mapInboundAnswers — the failure modes that matter", () => {
   });
 
   test("a scored-zero answer and an unrecognised answer are not the same thing", () => {
-    const scoredZero = mapInboundAnswers({ readyToInvest: "No" }, CATALOGUE);
-    assert.equal(scoredZero.answers.readyToInvest, "no");
+    const scoredZero = mapInboundAnswers({ readyToInvest: "Not ready at the moment" }, CATALOGUE);
+    assert.equal(scoredZero.answers.readyToInvest, "not_ready");
     assert.equal(scoredZero.unresolved.length, 0);
-    assert.equal(scoredZero.mapped[0].score, 0, "'No' genuinely scores 0 — that is evidence");
+    assert.equal(scoredZero.mapped[0].score, 0, "'Not ready at the moment' genuinely scores 0 — that is evidence");
 
     const unknown = mapInboundAnswers({ readyToInvest: "Prefer not to say" }, CATALOGUE);
     assert.equal(unknown.unresolved.length, 1);
@@ -147,7 +147,7 @@ describe("mapInboundAnswers — the failure modes that matter", () => {
   });
 
   test("a field matching no question is reported so the mapping can be fixed", () => {
-    const r = mapInboundAnswers({ how_soon_can_you_start: "Immediately" }, CATALOGUE);
+    const r = mapInboundAnswers({ how_soon_can_you_start: "in next 6 months." }, CATALOGUE);
     assert.deepEqual(r.unrecognisedKeys, ["how_soon_can_you_start"]);
     assert.equal(r.scorable, false);
   });
@@ -157,12 +157,12 @@ describe("mapInboundAnswers — the failure modes that matter", () => {
       {
         name: "Asha", phone: "+919876543210", email: "a@b.com", submission_id: "42",
         utm_source: "meta", utm_campaign: "germany-jan",
-        whenStartGermany: "Immediately",
+        whenStartGermany: "in next 6 months.",
       },
       CATALOGUE,
     );
     assert.deepEqual(r.unrecognisedKeys, [], "a report full of plumbing is a report nobody reads");
-    assert.equal(r.answers.whenStartGermany, "immediately");
+    assert.equal(r.answers.whenStartGermany, "6_months");
   });
 
   test("`scorable` is false when only CONTEXT questions were answered", () => {
@@ -198,17 +198,17 @@ describe("end to end — a landing-page submission becomes a band score", () => 
   test("a strong prospect scores CONFIRM from labels alone", () => {
     const payload = {
       name: "Priya", phone: "+919000000000", email: "priya@example.com",
-      "Are you ready to invest in the right program?": "Yes - ready to invest in the right program",
-      "What is your current annual income?": "Over ₹20,00,000 / year",
-      "Who makes the decision to go ahead?": "Yes - it's fully my decision",
-      "Have you already applied for jobs in Germany?": "Yes - actively applying now",
-      "When are you looking to start your move to Germany?": "Immediately",
+      "Are you ready to invest in the right program?": "Ready to invest",
+      "What is your current monthly salary (in INR)?": "More than ₹1,00,000",
+      "Who makes the decision to go ahead?": "I make the final decision myself",
+      "Have you already applied for jobs in Germany?": "I got some interviews, but no offer",
+      "When are you looking to start your move to Germany?": "in next 6 months.",
     };
     // The founder has mapped each question text to its key — one Console edit per question.
     let questions = CATALOGUE;
     for (const [key, text] of [
       ["readyToInvest", "Are you ready to invest in the right program?"],
-      ["currentIncome", "What is your current annual income?"],
+      ["currentIncome", "What is your current monthly salary (in INR)?"],
       ["decisionMaking", "Who makes the decision to go ahead?"],
       ["alreadyApplied", "Have you already applied for jobs in Germany?"],
       ["whenStartGermany", "When are you looking to start your move to Germany?"],
@@ -229,7 +229,7 @@ describe("end to end — a landing-page submission becomes a band score", () => 
   test("a missing dimension drags the average down rather than being excluded", () => {
     // No Authority question answered at all: Authority scores 0 and STILL divides by four.
     const mapping = mapInboundAnswers(
-      { readyToInvest: "ready_now", alreadyApplied: "actively", whenStartGermany: "immediately" },
+      { readyToInvest: "ready_now", alreadyApplied: "interviews_no_offer", whenStartGermany: "6_months" },
       CATALOGUE,
     );
     const bant = scoreFromAnswers(mapping.answers, CATALOGUE);

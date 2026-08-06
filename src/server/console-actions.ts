@@ -23,6 +23,8 @@ import {
   coerceSectionsConfig,
   coerceSlotPatternConfig,
   slotPatternConfigSchema,
+  coerceBookingCalendarsConfig,
+  bookingCalendarsConfigSchema,
   bookOrderConfigSchema,
   commissionRulesConfigSchema,
   pipelineConfigSchema,
@@ -65,7 +67,7 @@ import {
   writeDailyLogTargets,
   writeGamificationConfig,
   writeSectionsConfig,
-  writeSlotPatternConfig,
+  writeBookingCalendars,
   writeSssPatternConfig,
 } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
@@ -879,31 +881,55 @@ export async function savePipelineConfig(input: unknown): Promise<ActionResult> 
  * returned `{ran: false, reason: "slot pattern disabled"}` on every tick. The fix for the empty
  * booking calendar shipped in a state where it could not be switched on. This is the switch.
  */
-export async function saveSlotPatternConfig(input: unknown): Promise<ActionResult> {
+export async function saveBookingCalendars(input: unknown): Promise<ActionResult> {
   const session = await requireAdmin();
-  const parsed = slotPatternConfigSchema.safeParse(input);
+  const parsed = bookingCalendarsConfigSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const list = parsed.data.calendars;
   // A pattern with no weekday generates nothing, so "on" with an empty week is a trap, not a
   // valid state — refuse it here rather than letting the job silently no-op like the default did.
-  if (parsed.data.enabled && parsed.data.weekdays.length === 0) {
-    return { ok: false, error: "Pick at least one weekday, or switch the pattern off." };
+  const toothless = list.find((c) => c.enabled && c.weekdays.length === 0);
+  if (toothless) {
+    return { ok: false, error: `"${toothless.name}" is on but has no weekday selected. Pick one, or switch it off.` };
   }
-  const before = coerceSlotPatternConfig(await settingValue(SLOT_PATTERN_KEY));
-  await writeSlotPatternConfig(parsed.data);
-  const diff = diffFields(
-    before as unknown as Record<string, unknown>,
-    parsed.data as unknown as Record<string, unknown>,
-  );
-  if (diff.changed.length > 0) {
+  // Ids address a calendar across a rename, so a duplicate would make two rows fight over one
+  // identity — the second silently winning every read.
+  const ids = new Set<string>();
+  for (const c of list) {
+    if (ids.has(c.id)) return { ok: false, error: `Two calendars share the id "${c.id}".` };
+    ids.add(c.id);
+  }
+  /**
+   * Two live calendars on one person would generate one set of slots (the per-owner dedupe in
+   * `ensureBookingSlots` collapses them) while the console showed two — the sort of disagreement
+   * that gets diagnosed as "the second calendar doesn't work".
+   */
+  const owners = new Set<string>();
+  for (const c of list.filter((c) => c.enabled && c.assignedToId)) {
+    if (owners.has(c.assignedToId)) {
+      return { ok: false, error: `Two live calendars are assigned to the same person. Give one a different owner, or switch it off.` };
+    }
+    owners.add(c.assignedToId);
+  }
+
+  const before = coerceBookingCalendarsConfig(await settingValue(SLOT_PATTERN_KEY));
+  await writeBookingCalendars(list);
+
+  const summarise = (cs: typeof list) =>
+    cs.map((c) => `${c.name}${c.enabled ? ` (${c.weekdays.join("/")} ${c.startTime}–${c.endTime})` : " — off"}`).join("; ");
+  const beforeText = summarise(before.calendars);
+  const afterText = summarise(list);
+  if (beforeText !== afterText) {
     await logActivity(session, {
       action: "console.slot-pattern.update",
       section: "console",
       entityType: "AppSetting",
       entityId: SLOT_PATTERN_KEY,
-      summary: parsed.data.enabled
-        ? `Set standing booking availability — ${parsed.data.weekdays.join(", ")} ${parsed.data.startTime}–${parsed.data.endTime}`
-        : "Switched off standing booking availability",
-      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+      summary: list.some((c) => c.enabled)
+        ? `Booking calendars — ${afterText}`
+        : "Switched off all booking availability",
+      meta: { before: beforeText, after: afterText, count: list.length },
     });
   }
   revalidatePath("/bookings");

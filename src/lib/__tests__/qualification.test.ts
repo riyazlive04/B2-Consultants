@@ -6,9 +6,14 @@
  * results for every submission the current form can produce.
  *
  * `exhaustiveAgreement` below is that proof, not a sample: it enumerates the FULL cartesian
- * product of the six scored questions' option lists (4×4×3×4×3×5 = 2,880 submissions) and
- * asserts both scorers agree on every one. A sampled test would pass while a single mistyped
- * score sat in a rarely-hit corner of the table.
+ * product of the six scored questions' option lists and asserts both scorers agree on every
+ * one. A sampled test would pass while a single mistyped score sat in a rarely-hit corner of
+ * the table.
+ *
+ * The total is DERIVED from the option lists, not hardcoded. It used to assert a literal 2,880
+ * (4×4×3×4×3×5); when the intake was matched to Synamate's questions on 07/08/2026 the lists
+ * changed shape and that number became a second, silently-wrong source of truth about the
+ * catalogue. The product of the real lists is the only figure that cannot drift.
  *
  * Run: npm test
  */
@@ -67,7 +72,7 @@ describe("qualification — the catalogue reproduces today's form", () => {
 });
 
 describe("qualification — EXHAUSTIVE agreement with the shipped scorer", () => {
-  test("all 2,880 possible submissions score identically", () => {
+  test("every possible submission scores identically", () => {
     const lists = SCORED_KEYS.map(
       (k) => (INTAKE_OPTIONS[k] as readonly { value: string }[]).map((o) => o.value),
     );
@@ -90,8 +95,11 @@ describe("qualification — EXHAUSTIVE agreement with the shipped scorer", () =>
     };
     walk(0, {});
 
-    assert.equal(checked, lists.reduce((n, l) => n * l.length, 1));
-    assert.equal(checked, 2880);
+    const expected = lists.reduce((n, l) => n * l.length, 1);
+    assert.equal(checked, expected);
+    // A floor, not an equality: it catches a list collapsing to nothing (which would make the
+    // "exhaustive" walk vacuously pass) without pinning the suite to one catalogue revision.
+    assert.ok(checked > 500, `only ${checked} combinations enumerated`);
   });
 
   test("a completely empty submission also agrees", () => {
@@ -109,10 +117,10 @@ describe("qualification — EXHAUSTIVE agreement with the shipped scorer", () =>
 
 describe("qualification — the rules that are easy to get wrong", () => {
   test("a dimension takes the MAX of its questions, never the sum", () => {
-    // Budget has two questions. Lukewarm invest (need_plan = 3) + high income (gt_20l = 5)
-    // must score 5, not 8 and not 4.
+    // Budget has two questions. Lukewarm invest (need_clarity = 2.5) + top salary (gt_1l = 5)
+    // must score 5, not 7.5 and not 2.5.
     const r = scoreFromAnswers(
-      { readyToInvest: "need_plan", currentIncome: "gt_20l" },
+      { readyToInvest: "need_clarity", currentIncome: "gt_1l" },
       CATALOGUE,
     );
     // Budget 5, the other three unanswered → 0. Mean = 1.25 → rounded 1.3.
@@ -137,7 +145,7 @@ describe("qualification — the rules that are easy to get wrong", () => {
   test("weight scales but clamps into 0–5 so the verdict thresholds stay meaningful", () => {
     const base = CATALOGUE.find((x) => x.key === "readyToInvest")!;
     const heavy: QuestionSpec = { ...base, weight: 3 };
-    assert.equal(optionScore(heavy, "need_plan"), 5); // 3 × 3 = 9, clamped to 5
+    assert.equal(optionScore(heavy, "need_clarity"), 5); // 3 × 2.5 = 7.5, clamped to 5
     const half: QuestionSpec = { ...base, weight: 0.5 };
     assert.equal(optionScore(half, "ready_now"), 2.5);
   });

@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarCheck, CheckCircle2 } from "lucide-react";
 import { submitBooking } from "@/server/booking-actions";
-import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
-import { PhoneField } from "@/components/ui/PhoneField";
-import { INTAKE_OPTIONS } from "@/lib/booking-intake";
-import { CONSENT_LABEL, CONSENT_VALUE } from "@/lib/consent";
+import { BookingIntakeFields } from "@/components/booking/BookingIntakeFields";
+import { FormError, SubmitButton } from "@/components/ui/form";
 import { slotTypeLabel } from "@/lib/labels";
 
 const IST_ZONE = "Asia/Kolkata";
@@ -22,28 +20,10 @@ export type SlotOption = {
   startsAtIso: string;
 };
 
-const withPlaceholder = (opts: readonly { value: string; label: string }[], placeholder: string) => [
-  { value: "", label: placeholder },
-  ...opts,
-];
-
 export function BookingForm({ slots }: { slots: SlotOption[] }) {
   const [slotId, setSlotId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<SlotOption | null>(null);
-  const utmRef = useRef<HTMLInputElement>(null);
-
-  // Capture UTM / attribution params from the landing URL so the lead carries its source.
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search);
-    const utm: Record<string, string> = {};
-    for (const k of ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "gclid", "fbclid"]) {
-      const v = p.get(k);
-      if (v) utm[k] = v;
-    }
-    if (utmRef.current) utmRef.current.value = Object.keys(utm).length ? JSON.stringify(utm) : "";
-  }, []);
-
   // Visitor timezone, detected client-side only (browser API - unavailable during SSR).
   // Shown ALONGSIDE the static IST/CET times, never replacing them.
   const [visitorTz, setVisitorTz] = useState<string | null>(null);
@@ -178,107 +158,7 @@ export function BookingForm({ slots }: { slots: SlotOption[] }) {
         )}
       </section>
 
-      {/* ── Contact ── */}
-      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="font-display text-h2 font-semibold">2. Your details</h2>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Full name"><TextInput kind="name" name="name" required placeholder="Your name" /></Field>
-          <Field label="Email"><TextInput kind="email" name="email" required placeholder="you@email.com" /></Field>
-          <Field label="Phone / WhatsApp" hint="Pick your country, then type your number">
-            <PhoneField name="phone" required />
-          </Field>
-          <Field label="WhatsApp (if different)"><PhoneField name="whatsapp" /></Field>
-          <Field label="City"><TextInput kind="city" name="city" placeholder="Your city" /></Field>
-          <Field label="How did you hear about us?">
-            <Select name="howKnowUs" options={withPlaceholder(INTAKE_OPTIONS.howKnowUs, "Select…")} defaultValue="" />
-          </Field>
-        </div>
-        <p className="mt-3 text-xs text-muted">
-          By sharing your number you agree to receive your booking confirmation and call reminders on WhatsApp.
-          Reply <strong>STOP</strong> anytime to opt out.
-        </p>
-      </section>
-
-      {/* ── Qualification (drives BANT) ── */}
-      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="font-display text-h2 font-semibold">3. About your goal</h2>
-        <p className="mt-0.5 text-xs text-muted">This helps us tailor the call to you.</p>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* Job title / industry stay unfiltered: "Engineer II", "Industry 4.0" are real answers. */}
-          <Field label="Current job title"><TextInput kind="text" maxLength={160} name="currentJobTitle" placeholder="e.g. Mechanical Engineer" /></Field>
-          <Field label="Industry"><TextInput kind="text" maxLength={160} name="prospectIndustry" placeholder="e.g. Automotive" /></Field>
-          <Field label="LinkedIn profile"><TextInput kind="url" name="linkedInProfile" placeholder="linkedin.com/in/you" /></Field>
-          <Field label="Highest education">
-            <Select name="highestEducation" options={withPlaceholder(INTAKE_OPTIONS.highestEducation, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Years of experience">
-            <Select name="yearsExperience" options={withPlaceholder(INTAKE_OPTIONS.yearsExperience, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="When do you want to start working in Germany?">
-            <Select name="whenStartGermany" options={withPlaceholder(INTAKE_OPTIONS.whenStartGermany, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Have you already applied to jobs in Germany?">
-            <Select name="alreadyApplied" options={withPlaceholder(INTAKE_OPTIONS.alreadyApplied, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Do you hold a German visa?">
-            <Select name="germanVisa" options={withPlaceholder(INTAKE_OPTIONS.germanVisa, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Your German language level">
-            <Select name="germanLevel" options={withPlaceholder(INTAKE_OPTIONS.germanLevel, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Willing to learn German?">
-            <Select name="willingnessLearnGerman" options={withPlaceholder(INTAKE_OPTIONS.willingnessLearnGerman, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Current annual income">
-            <Select name="currentIncome" options={withPlaceholder(INTAKE_OPTIONS.currentIncome, "Prefer not to say")} defaultValue="" />
-          </Field>
-          <Field label="Ready to invest in the right program?">
-            <Select name="readyToInvest" options={withPlaceholder(INTAKE_OPTIONS.readyToInvest, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Who makes the decision?">
-            <Select name="decisionMaking" options={withPlaceholder(INTAKE_OPTIONS.decisionMaking, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="How committed are you?">
-            <Select name="commitment" options={withPlaceholder(INTAKE_OPTIONS.commitment, "Select…")} defaultValue="" />
-          </Field>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4">
-          <Field label="Why Germany?" hint="A sentence or two on what you're hoping for.">
-            <TextArea kind="text" name="whyGermany" />
-          </Field>
-          <Field label="Anything you'd like to focus on in the call?">
-            <TextArea kind="text" name="reasonForCall" />
-          </Field>
-        </div>
-      </section>
-
-      {/* honeypot - hidden from real users; bots fill it and get silently dropped */}
-      <input
-        type="text"
-        name="company_website"
-        tabIndex={-1}
-        autoComplete="off"
-        aria-hidden="true"
-        className="absolute left-[-9999px] h-0 w-0 opacity-0"
-      />
-      <input type="hidden" name="utm" ref={utmRef} defaultValue="" />
-
-      {/*
-        GDPR consent (spec §15). `required` gives the prospect an instant browser-native
-        message instead of a server round-trip, but it is only a courtesy — submitBooking
-        refuses unconsented submissions regardless, since a client-side attribute is not a
-        compliance control.
-      */}
-      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-subtle bg-surface p-4 text-sm">
-        <input
-          type="checkbox"
-          name="consent"
-          value={CONSENT_VALUE}
-          required
-          className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]"
-        />
-        <span className="text-muted">{CONSENT_LABEL}</span>
-      </label>
+      <BookingIntakeFields />
 
       <div className="flex flex-col items-center gap-3">
         <SubmitButton>Confirm my call</SubmitButton>

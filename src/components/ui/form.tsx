@@ -46,12 +46,19 @@ export function Field({
   children,
   hint,
   error,
+  required,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
   /** Renders below the control in --bad and marks the control aria-invalid (§5.5). */
   error?: string | null;
+  /**
+   * Marks the label with a `*`. PURELY the label's decoration — it does not make the control
+   * required; the control's own `required` does that. Kept separate on purpose: a `*` that
+   * silently added validation would let a label change alter what the form accepts.
+   */
+  required?: boolean;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -66,6 +73,9 @@ export function Field({
           field's accessible name. */}
       <label className="block text-sm font-medium text-ink">
         {label}
+        {/* aria-hidden: the control's own `required` is what a screen reader announces. Reading
+            "star" after every label would be noise on top of information it already has. */}
+        {required && <span aria-hidden className="ml-0.5 text-risk">*</span>}
         <FieldContext.Provider value={{ describedBy, invalid: !!error }}>
           <div className="mt-1.5 font-normal">{children}</div>
         </FieldContext.Provider>

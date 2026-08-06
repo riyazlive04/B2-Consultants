@@ -877,6 +877,15 @@ export type BlockType =
   | "heading" | "subheading" | "text" | "eyebrow" | "bullets"
   // ── media & action ──
   | "image" | "video" | "button" | "form"
+  /**
+   * An embedded discovery-call booker, scoped to ONE person's calendar.
+   *
+   * A sibling of `form`, not a variant of it: a form collects answers, this holds a slot. Both
+   * resolve their data server-side and are handed down prefetched (see `getPublicStep`), because
+   * availability has to be read at request time — a cached "19:00 is free" is how two people book
+   * the same slot.
+   */
+  | "booking"
   // ── composites & spacing ──
   | "card" | "stat" | "divider" | "spacer"
   /**
@@ -1009,6 +1018,17 @@ export type Block = {
    * end up with phantom empty bands nobody can explain.
    */
   opensFormId?: string;
+  /**
+   * `booking` blocks — WHOSE calendar this shows (a `User.id`).
+   *
+   * Required in practice: the whole point of a per-person disco page is that Asma's page offers
+   * Asma's slots. Left unset the block falls back to every open slot, which is the old `/book`
+   * behaviour and is better than rendering nothing, but it makes two "personalised" pages show
+   * identical availability — so the authoring side should always set it.
+   */
+  bookingOwnerId?: string;
+  /** `booking` blocks — the small label above the title ("DISCO"). */
+  bookingEyebrow?: string;
   /** Popup headline. Falls back to the form's own name, so an unset field is never a blank dialog. */
   modalTitle?: string;
   /** The line under it — "20 minutes. Free. Changes everything." Optional. */
@@ -1041,6 +1061,7 @@ export function blockLabel(type: BlockType): string {
     heading: "Heading", subheading: "Subheading", text: "Paragraph",
     eyebrow: "Eyebrow label", bullets: "Bullet list",
     image: "Image", video: "Video embed", button: "Button / CTA", form: "Form embed",
+    booking: "Booking calendar",
     card: "Card", stat: "Stat", divider: "Divider", spacer: "Spacer",
     pill: "Pill / badge", avatar: "Avatar", dot: "Dot marker",
     html: "Custom HTML / Javascript",

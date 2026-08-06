@@ -34,7 +34,7 @@ import { SaveSnippetDialog, SnippetPicker } from "./Snippets";
 const PALETTE: BlockType[] = [
   "section", "row", "card",
   "heading", "subheading", "eyebrow", "text", "bullets", "stat", "pill", "avatar", "dot",
-  "image", "video", "button", "form",
+  "image", "video", "button", "form", "booking",
   "divider", "spacer", "html",
 ];
 

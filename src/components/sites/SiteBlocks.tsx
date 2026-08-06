@@ -4,6 +4,8 @@ import { normalizeRow } from "@/lib/sites-types";
 import type { PublicForm as PublicFormType } from "@/server/forms-metrics";
 import PublicForm from "./PublicForm";
 import { FormPopupTrigger } from "./FormPopup";
+import { BookingCalendar } from "@/components/booking/BookingCalendar";
+import type { StepCalendars } from "@/server/booking-calendars";
 
 /**
  * Renders a funnel/site page's node tree (section → row → column → element).
@@ -168,14 +170,26 @@ function MobileRule({ b }: { b: Block }) {
   return <style dangerouslySetInnerHTML={{ __html: `@media(max-width:640px){[data-n="${safeId}"]{${css}}}` }} />;
 }
 
-function renderBlock(b: Block, forms: Record<string, PublicFormType>, utm?: Record<string, string>, inv = false) {
+/**
+ * What a block may need beyond itself: the resolved forms, the open booking slots, and the
+ * visitor's attribution. Bundled rather than passed as more positional arguments — this had
+ * reached four, and a fifth is where `renderBlock(b, forms, utm, true)` starts hiding bugs.
+ */
+type RenderCtx = {
+  forms: Record<string, PublicFormType>;
+  calendars: StepCalendars;
+  utm?: Record<string, string>;
+};
+
+function renderBlock(b: Block, ctx: RenderCtx, inv = false) {
+  const { forms, utm } = ctx;
   const align = ALIGN[b.style?.align ?? b.align ?? "left"] ?? "text-left";
   const style = nodeStyle(b);
   const inverted = invertedFor(b, inv);
   // On an inverted band every muted text tone becomes the band's OWN colour at reduced opacity,
   // so a secondary paragraph still reads as secondary instead of disappearing into the navy.
   const tone = (cls: string) => (inverted ? "text-current opacity-80" : cls);
-  const kids = (list: Block[] | undefined) => (list ?? []).map((c) => renderBlock(c, forms, utm, inverted));
+  const kids = (list: Block[] | undefined) => (list ?? []).map((c) => renderBlock(c, ctx, inverted));
   /**
    * Every node carries its id (so the scoped mobile rule can target it) and its type.
    *
@@ -210,7 +224,7 @@ function renderBlock(b: Block, forms: Record<string, PublicFormType>, utm?: Reco
       return (
         <div key={b.id} {...attrs} className="flex flex-col gap-6 sm:flex-row sm:items-start">
           <MobileRule b={b} />
-          {cols.map((c) => renderBlock(c, forms, utm, inverted))}
+          {cols.map((c) => renderBlock(c, ctx, inverted))}
         </div>
       );
     }
@@ -406,6 +420,31 @@ function renderBlock(b: Block, forms: Record<string, PublicFormType>, utm?: Reco
         <p key={b.id} className="text-center text-sm text-ink-3">[form not published]</p>
       );
 
+    /**
+     * The embedded discovery-call booker.
+     *
+     * Slots are looked up from the prefetched map rather than fetched here — `SiteBlocks` is a
+     * server component but a pure renderer, and availability has to be read once per request at
+     * a known point (see `getStepCalendars`). A block whose owner produced no entry still renders:
+     * `BookingCalendar` shows "no times are open", which is the truth, where returning null would
+     * make the page look like it forgot its calendar.
+     */
+    case "booking": {
+      const key = b.bookingOwnerId ?? "";
+      return (
+        <div key={b.id} {...attrs}>
+          <MobileRule b={b} />
+          <BookingCalendar
+            slots={ctx.calendars[key] ?? []}
+            eyebrow={b.bookingEyebrow}
+            title={b.label || "Book your call"}
+            description={b.text}
+            logoUrl={b.url}
+          />
+        </div>
+      );
+    }
+
     // ── custom code ─────────────────────────────────────────────────────────────
     /**
      * GHL's "Custom HTML/Javascript". Rendered VERBATIM and unescaped — that is the entire
@@ -436,22 +475,26 @@ function renderBlock(b: Block, forms: Record<string, PublicFormType>, utm?: Reco
 export default function SiteBlocks({
   blocks,
   forms,
+  calendars = {},
   utm,
 }: {
   blocks: Block[];
   forms: Record<string, PublicFormType>;
+  /** Open slots per booking-block owner, resolved by `getPublicStep`. */
+  calendars?: StepCalendars;
   utm?: Record<string, string>;
 }) {
+  const ctx: RenderCtx = { forms, calendars, utm };
   const legacy = blocks.filter((b) => b.type !== "section");
   const sections = blocks.filter((b) => b.type === "section");
   return (
     <>
       {legacy.length > 0 && (
         <div className="mx-auto max-w-2xl space-y-5 px-4 py-14">
-          {legacy.map((b) => renderBlock(b, forms, utm))}
+          {legacy.map((b) => renderBlock(b, ctx))}
         </div>
       )}
-      {sections.map((b) => renderBlock(b, forms, utm))}
+      {sections.map((b) => renderBlock(b, ctx))}
     </>
   );
 }

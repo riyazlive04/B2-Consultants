@@ -2,10 +2,10 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { istToday, istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { slotStartsForRange } from "@/lib/slot-plan";
-import { getBookingRulesConfig, getSlotPatternConfig } from "./founder-config";
+import { getBookingCalendars, getBookingRulesConfig } from "./founder-config";
 
 /**
- * Keep the public /book calendar stocked to a rolling horizon.
+ * Keep every named booking calendar stocked to a rolling horizon.
  *
  * THE PROBLEM THIS SOLVES: appointment slots were only ever created by the founder's one-off
  * "generate for this range" form. On 23 Jul 2026 the newest slot in production was 15 Jul — the
@@ -26,73 +26,109 @@ import { getBookingRulesConfig, getSlotPatternConfig } from "./founder-config";
 
 export type SlotTopUpResult =
   | { ran: false; reason: string }
-  | { ran: true; created: number; horizonTo: string; alreadyPresent: number };
+  | { ran: true; created: number; horizonTo: string; alreadyPresent: number; perCalendar: CalendarTopUp[] };
+
+/** What one named calendar contributed to this tick, so an idle one can be told from a full one. */
+export type CalendarTopUp = { id: string; name: string; created: number; skipped?: string };
 
 export async function ensureBookingSlots(): Promise<SlotTopUpResult> {
-  const pattern = await getSlotPatternConfig();
-  if (!pattern.enabled) return { ran: false, reason: "slot pattern disabled" };
-  if (!pattern.weekdays.length) return { ran: false, reason: "no weekdays configured" };
+  const calendars = await getBookingCalendars();
+  const live = calendars.filter((c) => c.enabled);
+  if (!calendars.length) return { ran: false, reason: "no calendars configured" };
+  if (!live.length) return { ran: false, reason: "every calendar is switched off" };
 
   const rules = await getBookingRulesConfig();
   const today = istToday();
-
-  /**
-   * Never generate past the window the public page will actually offer. `maxAdvanceDays` is the
-   * founder's "how far ahead may a prospect book" rule; slots beyond it would be invisible rows
-   * that still have to be paged through in the admin calendar forever.
-   */
-  const horizonDays = Math.min(pattern.horizonDays, rules.maxAdvanceDays);
-  const horizonEnd = new Date(today);
-  horizonEnd.setUTCDate(today.getUTCDate() + horizonDays);
-
-  const starts = slotStartsForRange({
-    startDate: toDateInputValue(today),
-    endDate: toDateInputValue(horizonEnd),
-    pattern,
-    bufferMinutes: rules.bufferMinutes,
-    istWallToUtc,
-    parseDate: parseDateInput,
-    formatDate: toDateInputValue,
-  });
-  if (!starts.length) return { ran: false, reason: "pattern fits no slots in the horizon" };
-
-  /**
-   * Drop instants that have already passed, and those inside the minimum-notice window. Without
-   * this the job would helpfully create a slot for 15:00 today at 16:00, which no prospect can
-   * book and which then sits in the calendar as permanent noise.
-   */
   const earliest = Date.now() + rules.minNoticeHours * 3_600_000;
-  const bookable = starts.filter((s) => s.getTime() >= earliest);
-  if (!bookable.length) return { ran: false, reason: "every slot in the horizon is inside the notice window" };
 
+  /**
+   * Every instant that already has a slot, keyed by owner as well as time.
+   *
+   * ── The bug multi-calendar would otherwise have shipped with ──────────────────
+   * Dedupe used to be on `startsAt` alone, which was correct while one pattern owned the whole
+   * calendar. With a calendar per person it silently breaks: Asma already holding 18:00 would
+   * mark 18:00 "taken" for Ameen too, so the second calendar could never generate a slot at any
+   * time the first one already ran — and the failure looks exactly like the pattern not working.
+   * Two people being free at once is the normal case, not a collision.
+   */
+  const horizonAll = new Date(today);
+  horizonAll.setUTCDate(today.getUTCDate() + rules.maxAdvanceDays);
   const existing = await prisma.appointmentSlot.findMany({
-    where: { startsAt: { in: bookable } },
-    select: { startsAt: true },
+    where: { startsAt: { gte: new Date(earliest), lte: horizonAll } },
+    select: { startsAt: true, assignedToId: true },
   });
-  const taken = new Set(existing.map((s) => s.startsAt.getTime()));
-  const fresh = bookable.filter((s) => !taken.has(s.getTime()));
+  const key = (t: number, owner: string | null) => `${t}|${owner ?? ""}`;
+  const taken = new Set(existing.map((s) => key(s.startsAt.getTime(), s.assignedToId)));
 
-  if (fresh.length) {
-    await prisma.appointmentSlot.createMany({
-      data: fresh.map((startsAt) => ({
-        startsAt,
-        durationMins: pattern.durationMins,
-        assignedToId: pattern.assignedToId || null,
-      })),
-      // Belt and braces against a concurrent manual generation racing this tick. The dedupe
-      // above is a read-then-write, so it is not atomic; the calendar has no unique index on
-      // startsAt (two callers may legitimately hold the same slot time), so this only guards
-      // against an exact duplicate row, which is the case that matters.
-      skipDuplicates: true,
+  const perCalendar: CalendarTopUp[] = [];
+  let created = 0;
+  let alreadyPresent = 0;
+  let furthest = today;
+
+  for (const cal of live) {
+    if (!cal.weekdays.length) {
+      perCalendar.push({ id: cal.id, name: cal.name, created: 0, skipped: "no weekdays configured" });
+      continue;
+    }
+
+    /**
+     * Never generate past the window the public page will actually offer. `maxAdvanceDays` is the
+     * founder's "how far ahead may a prospect book" rule; slots beyond it would be invisible rows
+     * that still have to be paged through in the admin calendar forever.
+     */
+    const horizonDays = Math.min(cal.horizonDays, rules.maxAdvanceDays);
+    const horizonEnd = new Date(today);
+    horizonEnd.setUTCDate(today.getUTCDate() + horizonDays);
+    if (horizonEnd > furthest) furthest = horizonEnd;
+
+    const starts = slotStartsForRange({
+      startDate: toDateInputValue(today),
+      endDate: toDateInputValue(horizonEnd),
+      pattern: cal,
+      bufferMinutes: rules.bufferMinutes,
+      istWallToUtc,
+      parseDate: parseDateInput,
+      formatDate: toDateInputValue,
     });
+    if (!starts.length) {
+      perCalendar.push({ id: cal.id, name: cal.name, created: 0, skipped: "pattern fits no slots in the horizon" });
+      continue;
+    }
+
+    /**
+     * Drop instants that have already passed, and those inside the minimum-notice window. Without
+     * this the job would helpfully create a slot for 15:00 today at 16:00, which no prospect can
+     * book and which then sits in the calendar as permanent noise.
+     */
+    const bookable = starts.filter((s) => s.getTime() >= earliest);
+    if (!bookable.length) {
+      perCalendar.push({ id: cal.id, name: cal.name, created: 0, skipped: "whole horizon is inside the notice window" });
+      continue;
+    }
+
+    const owner = cal.assignedToId || null;
+    const fresh = bookable.filter((s) => !taken.has(key(s.getTime(), owner)));
+    alreadyPresent += bookable.length - fresh.length;
+
+    if (fresh.length) {
+      await prisma.appointmentSlot.createMany({
+        data: fresh.map((startsAt) => ({ startsAt, durationMins: cal.durationMins, assignedToId: owner })),
+        // Belt and braces against a concurrent manual generation racing this tick. The dedupe
+        // above is a read-then-write, so it is not atomic; the calendar has no unique index on
+        // startsAt (two callers may legitimately hold the same slot time), so this only guards
+        // against an exact duplicate row, which is the case that matters.
+        skipDuplicates: true,
+      });
+      // Claim them in-memory too, so a second calendar sharing this owner in the same tick
+      // cannot re-create the instants this one just wrote.
+      for (const s of fresh) taken.add(key(s.getTime(), owner));
+    }
+
+    created += fresh.length;
+    perCalendar.push({ id: cal.id, name: cal.name, created: fresh.length });
   }
 
-  return {
-    ran: true,
-    created: fresh.length,
-    alreadyPresent: bookable.length - fresh.length,
-    horizonTo: toDateInputValue(horizonEnd),
-  };
+  return { ran: true, created, alreadyPresent, horizonTo: toDateInputValue(furthest), perCalendar };
 }
 
 /**

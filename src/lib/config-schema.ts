@@ -366,6 +366,83 @@ export function coerceSlotPatternConfig(value: unknown): SlotPatternConfig {
   return parsed.success ? parsed.data : DEFAULT_SLOT_PATTERN_CONFIG;
 }
 
+// ──────────────────── booking calendars (many patterns, one per person) ────────────────────
+
+/**
+ * A NAMED calendar: one weekly pattern, owned by one person.
+ *
+ * WHY THIS REPLACED THE SINGLE PATTERN. `slotPatternConfig` held exactly one `assignedToId`, so
+ * the whole company had one standing availability. The funnel needs the opposite: the VSL hands
+ * off to "Book a call with Asma" and "Book a call with Ameen", and each page renders a calendar
+ * scoped to that person (`booking` block → `bookingOwnerId`). With one pattern only one of those
+ * two pages could ever have times in it — in production that was Asma with 73 open slots and
+ * Ameen with zero, so half the funnel's traffic hit a dead calendar.
+ *
+ * `name` is for the humans in the console; nothing keys off it. `id` is what survives a rename.
+ */
+export const bookingCalendarSchema = slotPatternConfigSchema.extend({
+  id: z.string().trim().min(1).max(64),
+  name: z.string().trim().min(1).max(80),
+});
+
+export type BookingCalendar = z.infer<typeof bookingCalendarSchema>;
+
+/**
+ * Capped at 12. Not a storage limit — every calendar is another pass over the horizon in the
+ * hourly top-up, and a console that can grow without bound is how you end up generating tens of
+ * thousands of slots nobody offers.
+ */
+export const bookingCalendarsConfigSchema = z.object({
+  calendars: z.array(bookingCalendarSchema).max(12).default([]),
+});
+
+export type BookingCalendarsConfig = z.infer<typeof bookingCalendarsConfigSchema>;
+
+export const DEFAULT_BOOKING_CALENDARS_CONFIG: BookingCalendarsConfig = { calendars: [] };
+
+/**
+ * Read the calendar list, MIGRATING the legacy single-pattern document in place.
+ *
+ * The old shape is a bare `SlotPatternConfig` under the same AppSetting key. Rather than a data
+ * migration — which would have to run before the first deploy that reads this, and would strand
+ * anyone who rolled back — the old shape is simply understood on read and rewritten the next
+ * time the console saves. Production's live pattern (Asma, Mon–Fri 18:00–21:00) therefore keeps
+ * generating slots across the deploy without anyone touching it.
+ */
+export function coerceBookingCalendarsConfig(value: unknown): BookingCalendarsConfig {
+  /**
+   * The `calendars` key must be PRESENT to take the list branch — testing only `safeParse` was a
+   * bug with teeth. `calendars` carries `.default([])`, and a Zod object strips keys it does not
+   * know, so the legacy `{enabled, weekdays, startTime, …}` document parsed *successfully* as
+   * `{calendars: []}`. The legacy branch below was unreachable, and the first deploy would have
+   * read production's live pattern as "no availability configured": the hourly job stops, the
+   * calendar drains to the horizon, and every booking page goes empty — the exact outage this
+   * whole feature exists to prevent, reintroduced by the migration meant to avoid it.
+   */
+  const hasList = typeof value === "object" && value !== null && "calendars" in value;
+  if (hasList) {
+    const asList = bookingCalendarsConfigSchema.safeParse(value);
+    if (asList.success) return asList.data;
+  }
+
+  /**
+   * Every field of `slotPatternConfigSchema` has a default, so it parses ANY object — including
+   * an unrelated or corrupt document, which would then surface as a phantom "Discovery calls"
+   * card in the console. Require some actual evidence of a pattern before claiming to have found
+   * one; a doc with none is not a legacy pattern, it is garbage, and belongs on the empty default.
+   */
+  const looksLegacy =
+    typeof value === "object" && value !== null && ("weekdays" in value || "startTime" in value);
+  if (looksLegacy) {
+    const legacy = slotPatternConfigSchema.safeParse(value);
+    if (legacy.success) {
+      return { calendars: [{ ...legacy.data, id: "default", name: "Discovery calls" }] };
+    }
+  }
+
+  return DEFAULT_BOOKING_CALENDARS_CONFIG;
+}
+
 // ──────────────────── global workflow settings (Automation) ────────────────────
 
 /**

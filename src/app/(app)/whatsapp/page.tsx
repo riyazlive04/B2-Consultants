@@ -9,6 +9,9 @@ import { WhatsAppSettingsForm } from "./_components/WhatsAppSettingsForm";
 import { WhatsAppTools } from "./_components/WhatsAppTools";
 import { RunRemindersButton } from "./_components/RunRemindersButton";
 import { WhatsAppMasterSwitch } from "./_components/WhatsAppMasterSwitch";
+import { WhatsAppDomainGate } from "./_components/WhatsAppDomainGate";
+import { prisma } from "@/lib/prisma";
+import { normalizeDomain } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +34,28 @@ export default async function WhatsAppPage() {
   const session = await requireSection("whatsapp");
   const data = await getWhatsAppAdminData();
   const { status, counts } = data;
+
+  /**
+   * Hosts to offer as one-click additions.
+   *
+   * The domains ALREADY OBSERVED on real leads come first, because they are the only source that
+   * is evidence rather than assumption — if traffic is arriving from a host, that host is what a
+   * gate has to name to let it through. Typing it from memory is how you list `b2consultants.de`
+   * and silently block everyone who actually arrived on `optin.b2consultants.de`.
+   *
+   * The app's own public origin joins them so the dashboard's host is one click away even before
+   * a single lead has been recorded through it.
+   */
+  const observed = await prisma.lead.findMany({
+    where: { originDomain: { not: null } },
+    distinct: ["originDomain"],
+    select: { originDomain: true },
+    take: 20,
+  });
+  const selfHost = normalizeDomain(process.env.BETTER_AUTH_URL ?? "");
+  const knownHosts = [
+    ...new Set([...observed.map((o) => o.originDomain!), ...(selfHost ? [selfHost] : [])]),
+  ].sort();
 
   const live = status.enabled;
   const stateLabel = live
@@ -90,6 +115,19 @@ export default async function WhatsAppPage() {
           </p>
         )}
       </div>
+
+      {/*
+        Admin only, and directly under the master switch: both answer "who is reachable right
+        now?", and separating them would leave someone reading a green "Not paused" chip while a
+        domain gate quietly blocks the contact they are asking about.
+      */}
+      {session.role === "ADMIN" && (
+        <WhatsAppDomainGate
+          enabled={data.settings.domainGate.enabled}
+          domains={data.settings.domainGate.domains}
+          suggestions={knownHosts}
+        />
+      )}
 
       {/* Volume */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

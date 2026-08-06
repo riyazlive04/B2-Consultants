@@ -273,7 +273,60 @@ export type WatiSettings = {
    * which would either send to nobody or fail open to everybody.
    */
   testRecipient: string | null;
+  /**
+   * Restrict outbound WhatsApp to contacts who arrived through named hostnames.
+   *
+   * `enabled: false` (the default) is the behaviour that existed before this: WATI serves every
+   * contact regardless of where they came from.
+   *
+   * ── Why an unknown origin is ALLOWED, not blocked ─────────────────────────────
+   * `Lead.originDomain` is only observed from 07/08/2026 onward, and the 23,429 contacts imported
+   * from Synamate have no host to record — they never will. Reading NULL as "not on the list"
+   * would mean switching this on silences every booking confirmation, reminder and dunning
+   * message for 99% of the database, instantly and silently. So the gate only ever blocks a
+   * contact whose origin IS known and is NOT listed. It is a filter on new traffic, not a
+   * whitelist of the existing book.
+   */
+  domainGate: WatiDomainGate;
 };
+
+export type WatiDomainGate = {
+  enabled: boolean;
+  /** Bare hostnames, lower-cased, no scheme/port/path. Empty while `enabled` is a no-op — see below. */
+  domains: string[];
+};
+
+/**
+ * Normalise whatever someone typed into a bare hostname.
+ *
+ * People paste URLs. "https://optin.b2consultants.de/apply-team?x=1" and "optin.b2consultants.de"
+ * are the same domain to everyone except a string compare, and a gate that silently fails to
+ * match because of a trailing slash is worse than no gate — it blocks messages nobody can explain.
+ */
+export function normalizeDomain(raw: string): string | null {
+  let s = raw.trim().toLowerCase();
+  if (!s) return null;
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, ""); // scheme
+  s = s.split("/")[0].split("?")[0].split("#")[0]; // path/query/fragment
+  s = s.replace(/^www\./, ""); // www is not a different site
+  s = s.split(":")[0]; // port
+  // A hostname, not a sentence. Rejects spaces, empty labels and bare TLDs.
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(s) || s === "localhost" ? s : null;
+}
+
+/**
+ * May this contact be messaged?
+ *
+ * Pure, so the gate's rule is testable and reads the same everywhere it is explained. Both
+ * "gate off" and "no domains listed" pass everything: an enabled gate with an empty list is
+ * someone mid-setup, and interpreting it as "block all" would take the whole system down between
+ * two clicks.
+ */
+export function domainAllows(gate: WatiDomainGate, originDomain: string | null | undefined): boolean {
+  if (!gate.enabled || gate.domains.length === 0) return true;
+  if (!originDomain) return true; // not observed → not blocked
+  return gate.domains.includes(originDomain);
+}
 
 /**
  * No touchpoint is mapped by default, on purpose.
@@ -297,6 +350,8 @@ export const DEFAULT_WATI_SETTINGS: WatiSettings = {
   cadence: DEFAULT_CADENCE,
   // Off by default: a fresh install must behave normally. Turning it ON is the deliberate act.
   testRecipient: null,
+  // Same rule: shipped off, so nothing about existing sending changes until someone arms it.
+  domainGate: { enabled: false, domains: [] },
 };
 
 /**

@@ -19,6 +19,7 @@ import { BOOKING_RULES_KEY, getBookingRulesConfig, writeBookingRulesConfig } fro
 import { logActivity, diffFields } from "./activity-log";
 import { emitTrigger } from "./automation";
 import { upsertIntakeLead } from "./lead-intake";
+import { observedOriginDomain } from "./request-origin";
 import { mirrorBookingScoreToLead } from "./lead-qualification";
 import { shadowScore } from "./qualification";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
@@ -246,6 +247,9 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     source: "BOOKING_FORM" as const,
     utm,
     notes: clean(d.reasonForCall),
+    // Observed from this request, so a prospect who books through the funnel carries the host
+    // they booked on. Only fills a blank — see `acceptReturningOptIn`.
+    originDomain: await observedOriginDomain(),
   };
 
   // The qualification answers + BANT, shared by the booked AND the auto-disqualified paths so

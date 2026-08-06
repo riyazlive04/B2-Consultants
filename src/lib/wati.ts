@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_CADENCE,
   DEFAULT_WATI_SETTINGS,
+  normalizeDomain,
   type WatiSettings,
+  type WatiDomainGate,
   type WatiCadence,
   type WatiTemplateMap,
   type WatiTemplateConfig,
@@ -76,6 +78,20 @@ function coerceTemplates(raw: unknown): WatiTemplateMap {
   return out;
 }
 
+/**
+ * Domains are re-normalised on READ, not trusted as stored — the same reasoning as the
+ * testRecipient number below. A hostname that survived a hand-edit of the AppSetting row in a
+ * shape the matcher cannot match would be a gate silently blocking traffic it was meant to pass.
+ * Anything unparseable is dropped rather than kept as dead config.
+ */
+function coerceDomainGate(raw: unknown): WatiDomainGate {
+  const v = (raw && typeof raw === "object" ? raw : {}) as Partial<WatiDomainGate>;
+  const domains = Array.isArray(v.domains)
+    ? [...new Set(v.domains.filter((d): d is string => typeof d === "string").map(normalizeDomain).filter((d): d is string => !!d))]
+    : [];
+  return { enabled: typeof v.enabled === "boolean" ? v.enabled : false, domains };
+}
+
 function coerceSettings(raw: unknown): WatiSettings {
   const v = (raw && typeof raw === "object" ? raw : {}) as Partial<WatiSettings>;
   // No stored mapping yet → seed the agreed defaults. A stored (even empty) mapping is the
@@ -87,6 +103,7 @@ function coerceSettings(raw: unknown): WatiSettings {
     defaultCountry,
     templates,
     cadence: coerceCadence(v.cadence),
+    domainGate: coerceDomainGate(v.domainGate),
     // Re-normalized on READ, not trusted as stored. The valve only protects anything if the
     // number is one WATI will accept — a value that fails to normalize would otherwise be sent
     // as-is, fail, and leave someone believing test mode was on.

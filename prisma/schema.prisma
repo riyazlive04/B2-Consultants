@@ -619,6 +619,14 @@ model Lead {
   manualOverride Boolean       @default(false)
   externalRef    String?
   utm            Json? // captured UTM params from the ad / landing source (Wave-1)
+  /// The hostname this contact came in through — "optin.b2consultants.de", lower-cased, no port.
+  ///
+  /// Observed, never inferred: it is the Host header of the request that actually created them,
+  /// recorded by the public funnel form and the booking form. Anything we could not observe stays
+  /// NULL, and NULL means "we do not know", not "none" — the WhatsApp domain gate reads it that
+  /// way and lets an unknown origin through, because the 23,429 leads imported from Synamate can
+  /// never have one and blocking them would silence every reminder in the system.
+  originDomain   String?
   // Speed-to-lead (Synamate "Who" + "Speed Ratio"): who owns the lead and when it was
   // first contacted. Speed = contactedAt − createdAt, computed at read time.
   assignedToId   String?

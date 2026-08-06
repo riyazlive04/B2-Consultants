@@ -8,6 +8,7 @@ import {
   WHATSAPP_KINDS,
   WHATSAPP_KIND_LABELS,
   DEFAULT_CADENCE,
+  normalizeDomain,
   type WatiSettings,
   type WatiTemplateMap,
   type WatiCadence,
@@ -343,7 +344,12 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
     return { ok: false, message: `"${rawTest}" isn't a valid WhatsApp number — include the country code.` };
   }
 
-  const settings: WatiSettings = { paused, defaultCountry, templates, cadence, testRecipient };
+  // Carried through, not rebuilt from the form: this screen does not render the domain gate (it
+  // has its own control), and a settings save that dropped the field would silently un-restrict
+  // sending every time someone edited a cadence number.
+  const settings: WatiSettings = {
+    paused, defaultCountry, templates, cadence, testRecipient, domainGate: before.domainGate,
+  };
   await writeWatiSettings(settings);
   const diff = diffFields(before, settings);
   if (diff.changed.length) {
@@ -461,4 +467,66 @@ export async function sendTestWhatsApp(form: FormData): Promise<WhatsAppActionRe
   }
   revalidatePath("/whatsapp");
   return toResult(out, `Test sent using the "${WHATSAPP_KIND_LABELS[kind]}" template`);
+}
+
+/**
+ * The domain gate: which hostnames WATI is allowed to serve.
+ *
+ * ADMIN ONLY, and audited as its own action rather than a generic settings diff — like the
+ * master switch, this is the record of who narrowed or widened who can be messaged.
+ *
+ * The whole gate is written in one call (enabled + list together). A separate "toggle" and
+ * "edit list" pair would allow the state nobody wants: the gate armed while the list is being
+ * retyped, blocking real traffic for as long as the second save takes.
+ */
+export async function saveWhatsAppDomainGate(input: {
+  enabled: boolean;
+  domains: string[];
+}): Promise<WhatsAppActionResult> {
+  const session = await requireAdmin();
+  const before = await readWatiSettings();
+
+  const seen = new Set<string>();
+  const rejected: string[] = [];
+  for (const raw of input.domains) {
+    const d = normalizeDomain(raw);
+    if (d) seen.add(d);
+    else if (raw.trim()) rejected.push(raw.trim());
+  }
+  if (rejected.length) {
+    return { ok: false, message: `Not a valid domain: ${rejected.slice(0, 3).join(", ")}` };
+  }
+
+  const domains = [...seen].sort();
+  /**
+   * Arming an empty gate is refused rather than silently treated as "allow everything".
+   * `domainAllows` does pass everything in that state — deliberately, so a half-finished edit
+   * cannot take the system down — but a switch that reads ON while changing nothing is a lie
+   * the founder would only discover by noticing messages they expected to be blocked.
+   */
+  if (input.enabled && domains.length === 0) {
+    return { ok: false, message: "Add at least one domain, or leave the gate off." };
+  }
+
+  await writeWatiSettings({ ...before, domainGate: { enabled: input.enabled, domains } });
+
+  const was = before.domainGate;
+  await logActivity(session, {
+    action: "whatsapp.domain-gate.update",
+    section: "whatsapp",
+    entityType: "AppSetting",
+    entityId: "watiConfig",
+    summary: input.enabled
+      ? `WhatsApp restricted to ${domains.length} domain(s): ${domains.join(", ")}`
+      : "WhatsApp domain restriction turned OFF — every contact can be messaged again",
+    meta: { before: was, after: { enabled: input.enabled, domains } },
+  });
+
+  revalidatePath("/whatsapp");
+  return {
+    ok: true,
+    message: input.enabled
+      ? `WhatsApp is now restricted to ${domains.length} domain(s)`
+      : "Domain restriction turned off",
+  };
 }

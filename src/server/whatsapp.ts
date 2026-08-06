@@ -5,6 +5,7 @@ import { istToday } from "@/lib/dates";
 import { formatDate, formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import {
   WHATSAPP_KIND_LABELS,
+  domainAllows,
   redirectedBodyPrefix,
   resolveDestination,
   type WatiTemplateConfig,
@@ -198,6 +199,32 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
         `Template "${template.name}" expects ${built.missing.map((m) => `{{${m}}}`).join(", ")}, ` +
         `which "${label}" cannot supply. Fix the variable list in WhatsApp → Settings.`;
     } else if (await isOptedOut(number)) dataSkip = "Recipient has opted out of WhatsApp";
+    else {
+      /**
+       * The domain gate: WATI serves only contacts who came in through the hostnames Ameen
+       * listed in WhatsApp → Domains.
+       *
+       * Filed as a `dataSkip` rather than `systemOff` because it is a fact about THIS recipient,
+       * not about the system — so it always writes a row saying which domain was refused. A
+       * message that vanishes with no trace is the thing that makes a gate impossible to debug
+       * six weeks later.
+       *
+       * Only leads carry an origin. A send addressed at a student, an agreement or the book
+       * publisher has no lead to look up, and `domainAllows(…, null)` lets those through — the
+       * gate is about where a PROSPECT came from, and it must never hold up a signed student's
+       * paperwork.
+       */
+      const gate = runtime.settings.domainGate;
+      if (gate.enabled && gate.domains.length > 0 && target.leadId) {
+        const lead = await prisma.lead.findUnique({
+          where: { id: target.leadId },
+          select: { originDomain: true },
+        });
+        if (!domainAllows(gate, lead?.originDomain)) {
+          dataSkip = `Blocked by the WhatsApp domain gate — this contact came from "${lead?.originDomain}", which is not in the allowed list.`;
+        }
+      }
+    }
   }
 
   const skipReason = systemOff ?? dataSkip;

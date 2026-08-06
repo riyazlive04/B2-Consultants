@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
-import { LeadSource } from "@prisma/client";
+import { LeadSource, type LeadStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
@@ -62,6 +62,30 @@ const HOW_TO_CHANNEL: Record<string, LeadSource> = {
   ghosted_blueprint: "GHOSTED_BLUEPRINT",
   other: "OTHER",
 };
+
+/**
+ * Stages a booking must NOT drag a lead out of — they are already at, or past, the booked-call
+ * column. Everything else advances (see the note at the update itself).
+ *
+ * `STRATEGY_CALL_BOOKED` is here because it is the destination: rebooking would otherwise write
+ * a stage-history row saying the lead moved from a stage to itself, and the desk's "moved today"
+ * counts read that table.
+ *
+ * The workshop pair is deliberately NOT here. Someone routed to the workshop who then books a
+ * discovery call HAS a discovery call booked, and the board should say so.
+ */
+const HOLDS_THROUGH_BOOKING: ReadonlySet<LeadStage> = new Set<LeadStage>([
+  "STRATEGY_CALL_BOOKED",
+  "DISCO_BOOKED",
+  "DISCO_COMPLETED",
+  "SSS_BOOKED",
+  "SSS_COMPLETED",
+  "PROPOSAL_SENT",
+  "OFFER_FOLLOWUP",
+  "DEPOSIT_FOLLOWUP",
+  "DEPOSIT_PAID",
+  "WON",
+]);
 
 /** A select whose answer the form now insists on. Blank is refused rather than stored as null. */
 const requiredChoice = (field: keyof typeof INTAKE_OPTIONS, message: string) =>
@@ -370,17 +394,24 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
       });
 
       /**
-       * A booked call = STRATEGY_CALL_BOOKED, the board's "Strategy Call Booked" column.
+       * A booked call = STRATEGY_CALL_BOOKED, the board's "Discovery Call Booked" column.
        *
        * This used to jump straight to DISCO_BOOKED ("Pre-Qualified & Confirmed"), which claimed
        * the prospect had been qualified AND their call confirmed the instant they picked a slot —
        * neither of which has happened yet. Qualification moves them on from here.
        *
-       * Advances from WHATSAPP_SENT as well as NEW_LEAD, because with the intro now auto-sending
-       * that is the stage most leads are actually in by the time they book.
+       * The guard is a HOLD list rather than an allow list. It used to advance only NEW_LEAD and
+       * WHATSAPP_SENT, so a prospect who already existed in any OTHER stage booked a call and the
+       * board did not move at all — the 8,086 leads sitting in Cancelled/Unqualified could each
+       * book a discovery call and stay filed as written off. Someone who was given up on and comes
+       * back to book is the single most valuable card on the board, and it was invisible.
+       *
+       * Inverting it also means a stage added later advances by default, which is the safe
+       * direction: a missing early stage silently strands prospects, while a missing late stage
+       * would announce itself immediately by dragging a paying customer backwards.
        */
       const fresh = await tx.lead.findUnique({ where: { id: lead.id }, select: { stage: true } });
-      if (fresh && (fresh.stage === "NEW_LEAD" || fresh.stage === "WHATSAPP_SENT")) {
+      if (fresh && !HOLDS_THROUGH_BOOKING.has(fresh.stage)) {
         await tx.lead.update({ where: { id: lead.id }, data: { stage: "STRATEGY_CALL_BOOKED" } });
         await tx.leadStageHistory.create({
           data: { leadId: lead.id, fromStage: fresh.stage, toStage: "STRATEGY_CALL_BOOKED" },

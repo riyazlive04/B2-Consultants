@@ -85,8 +85,10 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
 export const LEAD_STAGE_OPTIONS: { value: string; label: string }[] = [
   { value: "NEW_LEAD", label: "Fresh Optins" },
   { value: "WHATSAPP_SENT", label: "WhatsApp Sent" },
-  { value: "STRATEGY_CALL_BOOKED", label: "Strategy Call Booked" },
-  { value: "DISCO_BOOKED", label: "Discovery Booked" },
+  { value: "STRATEGY_CALL_BOOKED", label: "Discovery Call Booked" },
+  // Renamed off "Discovery Booked" when the column above took that name: two entries a word
+  // apart in one dropdown is how an automation gets pointed at the wrong stage.
+  { value: "DISCO_BOOKED", label: "Pre-Qualified & Confirmed" },
   { value: "DISCO_NOT_BOOKED", label: "Discovery Not Booked" },
   { value: "DISCO_COMPLETED", label: "Discovery Completed" },
   { value: "SSS_BOOKED", label: "Strategy Session Booked" },

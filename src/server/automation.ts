@@ -1,10 +1,14 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import type { LeadStage } from "@prisma/client";
+import type { LeadStage, WhatsAppKind } from "@prisma/client";
 import { inQuietWindow, quietWindowEndsAt } from "@/lib/automation-quiet-hours";
 import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { sendEmailMessage, sendSmsMessage } from "./messaging";
+import { sendWhatsApp } from "./whatsapp";
+import { readOutreachConfig } from "./outreach";
+import { WHATSAPP_KINDS, WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
+import { syncDefaultOpportunity } from "./opportunity-sync";
 import { logSystemActivity, SYSTEM_ACTORS, type ActivityInput } from "./activity-log";
 import type { WorkflowAction, TriggerType, TriggerConfig } from "@/lib/automation-types";
 import { getWorkflowSettings } from "./founder-config";
@@ -119,7 +123,12 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
       // NOT advance `step`) so the send actually happens once the window opens, rather than
       // being skipped. Only outbound sends are gated — tags/stages/tasks are silent to the
       // contact, so holding those overnight would delay the workflow for no benefit.
-      if ((a.type === "SEND_EMAIL" || a.type === "SEND_SMS") && settings.quietHours.enabled) {
+      // WhatsApp is held by quiet hours for the same reason as email and SMS — it is an outbound
+      // message to a person's phone, and is if anything the most intrusive of the three.
+      if (
+        (a.type === "SEND_EMAIL" || a.type === "SEND_SMS" || a.type === "SEND_WHATSAPP") &&
+        settings.quietHours.enabled
+      ) {
         const now = new Date();
         if (inQuietWindow(now, settings.quietHours.startHour, settings.quietHours.endHour)) {
           const resumeAt = quietWindowEndsAt(now, settings.quietHours.endHour);
@@ -160,6 +169,11 @@ async function record(input: Omit<ActivityInput, "section">): Promise<void> {
 }
 
 /** The founder reads names, never ids — and only a step that landed pays for the lookup. */
+/** Narrow a stored string to a real template slot — workflow JSON is not type-checked. */
+function isWhatsAppKind(v: string): v is WhatsAppKind {
+  return (WHATSAPP_KINDS as readonly string[]).includes(v);
+}
+
 async function leadName(leadId: string): Promise<string> {
   const l = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true } });
   return l?.name ?? "a contact";
@@ -211,6 +225,45 @@ async function executeAction(a: WorkflowAction, leadId: string): Promise<void> {
       }
       break;
     }
+    case "SEND_WHATSAPP": {
+      const kind = (a.whatsappKind ?? "").trim();
+      if (!isWhatsAppKind(kind)) break;
+
+      const l = await prisma.lead.findUnique({
+        where: { id: leadId },
+        select: { name: true, phone: true },
+      });
+      if (!l) break;
+
+      /**
+       * Only what a workflow step can honestly know about a contact.
+       *
+       * Deliberately NOT padded with placeholders to satisfy a template: a kind whose template
+       * wants a per-booking value (`b2_booking_confirmation` needs slot_time) has no such value
+       * at, say, form-submission time. `sendWhatsApp` then records a SKIPPED row naming the
+       * missing variable — which is the correct outcome. Inventing a slot_time would send a
+       * contact a confirmation for a meeting that does not exist.
+       */
+      const vars: Record<string, string> = {
+        name: (l.name ?? "").trim().split(/\s+/)[0] || "there",
+        booking_url: `${(process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "")}/book`,
+        // The SOP templates sign off with a person's name; reuse the same setting the
+        // outreach engine signs its own messages with so the two never disagree.
+        sender: (await readOutreachConfig()).defaultSpecialistName,
+      };
+
+      const out = await sendWhatsApp({ kind, to: l.phone, vars, leadId, logSkips: true });
+      if (out.status === "SENT") {
+        await record({
+          action: "whatsapp.send",
+          entityType: "Lead",
+          entityId: leadId,
+          summary: `WhatsApped ${await leadName(leadId)} the "${WHATSAPP_KIND_LABELS[kind]}" template`,
+          meta: { channel: "WHATSAPP", kind },
+        });
+      }
+      break;
+    }
     case "ADD_TAG": {
       if (a.tag?.trim()) {
         const name = a.tag.trim().toLowerCase();
@@ -258,8 +311,12 @@ async function executeAction(a: WorkflowAction, leadId: string): Promise<void> {
           const to = a.stage as LeadStage;
           await prisma.lead.update({ where: { id: leadId }, data: { stage: to } });
           await prisma.leadStageHistory.create({ data: { leadId, fromStage: lead.stage, toStage: to } });
-          const stage = await prisma.pipelineStage.findFirst({ where: { legacyStage: to, pipeline: { isDefault: true } } });
-          if (stage) await prisma.opportunity.updateMany({ where: { leadId, pipeline: { isDefault: true } }, data: { stageId: stage.id } });
+          // Was a hand-rolled `findFirst(legacyStage) → updateMany(stageId)`. It set the column and
+          // nothing else — no status, no wonAt — and it matched on `legacyStage` alone, which the
+          // board's twelve Synamate columns no longer permit: four lead stages have no column of
+          // their own and WON has two. `syncDefaultOpportunity` is the one place that knows all of
+          // that, so a workflow now moves a card exactly like a person does.
+          await syncDefaultOpportunity(prisma, leadId, to);
           await record({
             action: "lead.stage.move",
             entityType: "Lead",

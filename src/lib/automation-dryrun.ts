@@ -78,7 +78,7 @@ export type DryRunInput = {
   /** facts for each lead referenced by `events`, keyed by lead id */
   leads: Record<string, DryRunLead>;
   templates: Record<string, DryRunTemplate>;
-  channels: { email: DryRunChannel; sms: DryRunChannel };
+  channels: { email: DryRunChannel; sms: DryRunChannel; whatsapp: DryRunChannel };
   settings: DryRunSettings;
   windowStart: Date;
   windowEnd: Date;
@@ -170,9 +170,9 @@ export type DryRunResult = {
   /** distinct contacts enrolled */
   contacts: number;
   messages: {
-    delivered: { email: number; sms: number };
-    loggedOnly: { email: number; sms: number };
-    unreachable: { email: number; sms: number };
+    delivered: { email: number; sms: number; whatsapp: number };
+    loggedOnly: { email: number; sms: number; whatsapp: number };
+    unreachable: { email: number; sms: number; whatsapp: number };
     nothingToSend: number;
     heldByQuietHours: number;
   };
@@ -223,6 +223,11 @@ export function lintActions(actions: WorkflowAction[], templates: Record<string,
         else if (!a.templateId && !(a.body ?? "").trim()) out.push(`${at(i, a)} has no message body, so it would do nothing.`);
         else if (tpl && tpl.channel !== "SMS") out.push(`${at(i, a)} points at an email template.`);
         break;
+      case "SEND_WHATSAPP":
+        if (!(a.whatsappKind ?? "").trim()) {
+          out.push(`${at(i, a)} has no WhatsApp template chosen, so it would send nothing.`);
+        }
+        break;
       case "ADD_TAG":
       case "REMOVE_TAG":
         if (!(a.tag ?? "").trim()) out.push(`${at(i, a)} has no tag name.`);
@@ -264,9 +269,9 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
     blockedAlreadyRan: 0,
     contacts: 0,
     messages: {
-      delivered: { email: 0, sms: 0 },
-      loggedOnly: { email: 0, sms: 0 },
-      unreachable: { email: 0, sms: 0 },
+      delivered: { email: 0, sms: 0, whatsapp: 0 },
+      loggedOnly: { email: 0, sms: 0, whatsapp: 0 },
+      unreachable: { email: 0, sms: 0, whatsapp: 0 },
       nothingToSend: 0,
       heldByQuietHours: 0,
     },
@@ -372,7 +377,10 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
       // Quiet hours gate outbound sends only, and park ON the step — so the send still happens,
       // just later, and every step after it shifts with it.
       let heldUntil: Date | undefined;
-      if ((a.type === "SEND_EMAIL" || a.type === "SEND_SMS") && settings.quietHours.enabled) {
+      if (
+        (a.type === "SEND_EMAIL" || a.type === "SEND_SMS" || a.type === "SEND_WHATSAPP") &&
+        settings.quietHours.enabled
+      ) {
         if (inQuietWindow(clock, settings.quietHours.startHour, settings.quietHours.endHour)) {
           clock = quietWindowEndsAt(clock, settings.quietHours.endHour);
           heldUntil = clock;
@@ -416,6 +424,24 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
           } else {
             result.messages.delivered.sms++;
             push("DELIVERED", `Texts ${via}`, heldUntil);
+          }
+          break;
+        }
+        case "SEND_WHATSAPP": {
+          const kind = (a.whatsappKind ?? "").trim();
+          const via = kind ? `the "${kind}" WhatsApp template` : "a WhatsApp message";
+          if (!kind) {
+            result.messages.nothingToSend++;
+            push("NOTHING_TO_SEND", "No WhatsApp template chosen", heldUntil);
+          } else if (!lead.hasPhone) {
+            result.messages.unreachable.whatsapp++;
+            push("UNREACHABLE", "No phone number on this contact", heldUntil);
+          } else if (!channels.whatsapp.live) {
+            result.messages.loggedOnly.whatsapp++;
+            push("LOGGED_ONLY", `Would log ${via} — ${channels.whatsapp.reason}`, heldUntil);
+          } else {
+            result.messages.delivered.whatsapp++;
+            push("DELIVERED", `WhatsApps ${via}`, heldUntil);
           }
           break;
         }
@@ -509,7 +535,11 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
     (n, o) => n + result.byAction.reduce((m, r) => m + (r.outcomes.find((x) => x.outcome === o)?.count ?? 0), 0),
     0,
   );
-  if (result.enrolled > 0 && reached === 0 && actions.some((a) => a.type === "SEND_EMAIL" || a.type === "SEND_SMS")) {
+  if (
+    result.enrolled > 0 &&
+    reached === 0 &&
+    actions.some((a) => a.type === "SEND_EMAIL" || a.type === "SEND_SMS" || a.type === "SEND_WHATSAPP")
+  ) {
     warnings.add("No message in this workflow would actually reach anyone — check the channel status and contact details above.");
   }
 
@@ -535,7 +565,12 @@ export function summarise(r: DryRunResult): string {
   if (r.scanned === 0) return "Nothing triggered this workflow in that window.";
   if (r.enrolled === 0) return `${r.scanned.toLocaleString("en-IN")} events, but none of them would have enrolled anyone.`;
   const sends =
-    r.messages.delivered.email + r.messages.delivered.sms + r.messages.loggedOnly.email + r.messages.loggedOnly.sms;
+    r.messages.delivered.email +
+    r.messages.delivered.sms +
+    r.messages.delivered.whatsapp +
+    r.messages.loggedOnly.email +
+    r.messages.loggedOnly.sms +
+    r.messages.loggedOnly.whatsapp;
   const parts = [`would have enrolled ${r.enrolled.toLocaleString("en-IN")} contact${r.enrolled === 1 ? "" : "s"}`];
   if (sends > 0) parts.push(`sent ${sends.toLocaleString("en-IN")} message${sends === 1 ? "" : "s"}`);
   const touched = r.changes.tagsAdded + r.changes.tagsRemoved + r.changes.stageMoves + r.changes.tasksCreated;

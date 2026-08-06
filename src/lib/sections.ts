@@ -25,6 +25,7 @@ export const SECTION_ICON_NAMES = [
   "map", "book-open", "message-circle", "trophy", "sliders", "target", "gift",
   "sparkles", "bar-chart", "shield", "layout-grid", "file-signature", "scale",
   "contact", "kanban", "file-text", "layout-template", "receipt", "inbox", "workflow",
+  "globe",
 ] as const;
 export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];
 
@@ -98,7 +99,19 @@ export const SECTION_CATALOGUE = [
    * This is presentation only. Nothing is deleted, no route is removed, and no access changes —
    * merging the two boards into one is a separate, larger piece of work.
    */
-  { key: "pipeline", label: "Pipeline", href: "/pipeline", phase: 1, icon: "git-branch", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
+  /**
+   * "Pipeline" lands on the BOARD, not the metrics page (founder's call, 06/08/2026): the board is
+   * what the team works out of all day, and the metrics screen was a detour they had to click past.
+   *
+   * Only the href moves. `key` stays "pipeline", so `requireSection` still gates this rail entry on
+   * the pipeline section and nobody's access changes — but note the destination route runs
+   * `requireSection("opportunities")`, so a user who has pipeline and has had opportunities revoked
+   * in Console → Sections would be turned away here. Both default to ADMIN/HEAD/USER, so that only
+   * happens if someone deliberately splits them.
+   *
+   * The metrics page is not orphaned: /opportunities links back to it (see its ListHeader).
+   */
+  { key: "pipeline", label: "Pipeline", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // Synamate CRM parity (Phase 1): Contacts (the CRM) + Opportunities (the drag-drop board).
   // Grouped with Pipeline under Sales so the whole lead → contact → deal flow sits together.
   { key: "contacts", label: "Contacts", href: "/contacts", phase: 1, icon: "contact", group: "Sales", roles: ["ADMIN", "USER"] },
@@ -143,6 +156,10 @@ export const SECTION_CATALOGUE = [
   // Synamate Sites parity (Phase 2): native form + funnel/landing-page builders with public hosting.
   { key: "forms", label: "Forms", href: "/forms", phase: 2, icon: "file-text", group: "Insights", roles: ["ADMIN", "USER"] },
   { key: "funnels", label: "Funnels", href: "/funnels", phase: 2, icon: "layout-template", group: "Insights", roles: ["ADMIN", "USER"] },
+  // The public marketing website (b2consultants.de), replacing the GHL-hosted one. ADMIN-only at
+  // the section level AND write-gated on `sites.manage`: unlike Forms and Funnels, which capture
+  // leads, editing this changes what every ad click lands on.
+  { key: "sites", label: "Website", href: "/sites", phase: 2, icon: "globe", group: "Insights", roles: ["ADMIN"] },
   { key: "cv-check", label: "CV Studio", href: "/cv-check", phase: 2, icon: "file-search", group: "Insights", roles: ["ADMIN", "HEAD", "STUDENT"] },
   { key: "whatsapp", label: "WhatsApp", href: "/whatsapp", phase: 3, icon: "message-circle", group: "Insights", roles: ["ADMIN"] },
   // Synamate Conversations parity (Phase 4): unified Email + SMS + WhatsApp inbox + templates.

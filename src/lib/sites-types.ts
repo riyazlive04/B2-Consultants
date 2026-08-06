@@ -36,11 +36,51 @@ export type FormFieldType =
   | "date" | "time"
   // a single yes/no tick (consent). PRE-DATES `checkboxes` — see the note above.
   | "checkbox"
+  /**
+   * An amount of money. Its own type rather than `number` with a prefix, because the answer has a
+   * CURRENCY, and this project has learnt that lesson expensively: money is BigInt minor units
+   * with an explicit currency everywhere else in the schema, and a bare float labelled "₹" is how
+   * that discipline leaks away.
+   */
+  | "monetary"
+  /**
+   * A file the respondent uploads. Stored in object storage; the ANSWER is the resulting URL, so
+   * a submission stays a row of strings and nothing has to stream bytes out of Postgres.
+   */
+  | "file"
+  /** A drawn or typed signature. The answer is a PNG data URL — self-contained, no second fetch. */
+  | "signature"
+  /**
+   * Consent, with the legal text beside it. Distinct from `checkbox` because it is a different
+   * PROMISE: it renders the terms, it defaults to required, and its label is a sentence with a
+   * link in it rather than a question. Collapsing the two would mean the day someone edits the
+   * consent copy they are also editing an ordinary yes/no tick somewhere else.
+   */
+  | "terms"
+  /**
+   * A value carried with the submission but never shown — campaign, ad id, referrer. Prefilled
+   * from a URL parameter or a fixed default. This is what the Synamate form calls a "Hidden"
+   * field, and it is how a lead arrives already knowing where it came from.
+   */
+  | "hidden"
+  /**
+   * A running total derived from the options the respondent picked (`FormOption.score`). Not an
+   * input: it is computed at submit, so it cannot be forged by editing the page — which is the
+   * only way a score is worth anything for triage.
+   */
+  | "score"
+  /**
+   * Bot protection. Renders no visible control: it plants a honeypot and stamps the render time,
+   * and the submit action rejects anything that fills the trap or answers impossibly fast.
+   * Deliberately not a third-party captcha — no vendor, no cookie banner, nothing for a real
+   * respondent on a phone to fail.
+   */
+  | "captcha"
   // static items that collect nothing
-  | "section" | "heading" | "image";
+  | "section" | "heading" | "image" | "html";
 
 /** Items that carry no answer: they lay the form out rather than ask anything. */
-export const STATIC_ITEM_TYPES = ["section", "heading", "image"] as const;
+export const STATIC_ITEM_TYPES = ["section", "heading", "image", "html", "captcha"] as const;
 
 export function isStaticItem(type: FormFieldType): boolean {
   return (STATIC_ITEM_TYPES as readonly string[]).includes(type);
@@ -61,7 +101,12 @@ export function isMultiItem(type: FormFieldType): boolean {
  * `"submit"`) — see `resolveGoTo`. That restriction is ours, not Google's, and it exists so that a
  * form with a cycle in it cannot be built in the first place.
  */
-export type FormOption = { label: string; goTo?: string };
+export type FormOption = {
+  label: string;
+  goTo?: string;
+  /** Points this option contributes to a `score` item. Absent = 0, so scoring is opt-in per option. */
+  score?: number;
+};
 
 /** Response validation. One rule per question, mirroring Google's single validation row. */
 export type FormValidation =
@@ -105,6 +150,33 @@ export type FormItem = {
 
   /** Section items only: where to go after this page. A section id, or "submit". */
   goTo?: string;
+
+  // ── hidden ──
+  /** Fixed value when the URL carries nothing. */
+  hiddenValue?: string;
+  /** Query parameter to read the value from — `?ad=spring` with `hiddenFrom: "ad"`. */
+  hiddenFrom?: string;
+
+  // ── file ──
+  /** Accept attribute, e.g. ".pdf,.doc,image/*". Enforced again on the server. */
+  accept?: string;
+  /** Per-file cap in megabytes. Clamped server-side to MAX_UPLOAD_MB — a page can lie. */
+  maxSizeMb?: number;
+
+  // ── phone ──
+  /** ISO-3166 alpha-2 the country selector opens on. Defaults to IN — the audience's origin. */
+  defaultCountry?: string;
+
+  // ── monetary ──
+  currency?: "INR" | "EUR";
+
+  // ── terms ──
+  /** The sentence beside the tick. Plain text; `termsUrl` turns the last part into a link. */
+  termsText?: string;
+  termsUrl?: string;
+
+  /** html items only — raw markup, rendered unescaped. Admin-authored, same contract as Block.html. */
+  html?: string;
 
   validation?: FormValidation;
 };
@@ -193,11 +265,146 @@ export const FIELD_TYPE_GROUPS: {
     ],
   },
   {
+    group: "Money and files",
+    types: [
+      { value: "monetary", label: "Monetary", hint: "An amount, with a currency" },
+      { value: "file", label: "File upload" },
+      { value: "signature", label: "Signature" },
+    ],
+  },
+  {
+    group: "Behind the scenes",
+    types: [
+      { value: "hidden", label: "Hidden", hint: "Carried, never shown" },
+      { value: "score", label: "Score", hint: "Computed from the answers" },
+      { value: "terms", label: "Terms and conditions" },
+    ],
+  },
+  {
     group: "Layout — collects nothing",
     types: [
       { value: "section", label: "Section / page break" },
       { value: "heading", label: "Title and description" },
       { value: "image", label: "Image" },
+      { value: "html", label: "Custom HTML" },
+      { value: "captcha", label: "Bot protection" },
+    ],
+  },
+];
+
+/**
+ * The element palette — what the builder's left drawer offers, in Synamate's categories.
+ *
+ * ── Why this is separate from FIELD_TYPE_GROUPS ────────────────────────────────────────────────
+ * That list is the MODEL: every field type exactly once, and it is what the normaliser validates
+ * against. This is the AUTHORING catalogue, and the two are not the same shape — "First Name",
+ * "Last Name", "City" and "Website" are all one type (`text`) with a different key, label and
+ * keyboard. Collapsing them into the model would mean four near-identical types to validate and
+ * render; collapsing the palette into the model would mean the drawer offering "Short answer"
+ * four times and the author filling in the contact key by hand every time, which is exactly the
+ * step the GHL palette exists to remove.
+ *
+ * `quick` marks the tiles on the "Quick Add" tab; the rest are "Add Object Fields" — the ones
+ * that write a known key on the contact record.
+ */
+export type PaletteItem = {
+  /** Tile caption. */
+  label: string;
+  type: FormFieldType;
+  /** Lucide icon name, resolved by the builder — this file stays free of React. */
+  icon: string;
+  /** Defaults merged over `newItem(type)`. A preset is a type plus the fields that make it one. */
+  preset?: Partial<FormItem>;
+  /** Not offered yet, and says so on the tile rather than being silently missing. */
+  soon?: boolean;
+};
+
+export const ELEMENT_PALETTE: { group: string; quick: boolean; items: PaletteItem[] }[] = [
+  {
+    group: "Personal Info",
+    quick: false,
+    items: [
+      { label: "Full Name", type: "text", icon: "User", preset: { key: "name", label: "Full Name", placeholder: "Enter Your Full Name", required: true } },
+      { label: "First Name", type: "text", icon: "User", preset: { key: "firstName", label: "First Name", placeholder: "Enter Your First Name", required: true } },
+      { label: "Last Name", type: "text", icon: "User", preset: { key: "lastName", label: "Last Name", placeholder: "Enter Your Last Name" } },
+      { label: "Date of Birth", type: "date", icon: "Cake", preset: { key: "dob", label: "Date of Birth" } },
+      { label: "Phone", type: "phone", icon: "Phone", preset: { key: "phone", label: "Phone", placeholder: "Enter Your Phone Number", required: true } },
+      { label: "Email", type: "email", icon: "Mail", preset: { key: "email", label: "Email", placeholder: "Enter Your Email Address", required: true } },
+    ],
+  },
+  {
+    group: "Address",
+    quick: false,
+    items: [
+      { label: "Address", type: "text", icon: "MapPin", preset: { key: "address", label: "Address" } },
+      { label: "City", type: "text", icon: "Building2", preset: { key: "city", label: "City" } },
+      { label: "State", type: "text", icon: "Landmark", preset: { key: "state", label: "State" } },
+      { label: "Country", type: "text", icon: "Globe", preset: { key: "country", label: "Country" } },
+      { label: "Postal Code", type: "text", icon: "Mailbox", preset: { key: "postalCode", label: "Postal Code" } },
+      { label: "Organization", type: "text", icon: "Briefcase", preset: { key: "industry", label: "Organization" } },
+      { label: "Website", type: "text", icon: "Link", preset: { key: "website", label: "Website", placeholder: "https://…" } },
+    ],
+  },
+  {
+    group: "Text",
+    quick: true,
+    items: [
+      { label: "Single Line", type: "text", icon: "Minus" },
+      { label: "Multi Line", type: "textarea", icon: "AlignLeft" },
+      { label: "Number", type: "number", icon: "Hash" },
+    ],
+  },
+  {
+    group: "Choice Elements",
+    quick: true,
+    items: [
+      { label: "Single Dropdown", type: "select", icon: "ChevronDown" },
+      { label: "Multi Select", type: "checkboxes", icon: "ListChecks" },
+      { label: "Checkbox", type: "checkbox", icon: "CheckSquare" },
+      { label: "Radio", type: "radio", icon: "CircleDot" },
+    ],
+  },
+  {
+    group: "Rating",
+    quick: true,
+    items: [
+      { label: "Rating", type: "rating", icon: "Star" },
+      { label: "Linear Scale", type: "scale", icon: "SlidersHorizontal" },
+    ],
+  },
+  {
+    group: "Customized",
+    quick: true,
+    items: [
+      { label: "Text", type: "heading", icon: "Type" },
+      { label: "HTML", type: "html", icon: "Code" },
+      { label: "Bot Protection", type: "captcha", icon: "ShieldCheck" },
+      { label: "Source", type: "hidden", icon: "Radio", preset: { key: "source", label: "Source", hiddenFrom: "utm_source" } },
+      { label: "T & C", type: "terms", icon: "FileCheck" },
+      { label: "Score", type: "score", icon: "Gauge" },
+    ],
+  },
+  {
+    group: "Other Elements",
+    quick: true,
+    items: [
+      { label: "Image", type: "image", icon: "Image" },
+      { label: "File Upload", type: "file", icon: "Upload" },
+      { label: "Monetary", type: "monetary", icon: "IndianRupee" },
+      { label: "Date Picker", type: "date", icon: "Calendar" },
+      { label: "Signature", type: "signature", icon: "PenLine" },
+      { label: "Page Break", type: "section", icon: "SeparatorHorizontal" },
+    ],
+  },
+  {
+    group: "Payments",
+    quick: true,
+    items: [
+      // Shown and disabled rather than omitted: the team knows this palette from Synamate, and a
+      // missing tile reads as "the tool can't", while a greyed one reads as "not yet". Building
+      // them means a payment provider on a public form, which is its own piece of work.
+      { label: "Sell Products", type: "monetary", icon: "Package", soon: true },
+      { label: "Collect Payment", type: "monetary", icon: "CreditCard", soon: true },
     ],
   },
 ];
@@ -229,7 +436,13 @@ function normaliseOptions(raw: unknown): FormOption[] | undefined {
     if (typeof o === "string") out.push({ label: o.slice(0, 200) });
     else if (o && typeof o === "object") {
       const label = str((o as { label?: unknown }).label, 200);
-      if (label) out.push({ label, goTo: str((o as { goTo?: unknown }).goTo, 60) || undefined });
+      if (label) {
+        out.push({
+          label,
+          goTo: str((o as { goTo?: unknown }).goTo, 60) || undefined,
+          score: num((o as { score?: unknown }).score),
+        });
+      }
     }
   }
   return out;
@@ -295,6 +508,15 @@ export function normaliseItems(raw: unknown): FormItem[] {
       imageUrl: str(o.imageUrl, 2000) || undefined,
       imageAlt: str(o.imageAlt, 200) || undefined,
       goTo: str(o.goTo, 60) || undefined,
+      hiddenValue: str(o.hiddenValue, 500) || undefined,
+      hiddenFrom: str(o.hiddenFrom, 60) || undefined,
+      accept: str(o.accept, 200) || undefined,
+      maxSizeMb: num(o.maxSizeMb),
+      currency: o.currency === "EUR" ? "EUR" : o.currency === "INR" ? "INR" : undefined,
+      defaultCountry: /^[A-Za-z]{2}$/.test(String(o.defaultCountry ?? "")) ? String(o.defaultCountry).toUpperCase() : undefined,
+      termsText: str(o.termsText, 2000) || undefined,
+      termsUrl: str(o.termsUrl, 2000) || undefined,
+      html: str(o.html, 20000) || undefined,
       validation: normaliseValidation(o.validation),
     };
     if (type === "scale") {
@@ -302,6 +524,12 @@ export function normaliseItems(raw: unknown): FormItem[] {
       item.scaleMax = item.scaleMax ?? 5;
     }
     if (type === "rating") item.scaleMax = item.scaleMax ?? 5;
+    if (type === "monetary") item.currency = item.currency ?? "INR";
+    // Consent that is optional is not consent — it is a checkbox. An author who genuinely wants an
+    // optional tick has `checkbox` for exactly that.
+    if (type === "terms") item.required = true;
+    // A score is computed at submit, never entered, so requiring it could only ever fail.
+    if (type === "score") item.required = false;
     return [item];
   });
 }
@@ -337,9 +565,67 @@ export function newItem(type: FormFieldType, id: string, keySeed: number): FormI
       return { ...base, label: "Untitled question", scaleMin: 1, scaleMax: 5 };
     case "rating":
       return { ...base, label: "Untitled question", scaleMax: 5 };
+    case "html":
+      return { ...base, label: "Custom HTML", html: "<!-- paste your embed here -->" };
+    case "captcha":
+      return { ...base, label: "Bot protection" };
+    case "hidden":
+      return { ...base, label: "Hidden", key: `hidden_${keySeed}` };
+    case "score":
+      return { ...base, label: "Score", key: "score" };
+    case "monetary":
+      return { ...base, label: "Amount", currency: "INR" };
+    case "file":
+      return { ...base, label: "Upload a file", maxSizeMb: 10 };
+    case "signature":
+      return { ...base, label: "Signature", required: true };
+    case "terms":
+      return {
+        ...base,
+        key: "consent",
+        label: "I agree to the terms and conditions",
+        required: true,
+        termsText: "I agree to the terms and conditions and the privacy policy.",
+      };
     default:
       return { ...base, label: "Untitled question" };
   }
+}
+
+/**
+ * The score a set of answers earns, from the per-option points the author set.
+ *
+ * Computed from the ITEMS and the ANSWERS at submit rather than tracked as the respondent goes,
+ * because a number the browser accumulates is a number the browser can be told to accumulate
+ * differently. A score is used to decide who gets called first; it has to be worth trusting.
+ *
+ * Returns null when the form has no `score` item, so the caller can tell "no scoring here" from
+ * "scored zero" — a real distinction when the sales team sorts by it.
+ */
+export function computeScore(items: readonly FormItem[], answers: FormAnswers): number | null {
+  if (!items.some((i) => i.type === "score")) return null;
+  let total = 0;
+  for (const item of items) {
+    if (!isChoiceItem(item.type) || !item.options?.length) continue;
+    const v = answers[item.key];
+    const chosen = Array.isArray(v) ? v : v ? [v] : [];
+    for (const label of chosen) {
+      const hit = item.options.find((o) => o.label === label);
+      if (hit?.score) total += hit.score;
+    }
+  }
+  return total;
+}
+
+/**
+ * The value a hidden field should carry: the URL parameter it names, else its fixed default.
+ *
+ * `incoming` is the visitor's own query string. This is how a lead arrives already knowing which
+ * ad it came from without anyone typing anything.
+ */
+export function hiddenValueFor(item: FormItem, incoming: Record<string, string> | undefined): string {
+  const fromUrl = item.hiddenFrom ? incoming?.[item.hiddenFrom] : undefined;
+  return (fromUrl ?? item.hiddenValue ?? "").slice(0, 500);
 }
 
 export function defaultFormFields(): FormItem[] {
@@ -457,6 +743,10 @@ export function answerToText(v: FormAnswerValue | undefined): string {
  */
 export function validateAnswer(item: FormItem, value: FormAnswerValue | undefined): string | null {
   if (isStaticItem(item.type)) return null;
+  // Neither is entered by the respondent: `hidden` is stamped from the URL and `score` is derived
+  // at submit. Running the required/format rules over them would reject a form on the strength of
+  // a value the person filling it in cannot see, let alone correct.
+  if (item.type === "hidden" || item.type === "score") return null;
 
   const list = Array.isArray(value) ? value.filter((s) => s.trim() !== "") : [];
   const text = Array.isArray(value) ? "" : (value ?? "").trim();
@@ -482,6 +772,24 @@ export function validateAnswer(item: FormItem, value: FormAnswerValue | undefine
       if (!Number.isInteger(n) || n < min || n > max) return `${label} must be between ${min} and ${max}`;
       break;
     }
+    case "monetary": {
+      const n = Number(text.replace(/[,\s]/g, ""));
+      if (!Number.isFinite(n) || n < 0) return `${label} must be an amount`;
+      break;
+    }
+    case "terms":
+      // The tick posts "yes"; anything else means it was not ticked. `required` is forced on in
+      // the normaliser, so an unanswered one is already caught above — this is the tampered case.
+      if (text !== "yes") return `${label || "The terms"} must be accepted`;
+      break;
+    case "file":
+      // The answer is the URL the upload endpoint returned. That endpoint is the thing that
+      // enforced type and size; re-checking the extension here would only catch an honest client.
+      if (!/^https?:\/\/|^\//.test(text)) return `${label}: upload did not complete`;
+      break;
+    case "signature":
+      if (!text.startsWith("data:image/")) return `${label} is required`;
+      break;
     case "date":
       if (Number.isNaN(Date.parse(text))) return `${label} must be a date`;
       break;
@@ -545,33 +853,209 @@ export function validateAnswer(item: FormItem, value: FormAnswerValue | undefine
 
 // ─────────────────────────── Funnel page blocks ───────────────────────────
 
+/**
+ * ── The page document model ─────────────────────────────────────────────────────
+ *
+ * Mirrors the hierarchy the Synamate/GHL builder edits, because we are replacing that builder
+ * and every page the team migrates was authored in its terms:
+ *
+ *     section  →  row  →  column  →  element
+ *
+ * `section` is a full-bleed horizontal band (this is what carries a background colour across the
+ * viewport). `row` is a horizontal group inside it, `column` a vertical slice of that row, and
+ * everything else is a leaf element. Containers are not decoration — they are where padding,
+ * background and width live, exactly as in GHL, so a design can be expressed by nesting rather
+ * than by one-off CSS per element.
+ *
+ * Leaves stay flat-renderable: a page authored before this model (a plain `Block[]` with no
+ * sections) still renders, so nothing that exists today breaks. See `SiteBlocks`.
+ */
 export type BlockType =
-  | "heading" | "subheading" | "text" | "image" | "button" | "bullets"
-  | "divider" | "spacer" | "video" | "form" | "row";
+  // ── containers ──
+  | "section" | "row" | "column"
+  // ── text ──
+  | "heading" | "subheading" | "text" | "eyebrow" | "bullets"
+  // ── media & action ──
+  | "image" | "video" | "button" | "form"
+  // ── composites & spacing ──
+  | "card" | "stat" | "divider" | "spacer"
+  /**
+   * A rounded label chip — "OUR GUARANTEE", "★ NEXT BATCH FILLING NOW", "PHASE 1 · WEEK 1–2",
+   * the green "27 days" on a testimonial.
+   *
+   * Its own element rather than a styled `eyebrow` because it appears eight times on one page in
+   * six different colours: expressing it as per-node background + radius + padding would mean
+   * eight hand-tuned copies that drift the moment anyone edits one.
+   */
+  | "pill"
+  /** Initials in a circle, as on each testimonial. Text is the initials; tone picks the colour. */
+  | "avatar"
+  /**
+   * A small coloured disc marking a heading — the blue dot on each "everything included" tile.
+   *
+   * Not a one-item `bullets` list: the dot sits in its own column so the description below
+   * lines up with the TITLE rather than under the marker, which is what the original does and
+   * what a list cannot express.
+   */
+  | "dot"
+  /**
+   * Raw HTML/JS, the equivalent of GHL's "Custom HTML/Javascript" element — the training page
+   * uses four of them, so a migration is impossible without it.
+   *
+   * DANGEROUS BY CONSTRUCTION: it renders unescaped markup on a PUBLIC page, so it is an XSS
+   * sink by definition. Gated on the `pipeline.configure`-class admin capability at the editing
+   * boundary, never on the render side — a page that already contains one must keep rendering
+   * even when a non-admin views it.
+   */
+  | "html";
+
+/**
+ * Per-node presentation, the fields GHL's right-hand inspector edits.
+ *
+ * Deliberately a CLOSED set of primitives rather than free-form CSS: every value is validated and
+ * rendered into a style object we control, so an editor cannot inject `position:fixed` over the
+ * whole viewport, and a page stays readable when the theme changes. Colours accept a design token
+ * name (`primary`, `ink`, …) or a literal hex — tokens survive a rebrand, hex is the escape hatch
+ * when a design demands an exact value.
+ */
+export type NodeStyle = {
+  background?: string;
+  color?: string;
+  /** Padding / margin in px, CSS shorthand order: [top, right, bottom, left]. */
+  padding?: [number, number, number, number];
+  margin?: [number, number, number, number];
+  radius?: number;
+  borderWidth?: number;
+  borderColor?: string;
+  /** Container width cap in px. Sections default to a readable measure; 0 means full width. */
+  maxWidth?: number;
+  fontSize?: number;
+  fontWeight?: number;
+  lineHeight?: number;
+  letterSpacing?: number;
+  align?: "left" | "center" | "right";
+  /** `column` only — flex growth, so a 70/30 split is expressible without hard widths. */
+  grow?: number;
+  /** Gap between children, px. */
+  gap?: number;
+  shadow?: "none" | "card" | "soft";
+  /** Italic — the convention for a pulled quote, which is what every testimonial here is. */
+  italic?: boolean;
+  hidden?: boolean;
+};
 
 export type Block = {
   id: string;
   type: BlockType;
   text?: string;
+  /**
+   * Desktop styling, and the phone override applied on top of it.
+   *
+   * Two objects rather than one keyed by breakpoint because that is the only distinction the
+   * builder's device toggle makes, and a page that reads correctly on a phone is not optional —
+   * the funnel's traffic is a Meta ad audience, which is overwhelmingly mobile.
+   */
+  style?: NodeStyle;
+  styleMobile?: Partial<NodeStyle>;
+  /** `html` element only — raw markup, rendered unescaped. See the BlockType note. */
+  html?: string;
   align?: "left" | "center" | "right";
   url?: string; // image src / video embed url
   alt?: string;
-  label?: string; // button label
+  label?: string; // button label; also the caption under a "stat"
   href?: string; // button target
-  variant?: "primary" | "soft" | "outline"; // button style
+  /**
+   * Visual variant. Read per block type, so the same field means different things:
+   *   button  — primary | soft | outline | accent (the amber CTA that sits on the dark band)
+   *   bullets — "check" for ✔, "dash" for the em-dash lists the curriculum uses; default a disc
+   */
+  variant?: "primary" | "soft" | "outline" | "accent" | "check" | "dash";
+  /**
+   * Colour of a `pill` or `avatar`.
+   *
+   * A named set, not a free colour: these chips carry MEANING on the page — amber is the
+   * guarantee, green is a result, blue/orange/green mark the three curriculum phases in order.
+   * A palette keeps that consistent and survives a rebrand; a hex per chip would not.
+   */
+  tone?: "neutral" | "amber" | "blue" | "green" | "orange" | "navy" | "violet";
   items?: string[]; // bullets
   size?: number; // spacer height (px)
   formId?: string; // embedded form
-  columns?: Block[][]; // "row" layout container — 2 (or more) columns, each a nested block list
+
+  /**
+   * Click opens this form in a POPUP instead of navigating — the CTA pattern the live Synamate
+   * page uses, where "Apply for Guided Mode" and the video still both raise the same opt-in
+   * dialog rather than sending the visitor to another page.
+   *
+   * Read on `button` and `image`. Set on a button it wins over `href` — a control cannot both
+   * open a dialog and leave the page, and silently doing one while the author configured the
+   * other is worse than either. `href` is deliberately NOT cleared when this is set, so switching
+   * the behaviour back restores the link the author already typed.
+   *
+   * Why a form id on the node rather than a "popup" block containing a form: the popup has no
+   * position in the page and no styling of its own. Modelling it as a block would put an
+   * invisible node in the tree that the canvas has to render as something, which is how builders
+   * end up with phantom empty bands nobody can explain.
+   */
+  opensFormId?: string;
+  /** Popup headline. Falls back to the form's own name, so an unset field is never a blank dialog. */
+  modalTitle?: string;
+  /** The line under it — "20 minutes. Free. Changes everything." Optional. */
+  modalSubtitle?: string;
+  /**
+   * LEGACY row layout: N columns as bare block lists, with no identity or style of their own.
+   *
+   * Superseded by `children` holding real `column` nodes, which is what lets a column carry its
+   * own width, padding and background — the thing a 70/30 hero split needs. Kept because funnel
+   * steps authored before the node model still hold this shape in their `blocks` JSON, and a
+   * saved page must never stop rendering because the editor moved on. `normalizeRow` below is the
+   * single place that reconciles the two, so no renderer or editor has to know both.
+   */
+  columns?: Block[][];
+  /** Nested children of any container: a section's rows, a row's columns, a card's contents. */
+  children?: Block[];
+  /**
+   * `section` only — the band's background PRESET. `dark` is the inverted CTA strip at the foot
+   * of the page; `muted` is the alternating grey that separates one section from the next.
+   *
+   * A preset rather than a raw colour so a rebrand moves every band at once. `style.background`
+   * overrides it when a design genuinely needs a one-off value.
+   */
+  background?: "plain" | "muted" | "dark" | "brand";
 };
 
 export function blockLabel(type: BlockType): string {
   const map: Record<BlockType, string> = {
-    heading: "Heading", subheading: "Subheading", text: "Paragraph", image: "Image",
-    button: "Button / CTA", bullets: "Bullet list", divider: "Divider", spacer: "Spacer",
-    video: "Video embed", form: "Form embed", row: "Row (2 columns)",
+    section: "Section band", row: "Row", column: "Column",
+    heading: "Heading", subheading: "Subheading", text: "Paragraph",
+    eyebrow: "Eyebrow label", bullets: "Bullet list",
+    image: "Image", video: "Video embed", button: "Button / CTA", form: "Form embed",
+    card: "Card", stat: "Stat", divider: "Divider", spacer: "Spacer",
+    pill: "Pill / badge", avatar: "Avatar", dot: "Dot marker",
+    html: "Custom HTML / Javascript",
   };
   return map[type];
+}
+
+/** Container types hold other nodes; everything else is a leaf. Drives the builder's drop rules. */
+export const CONTAINER_TYPES: readonly BlockType[] = ["section", "row", "column", "card"];
+
+export function isContainer(type: BlockType): boolean {
+  return CONTAINER_TYPES.includes(type);
+}
+
+/**
+ * A row's columns, whichever way the page was authored.
+ *
+ * New pages nest real `column` nodes in `children`; pages from before the node model hold bare
+ * block lists in `columns`. Everything that walks a row — renderer, builder, and any future
+ * migration — goes through here, so the legacy shape is understood in exactly one place and can
+ * be deleted in exactly one place once no stored page uses it.
+ */
+export function normalizeRow(row: Block): Block[] {
+  const kids = row.children ?? [];
+  if (kids.length) return kids.map((c) => (c.type === "column" ? c : { id: `${c.id}-col`, type: "column" as const, children: [c] }));
+  return (row.columns ?? []).map((col, i) => ({ id: `${row.id}-c${i}`, type: "column" as const, children: col }));
 }
 
 export function slugify(input: string): string {

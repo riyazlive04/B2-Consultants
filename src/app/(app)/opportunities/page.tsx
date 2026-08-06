@@ -1,4 +1,6 @@
+import { BarChart3, MessageCircle } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
+import { SectionLink } from "@/components/ui/SectionLink";
 import { hasCapability } from "@/lib/capabilities";
 import { ListHeader } from "@/components/ui/ListHeader";
 import { Card } from "@/components/ui/kit";
@@ -47,6 +49,16 @@ export default async function OpportunitiesPage({
         count={board.activePipelineName ? `${board.totalCount} cards${board.filtered ? " (filtered)" : ""}` : undefined}
         subtitle={board.activePipelineName ? `${board.activePipelineName} · ${board.totalValueInr} pipeline value` : "Your sales pipeline board"}
       />
+      {/* The way back to the metrics screen. The sidebar's "Pipeline" entry now lands HERE, so
+          without this link the target bar, aging table and deals-at-risk would have no door. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <SectionLink href="/pipeline" sectionKey="pipeline">
+          <BarChart3 size={14} /> Pipeline metrics
+        </SectionLink>
+        <SectionLink href="/outreach" sectionKey="outreach">
+          <MessageCircle size={14} /> Outreach queue
+        </SectionLink>
+      </div>
       {board.activePipelineId && <BoardFilterBar owners={board.owners} filtered={board.filtered} />}
       <Board
         board={board}

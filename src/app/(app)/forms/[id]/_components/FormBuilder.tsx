@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Link2, Globe } from "lucide-react";
+import {
+  ArrowLeft, Plus, Link2, Globe, Monitor, Smartphone, PanelLeft, ExternalLink,
+  Trash2, Copy, ArrowUp, ArrowDown, MousePointerClick,
+} from "lucide-react";
 import type { FormDetail } from "@/server/forms-metrics";
 import {
   isStaticItem,
@@ -12,6 +15,7 @@ import {
   type FormItem,
   type FormFieldType,
   type FormSettings,
+  type PaletteItem,
 } from "@/lib/sites-types";
 import { Btn, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/form";
@@ -23,6 +27,8 @@ import PublicForm from "@/components/sites/PublicForm";
 import { saveForm, togglePublishForm } from "@/server/forms-actions";
 import { ItemEditor } from "./ItemEditor";
 import { ResponsesPanel } from "./ResponsesPanel";
+import ElementDrawer from "./ElementDrawer";
+import FormCanvas from "./FormCanvas";
 
 type Pickers = {
   pipelines: { id: string; name: string; stages: { id: string; name: string }[] }[];
@@ -46,6 +52,11 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
   const [published, setPublished] = useState(form.published);
   const [saving, setSaving] = useState(false);
   const [openId, setOpenId] = useState<string | null>(form.fields[0]?.id ?? null);
+  /** The field the canvas has selected — what the right-hand inspector is editing. */
+  const [selectedId, setSelectedId] = useState<string | null>(form.fields[0]?.id ?? null);
+  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [tab, setTab] = useState<"edit" | "settings" | "submissions">("edit");
 
   function update(index: number, patch: Partial<FormItem>) {
     setItems((fs) => fs.map((f, i) => (i === index ? { ...f, ...patch } : f)));
@@ -95,7 +106,35 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
   function add(type: FormFieldType) {
     const id = nextId();
     setOpenId(id);
+    setSelectedId(id);
     setItems((fs) => [...fs, newItem(type, id, fs.filter((f) => !isStaticItem(f.type)).length + 1)]);
+  }
+
+  /**
+   * Add from the element palette.
+   *
+   * A tile is a TYPE plus the fields that make it that tile — "First Name" is a `text` question
+   * whose key is `firstName`. The preset is layered over `newItem` so a palette entry only has to
+   * state what differs, and a type gaining a better default picks it up everywhere.
+   *
+   * Lands AFTER the current selection rather than at the end: an author who selected the third
+   * field and reached for the palette means "another one here", and appending to the bottom of a
+   * long form is how you end up scrolling to find what you just added.
+   */
+  function addFromPalette(p: PaletteItem) {
+    if (p.soon) return;
+    const id = nextId();
+    setSelectedId(id);
+    setOpenId(id);
+    setItems((fs) => {
+      const seed = fs.filter((f) => !isStaticItem(f.type)).length + 1;
+      const created: FormItem = { ...newItem(p.type, id, seed), ...p.preset, id, type: p.type };
+      // A contact key can only be claimed once — two questions writing `email` means the second
+      // silently overwrites the first on the contact record.
+      if (created.key && fs.some((f) => f.key === created.key)) created.key = `${created.key}_${seed}`;
+      const at = fs.findIndex((f) => f.id === selectedId);
+      return at < 0 ? [...fs, created] : [...fs.slice(0, at + 1), created, ...fs.slice(at + 1)];
+    });
   }
   function setS<K extends keyof FormSettings>(k: K, v: FormSettings[K]) {
     setSettings((s) => ({ ...s, [k]: v }));
@@ -122,6 +161,11 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
   const pages = useMemo(() => pagesOf(items), [items]);
   const questionCount = items.filter((f) => !isStaticItem(f.type)).length;
 
+  const selectedIndex = items.findIndex((f) => f.id === selectedId);
+  const selected = selectedIndex >= 0 ? items[selectedIndex] : null;
+  /** Per-option points only mean something once the form actually has a Score element. */
+  const scoring = items.some((f) => f.type === "score");
+
   // The only two Settings fields that carry a VALUE rather than builder copy: a link the public
   // page will navigate to, and a rupee amount. Everything else on this screen (labels, keys,
   // placeholders, button/success text) is free text by design and stays unfiltered.
@@ -141,12 +185,18 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
       .map((f) => ({ id: f.id, label: f.label || "Untitled section" }));
   }
 
-  const buildTab = (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_340px]">
+  /**
+   * The stacked list of fields — the keyboard-accessible way to edit the same draft the canvas
+   * edits by pointing. Lives under the canvas in a collapsed panel rather than being replaced by
+   * it: a pointer-only builder is not a builder for everyone.
+   */
+  const outlineList = (
+    <>
       <div className="space-y-3">
         {items.map((item, i) => (
           <ItemEditor
             key={item.id}
+            scoring={scoring}
             item={item}
             index={i}
             total={items.length}
@@ -189,8 +239,11 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
           </p>
         </Card>
       </div>
+    </>
+  );
 
-      <div className="space-y-4">
+  const settingsPanel = (
+    <div className="space-y-4">
         <Card title="Settings">
           <div className="space-y-3">
             <label className={labelCls}>
@@ -203,7 +256,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
             </label>
             <label className={labelCls}>
               Redirect URL (optional)
-              <input {...redirectProps.attrs} className={inputCls} value={settings.redirectUrl ?? ""} onChange={redirectProps.onChange} placeholder="https://…" />
+              <input {...redirectProps.attrs} className={inputCls} value={settings.redirectUrl ?? ""} onChange={redirectProps.onChange} placeholder="https://… or /p/vsl-funnel/vsl" />
             </label>
             <label className={labelCls}>
               Tag on submit
@@ -262,57 +315,217 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
             </label>
           </div>
         </Card>
-      </div>
-    </div>
-  );
-
-  const previewTab = (
-    <div className="mx-auto max-w-2xl space-y-3">
-      <p className="rounded-field border border-dashed border-line bg-surface-2 px-3 py-2 text-caption text-ink-3">
-        This is the live renderer running against your unsaved draft — same questions, same
-        validation, same branching. Submitting here records nothing.
-      </p>
-      <PublicForm
-        preview
-        form={{ id: form.id, name, slug: form.slug, fields: items, settings }}
-      />
     </div>
   );
 
   return (
-    <div className="space-y-5">
-      <Link href="/forms" className="inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-primary">
-        <ArrowLeft size={16} /> Forms
-      </Link>
+    /**
+     * The builder shell.
+     *
+     * Three columns — element palette, the form itself, the inspector — under one toolbar, which
+     * is the arrangement the team already knows from Synamate. The point of copying it is not
+     * imitation: it is that everything here is edited by POINTING at it on the form, and that only
+     * works if the form is the biggest thing on screen with its tools either side.
+     *
+     * `h-[calc(100vh-8rem)]` rather than page flow: the canvas and both rails scroll
+     * independently, so choosing an element from a long palette does not scroll the form away.
+     */
+    <div className="flex h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-card border border-line bg-surface">
+      {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
+      <div className="flex flex-none items-center gap-3 border-b border-line px-3 py-2">
+        <Link href="/forms" className="inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-primary">
+          <ArrowLeft size={15} /> Back
+        </Link>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="mx-1 h-5 w-px bg-line" />
+
+        <button
+          type="button"
+          onClick={() => setDrawerOpen((v) => !v)}
+          aria-label={drawerOpen ? "Hide the element panel" : "Show the element panel"}
+          aria-pressed={drawerOpen}
+          className={`rounded-field p-1.5 ${drawerOpen ? "bg-primary-soft text-primary-strong" : "text-ink-3 hover:text-ink-2"}`}
+        >
+          <PanelLeft size={15} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setDevice("desktop")}
+          aria-label="Desktop width"
+          aria-pressed={device === "desktop"}
+          className={`rounded-field p-1.5 ${device === "desktop" ? "bg-primary-soft text-primary-strong" : "text-ink-3 hover:text-ink-2"}`}
+        >
+          <Monitor size={15} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setDevice("mobile")}
+          aria-label="Phone width"
+          aria-pressed={device === "mobile"}
+          className={`rounded-field p-1.5 ${device === "mobile" ? "bg-primary-soft text-primary-strong" : "text-ink-3 hover:text-ink-2"}`}
+        >
+          <Smartphone size={15} />
+        </button>
+
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           aria-label="Form name"
-          className="min-w-0 flex-1 border-0 bg-transparent font-display text-display-l font-bold text-ink outline-none"
+          className="mx-auto w-[280px] rounded-field border-0 bg-transparent px-2 py-1 text-center text-sm font-semibold text-ink outline-none hover:bg-surface-2 focus:bg-surface-2"
         />
-        <div className="flex items-center gap-2">
-          {published && <Btn variant="ghost" icon={<Link2 size={16} />} onClick={copyLink}>Copy link</Btn>}
-          <Btn variant={published ? "soft" : "primary"} icon={<Globe size={16} />} onClick={publish}>
+
+        <div className="flex flex-none items-center gap-1.5">
+          <a href={`/f/${form.slug}`} target="_blank" rel="noreferrer">
+            <Btn size="sm" variant="ghost" icon={<ExternalLink size={14} />}>Preview</Btn>
+          </a>
+          {published && <Btn size="sm" variant="ghost" icon={<Link2 size={14} />} onClick={copyLink}>Copy link</Btn>}
+          <Btn size="sm" variant={published ? "soft" : "primary"} icon={<Globe size={14} />} onClick={publish}>
             {published ? "Unpublish" : "Publish"}
           </Btn>
-          <Btn onClick={save} busy={saving}>Save</Btn>
+          <Btn size="sm" onClick={save} busy={saving}>Save</Btn>
         </div>
       </div>
-      <p className="text-sm text-ink-3">
-        Public URL: <span className="font-mono">/f/{form.slug}</span> · {published ? "live" : "draft"} ·{" "}
-        {questionCount} question{questionCount === 1 ? "" : "s"}
-        {pages.length > 1 && ` across ${pages.length} pages`}
-      </p>
 
-      <Tabs
-        tabs={[
-          { label: "Build", content: buildTab },
-          { label: "Preview", content: previewTab },
-          { label: `Responses (${form.submissionCount})`, content: <ResponsesPanel form={form} /> },
-        ]}
-      />
+      {/* ── Section tabs ────────────────────────────────────────────────────── */}
+      <div role="tablist" aria-label="Form section" className="flex flex-none items-center gap-1 border-b border-line px-3">
+        {([
+          { key: "edit", label: "Edit" },
+          { key: "settings", label: "Settings" },
+          { key: "submissions", label: `Submissions (${form.submissionCount})` },
+        ] as const).map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-3 py-2 text-sm font-semibold ${
+              tab === t.key ? "border-b-2 border-primary text-primary-strong" : "text-ink-3 hover:text-ink-2"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+        <span className="ml-auto py-2 text-caption text-ink-3">
+          <span className="font-mono">/f/{form.slug}</span> · {published ? "live" : "draft"} · {questionCount} question
+          {questionCount === 1 ? "" : "s"}
+          {pages.length > 1 && ` · ${pages.length} pages`}
+        </span>
+      </div>
+
+      {/* ── Body ────────────────────────────────────────────────────────────── */}
+      {tab === "edit" ? (
+        <div className="flex min-h-0 flex-1">
+          <ElementDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} onAdd={addFromPalette} />
+
+          <div className="min-w-0 flex-1 overflow-y-auto">
+            <FormCanvas
+              items={items}
+              settings={settings}
+              name={name}
+              slug={form.slug}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              device={device}
+            />
+
+            {/*
+              The stacked list, kept and collapsed.
+              Not nostalgia: clicking a rendered form is a POINTING interaction and is not
+              reachable by keyboard alone. This tree is — every field is a real focusable control
+              in document order. Both views edit the same draft, so they cannot disagree.
+            */}
+            <details className="mx-6 mb-6 rounded-card border border-line bg-surface">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-ink-2">
+                Outline view — edit as a list (keyboard accessible)
+              </summary>
+              <div className="space-y-3 border-t border-line p-4">{outlineList}</div>
+            </details>
+          </div>
+
+          {/* Inspector */}
+          <aside className="w-[320px] flex-none overflow-y-auto border-l border-line bg-surface">
+            {selected ? (
+              <>
+                <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+                  <p className="truncate text-sm font-semibold text-ink">{selected.label || "Untitled"}</p>
+                  <div className="flex flex-none items-center gap-0.5">
+                    <IconBtn label="Move up" disabled={selectedIndex === 0} onClick={() => move(selectedIndex, -1)}>
+                      <ArrowUp size={14} />
+                    </IconBtn>
+                    <IconBtn label="Move down" disabled={selectedIndex === items.length - 1} onClick={() => move(selectedIndex, 1)}>
+                      <ArrowDown size={14} />
+                    </IconBtn>
+                    <IconBtn label="Duplicate" onClick={() => duplicate(selectedIndex)}>
+                      <Copy size={14} />
+                    </IconBtn>
+                    <IconBtn
+                      label="Delete"
+                      onClick={() => { remove(selectedIndex); setSelectedId(null); }}
+                    >
+                      <Trash2 size={14} />
+                    </IconBtn>
+                  </div>
+                </div>
+                <div className="p-3">
+                  {/* The real field editor, not a second copy of it — see ItemEditor's `variant`. */}
+                  <ItemEditor
+                    variant="panel"
+                    scoring={scoring}
+                    item={selected}
+                    index={selectedIndex}
+                    total={items.length}
+                    open
+                    laterSections={laterSections(selectedIndex)}
+                    onOpen={() => {}}
+                    onChange={(patch) => update(selectedIndex, patch)}
+                    onMove={(dir) => move(selectedIndex, dir)}
+                    onDuplicate={() => duplicate(selectedIndex)}
+                    onDelete={() => { remove(selectedIndex); setSelectedId(null); }}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="p-6 text-center">
+                <MousePointerClick size={18} className="mx-auto mb-2 text-ink-3" />
+                <p className="text-sm text-ink-3">
+                  Click any field on the form to edit it, or pick something from the panel on the left.
+                </p>
+              </div>
+            )}
+          </aside>
+        </div>
+      ) : tab === "settings" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <div className="mx-auto max-w-3xl">{settingsPanel}</div>
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <ResponsesPanel form={form} />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Toolbar-sized icon button. The shared `IconButton` is sized for data tables. */
+function IconBtn({
+  label, onClick, disabled, children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="rounded-field p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+    >
+      {children}
+    </button>
   );
 }

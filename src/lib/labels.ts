@@ -130,22 +130,38 @@ export const SOURCE_LABELS: Record<string, string> = {
   FLEXIFUNNELS: "FlexiFunnels",
 };
 
+/**
+ * Lead lifecycle stages, in funnel order.
+ *
+ * Worded as the live Synamate board words them — we are replacing that tool, and the team reads
+ * both during the changeover, so "Offer and didn't buy" must not appear here as "Offer made -
+ * didn't buy". The board's twelve columns use the same strings (`lib/pipeline-stages.ts`).
+ *
+ * NEW_LEAD, WHATSAPP_SENT and STRATEGY_CALL_BOOKED now DO have columns of their own (06/08/2026),
+ * so they take the board's exact wording — "Fresh Optins", not "New lead".
+ *
+ * The remaining DISCO_ and PROPOSAL_SENT labels are still deliberately NOT the board's: those
+ * stages have no column (they fold into "Pre-Qualified & Confirmed" and "Offer and didn't buy"),
+ * so they keep the precise name the funnel %, commission and radar all describe them by.
+ */
 export const LEAD_STAGE_LABELS: Record<string, string> = {
-  NEW_LEAD: "New lead",
+  NEW_LEAD: "Fresh Optins",
+  WHATSAPP_SENT: "WhatsApp Sent",
+  STRATEGY_CALL_BOOKED: "Strategy Call Booked",
   DISCO_BOOKED: "DISCO Call booked",
   DISCO_NOT_BOOKED: "DISCO Call NOT booked",
   DISCO_COMPLETED: "DISCO Call completed",
-  SSS_BOOKED: "SSS Call booked",
-  SSS_COMPLETED: "SSS Call completed",
+  SSS_BOOKED: "SSS Call Booked",
+  SSS_COMPLETED: "SSS Call Confirmed",
   PROPOSAL_SENT: "Proposal sent",
   SENT_TO_WORKSHOP: "Sent to Workshop",
-  WORKSHOP_FOLLOWUP: "Workshop follow-up",
-  OFFER_FOLLOWUP: "Offer made - didn't buy",
-  DEPOSIT_FOLLOWUP: "No deposit - follow-up",
-  DEPOSIT_PAID: "Confirmed signup (deposit)",
+  WORKSHOP_FOLLOWUP: "Summit Follow Up",
+  OFFER_FOLLOWUP: "Offer and didn’t buy",
+  DEPOSIT_FOLLOWUP: "No Deposit and follow up",
+  DEPOSIT_PAID: "Confirmed Sign Up (With Deposit)",
   WON: "Won",
-  LOST: "Lost",
-  NO_SHOW: "No show",
+  LOST: "Cancelled/Unqualified",
+  NO_SHOW: "No Shows/Rescheduled",
 };
 
 /**

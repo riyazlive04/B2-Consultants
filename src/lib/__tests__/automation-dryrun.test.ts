@@ -52,7 +52,7 @@ function input(over: Partial<DryRunInput> & { actions: WorkflowAction[] }): DryR
     events: [{ leadId: "l1", at: ist(11) }],
     leads,
     templates: {},
-    channels: { email: { live: true, reason: "live" }, sms: { live: true, reason: "live" } },
+    channels: { email: { live: true, reason: "live" }, sms: { live: true, reason: "live" }, whatsapp: { live: true, reason: "live" } },
     settings: { allowReEnrollment: true, quietHours: { enabled: false, startHour: 21, endHour: 9 } },
     windowStart: ist(0, 0, 1),
     windowEnd: ist(23, 59, 30),
@@ -190,7 +190,7 @@ describe("sends", () => {
     const r = simulateWorkflow(
       input({
         actions: oneEmail,
-        channels: { email: { live: false, reason: "email is not configured" }, sms: { live: true, reason: "live" } },
+        channels: { email: { live: false, reason: "email is not configured" }, sms: { live: true, reason: "live" }, whatsapp: { live: true, reason: "live" } },
       }),
     );
     assert.equal(r.messages.delivered.email, 0);

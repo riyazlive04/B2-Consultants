@@ -73,3 +73,11 @@ scripts/tmp/
 # copy of production: lead PII, student records, the ledger. Same reasoning as /.migration/ —
 # never commit, and keep them off any machine that doesn't need them.
 /backups/
+
+# Playwright artefacts from npm run e2e:builder
+e2e-*.png
+
+# Holds real sign-in passwords in plaintext, and they are NOT local-only despite the name —
+# the same values are live on the hosted database. Committing it publishes working admin
+# credentials. Keep it on the machine that needs it and nowhere else.
+scripts/set-local-passwords.mjs

@@ -9,6 +9,7 @@ import {
   ACTION_LABELS, TRIGGER_LABELS, LEAD_STAGE_OPTIONS,
   type WorkflowAction, type WorkflowActionType, type TriggerType, type TriggerConfig,
 } from "@/lib/automation-types";
+import { WHATSAPP_KINDS, WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Select } from "@/components/ui/form";
 import { Card, Pill } from "@/components/ui/kit";
@@ -25,7 +26,7 @@ type Pickers = {
   folders: { id: string; name: string }[];
 };
 
-const ACTION_TYPES: WorkflowActionType[] = ["SEND_EMAIL", "SEND_SMS", "ADD_TAG", "REMOVE_TAG", "MOVE_STAGE", "CREATE_TASK", "WAIT", "IF_TAG"];
+const ACTION_TYPES: WorkflowActionType[] = ["SEND_EMAIL", "SEND_SMS", "SEND_WHATSAPP", "ADD_TAG", "REMOVE_TAG", "MOVE_STAGE", "CREATE_TASK", "WAIT", "IF_TAG"];
 const TRIGGER_OPTS = (Object.keys(TRIGGER_LABELS) as TriggerType[]).map((k) => ({ value: k, label: TRIGGER_LABELS[k] }));
 const inputCls = "h-9 w-full rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary";
 
@@ -248,6 +249,26 @@ function ActionFields({ a, i, stepCount, update, pickers }: { a: WorkflowAction;
         <div className="space-y-2">
           <Select value={a.templateId ?? ""} onChange={(e) => update(i, { templateId: e.target.value })} options={[{ value: "", label: "Custom (write below)" }, ...pickers.templates.filter((t) => t.channel === "SMS").map((t) => ({ value: t.id, label: `Template: ${t.name}` }))]} />
           {!a.templateId && <textarea className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary" rows={2} placeholder="SMS body (use {{first_name}})" value={a.body ?? ""} onChange={(e) => update(i, { body: e.target.value })} />}
+        </div>
+      );
+    case "SEND_WHATSAPP":
+      return (
+        <div className="space-y-1.5">
+          <Select
+            placeholder="— pick a WhatsApp template —"
+            value={a.whatsappKind ?? ""}
+            onChange={(e) => update(i, { whatsappKind: e.target.value })}
+            options={WHATSAPP_KINDS.map((k) => ({ value: k, label: WHATSAPP_KIND_LABELS[k] }))}
+          />
+          {/* Says plainly what this step can and cannot fill in. A template wanting a per-booking
+              value (a slot time) has nothing to read it from at workflow time, and the send is
+              skipped rather than half-built — better stated here than discovered in the log. */}
+          <p className="text-caption text-ink-3">
+            Sends the WATI template mapped to this slot in WhatsApp → Settings. Only{" "}
+            <code className="font-mono">name</code> and <code className="font-mono">booking_url</code> can be
+            supplied from a workflow — a template needing anything else (a slot time, an amount) is skipped
+            with the missing variable named.
+          </p>
         </div>
       );
     case "ADD_TAG":

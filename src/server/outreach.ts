@@ -22,6 +22,7 @@ import {
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { sendWhatsApp } from "./whatsapp";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
+import { advanceLeadStage } from "./lead-stage-auto";
 
 /**
  * Outreach SOP — the DB shell around `lib/outreach-engine.ts`.
@@ -597,7 +598,7 @@ export async function markSent(
   actedById: string | null,
   whatsAppMessageId: string | null,
 ) {
-  return prisma.outreachStepLog.update({
+  const updated = await prisma.outreachStepLog.update({
     where: { id: stepLogId },
     data: {
       status: "SENT",
@@ -606,7 +607,24 @@ export async function markSent(
       renderedBody: body,
       whatsAppMessageId,
     },
+    include: { journey: { select: { leadId: true } } },
   });
+
+  /**
+   * The board's "WhatsApp Sent" column IS this step.
+   *
+   * Advancing here rather than at the three call sites — the cron auto-sender, the instant intro
+   * at capture, and the specialist's manual "Mark sent" — means every route that can send the
+   * intro moves the card, and no future fourth route can forget to. Only from NEW_LEAD: a lead
+   * further along has overtaken this signal (see `advanceLeadStage`).
+   *
+   * Awaited, but it cannot fail the send: the step is already SENT and committed by this point,
+   * so the worst case is a card left in Fresh Optins with the message genuinely delivered.
+   */
+  if (updated.step === "INTRO_WHATSAPP") {
+    await advanceLeadStage(updated.journey.leadId, "WHATSAPP_SENT", ["NEW_LEAD"]);
+  }
+  return updated;
 }
 
 /**

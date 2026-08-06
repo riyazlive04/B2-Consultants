@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
+import { VISITOR_COOKIE } from "@/lib/ab";
 
 /**
  * Fast redirect for unauthenticated visitors. This only checks cookie presence -
@@ -28,9 +29,13 @@ import { getSessionCookie } from "better-auth/cookies";
 //  - /f/*             Phase 2: publicly-hosted native forms (submit → idempotent lead-intake)
 //  - /p/*             Phase 2: publicly-hosted funnel / landing pages
 //  - /i/*             Phase 3: public invoice / estimate view + PDF (addressed by publicToken)
+//  - /s/*             the marketing website (b2consultants.de). Doubly gated in the data layer:
+//                     getPublicPage requires BOTH the site and the page to be `published`, so an
+//                     unpublished draft is not reachable by guessing its path.
 //  - /forgot-password, /reset-password  password-reset flow — no session exists yet by definition
-// NOTE: the test is exact-match-or-followed-by-"/", so "/f", "/p" and "/i" never match app routes
-// like /funnel, /finance, /people, /pipeline, /profile, /invite (invite is its own prefix anyway).
+// NOTE: the test is exact-match-or-followed-by-"/", so "/f", "/p", "/i" and "/s" never match app
+// routes like /funnel, /finance, /people, /pipeline, /profile, /students, /sites (all longer than
+// one letter, and /invite is its own prefix anyway).
 const PUBLIC_PREFIXES = [
   "/book", "/invite", "/agreement",
   "/api/leads", "/api/wati", "/api/resend", "/api/twilio", "/api/cron", "/api/health",
@@ -39,7 +44,17 @@ const PUBLIC_PREFIXES = [
   // NOT /api/export: that one is session-gated, and a public export of 23,545 contacts
   // would be the single worst hole this list could open.
   "/api/intake",
-  "/f", "/p", "/i",
+  // Attachment upload for a public form's File Upload field. Unauthenticated by necessity — the
+  // person sending their CV has no account — and defended instead by being bound to a published
+  // form that actually has such a field, rate limited, magic-byte sniffed and size capped. See
+  // the note at the top of the route; it is NOT a general uploader.
+  "/api/form-upload",
+  "/f", "/p", "/i", "/s",
+  // Brand assets served from `public/media/` — the logo and hero stills the PUBLIC funnel and
+  // marketing pages reference. Without this the pages themselves are reachable but every image
+  // on them 307s to /login, so a cold visitor gets a page of broken images. Static files only:
+  // `public/` is not code and holds nothing session-scoped.
+  "/media",
   "/forgot-password", "/reset-password",
 ];
 
@@ -51,11 +66,48 @@ const PUBLIC_PREFIXES = [
  */
 const LOGIN_PATHS = new Set(["/login", "/portal", "/tutor"]);
 
+/**
+ * Stamp an anonymous visitor id on the funnel routes, so an A/B split can be STICKY.
+ *
+ * This is the only place it can happen. A Server Component may not set cookies, and the funnel
+ * step is one — so if the id were minted where it is used, every request would mint a new one and
+ * a visitor who reloaded would see the other arm of the test.
+ *
+ * The value is opaque and carries nothing: it is not an identity, it is a coin that stays the
+ * same. `httpOnly` because no browser code needs it and it should not be readable by a pasted
+ * third-party pixel; `lax` so it survives the click in from an ad without being sent on
+ * cross-site subrequests; a year, because a test that forgets its visitors is not a test.
+ *
+ * It is written on the REQUEST as well as the response, so the very first page view is already
+ * assigned rather than falling back to the control and then switching on the second impression.
+ */
+function withVisitorId(request: NextRequest): NextResponse {
+  const existing = request.cookies.get(VISITOR_COOKIE)?.value;
+  if (existing) return NextResponse.next();
+
+  const id = crypto.randomUUID();
+  request.cookies.set(VISITOR_COOKIE, id);
+  const res = NextResponse.next({ request: { headers: request.headers } });
+  res.cookies.set(VISITOR_COOKIE, id, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: request.nextUrl.protocol === "https:",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  return res;
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isLogin = LOGIN_PATHS.has(pathname);
   const isPublic = PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  if (isPublic) return NextResponse.next();
+  if (isPublic) {
+    // Only the funnel pages. Every other public route — the webhooks, the invoice links, the
+    // booking page — has nothing to split-test, and setting a cookie on a machine-to-machine
+    // webhook call would be noise in someone's logs at best.
+    return pathname === "/p" || pathname.startsWith("/p/") ? withVisitorId(request) : NextResponse.next();
+  }
 
   const cookie = getSessionCookie(request);
   if (!cookie && !isLogin) {

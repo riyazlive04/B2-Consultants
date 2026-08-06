@@ -6,6 +6,7 @@ import { RunwayBadge } from "@/components/shell/RunwayBadge";
 import { AppShell } from "@/components/shell/AppShell";
 import { CurrencyProvider } from "@/components/ui/CurrencyToggle";
 import { ThemeSync } from "@/components/shell/ThemeSync";
+import { WorkTimeTracker } from "@/components/shell/WorkTimeTracker";
 import { SkeletonPill } from "@/components/ui/Skeleton";
 import { CallsTodayGreeting } from "@/components/shell/CallsTodayGreeting";
 import { istToday } from "@/lib/dates";
@@ -106,6 +107,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="contents">
       {/* The user's own theme wins over whatever this browser happens to have cached. */}
       <ThemeSync preference={session.themePreference} />
+      {/* Headless. Mounted HERE, not on the dashboard, so work time keeps accruing
+          on every screen instead of only while the dashboard is open. */}
+      <WorkTimeTracker />
       <AppShell
         items={items}
         accessibleHrefs={accessible.map((s) => s.href)}

@@ -360,6 +360,50 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
   return { ok: true, message: "WhatsApp settings saved" };
 }
 
+/**
+ * The Admin master switch for outbound WhatsApp — one click, no form to save.
+ *
+ * WHY THIS EXISTS SEPARATELY FROM `saveWhatsAppSettings`: turning sending off is the thing you
+ * reach for when something is going wrong, and until now it meant finding a checkbox in the middle
+ * of a long settings form and submitting the whole thing — which also writes back every template
+ * mapping and cadence number on screen. This writes ONE field.
+ *
+ * It flips `paused`, which is the gate that is reachable at runtime. `WATI_ENABLED` is process
+ * environment: it cannot be changed from a web request, and pretending otherwise would give an
+ * admin a switch that silently does nothing. The UI states which gate is which.
+ *
+ * ADMIN ONLY. `requireSection("whatsapp")` would let anyone with the section open arm outbound
+ * messaging to real people; that is a founder-level decision.
+ */
+export async function setWhatsAppPaused(paused: boolean): Promise<WhatsAppActionResult> {
+  const session = await requireAdmin();
+  const before = await readWatiSettings();
+  if (before.paused === paused) {
+    return { ok: true, message: paused ? "WhatsApp is already off" : "WhatsApp is already on" };
+  }
+
+  await writeWatiSettings({ ...before, paused });
+
+  // Worth its own audit line rather than a generic settings diff: this is the record of who
+  // armed or silenced outbound messaging, and when.
+  await logActivity(session, {
+    action: paused ? "whatsapp.sending.pause" : "whatsapp.sending.resume",
+    section: "whatsapp",
+    entityType: "AppSetting",
+    entityId: "watiConfig",
+    summary: paused
+      ? "Turned WhatsApp sending OFF"
+      : "Turned WhatsApp sending ON — outbound messages can now leave the system",
+    meta: { paused },
+  });
+
+  revalidatePath("/whatsapp");
+  return {
+    ok: true,
+    message: paused ? "WhatsApp sending is off" : "WhatsApp sending is on",
+  };
+}
+
 /** Add or remove a phone number from the WhatsApp opt-out list. */
 export async function setWhatsAppOptOut(rawPhone: string, on: boolean): Promise<WhatsAppActionResult> {
   const session = await requireAdmin();

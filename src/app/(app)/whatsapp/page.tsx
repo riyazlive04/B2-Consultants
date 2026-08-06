@@ -8,6 +8,7 @@ import { WhatsAppHistory } from "./_components/WhatsAppHistory";
 import { WhatsAppSettingsForm } from "./_components/WhatsAppSettingsForm";
 import { WhatsAppTools } from "./_components/WhatsAppTools";
 import { RunRemindersButton } from "./_components/RunRemindersButton";
+import { WhatsAppMasterSwitch } from "./_components/WhatsAppMasterSwitch";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ function Chip({ ok, label }: { ok: boolean; label: string }) {
 }
 
 export default async function WhatsAppPage() {
-  await requireSection("whatsapp");
+  const session = await requireSection("whatsapp");
   const data = await getWhatsAppAdminData();
   const { status, counts } = data;
 
@@ -59,6 +60,17 @@ export default async function WhatsAppPage() {
             />
             {stateLabel}
           </p>
+          {/* The one control that stops (or starts) outbound messaging, at the top of the page
+              rather than buried in the settings form — Admin only, since arming this reaches
+              real phones. */}
+          {session.role === "ADMIN" && (
+            <WhatsAppMasterSwitch
+              paused={status.paused}
+              envLive={status.envEnabled}
+              configured={status.configured}
+              testRecipient={data.settings.testRecipient ?? null}
+            />
+          )}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Chip ok={status.envEnabled} label="WATI_ENABLED" />

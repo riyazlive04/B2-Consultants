@@ -9,10 +9,11 @@ import { majorStringToMinor } from "@/lib/format";
 import { parseMentions } from "@/lib/gn-mentions";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { statusForLegacyStage } from "@/lib/opportunity-status";
-import { LEAD_STAGE_LABELS } from "@/lib/labels";
+import { LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
 import { emitTrigger } from "./automation";
 import { logActivity, diffFields } from "./activity-log";
-import type { OpportunityStatus, LeadStage } from "@prisma/client";
+import { applySynamateStages } from "./pipeline-reshape";
+import type { OpportunityStatus, LeadStage, PaymentPlan } from "@prisma/client";
 import type { ActionResult } from "./finance-actions";
 import { archiveData, restoreData } from "@/lib/soft-delete";
 
@@ -104,13 +105,30 @@ export async function moveOpportunity(
     // (schema.prisma PipelineStage.legacyStage). An unmapped stage still has `legacy` null here,
     // so custom boards that carry no lifecycle meaning are unaffected.
     if (legacy) {
-      const lead = await tx.lead.findUnique({ where: { id: opp.leadId }, select: { stage: true } });
-      if (lead && lead.stage !== legacy) {
-        await tx.lead.update({ where: { id: opp.leadId }, data: { stage: legacy } });
-        await tx.leadStageHistory.create({
-          data: { leadId: opp.leadId, fromStage: lead.stage, toStage: legacy, changedById: session.user.id },
-        });
-        stageChangedTo = legacy;
+      const lead = await tx.lead.findUnique({
+        where: { id: opp.leadId },
+        select: { stage: true, paymentPlan: true },
+      });
+      if (lead) {
+        const moved = lead.stage !== legacy;
+        // Synamate ends in two won columns, "Split Pay" and "Full pay", where this schema has one
+        // WON stage plus `Lead.paymentPlan` (schema.prisma PipelineStage.paymentPlan). Dropping a
+        // card in one of them IS the statement of how the deal pays, so record it — otherwise the
+        // two columns would be indistinguishable to everything downstream (commission, Finance),
+        // and the plan would still have to be typed in by hand on the lead form.
+        const plan = toStage.paymentPlan && toStage.paymentPlan !== lead.paymentPlan ? toStage.paymentPlan : null;
+        if (moved || plan) {
+          await tx.lead.update({
+            where: { id: opp.leadId },
+            data: { ...(moved ? { stage: legacy } : {}), ...(plan ? { paymentPlan: plan } : {}) },
+          });
+        }
+        if (moved) {
+          await tx.leadStageHistory.create({
+            data: { leadId: opp.leadId, fromStage: lead.stage, toStage: legacy, changedById: session.user.id },
+          });
+          stageChangedTo = legacy;
+        }
       }
     }
   });
@@ -414,6 +432,7 @@ export async function createPipeline(form: FormData): Promise<ActionResult> {
     summary: `Created the ${name} pipeline`,
   });
   revalidatePath("/opportunities");
+  revalidatePath("/opportunities/pipelines");
   return { ok: true };
 }
 
@@ -437,6 +456,7 @@ export async function renamePipeline(id: string, name: string): Promise<ActionRe
     }
   }
   revalidatePath("/opportunities");
+  revalidatePath("/opportunities/pipelines");
   return { ok: true };
 }
 
@@ -459,43 +479,99 @@ export async function deletePipeline(id: string): Promise<ActionResult> {
     meta: { soft: true },
   });
   revalidatePath("/opportunities");
+  revalidatePath("/opportunities/pipelines");
   return { ok: true };
 }
 
-export async function addStage(pipelineId: string, name: string): Promise<ActionResult> {
+/**
+ * Reorder the pipelines themselves — the Pipelines screen's drag handle.
+ *
+ * The board's switcher orders by `[isDefault desc, position asc, name asc]`, so this decides the
+ * order everywhere pipelines are listed, not just on that screen. The default Sales pipeline still
+ * sorts first regardless of the position stored here; that is deliberate and not something a drag
+ * should be able to change.
+ */
+export async function reorderPipelines(orderedIds: string[]): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
+  // Ignore ids the caller has no business moving — this arrives from a browser, and a soft-deleted
+  // or non-existent id would otherwise throw mid-transaction and roll back every other move.
+  const live = await prisma.pipeline.findMany({
+    where: { id: { in: orderedIds }, deletedAt: null },
+    select: { id: true },
+  });
+  const liveIds = new Set(live.map((p) => p.id));
+  const ids = orderedIds.filter((id) => liveIds.has(id));
+  if (!ids.length) return { ok: false, error: "Nothing to reorder" };
+
+  await prisma.$transaction(
+    ids.map((id, i) => prisma.pipeline.update({ where: { id }, data: { position: i } })),
+  );
+  await logActivity(session, {
+    action: "pipeline.move",
+    section: "opportunities",
+    entityType: "Pipeline",
+    entityId: ids[0]!,
+    summary: `Reordered the pipelines`,
+    meta: { orderedIds: ids },
+  });
+  revalidatePath("/opportunities");
+  revalidatePath("/opportunities/pipelines");
+  return { ok: true };
+}
+
+export async function addStage(
+  pipelineId: string,
+  name: string,
+  legacyStage?: string | null,
+  paymentPlan?: string | null,
+): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   if (!name.trim()) return { ok: false, error: "Stage name is required" };
 
   /**
-   * THE DEFAULT PIPELINE TAKES NO NEW COLUMNS.
+   * THE DEFAULT PIPELINE TAKES NO *UNMAPPED* COLUMNS.
    *
-   * A stage created here gets `legacyStage: null`, and `setStageLegacyStage` refuses to map a
-   * default-pipeline stage ("managed by the system"). So an added column on the default board is
-   * permanently unmappable — and an unmapped column is a data trap, not just an oddity: a card
-   * dragged into it silently stops writing through to `Lead.stage`, and `syncDefaultOpportunity`
-   * can never move it back out, because it only targets bridged columns.
+   * This used to refuse a new column on the default board outright, because a stage created here
+   * got `legacyStage: null` and `setStageLegacyStage` then refused to map it — leaving a column
+   * that is a data trap, not just an oddity: a card dragged into it silently stops writing
+   * through to `Lead.stage`, and `syncDefaultOpportunity` can never move it back out, because it
+   * only targets bridged columns. Production had exactly this: columns named "loser" and "Aakash",
+   * both unmapped, both able to swallow a deal.
    *
-   * Production had exactly this: columns named "loser" and "Aakash" on the default Sales
-   * pipeline, both unmapped, both able to swallow a deal. Custom pipelines are unaffected —
-   * there, an unmapped column is the deliberate "this board is its own process" case.
+   * The trap was the missing mapping, though — not the column. Admin needs to be able to shape
+   * this board by hand (Synamate's own pipeline is edited from its UI), so a default-board column
+   * is now allowed on one condition: it must name the lifecycle stage it means, here and forever
+   * after (`setStageLegacyStage` will not clear it). "Restore the Synamate columns" puts the
+   * standard twelve back if an experiment goes wrong.
    */
   const target = await prisma.pipeline.findUnique({
     where: { id: pipelineId },
     select: { isDefault: true, name: true },
   });
   if (!target) return { ok: false, error: "Pipeline not found" };
-  if (target.isDefault) {
+
+  const legacy = legacyStage && legacyStage.trim() ? legacyStage.trim() : null;
+  if (legacy !== null && !(legacy in LEAD_STAGE_LABELS)) return { ok: false, error: "Unknown lifecycle stage" };
+  if (target.isDefault && !legacy) {
     return {
       ok: false,
       error:
-        "The default Sales pipeline's columns mirror the lead lifecycle and can't be added to — a new column there could never be mapped to a stage, so cards in it would stop syncing. Create a custom pipeline for a separate process.",
+        "A column on the default Sales board has to say which lead stage it means — a card dropped in an unmapped column stops syncing to the contact. Pick a lifecycle stage and add it again.",
     };
   }
+  const plan = planFor(legacy, paymentPlan);
 
   const max = await prisma.pipelineStage.aggregate({ where: { pipelineId }, _max: { position: true } });
   const stage = await prisma.pipelineStage.create({
-    data: { pipelineId, name: name.trim(), position: (max._max.position ?? -1) + 1 },
+    data: {
+      pipelineId,
+      name: name.trim(),
+      position: (max._max.position ?? -1) + 1,
+      legacyStage: legacy as LeadStage | null,
+      paymentPlan: plan,
+    },
     include: { pipeline: { select: { name: true } } },
   });
   await logActivity(session, {
@@ -534,35 +610,112 @@ export async function renameStage(id: string, name: string): Promise<ActionResul
 }
 
 /**
- * Map a CUSTOM pipeline's stage to a lead-lifecycle stage (or clear the mapping with null/"").
- * This is how a second pipeline opts into the Lead.stage bridge: once a stage is mapped, moving a
- * card into it write-throughs to Lead.stage exactly like the default Sales board (moveOpportunity).
- * The default pipeline's mapping is seed-managed and load-bearing, so it can't be re-pointed here.
+ * The payment plan a column means, validated against the stage it is mapped to.
+ *
+ * Only WON columns carry one — it is what tells Synamate's "Split Pay" and "Full pay" apart
+ * (schema.prisma PipelineStage.paymentPlan). Anywhere else it is silently dropped rather than
+ * rejected: a plan on a "No Show" column is meaningless, not an error worth stopping an admin for.
  */
-export async function setStageLegacyStage(stageId: string, legacy: string | null): Promise<ActionResult> {
+function planFor(legacy: string | null, paymentPlan: string | null | undefined): PaymentPlan | null {
+  if (legacy !== "WON") return null;
+  const v = paymentPlan?.trim();
+  return v === "SPLIT_PAY" || v === "FULL_PAY" ? v : null;
+}
+
+/**
+ * Map a stage to a lead-lifecycle stage — the Lead.stage bridge. Once a stage is mapped, moving a
+ * card into it write-throughs to Lead.stage (moveOpportunity), and leads reaching that stage are
+ * filed into it (opportunity-sync).
+ *
+ * Editable on the DEFAULT board too, so Admin can shape it by hand. The one thing refused there is
+ * CLEARING the mapping: an unmapped column on the board that drives the lead lifecycle silently
+ * swallows deals (see `addStage`). On a custom pipeline, unmapped is the normal "this board is its
+ * own process" case and clearing stays allowed.
+ */
+export async function setStageLegacyStage(
+  stageId: string,
+  legacy: string | null,
+  paymentPlan?: string | null,
+): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
   const value = legacy && legacy.trim() ? legacy.trim() : null;
   if (value !== null && !(value in LEAD_STAGE_LABELS)) return { ok: false, error: "Unknown lifecycle stage" };
   const stage = await prisma.pipelineStage.findUnique({
     where: { id: stageId },
-    select: { name: true, legacyStage: true, pipeline: { select: { isDefault: true } } },
+    select: { name: true, legacyStage: true, paymentPlan: true, pipeline: { select: { isDefault: true } } },
   });
   if (!stage) return { ok: false, error: "Stage not found" };
-  if (stage.pipeline.isDefault) {
-    return { ok: false, error: "The default Sales pipeline's stage mapping is managed by the system" };
+  if (stage.pipeline.isDefault && value === null) {
+    return {
+      ok: false,
+      error:
+        "A column on the default Sales board has to stay mapped to a lead stage — cards in an unmapped column stop syncing to the contact. Point it at a different stage instead, or delete the column.",
+    };
   }
-  if (stage.legacyStage === value) return { ok: true };
-  await prisma.pipelineStage.update({ where: { id: stageId }, data: { legacyStage: value as LeadStage | null } });
+  const plan = planFor(value, paymentPlan);
+  if (stage.legacyStage === value && stage.paymentPlan === plan) return { ok: true };
+  await prisma.pipelineStage.update({
+    where: { id: stageId },
+    data: { legacyStage: value as LeadStage | null, paymentPlan: plan },
+  });
   await logActivity(session, {
     action: "stage.update",
     section: "opportunities",
     entityType: "PipelineStage",
     entityId: stageId,
     summary: value
-      ? `Mapped the ${stage.name} stage to lead stage "${LEAD_STAGE_LABELS[value]}"`
+      ? `Mapped the ${stage.name} stage to lead stage "${LEAD_STAGE_LABELS[value]}"${plan ? ` (${PAYMENT_PLAN_LABELS[plan] ?? plan})` : ""}`
       : `Cleared the lifecycle mapping on the ${stage.name} stage`,
-    meta: { legacyStage: value },
+    meta: { legacyStage: value, paymentPlan: plan },
+  });
+  revalidatePath("/opportunities");
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+/**
+ * Put the default board back to the twelve live Synamate columns.
+ *
+ * The safety net that makes hand-editing the board sane to offer: rename, re-map, add and remove
+ * columns freely, and this restores the standard shape — renaming columns back rather than
+ * duplicating them, and re-filing every card into the column its lead's stage belongs to. Nothing
+ * is deleted while it still holds cards (`server/pipeline-reshape.ts`).
+ *
+ * Default board only. A custom pipeline is somebody's own process and is none of this action's
+ * business.
+ */
+export async function restoreSynamateStages(pipelineId: string): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return denied;
+  const pipeline = await prisma.pipeline.findUnique({
+    where: { id: pipelineId },
+    select: { isDefault: true, name: true },
+  });
+  if (!pipeline) return { ok: false, error: "Pipeline not found" };
+  if (!pipeline.isDefault) {
+    return { ok: false, error: "Only the default Sales board mirrors Synamate — a custom pipeline is its own process." };
+  }
+
+  let report;
+  try {
+    report = await applySynamateStages(prisma, pipelineId);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not restore the Synamate columns" };
+  }
+
+  await logActivity(session, {
+    action: "pipeline.update",
+    section: "opportunities",
+    entityType: "Pipeline",
+    entityId: pipelineId,
+    summary: `Restored the Synamate columns on the ${pipeline.name} board`,
+    meta: {
+      renamed: report.renamed.length,
+      created: report.created.length,
+      removed: report.removed.length,
+      refiled: report.refiled,
+    },
   });
   revalidatePath("/opportunities");
   revalidatePath("/pipeline");
@@ -577,9 +730,11 @@ export async function deleteStage(id: string): Promise<ActionResult> {
     select: { legacyStage: true, name: true, _count: { select: { opps: true } } },
   });
   if (!stage) return { ok: false, error: "Stage not found" };
-  if (stage.legacyStage) {
-    return { ok: false, error: "This stage is bridged to the sales workflow and can't be deleted" };
-  }
+  // A bridged column used to be undeletable outright — which, now that EVERY default-board column
+  // is bridged, would mean the board could be added to but never tidied up. The card guard below
+  // is the one that actually matters: an empty column can go, and leads whose stage no longer has
+  // a column simply stop being filed onto the board until one exists again (opportunity-sync
+  // no-ops rather than throwing). "Restore the Synamate columns" brings it back.
   if (stage._count.opps > 0) {
     return { ok: false, error: "Move the opportunities out of this stage before deleting it" };
   }

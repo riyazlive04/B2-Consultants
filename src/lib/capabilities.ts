@@ -112,6 +112,28 @@ export const CAPABILITIES = [
     roles: ["ADMIN"],
   },
   /**
+   * The public marketing site, forms and funnels — everything a visitor can see before they are a
+   * lead. A key of its own rather than `pipeline.configure`, which is what these actions borrowed
+   * before it existed.
+   *
+   * The two powers have nothing to do with each other. `pipeline.configure` is an INTERNAL power:
+   * reassign leads, edit targets, delete outcomes. This one is OUTWARD-FACING — publishing a page
+   * changes what the public and every ad click sees, on a site that takes paid traffic. Someone
+   * trusted to move a lead between telecallers has not thereby been trusted to edit the homepage,
+   * and the reverse is just as true: whoever writes the copy should not need the power to delete
+   * leads to do it.
+   *
+   * Guards the WRITE path only. Public rendering is unauthenticated by definition and gated on
+   * `published`, never on this key.
+   */
+  {
+    key: "sites.manage",
+    name: "Edit the public website",
+    description: "Pages, forms, funnels and published content",
+    actions: "sites-actions (pages, sections, media) · funnels-actions · forms-actions — publishing included",
+    roles: ["ADMIN"],
+  },
+  /**
    * ER v2 Track A. Seating is a delivery decision, not a finance one: the Head coach
    * plausibly decides which cohort a student joins, without being handed the Students board's
    * other write powers. Distinct from `pipeline.configure` for that reason.

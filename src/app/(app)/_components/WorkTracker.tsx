@@ -1,36 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { RotateCcw, Timer, TrendingUp } from "lucide-react";
 import { IconButton } from "@/components/ui/controls";
+import { askConfirm, toast } from "@/components/ui/feedback";
 
 /**
- * Personal work-time widget pair (Crextio-style): an automatic Time Tracker that
- * counts only while you're actually using the app (tab visible + recent activity),
- * feeding a weekly Progress bar chart. No start button — it tracks itself and
- * pauses when you're idle or away. State lives in localStorage (per device).
+ * Personal work-time widget pair: an automatic Time Tracker feeding a weekly
+ * Progress bar chart. No start button — accrual is handled app-wide by the
+ * headless <WorkTimeTracker /> in the (app) layout.
+ *
+ * THIS COMPONENT NO LONGER OWNS THE CLOCK. It used to run the setInterval AND
+ * keep the whole history in one un-scoped localStorage key, which produced two
+ * bugs: time only accrued while the dashboard was on screen, and the day-wise
+ * history vanished on a new device, a cleared browser or a second user sharing
+ * a machine. Totals now come from the server (WorkDay, one row per IST day);
+ * this renders them and ticks the seconds between heartbeats so the clock reads
+ * smoothly.
  */
 
-const STORAGE_KEY = "b2-worktracker-v1";
 const DAILY_GOAL_SEC = 8 * 3600; // ring fills toward an 8-hour day
-const IDLE_MS = 60_000; // no input for 1 min -> treat as idle, stop counting
-
-/** Local YYYY-MM-DD (not UTC) so "today" matches the user's clock. */
-function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-/** Mon->Sun keys for the week containing `ref`. */
-function weekKeys(ref: Date): string[] {
-  const monday = new Date(ref);
-  const dow = (monday.getDay() + 6) % 7; // 0 = Monday
-  monday.setDate(monday.getDate() - dow);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return dayKey(d);
-  });
-}
 
 function fmtClock(sec: number): string {
   const h = Math.floor(sec / 3600);
@@ -47,90 +36,67 @@ function fmtShort(sec: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-export function WorkTracker() {
-  const [days, setDays] = useState<Record<string, number>>({});
-  const [ready, setReady] = useState(false);
-  const [active, setActive] = useState(false);
+export type WorkTrackerProps = {
+  /** Day key (YYYY-MM-DD, IST) -> seconds, from the server. */
+  byDay: Record<string, number>;
+  /** Mon->Sun day keys of the current IST week. */
+  weekKeys: string[];
+  /** Today's IST day key. */
+  today: string;
+};
 
-  const lastActivity = useRef(0);
-  const daysRef = useRef(days);
-  const lastSave = useRef(0);
-  daysRef.current = days;
+export function WorkTracker({ byDay, weekKeys, today }: WorkTrackerProps) {
+  const [days, setDays] = useState<Record<string, number>>(byDay);
+  /** Server total for today plus the moment it was read, so the display can
+   *  advance between the 30s heartbeats without inventing time. */
+  const [base, setBase] = useState({ sec: byDay[today] ?? 0, at: Date.now() });
+  const [display, setDisplay] = useState(byDay[today] ?? 0);
 
-  // hydrate from localStorage after mount (avoids SSR mismatch)
+  // The layout's tracker owns the network; this just listens for its totals.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { days?: Record<string, number> };
-        if (parsed.days) setDays(parsed.days);
+    const onUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail as {
+        todaySec?: number;
+        byDay?: Record<string, number>;
+      };
+      if (detail?.byDay) setDays(detail.byDay);
+      if (typeof detail?.todaySec === "number") {
+        setBase({ sec: detail.todaySec, at: Date.now() });
+        setDays((prev) => ({ ...prev, [today]: detail.todaySec as number }));
       }
-    } catch {
-      /* ignore corrupt storage */
-    }
-    lastActivity.current = Date.now();
-    lastSave.current = Date.now();
-    setReady(true);
-  }, []);
+    };
+    window.addEventListener("b2-work-time", onUpdate);
+    return () => window.removeEventListener("b2-work-time", onUpdate);
+  }, [today]);
 
-  // register "user is here" signals: any input, or the tab becoming visible
+  // Smooth 1s clock, corrected every time a heartbeat lands.
   useEffect(() => {
-    const bump = () => {
-      lastActivity.current = Date.now();
-    };
-    const events = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "wheel"];
-    events.forEach((e) => window.addEventListener(e, bump, { passive: true }));
-    const onVis = () => {
-      if (document.visibilityState === "visible") lastActivity.current = Date.now();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      events.forEach((e) => window.removeEventListener(e, bump));
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, []);
-
-  // one tick per second: add a second only when genuinely active
-  useEffect(() => {
-    if (!ready) return;
     const id = setInterval(() => {
-      const isActive =
-        document.visibilityState === "visible" && Date.now() - lastActivity.current < IDLE_MS;
-      setActive(isActive);
-      if (isActive) {
-        const key = dayKey(new Date());
-        setDays((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
-      }
+      setDisplay(base.sec + Math.floor((Date.now() - base.at) / 1000));
     }, 1000);
     return () => clearInterval(id);
-  }, [ready]);
+  }, [base]);
 
-  // persist: throttled to every 5s, plus a final flush when leaving
-  useEffect(() => {
-    if (!ready) return;
-    const now = Date.now();
-    if (now - lastSave.current >= 5000) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ days }));
-      lastSave.current = now;
+  const todaySec = Math.max(display, base.sec);
+
+  /** Clears today's stored total. Confirmed first — it deletes real recorded time. */
+  const reset = async () => {
+    const ok = await askConfirm({
+      title: "Reset today's time?",
+      body: "Today's tracked work time will be set back to zero. Previous days are not affected.",
+      confirmLabel: "Reset",
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch("/api/work-time", { method: "DELETE" });
+      if (!res.ok) throw new Error(String(res.status));
+      setBase({ sec: 0, at: Date.now() });
+      setDisplay(0);
+      setDays((prev) => ({ ...prev, [today]: 0 }));
+      toast("Today's time reset");
+    } catch {
+      toast("Could not reset the timer", "error");
     }
-  }, [days, ready]);
-
-  useEffect(() => {
-    const flush = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({ days: daysRef.current }));
-    window.addEventListener("beforeunload", flush);
-    document.addEventListener("visibilitychange", flush);
-    return () => {
-      window.removeEventListener("beforeunload", flush);
-      document.removeEventListener("visibilitychange", flush);
-    };
-  }, []);
-
-  const today = dayKey(new Date());
-  const todaySec = days[today] ?? 0;
-
-  const reset = () => {
-    setDays((prev) => ({ ...prev, [today]: 0 }));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ days: { ...daysRef.current, [today]: 0 } }));
   };
 
   // circular ring geometry
@@ -138,9 +104,8 @@ export function WorkTracker() {
   const C = 2 * Math.PI * R;
   const frac = Math.min(1, todaySec / DAILY_GOAL_SEC);
 
-  // weekly bars
-  const week = weekKeys(new Date());
-  const weekSecs = week.map((k) => days[k] ?? 0);
+  // weekly bars — today reads live, past days come straight from the server
+  const weekSecs = weekKeys.map((k) => (k === today ? todaySec : days[k] ?? 0));
   const weekTotal = weekSecs.reduce((a, b) => a + b, 0);
   const maxSec = Math.max(1, ...weekSecs);
   const dayLetters = ["M", "T", "W", "T", "F", "S", "S"];
@@ -166,10 +131,10 @@ export function WorkTracker() {
 
         <div className="relative mt-6 flex items-end justify-between gap-2" style={{ height: 112 }}>
           {weekSecs.map((sec, i) => {
-            const isToday = week[i] === today;
+            const isToday = weekKeys[i] === today;
             const h = Math.max(6, Math.round((sec / maxSec) * 96));
             return (
-              <div key={week[i]} className="flex flex-1 flex-col items-center gap-1.5">
+              <div key={weekKeys[i]} className="flex flex-1 flex-col items-center gap-1.5">
                 <div className="flex w-full flex-1 items-end justify-center">
                   <div
                     className="w-full max-w-[26px] rounded-full transition-all"
@@ -186,7 +151,7 @@ export function WorkTracker() {
         </div>
       </div>
 
-      {/* Time tracker: automatic, activity-based */}
+      {/* Time tracker: automatic, runs on every screen */}
       <div className="glass-card rise-in card-hover flex flex-col rounded-card p-5">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
@@ -194,16 +159,10 @@ export function WorkTracker() {
           </p>
           <span
             className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-caption font-semibold"
-            style={{
-              background: active ? "var(--good-bg)" : "var(--bg-surface-2)",
-              color: active ? "var(--good)" : "var(--ink-2)",
-            }}
+            style={{ background: "var(--good-bg)", color: "var(--good)" }}
           >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: active ? "var(--good)" : "var(--ink-3)" }}
-            />
-            {active ? "Tracking" : "Idle"}
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--good)" }} />
+            Tracking
           </span>
         </div>
 
@@ -232,7 +191,7 @@ export function WorkTracker() {
         </div>
 
         <div className="mt-auto flex items-center justify-center gap-2 text-xs text-muted">
-          <span>Auto-tracks while you work</span>
+          <span>Counts on every screen while the app is open</span>
           <IconButton label="Reset today's time" onClick={reset}>
             <RotateCcw size={15} />
           </IconButton>

@@ -4,6 +4,7 @@ import type { LeadStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmailRuntime } from "@/lib/email";
 import { getSmsRuntime } from "@/lib/sms";
+import { getWatiRuntime } from "@/lib/wati";
 import { getWorkflowSettings } from "./founder-config";
 import {
   simulateWorkflow,
@@ -53,7 +54,7 @@ export type DryRunReport = {
   engineEnabled: boolean;
   allowReEnrollment: boolean;
   quietHours: { enabled: boolean; startHour: number; endHour: number };
-  channels: { email: DryRunChannel; sms: DryRunChannel };
+  channels: { email: DryRunChannel; sms: DryRunChannel; whatsapp: DryRunChannel };
   windowDays: number;
 };
 
@@ -253,10 +254,11 @@ export async function dryRunWorkflow(
   const days = Math.max(1, Math.min(365, Math.round(windowDays)));
   const windowStart = new Date(now.getTime() - days * 86_400_000);
 
-  const [settings, emailRt, smsRt, rawEvents, templates] = await Promise.all([
+  const [settings, emailRt, smsRt, watiRt, rawEvents, templates] = await Promise.all([
     getWorkflowSettings(),
     getEmailRuntime(),
     getSmsRuntime(),
+    getWatiRuntime(),
     fetchEvents(definition.triggerType, definition.triggerConfig, windowStart, now),
     fetchTemplates(definition.actions),
   ]);
@@ -278,6 +280,7 @@ export async function dryRunWorkflow(
     channels: {
       email: channelState(emailRt, "Email"),
       sms: channelState(smsRt, "SMS"),
+      whatsapp: channelState(watiRt, "WhatsApp"),
     },
     settings: { allowReEnrollment: settings.allowReEnrollment, quietHours: settings.quietHours },
     windowStart,
@@ -294,6 +297,7 @@ export async function dryRunWorkflow(
     channels: {
       email: channelState(emailRt, "Email"),
       sms: channelState(smsRt, "SMS"),
+      whatsapp: channelState(watiRt, "WhatsApp"),
     },
     windowDays: days,
   };

@@ -69,6 +69,7 @@ model User {
 
   sessions                 Session[]
   accounts                 Account[]
+  workDays                 WorkDay[]          @relation("WorkDayUser")
   teamProfile              TeamProfile?
   /// Terminations this person carried out. SetNull like every other actor link — an admin
   /// leaving must not erase the record of who offboarded whom.
@@ -115,6 +116,11 @@ model User {
   // Synamate Sites (Phase 2)
   formsCreated             Form[]             @relation("FormCreatedBy")
   funnelsCreated           Funnel[]           @relation("FunnelCreatedBy")
+  snippetsCreated  SectionSnippet[] @relation("SnippetCreatedBy")
+  // Sites — the marketing website
+  sitesCreated             Site[]             @relation("SiteCreatedBy")
+  sitePageRevisions        SitePageRevision[] @relation("SitePageRevisionBy")
+  mediaUploaded            MediaAsset[]       @relation("MediaUploadedBy")
   // Synamate Payments (Phase 3)
   invoicesCreated          Invoice[]          @relation("InvoiceCreatedBy")
   invoicePaymentsRecorded  InvoicePayment[]   @relation("InvoicePaymentRecordedBy")
@@ -142,6 +148,30 @@ model User {
   productsArchived         Product[]          @relation("ProductArchivedBy")
 
   @@map("user")
+}
+
+/// Per-user work time, one row per IST calendar day (`day` is UTC-midnight, the
+/// project-wide @db.Date encoding — see src/lib/dates.ts).
+///
+/// Deliberately NOT append-only: the client heartbeats elapsed seconds every
+/// ~30s and the server ADDS them to today's row, so this table is updated in
+/// place all day long. Keep it out of the `append_only_guards` trigger list.
+///
+/// `seconds` is the source of truth for the dashboard's day/week widget; the
+/// browser holds only an unflushed remainder. That is what makes history
+/// survive a new device, a cleared browser or a re-login.
+model WorkDay {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("WorkDayUser", fields: [userId], references: [id], onDelete: Cascade)
+  day       DateTime @db.Date
+  seconds   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, day])
+  @@index([userId, day])
+  @@map("work_day")
 }
 
 model Session {
@@ -540,6 +570,11 @@ enum LeadSource {
 
 enum LeadStage {
   NEW_LEAD
+  // The SOP's early funnel, given columns of their own on the board (06/08/2026). Before this,
+  // every lead from opt-in until a DISCO was booked sat in "Pre-Qualified & Confirmed", so the
+  // busiest part of the funnel was invisible.
+  WHATSAPP_SENT
+  STRATEGY_CALL_BOOKED
   DISCO_BOOKED
   DISCO_NOT_BOOKED
   DISCO_COMPLETED
@@ -971,6 +1006,15 @@ model PipelineStage {
   // can be shown as a weighted forecast rather than a flat sum. Nullable: existing/unset stages
   // fall back to flat-sum behavior until an admin sets one.
   probability Int?
+  // Synamate's board ends in TWO won columns — "Split Pay" and "Full pay" — which in this schema
+  // are one lifecycle stage (WON) plus a field (Lead.paymentPlan). This is the tiebreak: both
+  // columns carry legacyStage WON, and this says which plan each one means. Set on the two
+  // terminal columns of the seeded default pipeline, null everywhere else.
+  //
+  // It exists so the two directions can't disagree. Board → lead: dropping a card in "Split Pay"
+  // writes SPLIT_PAY onto the lead. Lead → board: a lead that turns WON is filed into the column
+  // matching its plan, instead of whichever WON column `findFirst` happened to return.
+  paymentPlan PaymentPlan?
   deletedAt   DateTime?
   opps        Opportunity[]
 
@@ -1058,6 +1102,12 @@ model Funnel {
   name        String
   slug        String       @unique
   published   Boolean      @default(false)
+  /// Block[] rendered above and below EVERY step of this funnel — the logo bar and the
+  /// legal/footer strip. Held on the funnel rather than copied into each step because a funnel
+  /// with four steps otherwise means changing the phone number in four places and missing one.
+  /// Null (not `[]`) means "this funnel has none", so an empty header is a deliberate state.
+  headerBlocks Json?
+  footerBlocks Json?
   createdById String?
   createdBy   User?        @relation("FunnelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime     @default(now())
@@ -1080,9 +1130,208 @@ model FunnelStep {
   seoDescription String?
   views          Int     @default(0)
 
+  /// ── A/B split ──────────────────────────────────────────────────────────────────────────────
+  /// A variant points at the step it is testing against; that step (the control) has this null.
+  /// Modelled as ordinary steps rather than a separate table so a variant IS a page — it gets the
+  /// same builder, the same renderer and the same `views` counter, and nothing has to learn a
+  /// second shape. A variant is hidden from the funnel's own navigation: it is reachable only by
+  /// being chosen for a visitor.
+  abTestOf   String?
+  abControl  FunnelStep?  @relation("AbVariants", fields: [abTestOf], references: [id], onDelete: Cascade)
+  abVariants FunnelStep[] @relation("AbVariants")
+  /// Relative share of traffic, against the control's own weight. Not a percentage: percentages
+  /// have to sum to 100 and silently break when a third variant is added.
+  abWeight   Int          @default(50)
+
   @@unique([funnelId, slug])
   @@index([funnelId, position])
+  @@index([abTestOf])
   @@map("funnel_step")
+}
+
+/// A saved chunk of page — one section, a testimonial card, a whole CTA band — kept for reuse.
+///
+/// Both halves of "templates" and "section library" are this one model: a TEMPLATE is a snippet
+/// holding an entire page (`scope: PAGE`), a library SECTION is one holding a fragment. Two
+/// tables would have meant two editors, two pickers and two ways to drift.
+model SectionSnippet {
+  id          String   @id @default(cuid())
+  name        String
+  /// Grouping for the picker ("Hero", "Social proof", "Closing") — free text, not an enum, so
+  /// the team can organise their own library without a migration.
+  category    String?
+  scope       SnippetScope @default(SECTION)
+  /// Block[] — the nodes to insert. Ids are regenerated on insert, so one snippet used twice on
+  /// a page cannot produce duplicate node ids.
+  blocks      Json
+  /// Seeded starter content is BUILT-IN and cannot be deleted from the UI; anything the team
+  /// saves is theirs to remove.
+  builtIn     Boolean  @default(false)
+  createdById String?
+  createdBy   User?    @relation("SnippetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([scope, category])
+  @@map("section_snippet")
+}
+
+enum SnippetScope {
+  /// A fragment — inserted into the page you are editing.
+  SECTION
+  /// A whole page — offered when creating a new step.
+  PAGE
+}
+
+// ═══════════════ Sites — the marketing website (replaces the GHL-hosted b2consultants.de) ═══════
+// A WEBSITE is not a funnel, and this is deliberately not built on Funnel/FunnelStep.
+//
+// A funnel is an ORDERED sequence: step 1 → 2 → 3, and `position` is the whole navigation model.
+// A website is a SET of pages reached from a shared nav in any order. Modelling b2consultants.de
+// as funnel steps would mean hand-maintaining the nav on every page and renumbering to insert one
+// — so `Funnel`/`FunnelStep` above stays exactly as it is, for the thing it is actually good at:
+// the opt-in flow. optin.b2consultants.de remains on GHL and is NOT modelled here at all; the new
+// pages link OUT to it, forwarding their query string so attribution survives the hostname hop.
+
+/// One hosted website = one domain. Theme, nav and the shared header/footer live here, so a page
+/// created next year inherits them without anyone copying anything.
+model Site {
+  id   String @id @default(cuid())
+  name String
+  /// URL path prefix while the real domain is still pointed at GHL: /s/<slug>/…
+  slug String @unique
+  /// Primary hostname, once DNS is cut over. NULL means "not serving a domain yet", which is the
+  /// state this ships in — the rebuild is verified on b2app.sirahagents.com first.
+  domain String? @unique
+
+  /// Design tokens (colours, fonts, radii) as SiteTheme JSON. Held per-site rather than read from
+  /// the dashboard's own Tailwind tokens because this site must NOT inherit the app's look — it
+  /// has its own brand, and the two must be free to diverge.
+  theme Json
+  /// NavItem[] — the shared header menu. External targets (the GHL opt-in) are just absolute hrefs.
+  navMenu Json
+
+  faviconUrl String?
+  /// Tracking. Absent = not injected at all, rather than an empty script tag.
+  metaPixelId     String?
+  gaMeasurementId String?
+
+  published   Boolean  @default(false)
+  createdById String?
+  createdBy   User?    @relation("SiteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pages    SitePage[]
+  sections SiteSection[]
+
+  @@map("site")
+}
+
+/// A shared, reusable band — the header and footer that appear on every page.
+/// Stored once and referenced, so editing the footer does not mean editing five pages.
+enum SiteSectionKind {
+  HEADER
+  FOOTER
+  REUSABLE
+}
+
+model SiteSection {
+  id     String          @id @default(cuid())
+  siteId String
+  site   Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  kind   SiteSectionKind
+  name   String
+  /// Section[] JSON — same shape as SitePage.sections.
+  blocks Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([siteId, kind])
+  @@map("site_section")
+}
+
+/// One page. `path` is the public path within the site ("/", "/aboutus"), NOT a slug fragment —
+/// the live URLs are being reproduced exactly, and "/aboutus" is not what slugify() would produce.
+model SitePage {
+  id     String @id @default(cuid())
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  path   String
+  title  String
+
+  /// Section[] — the page body. A JSON blob rather than section rows, matching FunnelStep.blocks:
+  /// the editor saves a whole page at once and revisions snapshot it, so rows would buy nothing
+  /// and cost a join on every public render.
+  sections Json
+
+  seoTitle       String?
+  seoDescription String?
+  ogImageUrl     String?
+  /// Excluded from the generated sitemap/robots (privacy and terms do not need indexing).
+  noIndex Boolean @default(false)
+
+  published Boolean   @default(false)
+  /// Denormalised view counter. Incremented in batches, NOT per request — see the public route.
+  views     Int       @default(0)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  revisions SitePageRevision[]
+
+  @@unique([siteId, path])
+  @@index([siteId, published])
+  @@map("site_page")
+}
+
+/// An immutable snapshot taken on every save, so "restore what it looked like on Tuesday" is a
+/// row lookup. GHL shows a version history and the team will expect one; more to the point, this
+/// site takes paid traffic and a bad edit needs a one-click way back.
+model SitePageRevision {
+  id     String   @id @default(cuid())
+  pageId String
+  page   SitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  /// The full `sections` blob as it was after this save.
+  sections Json
+  /// Optional human label ("before pricing change"); autosaves leave it null.
+  label       String?
+  createdById String?
+  createdBy   User?    @relation("SitePageRevisionBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([pageId, createdAt])
+  @@map("site_page_revision")
+}
+
+/// An uploaded image in the media library, stored in Supabase Storage (same project as the DB).
+/// The row is the INDEX — `storageKey` is the object path, `url` the public URL. Bytes never live
+/// in Postgres: the existing data-URL-in-a-column trick is fine for a 64px avatar and wrong for a
+/// hero image, which must be CDN-cacheable and resizable by next/image.
+model MediaAsset {
+  id         String @id @default(cuid())
+  storageKey String @unique
+  url        String
+  filename   String
+  mimeType   String
+  bytes      Int
+  /// Intrinsic dimensions, captured at upload so the renderer can set width/height and avoid
+  /// layout shift without measuring the image at request time.
+  width  Int?
+  height Int?
+  /// Editable alt text — the media library is the right place to fix accessibility once, rather
+  /// than re-typing alt on every page that uses the image.
+  alt String?
+
+  uploadedById String?
+  uploadedBy   User?     @relation("MediaUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  @@index([deletedAt, createdAt])
+  @@map("media_asset")
 }
 
 // ═══════════════ Synamate Payments parity — Phase 3 (invoicing, no processor yet) ═══════════════
@@ -1633,6 +1882,11 @@ model TeamProfile {
   goals             Goal[]
   rewardGrants      RewardGrant[]
 
+  // Declared here to match what 20260803090000_team_profile_termination actually created. The
+  // migration made this index; the model never mentioned it, so Prisma believed it was unwanted
+  // and every `migrate diff` since has wanted to DROP it — which would have silently removed a
+  // live index the moment anyone generated the next migration.
+  @@index([terminatedAt])
   @@map("team_profile")
 }
 

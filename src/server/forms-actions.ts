@@ -11,12 +11,13 @@ import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
 import { upsertIntakeLead } from "./lead-intake";
+import { ensureDefaultOpportunity } from "./opportunity-sync";
 import { emitTrigger } from "./automation";
 import { logActivity, diffFields } from "./activity-log";
 import {
   defaultFormFields, defaultFormSettings, slugify, CONTACT_FIELD_KEYS,
   normaliseItems, normaliseSettings, isStaticItem, isChoiceItem, isMultiItem,
-  reachableItems, validateAnswer, answerToText, pagesOf,
+  reachableItems, validateAnswer, answerToText, pagesOf, computeScore,
   OTHER_VALUE, otherFieldName,
   type FormItem, type FormAnswers, type FormSettings,
 } from "@/lib/sites-types";
@@ -85,8 +86,26 @@ export async function createForm(form: FormData): Promise<ActionResult> {
  * a runtime gate, so the builder's character filter is UX only and this is the real one. The rest of
  * FormSettings (submitText, successMessage, tag, field labels…) is free-text copy and stays so.
  */
+/**
+ * A SITE-RELATIVE redirect target: "/p/vsl-funnel/vsl".
+ *
+ * The `url` rule below adds a missing scheme, which is right for a lead typing
+ * "linkedin.com/in/x" and wrong here — it turns "/p/vsl-funnel/vsl" into the
+ * nonsense host "https://p/vsl-funnel/vsl". Funnel steps redirect WITHIN this app,
+ * so pinning the host would hardcode localhost into data that also has to work on
+ * the live domain. `window.location.href = "/p/..."` already resolves against the
+ * current origin, so the relative form is the portable one.
+ *
+ * A single leading slash only. "//evil.com" is protocol-relative — it LOOKS like a
+ * path and navigates off-site, which is the open-redirect this guards against.
+ */
+const sitePathSchema = z
+  .string()
+  .trim()
+  .regex(/^\/(?!\/)[^\s]*$/, "Enter a link, or a path beginning with /");
+
 const formValueSettingsSchema = z.object({
-  redirectUrl: optionalRule("url"),
+  redirectUrl: z.union([sitePathSchema, optionalRule("url")]),
   opportunityValueInr: optionalRule("money"),
 });
 
@@ -220,7 +239,7 @@ export async function togglePublishForm(id: string): Promise<ActionResult> {
 }
 
 export async function deleteForm(id: string): Promise<ActionResult> {
-  const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
+  const { allowed, denied, session } = await capabilityCheck("sites.manage");
   if (!allowed) return denied;
   const row = await prisma.form.delete({ where: { id } });
   await logActivity(session, {
@@ -308,6 +327,26 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
     return { ok: false, error: "You've already sent this form in." };
   }
 
+  /**
+   * The "Bot Protection" element's second half.
+   *
+   * The honeypot above catches anything that fills every input it finds; this catches the ones
+   * that don't, by timing. A form that comes back in under a second and a half was not read. The
+   * stamp is client-supplied and therefore forgeable — which is fine, because this sits behind a
+   * per-IP rate limit and in front of nothing valuable: the cost of a false negative is one junk
+   * lead, and the cost of a false POSITIVE is a real person being told their enquiry failed. So
+   * it silently accepts-and-drops rather than erroring, exactly like the honeypot.
+   *
+   * Only enforced when the author put the element on the form. Applying it everywhere would
+   * change the behaviour of live forms nobody asked to change.
+   */
+  if (fields.some((f) => f.type === "captcha")) {
+    const startedAt = Number(form.get("form_started_at"));
+    if (Number.isFinite(startedAt) && startedAt > 0 && Date.now() - startedAt < 1500) {
+      return { ok: true, message: settings.successMessage };
+    }
+  }
+
   const answers = collectAnswers(fields, form);
 
   /**
@@ -341,8 +380,29 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
 
   // The contact record wants scalars. A multi-answer that lands on a contact field (someone can
   // name a checkboxes question `city`) is flattened rather than dropped.
+  /**
+   * The score, stamped in as an ordinary answer.
+   *
+   * Computed here from the items and the answers, never read off the post — see `computeScore`.
+   * It lands in `data` before the custom-fields blob is built, so it reaches the contact record
+   * with no special handling anywhere downstream.
+   */
+  const score = computeScore(asked, data);
+  if (score !== null) {
+    const scoreKey = asked.find((i) => i.type === "score")?.key || "score";
+    data[scoreKey] = String(score);
+  }
+
   const text = (k: string) => answerToText(data[k]).trim();
-  const name = text("name");
+  /**
+   * The contact's name.
+   *
+   * The palette offers "Full Name" AND a First/Last pair, because Synamate's does and the live
+   * opt-in uses the split. A lead needs one name, and `upsertIntakeLead` refuses without it — so
+   * a form built the split way would capture nothing at all into the pipeline while looking like
+   * it worked. Full name wins when present; otherwise the two halves are joined.
+   */
+  const name = text("name") || [text("firstName"), text("lastName")].filter(Boolean).join(" ").trim();
   const phone = text("phone");
 
   let leadId: string | null = null;
@@ -380,8 +440,31 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
     }
 
     if (settings.createOpportunity && settings.pipelineId && settings.stageId) {
-      const stage = await prisma.pipelineStage.findUnique({ where: { id: settings.stageId }, select: { pipelineId: true } });
-      if (stage && stage.pipelineId === settings.pipelineId) {
+      /**
+       * `deletedAt: null` on the stage AND its pipeline — the guard this lookup used to be missing.
+       *
+       * A form's `stageId` is frozen at configuration time, but a column can be soft-deleted long
+       * afterwards, and `deleteStage` only refuses when the column ALREADY holds cards — nothing
+       * stopped new ones being written into a deleted one. The board renders live columns only
+       * (opportunities-metrics), so such a card is created, counted in every total, and invisible
+       * on the board. Seen in production on 06/08/2026: the "Free Consultation" form still pointed
+       * at a "New Lead" column deleted the day before, so its captures silently went nowhere.
+       */
+      const stage = await prisma.pipelineStage.findFirst({
+        where: {
+          id: settings.stageId,
+          pipelineId: settings.pipelineId,
+          deletedAt: null,
+          pipeline: { deletedAt: null },
+        },
+        select: { pipelineId: true },
+      });
+      if (!stage) {
+        // The configured column is gone. File the lead onto the default board instead of dropping
+        // it — a card in the wrong column is recoverable, a capture nobody can see is not. Costs
+        // the form's own name/value settings, which is the right trade against losing the lead.
+        await ensureDefaultOpportunity(prisma, leadId);
+      } else {
         const fx = await getTodayInrPerEur();
         const inr = settings.opportunityValueInr?.trim() ? majorStringToMinor(settings.opportunityValueInr) : 0n;
         const max = await prisma.opportunity.aggregate({ where: { stageId: settings.stageId }, _max: { position: true } });

@@ -440,6 +440,7 @@ function renderBlock(b: Block, ctx: RenderCtx, inv = false) {
             title={b.label || "Book your call"}
             description={b.text}
             logoUrl={b.url}
+            redirectTo={b.bookingRedirectUrl}
           />
         </div>
       );

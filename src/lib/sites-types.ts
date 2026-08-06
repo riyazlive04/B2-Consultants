@@ -1029,6 +1029,16 @@ export type Block = {
   bookingOwnerId?: string;
   /** `booking` blocks — the small label above the title ("DISCO"). */
   bookingEyebrow?: string;
+  /**
+   * `booking` blocks — where to send the prospect once the booking is confirmed.
+   *
+   * Unset keeps the inline "You're booked in 🎉" card, which is the right default for the
+   * standalone `/book` page: there is nowhere else to go. Inside a funnel there IS — the
+   * confirmation step, which is a page the team can edit, measure a view on, and hang the next
+   * action off. A funnel that ends on a component's built-in success card ends where the
+   * analytics stop.
+   */
+  bookingRedirectUrl?: string;
   /** Popup headline. Falls back to the form's own name, so an unset field is never a blank dialog. */
   modalTitle?: string;
   /** The line under it — "20 minutes. Free. Changes everything." Optional. */

@@ -13,6 +13,7 @@ import { Btn, IconButton } from "@/components/ui/controls";
 import Canvas from "./Canvas";
 import Inspector from "./Inspector";
 import { SaveSnippetDialog, SnippetPicker } from "./Snippets";
+import type { StepCalendars } from "@/server/booking-calendars";
 
 /**
  * The page editor: a canvas of the real page, an inspector for the selected node, and the
@@ -44,6 +45,7 @@ export default function PageEditor({
   blocks,
   onChange,
   forms,
+  calendars,
   snippets,
   snippetCategories,
   chromeBefore,
@@ -52,6 +54,8 @@ export default function PageEditor({
   blocks: Block[];
   onChange: (b: Block[]) => void;
   forms: { id: string; name: string }[];
+  /** Real open slots per booking-block owner, forwarded to the canvas. */
+  calendars: StepCalendars;
   /** The section library. Empty is a valid state — the picker says so rather than hiding. */
   snippets: SnippetRow[];
   snippetCategories: string[];
@@ -213,6 +217,7 @@ export default function PageEditor({
           <Canvas
             blocks={blocks}
             forms={{}}
+            calendars={calendars}
             selectedId={selectedId}
             onSelect={setSelectedId}
             device={device}

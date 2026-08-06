@@ -21,6 +21,15 @@ if (!process.argv.includes("--force")) {
 const B2_LOGO =
   "https://images.leadconnectorhq.com/image/f_webp/q_80/r_1200/u_https://assets.cdn.filesafe.space/40rq2210I0idDREaOysb/media/671ffbe25c826a6bdee47955.png";
 
+/**
+ * Where a confirmed booking lands.
+ *
+ * Inside the funnel, not the component's built-in success card: the congrats step is a page the
+ * team can edit and whose view is counted, so "booked" becomes a measurable funnel stage instead
+ * of a state that only exists in the browser.
+ */
+const CONFIRM_REDIRECT = "/p/vsl-funnel/congrats";
+
 const DESCRIPTION =
   "Please answer the short questionnaire so we have the details needed to help you on our call (takes 2-3 minutes).";
 
@@ -70,6 +79,7 @@ function calendar(id: string, name: string, ownerId: string) {
         label: `Personalized Discovery Call with ${name}`,
         text: DESCRIPTION,
         url: B2_LOGO,
+        bookingRedirectUrl: CONFIRM_REDIRECT,
       },
     ],
   };

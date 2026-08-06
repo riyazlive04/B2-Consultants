@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, Clock, Globe } from "lucide-react";
 import { submitBooking } from "@/server/booking-actions";
 import { FormError, SubmitButton } from "@/components/ui/form";
@@ -115,12 +116,15 @@ export function BookingCalendar({
   title,
   description,
   logoUrl,
+  redirectTo,
 }: {
   slots: CalendarSlot[];
   eyebrow?: string;
   title: string;
   description?: string;
   logoUrl?: string;
+  /** Where to go once the booking lands. Unset keeps the inline success card. */
+  redirectTo?: string;
 }) {
   /**
    * The zone starts at a FIXED default and only becomes the visitor's after mount.
@@ -138,6 +142,7 @@ export function BookingCalendar({
    * Changing the zone re-labels every date and time from the same UTC instants — a slot can move
    * to a different calendar DAY, which is why the grid is derived from `zone` rather than fixed.
    */
+  const router = useRouter();
   const [zone, setZone] = useState("Asia/Kolkata");
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -206,6 +211,18 @@ export function BookingCalendar({
     if (!slotId) return setError("Please choose a time for your call.");
     const res = await submitBooking(form);
     if (!res.ok) return setError(res.error);
+    if (redirectTo) {
+      /**
+       * `setDone` FIRST, then navigate. The push is not instant — it is a server round trip for
+       * the confirmation page — and without this the form sits there looking unsubmitted, which
+       * is exactly when someone presses "Confirm my call" a second time. The slot is already
+       * gone by then, so the retry fails with "no longer available" on a booking that in fact
+       * succeeded. The success card covers that gap and is then replaced by the new page.
+       */
+      setDone(chosen);
+      router.push(redirectTo);
+      return;
+    }
     setDone(chosen);
   };
 

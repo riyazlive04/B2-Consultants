@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Loader2, CheckCircle2, ChevronDown, Star } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, CheckCircle2, ChevronDown, Star, Upload, X, Eraser } from "lucide-react";
 import type { PublicForm as PublicFormType } from "@/server/forms-metrics";
 import {
   isStaticItem,
   nextPageIndex,
   pagesOf,
   validateAnswer,
+  hiddenValueFor,
   OTHER_VALUE,
   otherFieldName,
   type FormAnswers,
@@ -16,6 +17,9 @@ import {
   type FormItem,
   type FormPage,
 } from "@/lib/sites-types";
+import {
+  COUNTRIES, DEFAULT_COUNTRY, countryByIso, flagOf, joinPhone, splitPhone,
+} from "@/lib/phone-countries";
 import { fieldKindProps } from "@/components/ui/field-base";
 import type { FieldKind } from "@/lib/field-rules";
 import { submitPublicForm } from "@/server/forms-actions";
@@ -78,9 +82,16 @@ export default function PublicForm({
   form,
   utm,
   preview = false,
+  bare = false,
 }: {
   form: PublicFormType;
   utm?: Record<string, string>;
+  /**
+   * Drop the form's own card (border, background, shadow) because something else is already
+   * providing it — the popup, which IS a white card. Without this the dialog shows a card inside
+   * a card, the visual tell of two components each assuming they own the surface.
+   */
+  bare?: boolean;
   /**
    * Builder preview. Renders and BRANCHES exactly as the live page does — same component, same
    * validation, same page walk — but stops at the submit. A preview built from a second, simpler
@@ -98,6 +109,28 @@ export default function PublicForm({
 
   // One seed for the life of the visit: order must be stable while the respondent is filling in.
   const [seed] = useState(() => Math.floor(Math.random() * 2 ** 31));
+  const mountedAt = useRef(Date.now());
+
+  /**
+   * Seed the hidden fields from the visitor's own URL.
+   *
+   * Read here rather than threaded down from the page, because `hiddenFrom` may name ANY query
+   * parameter — an ad id, a partner code — and the page only knows about the five `utm_*` keys.
+   * Runs once: a hidden value is what the visitor arrived with, and re-reading it later would
+   * mean a client-side navigation could quietly change what a half-filled form is about to say.
+   */
+  useEffect(() => {
+    const hidden = form.fields.filter((f) => f.type === "hidden");
+    if (hidden.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const incoming: Record<string, string> = {};
+    params.forEach((v, k) => { incoming[k] = v; });
+    setAnswers((a) => {
+      const next = { ...a };
+      for (const f of hidden) next[f.key] = hiddenValueFor(f, incoming);
+      return next;
+    });
+  }, [form.fields]);
 
   const pages = useMemo(() => {
     const raw = pagesOf(form.fields);
@@ -190,6 +223,9 @@ export default function PublicForm({
       if (other) fd.set(otherFieldName(item.key), other);
     }
     for (const [k, v] of Object.entries(utm ?? {})) fd.set(k, v);
+    // The "Bot Protection" element's timing half — see submitPublicForm. Stamped when the form
+    // mounted, not when it was submitted, so it measures how long the page was actually open.
+    fd.set("form_started_at", String(mountedAt.current));
 
     const res = await submitPublicForm(form.slug, fd);
     setBusy(false);
@@ -212,7 +248,7 @@ export default function PublicForm({
 
   if (done) {
     return (
-      <div className="rounded-card border border-line bg-surface p-8 text-center shadow-card">
+      <div className={bare ? "p-2 text-center" : "rounded-card border border-line bg-surface p-8 text-center shadow-card"}>
         <CheckCircle2 className="mx-auto mb-3 text-good" size={32} />
         <p className="font-display text-h3 text-ink">{done}</p>
         {form.settings.showSubmitAnother && (
@@ -233,7 +269,7 @@ export default function PublicForm({
         e.preventDefault();
         void goNext();
       }}
-      className="space-y-5 rounded-card border border-line bg-surface p-6 shadow-card"
+      className={bare ? "space-y-5" : "space-y-5 rounded-card border border-line bg-surface p-6 shadow-card"}
     >
       {multiPage && form.settings.progressBar && (
         <div>
@@ -271,6 +307,7 @@ export default function PublicForm({
           otherText={otherText[item.key] ?? ""}
           error={errors[item.key]}
           seed={seed}
+          formSlug={form.slug}
           onChange={(v) => set(item.key, v)}
           onToggle={(opt, on) => toggleMulti(item.key, opt, on)}
           onOther={(t) => setOtherText((o) => ({ ...o, [item.key]: t }))}
@@ -317,6 +354,7 @@ function Question({
   otherText,
   error,
   seed,
+  formSlug,
   onChange,
   onToggle,
   onOther,
@@ -326,6 +364,8 @@ function Question({
   otherText: string;
   error?: string;
   seed: number;
+  /** Needed by the file field: the upload endpoint refuses anything not bound to a real form. */
+  formSlug: string;
   onChange: (v: FormAnswerValue) => void;
   onToggle: (option: string, on: boolean) => void;
   onOther: (text: string) => void;
@@ -351,6 +391,35 @@ function Question({
       // eslint-disable-next-line @next/next/no-img-element
       <img src={item.imageUrl} alt={item.imageAlt ?? item.label ?? ""} className="w-full rounded-field" />
     ) : null;
+  }
+  if (item.type === "html") {
+    /**
+     * Raw markup on a PUBLIC form, rendered unescaped — that IS the feature, the same contract as
+     * the page builder's Custom HTML block. The boundary is at authoring time: only a signed-in
+     * admin with the forms capability can put one here.
+     */
+    return item.html ? <div data-item={item.id} data-item-type="html" dangerouslySetInnerHTML={{ __html: item.html }} /> : null;
+  }
+  /**
+   * The three invisible elements.
+   *
+   * They render as nothing on the live form — which is right there and useless in the BUILDER,
+   * where an author cannot select what has no box. Each still emits `data-item-type` so the
+   * canvas can style it into a labelled placeholder; see FormCanvas. Dropping the attribute here
+   * would make a form's own machinery unselectable in the tool that is supposed to edit it.
+   */
+  if (item.type === "captcha") {
+    // No visible control by design. The trap and the timestamp are on the <form>; this element's
+    // only job is to say "this form is protected", which it does by existing.
+    return <div data-item={item.id} data-item-type="captcha" className="sr-only" aria-hidden />;
+  }
+  if (item.type === "hidden") {
+    // Rendered as nothing. Its value rides in the answers, seeded from the URL on mount.
+    return <div data-item={item.id} data-item-type="hidden" className="hidden" aria-hidden />;
+  }
+  if (item.type === "score") {
+    // Computed server-side at submit; nothing to show and nothing to post.
+    return <div data-item={item.id} data-item-type="score" className="hidden" aria-hidden />;
   }
   if (isStaticItem(item.type)) return null;
 
@@ -484,6 +553,58 @@ function Question({
           </label>
         );
 
+      case "terms":
+        return (
+          <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink-2">
+            <input
+              type="checkbox"
+              // "yes", not "Yes": the server checks this exact token, and the two spellings
+              // drifting apart would silently reject every consent on the form.
+              checked={text === "yes"}
+              onChange={(e) => onChange(e.target.checked ? "yes" : "")}
+              aria-describedby={errId}
+              className="mt-0.5 h-4 w-4 flex-none accent-[var(--primary)]"
+            />
+            <span>
+              {item.termsText || item.label}
+              {item.termsUrl && (
+                <>
+                  {" "}
+                  <a href={item.termsUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">
+                    Read them
+                  </a>
+                </>
+              )}
+            </span>
+          </label>
+        );
+
+      case "monetary": {
+        const symbol = item.currency === "EUR" ? "€" : "₹";
+        return (
+          <span className="relative block">
+            <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-3">
+              {symbol}
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={text}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder={item.placeholder ?? "0"}
+              aria-describedby={errId}
+              className={`${INPUT_CLS} pl-7`}
+            />
+          </span>
+        );
+      }
+
+      case "file":
+        return <FileField item={item} value={text} formSlug={formSlug} errId={errId} onChange={onChange} />;
+
+      case "signature":
+        return <SignatureField value={text} errId={errId} onChange={onChange} />;
+
       case "scale": {
         const min = item.scaleMin ?? 1;
         const max = item.scaleMax ?? 5;
@@ -533,6 +654,9 @@ function Question({
         );
       }
 
+      case "phone":
+        return <PhoneField item={item} value={text} errId={errId} onChange={onChange} />;
+
       case "date":
         return (
           <input
@@ -562,9 +686,9 @@ function Question({
             {...input.attrs}
             value={text}
             onChange={input.onChange}
-            // Still derived from the declared type: it matches what the kind sets for email/phone,
-            // and it is the only thing giving `number` its numeric keypad.
-            type={item.type === "phone" ? "tel" : item.type}
+            // Still derived from the declared type — it is what gives `number` its numeric
+            // keypad. `phone` no longer reaches here: it has its own country-code control above.
+            type={item.type}
             placeholder={item.placeholder}
             aria-describedby={errId}
             className={INPUT_CLS}
@@ -575,7 +699,16 @@ function Question({
   })();
 
   return (
-    <div>
+    /**
+     * `data-item` is what lets the BUILDER edit this form by pointing at it.
+     *
+     * Same trick, and the same reasoning, as `data-n` on the page builder's blocks: the canvas
+     * mounts this exact component — the production renderer — and derives selection from one
+     * delegated click that walks up to the nearest `[data-item]`. The alternative is a second
+     * "preview" renderer, and the two always drift. It costs a handful of bytes on the public
+     * page and it is what keeps what-you-click identical to what-ships.
+     */
+    <div data-item={item.id} data-item-type={item.type}>
       <label className="mb-1.5 block text-sm font-medium text-ink">
         {item.label}
         {item.required && <span className="text-bad"> *</span>}
@@ -587,6 +720,244 @@ function Question({
           {error}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Phone number with a country selector — the control the GHL opt-in uses, and the one people
+ * expect the moment a form asks for a number they might be dialling from anywhere.
+ *
+ * ── Why one stored string, not two fields ─────────────────────────────────────────────────────
+ * The answer stays `+91 9876543210`: a single string that every downstream consumer already
+ * understands. `upsertIntakeLead` dedupes on a NORMALISED phone, WATI sends to a full
+ * international number, and the sheet exports one column. Splitting the model in two would mean
+ * teaching every one of those about a country column for no gain — so the split lives in the
+ * control, and `splitPhone`/`joinPhone` are the only code that knows about it.
+ *
+ * ── Why a native <select> ─────────────────────────────────────────────────────────────────────
+ * 240 options on an unknown device, on the intake path. The OS picker is searchable, scrollable
+ * and already known to every screen reader and every thumb; a custom popover here would be a
+ * rebuild of something the platform does better, on the one screen where a stranger is trying to
+ * give us their details.
+ */
+function PhoneField({
+  item, value, errId, onChange,
+}: {
+  item: FormItem;
+  value: string;
+  errId?: string;
+  onChange: (v: FormAnswerValue) => void;
+}) {
+  const parsed = splitPhone(value, item.defaultCountry || DEFAULT_COUNTRY);
+  // The chosen country is held locally as well as derived, so picking a country BEFORE typing a
+  // number sticks. Derived alone, it would snap back the moment the (still empty) value re-parsed.
+  const [iso2, setIso2] = useState(parsed.iso2);
+  const current = countryByIso(iso2);
+
+  return (
+    <div className={`flex items-stretch overflow-hidden rounded-field border border-line bg-surface focus-within:border-primary`}>
+      <span className="relative flex items-center border-r border-line pl-3 pr-1">
+        <span aria-hidden className="pointer-events-none flex items-center gap-1 text-sm">
+          <span className="text-base leading-none">{flagOf(current.iso2)}</span>
+          <span className="text-ink-2">+{current.dial}</span>
+          <ChevronDown size={13} className="text-ink-3" />
+        </span>
+        <select
+          aria-label="Country code"
+          value={iso2}
+          onChange={(e) => {
+            setIso2(e.target.value);
+            // Recombine immediately so the stored answer follows the country even when the
+            // number was typed first.
+            onChange(joinPhone(e.target.value, parsed.national));
+          }}
+          className="absolute inset-0 cursor-pointer opacity-0"
+        >
+          {COUNTRIES.map((c) => (
+            <option key={c.iso2} value={c.iso2}>
+              {c.name} (+{c.dial})
+            </option>
+          ))}
+        </select>
+      </span>
+      <input
+        type="tel"
+        inputMode="tel"
+        autoComplete="tel-national"
+        value={parsed.national}
+        onChange={(e) => onChange(joinPhone(iso2, e.target.value))}
+        placeholder={item.placeholder || "Enter Your Phone Number"}
+        aria-describedby={errId}
+        className="h-11 min-w-0 flex-1 bg-transparent px-3 text-sm outline-none"
+      />
+    </div>
+  );
+}
+
+/**
+ * File upload.
+ *
+ * Uploads IMMEDIATELY on choose rather than carrying the bytes to submit, because the submit path
+ * is a server action and an action argument is serialised whole — a 10 MB CV would ride inside
+ * the form post. So the answer this field holds is the resulting URL, and by the time anyone
+ * presses submit the file is already stored.
+ */
+function FileField({
+  item, value, formSlug, errId, onChange,
+}: {
+  item: FormItem;
+  value: string;
+  formSlug: string;
+  errId?: string;
+  onChange: (v: FormAnswerValue) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      fd.set("form", formSlug);
+      fd.set("item", item.id);
+      const res = await fetch("/api/form-upload", { method: "POST", body: fd });
+      const json = (await res.json()) as { ok: boolean; url?: string; name?: string; error?: string };
+      if (!json.ok || !json.url) throw new Error(json.error || "Upload failed");
+      onChange(json.url);
+      setName(json.name ?? file.name);
+    } catch (e) {
+      // Shown here rather than thrown: the respondent can retry, and a failed attachment must not
+      // look like a failed form.
+      setErr(e instanceof Error ? e.message : "Upload failed");
+      onChange("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {value ? (
+        <div className="flex items-center gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
+          <span className="min-w-0 flex-1 truncate text-ink-2">{name || "Uploaded"}</span>
+          <button
+            type="button"
+            onClick={() => { onChange(""); setName(""); }}
+            aria-label="Remove the file"
+            className="text-ink-3 hover:text-bad"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      ) : (
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-field border border-dashed border-line bg-surface px-3 py-4 text-sm text-ink-2 hover:border-primary">
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+          {busy ? "Uploading…" : item.placeholder || "Choose a file"}
+          <input
+            type="file"
+            accept={item.accept}
+            aria-describedby={errId}
+            className="sr-only"
+            onChange={(e) => void pick(e.target.files?.[0])}
+            disabled={busy}
+          />
+        </label>
+      )}
+      <p className="text-caption text-muted">PDF, Word or image · up to {item.maxSizeMb ?? 10} MB</p>
+      {err && <p className="text-caption font-medium text-bad">{err}</p>}
+    </div>
+  );
+}
+
+/**
+ * Signature pad.
+ *
+ * Plain pointer events on a <canvas>, no library: the whole interaction is down-move-up, and a
+ * dependency here would ship on a public landing page for the sake of forty lines.
+ *
+ * Pointer events rather than mouse+touch pairs so a stylus, a finger and a mouse are one code
+ * path; `touch-none` stops the browser scrolling the page while someone is signing on a phone,
+ * which otherwise makes the field impossible to use on exactly the device most people are on.
+ */
+function SignatureField({
+  value, errId, onChange,
+}: {
+  value: string;
+  errId?: string;
+  onChange: (v: FormAnswerValue) => void;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+
+  function pos(e: React.PointerEvent<HTMLCanvasElement>) {
+    const c = ref.current!;
+    const r = c.getBoundingClientRect();
+    // The canvas is drawn at its backing-store size but laid out at CSS size; without this scale
+    // the ink lands away from the fingertip on any display that isn't 1:1.
+    return { x: (e.clientX - r.left) * (c.width / r.width), y: (e.clientY - r.top) * (c.height / r.height) };
+  }
+
+  function start(e: React.PointerEvent<HTMLCanvasElement>) {
+    const c = ref.current;
+    if (!c) return;
+    drawing.current = true;
+    c.setPointerCapture(e.pointerId);
+    const ctx = c.getContext("2d")!;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+    const { x, y } = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+
+  function move(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current) return;
+    const ctx = ref.current!.getContext("2d")!;
+    const { x, y } = pos(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  }
+
+  function end() {
+    if (!drawing.current) return;
+    drawing.current = false;
+    // Committed on stroke end, not per point: a data URL per pixel of movement would re-render
+    // the whole form on every frame of the signature.
+    onChange(ref.current!.toDataURL("image/png"));
+  }
+
+  function clear() {
+    const c = ref.current;
+    if (!c) return;
+    c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
+    onChange("");
+  }
+
+  return (
+    <div className="space-y-2">
+      <canvas
+        ref={ref}
+        width={600}
+        height={180}
+        aria-describedby={errId}
+        aria-label="Sign here"
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerLeave={end}
+        className="h-[140px] w-full touch-none rounded-field border border-line bg-surface"
+      />
+      <button type="button" onClick={clear} className="inline-flex items-center gap-1.5 text-caption font-semibold text-ink-3 hover:text-primary">
+        <Eraser size={13} /> Clear
+      </button>
+      {!value && <p className="text-caption text-muted">Sign in the box above using your finger or mouse.</p>}
     </div>
   );
 }

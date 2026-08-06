@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function FunnelsPage() {
   const session = await requireSection("funnels");
-  const canDelete = hasCapability(session.role, session.capabilities, "pipeline.configure");
+  const canDelete = hasCapability(session.role, session.capabilities, "sites.manage");
   const funnels = await getFunnelsList();
 
   return (

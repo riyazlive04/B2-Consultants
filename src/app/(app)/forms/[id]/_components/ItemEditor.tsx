@@ -20,6 +20,7 @@ import {
   type FormOption,
   type FormValidation,
 } from "@/lib/sites-types";
+import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/phone-countries";
 import { Btn, IconButton, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/form";
 
@@ -57,11 +58,25 @@ export function ItemEditor({
   onMove,
   onDuplicate,
   onDelete,
+  variant = "card",
+  scoring = false,
 }: {
   item: FormItem;
   index: number;
   total: number;
   open: boolean;
+  /**
+   * `card` is the stacked outline view: a collapsed header you click to open.
+   * `panel` is the builder's right-hand inspector, where the selection has already been made by
+   * clicking the field ON the form — so there is no header to click and nothing to collapse.
+   *
+   * A variant rather than a second component. These are ~240 lines of per-type editors, and the
+   * one thing worse than a prop here would be two copies of them drifting apart, so that the
+   * inspector quietly stops offering an option the outline view still has.
+   */
+  variant?: "card" | "panel";
+  /** True when the form has a Score element, which is what makes per-option points meaningful. */
+  scoring?: boolean;
   /** Sections after this item — the only legal branch targets. See sites-types. */
   laterSections: { id: string; label: string }[];
   onOpen: () => void;
@@ -87,31 +102,40 @@ export function ItemEditor({
     ? fieldTypeLabel(item.type)
     : `${fieldTypeLabel(item.type)}${item.required ? " · required" : ""} · ${item.key || "no key"}`;
 
+  const panel = variant === "panel";
+
   return (
     <div
-      className={`rounded-card border bg-surface transition-shadow ${
-        open ? "border-primary shadow-card" : "border-line hover:border-line-strong"
-      } ${isSection ? "border-l-4 border-l-primary" : ""}`}
+      className={
+        panel
+          ? "bg-transparent"
+          : `rounded-card border bg-surface transition-shadow ${
+              open ? "border-primary shadow-card" : "border-line hover:border-line-strong"
+            } ${isSection ? "border-l-4 border-l-primary" : ""}`
+      }
     >
-      {/* Collapsed header — click anywhere to open. */}
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
-      >
-        <GripVertical size={15} aria-hidden className="flex-none text-ink-3" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-ink">
-            {item.label || <span className="text-ink-3">Untitled</span>}
-            {item.required && <span className="text-bad"> *</span>}
+      {/* Collapsed header — click anywhere to open. Absent in the inspector, where selecting the
+          field on the canvas IS the act of opening it. */}
+      {!panel && (
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-expanded={open}
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+        >
+          <GripVertical size={15} aria-hidden className="flex-none text-ink-3" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-ink">
+              {item.label || <span className="text-ink-3">Untitled</span>}
+              {item.required && <span className="text-bad"> *</span>}
+            </span>
+            {!open && <span className="block truncate text-caption text-ink-3">{summary}</span>}
           </span>
-          {!open && <span className="block truncate text-caption text-ink-3">{summary}</span>}
-        </span>
-      </button>
+        </button>
+      )}
 
-      {open && (
-        <div className="space-y-3 border-t border-line p-3">
+      {(open || panel) && (
+        <div className={panel ? "space-y-3" : "space-y-3 border-t border-line p-3"}>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_200px]">
             <label className={labelCls}>
               {isSection ? "Section title" : item.type === "heading" ? "Title" : "Question"}
@@ -197,6 +221,20 @@ export function ItemEditor({
                         />
                       </span>
                     )}
+                    {/* Points this option contributes to the form's Score element. Only shown
+                        once such an element exists — a score box on every option of every form
+                        would be noise on the 95% of forms that never score anything. */}
+                    {scoring && (
+                      <input
+                        type="number"
+                        title="Points this option adds to the score"
+                        aria-label={`Points for ${o.label}`}
+                        className="h-9 w-14 flex-none rounded-field border border-line bg-surface px-2 text-center text-sm tabular-nums outline-none focus:border-primary"
+                        value={o.score ?? ""}
+                        placeholder="0"
+                        onChange={(e) => setOption(i, { score: e.target.value === "" ? undefined : Number(e.target.value) })}
+                      />
+                    )}
                     <IconButton label="Remove option" onClick={() => removeOption(i)}>
                       <X size={14} />
                     </IconButton>
@@ -279,6 +317,140 @@ export function ItemEditor({
             <label className="flex items-center justify-between rounded-field border border-line p-2.5 text-sm font-medium text-ink">
               Include a time as well as a date
               <Switch checked={!!item.includeTime} onChange={(v) => onChange({ includeTime: v })} />
+            </label>
+          )}
+
+          {item.type === "hidden" && (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className={labelCls}>
+                Read from URL parameter
+                <input
+                  className={inputCls}
+                  value={item.hiddenFrom ?? ""}
+                  onChange={(e) => onChange({ hiddenFrom: e.target.value || undefined })}
+                  placeholder="utm_source"
+                />
+              </label>
+              <label className={labelCls}>
+                Fallback value
+                <input
+                  className={inputCls}
+                  value={item.hiddenValue ?? ""}
+                  onChange={(e) => onChange({ hiddenValue: e.target.value || undefined })}
+                  placeholder="Used when the URL carries nothing"
+                />
+              </label>
+              <p className="text-caption text-ink-3 sm:col-span-2">
+                Never shown to the respondent. Lands on the contact under the key <b>{item.key || "—"}</b>.
+              </p>
+            </div>
+          )}
+
+          {item.type === "score" && (
+            <p className="rounded-field bg-primary-soft px-3 py-2 text-caption text-primary-strong">
+              Set points per option on the choice questions above. The total is worked out when the form is
+              submitted — it is never sent by the browser, so it can&apos;t be tampered with.
+            </p>
+          )}
+
+          {item.type === "captcha" && (
+            <p className="rounded-field bg-primary-soft px-3 py-2 text-caption text-primary-strong">
+              Adds a hidden trap field and a timing check. Nothing is shown to the respondent and there is
+              nothing to solve — no third-party captcha, no cookie banner.
+            </p>
+          )}
+
+          {item.type === "phone" && (
+            <label className={labelCls}>
+              Country the picker opens on
+              <Select
+                value={item.defaultCountry ?? DEFAULT_COUNTRY}
+                onChange={(e) => onChange({ defaultCountry: e.target.value })}
+                options={COUNTRIES.map((c) => ({ value: c.iso2, label: `${c.name} (+${c.dial})` }))}
+              />
+              <span className="mt-1 block text-caption font-normal normal-case text-ink-3">
+                Respondents can pick any country; this is only where the list starts.
+              </span>
+            </label>
+          )}
+
+          {item.type === "monetary" && (
+            <label className={labelCls}>
+              Currency
+              <Select
+                value={item.currency ?? "INR"}
+                onChange={(e) => onChange({ currency: e.target.value === "EUR" ? "EUR" : "INR" })}
+                options={[{ value: "INR", label: "₹ Indian rupee" }, { value: "EUR", label: "€ Euro" }]}
+              />
+            </label>
+          )}
+
+          {item.type === "file" && (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className={labelCls}>
+                Accepted types
+                <input
+                  className={inputCls}
+                  value={item.accept ?? ""}
+                  onChange={(e) => onChange({ accept: e.target.value || undefined })}
+                  placeholder=".pdf,.doc,.docx,image/*"
+                />
+              </label>
+              <label className={labelCls}>
+                Max size (MB)
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  className={inputCls}
+                  value={item.maxSizeMb ?? 10}
+                  onChange={(e) => onChange({ maxSizeMb: Number(e.target.value) || 10 })}
+                />
+              </label>
+              <p className="text-caption text-ink-3 sm:col-span-2">
+                The server accepts PDF, Word and images up to 10 MB and checks the real file contents, so this
+                box narrows what is offered rather than what is allowed.
+              </p>
+            </div>
+          )}
+
+          {item.type === "terms" && (
+            <div className="grid grid-cols-1 gap-2">
+              <label className={labelCls}>
+                Consent wording
+                <textarea
+                  className={`${inputCls} h-auto py-2`}
+                  rows={2}
+                  value={item.termsText ?? ""}
+                  onChange={(e) => onChange({ termsText: e.target.value })}
+                />
+              </label>
+              <label className={labelCls}>
+                Link to the terms (optional)
+                <input
+                  className={inputCls}
+                  value={item.termsUrl ?? ""}
+                  onChange={(e) => onChange({ termsUrl: e.target.value || undefined })}
+                  placeholder="https://…/terms"
+                />
+              </label>
+              <p className="text-caption text-ink-3">Always required — consent that can be skipped is not consent.</p>
+            </div>
+          )}
+
+          {item.type === "html" && (
+            <label className={labelCls}>
+              HTML
+              <textarea
+                className={`${inputCls} h-auto py-2 font-mono text-xs`}
+                rows={6}
+                value={item.html ?? ""}
+                onChange={(e) => onChange({ html: e.target.value })}
+              />
+              <span className="mt-1 block text-caption font-normal normal-case text-ink-3">
+                Rendered exactly as written, scripts included. Only paste markup you trust — it runs on the live
+                form with no sandbox.
+              </span>
             </label>
           )}
 

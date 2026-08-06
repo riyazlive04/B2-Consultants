@@ -32,6 +32,7 @@ import { getPipelineSnapshot } from "@/server/pipeline-metrics";
 import { getMyGame, getTeamGame } from "@/server/gamification";
 import { getGnHomeSnapshot } from "@/server/german-note-metrics";
 import { computeNotifications } from "@/server/notifications";
+import { getMyWorkTime, istWeekKeys } from "@/server/work-time";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +102,10 @@ export default async function Home({
     // away from the head.
     isHead ? getHeadCoachSnapshot() : Promise.resolve(null),
   ]);
+
+  // Day-wise work time (WorkDay). Accrual itself happens app-wide in the layout's
+  // headless tracker; this is just the history the widget renders from.
+  const workTime = await getMyWorkTime(session.user.id);
 
   const months = runway?.runwayMonths ?? null;
   const cashOnHandInr = runway?.cashInr ?? null;
@@ -447,7 +452,7 @@ export default async function Home({
               title="Your day"
               description="Time tracked automatically while you work"
             />
-            <WorkTracker />
+            <WorkTracker byDay={workTime.byDay} weekKeys={istWeekKeys()} today={workTime.today} />
           </section>
 
           <section className="space-y-4">

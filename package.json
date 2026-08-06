@@ -23,11 +23,17 @@
     "db:sample": "tsx prisma/sample-data.ts",
     "db:demo": "tsx prisma/demo-data.ts",
     "db:workshops": "tsx prisma/seed-workshops.ts",
-    "db:crm": "tsx prisma/seed-crm.ts",
+    "db:crm": "node --conditions=react-server --import tsx prisma/seed-crm.ts",
+    "db:pipeline-sync": "node --conditions=react-server --import tsx scripts/sync-pipeline-stages.ts",
+    "db:training-page": "tsx prisma/seed-training-page.ts",
+    "db:snippets": "tsx prisma/seed-snippets.ts",
+    "wire:cta": "node --conditions=react-server --import tsx scripts/wire-cta-popup.ts",
     "db:link-bookings": "tsx prisma/backfill-booking-links.ts",
     "verify:outreach": "tsx prisma/verify-outreach.ts",
     "verify:automation": "tsx prisma/verify-automation.ts",
-    "docs:whatsapp": "tsx scripts/whatsapp-templates-docx.ts"
+    "docs:whatsapp": "tsx scripts/whatsapp-templates-docx.ts",
+    "e2e:builder": "tsx scripts/e2e-funnel-builder.ts",
+    "wire:pipeline": "node --conditions=react-server --import tsx scripts/wire-form-pipeline.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -49,6 +55,7 @@
     "react": "^18",
     "react-dom": "^18",
     "server-only": "^0.0.1",
+    "sharp": "^0.35.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -59,6 +66,7 @@
     "@types/react-dom": "^18",
     "eslint": "^8",
     "eslint-config-next": "14.2.5",
+    "playwright": "^1.62.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.22.4",

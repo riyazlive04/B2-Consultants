@@ -339,7 +339,8 @@ export async function getPipelineOverview(
 
   // ── Lead priority scoring + deal-risk (report §3.A - rule-based, no AI) ──
   const OPEN_STAGES = [
-    "NEW_LEAD", "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED",
+    "NEW_LEAD", "WHATSAPP_SENT", "STRATEGY_CALL_BOOKED",
+    "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED",
     "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT",
     "SENT_TO_WORKSHOP", "WORKSHOP_FOLLOWUP", "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP", "DEPOSIT_PAID",
     "NO_SHOW",
@@ -348,6 +349,10 @@ export async function getPipelineOverview(
     DEPOSIT_PAID: 32, SSS_COMPLETED: 30, DEPOSIT_FOLLOWUP: 29, PROPOSAL_SENT: 28,
     OFFER_FOLLOWUP: 26, SSS_BOOKED: 25, DISCO_COMPLETED: 20, DISCO_BOOKED: 15,
     WORKSHOP_FOLLOWUP: 14, SENT_TO_WORKSHOP: 12, NEW_LEAD: 10, DISCO_NOT_BOOKED: 8, NO_SHOW: 5,
+    // The early funnel. Slotted by how far along they are: a booked strategy call is worth about
+    // as much attention as a booked DISCO, an opt-in we have only messaged barely more than a
+    // raw one. An absent weight scores 0, which would rank the newest leads below every dead one.
+    STRATEGY_CALL_BOOKED: 16, WHATSAPP_SENT: 11,
   };
 
   // Open leads first (lean select), then history/outcomes scoped to just those
@@ -576,6 +581,8 @@ export type OutcomeRow = PipelineOverview["outcomes"][number];
  */
 export const KANBAN_STAGES = [
   "NEW_LEAD",
+  "WHATSAPP_SENT",
+  "STRATEGY_CALL_BOOKED",
   "DISCO_BOOKED",
   "DISCO_COMPLETED",
   "SSS_BOOKED",

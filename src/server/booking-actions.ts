@@ -336,13 +336,21 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
         data: { slotId: slot.id, leadId: lead.id, ...bookingFields },
       });
 
-      // A booked call = DISCO_BOOKED; mirror BANT onto a DiscoveryOutcome-free path by
-      // only advancing the stage (the closer records the outcome after the call).
+      /**
+       * A booked call = STRATEGY_CALL_BOOKED, the board's "Strategy Call Booked" column.
+       *
+       * This used to jump straight to DISCO_BOOKED ("Pre-Qualified & Confirmed"), which claimed
+       * the prospect had been qualified AND their call confirmed the instant they picked a slot —
+       * neither of which has happened yet. Qualification moves them on from here.
+       *
+       * Advances from WHATSAPP_SENT as well as NEW_LEAD, because with the intro now auto-sending
+       * that is the stage most leads are actually in by the time they book.
+       */
       const fresh = await tx.lead.findUnique({ where: { id: lead.id }, select: { stage: true } });
-      if (fresh && fresh.stage === "NEW_LEAD") {
-        await tx.lead.update({ where: { id: lead.id }, data: { stage: "DISCO_BOOKED" } });
+      if (fresh && (fresh.stage === "NEW_LEAD" || fresh.stage === "WHATSAPP_SENT")) {
+        await tx.lead.update({ where: { id: lead.id }, data: { stage: "STRATEGY_CALL_BOOKED" } });
         await tx.leadStageHistory.create({
-          data: { leadId: lead.id, fromStage: "NEW_LEAD", toStage: "DISCO_BOOKED" },
+          data: { leadId: lead.id, fromStage: fresh.stage, toStage: "STRATEGY_CALL_BOOKED" },
         });
       }
 

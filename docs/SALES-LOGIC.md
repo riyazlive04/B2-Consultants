@@ -110,6 +110,29 @@ The app's booking form already captures the core (BANT parts, whenStart,
 readyToInvest, commitment); gaps if full parity is wanted: LinkedIn, education,
 experience, German level, visa status, income bracket, "how do you know us".
 
+## 6b. The Opportunities board mirrors Synamate exactly
+
+We are REPLACING Synamate, not integrating with it, so the board's columns are a
+character-for-character copy of the live pipeline at app.synamate.com — twelve columns, in
+Synamate's order, with Synamate's wording. The list and the mapping live in
+`src/lib/pipeline-stages.ts`; `npm run db:pipeline-sync` (or the board's "Restore the Synamate
+columns" button) shapes any board back to it.
+
+Twelve columns against fifteen `LeadStage` values, so two things are worth knowing when reading
+a column's count:
+
+| Not a column | Filed into | Consequence |
+|---|---|---|
+| `NEW_LEAD`, `DISCO_COMPLETED` | Pre-Qualified & Confirmed | that column is wider than its Synamate namesake |
+| `DISCO_NOT_BOOKED` | Cancelled/Unqualified | counted as closed on the board, still its own stage in the funnel |
+| `PROPOSAL_SENT` | Offer and didn't buy | the column includes offers still *outstanding* |
+
+And the reverse: `WON` has TWO columns, split by `Lead.paymentPlan`. A win with no plan recorded
+sits in Split Pay.
+
+**Read stage-level metrics off `LeadStage`, never off a board column count.** The funnel %,
+commission split and gamification XP all do.
+
 ## 7. Known gaps between app and sheet logic (for future waves)
 
 - WhatsApp touchpoints (sent / confirmed) are now built as the Wave-2 WATI layer: outbound
@@ -119,5 +142,7 @@ experience, German level, visa status, income bracket, "how do you know us".
 - No SSS "sales pattern" (SSS Call vs Workshop vs Summit routing).
 - No offer / price / objection / 3-follow-up tracking → no offer-rate or
   close-rate-from-offers metric; app's close rate uses disco completions.
-- No split-pay vs full-pay flag on wins (income entries capture instalments instead).
+- ~~No split-pay vs full-pay flag on wins~~ — closed. `Lead.paymentPlan` carries it, and the
+  Opportunities board ends in Synamate's two won columns ("Split Pay" / "Full pay"); dropping a
+  card in one writes the plan onto the lead (`src/lib/pipeline-stages.ts`).
 - Lead import keeps no UTM/campaign id → no per-campaign booking-rate attribution.

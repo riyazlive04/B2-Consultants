@@ -1,6 +1,44 @@
 import "server-only";
-import type { Prisma, LeadStage } from "@prisma/client";
+import type { Prisma, LeadStage, PaymentPlan } from "@prisma/client";
 import { statusForLegacyStage } from "@/lib/opportunity-status";
+import { boardColumnFor, columnStageFor } from "@/lib/pipeline-stages";
+
+/**
+ * Which column on the default board a lead belongs in.
+ *
+ * Not a plain `legacyStage` lookup, because the board mirrors Synamate's twelve columns rather
+ * than the fifteen `LeadStage` values (`lib/pipeline-stages.ts`):
+ *
+ *   - Four stages have no column of their own (NEW_LEAD, DISCO_NOT_BOOKED, DISCO_COMPLETED,
+ *     PROPOSAL_SENT). Matching on `legacyStage` alone found nothing for them, and both callers
+ *     below no-op on "no column" — so a brand-new lead would never have reached the board at all.
+ *   - WON has TWO columns, Split Pay and Full pay. `findFirst` on `legacyStage: "WON"` returns
+ *     whichever the database hands back first, so the same win could land in either column on
+ *     different runs. The lead's payment plan decides it.
+ *
+ * The fallback exists for a board an Admin has edited: if the exact column is gone, any column
+ * bridged to the same stage will do, and only then do we give up.
+ */
+async function defaultBoardStage(
+  tx: Prisma.TransactionClient,
+  stage: LeadStage,
+  paymentPlan: PaymentPlan | null,
+): Promise<{ id: string; pipelineId: string } | null> {
+  const col = boardColumnFor(stage, paymentPlan);
+  const onDefaultBoard = { pipeline: { isDefault: true, deletedAt: null }, deletedAt: null };
+  const select = { id: true, pipelineId: true };
+  return (
+    (await tx.pipelineStage.findFirst({
+      where: { ...onDefaultBoard, legacyStage: col.legacyStage, paymentPlan: col.paymentPlan },
+      select,
+    })) ??
+    (await tx.pipelineStage.findFirst({
+      where: { ...onDefaultBoard, legacyStage: col.legacyStage },
+      orderBy: { position: "asc" },
+      select,
+    }))
+  );
+}
 
 /**
  * Keep the default Opportunity board in step with a lead's stage.
@@ -53,15 +91,12 @@ export async function ensureDefaultOpportunity(
 
   const lead = await tx.lead.findUnique({
     where: { id: leadId },
-    select: { name: true, stage: true, leadSource: true, assignedToId: true, deletedAt: true },
+    select: { name: true, stage: true, paymentPlan: true, leadSource: true, assignedToId: true, deletedAt: true },
   });
   // An archived lead has no business appearing on a live board.
   if (!lead || lead.deletedAt) return;
 
-  const target = await tx.pipelineStage.findFirst({
-    where: { pipeline: { isDefault: true, deletedAt: null }, legacyStage: lead.stage, deletedAt: null },
-    select: { id: true, pipelineId: true },
-  });
+  const target = await defaultBoardStage(tx, lead.stage, lead.paymentPlan);
   if (!target) return;
 
   const max = await tx.opportunity.aggregate({ where: { stageId: target.id }, _max: { position: true } });
@@ -71,7 +106,10 @@ export async function ensureDefaultOpportunity(
       pipelineId: target.pipelineId,
       stageId: target.id,
       name: lead.name,
-      status: statusForLegacyStage(lead.stage),
+      // The COLUMN's stage, not the lead's: a DISCO_NOT_BOOKED lead is filed into
+      // Cancelled/Unqualified, and a card in a closed column that still reported OPEN would show
+      // up under the board's Open filter inside a closed column.
+      status: statusForLegacyStage(columnStageFor(lead.stage)),
       // Value is unknown at capture — a lead has not been quoted anything yet. Zero is the
       // honest figure and keeps the pipeline-value total truthful; guessing an average deal size
       // here would inflate every forecast on the board by the number of raw leads.
@@ -99,12 +137,12 @@ export async function syncDefaultOpportunity(
     select: { id: true, stageId: true, wonAt: true },
   });
   if (!opps.length) return;
-  const target = await tx.pipelineStage.findFirst({
-    where: { pipeline: { isDefault: true, deletedAt: null }, legacyStage: newStage, deletedAt: null },
-    select: { id: true },
-  });
+  // Which of the two won columns a win goes to is the lead's payment plan, so it has to be read
+  // — the caller only tells us the stage. Cheap: one column, and only when a card exists.
+  const lead = await tx.lead.findUnique({ where: { id: leadId }, select: { paymentPlan: true } });
+  const target = await defaultBoardStage(tx, newStage, lead?.paymentPlan ?? null);
   if (!target) return;
-  const status = statusForLegacyStage(newStage);
+  const status = statusForLegacyStage(columnStageFor(newStage));
   const max = await tx.opportunity.aggregate({ where: { stageId: target.id }, _max: { position: true } });
   let pos = (max._max.position ?? -1) + 1;
   for (const o of opps) {

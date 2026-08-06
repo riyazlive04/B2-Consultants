@@ -18,6 +18,8 @@ export type BoardCard = {
   name: string;
   contactId: string;
   contactName: string;
+  /** Drives the card's call / WhatsApp actions. Null hides them rather than rendering dead icons. */
+  contactPhone: string | null;
   source: string | null;
   valueInr: string;
   ownerName: string | null;
@@ -25,12 +27,16 @@ export type BoardCard = {
   status: string;
   position: number;
   stageId: string;
+  /** Notes already on this card, for the badge. 0 renders no badge. */
+  noteCount: number;
 };
 
 export type BoardStage = {
   id: string;
   name: string;
   legacyStage: string | null;
+  /** Only set on a WON column: which of Synamate's two won columns this is (Split Pay / Full pay). */
+  paymentPlan: string | null;
   probability: number | null;
   count: number;
   totalInr: string;
@@ -74,6 +80,44 @@ export type BoardFilters = {
   /** OPEN | WON | LOST | ABANDONED. */
   status?: string;
 };
+
+export type PipelineRow = {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  stageCount: number;
+  oppCount: number;
+  updatedAt: Date;
+};
+
+/**
+ * The Pipelines management list.
+ *
+ * `stageCount` counts LIVE columns only — a soft-deleted stage is gone as far as anyone reading
+ * this screen is concerned, and counting it would make the number disagree with the board.
+ * Ordered the same way the board's switcher orders, so the two screens never contradict.
+ */
+export async function listPipelines(): Promise<PipelineRow[]> {
+  const rows = await prisma.pipeline.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ isDefault: "desc" }, { position: "asc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+      updatedAt: true,
+      _count: { select: { stages: { where: { deletedAt: null } }, opps: { where: { deletedAt: null } } } },
+    },
+  });
+  return rows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    isDefault: p.isDefault,
+    stageCount: p._count.stages,
+    oppCount: p._count.opps,
+    updatedAt: p.updatedAt,
+  }));
+}
 
 export async function getBoard(pipelineId?: string, filters: BoardFilters = {}): Promise<BoardData> {
   const search = filters.search?.trim();
@@ -144,8 +188,11 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
         orderBy: { position: "asc" },
         take: STAGE_CARD_LIMIT + 1, // fetch one extra to detect overflow without a second COUNT query
         include: {
-          lead: { select: { id: true, name: true } },
+          lead: { select: { id: true, name: true, phone: true } },
           assignedTo: { select: { id: true, name: true } },
+          // Counted here rather than in a second pass: Prisma resolves it as one grouped subquery
+          // over the same rows already being fetched, so the badge costs no extra round trip.
+          _count: { select: { notes: true } },
         },
       },
     },
@@ -161,12 +208,19 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
     by: ["stageId", "status"],
     where: { stageId: { in: stages.map((s) => s.id) }, ...cardWhere },
     _sum: { valueInrMinor: true },
+    // The TRUE card count, from the same set as the money. The header used to report
+    // `cards.length` — the display slice — so a column holding more than STAGE_CARD_LIMIT would
+    // announce "300 opportunities" beside a total covering thousands. Harmless while production
+    // had one card; wrong the moment lead capture fills the board.
+    _count: { _all: true },
   });
   const allByStage = new Map<string, bigint>();
   const openByStage = new Map<string, bigint>();
+  const countByStage = new Map<string, number>();
   for (const r of sums) {
     const v = r._sum.valueInrMinor ?? 0n;
     allByStage.set(r.stageId, (allByStage.get(r.stageId) ?? 0n) + v);
+    countByStage.set(r.stageId, (countByStage.get(r.stageId) ?? 0) + r._count._all);
     if (r.status === "OPEN") openByStage.set(r.stageId, (openByStage.get(r.stageId) ?? 0n) + v);
   }
 
@@ -184,6 +238,7 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
       name: o.name,
       contactId: o.lead.id,
       contactName: o.lead.name,
+      contactPhone: o.lead.phone,
       source: o.source,
       valueInr: formatInrMinor(o.valueInrMinor),
       ownerName: o.assignedTo?.name ?? null,
@@ -191,12 +246,14 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
       status: o.status,
       position: o.position,
       stageId: o.stageId,
+      noteCount: o._count.notes,
     }));
 
     const stageAll = allByStage.get(s.id) ?? 0n; // column header: every card, any status
     const stageOpen = openByStage.get(s.id) ?? 0n; // live pipeline: OPEN cards only
+    const stageCount = countByStage.get(s.id) ?? 0; // every card, not just the rendered slice
 
-    totalCount += cards.length;
+    totalCount += stageCount;
     grandTotal += stageOpen;
 
     const weightedOpen =
@@ -208,8 +265,9 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
       id: s.id,
       name: s.name,
       legacyStage: s.legacyStage,
+      paymentPlan: s.paymentPlan,
       probability: s.probability,
-      count: cards.length,
+      count: stageCount,
       totalInr: formatInrMinor(stageAll),
       weightedTotalInr: s.probability != null ? formatInrMinor(weightedOpen) : null,
       cards,

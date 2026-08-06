@@ -132,7 +132,8 @@ function istTodayInstantRange(): { start: Date; end: Date } {
 
 /** Stages that are still worth a phone call. WON/LOST are finished business. */
 const OPEN_STAGES = [
-  "NEW_LEAD", "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED",
+  "NEW_LEAD", "WHATSAPP_SENT", "STRATEGY_CALL_BOOKED",
+  "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED",
   "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT", "SENT_TO_WORKSHOP",
   "WORKSHOP_FOLLOWUP", "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP", "DEPOSIT_PAID",
   "NO_SHOW",

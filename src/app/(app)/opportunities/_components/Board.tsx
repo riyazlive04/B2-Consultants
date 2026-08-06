@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Settings2, GripVertical, Trash2, ChevronUp, ChevronDown, Pin } from "lucide-react";
+import {
+  Plus, Settings2, GripVertical, Trash2, ChevronUp, ChevronDown, Pin,
+  ChevronLeft, ChevronRight, Phone, MessageCircle, StickyNote, User,
+} from "lucide-react";
 import type { BoardData } from "@/server/opportunities-metrics";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Modal } from "@/components/ui/Modal";
@@ -16,17 +19,26 @@ import { DateText } from "@/components/ui/DateText";
 import {
   moveOpportunity, createOpportunity, updateOpportunity, deleteOpportunity,
   createPipeline, deletePipeline, addStage, renameStage, deleteStage, reorderStages,
-  setStageLegacyStage,
+  setStageLegacyStage, restoreSynamateStages,
   getOpportunityNotes, createOpportunityNote, toggleOpportunityNotePin, deleteOpportunityNote,
   type OpportunityNote,
 } from "@/server/opportunities-actions";
-import { LEAD_STAGE_LABELS } from "@/lib/labels";
+import { LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
+import { SYNAMATE_STAGES } from "@/lib/pipeline-stages";
 
-// Options for mapping a custom pipeline's stage back to a lead-lifecycle stage (the bridge that
-// syncs a card move to Lead.stage). "" = no sync; the board stays a standalone process.
+// Options for mapping a stage back to a lead-lifecycle stage (the bridge that syncs a card move to
+// Lead.stage). "" = no sync; the board stays a standalone process — offered on custom pipelines
+// only, since an unmapped column on the default board swallows deals (opportunities-actions).
 const LIFECYCLE_OPTS = [
   { value: "", label: "— No lead-stage sync —" },
   ...Object.entries(LEAD_STAGE_LABELS).map(([value, label]) => ({ value, label })),
+];
+const LIFECYCLE_OPTS_REQUIRED = LIFECYCLE_OPTS.slice(1);
+
+// Which of Synamate's two won columns a WON-mapped column is. Shown only for WON.
+const PLAN_OPTS = [
+  { value: "", label: "— either —" },
+  ...Object.entries(PAYMENT_PLAN_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 const SOURCE_OPTS = [
@@ -100,6 +112,38 @@ export default function Board({
   // dragId is set and torn down (with the loop) the moment the drag ends.
   // The scrollable strip now belongs to HScroll, which hands it back through this handle — the
   // auto-scroll below drives exactly the same element it always did.
+  /**
+   * Columns the viewer has folded away, kept per pipeline in localStorage.
+   *
+   * Client-only on purpose: which columns you have out of the way is a preference about YOUR
+   * screen, not a property of the board, so it must not follow you onto someone else's. Read in an
+   * effect rather than in the initialiser because this component server-renders — reading
+   * localStorage during render is a hydration mismatch.
+   */
+  const collapseKey = `b2.board.collapsed.${board.activePipelineId ?? "none"}`;
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(collapseKey);
+      setCollapsed(new Set(raw ? (JSON.parse(raw) as string[]) : []));
+    } catch {
+      setCollapsed(new Set());
+    }
+  }, [collapseKey]);
+
+  function toggleCollapsed(stageId: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(stageId)) next.add(stageId);
+      try {
+        window.localStorage.setItem(collapseKey, JSON.stringify([...next]));
+      } catch {
+        /* private mode / storage full — folding still works for this visit */
+      }
+      return next;
+    });
+  }
+
   const boardScroll = useRef<HScrollHandle>(null);
   const boardEl = () => boardScroll.current?.el ?? null;
   const rafRef = useRef<number | null>(null);
@@ -294,18 +338,23 @@ export default function Board({
 
   return (
     <div className="space-y-4">
-      {/* Pipeline switcher + actions */}
+      {/* Pipeline switcher + actions.
+          A dropdown rather than a pill per pipeline: pills were fine at one or two boards and
+          wrap into a wall the moment there are several, and the count beside it is the figure
+          people actually check first. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {board.pipelines.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => router.push(`/opportunities?pipeline=${p.id}`)}
-              className={`rounded-full px-3 py-1.5 text-sm font-semibold ${p.id === board.activePipelineId ? "bg-primary text-on-accent" : "bg-surface-2 text-ink-2 hover:bg-sky"}`}
-            >
-              {p.name}
-            </button>
-          ))}
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <Select
+            aria-label="Pipeline"
+            value={board.activePipelineId ?? ""}
+            onChange={(e) => router.push(`/opportunities?pipeline=${e.target.value}`)}
+            options={board.pipelines.map((p) => ({ value: p.id, label: p.name }))}
+            className="w-56"
+          />
+          <span className="text-sm font-semibold text-primary">
+            {board.totalCount.toLocaleString("en-IN")} {board.totalCount === 1 ? "opportunity" : "opportunities"}
+            {board.filtered && <span className="font-normal text-ink-3"> (filtered)</span>}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {board.weightedTotalValueInr && (
@@ -364,26 +413,62 @@ export default function Board({
             key={stage.id}
             onDragOver={dragEnabled ? (e) => { e.preventDefault(); setDropStage(stage.id); } : undefined}
             onDrop={dragEnabled ? () => onDrop(stage.id, stage.cards.length) : undefined}
-            className={`flex w-72 flex-none flex-col rounded-card border bg-surface-2 ${dropStage === stage.id ? "border-primary" : "border-line"}`}
+            className={`flex flex-none flex-col rounded-card border bg-surface-2 ${collapsed.has(stage.id) ? "w-12" : "w-72"} ${dropStage === stage.id ? "border-primary" : "border-line"}`}
           >
-            <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
-              <span className="truncate text-sm font-semibold text-ink">{stage.name}</span>
-              {/* A column with no lead stage mapped is a ONE-WAY DOOR: a card dropped in it stops
-                  writing through to Lead.stage, and the stage sync can never move it back out
-                  because it only targets mapped columns. Production had two such columns on the
-                  default board with nothing anywhere saying so. */}
-              {!stage.legacyStage && (
-                <span
-                  title="This column isn't mapped to a lead stage — a card moved here stops updating the lead's stage, and won't be moved back automatically."
-                  className="flex-none rounded-full bg-warn-soft px-1.5 py-0.5 text-caption font-semibold text-warn"
-                >
-                  Unmapped
-                </span>
-              )}
-              <span className="flex-none rounded-full bg-surface px-2 py-0.5 text-caption font-semibold text-ink-2">{stage.count}</span>
-            </div>
-            <StageTotals stage={stage} />
-            <div className="flex-1 space-y-2 p-2">
+            {collapsed.has(stage.id) ? (
+              /* Collapsed rail. Still a drop target — the wrapper's handlers are unchanged — so a
+                 card can be parked in a column you have folded away. */
+              <button
+                type="button"
+                onClick={() => toggleCollapsed(stage.id)}
+                title={`Expand ${stage.name}`}
+                aria-label={`Expand ${stage.name}`}
+                className="flex h-full flex-col items-center gap-2 py-3 hover:bg-surface"
+              >
+                <ChevronRight size={14} className="text-ink-3" />
+                <span className="rounded-full bg-surface px-1.5 py-0.5 text-caption font-semibold text-ink-2">{stage.count}</span>
+                <span className="mt-1 whitespace-nowrap text-sm font-semibold text-ink [writing-mode:vertical-rl]">{stage.name}</span>
+              </button>
+            ) : (
+              <>
+                <div className="border-b border-line px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-semibold text-ink">{stage.name}</span>
+                    {/* A column with no lead stage mapped is a ONE-WAY DOOR: a card dropped in it
+                        stops writing through to Lead.stage, and the stage sync can never move it
+                        back out because it only targets mapped columns. Production had two such
+                        columns on the default board with nothing anywhere saying so. */}
+                    {!stage.legacyStage && (
+                      <span
+                        title="This column isn't mapped to a lead stage — a card moved here stops updating the lead's stage, and won't be moved back automatically."
+                        className="flex-none rounded-full bg-warn-soft px-1.5 py-0.5 text-caption font-semibold text-warn"
+                      >
+                        Unmapped
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapsed(stage.id)}
+                      title={`Collapse ${stage.name}`}
+                      aria-label={`Collapse ${stage.name}`}
+                      className="flex-none rounded p-0.5 text-ink-3 hover:bg-surface hover:text-ink"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                  </div>
+                  {/* Count and money on one line under the name — the two figures anyone scanning
+                      the board is actually comparing between columns. */}
+                  <div className="mt-0.5 flex items-baseline gap-2 text-caption text-ink-3">
+                    <span>{stage.count.toLocaleString("en-IN")} {stage.count === 1 ? "opportunity" : "opportunities"}</span>
+                    <span className="font-semibold text-ink-2">{stage.totalInr}</span>
+                  </div>
+                  {stage.weightedTotalInr && (
+                    <p className="text-caption text-ink-3" title={`Weighted at ${stage.probability}% probability`}>
+                      weighted {stage.weightedTotalInr}
+                    </p>
+                  )}
+                </div>
+                <div className="flex-1 space-y-2 p-2">
               {stage.cards.map((card, i) => (
                 <OppCard
                   key={card.id}
@@ -407,7 +492,9 @@ export default function Board({
                   above to narrow it down.
                 </p>
               )}
-            </div>
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -527,10 +614,28 @@ function OppCard({
   onDropOn?: (e: React.DragEvent) => void;
   onOpen: () => void;
 }) {
+  /**
+   * A drag MUST put something on the dataTransfer to start.
+   *
+   * Chrome tolerates an empty payload; Firefox does not — it cancels the drag outright, so the
+   * board looked permanently un-draggable there even with drag mode on. The id we write is not
+   * read back (the dragged card is tracked in React state), but setting it is what makes the
+   * gesture legal, and `effectAllowed` is what shows a move cursor instead of the "no entry" one.
+   */
+  const startDrag = (e: React.DragEvent) => {
+    try {
+      e.dataTransfer.setData("text/plain", card.id);
+      e.dataTransfer.effectAllowed = "move";
+    } catch {
+      /* a browser that refuses the write can still drag — state carries the card */
+    }
+    onDragStart?.();
+  };
+
   return (
     <div
       draggable={draggable}
-      onDragStart={draggable ? onDragStart : undefined}
+      onDragStart={draggable ? startDrag : undefined}
       onDragEnd={draggable ? onDragEnd : undefined}
       onDrop={draggable ? onDropOn : undefined}
       onClick={onOpen}
@@ -542,32 +647,103 @@ function OppCard({
       className={`cursor-pointer rounded-field border border-line bg-surface p-3 shadow-card transition-shadow hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ${dragActive ? "opacity-40" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 truncate text-sm font-semibold text-ink">{card.name}</p>
-        {draggable && <GripVertical size={14} className="flex-none text-ink-3" />}
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{card.name}</p>
+        {/* The owner rides as an avatar in the corner rather than a labelled row at the bottom:
+            it is the one field people scan across a whole column, and a name repeated on every
+            card costs a line each without ever being read in full. */}
+        {card.ownerName ? (
+          <span className="flex-none" title={`Owner: ${card.ownerName}`}>
+            <Avatar name={card.ownerName} size={22} />
+          </span>
+        ) : (
+          draggable && <GripVertical size={14} className="flex-none text-ink-3" />
+        )}
       </div>
-      <Link
-        href={`/contacts/${card.contactId}`}
-        onClick={(e) => e.stopPropagation()}
-        className="mt-0.5 block truncate text-caption text-ink-3 hover:text-primary"
-      >
-        {card.contactName}
-      </Link>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-ink">{card.valueInr}</span>
-        {card.source && <Pill tone="neutral">{card.source.replaceAll("_", " ").toLowerCase()}</Pill>}
-      </div>
-      {card.ownerName && (
-        <div className="mt-2 flex items-center gap-1.5 text-caption text-ink-3">
-          <Avatar name={card.ownerName} size={18} /> {card.ownerName}
+
+      {/* Labelled rows. The label carries the meaning — a bare "Social media" above a bare
+          "₹1,500" reads as two unrelated facts. */}
+      <dl className="mt-2 space-y-0.5 text-caption">
+        <div className="flex gap-2">
+          <dt className="w-12 flex-none text-ink-3">Source</dt>
+          <dd className="min-w-0 truncate text-ink-2">
+            {card.source ? card.source.replaceAll("_", " ").toLowerCase() : "—"}
+          </dd>
         </div>
-      )}
+        <div className="flex gap-2">
+          <dt className="w-12 flex-none text-ink-3">Value</dt>
+          <dd className="min-w-0 truncate font-semibold text-ink">{card.valueInr}</dd>
+        </div>
+      </dl>
+
+      {/* Quick actions. Every icon here does something real — a decorative icon row on a card
+          people click all day is worse than none. `stopPropagation` so acting on a card does not
+          also open its edit modal. */}
+      <div className="mt-2 flex items-center gap-1 border-t border-line pt-2">
+        {card.contactPhone && (
+          <>
+            <CardAction href={`tel:${card.contactPhone}`} label={`Call ${card.contactName}`}>
+              <Phone size={13} />
+            </CardAction>
+            <CardAction
+              href={`https://wa.me/${card.contactPhone.replace(/[^0-9]/g, "")}`}
+              external
+              label={`WhatsApp ${card.contactName}`}
+            >
+              <MessageCircle size={13} />
+            </CardAction>
+          </>
+        )}
+        <CardAction href={`/contacts/${card.contactId}`} label={`Open ${card.contactName}`}>
+          <User size={13} />
+        </CardAction>
+        {card.noteCount > 0 && (
+          <span
+            title={`${card.noteCount} note${card.noteCount === 1 ? "" : "s"}`}
+            className="ml-auto inline-flex items-center gap-1 rounded-full bg-surface-2 px-1.5 py-0.5 text-caption font-semibold text-ink-2"
+          >
+            <StickyNote size={12} /> {card.noteCount}
+          </span>
+        )}
+      </div>
     </div>
+  );
+}
+
+/** One quick action on a card. A link, not a button — these all navigate or hand off to the OS. */
+function CardAction({
+  href, label, external = false, children,
+}: {
+  href: string;
+  label: string;
+  external?: boolean;
+  children: React.ReactNode;
+}) {
+  const cls =
+    "rounded p-1 text-ink-3 hover:bg-surface-2 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary";
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+  // tel: and wa.me leave the app, so they are plain anchors; the contact link stays client-side.
+  return external || href.startsWith("tel:") ? (
+    <a
+      href={href}
+      onClick={stop}
+      title={label}
+      aria-label={label}
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+      className={cls}
+    >
+      {children}
+    </a>
+  ) : (
+    <Link href={href} onClick={stop} title={label} aria-label={label} className={cls}>
+      {children}
+    </Link>
   );
 }
 
 function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean; onClose: () => void }) {
   const router = useRouter();
   const [newStage, setNewStage] = useState("");
+  const [newStageLegacy, setNewStageLegacy] = useState("");
   const [newPipeline, setNewPipeline] = useState("");
   const [names, setNames] = useState<Record<string, string>>(Object.fromEntries(board.stages.map((s) => [s.id, s.name])));
   const [order, setOrder] = useState<string[]>(board.stages.map((s) => s.id));
@@ -625,35 +801,97 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
                       <Trash2 size={15} />
                     </IconButton>
                   </div>
-                  {/* Custom pipelines opt into the Lead.stage bridge per stage — moving a card here
-                      then syncs the contact's lifecycle stage (funnel/reminders stay correct). */}
-                  {!activeIsDefault && (
-                    <div className="flex items-center gap-2 pl-10">
-                      <span className="whitespace-nowrap text-caption text-ink-3">Syncs lead stage →</span>
+                  {/* Every column says which lifecycle stage it means — that bridge is what syncs a
+                      card move to the contact's stage (funnel/reminders stay correct). Editable on
+                      the default board too, so this pipeline can be shaped by hand; the one thing
+                      refused there is clearing it, which is why the option list differs. */}
+                  <div className="flex flex-wrap items-center gap-2 pl-10">
+                    <span className="whitespace-nowrap text-caption text-ink-3">Syncs lead stage →</span>
+                    <Select
+                      key={`${id}-${s.legacyStage ?? "none"}`}
+                      size="sm"
+                      defaultValue={s.legacyStage ?? ""}
+                      aria-label={`Lead lifecycle stage for ${s.name}`}
+                      options={activeIsDefault ? LIFECYCLE_OPTS_REQUIRED : LIFECYCLE_OPTS}
+                      onChange={async (e) => {
+                        const r = await setStageLegacyStage(id, e.target.value, s.paymentPlan);
+                        if (r.ok) {
+                          toast(e.target.value ? `Mapped to "${LEAD_STAGE_LABELS[e.target.value] ?? e.target.value}"` : "Sync cleared");
+                          router.refresh();
+                        } else toast(r.error, "error");
+                      }}
+                    />
+                    {/* Synamate ends in two won columns; this is what tells them apart, and what a
+                        drop into one writes onto the lead. Only WON can carry it. */}
+                    {s.legacyStage === "WON" && (
                       <Select
-                        key={`${id}-${s.legacyStage ?? "none"}`}
+                        key={`${id}-plan-${s.paymentPlan ?? "none"}`}
                         size="sm"
-                        defaultValue={s.legacyStage ?? ""}
-                        aria-label={`Lead lifecycle stage for ${s.name}`}
-                        options={LIFECYCLE_OPTS}
+                        defaultValue={s.paymentPlan ?? ""}
+                        aria-label={`Payment plan for ${s.name}`}
+                        options={PLAN_OPTS}
                         onChange={async (e) => {
-                          const r = await setStageLegacyStage(id, e.target.value);
-                          if (r.ok) {
-                            toast(e.target.value ? `Mapped to "${LEAD_STAGE_LABELS[e.target.value] ?? e.target.value}"` : "Sync cleared");
-                            router.refresh();
-                          } else toast(r.error, "error");
+                          const r = await setStageLegacyStage(id, s.legacyStage, e.target.value);
+                          if (r.ok) { toast("Payment plan set"); router.refresh(); }
+                          else toast(r.error, "error");
                         }}
                       />
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
           {board.activePipelineId && (
-            <div className="mt-3 flex gap-2">
-              <input value={newStage} onChange={(e) => setNewStage(e.target.value)} placeholder="New stage name" className="h-9 flex-1 rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary" />
-              <Btn size="sm" icon={<Plus size={15} />} onClick={async () => { if (!newStage.trim()) return; const r = await addStage(board.activePipelineId!, newStage); if (r.ok) { toast("Stage added"); setNewStage(""); } else toast(r.error, "error"); }}>Add</Btn>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input value={newStage} onChange={(e) => setNewStage(e.target.value)} placeholder="New stage name" className="h-9 min-w-[10rem] flex-1 rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary" />
+              <Select
+                size="sm"
+                value={newStageLegacy}
+                aria-label="Lead lifecycle stage for the new column"
+                options={activeIsDefault ? [{ value: "", label: "— pick a lead stage —" }, ...LIFECYCLE_OPTS_REQUIRED] : LIFECYCLE_OPTS}
+                onChange={(e) => setNewStageLegacy(e.target.value)}
+              />
+              <Btn
+                size="sm"
+                icon={<Plus size={15} />}
+                onClick={async () => {
+                  if (!newStage.trim()) return;
+                  const r = await addStage(board.activePipelineId!, newStage, newStageLegacy);
+                  if (r.ok) { toast("Stage added"); setNewStage(""); setNewStageLegacy(""); router.refresh(); }
+                  else toast(r.error, "error");
+                }}
+              >
+                Add
+              </Btn>
+            </div>
+          )}
+
+          {/* The safety net that makes the editing above safe to offer: whatever has been renamed,
+              re-mapped, added or removed, this puts the twelve live Synamate columns back and
+              re-files every card. Nothing is dropped — a column that still holds cards is refused
+              rather than emptied (server/pipeline-reshape.ts). */}
+          {activeIsDefault && board.activePipelineId && (
+            <div className="mt-4 rounded-field border border-dashed border-line p-3">
+              <p className="text-caption text-ink-3">
+                This board mirrors the {SYNAMATE_STAGES.length} Synamate columns. Edited it into a corner?
+              </p>
+              <Btn
+                size="sm"
+                variant="soft"
+                className="mt-2"
+                onClick={async () => {
+                  if (!(await askConfirm({
+                    title: "Restore the Synamate columns?",
+                    body: `The board goes back to the ${SYNAMATE_STAGES.length} standard columns and every card is re-filed into the column its contact's stage belongs to. Columns you added are removed once they're empty; nothing is deleted with cards still in it.`,
+                  }))) return;
+                  const r = await restoreSynamateStages(board.activePipelineId!);
+                  if (r.ok) { toast("Synamate columns restored"); router.refresh(); }
+                  else toast(r.error, "error");
+                }}
+              >
+                Restore the Synamate columns
+              </Btn>
             </div>
           )}
         </section>

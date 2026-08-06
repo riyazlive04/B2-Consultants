@@ -10,6 +10,34 @@ const nextConfig = {
   outputFileTracing: process.env.NEXT_OUTPUT_STANDALONE === "1" || !!process.env.VERCEL,
   // Allow out-of-band builds (e.g. verifying prod while a dev server holds .next).
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  /**
+   * Marketing-site images (Supabase Storage).
+   *
+   * This IS the image pipeline. Synamate serves every asset through a transform CDN
+   * (`images.leadconnectorhq.com/image/f_webp/q_80/r_{width}/…`) which converts to WebP and emits
+   * five widths. The captured originals total 4.5 MB — two PNGs are 1.7 MB and 1.9 MB — so serving
+   * them raw would make the rebuilt site SLOWER than the GHL one it replaces, on exactly the paid
+   * traffic it exists for. `next/image` does the same job, but only for hosts listed here; an
+   * unlisted host throws at request time rather than falling back.
+   *
+   * `deviceSizes` mirrors the breakpoints GHL actually emits, so the variants match what the live
+   * site already proved works for this design.
+   */
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "vyuzqkzujjbgccfjhjcr.supabase.co", pathname: "/storage/v1/object/public/**" },
+      // ── MIGRATION ONLY — remove once the assets live in Supabase ──
+      // While the rebuilt pages still point at Synamate's origin, next/image must be allowed to
+      // fetch from it. Without these entries an unconfigured host is a hard 500, not a fallback —
+      // so omitting them does not "degrade gracefully", it takes the page down.
+      // Delete both lines after `scripts/rebuild-b2-site.mjs --images` has run and the pages have
+      // been re-pointed; leaving them is a standing dependency on the platform being replaced.
+      { protocol: "https", hostname: "assets.cdn.filesafe.space" },
+      { protocol: "https", hostname: "firebasestorage.googleapis.com" },
+    ],
+    deviceSizes: [320, 640, 768, 900, 1200, 1920],
+    formats: ["image/webp"],
+  },
   compress: true, // gzip RSC/HTML/JS from the Node server (belt-and-suspenders behind a proxy)
   poweredByHeader: false,
   reactStrictMode: true,

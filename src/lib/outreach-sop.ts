@@ -696,6 +696,13 @@ export function coerceOutreachConfig(raw: unknown): OutreachConfig {
  * test on, and `server/outreach-instant.ts` imports `server-only`, which cannot be loaded from a
  * test runner.
  */
+/**
+ * `NATIVE_FORM` stays OUT even though the public opt-in is a genuine live capture: the same
+ * source is also stamped by workshop registration (server/workshop-registrations.ts) and the
+ * intake API, so admitting it here would auto-message every workshop registrant as a side effect.
+ * A per-form WhatsApp step on the FORM_SUBMITTED workflow is the scoped way to message one
+ * specific form's opt-ins — see the SEND_WHATSAPP action in lib/automation-types.ts.
+ */
 export const INSTANT_INTRO_SOURCES = ["PABBLY", "FLEXIFUNNELS", "META_LEAD_AD"] as const;
 
 export function isInstantIntroSource(source: string): boolean {

@@ -147,7 +147,7 @@ export function WhatsAppSettingsForm({
           <NumField name="discoRepeatHours" label="Disco: repeat gap (hrs)" defaultValue={c.discoRepeatHours} />
           <NumField name="discoMaxReminders" label="Disco: max reminders" defaultValue={c.discoMaxReminders} />
           {/* The floor that stops the engine reaching back into a historical import. */}
-          <NumField name="discoMaxAgeDays" label="Disco: don't chase leads older than (days)" defaultValue={c.discoMaxAgeDays} />
+          <NumField name="discoMaxAgeDays" label="Disco: only if they opted in within (days)" defaultValue={c.discoMaxAgeDays} />
           <label className="block sm:col-span-3">
             <span className="text-xs font-medium text-muted">Pre-call reminders (hours before slot, comma-separated)</span>
             <input name="bookingReminderLeadHours" defaultValue={c.bookingReminderLeadHours.join(", ")} className={`mt-1 ${inputCls}`} placeholder="24, 2" />

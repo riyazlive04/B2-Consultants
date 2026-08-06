@@ -543,18 +543,35 @@ export async function runDueReminders(): Promise<ReminderRun> {
   // 1. Discovery-call reminders — un-booked leads.
   if (budget > 0 && hasTemplate("DISCO_REMINDER")) {
     const cutoff = new Date(now - cadence.discoFirstDelayHours * HR);
-    /**
-     * The floor that was missing. `createdAt <= cutoff` alone means "old enough to chase" with
-     * nothing saying "not TOO old", so the query matched every un-booked lead ever created and
-     * `orderBy: createdAt asc` started at the oldest row in the database. See `discoMaxAgeDays`.
-     */
     const oldest = new Date(now - cadence.discoMaxAgeDays * 24 * HR);
     const leads = await prisma.lead.findMany({
       where: {
         ...ACTIVE,
         stage: { in: ["NEW_LEAD", "DISCO_NOT_BOOKED"] },
-        createdAt: { gte: oldest, lte: cutoff },
         phone: { not: "" },
+        /**
+         * ── The engine chases a recent ACTION, never merely a recent row ──────────
+         * This used to read `createdAt: { lte: cutoff }` on the lead: "old enough to chase" with
+         * nothing saying "not TOO old", so every un-booked lead ever created qualified and
+         * `orderBy asc` started at the oldest row in the table. Bounding `createdAt` would have
+         * fixed the blast radius and still answered the wrong question — creation is not
+         * consent to be messaged today.
+         *
+         * `outreachJourney.optInAt` is the moment the prospect last actually opted in, and
+         * `acceptReturningOptIn` resets it to now whenever they submit again. So a lead who
+         * went cold eighteen months ago is silent until the day they opt in afresh — and then
+         * they are picked up immediately, with no backfill of the reminders they missed.
+         *
+         * Requiring the relation to EXIST is the other half. The 23,429 contacts imported from
+         * Synamate have no journey, so they cannot be selected by this query at all: the engine
+         * can only reach people who came through an intake that created one. That is
+         * fail-closed, and it is why arming WhatsApp is now a decision about 207 leads rather
+         * than 13,103.
+         *
+         * A booking needs no clause here — it moves the lead out of these two stages entirely,
+         * and BOOKING_REMINDER takes over keyed on the slot time.
+         */
+        outreachJourney: { optInAt: { gte: oldest, lte: cutoff } },
       },
       // Oldest first WITHIN the window: those are the ones about to age out of it, so a run that
       // hits `maxPerRun` spends its budget on the leads that will otherwise never be chased.

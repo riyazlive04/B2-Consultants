@@ -200,7 +200,11 @@ export type WatiCadence = {
   /** Hard cap on discovery reminders per lead. */
   discoMaxReminders: number;
   /**
-   * Never chase a lead who opted in more than this many days ago.
+   * Never chase a lead whose LAST OPT-IN is more than this many days ago.
+   *
+   * Measured from `OutreachJourney.optInAt`, not from when the lead row was created — a returning
+   * opt-in resets that timestamp, so submitting the form again is what brings a dormant prospect
+   * back into scope. Age of the record is not consent to be messaged today.
    *
    * ── Why this exists ────────────────────────────────────────────────────────────
    * The candidate query was `createdAt <= now - discoFirstDelayHours` with NO lower bound, and

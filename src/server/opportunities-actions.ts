@@ -343,48 +343,147 @@ export async function updateOpportunity(id: string, form: FormData): Promise<Act
   return { ok: true };
 }
 
-/** Delete = ARCHIVE. Notes stay on the parent lead; restore from the Archived tab. */
+/**
+ * Delete = ARCHIVE. Notes stay on the parent lead; restore from the Archived tab.
+ *
+ * Deleting the card ALSO archives the LEAD, once the card was the last live one that lead had.
+ *
+ * ── The bug this closes ─────────────────────────────────────────────────────────
+ * The board is what everyone calls "the pipeline", so deleting a card there is understood to
+ * mean the person is out. But `Opportunity` and `Lead` are separate rows, and this only ever
+ * archived the card: the lead stayed active, stayed assigned, and kept appearing on its owner's
+ * My Desk queue — every desk read is `Lead` filtered on `deletedAt` (`l1-desk-metrics`,
+ * `l2-desk-metrics`, `telecaller-desk-metrics`), and the lead's `deletedAt` was still null. The
+ * symptom reported on 7 Aug 2026: a lead deleted from the board at 06:55 was still on Asma's
+ * desk, because nothing had ever archived the lead.
+ *
+ * ── Why the "last live card" guard ──────────────────────────────────────────────
+ * A lead may hold cards on more than one pipeline — the default Sales board plus any custom
+ * board an Admin built. Clearing someone off ONE process is not the same as dropping the person,
+ * and archiving unconditionally would leave an archived lead with a live card still sitting on
+ * someone else's board. So the lead is archived only when no live card is left for it anywhere.
+ * In the ordinary case that guard is a no-op: `ensureDefaultOpportunity` gives a lead exactly one.
+ *
+ * Both rows are stamped with the SAME `deletedAt` instant, which is what lets `restoreOpportunity`
+ * put the pair back together, and the retention sweep age them out together.
+ */
 export async function deleteOpportunity(id: string): Promise<ActionResult> {
   const session = await requireSection("opportunities");
   const opp = await prisma.opportunity.findUnique({
     where: { id },
-    select: { leadId: true, name: true, lead: { select: { name: true } } },
+    select: {
+      leadId: true, name: true,
+      lead: { select: { name: true, stage: true, deletedAt: true } },
+    },
   });
   if (!opp) return { ok: false, error: "Opportunity not found" };
-  await prisma.opportunity.update({ where: { id }, data: archiveData(session.user.id) });
+
+  // One payload for both rows — `archiveData()` stamps `new Date()` per call, and two instants
+  // a few milliseconds apart is exactly the pairing `restoreOpportunity` needs to recognise.
+  const archived = archiveData(session.user.id);
+
+  const leadArchived = await prisma.$transaction(async (tx) => {
+    await tx.opportunity.update({ where: { id }, data: archived });
+    if (opp.lead.deletedAt) return false; // already archived from the Pipeline side
+    const liveElsewhere = await tx.opportunity.count({
+      where: { leadId: opp.leadId, id: { not: id }, deletedAt: null },
+    });
+    if (liveElsewhere > 0) return false;
+    await tx.lead.update({ where: { id: opp.leadId }, data: archived });
+    return true;
+  });
+
   await logActivity(session, {
     action: "opportunity.archive",
     section: "opportunities",
     entityType: "Opportunity",
     entityId: id,
     summary: `Archived opportunity ${opp.name} for ${opp.lead.name}`,
-    meta: { leadId: opp.leadId },
+    meta: { leadId: opp.leadId, leadArchived },
   });
+  // A SECOND entry against the Lead, not just a flag on the one above: the lead's own activity
+  // trail is what someone reads when asking "why did this contact disappear", and it is the
+  // Pipeline/Contacts screens that surface it.
+  if (leadArchived) {
+    await logActivity(session, {
+      action: "lead.archive",
+      section: "pipeline",
+      entityType: "Lead",
+      entityId: opp.leadId,
+      summary: `Archived lead ${opp.lead.name} — its last board card was deleted`,
+      meta: { stage: opp.lead.stage, viaOpportunityId: id },
+    });
+  }
+
   revalidatePath("/opportunities");
   revalidatePath(`/contacts/${opp.leadId}`);
+  // The lead just left every lead-backed screen; without these they keep serving it from cache.
+  if (leadArchived) {
+    revalidatePath("/pipeline");
+    revalidatePath("/contacts");
+    revalidatePath("/my-desk");
+  }
   return { ok: true };
 }
 
-/** Restore an archived opportunity. */
+/**
+ * Restore an archived opportunity — and the lead with it, if the two were archived together.
+ *
+ * The pairing test is the shared `deletedAt` instant that `deleteOpportunity` stamps on both
+ * rows. Restoring on that basis and no other is what keeps this from over-reaching: a lead
+ * archived separately from the Pipeline screen, that happens to own an archived card, stays
+ * archived — undoing a board delete must not quietly undo a decision taken somewhere else.
+ *
+ * Without this the delete would be one-way in practice. The card would come back to the board
+ * while the lead behind it stayed archived, which is the mirror image of the bug being fixed:
+ * a live card pointing at a contact that no lead-backed screen will show.
+ */
 export async function restoreOpportunity(id: string): Promise<ActionResult> {
   const session = await requireSection("opportunities");
   const opp = await prisma.opportunity.findUnique({
     where: { id },
-    select: { leadId: true, name: true, deletedAt: true, lead: { select: { name: true } } },
+    select: {
+      leadId: true, name: true, deletedAt: true,
+      lead: { select: { name: true, deletedAt: true } },
+    },
   });
   if (!opp) return { ok: false, error: "Opportunity not found" };
   if (!opp.deletedAt) return { ok: false, error: "This opportunity is not archived" };
-  await prisma.opportunity.update({ where: { id }, data: restoreData });
+
+  const archivedTogether =
+    !!opp.lead.deletedAt && opp.lead.deletedAt.getTime() === opp.deletedAt.getTime();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.opportunity.update({ where: { id }, data: restoreData });
+    if (archivedTogether) await tx.lead.update({ where: { id: opp.leadId }, data: restoreData });
+  });
+
   await logActivity(session, {
     action: "opportunity.restore",
     section: "opportunities",
     entityType: "Opportunity",
     entityId: id,
     summary: `Restored opportunity ${opp.name} for ${opp.lead.name}`,
-    meta: { leadId: opp.leadId },
+    meta: { leadId: opp.leadId, leadRestored: archivedTogether },
   });
+  if (archivedTogether) {
+    await logActivity(session, {
+      action: "lead.restore",
+      section: "pipeline",
+      entityType: "Lead",
+      entityId: opp.leadId,
+      summary: `Restored lead ${opp.lead.name} — its board card was restored`,
+      meta: { viaOpportunityId: id },
+    });
+  }
+
   revalidatePath("/opportunities");
   revalidatePath(`/contacts/${opp.leadId}`);
+  if (archivedTogether) {
+    revalidatePath("/pipeline");
+    revalidatePath("/contacts");
+    revalidatePath("/my-desk");
+  }
   return { ok: true };
 }
 

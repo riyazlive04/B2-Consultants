@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Block } from "@/lib/sites-types";
 import SiteBlocks from "@/components/sites/SiteBlocks";
+import type { StepCalendars } from "@/server/booking-calendars";
 
 /**
  * The editable page surface — the real page, clickable.
@@ -36,6 +37,7 @@ const EDITABLE = new Set(["heading", "subheading", "eyebrow", "text"]);
 export default function Canvas({
   blocks,
   forms,
+  calendars,
   selectedId,
   onSelect,
   onMove,
@@ -46,6 +48,11 @@ export default function Canvas({
 }: {
   blocks: Block[];
   forms: Record<string, never>;
+  /**
+   * Live availability for any `booking` block on the page. Without it the production renderer
+   * honestly reports "no times are open", which in the EDITOR is a lie about the published page.
+   */
+  calendars?: StepCalendars;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onMove: (dragId: string, targetId: string, mode: "before" | "after" | "inside") => void;
@@ -197,9 +204,9 @@ export default function Canvas({
           }}
           onDragEnd={() => { setDragId(null); setDropHint(null); }}
         >
-          <Chrome blocks={chromeBefore} label="Global header — edit it on the Header tab" />
-          <SiteBlocks blocks={blocks} forms={forms} />
-          <Chrome blocks={chromeAfter} label="Global footer — edit it on the Footer tab" />
+          <Chrome blocks={chromeBefore} calendars={calendars} label="Global header — edit it on the Header tab" />
+          <SiteBlocks blocks={blocks} forms={forms} calendars={calendars} />
+          <Chrome blocks={chromeAfter} calendars={calendars} label="Global footer — edit it on the Footer tab" />
         </div>
       </div>
     </div>
@@ -213,14 +220,14 @@ export default function Canvas({
  * blocks through the real renderer — a sketched placeholder would be one more thing to drift out
  * of step with what actually ships.
  */
-function Chrome({ blocks, label }: { blocks?: Block[]; label: string }) {
+function Chrome({ blocks, calendars, label }: { blocks?: Block[]; calendars?: StepCalendars; label: string }) {
   if (!blocks?.length) return null;
   return (
     <div className="pointer-events-none relative select-none opacity-55 grayscale-[.35]">
       <span className="absolute right-2 top-2 z-10 rounded-full bg-ink/75 px-2 py-0.5 text-[11px] font-semibold text-surface">
         {label}
       </span>
-      <SiteBlocks blocks={blocks} forms={{}} />
+      <SiteBlocks blocks={blocks} forms={{}} calendars={calendars} />
     </div>
   );
 }

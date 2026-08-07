@@ -59,15 +59,15 @@ export default async function FunnelStepPage({
           bleed bands and embedded forms for free. Empty arrays render nothing at all. */}
       {data.header.length > 0 && (
         <header>
-          <SiteBlocks blocks={data.header} forms={data.forms} utm={utm} />
+          <SiteBlocks blocks={data.header} forms={data.forms} calendars={data.calendars} utm={utm} />
         </header>
       )}
 
-      <SiteBlocks blocks={data.step.blocks} forms={data.forms} utm={utm} />
+      <SiteBlocks blocks={data.step.blocks} forms={data.forms} calendars={data.calendars} utm={utm} />
 
       {data.footer.length > 0 ? (
         <footer>
-          <SiteBlocks blocks={data.footer} forms={data.forms} utm={utm} />
+          <SiteBlocks blocks={data.footer} forms={data.forms} calendars={data.calendars} utm={utm} />
         </footer>
       ) : (
         // The default sign-off, shown only when the funnel has not been given a footer of its

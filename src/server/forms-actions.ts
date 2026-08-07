@@ -11,6 +11,7 @@ import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
 import { upsertIntakeLead } from "./lead-intake";
+import { observedOriginDomain } from "./request-origin";
 import { ensureDefaultOpportunity } from "./opportunity-sync";
 import { emitTrigger } from "./automation";
 import { logActivity, diffFields } from "./activity-log";
@@ -417,6 +418,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
       source: "NATIVE_FORM",
       externalRef: null,
       utm: Object.keys(utm).length ? utm : null,
+      originDomain: await observedOriginDomain(),
     });
     leadId = lead.id;
 

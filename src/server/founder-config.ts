@@ -8,6 +8,7 @@ import {
   coerceCallDistribution,
   coerceBookingRulesConfig,
   coerceSlotPatternConfig,
+  coerceBookingCalendarsConfig,
   coerceCommissionRulesConfig,
   coerceDailyLogEod,
   coerceDailyLogTargets,
@@ -49,6 +50,7 @@ import {
   type CallDistributionConfig,
   type BookingRulesConfig,
   type SlotPatternConfig,
+  type BookingCalendar,
   type CommissionRulesConfig,
   type DailyLogEodConfig,
   type DailyLogTargets,
@@ -176,14 +178,21 @@ export const getBookingRulesConfig = cache(async (): Promise<BookingRulesConfig>
   return row ? coerceBookingRulesConfig(row.value) : DEFAULT_BOOKING_RULES_CONFIG;
 });
 
-/** Standing weekly availability, replayed forward nightly by `ensureBookingSlots`. */
-export const getSlotPatternConfig = cache(async (): Promise<SlotPatternConfig> => {
+/**
+ * The named booking calendars — one weekly pattern per person.
+ *
+ * Shares `SLOT_PATTERN_KEY` with the legacy single-pattern document rather than taking a key of
+ * its own: there is one answer to "what availability do we keep stocked?", and two rows would be
+ * two answers waiting to disagree. `coerceBookingCalendarsConfig` reads either shape, so the
+ * live pattern keeps working until the console next saves and rewrites it as a list.
+ */
+export const getBookingCalendars = cache(async (): Promise<BookingCalendar[]> => {
   const row = await readSetting(SLOT_PATTERN_KEY);
-  return row ? coerceSlotPatternConfig(row.value) : DEFAULT_SLOT_PATTERN_CONFIG;
+  return row ? coerceBookingCalendarsConfig(row.value).calendars : [];
 });
 
-export async function writeSlotPatternConfig(config: SlotPatternConfig): Promise<void> {
-  const value = config as unknown as Prisma.InputJsonValue;
+export async function writeBookingCalendars(calendars: BookingCalendar[]): Promise<void> {
+  const value = { calendars } as unknown as Prisma.InputJsonValue;
   await prisma.appSetting.upsert({
     where: { key: SLOT_PATTERN_KEY },
     create: { key: SLOT_PATTERN_KEY, value },

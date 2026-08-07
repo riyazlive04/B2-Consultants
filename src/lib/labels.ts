@@ -147,7 +147,7 @@ export const SOURCE_LABELS: Record<string, string> = {
 export const LEAD_STAGE_LABELS: Record<string, string> = {
   NEW_LEAD: "Fresh Optins",
   WHATSAPP_SENT: "WhatsApp Sent",
-  STRATEGY_CALL_BOOKED: "Strategy Call Booked",
+  STRATEGY_CALL_BOOKED: "Discovery Call Booked",
   DISCO_BOOKED: "DISCO Call booked",
   DISCO_NOT_BOOKED: "DISCO Call NOT booked",
   DISCO_COMPLETED: "DISCO Call completed",

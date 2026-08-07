@@ -23,6 +23,7 @@ import {
   renameFunnel, togglePublishFunnel, addStep, deleteStep, reorderSteps, saveStepBlocks,
   saveFunnelChrome, createVariant, setStepWeight, resetVariantViews,
 } from "@/server/funnels-actions";
+import type { StepCalendars } from "@/server/booking-calendars";
 
 // Grouped the way the builder offers them: bands and layout first (a page is built out of
 // containers), then content, then the escape hatch.
@@ -54,11 +55,14 @@ type Slot = "pages" | "header" | "footer";
 export default function FunnelBuilder({
   funnel,
   forms,
+  calendars,
   snippets,
   snippetCategories,
 }: {
   funnel: FunnelDetail;
   forms: { id: string; name: string }[];
+  /** Real open slots per booking-block owner, so the canvas previews the live calendar. */
+  calendars: StepCalendars;
   snippets: SnippetRow[];
   snippetCategories: string[];
 }) {
@@ -345,6 +349,7 @@ export default function FunnelBuilder({
           onChange={(b) => setSlotBlocks(slot, b)}
           onRemove={() => removeChrome(slot)}
           forms={forms}
+          calendars={calendars}
           snippets={snippets}
           snippetCategories={snippetCategories}
         />
@@ -416,6 +421,7 @@ export default function FunnelBuilder({
                 blocks={draft.blocks}
                 onChange={(blocks) => setDraft((d) => ({ ...d, blocks }))}
                 forms={forms}
+                calendars={calendars}
                 snippets={snippets}
                 snippetCategories={snippetCategories}
                 // The page is composed against the chrome it will ship inside — see Canvas.
@@ -569,13 +575,14 @@ function StepRow({
  * — a header edited inside a preview of one arbitrary step would suggest it belongs to that step.
  */
 function ChromeEditor({
-  which, blocks, onChange, onRemove, forms, snippets, snippetCategories,
+  which, blocks, onChange, onRemove, forms, calendars, snippets, snippetCategories,
 }: {
   which: "header" | "footer";
   blocks: Block[] | null;
   onChange: (b: Block[]) => void;
   onRemove: () => void;
   forms: { id: string; name: string }[];
+  calendars: StepCalendars;
   snippets: SnippetRow[];
   snippetCategories: string[];
 }) {
@@ -616,6 +623,7 @@ function ChromeEditor({
         blocks={blocks}
         onChange={onChange}
         forms={forms}
+        calendars={calendars}
         snippets={snippets}
         snippetCategories={snippetCategories}
       />

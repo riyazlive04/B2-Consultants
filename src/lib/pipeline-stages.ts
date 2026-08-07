@@ -37,7 +37,7 @@ export const SYNAMATE_STAGES: readonly SynamateStage[] = [
   // column on the board inside one that is meant to hold a handful of confirmed calls.
   { name: "Fresh Optins", legacyStage: "NEW_LEAD", paymentPlan: null },
   { name: "WhatsApp Sent", legacyStage: "WHATSAPP_SENT", paymentPlan: null },
-  { name: "Strategy Call Booked", legacyStage: "STRATEGY_CALL_BOOKED", paymentPlan: null },
+  { name: "Discovery Call Booked", legacyStage: "STRATEGY_CALL_BOOKED", paymentPlan: null },
   { name: "Cancelled/Unqualified", legacyStage: "LOST", paymentPlan: null },
   { name: "Pre-Qualified & Confirmed", legacyStage: "DISCO_BOOKED", paymentPlan: null },
   { name: "No Shows/Rescheduled", legacyStage: "NO_SHOW", paymentPlan: null },

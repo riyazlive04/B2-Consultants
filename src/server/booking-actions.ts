@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
-import { LeadSource } from "@prisma/client";
+import { LeadSource, type LeadStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
@@ -19,6 +19,7 @@ import { BOOKING_RULES_KEY, getBookingRulesConfig, writeBookingRulesConfig } fro
 import { logActivity, diffFields } from "./activity-log";
 import { emitTrigger } from "./automation";
 import { upsertIntakeLead } from "./lead-intake";
+import { observedOriginDomain } from "./request-origin";
 import { mirrorBookingScoreToLead } from "./lead-qualification";
 import { shadowScore } from "./qualification";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
@@ -45,10 +46,51 @@ const HOW_TO_CHANNEL: Record<string, LeadSource> = {
   youtube: "YOUTUBE",
   linkedin: "LINKEDIN",
   referral: "REFERRAL",
+  workshop: "WORKSHOP",
+  /**
+   * `LeadSource` has no FACEBOOK or GOOGLE member, so both coarsen to OTHER here. Nothing is
+   * lost: the precise answer is stored verbatim on `BookingRequest.howKnowUs`, which is what
+   * the closer reads — only the roll-up enum blurs. FACEBOOK is deliberately NOT mapped to
+   * META_ADS: that value means "arrived via the Meta Lead Ads webhook", and using it for
+   * someone who typed a form would corrupt paid-channel attribution.
+   *
+   * Worth an enum migration if either channel starts carrying real volume.
+   */
+  facebook: "OTHER",
+  google: "OTHER",
+  // Retired answers, still mapped so a replay of historical submissions lands the same way.
   summit: "SUMMIT",
   ghosted_blueprint: "GHOSTED_BLUEPRINT",
   other: "OTHER",
 };
+
+/**
+ * Stages a booking must NOT drag a lead out of — they are already at, or past, the booked-call
+ * column. Everything else advances (see the note at the update itself).
+ *
+ * `STRATEGY_CALL_BOOKED` is here because it is the destination: rebooking would otherwise write
+ * a stage-history row saying the lead moved from a stage to itself, and the desk's "moved today"
+ * counts read that table.
+ *
+ * The workshop pair is deliberately NOT here. Someone routed to the workshop who then books a
+ * discovery call HAS a discovery call booked, and the board should say so.
+ */
+const HOLDS_THROUGH_BOOKING: ReadonlySet<LeadStage> = new Set<LeadStage>([
+  "STRATEGY_CALL_BOOKED",
+  "DISCO_BOOKED",
+  "DISCO_COMPLETED",
+  "SSS_BOOKED",
+  "SSS_COMPLETED",
+  "PROPOSAL_SENT",
+  "OFFER_FOLLOWUP",
+  "DEPOSIT_FOLLOWUP",
+  "DEPOSIT_PAID",
+  "WON",
+]);
+
+/** A select whose answer the form now insists on. Blank is refused rather than stored as null. */
+const requiredChoice = (field: keyof typeof INTAKE_OPTIONS, message: string) =>
+  z.enum(valuesOf(field), { message });
 
 const bookingSchema = z.object({
   slotId: z.string().min(1, "Please choose an available time").max(64),
@@ -61,26 +103,42 @@ const bookingSchema = z.object({
   // report a booked prospect as "not booked".
   email: rule("email"),
   phone: rule("phone"),
+  /**
+   * ── Required, because the form marks them required ────────────────────────────
+   * The public questionnaire now stars every one of these. Leaving the schema permissive would
+   * mean the browser is the only thing enforcing them, and a crafted POST could bank a booked
+   * slot with no LinkedIn, no salary band and no BANT answers at all — which is precisely the
+   * submission the auto-disqualify gate cannot judge.
+   *
+   * Everything BELOW this block stays optional: those fields were removed from the form, and
+   * requiring a field nothing renders would reject every real submission.
+   */
+  linkedInProfile: rule("url"),
+  currentJobTitle: z.string().trim().min(1, "Please tell us your current job title").max(160),
+  prospectIndustry: z.string().trim().min(1, "Please tell us which industry you work in").max(160),
+  whyGermany: z
+    .string()
+    .trim()
+    .min(1, "Please tell us why you want to work in Germany")
+    .max(2000, "Please keep this under 2000 characters"),
+  highestEducation: requiredChoice("highestEducation", "Please pick your highest qualification"),
+  yearsExperience: requiredChoice("yearsExperience", "Please pick your years of experience"),
+  alreadyApplied: requiredChoice("alreadyApplied", "Please tell us where you are with applying"),
+  whenStartGermany: requiredChoice("whenStartGermany", "Please pick when you want to start"),
+  germanVisa: requiredChoice("germanVisa", "Please tell us about your visa status"),
+  germanLevel: requiredChoice("germanLevel", "Please pick your German level"),
+  willingnessLearnGerman: requiredChoice("willingnessLearnGerman", "Please tell us if you're ready to learn German"),
+  currentIncome: requiredChoice("currentIncome", "Please pick your current monthly salary"),
+  readyToInvest: requiredChoice("readyToInvest", "Please tell us how prepared you are to invest"),
+  decisionMaking: requiredChoice("decisionMaking", "Please tell us who makes the decision"),
+  howKnowUs: requiredChoice("howKnowUs", "Please tell us where you heard about us"),
+
+  // ── No longer on the public form; still accepted so older clients and the admin paths work ──
   whatsapp: optionalRule("phone"),
   city: optionalRule("city"),
-  currentJobTitle: z.string().trim().max(160).optional(),
-  prospectIndustry: z.string().trim().max(160).optional(),
-  linkedInProfile: optionalRule("url"),
-  highestEducation: optional("highestEducation"),
-  yearsExperience: optional("yearsExperience"),
-  whyGermany: z.string().trim().max(2000, "Please keep this under 2000 characters").optional(),
   participateWorkshop: optional("participateWorkshop"),
   reasonForCall: z.string().trim().max(2000, "Please keep this under 2000 characters").optional(),
-  alreadyApplied: optional("alreadyApplied"),
-  whenStartGermany: optional("whenStartGermany"),
-  germanVisa: optional("germanVisa"),
-  germanLevel: optional("germanLevel"),
-  willingnessLearnGerman: optional("willingnessLearnGerman"),
-  currentIncome: optional("currentIncome"),
-  readyToInvest: optional("readyToInvest"),
-  decisionMaking: optional("decisionMaking"),
   commitment: optional("commitment"),
-  howKnowUs: optional("howKnowUs"),
   // GDPR consent (spec §15). Optional in the SCHEMA but mandatory in the ACTION: an unticked
   // checkbox posts nothing at all, and a bare z.literal would fail with "Invalid literal
   // value" — useless to a prospect. Parsed loosely, then refused explicitly below.
@@ -196,6 +254,9 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
     source: "BOOKING_FORM" as const,
     utm,
     notes: clean(d.reasonForCall),
+    // Observed from this request, so a prospect who books through the funnel carries the host
+    // they booked on. Only fills a blank — see `acceptReturningOptIn`.
+    originDomain: await observedOriginDomain(),
   };
 
   // The qualification answers + BANT, shared by the booked AND the auto-disqualified paths so
@@ -344,17 +405,24 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
       });
 
       /**
-       * A booked call = STRATEGY_CALL_BOOKED, the board's "Strategy Call Booked" column.
+       * A booked call = STRATEGY_CALL_BOOKED, the board's "Discovery Call Booked" column.
        *
        * This used to jump straight to DISCO_BOOKED ("Pre-Qualified & Confirmed"), which claimed
        * the prospect had been qualified AND their call confirmed the instant they picked a slot —
        * neither of which has happened yet. Qualification moves them on from here.
        *
-       * Advances from WHATSAPP_SENT as well as NEW_LEAD, because with the intro now auto-sending
-       * that is the stage most leads are actually in by the time they book.
+       * The guard is a HOLD list rather than an allow list. It used to advance only NEW_LEAD and
+       * WHATSAPP_SENT, so a prospect who already existed in any OTHER stage booked a call and the
+       * board did not move at all — the 8,086 leads sitting in Cancelled/Unqualified could each
+       * book a discovery call and stay filed as written off. Someone who was given up on and comes
+       * back to book is the single most valuable card on the board, and it was invisible.
+       *
+       * Inverting it also means a stage added later advances by default, which is the safe
+       * direction: a missing early stage silently strands prospects, while a missing late stage
+       * would announce itself immediately by dragging a paying customer backwards.
        */
       const fresh = await tx.lead.findUnique({ where: { id: lead.id }, select: { stage: true } });
-      if (fresh && (fresh.stage === "NEW_LEAD" || fresh.stage === "WHATSAPP_SENT")) {
+      if (fresh && !HOLDS_THROUGH_BOOKING.has(fresh.stage)) {
         await tx.lead.update({ where: { id: lead.id }, data: { stage: "STRATEGY_CALL_BOOKED" } });
         await tx.leadStageHistory.create({
           data: { leadId: lead.id, fromStage: fresh.stage, toStage: "STRATEGY_CALL_BOOKED" },

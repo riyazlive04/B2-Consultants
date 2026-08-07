@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type { Block } from "@/lib/sites-types";
 import { assignVariant } from "@/lib/ab";
 import { getPublicFormsByIds, type PublicForm } from "./forms-metrics";
+import { collectBookingOwnerIds, getStepCalendars, type StepCalendars } from "./booking-calendars";
 
 /** Read layer for Funnels / landing pages (Synamate "Funnels"/"Websites"). */
 
@@ -136,6 +137,8 @@ export type PublicStep = {
   footer: Block[];
   steps: { name: string; slug: string; position: number }[];
   forms: Record<string, PublicForm>;
+  /** Open slots per `booking` block owner. Read fresh every request — see getStepCalendars. */
+  calendars: StepCalendars;
   /** True when a variant is being served. Not used to render anything — it is what makes the
    *  builder's preview honest about which page it is looking at. */
   isVariant: boolean;
@@ -211,7 +214,11 @@ export async function getPublicStep(funnelSlug: string, stepSlug: string, visito
   const blocks = (chosen.blocks as Block[]) ?? [];
   // Chrome is collected too: a header with the newsletter form in it is the exact case where a
   // form silently failing to resolve would be least visible in the builder and most costly live.
-  const forms = await getPublicFormsByIds([...new Set(collectFormIds([...header, ...blocks, ...footer]))]);
+  const all = [...header, ...blocks, ...footer];
+  const forms = await getPublicFormsByIds([...new Set(collectFormIds(all))]);
+  // Same contract as `forms`: resolved here so `SiteBlocks` stays a pure renderer and a booking
+  // widget can never end up fetching from inside a client component.
+  const calendars = await getStepCalendars(collectBookingOwnerIds(all));
 
   return {
     funnelName: f.name,
@@ -232,6 +239,7 @@ export async function getPublicStep(funnelSlug: string, stepSlug: string, visito
     footer,
     steps: f.steps.filter((s) => !s.abTestOf).map((s) => ({ name: s.name, slug: s.slug, position: s.position })),
     forms,
+    calendars,
     isVariant: chosen.id !== step.id,
   };
 }

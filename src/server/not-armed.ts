@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getEmailRuntime } from "@/lib/email";
 import { getWatiRuntime } from "@/lib/wati";
 import {
-  getSlotPatternConfig,
+  getBookingCalendars,
   getMaintenanceConfig,
   getFinancePostingConfig,
   getSpeedToLeadAlertConfig,
@@ -54,7 +54,7 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
     await Promise.all([
       getEmailRuntime(),
       getWatiRuntime(),
-      getSlotPatternConfig(),
+      getBookingCalendars(),
       getMaintenanceConfig(),
       getFinancePostingConfig(),
       getSpeedToLeadAlertConfig(),
@@ -93,9 +93,12 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
     {
       key: "availability",
       name: "Discovery-call availability",
-      armed: slots.enabled && slots.weekdays.length > 0,
+      // Armed when at least ONE calendar can actually produce a slot. Asking whether *every*
+      // calendar is on would light this warning for a deliberately paused one; asking whether
+      // any exists at all would call a switched-off list armed.
+      armed: slots.some((c) => c.enabled && c.weekdays.length > 0),
       consequence:
-        "No slots are generated, so /book shows every prospect an empty calendar and no discovery call can be booked at all. The Bookings page and both specialist desks are empty as a direct result.",
+        "No slots are generated, so /book and every funnel booking page show prospects an empty calendar and no discovery call can be booked at all. The Bookings page and both specialist desks are empty as a direct result.",
       where: "Console → Sales ops → Availability",
     },
     {

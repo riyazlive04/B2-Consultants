@@ -5,6 +5,7 @@ import { istToday } from "@/lib/dates";
 import { formatDate, formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import {
   WHATSAPP_KIND_LABELS,
+  domainAllows,
   redirectedBodyPrefix,
   resolveDestination,
   type WatiTemplateConfig,
@@ -198,6 +199,32 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
         `Template "${template.name}" expects ${built.missing.map((m) => `{{${m}}}`).join(", ")}, ` +
         `which "${label}" cannot supply. Fix the variable list in WhatsApp → Settings.`;
     } else if (await isOptedOut(number)) dataSkip = "Recipient has opted out of WhatsApp";
+    else {
+      /**
+       * The domain gate: WATI serves only contacts who came in through the hostnames Ameen
+       * listed in WhatsApp → Domains.
+       *
+       * Filed as a `dataSkip` rather than `systemOff` because it is a fact about THIS recipient,
+       * not about the system — so it always writes a row saying which domain was refused. A
+       * message that vanishes with no trace is the thing that makes a gate impossible to debug
+       * six weeks later.
+       *
+       * Only leads carry an origin. A send addressed at a student, an agreement or the book
+       * publisher has no lead to look up, and `domainAllows(…, null)` lets those through — the
+       * gate is about where a PROSPECT came from, and it must never hold up a signed student's
+       * paperwork.
+       */
+      const gate = runtime.settings.domainGate;
+      if (gate.enabled && gate.domains.length > 0 && target.leadId) {
+        const lead = await prisma.lead.findUnique({
+          where: { id: target.leadId },
+          select: { originDomain: true },
+        });
+        if (!domainAllows(gate, lead?.originDomain)) {
+          dataSkip = `Blocked by the WhatsApp domain gate — this contact came from "${lead?.originDomain}", which is not in the allowed list.`;
+        }
+      }
+    }
   }
 
   const skipReason = systemOff ?? dataSkip;
@@ -516,8 +543,38 @@ export async function runDueReminders(): Promise<ReminderRun> {
   // 1. Discovery-call reminders — un-booked leads.
   if (budget > 0 && hasTemplate("DISCO_REMINDER")) {
     const cutoff = new Date(now - cadence.discoFirstDelayHours * HR);
+    const oldest = new Date(now - cadence.discoMaxAgeDays * 24 * HR);
     const leads = await prisma.lead.findMany({
-      where: { ...ACTIVE, stage: { in: ["NEW_LEAD", "DISCO_NOT_BOOKED"] }, createdAt: { lte: cutoff }, phone: { not: "" } },
+      where: {
+        ...ACTIVE,
+        stage: { in: ["NEW_LEAD", "DISCO_NOT_BOOKED"] },
+        phone: { not: "" },
+        /**
+         * ── The engine chases a recent ACTION, never merely a recent row ──────────
+         * This used to read `createdAt: { lte: cutoff }` on the lead: "old enough to chase" with
+         * nothing saying "not TOO old", so every un-booked lead ever created qualified and
+         * `orderBy asc` started at the oldest row in the table. Bounding `createdAt` would have
+         * fixed the blast radius and still answered the wrong question — creation is not
+         * consent to be messaged today.
+         *
+         * `outreachJourney.optInAt` is the moment the prospect last actually opted in, and
+         * `acceptReturningOptIn` resets it to now whenever they submit again. So a lead who
+         * went cold eighteen months ago is silent until the day they opt in afresh — and then
+         * they are picked up immediately, with no backfill of the reminders they missed.
+         *
+         * Requiring the relation to EXIST is the other half. The 23,429 contacts imported from
+         * Synamate have no journey, so they cannot be selected by this query at all: the engine
+         * can only reach people who came through an intake that created one. That is
+         * fail-closed, and it is why arming WhatsApp is now a decision about 207 leads rather
+         * than 13,103.
+         *
+         * A booking needs no clause here — it moves the lead out of these two stages entirely,
+         * and BOOKING_REMINDER takes over keyed on the slot time.
+         */
+        outreachJourney: { optInAt: { gte: oldest, lte: cutoff } },
+      },
+      // Oldest first WITHIN the window: those are the ones about to age out of it, so a run that
+      // hits `maxPerRun` spends its budget on the leads that will otherwise never be chased.
       orderBy: { createdAt: "asc" },
       take: Math.min(budget * 2 + 50, 500),
       select: { id: true, name: true, phone: true },

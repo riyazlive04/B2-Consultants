@@ -199,6 +199,29 @@ export type WatiCadence = {
   discoRepeatHours: number;
   /** Hard cap on discovery reminders per lead. */
   discoMaxReminders: number;
+  /**
+   * Never chase a lead whose LAST OPT-IN is more than this many days ago.
+   *
+   * Measured from `OutreachJourney.optInAt`, not from when the lead row was created — a returning
+   * opt-in resets that timestamp, so submitting the form again is what brings a dormant prospect
+   * back into scope. Age of the record is not consent to be messaged today.
+   *
+   * ── Why this exists ────────────────────────────────────────────────────────────
+   * The candidate query was `createdAt <= now - discoFirstDelayHours` with NO lower bound, and
+   * ordered OLDEST FIRST. Every un-booked lead ever created therefore qualified, and the engine
+   * started at the very oldest row in the table. Switching WhatsApp on for the first time on
+   * 06/08/2026 sent 98 discovery reminders walking forward from the start of the database —
+   * people who opted in months ago and had long since gone cold.
+   *
+   * The test-recipient valve caught all of them, which is the only reason this reads as an
+   * anecdote rather than an incident. Without it, the first click of the master switch would
+   * have messaged thousands of strangers about a call they never asked about.
+   *
+   * A cap in DAYS, not a row limit: `maxPerRun` only decides how many go out per tick, so an
+   * unbounded window drains the backlog over hours instead of seconds. The question is not how
+   * fast to chase old leads, it is whether to chase them at all.
+   */
+  discoMaxAgeDays: number;
   /** Hours-before-slot at which to send a pre-call reminder (each once). */
   bookingReminderLeadHours: number[];
   /** Delay after a No-show before the rebook nudge. */
@@ -228,6 +251,9 @@ export const DEFAULT_CADENCE: WatiCadence = {
   discoFirstDelayHours: 2,
   discoRepeatHours: 24,
   discoMaxReminders: 3,
+  // 30 days. Long enough to cover a real nurture window, short enough that arming the engine
+  // cannot reach back into a historical import.
+  discoMaxAgeDays: 30,
   bookingReminderLeadHours: [24, 2],
   noShowDelayHours: 2,
   paymentRepeatHours: 72,
@@ -273,7 +299,60 @@ export type WatiSettings = {
    * which would either send to nobody or fail open to everybody.
    */
   testRecipient: string | null;
+  /**
+   * Restrict outbound WhatsApp to contacts who arrived through named hostnames.
+   *
+   * `enabled: false` (the default) is the behaviour that existed before this: WATI serves every
+   * contact regardless of where they came from.
+   *
+   * ── Why an unknown origin is ALLOWED, not blocked ─────────────────────────────
+   * `Lead.originDomain` is only observed from 07/08/2026 onward, and the 23,429 contacts imported
+   * from Synamate have no host to record — they never will. Reading NULL as "not on the list"
+   * would mean switching this on silences every booking confirmation, reminder and dunning
+   * message for 99% of the database, instantly and silently. So the gate only ever blocks a
+   * contact whose origin IS known and is NOT listed. It is a filter on new traffic, not a
+   * whitelist of the existing book.
+   */
+  domainGate: WatiDomainGate;
 };
+
+export type WatiDomainGate = {
+  enabled: boolean;
+  /** Bare hostnames, lower-cased, no scheme/port/path. Empty while `enabled` is a no-op — see below. */
+  domains: string[];
+};
+
+/**
+ * Normalise whatever someone typed into a bare hostname.
+ *
+ * People paste URLs. "https://optin.b2consultants.de/apply-team?x=1" and "optin.b2consultants.de"
+ * are the same domain to everyone except a string compare, and a gate that silently fails to
+ * match because of a trailing slash is worse than no gate — it blocks messages nobody can explain.
+ */
+export function normalizeDomain(raw: string): string | null {
+  let s = raw.trim().toLowerCase();
+  if (!s) return null;
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, ""); // scheme
+  s = s.split("/")[0].split("?")[0].split("#")[0]; // path/query/fragment
+  s = s.replace(/^www\./, ""); // www is not a different site
+  s = s.split(":")[0]; // port
+  // A hostname, not a sentence. Rejects spaces, empty labels and bare TLDs.
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(s) || s === "localhost" ? s : null;
+}
+
+/**
+ * May this contact be messaged?
+ *
+ * Pure, so the gate's rule is testable and reads the same everywhere it is explained. Both
+ * "gate off" and "no domains listed" pass everything: an enabled gate with an empty list is
+ * someone mid-setup, and interpreting it as "block all" would take the whole system down between
+ * two clicks.
+ */
+export function domainAllows(gate: WatiDomainGate, originDomain: string | null | undefined): boolean {
+  if (!gate.enabled || gate.domains.length === 0) return true;
+  if (!originDomain) return true; // not observed → not blocked
+  return gate.domains.includes(originDomain);
+}
 
 /**
  * No touchpoint is mapped by default, on purpose.
@@ -297,6 +376,8 @@ export const DEFAULT_WATI_SETTINGS: WatiSettings = {
   cadence: DEFAULT_CADENCE,
   // Off by default: a fresh install must behave normally. Turning it ON is the deliberate act.
   testRecipient: null,
+  // Same rule: shipped off, so nothing about existing sending changes until someone arms it.
+  domainGate: { enabled: false, domains: [] },
 };
 
 /**

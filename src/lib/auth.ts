@@ -21,9 +21,36 @@ const baseURL =
 // EXTRA_TRUSTED_ORIGINS (comma-separated) lets a temporary tunnel (e.g. ngrok) sign in
 // WITHOUT repointing BETTER_AUTH_URL — so emailed/booking/agreement links keep using the
 // real base URL. Leave it unset in production; it only widens the sign-in origin allow-list.
+/**
+ * Local development is trusted on ANY port, automatically.
+ *
+ * `BETTER_AUTH_URL` names one origin, and better-auth rejects every other — so running the dev
+ * server on 3001 because 3000 was busy produced "Sign-in failed: Invalid origin", which reads
+ * like a broken password rather than a config mismatch and sends you looking at the user table.
+ * The ports below are what `next dev` actually walks through when one is taken.
+ *
+ * Gated on NODE_ENV, so this widens nothing in production.
+ */
+const devOrigins =
+  process.env.NODE_ENV === "production"
+    ? []
+    : [3000, 3001, 3002, 3003].flatMap((p) => [`http://localhost:${p}`, `http://127.0.0.1:${p}`]);
+
+/**
+ * The deployed hostname, from the same variable the compose file and Caddy already require.
+ *
+ * Belt and braces with `baseURL`: those two are set in one file and WILL drift, and when they do
+ * the symptom is that nobody can sign in to production. Trusting APP_DOMAIN as well means a
+ * stale BETTER_AUTH_URL breaks emailed links — annoying, visible, fixable — instead of the front
+ * door.
+ */
+const appDomainOrigin = process.env.APP_DOMAIN ? `https://${process.env.APP_DOMAIN.trim()}` : null;
+
 const trustedOrigins = [
   process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
   process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
+  appDomainOrigin,
+  ...devOrigins,
   ...(process.env.EXTRA_TRUSTED_ORIGINS?.split(",").map((o) => o.trim()) ?? []),
 ].filter((o): o is string => Boolean(o));
 

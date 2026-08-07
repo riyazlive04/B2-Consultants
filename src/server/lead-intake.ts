@@ -44,6 +44,15 @@ export type IntakeLead = {
   source: Source;
   externalRef?: string | null;
   utm?: Record<string, string> | null;
+  /**
+   * The hostname this person actually arrived through, taken from the request that created them.
+   *
+   * OBSERVED ONLY — never inferred from a funnel slug or a UTM code. The WhatsApp domain gate
+   * treats a recorded value as grounds to BLOCK a message, so a guess written here would silence
+   * a real prospect on the strength of something nobody checked. Omit it and the lead keeps a
+   * NULL origin, which the gate reads as "unknown" and always lets through.
+   */
+  originDomain?: string | null;
   notes?: string | null;
   /**
    * The sender's RAW payload, when it may carry qualification answers.
@@ -242,6 +251,10 @@ async function acceptReturningOptIn(
     city: existing.city ?? input.city ?? null,
     industry: existing.industry ?? input.industry ?? null,
     utm: existing.utm === null && utm !== undefined ? utm : undefined,
+    // Same fill-blanks-only contract: the FIRST domain someone was seen on is the one that
+    // sticks. Overwriting it on a later opt-in would rewrite history every time they came back
+    // through a different page, and the gate would start judging them by their most recent visit.
+    originDomain: existing.originDomain ?? input.originDomain ?? null,
   };
 
   if (!plan.reopened) {
@@ -403,6 +416,7 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
         source: input.source,
         externalRef: input.externalRef ?? null,
         utm,
+        originDomain: input.originDomain ?? null,
         dateIn: istToday(),
         stage: "NEW_LEAD",
         notes: input.notes ?? null,

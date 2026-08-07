@@ -24,6 +24,7 @@ export function PhoneField({
   required,
   size = "md",
   id,
+  placeholder,
 }: {
   name: string;
   defaultValue?: string;
@@ -31,6 +32,11 @@ export function PhoneField({
   required?: boolean;
   size?: ControlSize;
   id?: string;
+  /**
+   * Overrides the country's example number. The example is the better default — it teaches the
+   * expected format — so this is only for a form whose wording is fixed by an external spec.
+   */
+  placeholder?: string;
 }) {
   const initial = defaultValue ? splitE164(defaultValue) : { iso: defaultCountry, national: "" };
   const { invalid, "aria-describedby": describedBy } = useControlProps();
@@ -69,7 +75,7 @@ export function PhoneField({
             aria-required={required || undefined}
             aria-invalid={invalid || lengthBad || undefined}
             aria-describedby={describedBy}
-            placeholder={country.example}
+            placeholder={placeholder ?? country.example}
             value={national}
             onChange={(e) => setNational(e.currentTarget.value.replace(/[^\d\s]/g, ""))}
             className={inputCls}

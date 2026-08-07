@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CalendarCheck, CalendarDays, CheckCircle2, Clock, MailCheck } from "lucide-react";
 import { submitBooking } from "@/server/booking-actions";
 import { BrandLogo } from "@/components/shell/BrandLogo";
+import {
+  BookingIntakeFields,
+  BookingIntakeHiddenFields,
+  type IntakeSection,
+} from "@/components/booking/BookingIntakeFields";
 import { Btn } from "@/components/ui/controls";
-import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
-import { PhoneField } from "@/components/ui/PhoneField";
-import { INTAKE_OPTIONS } from "@/lib/booking-intake";
-import { CONSENT_LABEL, CONSENT_VALUE } from "@/lib/consent";
+import { FormError, SubmitButton } from "@/components/ui/form";
 import { slotTypeLabel } from "@/lib/labels";
 import { SlotCalendar } from "./SlotCalendar";
 
@@ -25,29 +27,34 @@ export type SlotOption = {
   startsAtIso: string;
 };
 
-const withPlaceholder = (opts: readonly { value: string; label: string }[], placeholder: string) => [
-  { value: "", label: placeholder },
-  ...opts,
-];
-
-/** The wizard, in order. Titles are the only copy the step header needs. */
+/**
+ * The wizard, in order.
+ *
+ * Each question step names a rung of the intake ladder rather than listing fields: the questions
+ * themselves live in `BookingIntakeFields`, which is also what the funnel block and the per-person
+ * calendar render. That indirection is the point — every `name` here maps to a BANT answer, so a
+ * second copy of these inputs would silently score funnel leads differently from /book leads.
+ */
 const STEPS = [
-  { title: "Select date & time", hint: "" },
-  { title: "Your details", hint: "So we know who we're speaking to." },
-  { title: "Your background", hint: "A quick picture of where you are today." },
-  { title: "Your Germany plan", hint: "Where you're trying to get to." },
-  { title: "Fit & commitment", hint: "The last few — then you're booked." },
-] as const;
+  { title: "Select date & time", hint: "", section: null },
+  { title: "Your details", hint: "So we know who we're speaking to.", section: "identity" },
+  { title: "Your background", hint: "A quick picture of where you are today.", section: "credentials" },
+  { title: "Your Germany plan", hint: "Where you're trying to get to.", section: "motivation" },
+  { title: "Fit & commitment", hint: "The last few — then you're booked.", section: "commercial" },
+] as const satisfies readonly { title: string; hint: string; section: IntakeSection | null }[];
 
 /**
  * The public booking flow: pick a time, then four short pages of questions.
  *
  * ── Why it is paginated ─────────────────────────────────────────────────────────
- * This was one scroll: ninety slot chips, then contact details, then fourteen qualification
- * questions and two free-text boxes, all visible at once. Everything being on screen together
+ * This was one scroll: ninety slot chips, then contact details, then nineteen qualification
+ * questions and a free-text box, all visible at once. Everything being on screen together
  * reads as a form — and a long one — rather than as booking a call, and the length is the thing
  * a prospect judges before they start. Four pages of four-to-six fields ask for exactly the same
  * information and never look like more than a minute's work.
+ *
+ * It also enforces the ladder the question order encodes: the commercial questions (salary, who
+ * decides) cannot appear until identity and motivation are already answered.
  *
  * ── Why every step stays mounted ────────────────────────────────────────────────
  * Steps are hidden with `display:none`, never unmounted. A hidden input still posts its value;
@@ -56,7 +63,8 @@ const STEPS = [
  * submit — the server action is untouched.
  *
  * `required` is checked per step on the way forward, so the browser never has to complain about
- * a field it cannot scroll to.
+ * a field it cannot scroll to. Every intake field is required, so this is what carries a prospect
+ * to a complete answer set instead of a server-side rejection at the end.
  */
 export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName?: string | null }) {
   const [slotId, setSlotId] = useState<string>("");
@@ -64,20 +72,8 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
   const [dir, setDir] = useState<"fwd" | "back">("fwd");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ slot: SlotOption | null; declined: boolean } | null>(null);
-  const utmRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
-
-  // Capture UTM / attribution params from the landing URL so the lead carries its source.
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search);
-    const utm: Record<string, string> = {};
-    for (const k of ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "gclid", "fbclid"]) {
-      const v = p.get(k);
-      if (v) utm[k] = v;
-    }
-    if (utmRef.current) utmRef.current.value = Object.keys(utm).length ? JSON.stringify(utm) : "";
-  }, []);
 
   /**
    * Starts as IST and is replaced by the visitor's own zone on mount.
@@ -302,109 +298,19 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
       </div>
       <input type="hidden" name="slotId" value={slotId} />
 
-      {/* ── 2. Contact ── */}
-      <div data-step={1} className={panel(1)}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Full name"><TextInput kind="name" name="name" required placeholder="Your name" /></Field>
-          <Field label="Email"><TextInput kind="email" name="email" required placeholder="you@email.com" /></Field>
-          <Field label="Phone / WhatsApp" hint="Pick your country, then type your number">
-            <PhoneField name="phone" required />
-          </Field>
-          <Field label="WhatsApp (if different)"><PhoneField name="whatsapp" /></Field>
-          <Field label="City"><TextInput kind="city" name="city" placeholder="Your city" /></Field>
-          <Field label="How did you hear about us?">
-            <Select name="howKnowUs" options={withPlaceholder(INTAKE_OPTIONS.howKnowUs, "Select…")} defaultValue="" />
-          </Field>
-        </div>
-        <p className="mt-3 text-caption text-muted">
-          By sharing your number you agree to receive your booking confirmation and call reminders on WhatsApp.
-          Reply <strong>STOP</strong> anytime to opt out.
-        </p>
-      </div>
+      {/* ── 2–5. The intake ladder, one rung per step ──
+          `headings={false}`: the step header above already names the rung, and the component's own
+          "Enter details" h2 would repeat it on every page. */}
+      {STEPS.map((s, i) =>
+        s.section ? (
+          <div key={s.section} data-step={i} className={panel(i)}>
+            <BookingIntakeFields section={s.section} headings={false} />
+          </div>
+        ) : null,
+      )}
 
-      {/* ── 3. Background ── */}
-      <div data-step={2} className={panel(2)}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* Job title / industry stay unfiltered: "Engineer II", "Industry 4.0" are real answers. */}
-          <Field label="Current job title"><TextInput kind="text" maxLength={160} name="currentJobTitle" placeholder="e.g. Mechanical Engineer" /></Field>
-          <Field label="Industry"><TextInput kind="text" maxLength={160} name="prospectIndustry" placeholder="e.g. Automotive" /></Field>
-          <Field label="LinkedIn profile"><TextInput kind="url" name="linkedInProfile" placeholder="linkedin.com/in/you" /></Field>
-          <Field label="Highest education">
-            <Select name="highestEducation" options={withPlaceholder(INTAKE_OPTIONS.highestEducation, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Years of experience">
-            <Select name="yearsExperience" options={withPlaceholder(INTAKE_OPTIONS.yearsExperience, "Select…")} defaultValue="" />
-          </Field>
-        </div>
-      </div>
-
-      {/* ── 4. Germany plan ── */}
-      <div data-step={3} className={panel(3)}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="When do you want to start working in Germany?">
-            <Select name="whenStartGermany" options={withPlaceholder(INTAKE_OPTIONS.whenStartGermany, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Have you already applied to jobs in Germany?">
-            <Select name="alreadyApplied" options={withPlaceholder(INTAKE_OPTIONS.alreadyApplied, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Do you hold a German visa?">
-            <Select name="germanVisa" options={withPlaceholder(INTAKE_OPTIONS.germanVisa, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Your German language level">
-            <Select name="germanLevel" options={withPlaceholder(INTAKE_OPTIONS.germanLevel, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Willing to learn German?">
-            <Select name="willingnessLearnGerman" options={withPlaceholder(INTAKE_OPTIONS.willingnessLearnGerman, "Select…")} defaultValue="" />
-          </Field>
-        </div>
-      </div>
-
-      {/* ── 5. Fit, commitment and consent ── */}
-      <div data-step={4} className={panel(4)}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Current annual income">
-            <Select name="currentIncome" options={withPlaceholder(INTAKE_OPTIONS.currentIncome, "Prefer not to say")} defaultValue="" />
-          </Field>
-          <Field label="Ready to invest in the right program?">
-            <Select name="readyToInvest" options={withPlaceholder(INTAKE_OPTIONS.readyToInvest, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="Who makes the decision?">
-            <Select name="decisionMaking" options={withPlaceholder(INTAKE_OPTIONS.decisionMaking, "Select…")} defaultValue="" />
-          </Field>
-          <Field label="How committed are you?">
-            <Select name="commitment" options={withPlaceholder(INTAKE_OPTIONS.commitment, "Select…")} defaultValue="" />
-          </Field>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4">
-          <Field label="Why Germany?" hint="A sentence or two on what you're hoping for.">
-            <TextArea kind="text" name="whyGermany" />
-          </Field>
-          <Field label="Anything you'd like to focus on in the call?">
-            <TextArea kind="text" name="reasonForCall" />
-          </Field>
-        </div>
-
-        {/*
-          GDPR consent (spec §15). `required` gives the prospect an instant browser-native
-          message instead of a server round-trip, but it is only a courtesy — submitBooking
-          refuses unconsented submissions regardless, since a client-side attribute is not a
-          compliance control.
-        */}
-        <div className="mt-4 rounded-field border border-line bg-surface-2 px-4 py-1">
-          <CheckboxField name="consent" value={CONSENT_VALUE} required label={CONSENT_LABEL} />
-        </div>
-      </div>
-
-      {/* honeypot - hidden from real users; bots fill it and get silently dropped */}
-      <input
-        type="text"
-        name="company_website"
-        tabIndex={-1}
-        autoComplete="off"
-        aria-hidden="true"
-        className="absolute left-[-9999px] h-0 w-0 opacity-0"
-      />
-      <input type="hidden" name="utm" ref={utmRef} defaultValue="" />
+      {/* Once for the whole form, outside the panels — two `name="utm"` inputs would post twice. */}
+      <BookingIntakeHiddenFields />
 
       {/* ── Wizard controls ── */}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">

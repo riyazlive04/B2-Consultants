@@ -19,7 +19,7 @@ import {
   getScheduledReportConfig,
   getFinancePostingConfig,
   getInstalmentPlanConfig,
-  getSlotPatternConfig,
+  getBookingCalendars,
   getSssPatternConfig,
   getSssConfig,
   getBookingRulesConfig,
@@ -170,7 +170,7 @@ export default async function ConsolePage() {
     getMaintenanceConfig(),
     getScheduledReportConfig(),
     getFinancePostingConfig(),
-    getSlotPatternConfig(),
+    getBookingCalendars(),
     getSssPatternConfig(),
     getSssConfig(),
     getBookingRulesConfig(),
@@ -350,7 +350,7 @@ export default async function ConsolePage() {
                     label: "Availability",
                     content: (
                       <AvailabilityPanel
-                        booking={slotPattern}
+                        calendars={slotPattern}
                         sss={sssPattern}
                         people={bookableMembers}
                         sssOwnerName={sssOwner?.name ?? sssOwner?.email ?? null}

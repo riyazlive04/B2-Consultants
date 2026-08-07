@@ -325,6 +325,10 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
         assignedToId: userId,
         status: "BOOKED",
         startsAt: { gte: day.end, lt: new Date(day.end.getTime() + DAY_MS) },
+        // Reached via AppointmentSlot → BookingRequest → Lead, so unlike every other read on
+        // this desk it never saw the lead's `deletedAt` — an archived lead holding a slot stayed
+        // on tomorrow's list. A booking with no lead behind it is still a call, hence the OR.
+        booking: { is: { OR: [{ leadId: null }, { lead: { deletedAt: null } }] } },
       },
       select: {
         id: true, startsAt: true,

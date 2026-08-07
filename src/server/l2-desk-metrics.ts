@@ -159,6 +159,11 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
         assignedToId: userId,
         status: "BOOKED",
         startsAt: { gte: day.start, lt: day.end },
+        // Today's list reaches its people through AppointmentSlot → BookingRequest → Lead, so
+        // it never passed through the `deletedAt` filter every other desk read uses: an archived
+        // lead with a booked slot stayed on this list. `leadId: null` is kept deliberately — a
+        // booking made by someone who never became a lead is still a call that must be taken.
+        booking: { is: { OR: [{ leadId: null }, { lead: { deletedAt: null } }] } },
       },
       select: {
         id: true, startsAt: true,

@@ -288,11 +288,19 @@ export default function Board({
     setEditCard(null);
   }
 
+  // Deleting the last card a lead has also archives the LEAD, so it leaves the callers' desks
+  // and the Pipeline list too (`deleteOpportunity`). The confirm says so, because "delete" here
+  // now reaches further than the board — and both halves come back together from Archived.
   async function removeOpp() {
     if (!editCard) return;
-    if (!(await askConfirm({ title: `Delete "${editCard.name}"?`, danger: true }))) return;
+    const ok = await askConfirm({
+      title: `Delete "${editCard.name}"?`,
+      body: "The card and the lead behind it are archived together — the lead leaves the Pipeline list and its owner's desk. Restore both from the Archived tab.",
+      danger: true,
+    });
+    if (!ok) return;
     const res = await deleteOpportunity(editCard.id);
-    if (res.ok) { toast("Opportunity deleted"); setEditCard(null); }
+    if (res.ok) { toast("Opportunity and lead archived"); setEditCard(null); }
     else toast(res.error, "error");
   }
 

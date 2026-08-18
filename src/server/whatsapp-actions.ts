@@ -317,7 +317,18 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
     if (name) templates[kind] = { name, ...(broadcast ? { broadcastName: broadcast } : {}), params };
   }
 
+  // Per-touchpoint switches. An unchecked switch submits nothing, so absence means OFF — safe
+  // here (unlike emiPreDueLive below) because turning a reminder off is the harmless direction,
+  // and the settings form always renders all six.
+  const on = (key: string) => form.get(key) === "on" || form.get(key) === "true";
+
   const cadence: WatiCadence = {
+    discoEnabled: on("discoEnabled"),
+    bookingReminderEnabled: on("bookingReminderEnabled"),
+    noShowEnabled: on("noShowEnabled"),
+    paymentEnabled: on("paymentEnabled"),
+    emiPreDueEnabled: on("emiPreDueEnabled"),
+    studentNudgesEnabled: on("studentNudgesEnabled"),
     discoFirstDelayHours: num(form, "discoFirstDelayHours", DEFAULT_CADENCE.discoFirstDelayHours),
     discoRepeatHours: num(form, "discoRepeatHours", DEFAULT_CADENCE.discoRepeatHours),
     discoMaxReminders: num(form, "discoMaxReminders", DEFAULT_CADENCE.discoMaxReminders),

@@ -193,6 +193,21 @@ export function whatsappStatusTone(status: WhatsAppStatus): "good" | "warn" | "b
 
 // ── Cadence (editable in settings; these are the defaults) ──
 export type WatiCadence = {
+  /**
+   * Per-touchpoint switches for the scheduled reminder run. Each one silences ONE touchpoint of
+   * `runDueReminders` without touching its numbers, its template mapping, or the other
+   * touchpoints — so an admin can pause "chase unpaid fees" while "remind about tomorrow's call"
+   * keeps going. They only affect the CRON engine: manual sends from the section rows and
+   * event-driven sends (booking confirmation, agreement links) are deliberate human/flow acts
+   * and stay available.
+   */
+  discoEnabled: boolean;
+  bookingReminderEnabled: boolean;
+  noShowEnabled: boolean;
+  paymentEnabled: boolean;
+  emiPreDueEnabled: boolean;
+  /** One switch for both student nudges (check-in + sprint-miss) — they share a cadence field. */
+  studentNudgesEnabled: boolean;
   /** Wait this long after a lead first arrives before the first discovery reminder. */
   discoFirstDelayHours: number;
   /** Minimum spacing between two discovery reminders to the same lead. */
@@ -248,6 +263,14 @@ export type WatiCadence = {
 };
 
 export const DEFAULT_CADENCE: WatiCadence = {
+  // All on by default: an existing install keeps behaving exactly as before these switches
+  // existed. Every touchpoint is still inert until its template is mapped and WATI is armed.
+  discoEnabled: true,
+  bookingReminderEnabled: true,
+  noShowEnabled: true,
+  paymentEnabled: true,
+  emiPreDueEnabled: true,
+  studentNudgesEnabled: true,
   discoFirstDelayHours: 2,
   discoRepeatHours: 24,
   discoMaxReminders: 3,

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/feedback";
 import { Select, TextInput } from "@/components/ui/form";
+import { Switch } from "@/components/ui/controls";
 import { saveWatiSettings, refreshWatiTemplates } from "@/server/whatsapp-actions";
 import {
   WHATSAPP_KINDS,
@@ -29,6 +30,43 @@ function NumField({ name, label, defaultValue, hint }: { name: string; label: st
   );
 }
 
+/**
+ * One touchpoint of the reminder schedule: a title, its on/off switch, and its cadence fields.
+ * The fields DIM when off but stay enabled — a disabled input drops out of the FormData and the
+ * save action would silently reset the number to its default, so the values must keep submitting.
+ */
+function ScheduleGroup({
+  title,
+  hint,
+  name,
+  on,
+  onToggle,
+  children,
+}: {
+  title: string;
+  hint: string;
+  name: string;
+  on: boolean;
+  onToggle: (v: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-field border p-4 transition-colors ${on ? "border-line" : "border-line bg-surface-2"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">
+            {title}
+            {!on && <span className="ml-2 rounded-full bg-line px-2 py-0.5 text-caption font-medium text-muted">Off</span>}
+          </p>
+          <p className="mt-0.5 text-caption text-muted">{hint}</p>
+        </div>
+        <Switch name={name} label={`${title} on/off`} checked={on} onChange={onToggle} />
+      </div>
+      <div className={on ? "" : "opacity-50"}>{children}</div>
+    </div>
+  );
+}
+
 export function WhatsAppSettingsForm({
   settings,
   catalog = [],
@@ -41,6 +79,17 @@ export function WhatsAppSettingsForm({
   const [refreshing, setRefreshing] = useState(false);
   const [, startNav] = useTransition();
   const c = settings.cadence;
+
+  // Per-touchpoint on/off switches for the scheduled run (the Switch component is controlled).
+  const [enabled, setEnabled] = useState({
+    discoEnabled: c.discoEnabled,
+    bookingReminderEnabled: c.bookingReminderEnabled,
+    noShowEnabled: c.noShowEnabled,
+    paymentEnabled: c.paymentEnabled,
+    emiPreDueEnabled: c.emiPreDueEnabled,
+    studentNudgesEnabled: c.studentNudgesEnabled,
+  });
+  const setOn = (key: keyof typeof enabled) => (v: boolean) => setEnabled((e) => ({ ...e, [key]: v }));
 
   // Only APPROVED templates can actually be sent; show those first, then the rest (labelled).
   const sorted = [...catalog].sort((a, b) => Number(b.status === "APPROVED") - Number(a.status === "APPROVED"));
@@ -141,58 +190,117 @@ export function WhatsAppSettingsForm({
       {/* Reminder schedule */}
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
         <h3 className="font-display text-base font-semibold">Automatic reminder schedule</h3>
-        <p className="mt-1 text-xs text-muted">Controls the scheduled reminder run (hit by the cron endpoint / “Run reminders now”).</p>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <NumField name="discoFirstDelayHours" label="Disco: first delay (hrs)" defaultValue={c.discoFirstDelayHours} hint="Wait after a lead arrives before the 1st nudge." />
-          <NumField name="discoRepeatHours" label="Disco: repeat gap (hrs)" defaultValue={c.discoRepeatHours} />
-          <NumField name="discoMaxReminders" label="Disco: max reminders" defaultValue={c.discoMaxReminders} />
-          {/* The floor that stops the engine reaching back into a historical import. */}
-          <NumField name="discoMaxAgeDays" label="Disco: only if they opted in within (days)" defaultValue={c.discoMaxAgeDays} />
-          <label className="block sm:col-span-3">
-            <span className="text-xs font-medium text-muted">Pre-call reminders (hours before slot, comma-separated)</span>
-            <input name="bookingReminderLeadHours" defaultValue={c.bookingReminderLeadHours.join(", ")} className={`mt-1 ${inputCls}`} placeholder="24, 2" />
-          </label>
-          <NumField name="noShowDelayHours" label="No-show: delay (hrs)" defaultValue={c.noShowDelayHours} />
-          <NumField name="paymentRepeatHours" label="Payment: repeat gap (hrs)" defaultValue={c.paymentRepeatHours} />
-          <NumField name="studentRepeatHours" label="Student nudge: repeat gap (hrs)" defaultValue={c.studentRepeatHours} />
-          <NumField name="maxPerRun" label="Max messages per run" defaultValue={c.maxPerRun} hint="Safety cap for a single reminder run." />
-        </div>
+        <p className="mt-1 text-xs text-muted">
+          Controls the scheduled reminder run (hit by the cron endpoint / “Run reminders now”). Each reminder has its
+          own switch — turning one off silences only that reminder; manual sends from the section rows still work.
+        </p>
 
-        {/* EMI pre-due — separated out because this is the one touchpoint that fans out to
-            every paying student at once, and the one with a live/rehearse switch. */}
-        <div className="mt-5 rounded-field border border-line bg-surface-2 p-4">
-          <h4 className="text-sm font-semibold">EMI reminder (before the due date)</h4>
-          <p className="mt-1 text-xs text-muted">
-            Reminds a student their instalment is coming up. Separate from “Payment reminder”, which chases money
-            that is already overdue.
-          </p>
-          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="text-xs font-medium text-muted">Days before due (comma-separated, 0 = on the day)</span>
-              <input
-                name="emiPreDueLeadDays"
-                defaultValue={c.emiPreDueLeadDays.join(", ")}
-                className={`mt-1 ${inputCls}`}
-                placeholder="3, 0"
-              />
-              <span className="mt-1 block text-xs text-muted">Leave empty to switch this reminder off.</span>
+        <div className="mt-4 space-y-4">
+          <ScheduleGroup
+            title="Discovery-call reminder"
+            hint="Chases un-booked leads (New / Disco-not-booked) who haven't scheduled a call yet."
+            name="discoEnabled"
+            on={enabled.discoEnabled}
+            onToggle={setOn("discoEnabled")}
+          >
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-4">
+              <NumField name="discoFirstDelayHours" label="First delay (hrs)" defaultValue={c.discoFirstDelayHours} hint="Wait after a lead arrives before the 1st nudge." />
+              <NumField name="discoRepeatHours" label="Repeat gap (hrs)" defaultValue={c.discoRepeatHours} />
+              <NumField name="discoMaxReminders" label="Max reminders" defaultValue={c.discoMaxReminders} />
+              {/* The floor that stops the engine reaching back into a historical import. */}
+              <NumField name="discoMaxAgeDays" label="Only if opted in within (days)" defaultValue={c.discoMaxAgeDays} />
+            </div>
+          </ScheduleGroup>
+
+          <ScheduleGroup
+            title="Pre-call reminder"
+            hint="Reminds a booked prospect before their upcoming slot."
+            name="bookingReminderEnabled"
+            on={enabled.bookingReminderEnabled}
+            onToggle={setOn("bookingReminderEnabled")}
+          >
+            <label className="mt-3 block">
+              <span className="text-xs font-medium text-muted">Hours before slot (comma-separated)</span>
+              <input name="bookingReminderLeadHours" defaultValue={c.bookingReminderLeadHours.join(", ")} className={`mt-1 ${inputCls}`} placeholder="24, 2" />
             </label>
-            <label className="flex flex-col justify-center gap-1.5">
-              <span className="flex items-center gap-2">
+          </ScheduleGroup>
+
+          <ScheduleGroup
+            title="No-show follow-up"
+            hint="One nudge to rebook after a lead is marked No-show."
+            name="noShowEnabled"
+            on={enabled.noShowEnabled}
+            onToggle={setOn("noShowEnabled")}
+          >
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <NumField name="noShowDelayHours" label="Delay after no-show (hrs)" defaultValue={c.noShowDelayHours} />
+            </div>
+          </ScheduleGroup>
+
+          <ScheduleGroup
+            title="Payment reminder (overdue)"
+            hint="Chases pending payments that are already past their due date."
+            name="paymentEnabled"
+            on={enabled.paymentEnabled}
+            onToggle={setOn("paymentEnabled")}
+          >
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <NumField name="paymentRepeatHours" label="Repeat gap (hrs)" defaultValue={c.paymentRepeatHours} />
+            </div>
+          </ScheduleGroup>
+
+          <ScheduleGroup
+            title="Student nudges"
+            hint="Check-in nudges and sprint-miss nudges for active students — one switch covers both."
+            name="studentNudgesEnabled"
+            on={enabled.studentNudgesEnabled}
+            onToggle={setOn("studentNudgesEnabled")}
+          >
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <NumField name="studentRepeatHours" label="Repeat gap per student (hrs)" defaultValue={c.studentRepeatHours} />
+            </div>
+          </ScheduleGroup>
+
+          {/* EMI pre-due — kept visually distinct because this is the one touchpoint that fans out
+              to every paying student at once, and the one with a live/rehearse switch. */}
+          <ScheduleGroup
+            title="EMI reminder (before the due date)"
+            hint="Reminds a student their instalment is coming up. Separate from “Payment reminder”, which chases money that is already overdue."
+            name="emiPreDueEnabled"
+            on={enabled.emiPreDueEnabled}
+            onToggle={setOn("emiPreDueEnabled")}
+          >
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-medium text-muted">Days before due (comma-separated, 0 = on the day)</span>
                 <input
-                  name="emiPreDueLive"
-                  type="checkbox"
-                  defaultChecked={!c.emiPreDueDryRun}
-                  className="h-4 w-4 rounded border-line"
+                  name="emiPreDueLeadDays"
+                  defaultValue={c.emiPreDueLeadDays.join(", ")}
+                  className={`mt-1 ${inputCls}`}
+                  placeholder="3, 0"
                 />
-                <span className="text-sm font-medium">Send for real</span>
-              </span>
-              <span className="text-xs text-muted">
-                Unticked (default) = <strong>rehearsal</strong>: every reminder is logged to WhatsApp history as
-                “DRY RUN”, naming the recipient and template, but nothing is sent. Tick this only once the dry-run
-                list looks right — it sends to real students.
-              </span>
-            </label>
+              </label>
+              <label className="flex flex-col justify-center gap-1.5">
+                <span className="flex items-center gap-2">
+                  <input
+                    name="emiPreDueLive"
+                    type="checkbox"
+                    defaultChecked={!c.emiPreDueDryRun}
+                    className="h-4 w-4 rounded border-line"
+                  />
+                  <span className="text-sm font-medium">Send for real</span>
+                </span>
+                <span className="text-xs text-muted">
+                  Unticked (default) = <strong>rehearsal</strong>: every reminder is logged to WhatsApp history as
+                  “DRY RUN”, naming the recipient and template, but nothing is sent. Tick this only once the dry-run
+                  list looks right — it sends to real students.
+                </span>
+              </label>
+            </div>
+          </ScheduleGroup>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <NumField name="maxPerRun" label="Max messages per run" defaultValue={c.maxPerRun} hint="Safety cap for a single reminder run — applies across all reminders above." />
           </div>
         </div>
       </section>

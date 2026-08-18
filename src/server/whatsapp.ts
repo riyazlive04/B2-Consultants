@@ -541,7 +541,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
   const hasTemplate = (kind: WhatsAppKind) => !!runtime.settings.templates[kind]?.name;
 
   // 1. Discovery-call reminders — un-booked leads.
-  if (budget > 0 && hasTemplate("DISCO_REMINDER")) {
+  if (budget > 0 && cadence.discoEnabled && hasTemplate("DISCO_REMINDER")) {
     const cutoff = new Date(now - cadence.discoFirstDelayHours * HR);
     const oldest = new Date(now - cadence.discoMaxAgeDays * 24 * HR);
     const leads = await prisma.lead.findMany({
@@ -590,7 +590,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
   }
 
   // 2. Pre-call reminders — booked slots coming up.
-  if (budget > 0 && hasTemplate("BOOKING_REMINDER")) {
+  if (budget > 0 && cadence.bookingReminderEnabled && hasTemplate("BOOKING_REMINDER")) {
     const leadHours = cadence.bookingReminderLeadHours;
     const maxLead = Math.max(...leadHours);
     const minLead = Math.min(...leadHours);
@@ -614,7 +614,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
   }
 
   // 3. No-show follow-ups — one nudge to rebook.
-  if (budget > 0 && hasTemplate("NO_SHOW_FOLLOWUP")) {
+  if (budget > 0 && cadence.noShowEnabled && hasTemplate("NO_SHOW_FOLLOWUP")) {
     const leads = await prisma.lead.findMany({
       where: {
         ...ACTIVE,
@@ -636,7 +636,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
   }
 
   // 4. Payment reminders — overdue pending payments (balance still > 0).
-  if (budget > 0 && hasTemplate("PAYMENT_REMINDER")) {
+  if (budget > 0 && cadence.paymentEnabled && hasTemplate("PAYMENT_REMINDER")) {
     const [pendingRows, overdue] = await Promise.all([
       getPendingRows(),
       prisma.pendingPayment.findMany({
@@ -668,7 +668,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
   // Reads Instalment directly rather than PendingPayment.nextDueDate, because the headline
   // next-due only ever names the earliest unpaid instalment — it cannot say "#2 of 3", and it
   // is a denormalised mirror that emi-actions keeps in sync. The instalment row is the fact.
-  if (budget > 0 && hasTemplate("EMI_PRE_DUE") && cadence.emiPreDueLeadDays.length > 0) {
+  if (budget > 0 && cadence.emiPreDueEnabled && hasTemplate("EMI_PRE_DUE") && cadence.emiPreDueLeadDays.length > 0) {
     const DAY = 24 * HR;
     // today is IST-midnight UTC; dueDate is @db.Date (also midnight) → exact day equality.
     const wanted = cadence.emiPreDueLeadDays.map((d) => new Date(today.getTime() + d * DAY));
@@ -721,7 +721,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
   }
 
   // 5. Check-in nudges — active enrollments whose check-in date has arrived/passed.
-  if (budget > 0 && hasTemplate("CHECKIN_NUDGE")) {
+  if (budget > 0 && cadence.studentNudgesEnabled && hasTemplate("CHECKIN_NUDGE")) {
     const enrollments = await prisma.enrollment.findMany({
       where: { status: "ACTIVE", nextCheckInDate: { lte: today }, student: { phone: { not: null } } },
       include: { student: { select: { id: true, fullName: true, phone: true } } },
@@ -739,7 +739,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
   }
 
   // 6. Sprint-miss nudges — recently missed sprint weeks.
-  if (budget > 0 && hasTemplate("SPRINT_MISS_NUDGE")) {
+  if (budget > 0 && cadence.studentNudgesEnabled && hasTemplate("SPRINT_MISS_NUDGE")) {
     const misses = await prisma.sprintWeek.findMany({
       where: {
         status: "MISSED",

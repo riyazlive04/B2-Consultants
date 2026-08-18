@@ -40,7 +40,16 @@ function coerceCadence(raw: unknown): WatiCadence {
   const leadHours = Array.isArray(c.bookingReminderLeadHours)
     ? c.bookingReminderLeadHours.filter((h): h is number => typeof h === "number" && h >= 0)
     : DEFAULT_CADENCE.bookingReminderLeadHours;
+  // Only an explicit stored `false` turns a touchpoint off. Absent (settings saved before these
+  // switches existed) or malformed keeps it on — the behaviour every install already had.
+  const flag = (v: unknown) => v !== false;
   return {
+    discoEnabled: flag(c.discoEnabled),
+    bookingReminderEnabled: flag(c.bookingReminderEnabled),
+    noShowEnabled: flag(c.noShowEnabled),
+    paymentEnabled: flag(c.paymentEnabled),
+    emiPreDueEnabled: flag(c.emiPreDueEnabled),
+    studentNudgesEnabled: flag(c.studentNudgesEnabled),
     discoFirstDelayHours: num(c.discoFirstDelayHours, DEFAULT_CADENCE.discoFirstDelayHours),
     discoRepeatHours: num(c.discoRepeatHours, DEFAULT_CADENCE.discoRepeatHours),
     discoMaxReminders: num(c.discoMaxReminders, DEFAULT_CADENCE.discoMaxReminders),

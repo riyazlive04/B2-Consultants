@@ -597,6 +597,10 @@ const bookingRulesFormSchema = z.object({
   // because an unchecked HTML checkbox submits nothing at all.
   confirmRequestLeadHours: z.coerce.number().int().min(0).max(240),
   autoCancelHours: z.coerce.number().int().min(0).max(240),
+  // The rejection template. Bounds mirror `bookingRulesConfigSchema` so the form cannot store a
+  // value the config would later refuse and coerce away.
+  rejectionSubject: z.string().trim().min(1).max(200),
+  rejectionBody: z.string().trim().min(1).max(4000),
 });
 
 /** Admin edits the slot window + the confirmation-loop cadence/toggles (AppSetting). */
@@ -604,14 +608,17 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
   const session = await requireSection("bookings");
   const parsed = bookingRulesFormSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  // Merge over the current config so saving never resets the auto-disqualify toggle or the
-  // rejection template (which this form doesn't carry).
+  // Merged over the current config so a key this form does not carry is preserved rather than
+  // reset to its shipped default.
   const current = await getBookingRulesConfig();
   const next = {
     ...current,
     ...parsed.data,
     autoCancelEnabled: form.get("autoCancelEnabled") === "on",
     promoteNext: form.get("promoteNext") === "on",
+    // Read separately for the same reason as the two above: an unchecked HTML checkbox submits
+    // nothing at all, so `?? current` would keep it stuck on forever once enabled.
+    autoDisqualify: form.get("autoDisqualify") === "on",
   };
   // Validate the full merged config - including the "ask lead > cancel window" refinement - before
   // persisting; an invalid combo would otherwise coerce back to defaults on the next read.

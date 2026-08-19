@@ -11,7 +11,7 @@ import {
 } from "@/server/booking-actions";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Modal } from "@/components/ui/Modal";
-import { CheckboxField, Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { SLOT_DURATION_OPTIONS, SLOT_STATUS_LABELS, slotTypeLabel } from "@/lib/labels";
 import type { SlotRow, TeamMemberOption } from "@/server/booking-metrics";
 import type { BookingRulesConfig } from "@/lib/config-schema";
@@ -102,6 +102,46 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
             <TextInput kind="int" name="autoCancelHours" required defaultValue={rules.autoCancelHours} maxLength={3} />
           </Field>
         </div>
+      </div>
+
+      {/*
+        ── Auto-disqualify + the rejection email ──────────────────────────────────────
+        The rule and the template were configurable in the schema from the start, and read on
+        every booking, but had no screen - so the only way to change either was a database edit.
+        A setting nobody can reach is one nobody can be accountable for, which matters more than
+        usual here: this decides which prospects are turned away and what they are told.
+      */}
+      <div className="mt-5 border-t border-line pt-4">
+        <h4 className="font-display text-base font-semibold">Turn away unqualified applicants</h4>
+        <p className="mt-0.5 text-xs text-muted">
+          A band score below <span className="font-medium">2.0 out of 5</span> is a
+          &ldquo;cancel&rdquo; verdict. The applicant never takes a slot - it stays open for
+          someone who qualifies - their card moves to{" "}
+          <span className="font-medium">Cancelled/Unqualified</span>, and they get the note below.
+        </p>
+        <div className="mt-3">
+          <CheckboxField
+            name="autoDisqualify"
+            label="Turn away applicants who score below 2.0"
+            defaultChecked={rules.autoDisqualify}
+            hint="Off means every applicant keeps their slot whatever they score, and no rejection is sent. The score is still recorded either way."
+          />
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-4">
+          <Field label="Email subject" hint="What they see in their inbox. Max 200 characters.">
+            <TextInput kind="text" name="rejectionSubject" required defaultValue={rules.rejectionSubject} maxLength={200} />
+          </Field>
+          <Field
+            label="Email body"
+            hint="Plain text - line breaks are kept. Tokens: {{first_name}}, {{name}}, {{email}}, {{phone}}. A token we hold no value for renders as nothing, so keep the sentence readable without it."
+          >
+            <TextArea name="rejectionBody" required defaultValue={rules.rejectionBody} rows={10} maxLength={4000} />
+          </Field>
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          Nothing is sent while the email channel is off - the message is recorded as skipped
+          instead. Check Console → System health to see whether email is armed.
+        </p>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

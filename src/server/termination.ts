@@ -84,6 +84,29 @@ export async function getOwnershipInventory(userId: string, now = new Date()): P
 export type MigrationResult = Record<string, number>;
 
 /**
+ * Where a departing person's OPEN LEADS go.
+ *
+ *   "successor" - onto the named replacement, the original behaviour.
+ *   "pool"      - back to unassigned, to be handed out from Pipeline → Leads → Hand out leads.
+ *
+ * ── Why "ownerless" is the right answer sometimes ────────────────────────────────
+ * This module's dialog is built on "never leave work ownerless", and that rule is still right for
+ * slots, tasks, opportunities and companies: each is one commitment to one person, and a calendar
+ * slot nobody owns is a call nobody turns up to.
+ *
+ * Leads are different, and the difference is VOLUME. When the person leaving carried 80% of the
+ * first-call rotation, "hand it to the successor" moves thousands of leads onto one desk in a
+ * single transaction. Nothing about that queue is workable, and a lead buried at position 3,000
+ * of someone else's backlog is not more owned than an unassigned one - it is less, because it now
+ * LOOKS handled. The unassigned pool is the honest state: visible, counted, and the one thing the
+ * hand-out flow and the auto-assign rate are built to drain at a pace the team can absorb.
+ *
+ * The distinction that makes this safe is that the pool is a PLACE, whereas a lead stranded on a
+ * deactivated login is a leak. Nothing here can produce the second.
+ */
+export type LeadDestination = "successor" | "pool";
+
+/**
  * Move the forward-looking work to the successor, in ONE transaction.
  *
  * All-or-nothing on purpose: a partial migration would leave some of a departed person's queue
@@ -95,32 +118,53 @@ export type MigrationResult = Record<string, number>;
  */
 export async function migrateOwnership(
   fromUserId: string,
-  toUserId: string,
+  toUserId: string | null,
+  leadDestination: LeadDestination = "successor",
   now = new Date(),
 ): Promise<MigrationResult> {
+  // Leads are the only category with a destination that is not a person. Everything else is a
+  // commitment one human owes, so with no successor there is nothing to move - and the caller
+  // guarantees those categories are empty before allowing that combination.
+  if (!toUserId && leadDestination !== "pool") {
+    throw new Error("migrateOwnership needs a successor unless leads are released to the pool");
+  }
+
   return prisma.$transaction(async (tx) => {
+    const none = { count: 0 };
     const [leads, slots, sss, tasks, opportunities, companies] = await Promise.all([
-      tx.lead.updateMany({ where: openLeadWhere(fromUserId), data: { assignedToId: toUserId } }),
-      tx.appointmentSlot.updateMany({ where: futureSlotWhere(fromUserId, now), data: { assignedToId: toUserId } }),
-      tx.sssSlot.updateMany({ where: futureSssWhere(fromUserId, now), data: { ownerId: toUserId } }),
-      tx.contactTask.updateMany({ where: openTaskWhere(fromUserId), data: { assignedToId: toUserId } }),
-      tx.opportunity.updateMany({ where: openOpportunityWhere(fromUserId), data: { assignedToId: toUserId } }),
-      tx.company.updateMany({ where: ownedCompanyWhere(fromUserId), data: { ownerId: toUserId } }),
+      // `null` releases the lead to the unassigned pool - see `LeadDestination`.
+      tx.lead.updateMany({
+        where: openLeadWhere(fromUserId),
+        data: { assignedToId: leadDestination === "pool" ? null : toUserId },
+      }),
+      toUserId ? tx.appointmentSlot.updateMany({ where: futureSlotWhere(fromUserId, now), data: { assignedToId: toUserId } }) : none,
+      toUserId ? tx.sssSlot.updateMany({ where: futureSssWhere(fromUserId, now), data: { ownerId: toUserId } }) : none,
+      toUserId ? tx.contactTask.updateMany({ where: openTaskWhere(fromUserId), data: { assignedToId: toUserId } }) : none,
+      toUserId ? tx.opportunity.updateMany({ where: openOpportunityWhere(fromUserId), data: { assignedToId: toUserId } }) : none,
+      toUserId ? tx.company.updateMany({ where: ownedCompanyWhere(fromUserId), data: { ownerId: toUserId } }) : none,
     ]);
 
     // The two journey roles are separate columns, so they need separate updates - a single
     // `OR` where-clause cannot say WHICH column to rewrite.
-    const touchpoints = await tx.outreachJourney.updateMany({
-      where: { ...activeJourneyWhere(fromUserId), respTouchpointId: fromUserId },
-      data: { respTouchpointId: toUserId },
-    });
-    const discos = await tx.outreachJourney.updateMany({
-      where: { ...activeJourneyWhere(fromUserId), respDiscoId: fromUserId },
-      data: { respDiscoId: toUserId },
-    });
+    const touchpoints = toUserId
+      ? await tx.outreachJourney.updateMany({
+          where: { ...activeJourneyWhere(fromUserId), respTouchpointId: fromUserId },
+          data: { respTouchpointId: toUserId },
+        })
+      : none;
+    const discos = toUserId
+      ? await tx.outreachJourney.updateMany({
+          where: { ...activeJourneyWhere(fromUserId), respDiscoId: fromUserId },
+          data: { respDiscoId: toUserId },
+        })
+      : none;
 
     return {
-      leads: leads.count,
+      // Two different keys on purpose: the activity log prints these verbatim, and "12 leads" next
+      // to a successor's name would read as though someone now owns them when nobody does.
+      ...(leadDestination === "pool"
+        ? { "leads released to the pool": leads.count }
+        : { leads: leads.count }),
       slots: slots.count,
       sss: sss.count,
       tasks: tasks.count,

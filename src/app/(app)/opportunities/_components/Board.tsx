@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Plus, Settings2, GripVertical, Trash2, ChevronUp, ChevronDown, Pin,
-  ChevronLeft, ChevronRight, Phone, MessageCircle, StickyNote, User, Timer,
+  ChevronLeft, ChevronRight, Phone, MessageCircle, StickyNote, User, Timer, Gauge,
 } from "lucide-react";
 import type { BoardData } from "@/server/opportunities-metrics";
 import { Btn, IconButton } from "@/components/ui/controls";
@@ -30,6 +30,15 @@ import { SpeedToLeadReport } from "./SpeedToLeadReport";
 import { DialButton } from "@/components/calls/DialButton";
 import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
 import { firstCallVerdict, firstCallLabel, type FirstCallState } from "@/lib/speed-to-lead";
+
+/**
+ * Band score at or above which a booked prospect reads green, on the 0-5 scale.
+ *
+ * 2 is the founder's line ("red below 2, green above"), and it sits at the boundary rather than
+ * above it: a prospect who scores exactly 2 has met the bar, and rounding them into the red would
+ * punish the one case the rule is least sure about.
+ */
+const BANT_PASS = 2;
 
 // Options for mapping a stage back to a lead-lifecycle stage (the bridge that syncs a card move to
 // Lead.stage). "" = no sync; the board stays a standalone process - offered on custom pipelines
@@ -359,6 +368,17 @@ export default function Board({
   }
 
   const stageOpts = stages.map((s) => ({ value: s.id, label: s.name }));
+  /**
+   * The column where a call becomes booked, as a board POSITION rather than a name.
+   *
+   * From here rightwards the card shows the band score instead of the five-minute verdict: once
+   * the call is in the diary, "did we ring them fast enough" is a settled fact about the past,
+   * and the live question is whether this prospect is worth the call. Keyed on `legacyStage`
+   * because column names are editable, and derived from board order so a stage inserted later
+   * needs no code change here.
+   */
+  const bookedIdx = stages.findIndex((s) => s.legacyStage === "STRATEGY_CALL_BOOKED");
+  const pastBooking = (i: number) => bookedIdx >= 0 && i >= bookedIdx;
   const ownerOpts = [{ value: "", label: "- unassigned -" }, ...board.owners.map((o) => ({ value: o.id, label: o.name }))];
   const mobileStage = stages.find((s) => s.id === mobileStageId) ?? stages[0];
 
@@ -418,6 +438,7 @@ export default function Board({
               <OppCard
                 key={card.id}
                 card={card}
+                showBant={pastBooking(stages.findIndex((s) => s.id === mobileStage.id))}
                 draggable={false}
                 dragActive={false}
                 now={now}
@@ -504,6 +525,7 @@ export default function Board({
                 <OppCard
                   key={card.id}
                   card={card}
+                  showBant={pastBooking(stages.indexOf(stage))}
                   draggable={dragEnabled}
                   dragActive={dragId === card.id}
                   onDragStart={() => setDragId(card.id)}
@@ -626,6 +648,7 @@ const VERDICT_STYLE: Record<FirstCallState, { fg: string; bg: string }> = {
 
 function OppCard({
   card,
+  showBant,
   draggable,
   dragActive,
   onDragStart,
@@ -636,6 +659,8 @@ function OppCard({
   onDial,
 }: {
   card: Card;
+  /** True from the "Discovery Call Booked" column rightwards - swaps the speed chip for BANT. */
+  showBant: boolean;
   draggable: boolean;
   dragActive: boolean;
   onDragStart?: () => void;
@@ -718,9 +743,38 @@ function OppCard({
         </div>
       </dl>
 
-      {/* Speed to lead: the first call against the five-minute target. Spoken in words, not
-          just colour, so the verdict survives colour-blindness and a monochrome print. */}
-      {verdict && (
+      {/*
+        Band score, from the booked column onwards.
+
+        Replaces the speed chip rather than joining it: two chips on a card this size is how a
+        board stops being scannable, and once the call is booked the five-minute verdict has
+        stopped being actionable. The number is spoken as "3.2/5" and not left to colour alone,
+        so it survives colour-blindness and a monochrome print - the same rule the speed chip
+        follows.
+
+        A prospect nobody has scored gets "Not scored", never 0.0: null means no evidence, and
+        drawing that as a red zero would condemn a lead for a question we never asked.
+      */}
+      {showBant ? (
+        <span
+          className="tnum mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold"
+          style={
+            card.bantAvg === null
+              ? { background: "var(--surface-2)", color: "var(--ink-3)" }
+              : card.bantAvg >= BANT_PASS
+                ? { background: "var(--good-bg)", color: "var(--good)" }
+                : { background: "var(--bad-bg)", color: "var(--bad)" }
+          }
+          title={
+            card.bantAvg === null
+              ? "Nobody has scored this prospect's budget, authority, need or timeline yet"
+              : `BANT ${card.bantAvg.toFixed(1)} out of 5 - ${card.bantAvg >= BANT_PASS ? "worth the call" : "weak, qualify before spending the slot"}`
+          }
+        >
+          <Gauge size={11} aria-hidden />{" "}
+          {card.bantAvg === null ? "BANT not scored" : `BANT ${card.bantAvg.toFixed(1)}/5`}
+        </span>
+      ) : verdict ? (
         <span
           className="tnum mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold"
           style={{ background: VERDICT_STYLE[verdict.state].bg, color: VERDICT_STYLE[verdict.state].fg }}
@@ -728,7 +782,7 @@ function OppCard({
         >
           <Timer size={11} aria-hidden /> {firstCallLabel(verdict)}
         </span>
-      )}
+      ) : null}
 
       {/* Quick actions. Every icon here does something real - a decorative icon row on a card
           people click all day is worse than none. `stopPropagation` so acting on a card does not

@@ -19,6 +19,7 @@ import { BOOKING_RULES_KEY, getBookingRulesConfig, writeBookingRulesConfig } fro
 import { logActivity, diffFields } from "./activity-log";
 import { emitTrigger } from "./automation";
 import { upsertIntakeLead } from "./lead-intake";
+import { syncDefaultOpportunity } from "./opportunity-sync";
 import { observedOriginDomain } from "./request-origin";
 import { mirrorBookingScoreToLead } from "./lead-qualification";
 import { shadowScore } from "./qualification";
@@ -315,6 +316,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
         await tx.leadStageHistory.create({
           data: { leadId: lead.id, fromStage: fresh.stage, toStage: "LOST" },
         });
+        await syncDefaultOpportunity(tx, lead.id, "LOST");
       }
 
       // Close the SOP journey too (Step 17 - NO → terminal). A BANT CANCEL is a "Not Qualified"
@@ -420,6 +422,16 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
         await tx.leadStageHistory.create({
           data: { leadId: lead.id, fromStage: fresh.stage, toStage: "STRATEGY_CALL_BOOKED" },
         });
+        /**
+         * ...and carry the board card with it.
+         *
+         * Every other path that moves a lead's stage calls this (call logs, discovery routing,
+         * automation, the auto-stage rules); booking was the one that did not, so a confirmed
+         * discovery call left its card sitting in "WhatsApp Sent". The lead record said booked
+         * and the board said not booked, and the team works from the board - observed on a real
+         * booking on 20 Aug 2026.
+         */
+        await syncDefaultOpportunity(tx, lead.id, "STRATEGY_CALL_BOOKED");
       }
 
       // SOP Steps 10–11, synchronously. A prospect who books directly on the public form would
@@ -719,6 +731,8 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
         await tx.leadStageHistory.create({
           data: { leadId: booking.leadId, fromStage: lead.stage, toStage: "NO_SHOW" },
         });
+        // Same reason as the booked path - the board must not keep claiming they are coming.
+        await syncDefaultOpportunity(tx, booking.leadId, "NO_SHOW");
       }
     }
   });

@@ -12,6 +12,8 @@ const prisma = new PrismaClient();
 type Node = {
   id?: string; type?: string; text?: string; html?: string; url?: string;
   label?: string; href?: string; opensFormId?: string; children?: Node[];
+  // Booking blocks: whose calendar is offered, and where the prospect is sent afterwards.
+  bookingOwnerId?: string; bookingRedirectUrl?: string;
 };
 
 function walk(nodes: Node[] | undefined, depth = 0) {
@@ -21,6 +23,8 @@ function walk(nodes: Node[] | undefined, depth = 0) {
       n.href && `href="${n.href}"`,
       n.opensFormId && `opensForm=${n.opensFormId}`,
       n.url && `url="${n.url.slice(0, 50)}"`,
+      n.bookingOwnerId && `bookingOwner=${n.bookingOwnerId}`,
+      n.bookingRedirectUrl && `redirect="${n.bookingRedirectUrl}"`,
       n.text && `“${n.text.slice(0, 45).replace(/\s+/g, " ")}”`,
     ].filter(Boolean);
     console.log(`${"  ".repeat(depth)}- ${n.type} [${n.id}] ${bits.join("  ")}`);

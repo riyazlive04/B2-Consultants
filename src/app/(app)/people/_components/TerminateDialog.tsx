@@ -41,12 +41,25 @@ export function TerminateDialog({
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [successorProfileId, setSuccessorProfileId] = useState(successors[0]?.value ?? "");
   const [reason, setReason] = useState("");
+  /**
+   * Where their open leads go. Defaults to the successor, which is what this dialog always did.
+   *
+   * The choice exists because "hand everything to one person" stops being a handover at volume:
+   * a departing setter who carried most of the rotation leaves thousands of open leads, and
+   * dropping them on a colleague buries their own queue without anyone deciding to. Releasing to
+   * the pool keeps them visible and lets the hand-out flow drain them at a workable pace.
+   */
+  const [leadDestination, setLeadDestination] = useState<"successor" | "pool">("successor");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const holds = report.holds;
-  const needsSuccessor = holds.total > 0;
   const held = holds.categories.filter((c) => c.count > 0);
+  const leadCount = holds.categories.find((c) => c.key === "leads")?.count ?? 0;
+  // Releasing leads to the pool is a destination, not an omission - so those leads stop counting
+  // towards "somebody must take this over". Everything else still needs a named person.
+  const holdsNeedingOwner = leadDestination === "pool" ? holds.total - leadCount : holds.total;
+  const needsSuccessor = holdsNeedingOwner > 0;
 
   async function confirm() {
     setBusy(true);
@@ -55,6 +68,7 @@ export function TerminateDialog({
       profileId: report.profile.id,
       successorProfileId: needsSuccessor ? successorProfileId : successorProfileId || null,
       reason,
+      leadDestination,
     });
     setBusy(false);
     if (!res.ok) return setError(res.error);
@@ -141,9 +155,43 @@ export function TerminateDialog({
               </>
             )}
 
+            {leadCount > 0 && (
+              <div className="rounded-card border border-line p-3">
+                <p className="text-caption font-semibold uppercase text-muted">
+                  Their {leadCount.toLocaleString("en-IN")} open lead{leadCount === 1 ? "" : "s"}
+                </p>
+                <div className="mt-2 space-y-2">
+                  <DestinationChoice
+                    checked={leadDestination === "successor"}
+                    onChange={() => setLeadDestination("successor")}
+                    label="Give them to the successor"
+                    detail="They land in that person's queue straight away. Right for a small handover."
+                  />
+                  <DestinationChoice
+                    checked={leadDestination === "pool"}
+                    onChange={() => setLeadDestination("pool")}
+                    label="Return them to the unassigned pool"
+                    detail="They become unowned and are handed out from Pipeline → Leads → Hand out leads, at whatever pace the team can absorb. Right when the pile is bigger than one person's queue."
+                  />
+                </div>
+                {leadDestination === "pool" && (
+                  <p className="mt-2 text-caption text-muted">
+                    Nothing is lost - unassigned leads are counted and visible. Only the leads move
+                    this way; calls, slots and tasks still need a named owner.
+                  </p>
+                )}
+              </div>
+            )}
+
             <Field
               label="Who takes this over?"
-              hint={needsSuccessor ? "Required - open work cannot be left ownerless." : "Optional."}
+              hint={
+                needsSuccessor
+                  ? "Required - open work cannot be left ownerless."
+                  : leadDestination === "pool" && leadCount > 0
+                    ? "Not needed - the leads are going to the pool and nothing else is outstanding."
+                    : "Optional."
+              }
             >
               <SelectMenu
                 aria-label="Successor"
@@ -169,13 +217,20 @@ export function TerminateDialog({
                 this can be reversed from the Former team members list.
               </span>
             </p>
-            {holds.total > 0 && (
+            {holdsNeedingOwner > 0 && (
               <p className="text-sm text-muted">
-                {holds.total} open item{holds.total === 1 ? "" : "s"} will move to{" "}
+                {holdsNeedingOwner} open item{holdsNeedingOwner === 1 ? "" : "s"} will move to{" "}
                 <strong className="text-ink">
                   {successors.find((s) => s.value === successorProfileId)?.label ?? "-"}
                 </strong>
                 .
+              </p>
+            )}
+            {leadDestination === "pool" && leadCount > 0 && (
+              <p className="text-sm text-muted">
+                <strong className="text-ink">{leadCount.toLocaleString("en-IN")} open lead
+                {leadCount === 1 ? "" : "s"}</strong> will be returned to the unassigned pool, ready
+                to hand out.
               </p>
             )}
             <Field label="Reason (optional)" hint="Recorded on their record and in the activity log.">
@@ -216,6 +271,34 @@ export function TerminateDialog({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function DestinationChoice({
+  checked,
+  onChange,
+  label,
+  detail,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  detail: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2.5">
+      <input
+        type="radio"
+        name="lead-destination"
+        checked={checked}
+        onChange={onChange}
+        className="mt-1 flex-none accent-[var(--primary)]"
+      />
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-ink">{label}</span>
+        <span className="block text-caption text-muted">{detail}</span>
+      </span>
+    </label>
   );
 }
 

@@ -22,7 +22,7 @@ import { INVITE_TTL_DAYS, mintInviteToken, unguessablePlaceholderPassword } from
 import { normalizePassword } from "@/lib/credentials";
 import { rule } from "@/lib/field-rules";
 import { consumeAccessRequest } from "./access-requests";
-import { getOwnershipInventory, migrateOwnership } from "./termination";
+import { getOwnershipInventory, migrateOwnership, type LeadDestination } from "./termination";
 import { getTerminationReport, type TerminationReport } from "./termination-report";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
@@ -374,6 +374,8 @@ export async function terminateUser(input: {
   profileId: string;
   successorProfileId: string | null;
   reason: string;
+  /** Where their open leads go. Defaults to the successor - the behaviour before the choice existed. */
+  leadDestination?: LeadDestination;
 }): Promise<ActionResult & { migrated?: Record<string, number> }> {
   const { allowed, denied, session } = await capabilityCheck("users.manage");
   if (!allowed) return denied;
@@ -409,6 +411,19 @@ export async function terminateUser(input: {
     ? await getOwnershipInventory(profile.userId)
     : { categories: [], total: 0 };
 
+  /**
+   * What still needs a NAMED owner, which is not the same as what they hold.
+   *
+   * Releasing leads to the pool is a destination, not an omission, so when that is chosen the
+   * leads stop counting towards "you must pick a successor". Someone whose only open work is
+   * leads can then be offboarded without naming one - which is the common case for a departing
+   * setter, and previously forced the founder to park thousands of leads on a colleague purely
+   * to satisfy the guard.
+   */
+  const leadDestination: LeadDestination = input.leadDestination ?? "successor";
+  const leadHolds = holds.categories.find((c) => c.key === "leads")?.count ?? 0;
+  const holdsNeedingOwner = leadDestination === "pool" ? holds.total - leadHolds : holds.total;
+
   let successorUserId: string | null = null;
   let successorName = "";
   if (input.successorProfileId) {
@@ -427,15 +442,24 @@ export async function terminateUser(input: {
     }
     successorUserId = successor.userId;
     successorName = successor.fullName;
-  } else if (holds.total > 0) {
+  } else if (holdsNeedingOwner > 0) {
     return {
       ok: false,
-      error: `${profile.fullName} still holds ${holds.total} open item${holds.total === 1 ? "" : "s"} - choose who takes them over.`,
+      error: `${profile.fullName} still holds ${holdsNeedingOwner} open item${holdsNeedingOwner === 1 ? "" : "s"} that need a named owner - choose who takes them over.`,
     };
   }
 
+  /**
+   * Releasing leads to the pool needs no successor, so this runs on either condition.
+   *
+   * `successorUserId` is still passed through and is simply unused by the lead branch when the
+   * destination is the pool - `migrateOwnership` reads it for the six categories that always
+   * require a person, and those are empty in the no-successor case by the guard above.
+   */
   const migrated =
-    successorUserId && profile.userId ? await migrateOwnership(profile.userId, successorUserId) : {};
+    profile.userId && (successorUserId || (leadDestination === "pool" && leadHolds > 0))
+      ? await migrateOwnership(profile.userId, successorUserId, leadDestination)
+      : {};
 
   /**
    * Close the account and stamp the record together.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, Clock, Globe } from "lucide-react";
 import { submitBooking } from "@/server/booking-actions";
@@ -201,6 +201,33 @@ export function BookingCalendar({
     }
   }, [firstDay, selectedDay, byDay]);
 
+  /**
+   * Carry the prospect down to the questionnaire the moment a time is held.
+   *
+   * The form does not exist until `slotId` is set, so picking a time silently grows the page
+   * BELOW the fold: on a phone the calendar fills the screen, the tap highlights a button, and
+   * nothing else visibly happens. The prospect has no way to know a thirty-field form just
+   * appeared, so the booking is abandoned at the last step - having already done the hard part.
+   *
+   * Fires only on the null → chosen transition. Switching between two times re-scrolls nothing,
+   * because by then the form is already on screen and yanking the page under someone who is
+   * mid-form is worse than not scrolling at all.
+   */
+  const detailsRef = useRef<HTMLFormElement | null>(null);
+  const hadSlot = useRef(false);
+  useEffect(() => {
+    if (!slotId) {
+      hadSlot.current = false;
+      return;
+    }
+    if (hadSlot.current) return;
+    hadSlot.current = true;
+    // Honour the OS "reduce motion" setting - a smooth scroll is exactly the kind of movement
+    // that setting exists to suppress.
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    detailsRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+  }, [slotId]);
+
   const monthLabel = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" })
     .format(new Date(cursor.y, cursor.m, 1));
   const daySlots = selectedDay ? byDay.get(selectedDay) ?? [] : [];
@@ -400,7 +427,7 @@ export function BookingCalendar({
         and the slot is the thing that can run out, so it goes first.
       */}
       {slotId && (
-        <form action={submit} className="space-y-6 border-t border-line p-6">
+        <form ref={detailsRef} action={submit} className="scroll-mt-4 space-y-6 border-t border-line p-6">
           <input type="hidden" name="slotId" value={slotId} />
           <BookingIntakeFields />
           <div className="flex flex-col items-center gap-3">

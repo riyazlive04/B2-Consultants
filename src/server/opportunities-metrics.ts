@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { formatInrMinor } from "@/lib/format";
+import { resolveBant } from "@/lib/bant-view";
 
 /**
  * Read layer for the Opportunities Kanban board (Synamate "Pipelines").
@@ -37,6 +38,16 @@ export type BoardCard = {
    */
   optInAt: string;
   firstCallAt: string | null;
+  /**
+   * The band score to show once the prospect has a call booked, 0-5, or null when nobody has
+   * scored them.
+   *
+   * Resolved server-side through `resolveBant` - the one rule for "which stored score do I show"
+   * - so this card can never disagree with the desk or the bookings table about the same person.
+   * Null is "not scored", never zero: an unscored prospect is one nobody has asked, and drawing
+   * them as 0.0 alongside genuinely poor ones is how a good lead gets buried.
+   */
+  bantAvg: number | null;
 };
 
 export type BoardStage = {
@@ -201,6 +212,16 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
           lead: {
             select: {
               id: true, name: true, phone: true, createdAt: true,
+              // The landing page's score, and the booking form's fuller one - `resolveBant`
+              // picks between them. Both are plain columns on rows already being read.
+              bantAvg: true, bantScore: true, bantVerdict: true, bantSource: true,
+              bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true,
+              bookings: {
+                where: { status: { not: "CANCELLED" } },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+                select: { bantAvg: true, bantScore: true, bantVerdict: true, bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true },
+              },
               assignedTo: { select: { id: true, name: true } },
               outreachJourney: { select: { optInAt: true } },
             },
@@ -275,6 +296,7 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
       noteCount: o._count.notes,
       optInAt: (o.lead.outreachJourney?.optInAt ?? o.lead.createdAt).toISOString(),
       firstCallAt: firstCallByLead.get(o.lead.id)?.toISOString() ?? null,
+      bantAvg: resolveBant(o.lead.bookings[0] ?? null, o.lead)?.avg ?? null,
     }));
 
     const stageAll = allByStage.get(s.id) ?? 0n; // column header: every card, any status

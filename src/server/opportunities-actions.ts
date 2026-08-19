@@ -1188,9 +1188,31 @@ export async function getSpeedToLeadBoardReport(rangeDays: number): Promise<Spee
   const now = new Date();
   const since = new Date(now.getTime() - days * 86_400_000);
 
+  /**
+   * Scoped by OPT-IN, not by row creation - the fix for a report that read "0 leads" while
+   * opt-ins were arriving all week.
+   *
+   * `Lead.createdAt` is when the ROW was made, and on this database that is almost never when the
+   * person raised their hand. 23,000+ contacts were bulk-imported in July, so a landing-page
+   * opt-in today usually matches an existing row on phone or email, and `lead-intake.ts` correctly
+   * dedupes onto it: one human, one row. What that intake writes is a fresh
+   * `outreachJourney.optInAt`; `createdAt` keeps the import date, because the row genuinely was
+   * created then. Filtering on it therefore asked "which rows were INSERTED this week", and the
+   * honest answer most weeks is none - so the whole report emptied out.
+   *
+   * `optInAt` is the clock the five-minute target is judged on everywhere else in the app
+   * (`slaFor`, the L1 desk, the alert), so this simply brings the report onto the same baseline.
+   * The `outreachJourney: null` arm keeps pre-SOP rows, which never got a journey and for which
+   * `createdAt` really is the opt-in.
+   */
   const leads = await prisma.lead.findMany({
-    where: { deletedAt: null, createdAt: { gte: since } },
-    orderBy: { createdAt: "desc" },
+    where: {
+      deletedAt: null,
+      OR: [
+        { outreachJourney: { optInAt: { gte: since } } },
+        { outreachJourney: null, createdAt: { gte: since } },
+      ],
+    },
     select: {
       id: true, name: true, createdAt: true, stage: true, assignedToId: true,
       assignedTo: { select: { name: true } },
@@ -1198,8 +1220,20 @@ export async function getSpeedToLeadBoardReport(rangeDays: number): Promise<Spee
     },
   });
   const ids = leads.map((l) => l.id);
+  /**
+   * Calls inside the window only, so a returning opt-in is measured from THIS opt-in.
+   *
+   * Without the `calledAt` bound, `_min` over all of a lead's calls returns a call from months
+   * ago for anyone who opted in a second time - which lands before the new opt-in, produces a
+   * negative delta, and would be counted as a hit on a lead nobody has rung yet. The per-lead
+   * check below discards anything still earlier than that lead's own opt-in.
+   */
   const firstCalls = ids.length
-    ? await prisma.callLog.groupBy({ by: ["leadId"], where: { leadId: { in: ids } }, _min: { calledAt: true } })
+    ? await prisma.callLog.groupBy({
+        by: ["leadId"],
+        where: { leadId: { in: ids }, calledAt: { gte: since } },
+        _min: { calledAt: true },
+      })
     : [];
   const firstBy = new Map(firstCalls.map((r) => [r.leadId, r._min.calledAt!]));
 
@@ -1209,7 +1243,10 @@ export async function getSpeedToLeadBoardReport(rangeDays: number): Promise<Spee
 
   for (const l of leads) {
     const optInAt = l.outreachJourney?.optInAt ?? l.createdAt;
-    const firstCallAt = firstBy.get(l.id) ?? null;
+    // A call that predates this opt-in belongs to the previous cycle - for this one, nobody has
+    // dialled yet.
+    const firstInWindow = firstBy.get(l.id) ?? null;
+    const firstCallAt = firstInWindow && firstInWindow >= optInAt ? firstInWindow : null;
     const key = l.assignedToId;
     const s = stats.get(key) ?? {
       ownerId: key, ownerName: l.assignedTo?.name ?? "Unassigned",
@@ -1240,6 +1277,11 @@ export async function getSpeedToLeadBoardReport(rangeDays: number): Promise<Spee
     })
     // Named setters first by volume; "Unassigned" last, whatever its count.
     .sort((a, b) => (a.ownerId === null ? 1 : 0) - (b.ownerId === null ? 1 : 0) || b.leads - a.leads);
+
+  // Newest opt-in first, and sorted HERE rather than in the query: the rows are ordered by the
+  // journey's clock, which is on a joined table, and the 300-row cap must shed the oldest
+  // opt-ins rather than whatever the join happened to return last.
+  rows.sort((a, b) => b.optInAt.localeCompare(a.optInAt));
 
   return {
     rangeDays: days,

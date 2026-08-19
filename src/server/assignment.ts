@@ -99,8 +99,46 @@ async function loadRotation(now: Date): Promise<RotationMember[]> {
   });
 }
 
-/** The userId a fresh lead should go to right now, or null when no rotation is configured. */
+/**
+ * Has the rotation already auto-assigned its configured share of recent intake?
+ *
+ * ── Why this is measured, not rolled ─────────────────────────────────────────────────
+ * "Auto-assign 60% of leads" has two possible implementations. A coin flip per lead is one line
+ * and wrong for this app: it is non-deterministic, so the same lead assigned or not cannot be
+ * explained after the fact, and over the ten or twenty leads a real day brings it misses the
+ * target badly - a 60% dial that hands out 9 of 10 one day and 2 of 10 the next is not a dial.
+ *
+ * So the rate CONVERGES instead, exactly the way the per-person shares already do a few lines
+ * below: look at what actually happened over the fairness window and assign whenever the realised
+ * rate is under target. Deterministic, self-correcting after a burst, and the founder can check it
+ * by counting rows.
+ *
+ * The window counts leads by `createdAt`, so the 23,000-lead backlog and any manual hand-out of it
+ * stay out of the arithmetic - this measures live intake, which is what the dial is about.
+ */
+async function autoAssignQuotaMet(pct: number, lookbackDays: number, now: Date): Promise<boolean> {
+  if (pct >= 100) return false;
+  if (pct <= 0) return true;
+
+  const since = new Date(now.getTime() - lookbackDays * 86400000);
+  const [recent, assigned] = await Promise.all([
+    prisma.lead.count({ where: { ...ACTIVE, createdAt: { gte: since } } }),
+    prisma.lead.count({ where: { ...ACTIVE, createdAt: { gte: since }, assignedToId: { not: null } } }),
+  ]);
+  // No history yet - assign, so a fresh install does not sit on its hands until some other
+  // process happens to create a lead.
+  if (recent === 0) return false;
+  return (assigned / recent) * 100 >= pct;
+}
+
+/**
+ * The userId a fresh lead should go to right now, or null when no rotation is configured -
+ * or when the founder's auto-assign rate says this one waits in the unassigned pool.
+ */
 export async function pickFirstCaller(now = new Date()): Promise<string | null> {
+  const cfg = await getCallDistribution();
+  if (await autoAssignQuotaMet(cfg.autoAssignPct, cfg.lookbackDays, now)) return null;
+
   const all = await loadRotation(now);
   // Available = working today AND not already at their ceiling. A capped person is skipped, so
   // the lead goes to the next eligible caller rather than piling onto a queue they cannot work.
@@ -146,6 +184,8 @@ export async function getFirstCallSplit(now = new Date()) {
   return {
     lookbackDays: cfg.lookbackDays,
     dailyCapPerPerson: cfg.dailyCapPerPerson,
+    /** The founder's auto-assign rate. Below 100 the rest of intake waits to be handed out. */
+    autoAssignPct: cfg.autoAssignPct,
     isSaturday: istWeekday(now) === "Sat",
     /** True when the raw shares don't total 100 - the card explains rather than blocks. */
     sharesNormalised: shareTotal > 0 && shareTotal !== 100,

@@ -153,8 +153,10 @@ function istTodayInstants() {
  */
 export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
   const now = new Date();
-  // Founder-set ranking weights (Console → Call Distribution), shared with the pipeline list.
-  const priorityWeights = (await getCallDistribution()).priority;
+  // Founder-set distribution rules (Console → Call Distribution). `priority` is shared with the
+  // pipeline list; `followUpRestHours` is how long a called lead stays off the chase buckets.
+  const callCfg = await getCallDistribution();
+  const priorityWeights = callCfg.priority;
   const day = istTodayInstants();
   const month = istMonthInstantRange();
   const oldLeadCutoff = new Date(now.getTime() - OLD_LEAD_AFTER_DAYS * DAY_MS);
@@ -406,6 +408,29 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
 
   const openLeads = [...recentLeads, ...backlogLeads];
 
+  /**
+   * The LAST call on each lead, whatever its outcome - the thing "I already logged this" means.
+   *
+   * A separate read rather than a second `callLogs` block on `queueLeadSelect`, because a Prisma
+   * select can only name that relation once and the existing one is deliberately narrowed to the
+   * FIRST SPOKE call (the SLA clock). The two questions are different: "when did we first
+   * connect" grades the window, "when did we last dial" decides whether to show the row again.
+   *
+   * Skipped entirely when the founder has set the rest to 0, so the old behaviour costs nothing.
+   */
+  const restMs = callCfg.followUpRestHours * 3_600_000;
+  const lastCallAt = new Map<string, Date>();
+  if (restMs > 0 && openLeads.length) {
+    const rows = await prisma.callLog.groupBy({
+      by: ["leadId"],
+      where: { leadId: { in: openLeads.map((l) => l.id) }, calledAt: { gte: new Date(now.getTime() - restMs) } },
+      _max: { calledAt: true },
+    });
+    for (const r of rows) if (r._max.calledAt) lastCallAt.set(r.leadId, r._max.calledAt);
+  }
+  /** True while a lead is resting off the discretionary buckets after its most recent call. */
+  const resting = (leadId: string) => lastCallAt.has(leadId);
+
   for (const l of openLeads) {
     const optInAt = l.outreachJourney?.optInAt ?? l.createdAt;
     const first = l.callLogs[0];
@@ -462,11 +487,29 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
     const slaBucket = bucketForLead(verdict);
     if (slaBucket) {
       const isBacklog = slaBucket !== "FIVE_MINUTE" && optInAt < oldLeadCutoff;
+      // Backlog rests like the other discretionary work: its window closed weeks ago, so there is
+      // no same-day commitment left to justify showing a lead the caller just tried. A lead still
+      // inside its own window keeps its place - that deadline is live.
+      if (isBacklog && resting(l.id)) continue;
       queue[isBacklog ? "OLD_LEADS" : slaBucket].push(entry);
       continue;
     }
 
-    // Connected already. It can still be owed follow-up work, in JD priority order.
+    /**
+     * Connected already. It can still be owed follow-up work, in JD priority order - but not
+     * immediately after it was worked.
+     *
+     * These three buckets are STANDING conditions, not deadlines: "has a journey and no booking",
+     * "is older than 30 days", "came from a workshop". None of them is changed by making a call,
+     * so before the rest window a caller who rang someone, logged the outcome and refreshed found
+     * them sitting in the same place - the queue answering "who has not booked" while the caller
+     * was asking "who do I ring next". Resting the lead is what logging the outcome now does.
+     *
+     * The SLA buckets above are deliberately NOT rested: those are same-day commitments, and a
+     * lead that rang out this morning is still owed a connection this afternoon.
+     */
+    if (resting(l.id)) continue;
+
     if (l.outreachJourney && !l.outreachJourney.bookingId && l.outreachJourney.phase !== "IGNORED") {
       queue.OPTED_NOT_BOOKED.push(entry);
     } else if (l.leadSource === "WORKSHOP" && optInAt >= workshopCutoff) {

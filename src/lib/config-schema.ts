@@ -1120,6 +1120,41 @@ export const callDistributionSchema = z.object({
    * weighting governs only a trickle.
    */
   handOutSplitsByShare: z.boolean(),
+  /**
+   * What share of NEW leads the rotation hands out on its own. 100 = every lead gets an owner
+   * the moment it arrives; 0 = nothing is auto-assigned and every lead waits in the unassigned
+   * pool for someone to hand out deliberately.
+   *
+   * ── Why a dial and not a switch ──────────────────────────────────────────────────
+   * The shares below answer "of the leads we auto-assign, who gets them". Nothing answered "how
+   * many should we auto-assign at all", so the answer was always ALL of them. That is the right
+   * default with a full rotation, and the wrong one the moment the rotation shrinks: when the
+   * team loses a caller, 100% of intake lands on whoever is left, and a queue nobody can work is
+   * indistinguishable from leads that were never called.
+   *
+   * Held back leads are not lost - they arrive unowned and are handed out from Pipeline → Leads
+   * → Hand out leads, which is a deliberate act by a human who can see the day's capacity.
+   *
+   * `.default()` rather than plain `.number()` so a config blob written before this field existed
+   * still parses. Without it `coerceCallDistribution` would reject every stored config and
+   * silently reset the founder's window, cap and ranking weights back to the shipped defaults.
+   */
+  autoAssignPct: z.number().int().min(0).max(100).default(100),
+  /**
+   * How long a lead RESTS after a call is logged before the discretionary chase buckets show it
+   * again. 0 = never rest (the behaviour before this existed).
+   *
+   * The bug it fixes: "Opted in, not yet booked" listed every lead with a journey and no booking,
+   * full stop. Logging an outcome changed nothing about that test, so a caller who worked a lead,
+   * logged it and refreshed saw the same person at the top of the list - which reads as the app
+   * having lost the call. The queue was answering "who has not booked" when the caller was asking
+   * "who do I ring next".
+   *
+   * Only the DISCRETIONARY buckets rest (opted-not-booked, old leads, workshop follow-up). The
+   * SLA buckets deliberately do not: "connect same day" is a commitment, and a lead that rang out
+   * at 10am is still owed a connection at 3pm.
+   */
+  followUpRestHours: z.number().int().min(0).max(720).default(24),
   /** Ranking weights. Shape mirrors `PriorityWeights` in lib/lead-priority.ts. */
   priority: z.object({
     bantPerPoint: z.number().min(0).max(50),
@@ -1145,6 +1180,11 @@ export const DEFAULT_CALL_DISTRIBUTION: CallDistributionConfig = {
   lookbackDays: 30,
   dailyCapPerPerson: 0,
   handOutSplitsByShare: false,
+  // 100 = today's behaviour: every arriving lead is auto-assigned.
+  autoAssignPct: 100,
+  // 24 is NOT the old behaviour - the old behaviour was 0, and it is the bug. A lead worked today
+  // comes back tomorrow; anything shorter and the caller is looking at the person they just rang.
+  followUpRestHours: 24,
   priority: {
     bantPerPoint: 10,
     highlyQualifiedBonus: 15,

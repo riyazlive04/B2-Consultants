@@ -87,6 +87,53 @@ export function CallDistributionPanel({
         them. The preview below is computed exactly the way the hand-out computes it.
       </Hint>
 
+      {/* ── How much is auto-assigned at all ────────────────────────────────────── */}
+      <Card>
+        <p className="text-caption font-semibold uppercase text-ink-3">
+          How many new leads the system assigns by itself
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-4">
+          <label className="text-caption uppercase text-ink-3">
+            Auto-assigned share (%)
+            <span className="mt-1 block">
+              <NumInput
+                value={draft.autoAssignPct}
+                min={0}
+                max={100}
+                onChange={(v) => setDraft((d) => ({ ...d, autoAssignPct: v }))}
+              />
+            </span>
+          </label>
+          <p className="min-w-0 flex-1 text-caption text-ink-3">
+            {draft.autoAssignPct >= 100 ? (
+              <>
+                Every new lead is given an owner the moment it arrives. The shares below decide
+                who.
+              </>
+            ) : draft.autoAssignPct <= 0 ? (
+              <>
+                <strong className="text-ink">Nothing is auto-assigned.</strong> Every lead arrives
+                unowned and waits for someone to hand it out from Pipeline → Leads → Hand out
+                leads. The shares below still govern that hand-out.
+              </>
+            ) : (
+              <>
+                Roughly <strong className="text-ink">{draft.autoAssignPct} of every 100</strong> new
+                leads are given an owner on arrival; the other{" "}
+                <strong className="text-ink">{100 - draft.autoAssignPct}</strong> wait in the
+                unassigned pool to be handed out deliberately.
+              </>
+            )}
+          </p>
+        </div>
+        <p className="mt-3 rounded-field bg-surface-2 px-3 py-2 text-caption text-ink-3">
+          This is a rate the engine <strong>converges on</strong>, not a coin toss: it compares
+          what has actually been auto-assigned over the fairness window against this target, so a
+          quiet spell is caught up rather than lost. Held-back leads are never dropped - they sit
+          in the unassigned pile, visible to whoever hands work out.
+        </p>
+      </Card>
+
       {/* ── Shares ──────────────────────────────────────────────────────────────── */}
       <Card>
         <p className="text-caption font-semibold uppercase text-ink-3">
@@ -222,7 +269,38 @@ export function CallDistributionPanel({
           app had before these were adjustable.
         </p>
 
-        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 border-t border-line pt-4">
+          <label className="text-caption uppercase text-ink-3">
+            Rest a lead after a call (hours)
+            <span className="mt-1 block">
+              <NumInput
+                value={draft.followUpRestHours}
+                min={0}
+                max={720}
+                onChange={(v) => setDraft((d) => ({ ...d, followUpRestHours: v }))}
+              />
+            </span>
+            <span className="mt-1 block normal-case text-ink-3">
+              {draft.followUpRestHours === 0 ? (
+                <>
+                  <strong className="text-ink">Leads never rest.</strong> A lead reappears on
+                  &ldquo;Who to call now&rdquo; the instant its outcome is logged, which reads to
+                  the caller as the app having lost the call.
+                </>
+              ) : (
+                <>
+                  Once an outcome is logged, the lead drops off &ldquo;Opted in, not yet
+                  booked&rdquo;, &ldquo;Old leads&rdquo; and workshop follow-up for{" "}
+                  {draft.followUpRestHours} hour{draft.followUpRestHours === 1 ? "" : "s"}, then
+                  returns. Leads still inside their own connection deadline are not rested - that
+                  clock is a same-day commitment.
+                </>
+              )}
+            </span>
+          </label>
+        </div>
+
+        <div className="mt-4 grid gap-4 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-3">
           <Weight
             label="Points per BANT dimension"
             hint="A 4/4 lead gains four times this. Raise it to let a strongly-qualified older lead outrank a fresh unqualified one."

@@ -3783,6 +3783,9 @@ model OutreachJourney {
   @@index([phase])
   @@index([contactedAt])
   @@index([qualified])
+  // The speed-to-lead report and the SLA reads scope by opt-in window across all ~23k journeys.
+  // Without this they are a full scan of the table on every open.
+  @@index([optInAt])
   @@map("outreach_journey")
 }
 

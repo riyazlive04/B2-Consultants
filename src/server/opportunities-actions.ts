@@ -991,3 +991,154 @@ export async function deleteOpportunityNote(id: string): Promise<ActionResult> {
   revalidatePath(`/contacts/${note.leadId}`);
   return { ok: true };
 }
+
+// ─────────────────────────── Opportunity detail (the edit dialog) ───────────────────────────
+// The board card carries only what a column needs. The dialog needs the contact behind the deal
+// (Synamate's "Contact details" block), the deal's own audit stamps, and the contact's
+// appointments and tasks - loaded on open, like the notes, so the board query stays light.
+
+export type OpportunityDetail = {
+  id: string;
+  name: string;
+  status: string;
+  stageId: string;
+  source: string | null;
+  ownerId: string | null;
+  valueInr: string;
+  pipelineName: string;
+  lostReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  contact: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    city: string | null;
+    companyName: string | null;
+    tags: string[];
+    createdAt: Date;
+    enteredByName: string | null;
+    source: string;
+  };
+  appointments: {
+    id: string;
+    startsAt: Date | null;
+    status: string;
+    confirmed: boolean;
+    createdAt: Date;
+  }[];
+  tasks: {
+    id: string;
+    title: string;
+    dueAt: Date | null;
+    done: boolean;
+    assigneeName: string | null;
+  }[];
+};
+
+export async function getOpportunityDetail(id: string): Promise<OpportunityDetail | null> {
+  await requireSection("opportunities");
+  const o = await prisma.opportunity.findUnique({
+    where: { id },
+    select: {
+      id: true, name: true, status: true, stageId: true, source: true, assignedToId: true,
+      valueInrMinor: true, lostReason: true, createdAt: true, updatedAt: true,
+      pipeline: { select: { name: true } },
+      lead: {
+        select: {
+          id: true, name: true, email: true, phone: true, city: true, createdAt: true, source: true,
+          company: { select: { name: true } },
+          tags: { select: { name: true } },
+          enteredBy: { select: { name: true } },
+          bookings: {
+            orderBy: { createdAt: "desc" },
+            take: 10,
+            select: { id: true, status: true, confirmedAt: true, createdAt: true, slot: { select: { startsAt: true } } },
+          },
+          tasks: {
+            where: { deletedAt: null },
+            orderBy: [{ status: "asc" }, { dueAt: "asc" }],
+            take: 20,
+            select: { id: true, title: true, dueAt: true, status: true, assignedTo: { select: { name: true } } },
+          },
+        },
+      },
+    },
+  });
+  if (!o) return null;
+  return {
+    id: o.id,
+    name: o.name,
+    status: o.status,
+    stageId: o.stageId,
+    source: o.source,
+    ownerId: o.assignedToId,
+    valueInr: (Number(o.valueInrMinor) / 100).toFixed(2),
+    pipelineName: o.pipeline.name,
+    lostReason: o.lostReason,
+    createdAt: o.createdAt,
+    updatedAt: o.updatedAt,
+    contact: {
+      id: o.lead.id,
+      name: o.lead.name,
+      email: o.lead.email,
+      phone: o.lead.phone,
+      city: o.lead.city,
+      companyName: o.lead.company?.name ?? null,
+      tags: o.lead.tags.map((t) => t.name),
+      createdAt: o.lead.createdAt,
+      enteredByName: o.lead.enteredBy?.name ?? null,
+      source: o.lead.source,
+    },
+    appointments: o.lead.bookings.map((b) => ({
+      id: b.id,
+      startsAt: b.slot?.startsAt ?? null,
+      status: b.status,
+      confirmed: !!b.confirmedAt,
+      createdAt: b.createdAt,
+    })),
+    tasks: o.lead.tasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      dueAt: t.dueAt,
+      done: t.status === "COMPLETED",
+      assigneeName: t.assignedTo?.name ?? null,
+    })),
+  };
+}
+
+// Only the identity fields the dialog shows. `updateContact` in contacts-actions needs the full
+// contact form (source, city, company…) which this dialog does not render, and re-posting values
+// the user never saw is how a quick phone fix silently resets a field.
+const oppContactSchema = z.object({
+  name: rule("name"),
+  phone: optionalRule("phone"),
+  email: optionalRule("email"),
+});
+
+export async function updateOpportunityContact(leadId: string, form: FormData): Promise<ActionResult> {
+  const session = await requireSection("opportunities");
+  const parsed = oppContactSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const d = parsed.data;
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true, phone: true, email: true } });
+  if (!lead) return { ok: false, error: "Contact not found" };
+
+  const data = { name: d.name, phone: d.phone || null, email: d.email || null };
+  const diff = diffFields(lead, data);
+  if (!diff.changed.length) return { ok: true };
+
+  await prisma.lead.update({ where: { id: leadId }, data });
+  await logActivity(session, {
+    action: "contact.update",
+    section: "opportunities",
+    entityType: "Lead",
+    entityId: leadId,
+    summary: `Updated contact ${d.name} from the pipeline - changed ${diff.changed.join(", ")}`,
+    meta: { changed: diff.changed, before: diff.before, after: diff.after },
+  });
+  revalidatePath("/opportunities");
+  revalidatePath(`/contacts/${leadId}`);
+  return { ok: true };
+}

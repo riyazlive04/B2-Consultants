@@ -25,6 +25,7 @@ import {
 } from "@/server/opportunities-actions";
 import { LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
 import { SYNAMATE_STAGES } from "@/lib/pipeline-stages";
+import { OpportunityDialog } from "./OpportunityDialog";
 
 // Options for mapping a stage back to a lead-lifecycle stage (the bridge that syncs a card move to
 // Lead.stage). "" = no sync; the board stays a standalone process - offered on custom pipelines
@@ -545,48 +546,20 @@ export default function Board({
         </form>
       </Modal>
 
-      {/* Edit opportunity - Details (the existing form, untouched) + Notes (BUILD_CHECKLIST.md
-          §3: Opportunity gets its own notes via ContactNote.opportunityId, not just the parent
-          Lead's). Two tabs rather than one long scroll, and the note form has to be a sibling of
-          the Details form (not nested inside it) since HTML forms can't nest - Tabs only ever
-          mounts one panel at a time, so that's naturally satisfied here. */}
-      <Modal open={!!editCard} onClose={() => setEditCard(null)} title="Edit opportunity" size="md">
-        {editCard && (
-          <Tabs
-            tabs={[
-              {
-                label: "Details",
-                content: (
-                  <form action={saveOpp} key={editCard.id} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <Field label="Deal name"><TextInput kind="text" name="name" required defaultValue={editCard.name} /></Field>
-                      <Field label="Value (₹)"><TextInput kind="money" name="valueInr" defaultValue={editCard.valueInr.replace(/[^\d.]/g, "")} /></Field>
-                      <Field label="Stage">
-                        <Select name="stageId" options={stageOpts} defaultValue={editCard.stageId} />
-                      </Field>
-                      <Field label="Source"><Select name="source" options={SOURCE_OPTS} defaultValue={editCard.source ?? ""} /></Field>
-                      <Field label="Status"><Select name="status" options={[{ value: "OPEN", label: "Open" }, { value: "WON", label: "Won" }, { value: "LOST", label: "Lost" }, { value: "ABANDONED", label: "Abandoned" }]} defaultValue={editCard.status} /></Field>
-                      <Field label="Owner"><Select name="assignedToId" options={ownerOpts} defaultValue={editCard.ownerId ?? ""} /></Field>
-                    </div>
-                    <FormError message={editError} />
-                    <div className="flex items-center justify-between pt-1">
-                      <Btn variant="danger" type="button" icon={<Trash2 size={15} />} onClick={removeOpp}>Delete</Btn>
-                      <div className="flex gap-2">
-                        <Btn variant="ghost" type="button" onClick={() => setEditCard(null)}>Cancel</Btn>
-                        <SubmitButton>Save</SubmitButton>
-                      </div>
-                    </div>
-                  </form>
-                ),
-              },
-              {
-                label: "Notes",
-                content: <OpportunityNotesPanel key={editCard.id} opportunityId={editCard.id} />,
-              },
-            ]}
-          />
-        )}
-      </Modal>
+      {/* Edit opportunity - contact details first, then the deal, plus appointments, tasks and
+          notes (BUILD_CHECKLIST.md §3: Opportunity gets its own notes via ContactNote.opportunityId).
+          The deal save and delete stay here because they also drive the board's optimistic state. */}
+      <OpportunityDialog
+        card={editCard}
+        stageOpts={stageOpts}
+        ownerOpts={ownerOpts}
+        sourceOpts={SOURCE_OPTS}
+        error={editError}
+        onSave={saveOpp}
+        onDelete={removeOpp}
+        onClose={() => setEditCard(null)}
+        notesPanel={editCard ? <OpportunityNotesPanel key={editCard.id} opportunityId={editCard.id} /> : null}
+      />
 
       {/* Manage board */}
       {canConfigure && <ManageBoard board={board} open={manageOpen} onClose={() => setManageOpen(false)} />}

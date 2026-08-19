@@ -1,7 +1,33 @@
 import "server-only";
-import type { LeadStage } from "@prisma/client";
+import type { LeadStage, WhatsAppKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { syncDefaultOpportunity } from "./opportunity-sync";
+
+/**
+ * Which WhatsApp touchpoints mean "this prospect has now been messaged" for the board.
+ *
+ * "WhatsApp Sent" is the Fresh Optins column's exit: the SOP intro (Step 3) reached the
+ * prospect. Only the kinds that ARE that first contact are listed - a booking confirmation or a
+ * payment reminder says nothing about where a fresh opt-in is in the funnel, and listing them
+ * would drag a lead forward on the wrong signal.
+ */
+const STAGE_ON_SENT: Partial<Record<WhatsAppKind, { to: LeadStage; from: readonly LeadStage[] }>> = {
+  SOP_INTRO: { to: "WHATSAPP_SENT", from: ["NEW_LEAD"] },
+  DISCO_REMINDER: { to: "WHATSAPP_SENT", from: ["NEW_LEAD"] },
+};
+
+/**
+ * Called by `sendWhatsApp` after a message actually went out to a lead. One hook for every
+ * sender - the automation workflow, a manual send from the pipeline, the SOP engine - so the
+ * card moves the same way regardless of which path sent the intro. Before this, only the SOP
+ * engine's own step-marking advanced the stage, and an intro sent by a workflow left the lead
+ * sitting in Fresh Optins with the message genuinely delivered.
+ */
+export async function advanceLeadStageForWhatsApp(leadId: string, kind: WhatsAppKind): Promise<boolean> {
+  const rule = STAGE_ON_SENT[kind];
+  if (!rule) return false;
+  return advanceLeadStage(leadId, rule.to, rule.from);
+}
 
 /**
  * Move a lead forward because the system observed something, not because a human dragged a card.

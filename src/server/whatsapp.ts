@@ -23,6 +23,7 @@ import {
 } from "@/lib/wati";
 import { getPendingRows } from "./finance-metrics";
 import { ACTIVE } from "@/lib/soft-delete";
+import { advanceLeadStageForWhatsApp } from "./lead-stage-auto";
 
 /**
  * WhatsApp sending service + automatic reminder engine (WATI). Everything funnels through
@@ -296,6 +297,11 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
     sentById,
     target,
   });
+  // The board follows the message: a sent intro moves a fresh opt-in to "WhatsApp Sent". Done
+  // after the row is written and never allowed to fail the send - the message has already left.
+  if (result.ok && target.leadId) {
+    await advanceLeadStageForWhatsApp(target.leadId, kind).catch(() => undefined);
+  }
   return {
     messageId,
     status,

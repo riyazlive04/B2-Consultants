@@ -1,5 +1,5 @@
 /**
- * Outreach SOP — the ladder, as pure functions.
+ * Outreach SOP - the ladder, as pure functions.
  *
  * Deliberately has NO prisma, NO clock and NO IO: every function takes `now` as an argument and
  * returns a decision. That is what makes the SOP's timing rules testable at their boundaries
@@ -8,7 +8,7 @@
  *
  * The one rule worth internalising: a step is MATERIALISED when its precondition becomes true, and
  * is ACTIONABLE when `now >= dueAt`. Those are different moments. Materialising early is how the
- * queue can show "Disco confirmation 1 — in 4h" instead of surprising the specialist with it.
+ * queue can show "Disco confirmation 1 - in 4h" instead of surprising the specialist with it.
  */
 
 import type { OutreachPhase, OutreachStep, OutreachStepStatus, QualifiedVerdict } from "@prisma/client";
@@ -54,7 +54,7 @@ export type PlannedStep = { step: OutreachStep; dueAt: Date };
 export type Plan = {
   /** Rows to create (precondition met, not yet materialised). */
   materialise: PlannedStep[];
-  /** Rows overtaken by events — e.g. a reminder still DUE after the prospect confirmed. */
+  /** Rows overtaken by events - e.g. a reminder still DUE after the prospect confirmed. */
   supersede: OutreachStep[];
   /** The phase the journey should now be in. */
   phase: OutreachPhase;
@@ -67,7 +67,7 @@ export type ReactionBranch =
   | "FAST"
   /** Window blown → SOP Step 10 (skip the intro flow, go straight to the booking check). */
   | "SLOW"
-  /** Not contacted yet and still inside the window — the branch is undecided. */
+  /** Not contacted yet and still inside the window - the branch is undecided. */
   | "PENDING";
 
 export type ReactionState = {
@@ -76,14 +76,14 @@ export type ReactionState = {
   /** Milliseconds left before the SLA is blown. Negative once breached. */
   remainingMs: number;
   breached: boolean;
-  /** True in the last quarter of the window — drives the "approaching" alert (checklist §B). */
+  /** True in the last quarter of the window - drives the "approaching" alert (checklist §B). */
   approaching: boolean;
 };
 
 /**
  * Step 2. The branch is decided at the moment of contact: connect inside `reactionMinutes` and the
  * SOP runs Step 3; connect later and it skips to Step 10. Before any contact the branch is
- * PENDING — it can still land either way — which is why `approaching` exists at all.
+ * PENDING - it can still land either way - which is why `approaching` exists at all.
  */
 export function reactionState(state: JourneyState, now: Date, sla: OutreachSla): ReactionState {
   const windowMs = sla.reactionMinutes * MIN;
@@ -105,7 +105,7 @@ export function reactionState(state: JourneyState, now: Date, sla: OutreachSla):
     elapsedMs,
     remainingMs,
     breached,
-    // Only meaningful while nobody has contacted them yet — once contacted the clock has stopped.
+    // Only meaningful while nobody has contacted them yet - once contacted the clock has stopped.
     approaching: !state.contactedAt && !breached && remainingMs <= windowMs / 4,
   };
 }
@@ -140,8 +140,8 @@ function saidNo(state: JourneyState, step: OutreachStep): boolean {
  *
  * Strictly this is belt-and-braces: the engine runs the Step 10 checks BEFORE planning, so a
  * prospect who had booked would already have `booked = true` and the whole chase block below
- * would be skipped. Testing the outcome explicitly means the rule reads the way it is meant —
- * "they were asked, and they had not booked" — rather than depending on that ordering holding
+ * would be skipped. Testing the outcome explicitly means the rule reads the way it is meant -
+ * "they were asked, and they had not booked" - rather than depending on that ordering holding
  * forever.
  */
 function checkFoundNoBooking(state: JourneyState, step: OutreachStep): boolean {
@@ -149,7 +149,7 @@ function checkFoundNoBooking(state: JourneyState, step: OutreachStep): boolean {
 }
 
 /**
- * Steps 5/7/9 anchor on "2 hours after Step 3/4" — the later of the intro message and the first
+ * Steps 5/7/9 anchor on "2 hours after Step 3/4" - the later of the intro message and the first
  * call, since either may be the last thing the prospect actually experienced.
  */
 function laterOf(a: Date | null, b: Date | null): Date | null {
@@ -216,8 +216,8 @@ export function planJourney(
     /**
      * Step 2's branch, and the one subtlety in the whole ladder: the branch is decided ONCE, and
      * the intro having been sent is itself proof the FAST path was taken. Re-deriving it from the
-     * clock on every run would flip a journey onto the Step 10 path the moment 5 minutes elapse —
-     * even mid-chase, with the intro already delivered — and re-anchor Check 1 to "now", silently
+     * clock on every run would flip a journey onto the Step 10 path the moment 5 minutes elapse -
+     * even mid-chase, with the intro already delivered - and re-anchor Check 1 to "now", silently
      * moving a deadline that was already set. So: once INTRO_WHATSAPP exists, we are committed.
      */
     const onIntroPath = exists(state, "INTRO_WHATSAPP") || reaction.branch !== "SLOW";
@@ -226,13 +226,13 @@ export function planJourney(
       add("INTRO_WHATSAPP", state.optInAt);
       // Step 4 straight after Step 3 is the SOP as B2 wrote it: message, then ring, regardless of
       // whether the prospect has had any chance to act. Under "after_check" the call is deferred
-      // until a booking check has actually come back empty — see the CHECK_1 branch below.
+      // until a booking check has actually come back empty - see the CHECK_1 branch below.
       if (firstCallMode === "immediate" && acted(state, "INTRO_WHATSAPP")) {
         add("FIRST_CALL", actedAt(state, "INTRO_WHATSAPP") ?? state.optInAt);
       }
     }
 
-    // Step 5 — Check 1, two hours after Step 3/4 (the later of them: either may be the last thing
+    // Step 5 - Check 1, two hours after Step 3/4 (the later of them: either may be the last thing
     // the prospect actually experienced).
     const chaseAnchor = laterOf(actedAt(state, "INTRO_WHATSAPP"), actedAt(state, "FIRST_CALL"));
     if (chaseAnchor) {
@@ -242,14 +242,14 @@ export function planJourney(
       add("CHECK_1", now);
     }
 
-    // Step 6 — only once Check 1 has actually run and come back "not booked".
+    // Step 6 - only once Check 1 has actually run and come back "not booked".
     if (acted(state, "CHECK_1")) {
       if (firstCallMode === "after_check" && checkFoundNoBooking(state, "CHECK_1")) {
         /**
          * THE DEFERRED FIRST CALL.
          *
          * The intro has been out for `check1Hours`, the booking check has run, and there is still
-         * no booking — which is the moment a human is worth spending. This is the whole point of
+         * no booking - which is the moment a human is worth spending. This is the whole point of
          * the mode: every prospect who books off the message alone never reaches a caller at all.
          */
         add("FIRST_CALL", actedAt(state, "CHECK_1") ?? now);
@@ -263,16 +263,16 @@ export function planJourney(
       }
     }
 
-    // Step 7 — one hour after Step 6.
+    // Step 7 - one hour after Step 6.
     const a6 = actedAt(state, "FOLLOWUP_WHATSAPP");
     if (a6) add("CHECK_2", plus(a6, sla.check2Hours));
 
-    // Step 8 — only once Check 2 has run.
+    // Step 8 - only once Check 2 has run.
     if (acted(state, "CHECK_2")) {
       add("FOLLOWUP_CALL", actedAt(state, "CHECK_2") ?? now);
     }
 
-    // Step 9 — two hours after Step 8. The SOP's NO branch at Step 8 ends the cycle outright
+    // Step 9 - two hours after Step 8. The SOP's NO branch at Step 8 ends the cycle outright
     // (checklist §H), so no final check is scheduled in that case.
     const a8 = actedAt(state, "FOLLOWUP_CALL");
     if (a8 && !saidNo(state, "FOLLOWUP_CALL")) {
@@ -291,21 +291,21 @@ export function planJourney(
   // ═══ Steps 13–16: the Disco ladder. Gated on Qualified = YES/MAYBE. ═══
   const q = state.qualified;
   if (state.booked && q && qualifiedContinues(q) && acted(state, "KEY_METRICS_TRANSFER")) {
-    // Step 13 — "sent immediately on qualification", not delayed (checklist §M).
+    // Step 13 - "sent immediately on qualification", not delayed (checklist §M).
     add("DISCO_WELCOME", actedAt(state, "KEY_METRICS_TRANSFER") ?? now);
 
     if (state.discoAt && !state.whatsappConfirmed) {
-      // Step 14 — at least 36h before.
+      // Step 14 - at least 36h before.
       add("DISCO_CONFIRM_1", minus(state.discoAt, sla.discoConfirm1LeadHours));
 
-      // Step 15 — at least 24h before, ONLY if Step 14 drew no reply. If they already confirmed,
-      // the guard above stops the whole ladder — checklist §N explicitly tests that Step 15 does
+      // Step 15 - at least 24h before, ONLY if Step 14 drew no reply. If they already confirmed,
+      // the guard above stops the whole ladder - checklist §N explicitly tests that Step 15 does
       // not also fire when the prospect has confirmed.
       if (acted(state, "DISCO_CONFIRM_1")) {
         add("DISCO_CONFIRM_2", minus(state.discoAt, sla.discoConfirm2LeadHours));
       }
 
-      // Step 16 — two required call attempts, then the cancellation message.
+      // Step 16 - two required call attempts, then the cancellation message.
       if (acted(state, "DISCO_CONFIRM_2")) {
         add("DISCO_CONFIRM_CALL_1", minus(state.discoAt, sla.discoConfirm2LeadHours));
       }
@@ -313,7 +313,7 @@ export function planJourney(
         add("DISCO_CONFIRM_CALL_2", minus(state.discoAt, sla.discoConfirm2LeadHours));
       }
       // The SOP is emphatic: call twice BEFORE the 12-hour cancellation goes out. Both attempts
-      // must be logged (checklist §N) — this is the gate that enforces it.
+      // must be logged (checklist §N) - this is the gate that enforces it.
       if (acted(state, "DISCO_CONFIRM_CALL_1") && acted(state, "DISCO_CONFIRM_CALL_2")) {
         add("DISCO_CANCEL_MSG", minus(state.discoAt, sla.discoCancelLeadHours));
       }
@@ -350,7 +350,7 @@ export function planJourney(
 }
 
 /**
- * Reminder steps that events have overtaken — a confirmation ladder still sitting DUE after the
+ * Reminder steps that events have overtaken - a confirmation ladder still sitting DUE after the
  * prospect confirmed, or anything left open once the journey reached a terminal phase. Without
  * this the queue would keep offering the specialist a cancellation message for someone who already
  * said yes.
@@ -388,7 +388,7 @@ function pendingReminders(state: JourneyState): OutreachStep[] {
 }
 
 /**
- * The phase the journey should be in, derived from facts rather than stored transitions — so a
+ * The phase the journey should be in, derived from facts rather than stored transitions - so a
  * journey can never get stranded in a phase that contradicts its own data.
  */
 export function nextPhase(state: JourneyState, now: Date, sla: OutreachSla): OutreachPhase {
@@ -427,7 +427,7 @@ export function nextPhase(state: JourneyState, now: Date, sla: OutreachSla): Out
  * reported as 'not booked' due to formatting mismatches (trailing spaces, case, email aliasing)".
  *
  * Trailing space and case are unambiguous and we fix both. **Aliasing is deliberately NOT
- * stripped**: `+` sub-addressing and dot-insensitivity are Gmail conventions, not standards —
+ * stripped**: `+` sub-addressing and dot-insensitivity are Gmail conventions, not standards -
  * `a.b@yahoo.com` and `ab@yahoo.com` are genuinely different mailboxes. Folding them would turn a
  * false negative into a false positive, which is the worse failure here: it would cross-check one
  * prospect's booking against another prospect's lead. The SOP's own Ctrl+F is a literal match, so

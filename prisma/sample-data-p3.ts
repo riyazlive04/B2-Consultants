@@ -1,9 +1,9 @@
 /**
- * DEV-ONLY Phase 3 sample data — snapshots, cash positions, payables, back-months
+ * DEV-ONLY Phase 3 sample data - snapshots, cash positions, payables, back-months
  * of income/expense for burn & growth, GB-sourced leads.
  * Purge: npx tsx prisma/sample-data-p3.ts --purge
  * Rows are identified for purge by the fixed sample identities below (batch names,
- * ops vendors, phone prefix, week dates) — dev DB only.
+ * ops vendors, phone prefix, week dates) - dev DB only.
  */
 import { PrismaClient, Prisma } from "@prisma/client";
 
@@ -42,7 +42,7 @@ const BALANCES = [520000, 510000, 498000, 505000, 490000, 478000, 470000, 462000
 async function purge() {
   await prisma.weeklyFunnelSnapshot.deleteMany({ where: { weekStart: { in: WEEKS.map((w) => d(w[0])) } } });
   await prisma.cashPosition.deleteMany({ where: { date: { in: MONDAYS.map((m) => d(m)) } } });
-  await prisma.payable.deleteMany({}); // payables have no notes column — sample DB only
+  await prisma.payable.deleteMany({}); // payables have no notes column - sample DB only
   await prisma.lead.deleteMany({ where: { phone: { startsWith: SAMPLE_PHONE_PREFIX } } });
   await prisma.income.deleteMany({ where: { studentName: { in: SAMPLE_BATCHES } } });
   await prisma.expense.deleteMany({ where: { vendor: { in: SAMPLE_OPS_VENDORS } } });
@@ -59,23 +59,23 @@ async function main() {
   // ── Back-months income (growth series) + expenses (burn = avg Apr..Jun) ──
   await prisma.income.createMany({
     data: [
-      { date: d("2026-04-20"), studentName: "April Batch", amountInrMinor: inr(150000), amountEurMinor: BigInt(0), fxRateUsed: FX, programLevel: "GUIDED", paymentType: "FULL_PAYMENT", paymentMethod: "UPI", notes: "April cohort — collected in full", enteredById: ameen },
-      { date: d("2026-05-18"), studentName: "May Batch", amountInrMinor: inr(180000), amountEurMinor: BigInt(0), fxRateUsed: FX, programLevel: "GUIDED", paymentType: "FULL_PAYMENT", paymentMethod: "RAZORPAY", notes: "May cohort — collected in full", enteredById: ameen },
-      { date: d("2026-06-10"), studentName: "June Batch", amountInrMinor: inr(210000), amountEurMinor: BigInt(0), fxRateUsed: FX, programLevel: "ELITE", paymentType: "FULL_PAYMENT", paymentMethod: "RAZORPAY", notes: "June cohort — collected in full", enteredById: ameen },
+      { date: d("2026-04-20"), studentName: "April Batch", amountInrMinor: inr(150000), amountEurMinor: BigInt(0), fxRateUsed: FX, programLevel: "GUIDED", paymentType: "FULL_PAYMENT", paymentMethod: "UPI", notes: "April cohort - collected in full", enteredById: ameen },
+      { date: d("2026-05-18"), studentName: "May Batch", amountInrMinor: inr(180000), amountEurMinor: BigInt(0), fxRateUsed: FX, programLevel: "GUIDED", paymentType: "FULL_PAYMENT", paymentMethod: "RAZORPAY", notes: "May cohort - collected in full", enteredById: ameen },
+      { date: d("2026-06-10"), studentName: "June Batch", amountInrMinor: inr(210000), amountEurMinor: BigInt(0), fxRateUsed: FX, programLevel: "ELITE", paymentType: "FULL_PAYMENT", paymentMethod: "RAZORPAY", notes: "June cohort - collected in full", enteredById: ameen },
     ],
   });
   await prisma.expense.createMany({
     data: [
-      { date: d("2026-04-15"), amountInrMinor: inr(90000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "OPERATIONS", isCogs: false, vendor: "April ops", notes: "April operating costs — rent, utilities, misc", enteredById: ameen },
-      { date: d("2026-05-15"), amountInrMinor: inr(100000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "OPERATIONS", isCogs: false, vendor: "May ops", notes: "May operating costs — rent, utilities, misc", enteredById: ameen },
-      { date: d("2026-06-15"), amountInrMinor: inr(110000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "OPERATIONS", isCogs: false, vendor: "June ops", notes: "June operating costs — rent, utilities, misc", enteredById: ameen },
+      { date: d("2026-04-15"), amountInrMinor: inr(90000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "OPERATIONS", isCogs: false, vendor: "April ops", notes: "April operating costs - rent, utilities, misc", enteredById: ameen },
+      { date: d("2026-05-15"), amountInrMinor: inr(100000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "OPERATIONS", isCogs: false, vendor: "May ops", notes: "May operating costs - rent, utilities, misc", enteredById: ameen },
+      { date: d("2026-06-15"), amountInrMinor: inr(110000), amountEurMinor: BigInt(0), fxRateUsed: FX, category: "OPERATIONS", isCogs: false, vendor: "June ops", notes: "June operating costs - rent, utilities, misc", enteredById: ameen },
     ],
   });
 
   // ── GB-sourced leads with completed calls (feeds GB→call rate) ──
   const gbLeads = [
     { name: "Sameer Joshi", phone: "+91 98111 33001", note: "Downloaded Ghosted Blueprint, booked call same day" },
-    { name: "Lakshmi Iyer", phone: "+91 98111 33002", note: "Ghosted Blueprint reader — came in via email nurture" },
+    { name: "Lakshmi Iyer", phone: "+91 98111 33002", note: "Ghosted Blueprint reader - came in via email nurture" },
   ];
   for (const gb of gbLeads) {
     await prisma.lead.create({
@@ -133,15 +133,15 @@ async function main() {
 
   console.log(`Phase 3 sample data created.
 EXPECTED:
-  Runway  — burn = (90k+100k+110k)/3 = ₹1,00,000/mo · cash ₹4,50,000 → runway 4.5 mo AMBER
+  Runway  - burn = (90k+100k+110k)/3 = ₹1,00,000/mo · cash ₹4,50,000 → runway 4.5 mo AMBER
             break-even = 50k+40k+8k+4k+2k(Zoom/12) = ₹1,04,000
             revenue vs break-even (July ₹2,49,371.75) = +₹1,45,372
             payables due this month = 40k+8k+4k = ₹52,000
-  Funnel  — July: 12,000 → 10 → 7 → 1 → 2 (biggest drop Awareness→Lead ≈99.9%)
+  Funnel  - July: 12,000 → 10 → 7 → 1 → 2 (biggest drop Awareness→Lead ≈99.9%)
             overall conversion 20% · Guided share 100% · rev/lead ≈ ₹24,937
             GB: 177 downloads all time · 25 this month · →call 2/177=1.1% · →enrol 1/177=0.6%
             GB revenue attributed = Priya ₹1,20,000
-  Top bar — "Runway: 4.5 months" amber badge on every screen (Admin only)`);
+  Top bar - "Runway: 4.5 months" amber badge on every screen (Admin only)`);
 }
 
 main()

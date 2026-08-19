@@ -63,7 +63,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
         <AgreementActions id={row.id} status={status} studentName={data.student.fullName} />
       </div>
 
-      {/* Integrity — the two hashes, and why they are different things. */}
+      {/* Integrity - the two hashes, and why they are different things. */}
       <div className="rounded-card border border-line bg-surface p-5 shadow-card">
         <h2 className="mb-3 flex items-center gap-2 font-display text-h2 font-semibold">
           <ShieldCheck size={18} className="text-accent" /> Integrity
@@ -97,7 +97,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
             <p className="text-xs text-muted">
               {isSigned
                 ? "The sealed bytes, served exactly as they were hashed."
-                : "Rendered live from the fields below — this is what the student will read."}
+                : "Rendered live from the fields below - this is what the student will read."}
             </p>
           </div>
           <iframe
@@ -105,7 +105,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
             title={`Agreement ${row.documentNo}`}
             className="h-[820px] w-full bg-surface-2"
           />
-          {/* iOS and most Android browsers refuse to render a PDF inside an iframe — the founder on
+          {/* iOS and most Android browsers refuse to render a PDF inside an iframe - the founder on
               a phone gets a blank panel and concludes the preview is broken. The student's signing
               page has carried this escape hatch since day one; this screen was the one that didn't. */}
           <div className="border-t border-line px-4 py-2.5 text-center">
@@ -132,8 +132,8 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
               <Row label="Total fee">{formatInrMinor(BigInt(data.payment.totalInrMinor))}</Row>
               <Row label="Plan">
                 {data.payment.option === "FULL"
-                  ? "Option A — full payment"
-                  : `Option B — ${data.payment.instalments
+                  ? "Option A - full payment"
+                  : `Option B - ${data.payment.instalments
                       .map((i) => formatInrMinor(BigInt(i.amountInrMinor)))
                       .join(" + ")}`}
               </Row>
@@ -198,7 +198,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
         <div className="space-y-3">
           <h2 className="font-display text-h2 font-semibold">Edit fields</h2>
           <p className="text-xs text-muted">
-            Only a draft can be edited. Once issued, the terms are frozen — void and clone to revise.
+            Only a draft can be edited. Once issued, the terms are frozen - void and clone to revise.
           </p>
           <AgreementForm initial={data} mode={{ kind: "edit", id: row.id }} />
         </div>

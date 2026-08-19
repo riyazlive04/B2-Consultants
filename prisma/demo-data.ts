@@ -1,21 +1,21 @@
 /**
- * PRODUCTION-STYLE DEMO DATASET — one command, full coherent history.
+ * PRODUCTION-STYLE DEMO DATASET - one command, full coherent history.
  *
  *   npm run db:demo
  *
  * What it does:
- *   1. Wipes ALL business data (TRUNCATE — bypasses the append-only row triggers,
+ *   1. Wipes ALL business data (TRUNCATE - bypasses the append-only row triggers,
  *      which is intentional: this is a dataset reset, not a business mutation).
  *      Auth users, sessions and team profiles are KEPT.
  *   2. Seeds ~5 months of coherent history (Feb → today, dates are computed
  *      relative to "today" in IST so the demo always looks live):
- *        Finance   — income (growth trend, INR + EUR), expenses, pending payments
- *        Pipeline  — ~65 leads with full stage history, discovery outcomes + BANT
- *        Students  — 14 students, milestone journeys, signals, satisfaction
- *        People    — OKRs (3 months), daily logs with real streak runs
- *        Funnel    — 20 weekly snapshots · Cash — weekly balances, payables
- *        Bookings  — open slots + booking requests
- *        Arena     — everything above derives XP/badges/quests at read time
+ *        Finance   - income (growth trend, INR + EUR), expenses, pending payments
+ *        Pipeline  - ~65 leads with full stage history, discovery outcomes + BANT
+ *        Students  - 14 students, milestone journeys, signals, satisfaction
+ *        People    - OKRs (3 months), daily logs with real streak runs
+ *        Funnel    - 20 weekly snapshots · Cash - weekly balances, payables
+ *        Bookings  - open slots + booking requests
+ *        Arena     - everything above derives XP/badges/quests at read time
  *   3. Resets the four team passwords + the student portal login from .env
  *      (SEED_*_PASSWORD vars) so the demo credentials always work.
  *
@@ -57,7 +57,7 @@ const lastMonday = (d: Date) => {
 };
 
 async function resetBusinessData() {
-  // Row-level append-only triggers fire on UPDATE/DELETE, not TRUNCATE — a full
+  // Row-level append-only triggers fire on UPDATE/DELETE, not TRUNCATE - a full
   // dataset reset is the one sanctioned way to clear audit history.
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
@@ -80,7 +80,7 @@ async function getTeam(): Promise<{ ids: Ids; pids: Record<string, string> }> {
   const users = await prisma.user.findMany();
   const uid = (n: string) => {
     const u = users.find((x) => x.name === n);
-    if (!u) throw new Error(`Seed user "${n}" missing — run \`npm run db:seed\` first`);
+    if (!u) throw new Error(`Seed user "${n}" missing - run \`npm run db:seed\` first`);
     return u.id;
   };
   const profiles = await prisma.teamProfile.findMany();
@@ -120,19 +120,19 @@ const FEES_EUR: Record<string, number> = { SOLO: 260, GUIDED: 1400, ELITE: 2300 
 
 const STUDENTS: StudentSpec[] = [
   { name: "Ravi Kumar", email: "ravi.kumar@example.com", phone: "+91 98111 44001", industry: "Mechanical Engineering", targetRole: "Design Engineer", leadSource: "INSTAGRAM", level: "GUIDED", enrolledDaysAgo: 70, milestone: "INTERVIEWS", signal: "GREEN",
-    signalPath: [{ to: "GREEN", daysAgo: 62, note: "Strong start — resume draft in on time" }, { to: "AMBER", daysAgo: 35, note: "Missed two sessions while travelling" }, { to: "GREEN", daysAgo: 21, note: "Back on track, 12 applications out" }],
+    signalPath: [{ to: "GREEN", daysAgo: 62, note: "Strong start - resume draft in on time" }, { to: "AMBER", daysAgo: 35, note: "Missed two sessions while travelling" }, { to: "GREEN", daysAgo: 21, note: "Back on track, 12 applications out" }],
     nextCheckInDays: 4, sessionsDone: 9, sessionsPlanned: 12, lastSessionDaysAgo: 2, apps: 18, interviews: 3, paidPct: 0.5,
-    notes: "Interviewing with two Mittelstand firms — prep mock scheduled", lastTask: "Prepare STAR answers for Bosch interview", lastTaskDone: "PENDING" },
-  { name: "Priya Sharma", email: "priya.sharma@example.com", phone: "+91 98111 44002", industry: "IT — Fullstack", targetRole: "Senior Software Engineer", leadSource: "GHOSTED_BLUEPRINT", level: "ELITE", enrolledDaysAgo: 85, milestone: "OFFER_RECEIVED", signal: "GREEN",
+    notes: "Interviewing with two Mittelstand firms - prep mock scheduled", lastTask: "Prepare STAR answers for Bosch interview", lastTaskDone: "PENDING" },
+  { name: "Priya Sharma", email: "priya.sharma@example.com", phone: "+91 98111 44002", industry: "IT - Fullstack", targetRole: "Senior Software Engineer", leadSource: "GHOSTED_BLUEPRINT", level: "ELITE", enrolledDaysAgo: 85, milestone: "OFFER_RECEIVED", signal: "GREEN",
     signalPath: [{ to: "GREEN", daysAgo: 78, note: "Excellent momentum from week one" }],
     nextCheckInDays: 7, sessionsDone: 14, sessionsPlanned: 16, lastSessionDaysAgo: 3, apps: 25, interviews: 5, paidPct: 1,
-    notes: "Offer from SAP partner in Walldorf — negotiating start date", lastTask: "Review contract clauses with coach", lastTaskDone: "YES" },
+    notes: "Offer from SAP partner in Walldorf - negotiating start date", lastTask: "Review contract clauses with coach", lastTaskDone: "YES" },
   { name: "Anna Schmidt", email: "anna.schmidt@example.com", phone: "+49 171 555 3402", industry: "Finance", targetRole: "Financial Analyst", leadSource: "YOUTUBE", level: "GUIDED", enrolledDaysAgo: 42, milestone: "APPLICATIONS", signal: "AMBER",
-    signalPath: [{ to: "GREEN", daysAgo: 35, note: "Onboarding done, engaged" }, { to: "RED", daysAgo: 18, note: "Went quiet for 10 days — no session response" }, { to: "AMBER", daysAgo: 6, note: "Re-engaged after check-in call, needs weekly nudges" }],
+    signalPath: [{ to: "GREEN", daysAgo: 35, note: "Onboarding done, engaged" }, { to: "RED", daysAgo: 18, note: "Went quiet for 10 days - no session response" }, { to: "AMBER", daysAgo: 6, note: "Re-engaged after check-in call, needs weekly nudges" }],
     nextCheckInDays: 1, sessionsDone: 5, sessionsPlanned: 12, lastSessionDaysAgo: 6, apps: 6, interviews: 0, paysEur: true, paidPct: 1,
     notes: "Germany-based (CET). Prefers evening sessions", lastTask: "Submit 5 applications via StepStone", lastTaskDone: "NO" },
-  { name: "Arjun Mehta", email: "arjun.mehta@example.com", phone: "+91 98111 44004", industry: "IT — DevOps", targetRole: "Platform Engineer", leadSource: "REFERRAL", level: "GUIDED", enrolledDaysAgo: 55, milestone: "INTERVIEWS", signal: "GREEN",
-    signalPath: [{ to: "GREEN", daysAgo: 48, note: "Upgrade student — already has momentum" }],
+  { name: "Arjun Mehta", email: "arjun.mehta@example.com", phone: "+91 98111 44004", industry: "IT - DevOps", targetRole: "Platform Engineer", leadSource: "REFERRAL", level: "GUIDED", enrolledDaysAgo: 55, milestone: "INTERVIEWS", signal: "GREEN",
+    signalPath: [{ to: "GREEN", daysAgo: 48, note: "Upgrade student - already has momentum" }],
     nextCheckInDays: 5, sessionsDone: 8, sessionsPlanned: 12, lastSessionDaysAgo: 4, apps: 14, interviews: 2, paidPct: 1,
     notes: "Upgraded Solo → Guided after landing first interviews on his own",
     lastTask: "Follow up with Siemens recruiter", lastTaskDone: "YES",
@@ -140,11 +140,11 @@ const STUDENTS: StudentSpec[] = [
   { name: "Sneha Reddy", email: "sneha.reddy@example.com", phone: "+91 98111 44005", industry: "Data Science", targetRole: "Data Scientist", leadSource: "LINKEDIN", level: "GUIDED", enrolledDaysAgo: 105, milestone: "COMPLETED", status: "COMPLETED", statusChangedDaysAgo: 14, signal: "GREEN",
     signalPath: [{ to: "GREEN", daysAgo: 98, note: "Flying through milestones" }],
     sessionsDone: 12, sessionsPlanned: 12, lastSessionDaysAgo: 16, apps: 30, interviews: 6, paidPct: 1,
-    notes: "Placed — Data Scientist at a Berlin scale-up. Case study candidate", lastTask: "Record video testimonial", lastTaskDone: "YES" },
+    notes: "Placed - Data Scientist at a Berlin scale-up. Case study candidate", lastTask: "Record video testimonial", lastTaskDone: "YES" },
   { name: "Vikram Nair", email: "vikram.nair@example.com", phone: "+91 98111 44006", industry: "Automotive", targetRole: "Quality Manager", leadSource: "META_ADS", level: "ELITE", enrolledDaysAgo: 58, milestone: "APPLICATIONS", signal: "GREEN",
-    signalPath: [{ to: "GREEN", daysAgo: 50, note: "Good start" }, { to: "RED", daysAgo: 30, note: "Family emergency — paused all work" }, { to: "GREEN", daysAgo: 12, note: "Rescued: back with 8 applications in one week" }],
+    signalPath: [{ to: "GREEN", daysAgo: 50, note: "Good start" }, { to: "RED", daysAgo: 30, note: "Family emergency - paused all work" }, { to: "GREEN", daysAgo: 12, note: "Rescued: back with 8 applications in one week" }],
     nextCheckInDays: 3, sessionsDone: 7, sessionsPlanned: 16, lastSessionDaysAgo: 1, apps: 11, interviews: 1, paidPct: 0.5,
-    notes: "Comeback story — watch workload, don't overload", lastTask: "Tailor CV for automotive QM roles", lastTaskDone: "YES" },
+    notes: "Comeback story - watch workload, don't overload", lastTask: "Tailor CV for automotive QM roles", lastTaskDone: "YES" },
   { name: "Deepa Krishnan", email: "deepa.krishnan@example.com", phone: "+91 98111 44007", industry: "Pharma", targetRole: "Regulatory Affairs Specialist", leadSource: "INSTAGRAM", level: "GUIDED", enrolledDaysAgo: 28, milestone: "LINKEDIN_OPTIMISATION", signal: "GREEN",
     signalPath: [{ to: "GREEN", daysAgo: 21, note: "Consistent, quick turnarounds" }],
     nextCheckInDays: 2, sessionsDone: 4, sessionsPlanned: 12, lastSessionDaysAgo: 3, apps: 0, interviews: 0, paidPct: 1,
@@ -152,28 +152,28 @@ const STUDENTS: StudentSpec[] = [
   { name: "Mohammed Faisal", email: "mohammed.faisal@example.com", phone: "+91 98111 44008", industry: "Civil Engineering", targetRole: "Site Manager", leadSource: "WHATSAPP", level: "GUIDED", enrolledDaysAgo: 63, milestone: "APPLICATIONS", signal: "AMBER",
     signalPath: [{ to: "GREEN", daysAgo: 55, note: "Steady start" }, { to: "AMBER", daysAgo: 9, note: "Applications slowed + instalment overdue" }],
     nextCheckInDays: -2, sessionsDone: 7, sessionsPlanned: 12, lastSessionDaysAgo: 8, apps: 9, interviews: 1, paidPct: 0.5,
-    notes: "Check-in overdue — chase instalment gently on the same call", lastTask: "Apply to 5 Bau companies", lastTaskDone: "NO" },
+    notes: "Check-in overdue - chase instalment gently on the same call", lastTask: "Apply to 5 Bau companies", lastTaskDone: "NO" },
   { name: "Kavya Menon", email: "kavya.menon@example.com", phone: "+91 98111 44009", industry: "UX Design", targetRole: "Product Designer", leadSource: "INSTAGRAM", level: "ELITE", enrolledDaysAgo: 21, milestone: "RESUME_BUILD", signal: "GREEN",
     signalPath: [{ to: "GREEN", daysAgo: 14, note: "Portfolio review went well" }],
     nextCheckInDays: 6, sessionsDone: 3, sessionsPlanned: 16, lastSessionDaysAgo: 2, apps: 0, interviews: 0, paidPct: 0.5,
-    notes: "Excellent portfolio — fast-track candidate", lastTask: "German-format CV v2", lastTaskDone: "PENDING" },
+    notes: "Excellent portfolio - fast-track candidate", lastTask: "German-format CV v2", lastTaskDone: "PENDING" },
   { name: "Rahul Verma", email: "rahul.verma@example.com", phone: "+91 98111 44010", industry: "Sales", targetRole: "Business Development", leadSource: "META_ADS", level: "GUIDED", enrolledDaysAgo: 77, milestone: "RESUME_BUILD", status: "DROPPED", statusChangedDaysAgo: 35,
     signalPath: [{ to: "AMBER", daysAgo: 60, note: "Low engagement from week two" }, { to: "RED", daysAgo: 45, note: "Unresponsive for 2 weeks" }],
     sessionsDone: 2, sessionsPlanned: 12, lastSessionDaysAgo: 50, apps: 0, interviews: 0, paidPct: 0.5,
-    notes: "Dropped — visa situation changed. Refund not applicable per T&C" },
+    notes: "Dropped - visa situation changed. Refund not applicable per T&C" },
   { name: "Ananya Das", email: "ananya.das@example.com", phone: "+91 98111 44011", industry: "HR", targetRole: "HR Business Partner", leadSource: "WORKSHOP", level: "SOLO", enrolledDaysAgo: 40, milestone: "ONBOARDING",
-    paidPct: 1, notes: "Solo plan — self-paced, lifetime community access" },
+    paidPct: 1, notes: "Solo plan - self-paced, lifetime community access" },
   { name: "Thomas Müller", email: "thomas.mueller@example.com", phone: "+49 160 555 8811", industry: "Logistics", targetRole: "Supply Chain Manager", leadSource: "YOUTUBE", level: "ELITE", enrolledDaysAgo: 95, milestone: "INTERVIEWS", signal: "GREEN",
-    signalPath: [{ to: "GREEN", daysAgo: 88, note: "Already in Germany — network advantage" }],
+    signalPath: [{ to: "GREEN", daysAgo: 88, note: "Already in Germany - network advantage" }],
     nextCheckInDays: 3, sessionsDone: 12, sessionsPlanned: 16, lastSessionDaysAgo: 5, apps: 22, interviews: 4, paysEur: true, paidPct: 1,
-    notes: "Career-switcher inside Germany; targeting DHL & Kühne+Nagel", lastTask: "Second-round prep — logistics KPIs deck", lastTaskDone: "YES" },
+    notes: "Career-switcher inside Germany; targeting DHL & Kühne+Nagel", lastTask: "Second-round prep - logistics KPIs deck", lastTaskDone: "YES" },
   { name: "Divya Pillai", email: "divya.pillai@example.com", phone: "+91 98111 44013", industry: "Nursing", targetRole: "Registered Nurse (Pflege)", leadSource: "REFERRAL", level: "GUIDED", enrolledDaysAgo: 10, milestone: "ONBOARDING",
     nextCheckInDays: 4, sessionsDone: 1, sessionsPlanned: 12, lastSessionDaysAgo: 7, apps: 0, interviews: 0, paidPct: 0.33,
-    notes: "Kerala-based nurse — B1 German already, strong profile for Pflege track", lastTask: "Collect documents for anerkennung", lastTaskDone: "PENDING" },
+    notes: "Kerala-based nurse - B1 German already, strong profile for Pflege track", lastTask: "Collect documents for anerkennung", lastTaskDone: "PENDING" },
   { name: "Suresh Babu", email: "suresh.babu@example.com", phone: "+91 98111 44014", industry: "Electrical Engineering", targetRole: "Commissioning Engineer", leadSource: "LINKEDIN", level: "GUIDED", enrolledDaysAgo: 115, milestone: "COMPLETED", status: "COMPLETED", statusChangedDaysAgo: 42, signal: "GREEN",
     signalPath: [{ to: "GREEN", daysAgo: 108, note: "Model student" }],
     sessionsDone: 12, sessionsPlanned: 12, lastSessionDaysAgo: 44, apps: 27, interviews: 5, paidPct: 1,
-    notes: "Placed — commissioning engineer near Stuttgart. Referred Divya", lastTask: "Alumni referral intro", lastTaskDone: "YES" },
+    notes: "Placed - commissioning engineer near Stuttgart. Referred Divya", lastTask: "Alumni referral intro", lastTaskDone: "YES" },
 ];
 
 async function seedStudents(ids: Ids) {
@@ -205,7 +205,7 @@ async function seedStudents(ids: Ids) {
           currentMilestone: "COMPLETED", totalSessionsCompleted: 0,
           milestoneLogs: { create: [
             { date: at(soloStart, 11), newMilestone: "ONBOARDING", updatedById: ids.ameen, note: "Solo plan activated" },
-            { date: at(daysAgo(s.priorSolo.completedDaysAgo), 18), previousMilestone: "ONBOARDING", newMilestone: "COMPLETED", updatedById: ids.karthick, note: "Self-paced track finished — upgrading to Guided" },
+            { date: at(daysAgo(s.priorSolo.completedDaysAgo), 18), previousMilestone: "ONBOARDING", newMilestone: "COMPLETED", updatedById: ids.karthick, note: "Self-paced track finished - upgrading to Guided" },
           ] },
         },
       });
@@ -215,7 +215,7 @@ async function seedStudents(ids: Ids) {
           date: soloStart, studentName: s.name, studentId: student.id,
           amountInrMinor: inr(soloFee), amountEurMinor: BigInt(0), fxRateUsed: FX,
           programLevel: "SOLO", paymentType: "FULL_PAYMENT", paymentMethod: "UPI",
-          notes: "Solo plan — paid upfront", enteredById: ids.ameen, createdAt: at(soloStart, 12),
+          notes: "Solo plan - paid upfront", enteredById: ids.ameen, createdAt: at(soloStart, 12),
         },
       });
     }
@@ -240,7 +240,7 @@ async function seedStudents(ids: Ids) {
         updatedBy: { connect: { id: i === 0 ? ids.ameen : ids.karthick } },
         note: i === 0 ? "Enrolled and onboarded" : pick([
           "Moved ahead after coaching session",
-          "Milestone review passed — next phase unlocked",
+          "Milestone review passed - next phase unlocked",
           "Deliverables approved in weekly review",
           "Cleared checklist with coach",
         ]),
@@ -299,13 +299,13 @@ async function seedStudents(ids: Ids) {
       if (s.level === "SOLO" || rng() < 0.5) {
         await mk(0, 1, "FULL_PAYMENT", "Paid in full at enrolment");
       } else {
-        await mk(0, 0.5, "INSTALMENT", `1st of 2 instalments — ${s.paysEur ? "€" + feeEur / 2 : "₹" + (feeInr / 2).toLocaleString("en-IN")} of ${s.paysEur ? "€" + feeEur : "₹" + feeInr.toLocaleString("en-IN")}`);
-        await mk(Math.min(30, s.enrolledDaysAgo), 0.5, "INSTALMENT", "2nd of 2 instalments — fee cleared");
+        await mk(0, 0.5, "INSTALMENT", `1st of 2 instalments - ${s.paysEur ? "€" + feeEur / 2 : "₹" + (feeInr / 2).toLocaleString("en-IN")} of ${s.paysEur ? "€" + feeEur : "₹" + feeInr.toLocaleString("en-IN")}`);
+        await mk(Math.min(30, s.enrolledDaysAgo), 0.5, "INSTALMENT", "2nd of 2 instalments - fee cleared");
       }
     } else if (paidPct >= 0.4) {
-      await mk(0, 0.5, "INSTALMENT", `1st of 2 instalments — balance due day 30`);
+      await mk(0, 0.5, "INSTALMENT", `1st of 2 instalments - balance due day 30`);
     } else {
-      await mk(0, paidPct, "INSTALMENT", `Booking instalment — plan is 3 parts`);
+      await mk(0, paidPct, "INSTALMENT", `Booking instalment - plan is 3 parts`);
     }
 
     // Pending payment rows for anyone not fully paid
@@ -319,7 +319,7 @@ async function seedStudents(ids: Ids) {
           fxRateUsed: FX,
           nextDueDate: overdue ? daysAgo(5) : daysAhead(between(5, 18)),
           status: overdue ? "OVERDUE" : "ACTIVE",
-          notes: overdue ? "2nd instalment overdue — reminder sent on WhatsApp" : "On instalment plan — auto-reminder scheduled",
+          notes: overdue ? "2nd instalment overdue - reminder sent on WhatsApp" : "On instalment plan - auto-reminder scheduled",
         },
       });
     }
@@ -328,7 +328,7 @@ async function seedStudents(ids: Ids) {
         data: {
           studentName: s.name, studentId: student.id, programLevel: s.level,
           totalFeeInrMinor: inr(FEES[s.level]), totalFeeEurMinor: BigInt(0), fxRateUsed: FX,
-          nextDueDate: null, status: "DROPPED", notes: "Student dropped — balance written off",
+          nextDueDate: null, status: "DROPPED", notes: "Student dropped - balance written off",
         },
       });
     }
@@ -344,7 +344,7 @@ async function seedStudents(ids: Ids) {
           outcomeAchieved: s.milestone === "INTERVIEWS" ? "INTERVIEWS_ONLY" : "JOB_OFFER_RECEIVED",
           notes: pick([
             "Loved the structured milestone approach",
-            "Resume rework made the difference — more callbacks in 2 weeks than 6 months alone",
+            "Resume rework made the difference - more callbacks in 2 weeks than 6 months alone",
             "Would recommend to colleagues targeting Germany",
             "Coaching calls kept me accountable every week",
           ]),
@@ -361,7 +361,7 @@ async function seedStudents(ids: Ids) {
 const LEAD_FIRST = ["Aditya", "Meera", "Rohan", "Ishita", "Karan", "Nandini", "Farhan", "Pooja", "Siddharth", "Lakshmi", "Nikhil", "Shreya", "Imran", "Gayathri", "Varun", "Aisha", "Manoj", "Ritika", "Sameer", "Anjali", "Harish", "Tanvi", "Yusuf", "Swati", "Pranav", "Neha", "Ashwin", "Fatima", "Rajesh", "Divya", "Kiran", "Sonal", "Abhishek", "Zara", "Ganesh"];
 const LEAD_LAST = ["Iyer", "Bose", "Chopra", "Menon", "Sethi", "Rao", "Shaikh", "Agarwal", "Nambiar", "Kulkarni", "Reddy", "Batra", "Khan", "Pillai", "Joshi", "Fernandes", "Gupta", "Malhotra", "Ansari", "Desai"];
 const CITIES = ["Bengaluru", "Chennai", "Hyderabad", "Pune", "Kochi", "Mumbai", "Coimbatore", "Delhi NCR", "Thiruvananthapuram", "Mangaluru"];
-const INDUSTRIES = ["IT — Fullstack", "Mechanical Engineering", "Data Science", "Automotive", "Pharma", "Finance", "Civil Engineering", "Logistics", "UX Design", "Electrical Engineering", "Nursing", "HR"];
+const INDUSTRIES = ["IT - Fullstack", "Mechanical Engineering", "Data Science", "Automotive", "Pharma", "Finance", "Civil Engineering", "Logistics", "UX Design", "Electrical Engineering", "Nursing", "HR"];
 const LEAD_SOURCES = ["INSTAGRAM", "INSTAGRAM", "INSTAGRAM", "META_ADS", "META_ADS", "YOUTUBE", "YOUTUBE", "LINKEDIN", "REFERRAL", "WHATSAPP", "GHOSTED_BLUEPRINT", "GHOSTED_BLUEPRINT", "LANDING_PAGE", "WORKSHOP"] as const;
 
 async function seedPipeline(ids: Ids, studentIdByName: Record<string, string>) {
@@ -414,8 +414,8 @@ async function seedPipeline(ids: Ids, studentIdByName: Record<string, string>) {
         city: pick(CITIES), industry: opts.industry ?? pick(INDUSTRIES),
         leadSource: opts.source as never, dateIn,
         stage: s as never, wonLevel: opts.plan.wonLevel ?? null,
-        notes: s === "WON" ? "Enrolled — see student record" : pick([
-          "Asked detailed visa questions — serious intent",
+        notes: s === "WON" ? "Enrolled - see student record" : pick([
+          "Asked detailed visa questions - serious intent",
           "Wants to move within 12 months",
           "Budget discussion pending with family",
           "Compared us with two other consultancies",
@@ -451,8 +451,8 @@ async function seedPipeline(ids: Ids, studentIdByName: Record<string, string>) {
           bantBudget: bant(), bantAuthority: bant(), bantNeed: bant(), bantTimeline: bant(),
           sssDate: ["SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT", "WON"].includes(s) ? daysAgo(opts.dateInDaysAgo - sssDay) : null,
           notes: won ? "Clear budget + timeline. Family aligned. Close on value, not price"
-            : qualified ? pick(["Strong need, timeline 6-9 months", "Good fit — send case studies before SSS", "Decision maker, budget confirmed verbally"])
-            : pick(["Needs 1 more year of experience first", "Budget not available this year", "Exploring — nurture via newsletter"]),
+            : qualified ? pick(["Strong need, timeline 6-9 months", "Good fit - send case studies before SSS", "Decision maker, budget confirmed verbally"])
+            : pick(["Needs 1 more year of experience first", "Budget not available this year", "Exploring - nurture via newsletter"]),
           enteredById: ids.asma, createdAt: at(daysAgo(opts.dateInDaysAgo - discoDay), 19),
         },
       });
@@ -481,7 +481,7 @@ async function seedPipeline(ids: Ids, studentIdByName: Record<string, string>) {
   });
   await prisma.student.update({ where: { id: studentIdByName[rahul.name] }, data: { leadId: rahulLead.id } });
 
-  // 3) General pipeline spread — denser in recent weeks
+  // 3) General pipeline spread - denser in recent weeks
   const buckets: Array<{ ageLo: number; ageHi: number; count: number; stages: string[] }> = [
     { ageLo: 0, ageHi: 3, count: 7, stages: ["NEW_LEAD", "NEW_LEAD", "NEW_LEAD", "DISCO_BOOKED", "DISCO_BOOKED"] },
     { ageLo: 4, ageHi: 10, count: 9, stages: ["NEW_LEAD", "DISCO_BOOKED", "DISCO_BOOKED", "DISCO_COMPLETED", "DISCO_NOT_BOOKED", "NO_SHOW"] },
@@ -519,15 +519,15 @@ async function seedExtraIncome(ids: Ids, studentIdByName: Record<string, string>
   };
 
   // German-course income sprinkled through past months (level variety on Finance)
-  add(112, "Meghna Suresh", 15000, "GN_A1", "FULL_PAYMENT", "UPI", "German A1 batch — evening cohort");
+  add(112, "Meghna Suresh", 15000, "GN_A1", "FULL_PAYMENT", "UPI", "German A1 batch - evening cohort");
   add(84, "Joel Mathew", 18000, "GN_A2", "FULL_PAYMENT", "RAZORPAY", "German A2 batch");
-  add(60, "Farida Begum", 22000, "GN_B1", "FULL_PAYMENT", "UPI", "German B1 batch — Pflege track");
+  add(60, "Farida Begum", 22000, "GN_B1", "FULL_PAYMENT", "UPI", "German B1 batch - Pflege track");
   add(33, "Meghna Suresh", 18000, "GN_A2", "FULL_PAYMENT", "UPI", "A1 → A2 continuation");
-  add(15, "Sandeep Rao", 45000, "GN_BUNDLE", "FULL_PAYMENT", "RAZORPAY", "A1-B1 bundle — paid upfront");
+  add(15, "Sandeep Rao", 45000, "GN_BUNDLE", "FULL_PAYMENT", "RAZORPAY", "A1-B1 bundle - paid upfront");
 
   // This month's collections so far (keeps the MTD widgets alive)
   const dom = TODAY.getUTCDate(); // day of month
-  add(Math.min(dom - 1, 3), "Kavya Menon", 75000, "ELITE", "INSTALMENT", "RAZORPAY", "2nd of 3 instalments — on schedule", studentIdByName["Kavya Menon"]);
+  add(Math.min(dom - 1, 3), "Kavya Menon", 75000, "ELITE", "INSTALMENT", "RAZORPAY", "2nd of 3 instalments - on schedule", studentIdByName["Kavya Menon"]);
   add(Math.min(dom - 1, 2), "Joel Mathew", 22000, "GN_B1", "FULL_PAYMENT", "UPI", "A2 → B1 continuation");
   add(0, "Divya Pillai", 50000, "GUIDED", "INSTALMENT", "UPI", "2nd booking instalment collected on check-in call", studentIdByName["Divya Pillai"]);
 
@@ -547,7 +547,7 @@ async function seedGermanNote(ids: Ids) {
   });
   const ctx = await auth.$context;
 
-  // Demo accounts survive resets (users aren't truncated) — upsert-by-email.
+  // Demo accounts survive resets (users aren't truncated) - upsert-by-email.
   const ensureUser = async (name: string, email: string, password: string, role: "TUTOR" | "STUDENT") => {
     let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -563,7 +563,7 @@ async function seedGermanNote(ids: Ids) {
   const tutorEmail = process.env.SEED_TUTOR_EMAIL || "tutor.demo@b2consultants.in";
   const tutorId = await ensureUser("Lena Fischer", tutorEmail, process.env.SEED_TUTOR_PASSWORD || "deutsch-2026", "TUTOR");
 
-  // Promote the GN income names (seedExtraIncome) into real Student records —
+  // Promote the GN income names (seedExtraIncome) into real Student records -
   // no enrollment: GN learners live in batches, not the 90/120-day tracker.
   const gnLearners: Array<[string, string, string]> = [
     ["Meghna Suresh", "meghna.s@example.com", "+91 98111 55001"],
@@ -588,14 +588,14 @@ async function seedGermanNote(ids: Ids) {
   // Two batches, both taught by Lena
   const a1 = await prisma.batch.create({
     data: {
-      name: "A1 Evening — July 2026", level: "GN_A1", tutorId,
+      name: "A1 Evening - July 2026", level: "GN_A1", tutorId,
       notes: "Mon/Wed/Fri 7–8:30 PM IST · Zoom link pinned in the batch discussion",
       members: { create: [{ studentId: sid["Meghna Suresh"] }, { studentId: sid["Sandeep Rao"] }] },
     },
   });
   const b1 = await prisma.batch.create({
     data: {
-      name: "B1 Weekend — Pflege track", level: "GN_B1", tutorId,
+      name: "B1 Weekend - Pflege track", level: "GN_B1", tutorId,
       notes: "Sat/Sun 10 AM–1 PM IST",
       members: { create: [{ studentId: sid["Farida Begum"] }, { studentId: sid["Joel Mathew"] }] },
     },
@@ -617,13 +617,13 @@ async function seedGermanNote(ids: Ids) {
         notes: notes ?? null, postedById: tutorId, createdAt: at(daysAgo(dAgo), 21),
       },
     });
-  await rec(a1.id, 7, "Class 10 — Verben: sein & haben", "jNQXAC9IVRw", "Homework: workbook p. 32–34. Quiz on Friday!", a1Grammar.id);
-  await rec(a1.id, 4, "Class 11 — Akkusativ basics", "9bZkp7q19f0", undefined, a1Grammar.id);
-  await rec(a1.id, 1, "Class 12 — Fragen stellen (W-Fragen)", "dQw4w9WgXcQ", "Bring 5 questions about your day to next class.", a1Speaking.id);
-  await rec(b1.id, 5, "Woche 8 — Pflegeberichte schreiben", "jNQXAC9IVRw", "Focus: documentation vocabulary for the ward.");
-  await rec(b1.id, 2, "Woche 9 — Telefongespräche im Krankenhaus", "9bZkp7q19f0");
+  await rec(a1.id, 7, "Class 10 - Verben: sein & haben", "jNQXAC9IVRw", "Homework: workbook p. 32–34. Quiz on Friday!", a1Grammar.id);
+  await rec(a1.id, 4, "Class 11 - Akkusativ basics", "9bZkp7q19f0", undefined, a1Grammar.id);
+  await rec(a1.id, 1, "Class 12 - Fragen stellen (W-Fragen)", "dQw4w9WgXcQ", "Bring 5 questions about your day to next class.", a1Speaking.id);
+  await rec(b1.id, 5, "Woche 8 - Pflegeberichte schreiben", "jNQXAC9IVRw", "Focus: documentation vocabulary for the ward.");
+  await rec(b1.id, 2, "Woche 9 - Telefongespräche im Krankenhaus", "9bZkp7q19f0");
 
-  // Calendar — next live classes (with join links) + one past class
+  // Calendar - next live classes (with join links) + one past class
   const evt = (batchId: string, dAgoOrAhead: number, hh: number, title: string, joinUrl: string | null, notes?: string) =>
     prisma.classSession.create({
       data: {
@@ -631,15 +631,15 @@ async function seedGermanNote(ids: Ids) {
         durationMins: 90, joinUrl, notes: notes ?? null, createdById: tutorId,
       },
     });
-  await evt(a1.id, 2, 19, "Class 13 — Modalverben (live)", "https://zoom.us/j/9876543210", "We'll drill Akkusativ from the homework too.");
-  await evt(a1.id, 5, 19, "Class 14 — Perfekt tense intro (live)", "https://zoom.us/j/9876543210");
-  await evt(b1.id, 3, 10, "Woche 10 — Rollenspiel: Visite (live)", "https://meet.google.com/abc-defg-hij", "Bring your anonymised Pflegebericht.");
-  await evt(a1.id, -1, 19, "Class 12 — Fragen stellen (live)", null); // past — recording already posted
+  await evt(a1.id, 2, 19, "Class 13 - Modalverben (live)", "https://zoom.us/j/9876543210", "We'll drill Akkusativ from the homework too.");
+  await evt(a1.id, 5, 19, "Class 14 - Perfekt tense intro (live)", "https://zoom.us/j/9876543210");
+  await evt(b1.id, 3, 10, "Woche 10 - Rollenspiel: Visite (live)", "https://meet.google.com/abc-defg-hij", "Bring your anonymised Pflegebericht.");
+  await evt(a1.id, -1, 19, "Class 12 - Fragen stellen (live)", null); // past - recording already posted
 
   // Community: global feed + batch discussions (authors need logins → Lena / Meghna / Ameen).
   // Skool-style: titles + categories, welcome post pinned.
   type GnCat = "GENERAL" | "ANNOUNCEMENT" | "QUESTION" | "WIN";
-  // comments: [authorId, body, likerIds?] — likerIds feed comment-like points/levels
+  // comments: [authorId, body, likerIds?] - likerIds feed comment-like points/levels
   const post = async (
     batchId: string | null, authorId: string, dAgo: number, hh: number, body: string,
     comments: Array<[string, string] | [string, string, string[]]> = [], likerIds: string[] = [],
@@ -666,34 +666,34 @@ async function seedGermanNote(ids: Ids) {
   };
 
   await post(null, ids.ameen, 9, 10,
-    "Willkommen! 🎉 This is the German Note community — introduce yourself and say which level you're working towards.",
+    "Willkommen! 🎉 This is the German Note community - introduce yourself and say which level you're working towards.",
     [[tutorId, "Hallo zusammen! I'm Lena, your tutor for A1 and B1. Ask me anything here between classes.", [ids.ameen, meghnaUserId]],
      [meghnaUserId, "Hi everyone! Meghna here, A1 evening batch. Goal: B1 by next summer 💪"]],
     [tutorId, meghnaUserId],
     { title: "Willkommen bei German Note! Start here 👋", category: "ANNOUNCEMENT", pinned: true });
   await post(null, tutorId, 5, 18,
-    "Label 10 things in your kitchen with sticky notes — der Kühlschrank, die Pfanne, das Messer. Vocabulary sticks when you SEE it daily.",
-    [[meghnaUserId, "Did this yesterday — my flatmates think I've lost it 😄", [tutorId]]],
+    "Label 10 things in your kitchen with sticky notes - der Kühlschrank, die Pfanne, das Messer. Vocabulary sticks when you SEE it daily.",
+    [[meghnaUserId, "Did this yesterday - my flatmates think I've lost it 😄", [tutorId]]],
     [ids.ameen, meghnaUserId],
     { title: "Tip of the week: sticky-note your kitchen", category: "GENERAL" });
   await post(null, meghnaUserId, 2, 20,
-    "Passed my first mock test with 82%! The recording from Class 10 helped so much — danke Lena!",
+    "Passed my first mock test with 82%! The recording from Class 10 helped so much - danke Lena!",
     [[tutorId, "Sehr gut, Meghna! 👏", [ids.ameen, meghnaUserId]]],
     [tutorId, ids.ameen],
     { title: "82% on my first mock test 🎉", category: "WIN" });
-  // @mention demo — Lena tags Meghna (drives the mention highlight + her notification)
+  // @mention demo - Lena tags Meghna (drives the mention highlight + her notification)
   await post(null, tutorId, 1, 12,
-    "@Meghna Suresh that mock-test result is fantastic — would you share your study routine with the group?",
+    "@Meghna Suresh that mock-test result is fantastic - would you share your study routine with the group?",
     [], [ids.ameen],
     { category: "GENERAL", mentions: [meghnaUserId] });
 
   await post(a1.id, meghnaUserId, 3, 21,
     "Is it “Ich habe einen Hund” or “Ich habe ein Hund”? The Akkusativ endings confuse me.",
-    [[tutorId, "„einen Hund“ — Hund is masculine, and the direct object takes Akkusativ: der → den/einen. We'll drill this on Friday!", [meghnaUserId]]],
+    [[tutorId, "„einen Hund“ - Hund is masculine, and the direct object takes Akkusativ: der → den/einen. We'll drill this on Friday!", [meghnaUserId]]],
     [tutorId],
     { title: "Frage zur Hausaufgabe (Akkusativ)", category: "QUESTION" });
   await post(b1.id, tutorId, 4, 9,
-    "B1 group: bring one real Pflegebericht example (anonymised!) to Saturday's class — we'll rewrite them together.",
+    "B1 group: bring one real Pflegebericht example (anonymised!) to Saturday's class - we'll rewrite them together.",
     [], [ids.ameen],
     { title: "Homework for Saturday", category: "ANNOUNCEMENT", pinned: true });
 
@@ -727,21 +727,21 @@ async function seedFinanceOps(ids: Ids) {
   months.forEach((m, i) => {
     const day = (d: number) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), d));
     const label = m.toLocaleString("en-GB", { month: "long", timeZone: "UTC" });
-    push(day(1), 50000, "TEAM_SALARIES", true, "Karthick", `Delivery coach salary — ${label}`);
-    push(day(1), 18000, "TEAM_SALARIES", false, "Nilofer", `Appointment setter retainer — ${label}`);
-    push(day(1), 22000, "TEAM_SALARIES", false, "Asma", `Discovery specialist retainer — ${label}`);
+    push(day(1), 50000, "TEAM_SALARIES", true, "Karthick", `Delivery coach salary - ${label}`);
+    push(day(1), 18000, "TEAM_SALARIES", false, "Nilofer", `Appointment setter retainer - ${label}`);
+    push(day(1), 22000, "TEAM_SALARIES", false, "Asma", `Discovery specialist retainer - ${label}`);
     push(day(2), 32000 + i * 2500, "MARKETING", false, "Meta Ads", `${label} lead-gen campaigns`);
-    push(day(3), 8000, "TOOLS_SOFTWARE", false, "WATI", "WhatsApp automation — monthly");
+    push(day(3), 8000, "TOOLS_SOFTWARE", false, "WATI", "WhatsApp automation - monthly");
     // NOT COGS: the community platform is billed monthly whether or not anyone
     // enrols, so it is Tools & Software (same treatment as WATI above).
-    push(day(4), 4000, "TOOLS_SOFTWARE", false, "Skool", "Student community platform — monthly");
-    push(day(5), 28000, "OPERATIONS", false, "Sirah Workspace", `${label} — rent, utilities, internet`);
+    push(day(4), 4000, "TOOLS_SOFTWARE", false, "Skool", "Student community platform - monthly");
+    push(day(5), 28000, "OPERATIONS", false, "Sirah Workspace", `${label} - rent, utilities, internet`);
     push(day(12), 15000, "CONTENT_CREATION", false, "FrameCraft Studio", `${label} reels + YouTube edit batch`);
     push(day(18), 6500, "COGS_DIRECT_DELIVERY", true, "PrintWorks", "Student welcome kits + workbooks");
   });
   // One-off event in a middle month
   const eventMonth = months[2];
-  push(new Date(Date.UTC(eventMonth.getUTCFullYear(), eventMonth.getUTCMonth(), 21)), 45000, "EVENTS_OFFLINE", false, "Taj Conference Hall", "Offline career workshop — Bengaluru (62 attendees)");
+  push(new Date(Date.UTC(eventMonth.getUTCFullYear(), eventMonth.getUTCMonth(), 21)), 45000, "EVENTS_OFFLINE", false, "Taj Conference Hall", "Offline career workshop - Bengaluru (62 attendees)");
   await prisma.expense.createMany({ data: expenses });
 
   // Monthly revenue targets
@@ -765,7 +765,7 @@ async function seedFinanceOps(ids: Ids) {
     ],
   });
 
-  // Weekly cash positions — 18 Mondays, dip then recovery
+  // Weekly cash positions - 18 Mondays, dip then recovery
   const mondays: Date[] = [];
   let cursor = lastMonday(TODAY);
   for (let i = 0; i < 18; i++) { mondays.unshift(cursor); cursor = new Date(cursor.getTime() - 7 * 86400000); }
@@ -776,7 +776,7 @@ async function seedFinanceOps(ids: Ids) {
       date: m,
       bankBalanceInrMinor: inr(base + shape[i] * 1000),
       personalSavingsInrMinor: inr(300000),
-      notes: i === mondays.length - 1 ? "Monday balance check — June collections landed" : "Monday morning balance check",
+      notes: i === mondays.length - 1 ? "Monday balance check - June collections landed" : "Monday morning balance check",
     })),
   });
 
@@ -815,7 +815,7 @@ async function seedFunnel() {
       enrollmentsElite: rng() < 0.3 ? 1 : 0,
       ghostedDownloads: Math.round(8 + growth * 14 + between(-2, 2)),
       workshopAttendees: workshopWeek ? between(40, 80) : 0,
-      notes: i === 19 ? "Current week — auto-pulls will keep updating" : "Logged in Monday weekly review",
+      notes: i === 19 ? "Current week - auto-pulls will keep updating" : "Logged in Monday weekly review",
     };
   });
   for (const r of rows) {
@@ -835,25 +835,25 @@ async function seedPeople(ids: Ids, pids: Record<string, string>) {
   const mtdPace = Math.min(dayOfMonth / 30, 1);
 
   const okrs: Prisma.OKRCreateManyInput[] = [
-    // two months ago — settled, mostly green (feeds settled-OKR XP)
+    // two months ago - settled, mostly green (feeds settled-OKR XP)
     { teamProfileId: pids["Asma"], month: m2, title: "40 discovery calls", targetValue: "40 calls", targetNumeric: 40, currentProgress: "43 calls", currentNumeric: 43, notes: "Beat target in week 4" },
     { teamProfileId: pids["Asma"], month: m2, title: "Show-up rate to 80%", targetValue: "80", targetNumeric: 80, currentProgress: "82", currentNumeric: 82, notes: "Reminder sequence working" },
-    { teamProfileId: pids["Nilofer"], month: m2, title: "120 appointments set", targetValue: "120", targetNumeric: 120, currentProgress: "112", currentNumeric: 112, notes: "Just short — Insta DM slump week 2" },
+    { teamProfileId: pids["Nilofer"], month: m2, title: "120 appointments set", targetValue: "120", targetNumeric: 120, currentProgress: "112", currentNumeric: 112, notes: "Just short - Insta DM slump week 2" },
     { teamProfileId: pids["Karthick"], month: m2, title: "Session completion 90%", targetValue: "90", targetNumeric: 90, currentProgress: "93", currentNumeric: 93, notes: "No missed sessions after reschedule policy" },
-    // last month — settled
+    // last month - settled
     { teamProfileId: pids["Asma"], month: m1, title: "45 discovery calls", targetValue: "45 calls", targetNumeric: 45, currentProgress: "46 calls", currentNumeric: 46, notes: "New booking page helped" },
     { teamProfileId: pids["Asma"], month: m1, title: "HQ rate 50%", targetValue: "50", targetNumeric: 50, currentProgress: "44", currentNumeric: 44, notes: "Lead quality dipped mid-month with new ad set" },
     { teamProfileId: pids["Nilofer"], month: m1, title: "130 appointments set", targetValue: "130", targetNumeric: 130, currentProgress: "135", currentNumeric: 135, notes: "Best month yet" },
     { teamProfileId: pids["Nilofer"], month: m1, title: "Speed-to-lead under 2h", targetValue: "Qualitative", manualCompletionPct: 90, notes: "Avg first touch 1h 40m" },
     { teamProfileId: pids["Karthick"], month: m1, title: "Zero RED students", targetValue: "Qualitative", manualCompletionPct: 80, notes: "One RED (Vikram) rescued to GREEN" },
-    // this month — in progress
+    // this month - in progress
     { teamProfileId: pids["Asma"], month: m0, title: "45 discovery calls", targetValue: "45 calls", targetNumeric: 45, currentProgress: `${Math.round(45 * mtdPace + 2)} calls`, currentNumeric: Math.round(45 * mtdPace + 2), notes: "Slightly ahead of pace" },
     { teamProfileId: pids["Asma"], month: m0, title: "HQ rate 50%", targetValue: "50", targetNumeric: 50, currentProgress: "48", currentNumeric: 48, notes: "Better after BANT screening on the booking form" },
     { teamProfileId: pids["Asma"], month: m0, title: "Show-up rate to 85%", targetValue: "85", targetNumeric: 85, currentProgress: "71", currentNumeric: 71, notes: "Testing WhatsApp reminder at T-2h" },
-    { teamProfileId: pids["Nilofer"], month: m0, title: "130 appointments set", targetValue: "130", targetNumeric: 130, currentProgress: `${Math.round(130 * mtdPace - 4)}`, currentNumeric: Math.round(130 * mtdPace - 4), notes: "Pacing just behind — pushing referral asks" },
+    { teamProfileId: pids["Nilofer"], month: m0, title: "130 appointments set", targetValue: "130", targetNumeric: 130, currentProgress: `${Math.round(130 * mtdPace - 4)}`, currentNumeric: Math.round(130 * mtdPace - 4), notes: "Pacing just behind - pushing referral asks" },
     { teamProfileId: pids["Nilofer"], month: m0, title: "25 referral conversations", targetValue: "25", targetNumeric: 25, currentProgress: `${Math.round(25 * mtdPace)}`, currentNumeric: Math.round(25 * mtdPace), notes: "Alumni outreach list built" },
-    { teamProfileId: pids["Karthick"], month: m0, title: "Improve student engagement", targetValue: "Qualitative", manualCompletionPct: 70, notes: "Manual % — based on session attendance + task completion" },
-    { teamProfileId: pids["Karthick"], month: m0, title: "All check-ins within 7 days", targetValue: "Qualitative", manualCompletionPct: 85, notes: "One overdue (Mohammed) — scheduled" },
+    { teamProfileId: pids["Karthick"], month: m0, title: "Improve student engagement", targetValue: "Qualitative", manualCompletionPct: 70, notes: "Manual % - based on session attendance + task completion" },
+    { teamProfileId: pids["Karthick"], month: m0, title: "All check-ins within 7 days", targetValue: "Qualitative", manualCompletionPct: 85, notes: "One overdue (Mohammed) - scheduled" },
   ];
   await prisma.oKR.createMany({ data: okrs });
 
@@ -861,10 +861,10 @@ async function seedPeople(ids: Ids, pids: Record<string, string>) {
   type Variant = "DISCOVERY_SPECIALIST" | "APPOINTMENT_SETTER" | "DELIVERY_COACH";
   const logs: Prisma.DailyLogCreateManyInput[] = [];
   const NOTES = [
-    "Steady day — no blockers",
+    "Steady day - no blockers",
     "Good energy on calls today",
     "Follow-ups piling up, need a batching slot",
-    "Two promising conversations — flagged to Ameen",
+    "Two promising conversations - flagged to Ameen",
     "Slow day on DMs, doubled down on follow-ups",
     "Blocked 2h for pipeline hygiene",
     null, null, null,
@@ -960,7 +960,7 @@ async function seedBookings(ids: Ids) {
 
   await mkRequest(created[0].id, "Akhil Ramesh", "akhil.r@example.com", "+91 98111 44201");
   await mkRequest(created[1].id, "Sofia D'Souza", "sofia.d@example.com", "+91 98111 44202");
-  // one completed request from last week (no slot link — slot already past)
+  // one completed request from last week (no slot link - slot already past)
   await mkRequest(null, "Vishnu Prasad", "vishnu.p@example.com", "+91 98111 44203", { status: "COMPLETED", createdAt: at(daysAgo(6), 12) });
 
   console.log(`· ${slots.length} appointment slots + 3 booking requests`);
@@ -1037,7 +1037,7 @@ async function main() {
   const totalEur = Number(income._sum.amountEurMinor ?? 0) / 100;
   console.log(`
 DEMO DATASET READY
-  income rows ${income._count} — ₹${totalInr.toLocaleString("en-IN")} + €${totalEur.toLocaleString("en-IN")}
+  income rows ${income._count} - ₹${totalInr.toLocaleString("en-IN")} + €${totalEur.toLocaleString("en-IN")}
   leads ${leads} · students ${students} · daily logs ${logs}
 Logins (passwords in .env):
   Ameen (Admin)  ${process.env.SEED_ADMIN_EMAIL}

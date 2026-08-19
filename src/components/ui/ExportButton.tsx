@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Download } from "lucide-react";
 
 /**
- * "Export CSV" that downloads what the SCREEN IS SHOWING — every row of it.
+ * "Export CSV" that downloads what the SCREEN IS SHOWING - every row of it.
  *
  * It forwards the page's whole query string to `/api/export/[entity]`, which re-runs the same
  * `where` clause server-side with no page cap. That is the difference from `DataTable`'s own
@@ -24,7 +24,7 @@ export function ExportButton({
   label?: string;
 }) {
   const searchParams = useSearchParams();
-  // `cursor` is this page's scroll position, not a filter — carrying it into an export that is
+  // `cursor` is this page's scroll position, not a filter - carrying it into an export that is
   // deliberately unpaginated would be meaningless at best.
   const params = new URLSearchParams(searchParams.toString());
   params.delete("cursor");

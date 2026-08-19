@@ -2,13 +2,13 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 
 /**
- * SMS channel — Twilio HTTP client + config. Mirrors the WATI seam:
+ * SMS channel - Twilio HTTP client + config. Mirrors the WATI seam:
  *  - SECRETS in env, read inline, fail-closed when unset:
  *      SMS_ENABLED         "true" to arm sending (default off)
  *      TWILIO_ACCOUNT_SID  Twilio account SID
  *      TWILIO_AUTH_TOKEN   Twilio auth token (basic-auth password)
  *  - NON-SECRET config in AppSetting("smsConfig"): paused toggle, from number.
- * Never throws — send() always resolves a result object.
+ * Never throws - send() always resolves a result object.
  */
 
 const SETTINGS_KEY = "smsConfig";

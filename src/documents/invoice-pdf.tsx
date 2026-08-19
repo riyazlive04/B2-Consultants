@@ -1,7 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import { PdfBrandMark } from "./pdf-brand";
 
-/** Invoice / estimate PDF (Synamate parity). Pure — takes pre-formatted display data. */
+/** Invoice / estimate PDF (Synamate parity). Pure - takes pre-formatted display data. */
 
 export type InvoicePdfData = {
   kind: "INVOICE" | "ESTIMATE";

@@ -18,7 +18,7 @@ import {
  *       produces a hundred bars of one, which looks like analysis and isn't.
  *
  * Multi-select answers count once per ticked box, so the counts legitimately sum to more than the
- * number of respondents — `answered` is carried separately so the page can say so rather than
+ * number of respondents - `answered` is carried separately so the page can say so rather than
  * letting someone read the percentages as a share of people.
  */
 
@@ -60,7 +60,7 @@ export function summariseAnswers(
         for (const v of values) {
           for (const one of Array.isArray(v) ? v : [v]) {
             if (tally.has(one)) tally.set(one, tally.get(one)! + 1);
-            else other++; // an "Other:" write-in — grouped rather than given its own bar each
+            else other++; // an "Other:" write-in - grouped rather than given its own bar each
           }
         }
         const counts = [...tally].map(([label, value]) => ({ label, value }));

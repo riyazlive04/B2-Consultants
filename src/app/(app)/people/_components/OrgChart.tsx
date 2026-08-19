@@ -36,7 +36,7 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
   const team = current.filter((m) => m.dashboardRole !== "ADMIN");
   const showForm = adding || editing;
 
-  // Anyone still here can take over — offering a departed or suspended colleague would just move
+  // Anyone still here can take over - offering a departed or suspended colleague would just move
   // the orphaned-work problem along.
   const successors = current.map((m) => ({ value: m.id, label: `${m.fullName} · ${m.roleTitle}` }));
 
@@ -122,7 +122,7 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
 
       {/* ── Former team members ──────────────────────────────────────────────────────
           Not the app's `deletedAt` archive: that one is purged after 90 days, and an employment
-          record must outlive that — their name has to keep resolving on every call, commission
+          record must outlive that - their name has to keep resolving on every call, commission
           and audit row they ever produced. Permanent, and restorable. */}
       {former.length > 0 && (
         <details className="rounded-card border border-line bg-surface p-4">
@@ -137,7 +137,7 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
                     {m.fullName} <span className="font-normal text-muted">· {m.roleTitle}</span>
                   </p>
                   <p className="text-xs text-muted">
-                    Left {m.terminatedAt ? formatDate(m.terminatedAt) : "—"}
+                    Left {m.terminatedAt ? formatDate(m.terminatedAt) : "-"}
                     {m.terminationReason ? ` · ${m.terminationReason}` : ""}
                   </p>
                 </div>

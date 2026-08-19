@@ -15,13 +15,13 @@ export type PaymentsOverview = {
   receivedInr: string;
   overdueInr: string;
   counts: { draft: number; sent: number; paid: number; overdue: number };
-  /** "Received" broken down by how it came in — feeds that card's detail popup. */
+  /** "Received" broken down by how it came in - feeds that card's detail popup. */
   receivedByMethod: { method: string; amountInr: string }[];
 };
 
 /**
  * @param period Scope to invoices ISSUED in this window. Omit for every invoice ever, which is
- *   what this did before — and which is why "how much did we invoice in July" had no answer here.
+ *   what this did before - and which is why "how much did we invoice in July" had no answer here.
  *   Scoped on `issueDate` (a `@db.Date` column, so the UTC-midnight boundaries line up exactly
  *   with the period's own), NOT on `paidAt`: this board is about what was billed.
  */
@@ -203,7 +203,7 @@ export async function getPublicInvoice(token: string) {
 }
 
 /**
- * Same shape as `getPublicInvoice`, but keyed by id and NOT status-filtered — used only
+ * Same shape as `getPublicInvoice`, but keyed by id and NOT status-filtered - used only
  * server-side (sendInvoice in payments-actions.ts) to attach a PDF the moment a DRAFT
  * invoice is first sent, before the public /i/[token] page is allowed to show it.
  */

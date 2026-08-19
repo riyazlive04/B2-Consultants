@@ -9,7 +9,7 @@ import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/
  *
  * B2 messages Indian AND German contacts, so a single "default country code" that we blindly
  * prepend is unsafe: `0151 2345 6789` is a German mobile, `098765 43210` is an Indian one, and
- * both are "a number starting with 0". Guessing wrong doesn't fail loudly — it WhatsApps a
+ * both are "a number starting with 0". Guessing wrong doesn't fail loudly - it WhatsApps a
  * stranger. So we delegate to libphonenumber-js, which knows each country's trunk prefixes and
  * valid lengths, and we **fail closed**: anything that isn't a demonstrably valid number returns
  * null, the send is SKIPPED, and the operator sees "No valid WhatsApp number" and fixes it.
@@ -43,7 +43,7 @@ export function toCountry(raw: string | null | undefined): CountryCode {
 
 /**
  * Normalize to E.164 digits WITHOUT the leading "+" (WATI's expected `whatsappNumber` format).
- * Returns null when the number is missing, malformed, or not valid for the resolved country —
+ * Returns null when the number is missing, malformed, or not valid for the resolved country -
  * callers must skip the send rather than dial garbage.
  */
 export function normalizeWhatsappNumber(
@@ -64,7 +64,7 @@ export function normalizeWhatsappNumber(
   const national = parsePhoneNumberFromString(s, country);
   if (national?.isValid()) return national.number.replace(/^\+/, "");
 
-  // 2) Bare E.164 digits (WATI's `waId`, e.g. "919876543210") — retry with a "+".
+  // 2) Bare E.164 digits (WATI's `waId`, e.g. "919876543210") - retry with a "+".
   const digits = s.replace(/\D/g, "");
   if (!s.startsWith("+") && digits.length >= 11) {
     const e164 = parsePhoneNumberFromString(`+${digits}`);
@@ -76,7 +76,7 @@ export function normalizeWhatsappNumber(
 
 /** Pretty international form for display, e.g. "+91 98765 43210". Falls back to "+digits". */
 export function displayWhatsappNumber(normalized: string | null | undefined): string {
-  if (!normalized) return "—";
+  if (!normalized) return "-";
   const parsed = parsePhoneNumberFromString(`+${normalized}`);
   return parsed?.formatInternational() ?? `+${normalized}`;
 }

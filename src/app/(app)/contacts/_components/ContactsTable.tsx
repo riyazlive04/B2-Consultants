@@ -79,7 +79,7 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
   const addForm = useRef<HTMLFormElement>(null);
 
   // Filtering (search text / owner / stage / source / city / date range / tag) is now a real
-  // server-side query (contacts-metrics.ts) driven by URL params via ContactsFilterBar — `rows`
+  // server-side query (contacts-metrics.ts) driven by URL params via ContactsFilterBar - `rows`
   // arrives already filtered AND already paginated (one server "page", see below). DataTable's
   // own search box still runs client-side, but only ever over this one page's rows now; it's a
   // fast "refine what's on screen" tool, not the real cross-dataset search (that's the box in
@@ -94,7 +94,7 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
   // accurate for every page reached by clicking Next this session, and safely resets to page 1
   // (rather than guessing wrong) if someone lands mid-pagination via a raw link. Any filter
   // change elsewhere (ContactsFilterBar) pushes a URL with no `cursor` at all, which this stack
-  // also detects and clears — otherwise "Prev" after changing filters could try to reuse a
+  // also detects and clears - otherwise "Prev" after changing filters could try to reuse a
   // cursor id that belonged to the OLD filtered result set.
   const currentCursor = searchParams.get("cursor") ?? "";
   const [cursorStack, setCursorStack] = useState<string[]>([]);
@@ -123,7 +123,7 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
     goToPage(page.nextCursor);
   }
   function goPrev() {
-    if (cursorStack.length === 0) return goToPage(""); // no recorded history — page 1 is always correct
+    if (cursorStack.length === 0) return goToPage(""); // no recorded history - page 1 is always correct
     const stack = [...cursorStack];
     const back = stack.pop() ?? "";
     setCursorStack(stack);
@@ -167,20 +167,20 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
           <Avatar name={r.name} size={34} />
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-ink group-hover:text-primary">{r.name}</span>
-            <span className="block truncate text-xs text-ink-3">{r.email ?? "—"}</span>
+            <span className="block truncate text-xs text-ink-3">{r.email ?? "-"}</span>
           </span>
         </Link>
       ),
       value: (r) => r.name,
     },
-    { key: "phone", header: "Phone", cell: (r) => <span className="text-sm text-ink-2">{r.phone ?? "—"}</span>, value: (r) => r.phone },
-    { key: "company", header: "Company", cell: (r) => <span className="text-sm text-ink-2">{r.company ?? "—"}</span>, value: (r) => r.company },
+    { key: "phone", header: "Phone", cell: (r) => <span className="text-sm text-ink-2">{r.phone ?? "-"}</span>, value: (r) => r.phone },
+    { key: "company", header: "Company", cell: (r) => <span className="text-sm text-ink-2">{r.company ?? "-"}</span>, value: (r) => r.company },
     { key: "stage", header: "Stage", cell: (r) => <Pill tone="info">{prettyStage(r.stage)}</Pill>, value: (r) => prettyStage(r.stage) },
     {
       key: "tags", header: "Tags", sortable: false,
       cell: (r) => (
         <div className="flex flex-wrap gap-1">
-          {r.tags.length === 0 ? <span className="text-ink-3">—</span> : r.tags.slice(0, 3).map((t) => <Chip key={t.id}>{t.name}</Chip>)}
+          {r.tags.length === 0 ? <span className="text-ink-3">-</span> : r.tags.slice(0, 3).map((t) => <Chip key={t.id}>{t.name}</Chip>)}
           {r.tags.length > 3 && <Chip>+{r.tags.length - 3}</Chip>}
         </div>
       ),
@@ -230,7 +230,7 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
 
       {/* hideFilter: the real search is ContactsFilterBar above (server-side, whole dataset).
           DataTable's own box only ever filtered this one loaded page, so two near-identical
-          search inputs sat on the same screen searching different scopes — users typed in the
+          search inputs sat on the same screen searching different scopes - users typed in the
           wrong one and got "no results" on data that exists. One search box now. */}
       <DataTable
         rows={rows}
@@ -240,7 +240,7 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
         emptyMessage="No contacts match. Try a different search or filter combination."
       />
 
-      {/* Server-page pagination (BUILD_CHECKLIST.md §3) — separate from DataTable's own
+      {/* Server-page pagination (BUILD_CHECKLIST.md §3) - separate from DataTable's own
           client-side pager, which only ever slices this one page's rows. */}
       <div className="flex items-center justify-between rounded-card border border-line bg-surface px-4 py-2.5 text-sm">
         <span className="text-xs text-muted tnum">
@@ -278,7 +278,7 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
             <Field label="City"><TextInput kind="city" name="city" placeholder="City" /></Field>
             <Field label="Industry"><TextInput name="industry" placeholder="Industry" /></Field>
             <Field label="Company">
-              <Select name="companyId" options={[{ value: "", label: "— none —" }, ...filters.companies.map((c) => ({ value: c.id, label: c.name }))]} defaultValue="" />
+              <Select name="companyId" options={[{ value: "", label: "- none -" }, ...filters.companies.map((c) => ({ value: c.id, label: c.name }))]} defaultValue="" />
             </Field>
           </div>
           <FormError message={addError} />

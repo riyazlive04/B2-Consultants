@@ -13,7 +13,7 @@ type ActionResult = { ok: true } | { ok: false; error: string };
  * The per-section "Archived" tab. One component renders every record type (all archived getters
  * return the same `ArchivedRow` shape). Restore and permanent-delete are optimistic: the row
  * leaves the list immediately and slides back with an error toast if the server rejects it.
- * `purge` is only wired when `canPurge` (admin) — the same two-step guard as Automation's trash.
+ * `purge` is only wired when `canPurge` (admin) - the same two-step guard as Automation's trash.
  */
 export function ArchivedPanel({
   rows: initialRows,
@@ -51,7 +51,7 @@ export function ArchivedPanel({
   const doPurge = async (row: ArchivedRow) => {
     const ok = await askConfirm({
       title: `Permanently delete this ${noun}?`,
-      body: `"${row.primary}" will be gone for good — this cannot be undone.`,
+      body: `"${row.primary}" will be gone for good - this cannot be undone.`,
       confirmLabel: "Delete permanently",
       danger: true,
     });

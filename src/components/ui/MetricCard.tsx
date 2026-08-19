@@ -59,7 +59,7 @@ export type MetricDetail = {
  * INTERACTION (in priority order):
  *   - `href`    → the whole card is a link (navigates).
  *   - `onClick` → the whole card is a button calling that handler (the caller owns what
- *                 happens — e.g. FinanceKpis opens its own currency-aware popup).
+ *                 happens - e.g. FinanceKpis opens its own currency-aware popup).
  *   - otherwise → the whole card is a button that opens a built-in DETAIL POPUP: the value,
  *                 its plain-English explanation (`tooltip`), the comparison (`target`), the
  *                 trend (`delta`/`spark`), and any richer `detail` the caller passes. This is
@@ -129,11 +129,11 @@ export function MetricCard({
           {/* The label WRAPS to a second line rather than truncating.
               A 4-up KPI row on an iPad in landscape gives each card ~200px, which turned
               "Total active students" into "TOTAL ACTI…" and "Top paying student" into
-              "TOP PAYING…" — a KPI whose name you cannot read is not a KPI. Two lines is the cap
+              "TOP PAYING…" - a KPI whose name you cannot read is not a KPI. Two lines is the cap
               (`line-clamp-2`), so a pathological label still can't push the figure out of sight,
               and grid rows equalise height anyway so the row just gets a few pixels taller.
 
-              WIDTH IS THE CARD'S, NOT THE VIEWPORT'S — which is why this self-heals with flex
+              WIDTH IS THE CARD'S, NOT THE VIEWPORT'S - which is why this self-heals with flex
               rather than a breakpoint. `min-w-0` alone let the label collapse to ~19px (a 2-up
               KPI row on a 320px phone, and equally the 6-up row on /funnel at 1024px), so the
               text was clipped to "TO A…" with no viewport rule able to describe it. The floor
@@ -162,7 +162,7 @@ export function MetricCard({
                   role="tooltip"
                   // `text-surface`, not `text-white`: --ink is near-white in the dark
                   // theme, so a hardcoded white label rendered white-on-white there.
-                  // Pinned to the bottom gutters on phones, centred bubble from `sm` — see InfoHint
+                  // Pinned to the bottom gutters on phones, centred bubble from `sm` - see InfoHint
                   // for why (a 224px bubble does not fit either side of a chip on a 390px screen).
                   className="pointer-events-none fixed inset-x-4 bottom-4 z-30 w-auto translate-x-0 whitespace-normal rounded-field bg-ink px-3 py-2 text-left text-caption font-normal normal-case leading-snug tracking-normal text-surface opacity-0 shadow-pop transition-opacity group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100 sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-full sm:z-20 sm:mt-1.5 sm:w-56 sm:-translate-x-1/2 sm:px-2.5 sm:py-1.5 sm:shadow-soft"
                 >
@@ -189,7 +189,7 @@ export function MetricCard({
         ) : null}
       </div>
 
-      {/* §2.1 `metric` (28/34, Jakarta 700, tabular) — the token existed but was never used */}
+      {/* §2.1 `metric` (28/34, Jakarta 700, tabular) - the token existed but was never used */}
       <div className="font-display tnum truncate text-metric tracking-tight">{value}</div>
       {secondary && <div className="tnum truncate text-sm text-muted">{secondary}</div>}
       {delta && <DeltaChip {...delta} />}
@@ -230,7 +230,7 @@ export function MetricCard({
     </button>
   );
 
-  // Caller-managed click (e.g. FinanceKpis' currency-aware popup) — no built-in modal.
+  // Caller-managed click (e.g. FinanceKpis' currency-aware popup) - no built-in modal.
   if (onClick) return cardButton;
 
   // Built-in expand popup: every other card is click-to-expand.

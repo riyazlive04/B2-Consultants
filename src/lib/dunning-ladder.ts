@@ -1,7 +1,7 @@
 import { DEFAULT_DUNNING_CONFIG, type DunningConfig, type DunningChannel } from "./config-schema";
 
 /**
- * The dunning ladder — which rung an instalment is on, as pure functions.
+ * The dunning ladder - which rung an instalment is on, as pure functions.
  *
  * WHAT IT REPLACES: one reminder email that deduped by string-matching its own subject line
  * against the Message table. That works exactly until someone rewords a subject, at which point
@@ -11,7 +11,7 @@ import { DEFAULT_DUNNING_CONFIG, type DunningConfig, type DunningChannel } from 
  * here, so both are unit-tested:
  *
  *   1. Stages are STRICTLY ORDERED AND NON-SKIPPING. An instalment discovered already ten days
- *      overdue gets the FINAL notice only — not stage 1, 2 and 3 in the same tick. Receiving
+ *      overdue gets the FINAL notice only - not stage 1, 2 and 3 in the same tick. Receiving
  *      "just a reminder, due in three days", "you missed it" and "final notice" within the same
  *      minute is the single most obvious way to tell a student they are talking to a broken
  *      machine.
@@ -20,7 +20,7 @@ import { DEFAULT_DUNNING_CONFIG, type DunningConfig, type DunningChannel } from 
 
 export type DunningStage = "UPCOMING" | "MISSED" | "FINAL";
 
-/** Rungs, in the order they are climbed. Order is load-bearing — see `stageFor`. */
+/** Rungs, in the order they are climbed. Order is load-bearing - see `stageFor`. */
 export const DUNNING_STAGES: DunningStage[] = ["UPCOMING", "MISSED", "FINAL"];
 
 export const DUNNING_STAGE_LABELS: Record<DunningStage, string> = {
@@ -50,12 +50,12 @@ export function daysPastDue(dueDate: Date, today: Date): number {
 }
 
 /**
- * Which single stage — if any — should fire for this instalment today.
+ * Which single stage - if any - should fire for this instalment today.
  *
  * Returns the HIGHEST unsent stage whose offset has been reached, and never more than one. That
  * "highest" is what implements non-skipping: an instalment first seen at +10 days has all three
  * offsets satisfied, and answering FINAL means the earlier two are simply never sent rather than
- * being fired in a burst. They are dead — a stage whose moment has passed has nothing to say.
+ * being fired in a burst. They are dead - a stage whose moment has passed has nothing to say.
  *
  * Returns null when nothing is due, when every applicable stage has already gone, or when the
  * stage that would fire is disabled.
@@ -80,7 +80,7 @@ export function stageFor(
     if (!cfg.enabled) continue;
     if (elapsed < cfg.dayOffset) continue; // not yet time for this rung
     if (sent.has(stage)) {
-      // This rung has already gone. Nothing BELOW it can fire either — a lower rung is by
+      // This rung has already gone. Nothing BELOW it can fire either - a lower rung is by
       // definition earlier, and an earlier message arriving after a later one is nonsense.
       return null;
     }
@@ -104,7 +104,7 @@ export type DunningCopy = { subject: string; lines: string[] };
 /**
  * The message for one rung.
  *
- * The tone escalates and the CONTENT changes with it — that is the point of a ladder rather than
+ * The tone escalates and the CONTENT changes with it - that is the point of a ladder rather than
  * three copies of one email. Stage 1 does not mention consequences; stage 3 does, once, without
  * threatening anything the business would not actually do.
  *
@@ -125,7 +125,7 @@ export function dunningCopy(input: {
   // Every rung carries this. "If you've already paid, tell us" is what stops an automated chase
   // becoming an accusation when the ledger is simply behind.
   const alreadyPaid =
-    "If you've already paid, please ignore this — and do let us know so we can update our records.";
+    "If you've already paid, please ignore this - and do let us know so we can update our records.";
 
   if (stage === "UPCOMING") {
     return {
@@ -135,7 +135,7 @@ export function dunningCopy(input: {
         "",
         `A quick heads-up that your next instalment of ${amountLabel} is due on ${dueDateLabel}.`,
         "",
-        "Nothing to do if it's already scheduled — this is just so it doesn't catch you out.",
+        "Nothing to do if it's already scheduled - this is just so it doesn't catch you out.",
         "",
         alreadyPaid,
       ],
@@ -150,7 +150,7 @@ export function dunningCopy(input: {
         "",
         `Your instalment of ${amountLabel} was due on ${dueDateLabel} and we haven't received it yet.`,
         "",
-        "If something's come up, reply to this email and we'll sort out a plan that works — that's a much easier conversation to have now than later.",
+        "If something's come up, reply to this email and we'll sort out a plan that works - that's a much easier conversation to have now than later.",
         "",
         alreadyPaid,
       ],
@@ -165,10 +165,10 @@ export function dunningCopy(input: {
       `Your instalment of ${amountLabel} has now been outstanding since ${dueDateLabel}, and our earlier reminders haven't reached you.`,
       "",
       // One consequence, stated plainly, and one the business will actually act on. A threat it
-      // won't follow through on is worse than none — it teaches students to ignore the next one.
+      // won't follow through on is worse than none - it teaches students to ignore the next one.
       "We need to hear from you before we can carry on scheduling your sessions. Please reply to this email or call us so we can agree a way forward.",
       "",
-      "This is the last automatic reminder you'll get — from here it's a conversation with us directly.",
+      "This is the last automatic reminder you'll get - from here it's a conversation with us directly.",
       "",
       alreadyPaid,
     ],

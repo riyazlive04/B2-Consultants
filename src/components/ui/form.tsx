@@ -25,7 +25,7 @@ export { FieldContext } from "./field-base";
  * `time` / `month` / `datetime-local` used to fall back to a theme-corrected native input on the
  * grounds that a bespoke clock and month grid weren't worth three call sites. That traded away
  * more than it saved: the browser draws those popups in the platform's own font with its own
- * selection colour and its own "Clear / This month" links, and none of it is styleable — so next
+ * selection colour and its own "Clear / This month" links, and none of it is styleable - so next
  * to this app's fields they read as a different product. Each is now a sibling of DatePicker,
  * wrapping the same real hidden input so every form keeps submitting exactly what it did.
  *
@@ -54,7 +54,7 @@ export function Field({
   /** Renders below the control in --bad and marks the control aria-invalid (§5.5). */
   error?: string | null;
   /**
-   * Marks the label with a `*`. PURELY the label's decoration — it does not make the control
+   * Marks the label with a `*`. PURELY the label's decoration - it does not make the control
    * required; the control's own `required` does that. Kept separate on purpose: a `*` that
    * silently added validation would let a label change alter what the form accepts.
    */
@@ -98,7 +98,7 @@ export function Field({
 /**
  * Ref-forwarding so callers can reach the DOM node (e.g. to hook the form's reset event).
  *
- * `kind` is what makes a field accept only its own characters — `kind="name"` refuses symbols,
+ * `kind` is what makes a field accept only its own characters - `kind="name"` refuses symbols,
  * `kind="money"` refuses letters, etc. It also supplies inputMode/autoComplete/maxLength, so it
  * replaces hand-set attributes rather than adding to them. See lib/field-rules.ts.
  */
@@ -106,15 +106,15 @@ export const TextInput = forwardRef<
   HTMLInputElement,
   InputHTMLAttributes<HTMLInputElement> & { kind?: FieldKind }
 >(function TextInput({ kind, ...props }, ref) {
-  // Any date-ish field gets the app's own popover (§5.5) — same call site, no native OS popup.
+  // Any date-ish field gets the app's own popover (§5.5) - same call site, no native OS popup.
   const Picker = props.type ? DATEISH_PICKERS[props.type as keyof typeof DATEISH_PICKERS] : undefined;
   if (Picker) {
-    // drop native `type` and `size` (a number) — the picker owns both
+    // drop native `type` and `size` (a number) - the picker owns both
     const { type: _t, size: _s, ...rest } = props;
     return <Picker {...rest} />;
   }
   // Pull only the DOM-safe ARIA attrs. useControlProps also returns raw `describedBy`
-  // and `invalid` (consumed by the custom Select/DatePicker/PhoneField for styling) —
+  // and `invalid` (consumed by the custom Select/DatePicker/PhoneField for styling) -
   // spreading those onto a native <input> leaked them as junk `describedby`/`invalid`
   // attributes and threw a React warning on every form in the app.
   const { cls, "aria-describedby": ariaDescribedBy, "aria-invalid": ariaInvalid } = useControlProps();
@@ -153,7 +153,7 @@ export function TextArea({
 }
 
 /**
- * §5.5: the app's own dropdown — a custom listbox (SelectMenu), not the OS popup. Same
+ * §5.5: the app's own dropdown - a custom listbox (SelectMenu), not the OS popup. Same
  * `{ options }` API it always had, so all existing call sites upgrade untouched.
  */
 export function Select(

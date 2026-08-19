@@ -8,7 +8,7 @@ import {
   type ReturningLeadState,
 } from "../returning-opt-in";
 
-/** A lead that is live and owned — the "nothing to do" baseline. */
+/** A lead that is live and owned - the "nothing to do" baseline. */
 function state(over: Partial<ReturningLeadState> = {}): ReturningLeadState {
   return {
     stage: "NEW_LEAD",
@@ -19,7 +19,7 @@ function state(over: Partial<ReturningLeadState> = {}): ReturningLeadState {
   };
 }
 
-describe("planReturningOptIn — the case this was built for", () => {
+describe("planReturningOptIn - the case this was built for", () => {
   it("re-opens the exact shape that went missing: LOST, unassigned, no journey", () => {
     // Mohamed: imported from Synamate in June, marked LOST, never assigned, no journey. Opted in
     // three times in fifteen minutes and appeared nowhere.
@@ -32,7 +32,7 @@ describe("planReturningOptIn — the case this was built for", () => {
     });
   });
 
-  it("is idempotent — the second opt-in a minute later changes nothing more", () => {
+  it("is idempotent - the second opt-in a minute later changes nothing more", () => {
     // After the first re-open the lead is NEW_LEAD, owned, and on a fresh OPT_IN journey.
     const plan = planReturningOptIn(
       state({ stage: "NEW_LEAD", assignedToId: "user_1", journey: { phase: "OPT_IN", bookingId: null } }),
@@ -41,7 +41,7 @@ describe("planReturningOptIn — the case this was built for", () => {
   });
 });
 
-describe("planReturningOptIn — what it must not disturb", () => {
+describe("planReturningOptIn - what it must not disturb", () => {
   it("leaves an archived lead alone: archiving is a decision, not an accident", () => {
     const plan = planReturningOptIn(
       state({ stage: "LOST", assignedToId: null, journey: null, deletedAt: new Date() }),
@@ -57,12 +57,12 @@ describe("planReturningOptIn — what it must not disturb", () => {
     assert.equal(plan.reopened, false);
   });
 
-  it("does not reset a live SLA — a mid-chase journey keeps its own clock", () => {
+  it("does not reset a live SLA - a mid-chase journey keeps its own clock", () => {
     const plan = planReturningOptIn(state({ journey: { phase: "BOOKING_CHASE", bookingId: null } }));
     assert.equal(plan.restartJourney, false);
   });
 
-  it("does not restart a COMPLETED journey — that outreach succeeded", () => {
+  it("does not restart a COMPLETED journey - that outreach succeeded", () => {
     const plan = planReturningOptIn(state({ journey: { phase: "COMPLETED", bookingId: null } }));
     assert.equal(plan.restartJourney, false);
   });
@@ -70,7 +70,7 @@ describe("planReturningOptIn — what it must not disturb", () => {
   it("never steals a lead that already has an owner", () => {
     const plan = planReturningOptIn(state({ stage: "LOST", assignedToId: "user_2" }));
     assert.equal(plan.needsOwner, false);
-    assert.equal(plan.reopenStage, true, "the stage still re-opens — only the owner is preserved");
+    assert.equal(plan.reopenStage, true, "the stage still re-opens - only the owner is preserved");
   });
 
   it("does not drag a customer back into the dial queue", () => {
@@ -87,7 +87,7 @@ describe("planReturningOptIn — what it must not disturb", () => {
   });
 });
 
-describe("planReturningOptIn — the three triggers are independent", () => {
+describe("planReturningOptIn - the three triggers are independent", () => {
   it("an unassigned but otherwise live lead gets an owner and nothing else", () => {
     const plan = planReturningOptIn(state({ assignedToId: null }));
     assert.deepEqual(plan, { reopenStage: false, needsOwner: true, restartJourney: false, reopened: true });

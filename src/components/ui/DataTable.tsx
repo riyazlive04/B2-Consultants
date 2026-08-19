@@ -15,11 +15,11 @@ export type Column<T> = {
   sortable?: boolean;
   align?: "left" | "right";
   /**
-   * Sort position for an ENUM column, most-significant first — e.g. the funnel order of
+   * Sort position for an ENUM column, most-significant first - e.g. the funnel order of
    * LeadStage, or DRAFT → SENT → SIGNED.
    *
    * Without it a stage column sorts by its LABEL: "Won, Sent to Workshop, Proposal sent,
-   * New lead…" — alphabetical, and read by the client as the funnel running backwards
+   * New lead…" - alphabetical, and read by the client as the funnel running backwards
    * (Error Log L1). Alphabetical order is meaningless for anything whose values have a
    * natural sequence, and every such column in this app has one.
    *
@@ -33,7 +33,7 @@ export type Column<T> = {
  * Optional multi-select. Pass all four and the table grows a checkbox column plus a
  * header checkbox; the selection itself is owned by the caller (it drives a bulk-action
  * bar that lives outside the table). Header checkbox scope is the *filtered* rows, not
- * the current page — "select all" after a search means the search, which is what the
+ * the current page - "select all" after a search means the search, which is what the
  * count next to it says.
  */
 export type Selection<T> = {
@@ -73,7 +73,7 @@ export function DataTable<T>({
   toolbarExtra?: ReactNode;
   /**
    * Hide the built-in per-page filter box. Pass when the caller already provides a
-   * server-side search (e.g. Contacts' filter bar) — otherwise the two search boxes
+   * server-side search (e.g. Contacts' filter bar) - otherwise the two search boxes
    * on one screen search different scopes and users type in the wrong one.
    */
   hideFilter?: boolean;
@@ -128,7 +128,7 @@ export function DataTable<T>({
         out = [...out].sort((a, b) => {
           const va = raw(a, col);
           const vb = raw(b, col);
-          // Blanks sink to the bottom in BOTH directions — a missing due date is not
+          // Blanks sink to the bottom in BOTH directions - a missing due date is not
           // "the earliest" just because the arrow points the other way.
           if (va === null || va === undefined) return 1;
           if (vb === null || vb === undefined) return -1;
@@ -149,7 +149,7 @@ export function DataTable<T>({
   const safePage = Math.min(page, pageCount - 1);
   const paged = visible.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
-  // Select-all spans every filtered row, not just this page — see Selection's doc.
+  // Select-all spans every filtered row, not just this page - see Selection's doc.
   const selectableVisible = useMemo(
     () => (selection ? visible.filter((r) => selection.selectable?.(r) ?? true) : []),
     [visible, selection],
@@ -284,7 +284,7 @@ export function DataTable<T>({
                     type="checkbox"
                     className={checkboxCls}
                     checked={allSelected}
-                    // Mixed state can't be expressed declaratively in React — it's a DOM property.
+                    // Mixed state can't be expressed declaratively in React - it's a DOM property.
                     ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
                     disabled={selectableVisible.length === 0}
                     onChange={toggleAll}

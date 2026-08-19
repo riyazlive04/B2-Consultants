@@ -15,7 +15,7 @@ import type { ActionResult } from "./finance-actions";
  * Structured EMI schedule (spec Module G). Turns a PendingPayment (the single-figure
  * receivable) into per-instalment rows: 1 level = 2 EMIs, 3 levels = 6, each with its
  * own amount / due date / paid date / status. Finance-only (Admin). Money is BigInt
- * paise/cents; the split is exact — the last instalment absorbs the rounding remainder.
+ * paise/cents; the split is exact - the last instalment absorbs the rounding remainder.
  */
 
 function firstError(e: z.ZodError): string {
@@ -48,7 +48,7 @@ export async function generateInstalmentPlan(pendingPaymentId: string, form: For
     },
   });
   if (!pp) return { ok: false, error: "Receivable not found" };
-  if (pp.instalments.length) return { ok: false, error: "A schedule already exists — clear it before regenerating" };
+  if (pp.instalments.length) return { ok: false, error: "A schedule already exists - clear it before regenerating" };
 
   /**
    * The surcharge is priced by plan length in the Console and SNAPSHOTTED onto the receivable
@@ -94,7 +94,7 @@ export async function generateInstalmentPlan(pendingPaymentId: string, form: For
     section: "finance",
     entityType: "PendingPayment",
     entityId: pendingPaymentId,
-    summary: `Generated a ${count}-instalment plan for ${pp.studentName} — ${formatInrMinor(total.inr)}${extraNote} from ${formatDate(start)}, every ${intervalDays} days`,
+    summary: `Generated a ${count}-instalment plan for ${pp.studentName} - ${formatInrMinor(total.inr)}${extraNote} from ${formatDate(start)}, every ${intervalDays} days`,
     meta: {
       count,
       intervalDays,
@@ -111,7 +111,7 @@ export async function generateInstalmentPlan(pendingPaymentId: string, form: For
 }
 
 /**
- * What an N-instalment plan would cost and how it would split — read by the EMI modal so the
+ * What an N-instalment plan would cost and how it would split - read by the EMI modal so the
  * founder sees the surcharge and the schedule BEFORE generating. Returns minor units as strings
  * because BigInt does not cross the server/client boundary.
  */
@@ -191,7 +191,7 @@ export async function clearInstalmentPlan(pendingPaymentId: string): Promise<Act
   });
   const { count } = await prisma.instalment.deleteMany({ where: { pendingPaymentId } });
 
-  // deleteMany reports success on an empty schedule — only log a plan that actually existed.
+  // deleteMany reports success on an empty schedule - only log a plan that actually existed.
   if (count && pp) {
     await logActivity(session, {
       action: "finance.instalmentPlan.delete",

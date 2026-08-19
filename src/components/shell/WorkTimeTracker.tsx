@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 /**
- * App-wide work-time accrual. Headless — renders nothing.
+ * App-wide work-time accrual. Headless - renders nothing.
  *
  * WHY IT LIVES IN THE LAYOUT: this used to be a setInterval inside the dashboard's
  * WorkTracker card, so walking to Pipeline or Finance unmounted the component and
@@ -31,7 +31,7 @@ const TICK_MS = 15_000; // bank elapsed time this often
 const FLUSH_MS = 30_000; // heartbeat to the server this often
 const LOCK_STALE_MS = 45_000; // a leader silent this long is presumed gone
 
-/** A tick longer than this means the machine slept — don't bank the nap. */
+/** A tick longer than this means the machine slept - don't bank the nap. */
 const MAX_TICK_SEC = 300;
 
 type Lock = { id: string; ts: number };
@@ -132,7 +132,7 @@ export function WorkTimeTracker() {
       if (ok) pending -= seconds;
     };
     const onHide = () => {
-      // Not a pause — just a good moment to bank what's accrued, since a hidden
+      // Not a pause - just a good moment to bank what's accrued, since a hidden
       // tab may be discarded by the browser without ever firing pagehide.
       if (document.visibilityState === "hidden") {
         tick();
@@ -169,7 +169,7 @@ export function WorkTimeTracker() {
       clearInterval(timer);
       window.removeEventListener("pagehide", onLeave);
       document.removeEventListener("visibilitychange", onHide);
-      // Bank the final partial interval BEFORE the stop flag, then beacon it —
+      // Bank the final partial interval BEFORE the stop flag, then beacon it -
       // otherwise signing out drops up to 15s and, worse, leaves the lock held.
       tick();
       stopped = true;

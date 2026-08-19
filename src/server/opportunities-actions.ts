@@ -20,7 +20,7 @@ import { archiveData, restoreData } from "@/lib/soft-delete";
 /**
  * Mutations for the Opportunities Kanban (Synamate "Pipelines"). Moving a card into a stage that
  * is MAPPED to a lead-lifecycle stage (`PipelineStage.legacyStage`) write-throughs to Lead.stage +
- * LeadStageHistory, so pipeline-metrics / funnel / WhatsApp reminders stay correct — on ANY
+ * LeadStageHistory, so pipeline-metrics / funnel / WhatsApp reminders stay correct - on ANY
  * pipeline, not just the seeded default. The default Sales pipeline is mapped by the seed; custom
  * pipelines opt in per-stage via the Manage-board picker (`setStageLegacyStage`). Unmapped stages
  * (`legacyStage` null) never touch Lead.stage, so a board that's a separate process stays separate.
@@ -60,7 +60,7 @@ export async function moveOpportunity(
   const legacy = toStage.legacyStage;
   // A bridged (default-pipeline) stage dictates the status. A custom pipeline's columns carry no
   // won/lost meaning (legacyStage is null), so a drag there must PRESERVE the card's current status
-  // — otherwise dragging a deal you'd marked Won into the next column silently resets it to Open and
+  // - otherwise dragging a deal you'd marked Won into the next column silently resets it to Open and
   // erases wonAt, losing the win.
   const newStatus: OpportunityStatus = legacy ? statusForLegacy(legacy) : opp.status;
   let stageChangedTo: LeadStage | null = null;
@@ -99,7 +99,7 @@ export async function moveOpportunity(
         await tx.opportunity.update({ where: { id: sourceIds[i].id }, data: { position: i } });
       }
     }
-    // Write-through whenever the TARGET stage is mapped to a lifecycle stage — regardless of
+    // Write-through whenever the TARGET stage is mapped to a lifecycle stage - regardless of
     // which pipeline it's on. The old `isDefault` gate meant a card moved on a second pipeline
     // never updated Lead.stage, so the funnel / reminders / dashboard silently undercounted it
     // (schema.prisma PipelineStage.legacyStage). An unmapped stage still has `legacy` null here,
@@ -113,7 +113,7 @@ export async function moveOpportunity(
         const moved = lead.stage !== legacy;
         // Synamate ends in two won columns, "Split Pay" and "Full pay", where this schema has one
         // WON stage plus `Lead.paymentPlan` (schema.prisma PipelineStage.paymentPlan). Dropping a
-        // card in one of them IS the statement of how the deal pays, so record it — otherwise the
+        // card in one of them IS the statement of how the deal pays, so record it - otherwise the
         // two columns would be indistinguishable to everything downstream (commission, Finance),
         // and the plan would still have to be typed in by hand on the lead form.
         const plan = toStage.paymentPlan && toStage.paymentPlan !== lead.paymentPlan ? toStage.paymentPlan : null;
@@ -137,7 +137,7 @@ export async function moveOpportunity(
     { stageId: opp.stageId, status: opp.status },
     { stageId: toStageId, status: newStatus },
   );
-  // A drop back into the same column only reshuffles positions — not a feed row.
+  // A drop back into the same column only reshuffles positions - not a feed row.
   if (diff.changed.length) {
     await logActivity(session, {
       action: "opportunity.move",
@@ -161,12 +161,12 @@ export async function moveOpportunity(
 
 const createOppSchema = z.object({
   leadId: z.string().trim().optional(),
-  // The inline "new contact" pair — a real person, unlike the deal name below.
+  // The inline "new contact" pair - a real person, unlike the deal name below.
   newName: optionalRule("name"),
   newPhone: optionalRule("phone"),
   pipelineId: z.string().min(1, "Pick a pipeline"),
   stageId: z.string().min(1, "Pick a stage"),
-  // Deal name: free text, digits and all ("Level 2 — Q3 renewal").
+  // Deal name: free text, digits and all ("Level 2 - Q3 renewal").
   name: optionalRule("text"),
   valueInr: optionalRule("money"),
   source: z.enum(OPP_SOURCES).optional().or(z.literal("")),
@@ -262,7 +262,7 @@ const updateOppSchema = z.object({
   source: z.enum(OPP_SOURCES).optional().or(z.literal("")),
   assignedToId: z.string().trim().optional(),
   status: z.enum(["OPEN", "WON", "LOST", "ABANDONED"]).optional().or(z.literal("")),
-  // Lets the edit modal move a card without drag-and-drop — the keyboard/mobile fallback to the
+  // Lets the edit modal move a card without drag-and-drop - the keyboard/mobile fallback to the
   // native HTML5 DnD board (BUILD_CHECKLIST.md §4). Optional: omitted when the modal's Stage
   // field is unchanged.
   stageId: z.string().trim().optional(),
@@ -283,7 +283,7 @@ export async function updateOpportunity(id: string, form: FormData): Promise<Act
   if (!opp) return { ok: false, error: "Opportunity not found" };
 
   const fx = await getTodayInrPerEur();
-  // Preserve the current value when the Value box is left blank, rather than zeroing the deal — an
+  // Preserve the current value when the Value box is left blank, rather than zeroing the deal - an
   // untouched/cleared field on the edit modal must not wipe a real amount (to set zero, type 0).
   const valueInrMinor = d.valueInr?.trim() ? majorStringToMinor(d.valueInr) : opp.valueInrMinor;
   const valueEurMinor = inrMinorToEurMinor(valueInrMinor, fx.rate);
@@ -326,7 +326,7 @@ export async function updateOpportunity(id: string, form: FormData): Promise<Act
       section: "opportunities",
       entityType: "Opportunity",
       entityId: id,
-      summary: `Updated opportunity ${d.name} for ${opp.lead.name} — changed ${diff.changed.join(", ")}`,
+      summary: `Updated opportunity ${d.name} for ${opp.lead.name} - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -352,13 +352,13 @@ export async function updateOpportunity(id: string, form: FormData): Promise<Act
  * The board is what everyone calls "the pipeline", so deleting a card there is understood to
  * mean the person is out. But `Opportunity` and `Lead` are separate rows, and this only ever
  * archived the card: the lead stayed active, stayed assigned, and kept appearing on its owner's
- * My Desk queue — every desk read is `Lead` filtered on `deletedAt` (`l1-desk-metrics`,
+ * My Desk queue - every desk read is `Lead` filtered on `deletedAt` (`l1-desk-metrics`,
  * `l2-desk-metrics`, `telecaller-desk-metrics`), and the lead's `deletedAt` was still null. The
  * symptom reported on 7 Aug 2026: a lead deleted from the board at 06:55 was still on Asma's
  * desk, because nothing had ever archived the lead.
  *
  * ── Why the "last live card" guard ──────────────────────────────────────────────
- * A lead may hold cards on more than one pipeline — the default Sales board plus any custom
+ * A lead may hold cards on more than one pipeline - the default Sales board plus any custom
  * board an Admin built. Clearing someone off ONE process is not the same as dropping the person,
  * and archiving unconditionally would leave an archived lead with a live card still sitting on
  * someone else's board. So the lead is archived only when no live card is left for it anywhere.
@@ -378,7 +378,7 @@ export async function deleteOpportunity(id: string): Promise<ActionResult> {
   });
   if (!opp) return { ok: false, error: "Opportunity not found" };
 
-  // One payload for both rows — `archiveData()` stamps `new Date()` per call, and two instants
+  // One payload for both rows - `archiveData()` stamps `new Date()` per call, and two instants
   // a few milliseconds apart is exactly the pairing `restoreOpportunity` needs to recognise.
   const archived = archiveData(session.user.id);
 
@@ -410,7 +410,7 @@ export async function deleteOpportunity(id: string): Promise<ActionResult> {
       section: "pipeline",
       entityType: "Lead",
       entityId: opp.leadId,
-      summary: `Archived lead ${opp.lead.name} — its last board card was deleted`,
+      summary: `Archived lead ${opp.lead.name} - its last board card was deleted`,
       meta: { stage: opp.lead.stage, viaOpportunityId: id },
     });
   }
@@ -427,12 +427,12 @@ export async function deleteOpportunity(id: string): Promise<ActionResult> {
 }
 
 /**
- * Restore an archived opportunity — and the lead with it, if the two were archived together.
+ * Restore an archived opportunity - and the lead with it, if the two were archived together.
  *
  * The pairing test is the shared `deletedAt` instant that `deleteOpportunity` stamps on both
  * rows. Restoring on that basis and no other is what keeps this from over-reaching: a lead
  * archived separately from the Pipeline screen, that happens to own an archived card, stays
- * archived — undoing a board delete must not quietly undo a decision taken somewhere else.
+ * archived - undoing a board delete must not quietly undo a decision taken somewhere else.
  *
  * Without this the delete would be one-way in practice. The card would come back to the board
  * while the lead behind it stayed archived, which is the mirror image of the bug being fixed:
@@ -472,7 +472,7 @@ export async function restoreOpportunity(id: string): Promise<ActionResult> {
       section: "pipeline",
       entityType: "Lead",
       entityId: opp.leadId,
-      summary: `Restored lead ${opp.lead.name} — its board card was restored`,
+      summary: `Restored lead ${opp.lead.name} - its board card was restored`,
       meta: { viaOpportunityId: id },
     });
   }
@@ -487,7 +487,7 @@ export async function restoreOpportunity(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Permanent delete — only from the Archived tab. Notes detach (SetNull) to the parent lead. */
+/** Permanent delete - only from the Archived tab. Notes detach (SetNull) to the parent lead. */
 export async function purgeOpportunity(id: string): Promise<ActionResult> {
   const session = await requireSection("opportunities");
   const opp = await prisma.opportunity.findUnique({
@@ -567,7 +567,7 @@ export async function deletePipeline(id: string): Promise<ActionResult> {
   if (p.isDefault) return { ok: false, error: "The default Sales pipeline can't be deleted" };
   // Soft delete: the pipeline (and, since getBoard only ever loads stages for an undeleted
   // pipeline, its stages and opportunities too) drops out of the switcher immediately but stays
-  // recoverable — a confirm dialog is not undo. BUILD_CHECKLIST.md §4.
+  // recoverable - a confirm dialog is not undo. BUILD_CHECKLIST.md §4.
   await prisma.pipeline.update({ where: { id }, data: { deletedAt: new Date() } });
   await logActivity(session, {
     action: "pipeline.delete",
@@ -583,7 +583,7 @@ export async function deletePipeline(id: string): Promise<ActionResult> {
 }
 
 /**
- * Reorder the pipelines themselves — the Pipelines screen's drag handle.
+ * Reorder the pipelines themselves - the Pipelines screen's drag handle.
  *
  * The board's switcher orders by `[isDefault desc, position asc, name asc]`, so this decides the
  * order everywhere pipelines are listed, not just on that screen. The default Sales pipeline still
@@ -593,7 +593,7 @@ export async function deletePipeline(id: string): Promise<ActionResult> {
 export async function reorderPipelines(orderedIds: string[]): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
-  // Ignore ids the caller has no business moving — this arrives from a browser, and a soft-deleted
+  // Ignore ids the caller has no business moving - this arrives from a browser, and a soft-deleted
   // or non-existent id would otherwise throw mid-transaction and roll back every other move.
   const live = await prisma.pipeline.findMany({
     where: { id: { in: orderedIds }, deletedAt: null },
@@ -633,13 +633,13 @@ export async function addStage(
    * THE DEFAULT PIPELINE TAKES NO *UNMAPPED* COLUMNS.
    *
    * This used to refuse a new column on the default board outright, because a stage created here
-   * got `legacyStage: null` and `setStageLegacyStage` then refused to map it — leaving a column
+   * got `legacyStage: null` and `setStageLegacyStage` then refused to map it - leaving a column
    * that is a data trap, not just an oddity: a card dragged into it silently stops writing
    * through to `Lead.stage`, and `syncDefaultOpportunity` can never move it back out, because it
    * only targets bridged columns. Production had exactly this: columns named "loser" and "Aakash",
    * both unmapped, both able to swallow a deal.
    *
-   * The trap was the missing mapping, though — not the column. Admin needs to be able to shape
+   * The trap was the missing mapping, though - not the column. Admin needs to be able to shape
    * this board by hand (Synamate's own pipeline is edited from its UI), so a default-board column
    * is now allowed on one condition: it must name the lifecycle stage it means, here and forever
    * after (`setStageLegacyStage` will not clear it). "Restore the Synamate columns" puts the
@@ -657,7 +657,7 @@ export async function addStage(
     return {
       ok: false,
       error:
-        "A column on the default Sales board has to say which lead stage it means — a card dropped in an unmapped column stops syncing to the contact. Pick a lifecycle stage and add it again.",
+        "A column on the default Sales board has to say which lead stage it means - a card dropped in an unmapped column stops syncing to the contact. Pick a lifecycle stage and add it again.",
     };
   }
   const plan = planFor(legacy, paymentPlan);
@@ -711,7 +711,7 @@ export async function renameStage(id: string, name: string): Promise<ActionResul
 /**
  * The payment plan a column means, validated against the stage it is mapped to.
  *
- * Only WON columns carry one — it is what tells Synamate's "Split Pay" and "Full pay" apart
+ * Only WON columns carry one - it is what tells Synamate's "Split Pay" and "Full pay" apart
  * (schema.prisma PipelineStage.paymentPlan). Anywhere else it is silently dropped rather than
  * rejected: a plan on a "No Show" column is meaningless, not an error worth stopping an admin for.
  */
@@ -722,7 +722,7 @@ function planFor(legacy: string | null, paymentPlan: string | null | undefined):
 }
 
 /**
- * Map a stage to a lead-lifecycle stage — the Lead.stage bridge. Once a stage is mapped, moving a
+ * Map a stage to a lead-lifecycle stage - the Lead.stage bridge. Once a stage is mapped, moving a
  * card into it write-throughs to Lead.stage (moveOpportunity), and leads reaching that stage are
  * filed into it (opportunity-sync).
  *
@@ -749,7 +749,7 @@ export async function setStageLegacyStage(
     return {
       ok: false,
       error:
-        "A column on the default Sales board has to stay mapped to a lead stage — cards in an unmapped column stop syncing to the contact. Point it at a different stage instead, or delete the column.",
+        "A column on the default Sales board has to stay mapped to a lead stage - cards in an unmapped column stop syncing to the contact. Point it at a different stage instead, or delete the column.",
     };
   }
   const plan = planFor(value, paymentPlan);
@@ -777,7 +777,7 @@ export async function setStageLegacyStage(
  * Put the default board back to the twelve live Synamate columns.
  *
  * The safety net that makes hand-editing the board sane to offer: rename, re-map, add and remove
- * columns freely, and this restores the standard shape — renaming columns back rather than
+ * columns freely, and this restores the standard shape - renaming columns back rather than
  * duplicating them, and re-filing every card into the column its lead's stage belongs to. Nothing
  * is deleted while it still holds cards (`server/pipeline-reshape.ts`).
  *
@@ -793,7 +793,7 @@ export async function restoreSynamateStages(pipelineId: string): Promise<ActionR
   });
   if (!pipeline) return { ok: false, error: "Pipeline not found" };
   if (!pipeline.isDefault) {
-    return { ok: false, error: "Only the default Sales board mirrors Synamate — a custom pipeline is its own process." };
+    return { ok: false, error: "Only the default Sales board mirrors Synamate - a custom pipeline is its own process." };
   }
 
   let report;
@@ -829,7 +829,7 @@ export async function deleteStage(id: string): Promise<ActionResult> {
     select: { legacyStage: true, name: true, _count: { select: { opps: true } } },
   });
   if (!stage) return { ok: false, error: "Stage not found" };
-  // A bridged column used to be undeletable outright — which, now that EVERY default-board column
+  // A bridged column used to be undeletable outright - which, now that EVERY default-board column
   // is bridged, would mean the board could be added to but never tidied up. The card guard below
   // is the one that actually matters: an empty column can go, and leads whose stage no longer has
   // a column simply stop being filed onto the board until one exists again (opportunity-sync
@@ -837,7 +837,7 @@ export async function deleteStage(id: string): Promise<ActionResult> {
   if (stage._count.opps > 0) {
     return { ok: false, error: "Move the opportunities out of this stage before deleting it" };
   }
-  // Soft delete (BUILD_CHECKLIST.md §4/§5) — recoverable, matches deletePipeline above.
+  // Soft delete (BUILD_CHECKLIST.md §4/§5) - recoverable, matches deletePipeline above.
   await prisma.pipelineStage.update({ where: { id }, data: { deletedAt: new Date() } });
   await logActivity(session, {
     action: "stage.delete",
@@ -877,7 +877,7 @@ export async function reorderStages(pipelineId: string, orderedIds: string[]): P
 // `ContactNote.opportunityId` + `Opportunity.notes` (Phase 0 schema) let a deal have its own
 // conversation instead of everything living on the parent Lead. Mirrors the ContactNote CRUD in
 // contacts-actions.ts (createNote/deleteNote/toggleNotePin, scoped by leadId) but scoped by
-// opportunityId and gated by the "opportunities" section — these are reached from the
+// opportunityId and gated by the "opportunities" section - these are reached from the
 // Opportunities board, not Contacts, so they use the same requireSection key every other mutation
 // in this file uses. `leadId` is still required on ContactNote (not nullable), so every
 // opportunity note is stamped with the deal's underlying contact too.
@@ -923,7 +923,7 @@ export async function createOpportunityNote(
   });
   if (!opp) return { ok: false, error: "Opportunity not found" };
 
-  // Same @mention parse as ContactNote (contacts-actions.ts) — see the comment there for why
+  // Same @mention parse as ContactNote (contacts-actions.ts) - see the comment there for why
   // this can't persist to a mentionedUserIds column and is instead re-derived at notification
   // read time by contactNoteMentionNotifications() in notifications.ts.
   const candidates = await prisma.user.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } });
@@ -964,7 +964,7 @@ export async function toggleOpportunityNotePin(id: string): Promise<ActionResult
     section: "opportunities",
     entityType: "ContactNote",
     entityId: id,
-    summary: `${note.pinned ? "Unpinned" : "Pinned"} a note on opportunity ${note.opportunity?.name ?? "—"}`,
+    summary: `${note.pinned ? "Unpinned" : "Pinned"} a note on opportunity ${note.opportunity?.name ?? "-"}`,
     meta: { changed: diff.changed, before: diff.before, after: diff.after, opportunityId: note.opportunityId },
   });
   if (note.opportunityId) revalidatePath("/opportunities");
@@ -984,7 +984,7 @@ export async function deleteOpportunityNote(id: string): Promise<ActionResult> {
     section: "opportunities",
     entityType: "ContactNote",
     entityId: id,
-    summary: `Deleted a note on opportunity ${note.opportunity?.name ?? "—"}`,
+    summary: `Deleted a note on opportunity ${note.opportunity?.name ?? "-"}`,
     meta: { opportunityId: note.opportunityId, leadId: note.leadId },
   });
   if (note.opportunityId) revalidatePath("/opportunities");

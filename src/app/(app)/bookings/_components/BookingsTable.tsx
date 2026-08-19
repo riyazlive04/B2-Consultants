@@ -34,7 +34,7 @@ const VERDICT_STYLE: Record<string, string> = {
  */
 function BantChips({ r }: { r: BookingRow }) {
   // Null is "nobody has scored them", NOT zero. Rendering 0.0/5 would rank a prospect nobody
-  // asked alongside one who answered badly — see lib/bant-view.ts.
+  // asked alongside one who answered badly - see lib/bant-view.ts.
   if (!r.bant) {
     return (
       <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-caption font-medium text-muted" title="Nobody has scored this prospect yet">
@@ -114,7 +114,7 @@ export function BookingsTable({
     const res = await rescheduleBooking(postponeFor.id, targetSlot);
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
-    toast("Call postponed — prospect notified");
+    toast("Call postponed - prospect notified");
     setPostponeFor(null);
   };
 
@@ -194,7 +194,7 @@ export function BookingsTable({
           <button
             type="button"
             onClick={() => toggleConfirm(r)}
-            title={r.confirmed ? "Confirmed — click to clear" : "Mark this call confirmed"}
+            title={r.confirmed ? "Confirmed - click to clear" : "Mark this call confirmed"}
             className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-caption font-semibold transition-colors ${
               r.confirmed ? "bg-ok-soft text-ok" : "bg-surface-2 text-muted hover:text-ink"
             }`}

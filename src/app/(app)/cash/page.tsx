@@ -42,7 +42,7 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
   const asOf = formatDate(istToday().toISOString());
   const runwayLevel = runway.runwayMonths === null ? null : signalForRunway(runway.runwayMonths);
 
-  // The date the money actually runs out at this burn — a deadline lands harder
+  // The date the money actually runs out at this burn - a deadline lands harder
   // than "3.1 months". Approximate month = 30.44 days; rounded to the day.
   const cashOutDate =
     runway.runwayMonths === null
@@ -54,10 +54,10 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
   const gaugeC = 2 * Math.PI * gaugeR;
   const gaugeFrac = runway.runwayMonths === null ? 0 : Math.min(1, runway.runwayMonths / 12);
   const gaugeColor = runwayLevel ? `var(--${runwayLevel})` : "var(--muted)";
-  // hero band coloured by the runway signal (green ≥6, amber 3–6, red <3) — soft bg, not a gradient
+  // hero band coloured by the runway signal (green ≥6, amber 3–6, red <3) - soft bg, not a gradient
   const gaugeBand = runwayLevel ? `var(--${runwayLevel}-soft)` : "var(--surface-2)";
 
-  // Receivables age analysis — now per student, bucketed by WEEKS, each bar scaled to that
+  // Receivables age analysis - now per student, bucketed by WEEKS, each bar scaled to that
   // student's own agreed total (Error Log G1–G4). See _components/AgeAnalysis.
   const ageRows = receivables.rows
     .filter((r) => r.overdue && r.balanceInr > 0)
@@ -79,10 +79,10 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
   ];
 
   // "Top receivables by balance" and the full receivables table are rendered by
-  // TopReceivablesTable/ReceivablesTable (Client Components) below — see CashTables.tsx.
+  // TopReceivablesTable/ReceivablesTable (Client Components) below - see CashTables.tsx.
   const topRows = [...receivables.rows].sort((a, b) => b.balanceInr - a.balanceInr).slice(0, 10);
 
-  // Balances due within 30 days, not yet overdue — feeds the "Expected in next 30 days" card's detail popup.
+  // Balances due within 30 days, not yet overdue - feeds the "Expected in next 30 days" card's detail popup.
   const dueSoonRows = receivables.rows.filter((r) => {
     if (r.overdue || !r.nextDueDate) return false;
     const due = new Date(r.nextDueDate).getTime();
@@ -128,7 +128,7 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
                 Cash in Hand
                 <InfoHint
                   className="ml-1"
-                  text="Money actually available — income received minus expenses paid, accumulated to the date of the latest cash position entry. Not a forecast, and not the same as profit on paper."
+                  text="Money actually available - income received minus expenses paid, accumulated to the date of the latest cash position entry. Not a forecast, and not the same as profit on paper."
                 />
                 {runway.cashStale ? " · ⚠ stale" : runway.cashDate ? ` · ${formatDate(runway.cashDate)}` : ""}
               </p>
@@ -217,14 +217,14 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
                 At this burn, cash reaches ₹0 around {cashOutDate}.
               </p>
             )}
-            {/* One-time payables are excluded from break-even and from burn — both correctly —
+            {/* One-time payables are excluded from break-even and from burn - both correctly -
                 which is exactly how a large promised outflow ends up invisible on the one screen
                 that exists to answer "how long do we last". Stated here, next to the gauge it
                 contradicts, rather than left to be inferred from the payables table. */}
             {commitments.oneTimeInr > 0 && (
               <p className="tnum mt-1.5 text-sm font-semibold text-risk">
                 {compact(commitments.oneTimeInr)} already committed in {commitments.count} one-time
-                payable{commitments.count === 1 ? "" : "s"} — runway net of it is{" "}
+                payable{commitments.count === 1 ? "" : "s"} - runway net of it is{" "}
                 {commitments.runwayAfterMonths === null ? "-" : `${commitments.runwayAfterMonths} months`}.
               </p>
             )}
@@ -344,7 +344,7 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
                             .sort((a, b) => b.balanceInr - a.balanceInr)
                             .slice(0, 5)
                             .map((r) => ({ label: r.studentName, value: compact(r.balanceInr) }))
-                        : [{ label: "No overdue balances", value: "—" }],
+                        : [{ label: "No overdue balances", value: "-" }],
                       note: receivables.oldestOverdue
                         ? `${ageRows.length} student(s) overdue · oldest ${receivables.oldestOverdue.daysOverdue}d (${receivables.oldestOverdue.name}).`
                         : undefined,
@@ -359,7 +359,7 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
                             .sort((a, b) => b.balanceInr - a.balanceInr)
                             .slice(0, 5)
                             .map((r) => ({ label: r.studentName, value: compact(r.balanceInr) }))
-                        : [{ label: "No dues in the next 30 days", value: "—" }],
+                        : [{ label: "No dues in the next 30 days", value: "-" }],
                       note: `${dueSoonRows.length} student(s) due within 30 days.`,
                     }}
                   />
@@ -378,7 +378,7 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
                             .sort((a, b) => b.daysOverdue - a.daysOverdue)
                             .slice(0, 5)
                             .map((r) => ({ label: r.studentName, value: `${r.daysOverdue}d · ${compact(r.balanceInr)}` }))
-                        : [{ label: "No overdue balances", value: "—" }],
+                        : [{ label: "No overdue balances", value: "-" }],
                     }}
                   />
                 </div>

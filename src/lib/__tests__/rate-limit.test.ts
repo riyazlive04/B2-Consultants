@@ -64,7 +64,7 @@ describe("token bucket", () => {
       assert.equal(takeToken("refill", rule).ok, true, "one second buys exactly one token");
       assert.equal(takeToken("refill", rule).ok, false);
 
-      // Ten seconds of idling must not bank ten tokens — capacity is the ceiling.
+      // Ten seconds of idling must not bank ten tokens - capacity is the ceiling.
       clock.advance(10_000);
       assert.equal(takeToken("refill", rule).ok, true);
       assert.equal(takeToken("refill", rule).ok, true);
@@ -118,7 +118,7 @@ describe("the fixed-window boundary bug this replaced", () => {
 
   /**
    * THE REGRESSION TEST. A fixed-window counter resets wholesale on a wall-clock boundary, so
-   * "5 per 10 minutes" permitted 5 requests at 09:59:59 and 5 more at 10:00:00 — ten in one
+   * "5 per 10 minutes" permitted 5 requests at 09:59:59 and 5 more at 10:00:00 - ten in one
    * second, i.e. ten booking slots. A bucket has no boundary to straddle: after draining, the
    * next token is only available once it has actually been earned.
    */

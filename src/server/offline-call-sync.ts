@@ -19,7 +19,7 @@ import { syncDefaultOpportunity } from "./opportunity-sync";
  * and folding two different trust levels into one code path is how the marking gets forgotten.
  *
  * IDEMPOTENT BY CONSTRUCTION. `clientKey` carries a UNIQUE index, and a collision is caught
- * and reported as success — not as an error. That matters because the common failure is a
+ * and reported as success - not as an error. That matters because the common failure is a
  * half-open mobile connection where the write LANDS and the response never arrives: the device
  * retries the same key, and the only correct answer is "yes, that one is saved" rather than a
  * second row inflating the call counts people are reviewed on.
@@ -37,7 +37,7 @@ const entrySchema = z.object({
   leadId: z.string().min(1),
   outcome: z.enum(CALL_OUTCOMES),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
-  // Permissive here, validated by `resolveStageAfterCall` — an unrecognised stage must leave
+  // Permissive here, validated by `resolveStageAfterCall` - an unrecognised stage must leave
   // the card alone, never reject the whole entry. A rejected entry is a call the telecaller
   // has already moved on from and can no longer recover, which is the trade this module
   // explicitly refuses to make. Optional so entries queued before this field existed still sync.
@@ -68,7 +68,7 @@ export async function syncOfflineCalls(payloadJson: string): Promise<SyncResult>
   const results: SyncedEntry[] = [];
 
   for (const e of parsed.data.entries) {
-    // The server's own clock, read per entry — this is both the `syncedAt` stamp and the
+    // The server's own clock, read per entry - this is both the `syncedAt` stamp and the
     // reference the device's claim is clamped against.
     const receivedAt = new Date();
     const { calledAt, claimed, adjusted } = clampCalledAt(new Date(e.recordedAt), receivedAt);
@@ -101,7 +101,7 @@ export async function syncOfflineCalls(payloadJson: string): Promise<SyncResult>
           },
         });
 
-        // Same first-contact rule as the online path — only the FIRST connection counts, so a
+        // Same first-contact rule as the online path - only the FIRST connection counts, so a
         // late-synced call can't reset speed-to-lead and flatter the metric.
         if (e.outcome === "SPOKE") {
           await tx.lead.updateMany({
@@ -136,7 +136,7 @@ export async function syncOfflineCalls(payloadJson: string): Promise<SyncResult>
       entityId: e.clientKey,
       summary:
         `Synced an offline call with ${lead.name}` +
-        `${adjusted ? ` — device time was ${adjusted === "future" ? "in the future" : "implausibly old"} and was adjusted` : ""}`,
+        `${adjusted ? ` - device time was ${adjusted === "future" ? "in the future" : "implausibly old"} and was adjusted` : ""}`,
       // The claim is recorded even when it was accepted, so a later dispute has both numbers.
       meta: {
         outcome: e.outcome,

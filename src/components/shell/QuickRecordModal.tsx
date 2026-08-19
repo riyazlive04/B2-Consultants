@@ -23,7 +23,7 @@ import {
  * Expense tab, each with the SAME entry form the Finance page uses, so a payment or a cost can be
  * logged from anywhere without leaving the current screen.
  *
- * Create-only on purpose — a global quick-add records a NEW entry; editing an existing one belongs
+ * Create-only on purpose - a global quick-add records a NEW entry; editing an existing one belongs
  * on the Finance page next to its row. Both tabs post to the very same server actions
  * (`createIncome` / `createExpense`), so validation, FX stamping and ledger posting are identical
  * whether you record here or there; only the surrounding chrome differs.
@@ -122,7 +122,7 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
     keepOpen,
   );
 
-  // "Keep open" saves then resets the form to defaults — fold the instalment fields away with it.
+  // "Keep open" saves then resets the form to defaults - fold the instalment fields away with it.
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
@@ -137,7 +137,7 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
         <Field label="Date">
           <TextInput type="date" name="date" required defaultValue={data.today} />
         </Field>
-        <Field label="Student name" hint={data.studentOptions.length > 0 ? "Search to link a student — feeds their total paid" : undefined}>
+        <Field label="Student name" hint={data.studentOptions.length > 0 ? "Search to link a student - feeds their total paid" : undefined}>
           {data.studentOptions.length > 0 ? (
             <ComboBox options={data.studentOptions} nameText="studentName" nameValue="studentId" required placeholder="Search or type who paid" />
           ) : (

@@ -12,10 +12,10 @@ import { Card, Hint, SaveBar } from "./kit";
  * When the Agreement module starts nudging (Founder Console → Agreements).
  *
  * Deliberately the ONLY agreement setting: everything else about the workflow is derived, not
- * configured. This one number decides who shows up as "Agreement pending — ready to send" on the
+ * configured. This one number decides who shows up as "Agreement pending - ready to send" on the
  * dashboard and on a contact's profile before a draft exists.
  *
- * It is a prompt threshold, never a gate — whatever is picked here, the founder can still draft and
+ * It is a prompt threshold, never a gate - whatever is picked here, the founder can still draft and
  * send an agreement for anyone, any time, from the picker. That is the point: the system suggests,
  * the founder decides.
  */
@@ -26,7 +26,7 @@ const OPTIONS: Array<{ value: Readiness; title: string; body: string; stages: st
   {
     value: "EITHER",
     title: "As soon as they've agreed",
-    body: "Prompts the moment a deal is agreed — even before the deposit lands. The earliest nudge, and the one that keeps a contract from being the bottleneck.",
+    body: "Prompts the moment a deal is agreed - even before the deposit lands. The earliest nudge, and the one that keeps a contract from being the bottleneck.",
     stages: ["DEPOSIT_FOLLOWUP", "DEPOSIT_PAID", "WON"],
   },
   {
@@ -67,7 +67,7 @@ export function AgreementWorkflowPanel({ config }: { config: AgreementWorkflowCo
     <div className="space-y-5">
       <Hint>
         When should the app start telling you an agreement is <strong>ready to send</strong>? This
-        only controls the <em>prompt</em> — the action card on a contact and the task on your
+        only controls the <em>prompt</em> - the action card on a contact and the task on your
         dashboard. You can always draft and send an agreement for anyone, at any time, from the
         client picker. Nothing here ever blocks you.
       </Hint>

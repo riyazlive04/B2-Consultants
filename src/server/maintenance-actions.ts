@@ -110,7 +110,7 @@ export async function saveDunningConfig(input: unknown): Promise<ActionResult> {
     entityType: "AppSetting",
     entityId: DUNNING_KEY,
     // Arming this starts emailing paying students, so the summary names the switch explicitly
-    // rather than saying "updated settings" — this is the log line someone will look for.
+    // rather than saying "updated settings" - this is the log line someone will look for.
     summary: `${parsed.data.enabled ? "ARMED" : "Disabled"} the payment-chase ladder`,
     meta: {
       enabled: parsed.data.enabled,
@@ -130,8 +130,8 @@ export async function saveDunningConfig(input: unknown): Promise<ActionResult> {
  * Dry run: exactly who the ladder would contact on the next tick, and with which rung.
  *
  * Nobody sensible arms an engine that emails paying students on the strength of a description of
- * what it does. This runs the identical read path as the real job — same query, same `stageFor`
- * verdict — with every side effect removed.
+ * what it does. This runs the identical read path as the real job - same query, same `stageFor`
+ * verdict - with every side effect removed.
  */
 export async function previewDunningLadder(): Promise<
   { ok: true; rows: Awaited<ReturnType<typeof previewDunning>> } | { ok: false; error: string }

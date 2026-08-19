@@ -28,8 +28,8 @@ import {
  * One dialog, two jobs: invite a new person, or edit an existing one. Both answer the
  * same two questions, and the split between them is the point of the screen:
  *
- *   Module access — what they can SEE   (checkboxes, one per nav section)
- *   Capabilities  — what they can DO    (switches, one per privileged action group)
+ *   Module access - what they can SEE   (checkboxes, one per nav section)
+ *   Capabilities  - what they can DO    (switches, one per privileged action group)
  *
  * Picking a role is a preset, not a cage: it refills both lists with that role's
  * defaults, and every box stays editable afterwards.
@@ -72,7 +72,7 @@ export function AccessDialog({
   onInvited: (link: { url: string; expiresInDays: number }) => void;
 }) {
   const grantable = sections.filter((s) => !s.locked);
-  // A requested role is a suggestion, not a grant — and never Admin off a public form.
+  // A requested role is a suggestion, not a grant - and never Admin off a public form.
   const initialRole: AppRole =
     user?.role ?? (prefill?.role === "HEAD" || prefill?.role === "USER" ? prefill.role : "USER");
 
@@ -92,7 +92,7 @@ export function AccessDialog({
   const isAdminRole = role === "ADMIN";
 
   // Raw <input>s (this dialog predates the form kit), so the kind's attrs + character
-  // filter are wired by hand. Not hooks — safe to call here. See lib/field-rules.ts.
+  // filter are wired by hand. Not hooks - safe to call here. See lib/field-rules.ts.
   const nameField = fieldKindProps<HTMLInputElement>("name", (e) => setName(e.target.value));
   const emailField = fieldKindProps<HTMLInputElement>("email", (e) => setEmail(e.target.value));
 
@@ -110,7 +110,7 @@ export function AccessDialog({
     return next;
   };
 
-  /** A delegate can never hand out a capability they don't hold — the server says so too. */
+  /** A delegate can never hand out a capability they don't hold - the server says so too. */
   const canGrant = (key: CapabilityKey) => hasCapability(actor.role, actor.capabilities, key);
 
   const submit = async (form: FormData) => {
@@ -123,7 +123,7 @@ export function AccessDialog({
     }
     const res = await updateUserAccess(user!.id, form);
     if (!res.ok) return setError(res.error);
-    toast(`Access updated for ${name} — applies on their next page load`);
+    toast(`Access updated for ${name} - applies on their next page load`);
     onClose();
   };
 
@@ -172,7 +172,7 @@ export function AccessDialog({
         {/* role preset */}
         <div>
           <p className="text-sm font-medium text-ink">
-            Role <span className="font-normal text-muted">— sets a starting access preset</span>
+            Role <span className="font-normal text-muted">- sets a starting access preset</span>
           </p>
           <input type="hidden" name="role" value={role} />
           <div className="mt-2">
@@ -180,7 +180,7 @@ export function AccessDialog({
           </div>
         </div>
 
-        {/* modules — what they can SEE */}
+        {/* modules - what they can SEE */}
         <div>
           <div className="flex items-baseline justify-between">
             <p className="text-sm font-medium text-ink">Module access</p>
@@ -208,7 +208,7 @@ export function AccessDialog({
           )}
         </div>
 
-        {/* capabilities — what they can DO */}
+        {/* capabilities - what they can DO */}
         <div>
           <p className="text-sm font-medium text-ink">Capabilities</p>
           <div className="mt-2 space-y-2">
@@ -242,7 +242,7 @@ export function AccessDialog({
           <div className="mt-2">
             <Hint>
               Modules decide what a person can open. Capabilities decide what they can change once
-              they&apos;re there — a Head coach can read Finance without being able to post to the ledger.
+              they&apos;re there - a Head coach can read Finance without being able to post to the ledger.
             </Hint>
           </div>
         </div>
@@ -264,7 +264,7 @@ export function AccessDialog({
             </button>
           )}
           <Btn onClick={onClose}>Cancel</Btn>
-          {/* "Create", not "Send": there is no mailer — the next dialog hands you the link. */}
+          {/* "Create", not "Send": there is no mailer - the next dialog hands you the link. */}
           <SubmitBtn>{mode === "invite" ? "Create invite link" : "Save changes"}</SubmitBtn>
         </div>
       </form>

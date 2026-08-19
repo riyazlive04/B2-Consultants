@@ -1,20 +1,20 @@
 /**
- * Gamification engine — PURE and isomorphic (no prisma, no zod, no server-only).
+ * Gamification engine - PURE and isomorphic (no prisma, no zod, no server-only).
  *
  * Design rule (same spirit as LTV / runway / funnel): every score is DERIVED at
- * read time from the append-only history the app already keeps — daily logs,
+ * read time from the append-only history the app already keeps - daily logs,
  * lead stage history, discovery outcomes, milestone logs, signal changes, OKRs.
  * No score is stored, so XP is retroactive from day one, can never drift out of
- * sync with the real work, and can't be edited — you earn it by doing the work
+ * sync with the real work, and can't be edited - you earn it by doing the work
  * that is already audited.
  *
  * WHAT THE FOUNDER OWNS
  * Every number and label below (XP values, the streak ladder, levels, badges,
  * quests, the student journey) lives in a Ruleset, edited from /console and
- * persisted as JSON. The constants here are only the DEFAULTS — the genesis
+ * persisted as JSON. The constants here are only the DEFAULTS - the genesis
  * ruleset a fresh install starts from.
  *
- * EFFECTIVE DATING — the reason this isn't a plain settings object
+ * EFFECTIVE DATING - the reason this isn't a plain settings object
  * Rulesets are stamped with `effectiveFrom`. An event is scored by the ruleset
  * in force ON THE DAY IT HAPPENED, so tuning "deal won" from 100 → 50 today
  * never re-prices a deal closed in March. Two consequences fall out of that,
@@ -31,7 +31,7 @@
  * Two audiences:
  *  - EMPLOYEES: XP → levels, badges, weekly quests, leaderboard (the Arena).
  *  - STUDENTS:  journey XP over the 7 milestones, stage titles, momentum,
- *    achievement badges — shown to the team on the student pages (students
+ *    achievement badges - shown to the team on the student pages (students
  *    don't log in; the team uses this in sessions to motivate them).
  */
 
@@ -55,7 +55,7 @@ export type BadgeDef = {
   key: string;
   name: string;
   description: string;
-  icon: string; // emoji — renders everywhere, no asset pipeline
+  icon: string; // emoji - renders everywhere, no asset pipeline
   tier: BadgeTier;
 };
 
@@ -85,7 +85,7 @@ export type LevelDef = { level: number; title: string; minXp: number };
  * The countable things an employee badge can be pinned to. The METRIC is a code
  * concept (it must map to real history); the THRESHOLD, name, icon, tier and
  * copy are the founder's. New badges are made by combining any metric with any
- * threshold — no code change.
+ * threshold - no code change.
  */
 export const EMPLOYEE_BADGE_METRICS = [
   "logs",
@@ -207,7 +207,7 @@ export const QUEST_FIELDS = [
 /**
  * Human names for the quest fields. Without these the Founder Console's quest
  * editor renders the raw column names ("discoveryCallsCompleted") in a dropdown
- * the founder actually reads — the same reason EMPLOYEE_METRIC_LABELS exists.
+ * the founder actually reads - the same reason EMPLOYEE_METRIC_LABELS exists.
  */
 export const QUEST_FIELD_LABELS: Record<(typeof QUEST_FIELDS)[number], string> = {
   [WEEKDAY_LOGS_FIELD]: "Weekday logs (Mon–Fri count)",
@@ -240,7 +240,7 @@ export type StudentJourneyConfig = {
 export type Ruleset = {
   id: string;
   label: string;
-  /** YYYY-MM-DD — events on/after this day score by this ruleset */
+  /** YYYY-MM-DD - events on/after this day score by this ruleset */
   effectiveFrom: string;
   xpRules: XpRules;
   levels: LevelDef[];
@@ -316,8 +316,8 @@ export const DEFAULT_EMPLOYEE_BADGES: EmployeeBadgeRule[] = [
   { key: "rescues-3", name: "Lifeguard", icon: "🛟", tier: "gold", description: "Turned 3 red-signal students green.", metric: "rescues", threshold: 3, enabled: true },
   { key: "okr-100", name: "Bullseye", icon: "🎯", tier: "silver", description: "Completed an OKR at 100%.", metric: "okrHits", threshold: 1, enabled: true },
   { key: "okr-perfect-month", name: "Perfect Month", icon: "🌕", tier: "gold", description: "All OKRs (2+) at 100% in one month.", metric: "okrPerfectMonths", threshold: 1, enabled: true },
-  { key: "level-5", name: "Halfway to Legend", icon: "⭐", tier: "silver", description: "Reached level 5 — Mentor.", metric: "level", threshold: 5, enabled: true },
-  { key: "level-10", name: "Living Legend", icon: "👑", tier: "legend", description: "Reached level 10 — Legend.", metric: "level", threshold: 10, enabled: true },
+  { key: "level-5", name: "Halfway to Legend", icon: "⭐", tier: "silver", description: "Reached level 5 - Mentor.", metric: "level", threshold: 5, enabled: true },
+  { key: "level-10", name: "Living Legend", icon: "👑", tier: "legend", description: "Reached level 10 - Legend.", metric: "level", threshold: 10, enabled: true },
 ];
 
 export const DEFAULT_QUESTS: QuestDef[] = [
@@ -398,7 +398,7 @@ export const DEFAULT_STUDENT_JOURNEY: StudentJourneyConfig = {
       steps: [
         "Aim for 5+ tailored applications every week.",
         "Track every application so follow-ups never slip.",
-        "Tailor the CV keywords to each job description — the diagnostic helps.",
+        "Tailor the CV keywords to each job description - the diagnostic helps.",
       ],
     },
     INTERVIEWS: {
@@ -418,7 +418,7 @@ export const DEFAULT_STUDENT_JOURNEY: StudentJourneyConfig = {
       ],
     },
     COMPLETED: {
-      focus: "You made it — Alumni",
+      focus: "You made it - Alumni",
       steps: [
         "Share your story and a testimonial for the community.",
         "Stay in touch - referrals from alumni open doors for others.",
@@ -449,7 +449,7 @@ export function sortedRulesets(config: GamificationConfig): Ruleset[] {
   return [...rulesets].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
 }
 
-/** The ruleset in force on `dateKey` — the last one that had started by then. */
+/** The ruleset in force on `dateKey` - the last one that had started by then. */
 export function rulesetFor(config: GamificationConfig, dateKey: string): Ruleset {
   const all = sortedRulesets(config);
   let match = all[0];
@@ -457,7 +457,7 @@ export function rulesetFor(config: GamificationConfig, dateKey: string): Ruleset
   return match;
 }
 
-/** The ruleset in force today — what the UI renders and what future work will score by. */
+/** The ruleset in force today - what the UI renders and what future work will score by. */
 export function currentRuleset(config: GamificationConfig, todayKey: string): Ruleset {
   return rulesetFor(config, todayKey);
 }
@@ -576,7 +576,7 @@ export function currentStreak(dateKeys: string[], todayKey: string): { streak: n
 export type Increment = { dateKey: string; n: number };
 
 /**
- * First date a dated counter series reaches its threshold — where the threshold
+ * First date a dated counter series reaches its threshold - where the threshold
  * is itself a function of the date, because the founder may have moved the bar.
  * This is what makes badges ratchet: we test each day against the bar that was
  * standing THAT day, so a badge earned under the old rules stays earned.
@@ -628,11 +628,11 @@ export type PlayerGame = {
   unlockedCount: number;
   quests: QuestProgress[]; // this week
   events: XpEvent[]; // newest first
-  /** every day this player logged — reward rules read streaks off this */
+  /** every day this player logged - reward rules read streaks off this */
   logDays: string[];
-  /** dated counter series per metric — reward rules threshold over any window */
+  /** dated counter series per metric - reward rules threshold over any window */
   counters: Record<CountableMetric, Increment[]>;
-  /** every level-up, oldest first — reward rules fire on the day a level was reached */
+  /** every level-up, oldest first - reward rules fire on the day a level was reached */
   levelUps: Array<{ dateKey: string; level: number }>;
 };
 
@@ -640,7 +640,7 @@ const MILESTONE_INDEX: Record<string, number> = Object.fromEntries(
   MILESTONE_ORDER.map((m, i) => [m, i]),
 );
 
-/** Human names for the lead stages XP can be earned on — also rendered by the console. */
+/** Human names for the lead stages XP can be earned on - also rendered by the console. */
 export const STAGE_LABELS_SHORT: Record<string, string> = {
   DISCO_BOOKED: "Discovery call booked",
   SSS_BOOKED: "SSS call booked",
@@ -663,7 +663,7 @@ const METRIC_LOG_FIELD: Partial<Record<EmployeeBadgeMetric, string>> = {
   sessions: "sessionsDelivered",
 };
 
-/** Build the full XP ledger + badges + quests for every player. Pure — feed it rows, get the game. */
+/** Build the full XP ledger + badges + quests for every player. Pure - feed it rows, get the game. */
 export function computeTeamGame(
   inputs: GameInputs,
   config: GamificationConfig = DEFAULT_GAMIFICATION_CONFIG,
@@ -724,7 +724,7 @@ export function computeTeamGame(
       );
     }
 
-    // 4) Student milestone moves (forward only — no XP for corrections backwards)
+    // 4) Student milestone moves (forward only - no XP for corrections backwards)
     const forwardMoves = milestoneMoves.filter(
       (m) => m.previousMilestone === null ||
         (MILESTONE_INDEX[m.newMilestone] ?? 0) > (MILESTONE_INDEX[m.previousMilestone] ?? 0),
@@ -733,8 +733,8 @@ export function computeTeamGame(
       const rules = rulesOn(m.dateKey).xpRules;
       let xp = rules.MILESTONE_ADVANCED;
       let suffix = "";
-      if (m.newMilestone === "OFFER_RECEIVED") { xp += rules.MILESTONE_OFFER_BONUS; suffix = " — offer! 🎉"; }
-      if (m.newMilestone === "COMPLETED") { xp += rules.MILESTONE_COMPLETED_BONUS; suffix = " — journey complete"; }
+      if (m.newMilestone === "OFFER_RECEIVED") { xp += rules.MILESTONE_OFFER_BONUS; suffix = " - offer! 🎉"; }
+      if (m.newMilestone === "COMPLETED") { xp += rules.MILESTONE_COMPLETED_BONUS; suffix = " - journey complete"; }
       push(m.dateKey, "milestone", `Student milestone advanced · ${m.studentName}${suffix}`, xp, m.newMilestone);
     }
 
@@ -742,7 +742,7 @@ export function computeTeamGame(
     const rescues = signalMoves.filter((s) => s.previousSignal === "RED" && s.newSignal === "GREEN");
     for (const r of rescues) push(r.dateKey, "rescue", "Student rescued: red → green", rulesOn(r.dateKey).xpRules.STUDENT_RESCUED);
 
-    // 6) OKRs — settled past months pay on results; the running month pays only a confirmed 100%
+    // 6) OKRs - settled past months pay on results; the running month pays only a confirmed 100%
     const okrHits: Increment[] = [];
     const okrsByMonth = new Map<string, number[]>();
     for (const o of okrs) {
@@ -759,7 +759,7 @@ export function computeTeamGame(
       }
     }
 
-    // 7) Weekly quests — banked for every week that met the bar (incl. this one),
+    // 7) Weekly quests - banked for every week that met the bar (incl. this one),
     //    each week judged by the quest board that was live at the end of that week.
     const weekBuckets = new Map<string, { sums: Record<string, number>; weekdayLogs: number; lastLog: string }>();
     for (const l of logs) {
@@ -842,7 +842,7 @@ export function computeTeamGame(
     };
 
     // ── badges, ratcheted ──
-    // `thresholdOn` answers "what did this badge cost on that day?" — falling back
+    // `thresholdOn` answers "what did this badge cost on that day?" - falling back
     // to the live bar for a badge that didn't exist yet under the old ruleset.
     const thresholdOn = (badgeKey: string, dateKey: string, fallback: number): number => {
       const rule = rulesOn(dateKey).employeeBadges.find((b) => b.key === badgeKey);
@@ -921,7 +921,7 @@ export type StudentJourney = {
 
 /**
  * A student's journey is a SNAPSHOT of where they stand right now, not a ledger of
- * dated events — so unlike employee XP it is read against today's ruleset only.
+ * dated events - so unlike employee XP it is read against today's ruleset only.
  */
 export function computeStudentJourney(
   input: StudentJourneyInput,

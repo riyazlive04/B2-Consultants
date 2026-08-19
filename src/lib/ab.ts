@@ -5,12 +5,12 @@
  * The obvious design is: roll a die on the first visit, write the winner into a cookie, read that
  * cookie forever after. It cannot be built here. A funnel step is a React Server Component, and a
  * Server Component may not set cookies (Next only allows that in a Server Action, a Route Handler
- * or middleware) — so the roll would have to happen somewhere other than the page that needs it,
+ * or middleware) - so the roll would have to happen somewhere other than the page that needs it,
  * and `generateMetadata` + the page body each call the loader, which would roll twice and could
  * disagree with each other about which page the visitor is even on.
  *
- * So the cookie holds a VISITOR ID and nothing else — one opaque value, written once by
- * middleware — and the assignment is a pure function of (visitor, control step). Same visitor,
+ * So the cookie holds a VISITOR ID and nothing else - one opaque value, written once by
+ * middleware - and the assignment is a pure function of (visitor, control step). Same visitor,
  * same step, same answer, on every request, in both render passes, with no storage per experiment
  * and no write path on the hot public route.
  *
@@ -18,10 +18,10 @@
  * Changing a weight re-buckets some already-assigned visitors, because the boundary they are
  * compared against moves. That is inherent to hash bucketing (it is what every split-testing tool
  * that avoids a per-visitor assignment table does), and it is the right trade here: the
- * alternative — a row per visitor per experiment — is a write on every anonymous ad click.
+ * alternative - a row per visitor per experiment - is a write on every anonymous ad click.
  * Weights are meant to be set once at the start of a test, not tuned while it runs.
  *
- * The step id is mixed into the seed so that a visitor is not correlated across experiments — a
+ * The step id is mixed into the seed so that a visitor is not correlated across experiments - a
  * "control person" on step 1 is not thereby a control person on step 2, which would quietly turn
  * several independent tests into one.
  */
@@ -32,8 +32,8 @@ export type AbCandidate = { id: string; abWeight: number };
  * 32-bit FNV-1a, mapped onto [0, 1).
  *
  * Chosen over `crypto.subtle.digest` because that is async, and this runs inside a synchronous
- * render path. Cryptographic strength is not a requirement — nobody gains anything by predicting
- * which landing page they are shown — but even distribution is, and FNV-1a avalanches well enough
+ * render path. Cryptographic strength is not a requirement - nobody gains anything by predicting
+ * which landing page they are shown - but even distribution is, and FNV-1a avalanches well enough
  * that adjacent cuid visitor ids land in unrelated buckets.
  */
 export function hashUnit(seed: string): number {
@@ -50,7 +50,7 @@ export function hashUnit(seed: string): number {
 /**
  * Pick from weighted candidates using a pre-computed unit value.
  *
- * Weights are RELATIVE shares, not percentages — see the note on `FunnelStep.abWeight`. A
+ * Weights are RELATIVE shares, not percentages - see the note on `FunnelStep.abWeight`. A
  * candidate weighted 0 is switched off without being deleted, which is how you pause a losing
  * variant without throwing away the views it has already collected.
  *

@@ -1,9 +1,9 @@
 import { Text, View } from "@react-pdf/renderer";
 
 /**
- * The B2 Consultants logo mark for @react-pdf documents — the rounded indigo
+ * The B2 Consultants logo mark for @react-pdf documents - the rounded indigo
  * frame with a serif "B²". Uses the built-in Times-Bold serif (nothing to
- * register) and the "²" glyph, which is WinAnsi-safe (unlike ✓ ₹ ◦ — see the
+ * register) and the "²" glyph, which is WinAnsi-safe (unlike ✓ ₹ ◦ - see the
  * glyph note in agreement-guided-v3.tsx). Colour matches the app's
  * `--brand-indigo` token so print and screen read as one brand.
  */

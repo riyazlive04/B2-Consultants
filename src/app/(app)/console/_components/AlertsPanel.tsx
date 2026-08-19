@@ -28,7 +28,7 @@ import { Btn, Card, Hint, NumInput, Picker, SaveBar, TextIn, Toggle } from "./ki
  * cold, how a late payment gets chased, and when a student's attendance becomes a concern.
  *
  * Grouped together deliberately. They live in different parts of the product but they are the
- * same kind of decision — a threshold that, once crossed, produces a message to a real person —
+ * same kind of decision - a threshold that, once crossed, produces a message to a real person -
  * and the two that send ship OFF for that reason.
  */
 
@@ -72,14 +72,14 @@ export function AlertsPanel({
     <div className="space-y-6">
       {!cronArmed && (
         <p className="rounded-field bg-warn-soft px-3 py-2 text-xs font-medium text-warn">
-          <code>CRON_SECRET</code> isn&apos;t set, so none of the rules below can ever fire — the
+          <code>CRON_SECRET</code> isn&apos;t set, so none of the rules below can ever fire - the
           app has no clock of its own.
         </p>
       )}
       {cronArmed && !emailArmed && (
         <p className="rounded-field bg-warn-soft px-3 py-2 text-xs font-medium text-warn">
           Email isn&apos;t armed, so these rules will still <em>run</em> and log who they{" "}
-          <em>would</em> have contacted — but nothing will actually be sent.
+          <em>would</em> have contacted - but nothing will actually be sent.
         </p>
       )}
       <SpeedToLeadCard config={speedToLead} />
@@ -101,7 +101,7 @@ function SpeedToLeadCard({ config }: { config: SpeedToLeadAlertConfig }) {
         <code>/api/cron/alerts</code>.
         <br />
         <strong>Only newly-arrived leads count.</strong> The standing backlog of never-contacted
-        leads is reported in the weekly digest, not alerted on — an alert that fires on 23,000
+        leads is reported in the weekly digest, not alerted on - an alert that fires on 23,000
         leads every few minutes gets muted on day two, and a muted alert is worse than none.
       </Hint>
       <div className="mt-4 space-y-4">
@@ -232,7 +232,7 @@ function DunningCard({ config }: { config: DunningConfig }) {
       <h4 className="text-h3 text-ink">Payment chase ladder</h4>
       <Hint>
         Three escalating messages keyed off each instalment&apos;s own due date. Ships{" "}
-        <strong>off</strong> — this talks to paying students, which is the highest-consequence
+        <strong>off</strong> - this talks to paying students, which is the highest-consequence
         thing the app does.
         <br />
         Stages never fire out of order or bunch up: an instalment already ten days overdue when
@@ -253,7 +253,7 @@ function DunningCard({ config }: { config: DunningConfig }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
             label="Copy me on final notices"
-            hint="Optional. Only the last rung — copying you on every nudge would bury the escalations."
+            hint="Optional. Only the last rung - copying you on every nudge would bury the escalations."
           >
             <TextIn
               ariaLabel="Founder CC"
@@ -277,7 +277,7 @@ function DunningCard({ config }: { config: DunningConfig }) {
         </div>
       </div>
       {/* The dry run. Nobody sensible arms an engine that emails paying students on the strength
-          of a description of what it does — this runs the identical read path with every side
+          of a description of what it does - this runs the identical read path with every side
           effect removed, so "show me exactly who gets what" has an answer first. */}
       <div className="mt-5 border-t border-line pt-4">
         <Btn
@@ -322,10 +322,10 @@ function DunningCard({ config }: { config: DunningConfig }) {
                     </td>
                     <td className="py-1.5 text-ink-3">
                       {/* A row with no usable contact detail is the most useful thing on this
-                          table — it is silently skipped by the real run. */}
+                          table - it is silently skipped by the real run. */}
                       {r.channel === "WHATSAPP"
-                        ? r.hasPhone ? "WhatsApp" : "— no number —"
-                        : r.hasEmail ? "Email" : "— no email —"}
+                        ? r.hasPhone ? "WhatsApp" : "- no number -"
+                        : r.hasEmail ? "Email" : "- no email -"}
                     </td>
                   </tr>
                 ))}
@@ -358,7 +358,7 @@ function AttendanceCard({ config }: { config: AttendanceConfig }) {
       <h4 className="text-h3 text-ink">Attendance risk</h4>
       <Hint>
         When a student&apos;s attendance turns amber or red on the batch roster. Nothing here
-        sends anything — it only colours a list, so unlike the two rules above there is no switch
+        sends anything - it only colours a list, so unlike the two rules above there is no switch
         to arm.
         <br />
         Excused absences are excluded from the rate entirely, and a late arrival counts as
@@ -385,7 +385,7 @@ function AttendanceCard({ config }: { config: AttendanceConfig }) {
         </Field>
         <Field
           label="Red after N missed in a row"
-          hint="Fires on its own — a student at 80% who's missed the last three is the one about to drop, and an average can't see that."
+          hint="Fires on its own - a student at 80% who's missed the last three is the one about to drop, and an average can't see that."
         >
           <NumInput
             ariaLabel="Consecutive misses for red"

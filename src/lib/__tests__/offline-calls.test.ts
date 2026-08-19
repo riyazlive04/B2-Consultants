@@ -23,7 +23,7 @@ const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 
 test("a plausible offline claim is stored exactly as the device reported it", () => {
-  // 40 minutes of lost signal — the ordinary case this feature exists for.
+  // 40 minutes of lost signal - the ordinary case this feature exists for.
   const claimed = new Date(RECEIVED.getTime() - 40 * MIN);
   const r = clampCalledAt(claimed, RECEIVED);
 
@@ -48,13 +48,13 @@ test("a call claimed in the future is pulled back to its arrival instant", () =>
 
   assert.equal(r.adjusted, "future");
   assert.equal(r.calledAt.toISOString(), RECEIVED.toISOString());
-  // The claim survives for the audit trail — clamping must not erase what was asserted.
+  // The claim survives for the audit trail - clamping must not erase what was asserted.
   assert.equal(r.claimed.toISOString(), claimed.toISOString());
 });
 
 test("a back-dated clock cannot manufacture a 5-minute connection", () => {
   // The metric-gaming case: a device set back an hour claims it rang the lead moments after
-  // it arrived. It is still clamped only if implausible — an hour ago IS plausible, so this
+  // it arrived. It is still clamped only if implausible - an hour ago IS plausible, so this
   // one is accepted and it is `syncedAt` on the row, not the clamp, that exposes it.
   const claimed = new Date(RECEIVED.getTime() - HOUR);
   const r = clampCalledAt(claimed, RECEIVED);
@@ -81,7 +81,7 @@ test("the age boundary is inclusive, so a week-old call still lands unadjusted",
   assert.equal(clampCalledAt(justOver, RECEIVED).adjusted, "too-old");
 });
 
-test("clamping never drops the call — every path yields a usable calledAt", () => {
+test("clamping never drops the call - every path yields a usable calledAt", () => {
   for (const claimed of [
     new Date(RECEIVED.getTime() + 10 * DAY), // absurd future
     new Date(RECEIVED.getTime() - 400 * DAY), // absurd past

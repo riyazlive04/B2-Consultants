@@ -6,7 +6,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
 
 /**
- * App-styled select (§5.5, "fully custom popover" — the option list is ours, not the OS
+ * App-styled select (§5.5, "fully custom popover" - the option list is ours, not the OS
  * dropdown). Same wrapping trick as DatePicker: a REAL hidden `<select>` carries
  * `name`/`value`/`required` so forms submit and validate exactly as before, and it stays
  * the DOM source of truth so `onChange` handlers still get a real change event with
@@ -100,7 +100,7 @@ export function SelectMenu({
       case "End": e.preventDefault(); setActive(step(options.length, -1)); return;
       case "Enter":
       case " ": e.preventDefault(); commit(active); return;
-      // stopPropagation: inside a Modal, Escape must close the LIST only — the modal's own
+      // stopPropagation: inside a Modal, Escape must close the LIST only - the modal's own
       // window-level Escape listener would otherwise fire too and take the half-filled form.
       case "Escape": e.preventDefault(); e.stopPropagation(); setOpen(false); triggerRef.current?.focus(); return;
       case "Tab": setOpen(false); return;

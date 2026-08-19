@@ -32,7 +32,7 @@ function UrlField({ defaultValue }: { defaultValue?: string }) {
         url.trim()
           ? parsed
             ? `✓ Recognised as ${VIDEO_PROVIDER_LABELS[parsed.provider]}`
-            : "Not a recognisable Fathom / YouTube / Vimeo / Google Drive link — for Fathom, use “Copy share link”"
+            : "Not a recognisable Fathom / YouTube / Vimeo / Google Drive link - for Fathom, use “Copy share link”"
           : "Paste the Fathom share link from the recorded class. YouTube / Vimeo / Drive links work too."
       }
     >
@@ -45,7 +45,7 @@ function RecordingFields({ recording, modules }: { recording?: GnRecordingRow; m
   return (
     <div className="space-y-4">
       <Field label="Title">
-        <TextInput name="title" required maxLength={160} placeholder="Class 12 — Dativ prepositions" defaultValue={recording?.title} />
+        <TextInput name="title" required maxLength={160} placeholder="Class 12 - Dativ prepositions" defaultValue={recording?.title} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Class date">
@@ -82,7 +82,7 @@ function ModuleManager({ batchId, modules, onChanged }: { batchId: string; modul
       <p className="mt-0.5 text-xs text-muted">Organise lessons into an ordered curriculum. Reorder with the arrows.</p>
 
       <div className="mt-3 space-y-2">
-        {modules.length === 0 && <p className="text-xs text-muted">No modules yet — add one below, then file recordings into it.</p>}
+        {modules.length === 0 && <p className="text-xs text-muted">No modules yet - add one below, then file recordings into it.</p>}
         {modules.map((m, i) => (
           <div key={m.id} className="flex items-center gap-2 rounded-field border border-line bg-surface-2 px-3 py-2">
             <span className="flex flex-col">
@@ -101,7 +101,7 @@ function ModuleManager({ batchId, modules, onChanged }: { batchId: string; modul
             </button>
             <button type="button" aria-label="Delete module" className="text-muted hover:text-risk"
               onClick={async () => {
-                const ok = await askConfirm({ title: `Delete module “${m.title}”?`, body: "Its lessons move to the default Class recordings section — they aren't deleted.", confirmLabel: "Delete module", danger: true });
+                const ok = await askConfirm({ title: `Delete module “${m.title}”?`, body: "Its lessons move to the default Class recordings section - they aren't deleted.", confirmLabel: "Delete module", danger: true });
                 if (!ok) return;
                 const r = await deleteGnModule(m.id);
                 if (!r.ok) return toast(r.error, "error");
@@ -172,7 +172,7 @@ function LessonCard({ r, index, canManage, onEdit, onChanged }: {
             </button>
             {/*
               Tracked progress, when the provider reports any. Shown next to the tick rather
-              than instead of it: the founders' question is precisely "they said watched — did
+              than instead of it: the founders' question is precisely "they said watched - did
               they?", and answering it needs both numbers side by side.
             */}
             {r.watchedPct !== null && (
@@ -200,7 +200,7 @@ function LessonCard({ r, index, canManage, onEdit, onChanged }: {
                   size="sm"
                   tone="danger"
                   onClick={async () => {
-                    const ok = await askConfirm({ title: `Delete “${r.title}”?`, body: "The video stays on its platform — only the batch entry is removed.", confirmLabel: "Delete", danger: true });
+                    const ok = await askConfirm({ title: `Delete “${r.title}”?`, body: "The video stays on its platform - only the batch entry is removed.", confirmLabel: "Delete", danger: true });
                     if (!ok) return;
                     const res = await deleteRecording(r.id);
                     if (!res.ok) return toast(res.error, "error");
@@ -289,13 +289,13 @@ export function ClassroomPanel({ batchId, classroom, modules, canManage, recordi
 
       {!canManage && recordingTotal > 0 && (
         <p className="text-xs text-muted">
-          Your class recordings live here for <span className="font-semibold text-ink">lifetime</span> — rewatch them anytime, even after the batch ends.
+          Your class recordings live here for <span className="font-semibold text-ink">lifetime</span> - rewatch them anytime, even after the batch ends.
         </p>
       )}
 
       {recordingTotal === 0 && (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          No recordings yet{canManage ? " — post the first class recording above." : " — your tutor posts the Fathom recording here after each class."}
+          No recordings yet{canManage ? " - post the first class recording above." : " - your tutor posts the Fathom recording here after each class."}
         </p>
       )}
 

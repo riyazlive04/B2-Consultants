@@ -1,26 +1,26 @@
 /**
- * The publisher book-order WhatsApp message — reference numbering and variable assembly.
+ * The publisher book-order WhatsApp message - reference numbering and variable assembly.
  *
  * ══ WHY THIS TOUCHPOINT IS UNLIKE EVERY OTHER ONE ═══════════════════════════════
  * Every other WhatsApp template in this app is addressed to the person it is about: a prospect,
  * a student, a signer. `BOOK_ORDER` goes to the VENDOR. The recipient is a supplier, the subject
- * is a student, and the two must never be confused — which is why the variables carry
+ * is a student, and the two must never be confused - which is why the variables carry
  * `student_name` and `ship_to` as *content* rather than addressing the reader as the subject.
  *
  * Two consequences worth stating, because both are easy to get wrong later:
  *  · The number we send to is `Vendor.phone`, never the student's. A slip here ships a student's
  *    home address to the wrong person.
  *  · `ship_to`/`ship_phone` come from the ORDER's snapshot (`BookOrder.shipToAddress/shipToPhone`),
- *    not live off the Student. The snapshot is deliberate — the books go where the student lived
+ *    not live off the Student. The snapshot is deliberate - the books go where the student lived
  *    when we ordered, and a later address edit must not rewrite where a past parcel went.
  *
  * ══ WHY EVERY VARIABLE IS REQUIRED ══════════════════════════════════════════════
  * The approved template body uses all six. A template send with a blank parameter does not
- * degrade gracefully — it delivers "Ship to: " to a supplier, who then either ships nowhere or
+ * degrade gracefully - it delivers "Ship to: " to a supplier, who then either ships nowhere or
  * rings to ask. So a missing value BLOCKS the send and names what is missing, rather than
  * producing a message that is technically delivered and practically useless.
  *
- * Isomorphic — no prisma, no server-only, so the rules above are unit-testable.
+ * Isomorphic - no prisma, no server-only, so the rules above are unit-testable.
  */
 
 /**
@@ -78,14 +78,14 @@ export function nextBookOrderRef(existing: readonly string[], year: number): str
 export type BookOrderMessageInput = {
   publisherName: string | null | undefined;
   orderRef: string | null | undefined;
-  /** The level's DISPLAY name ("German A1"), not its code ("GERMAN_A1") — a vendor reads this. */
+  /** The level's DISPLAY name ("German A1"), not its code ("GERMAN_A1") - a vendor reads this. */
   levelLabel: string | null | undefined;
   studentName: string | null | undefined;
   shipTo: string | null | undefined;
   shipPhone: string | null | undefined;
 };
 
-/** Human wording for each gap — shown to the admin who pressed the button. */
+/** Human wording for each gap - shown to the admin who pressed the button. */
 const MISSING_LABEL: Record<BookOrderVar, string> = {
   publisher_name: "the vendor's name",
   order_ref: "an order reference",
@@ -123,7 +123,7 @@ export function buildBookOrderVars(input: BookOrderMessageInput): BookOrderVarsR
     return {
       ok: false,
       missing: [...missing],
-      message: `Can't message the publisher yet — this order has no ${joined}.`,
+      message: `Can't message the publisher yet - this order has no ${joined}.`,
     };
   }
   return { ok: true, vars: raw };
@@ -131,5 +131,5 @@ export function buildBookOrderVars(input: BookOrderMessageInput): BookOrderVarsR
 
 /** One-line summary stored on the message row, so the WhatsApp log reads without a join. */
 export function bookOrderBodySummary(vars: Record<BookOrderVar, string>): string {
-  return `Book order ${vars.order_ref} — ${vars.level} for ${vars.student_name} → ${vars.publisher_name}`;
+  return `Book order ${vars.order_ref} - ${vars.level} for ${vars.student_name} → ${vars.publisher_name}`;
 }

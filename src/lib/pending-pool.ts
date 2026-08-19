@@ -3,8 +3,8 @@
  *
  * The founders' rule, in their words: "Numbers are assigned only to batches that can
  * realistically fill… If a workshop yields only one joiner, no batch is assigned yet (wait
- * for the next workshop to accumulate enough)." Hence the gaps in batch numbers — B23, B24,
- * B25 … B26 — which look like a bug in the sheet and are actually the policy working.
+ * for the next workshop to accumulate enough)." Hence the gaps in batch numbers - B23, B24,
+ * B25 … B26 - which look like a bug in the sheet and are actually the policy working.
  *
  * Pure: candidates and config are passed in. No DB, no session.
  */
@@ -23,7 +23,7 @@ export type OpenBatchSuggestion = {
   /** Joiners who could fill it, best-fit first. */
   joinerIds: string[];
   count: number;
-  /** True when count clears minToOpen — i.e. this batch can realistically fill. */
+  /** True when count clears minToOpen - i.e. this batch can realistically fill. */
   openable: boolean;
   reason: string;
 };
@@ -41,8 +41,8 @@ export const DEFAULT_MIN_TO_OPEN = 2;
 /**
  * Group the pool into batches worth opening.
  *
- * EITHER joiners are counted toward BOTH timetables while pending — they are genuinely
- * available for either — but each is offered to whichever slot is closest to opening, so one
+ * EITHER joiners are counted toward BOTH timetables while pending - they are genuinely
+ * available for either - but each is offered to whichever slot is closest to opening, so one
  * person is never double-counted into two real batches.
  */
 export function suggestBatchesToOpen(
@@ -58,7 +58,7 @@ export function suggestBatchesToOpen(
     const weekend = atLevel.filter((j) => j.preference === "WEEKEND");
     const either = atLevel.filter((j) => j.preference === "EITHER");
 
-    // Give the flexible joiners to whichever fixed group is closer to viable — that is what
+    // Give the flexible joiners to whichever fixed group is closer to viable - that is what
     // "assign numbers only to batches that can realistically fill" means in practice.
     const weekdayFirst = weekday.length >= weekend.length;
     const primary = weekdayFirst ? weekday : weekend;
@@ -71,7 +71,7 @@ export function suggestBatchesToOpen(
     const toPrimary = either.slice(0, needed);
     let rest = either.slice(needed);
 
-    // Only spin up the SECOND timetable if somebody actually needs it — i.e. someone asked
+    // Only spin up the SECOND timetable if somebody actually needs it - i.e. someone asked
     // for it specifically. Handing leftover flexible joiners to an empty secondary would
     // split (say) three all-flexible people into a batch of two plus one stranded person,
     // when all three would happily sit in one batch. That is the precise opposite of
@@ -98,8 +98,8 @@ export function suggestBatchesToOpen(
         count: group.length,
         openable,
         reason: openable
-          ? `${group.length} waiting — can fill, open a batch.`
-          : `${group.length} waiting — below ${minToOpen}, hold in the pool for the next workshop.`,
+          ? `${group.length} waiting - can fill, open a batch.`
+          : `${group.length} waiting - below ${minToOpen}, hold in the pool for the next workshop.`,
       });
     }
   }

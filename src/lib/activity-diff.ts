@@ -1,5 +1,5 @@
 /**
- * Field-level diff for activity-log update entries — pure, so it lives here rather than in
+ * Field-level diff for activity-log update entries - pure, so it lives here rather than in
  * server/activity-log.ts (which imports prisma and `server-only`) and can be unit-tested.
  *
  * Call sites import it from `server/activity-log`, which re-exports it.
@@ -16,7 +16,7 @@ export type FieldDiff = {
  * Compare only the keys present in `after`, so a caller can diff the handful of fields a
  * form touches without listing everything the row holds.
  *
- * The founder should see "changed Stage and Owner", not a wall of unchanged values — and an
+ * The founder should see "changed Stage and Owner", not a wall of unchanged values - and an
  * update that changed nothing shouldn't reach the feed at all.
  */
 export function diffFields<T extends Record<string, unknown>>(before: T, after: Partial<T>): FieldDiff {
@@ -40,14 +40,14 @@ export function diffFields<T extends Record<string, unknown>>(before: T, after: 
  *
  * Three cases, each a way a money edit could go unrecorded:
  *
- * - **BigInt** — every amount in this app is a BigInt minor unit, and `JSON.stringify` THROWS
+ * - **BigInt** - every amount in this app is a BigInt minor unit, and `JSON.stringify` THROWS
  *   on one rather than returning anything. Because callers run `diffFields` before handing the
  *   result to `logActivity`, that throw would escape the helper's try/catch and roll back the
  *   caller's real write. A log that can delete a payment is far worse than no log.
- * - **Decimal** — a Prisma Decimal serialises to `{}`, so every amount would compare equal to
+ * - **Decimal** - a Prisma Decimal serialises to `{}`, so every amount would compare equal to
  *   every other, and a corrected fee would log as "nothing changed": the precise edit the
  *   founder most wants to see, silently swallowed.
- * - **Date** — compared by instant, so a rescheduled date reads as a change and an identical
+ * - **Date** - compared by instant, so a rescheduled date reads as a change and an identical
  *   one doesn't.
  */
 function normalise(v: unknown): unknown {
@@ -62,7 +62,7 @@ function normalise(v: unknown): unknown {
 /**
  * Deep-clean a value for the `meta` JSON column, for the same reason as above: one BigInt
  * anywhere in the object makes the whole write throw. Here the throw happens INSIDE
- * `logActivity`, so it's caught — which is worse in its own way, because the entry is then
+ * `logActivity`, so it's caught - which is worse in its own way, because the entry is then
  * lost silently and the founder sees a gap rather than an error.
  *
  * Applied centrally so no call site has to remember to stringify its own amounts.

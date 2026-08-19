@@ -34,8 +34,8 @@ test("a future due date is left exactly as entered", () => {
 });
 
 test("THE bug: a stale monthly anchor rolls forward to the real next date", () => {
-  // Set up in January, viewed in July. It used to keep reporting 15 January — a date six months
-  // in the past — on a payable explicitly marked monthly.
+  // Set up in January, viewed in July. It used to keep reporting 15 January - a date six months
+  // in the past - on a payable explicitly marked monthly.
   const next = nextOccurrence(d("2026-01-15"), "MONTHLY", d("2026-07-23"));
   assert.equal(next.toISOString().slice(0, 10), "2026-08-15");
 });

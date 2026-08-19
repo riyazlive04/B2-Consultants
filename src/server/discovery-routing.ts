@@ -16,7 +16,7 @@ import type { ActionResult } from "./finance-actions";
  * One action records the whole result of a discovery call: the outcome, the BANT reading,
  * the lead's new stage, and the booking's settled status. They move together in a single
  * transaction because a half-recorded call is exactly the state the dashboards cannot
- * describe — an outcome with a stale stage is what made "pipeline updated: 100%"
+ * describe - an outcome with a stale stage is what made "pipeline updated: 100%"
  * unreachable, and a stage with no outcome breaks the conversion metrics.
  *
  * Distinct from `pipeline-actions.createOutcome`, which is the Admin's full data-entry form
@@ -115,7 +115,7 @@ export async function routeDiscoveryCall(form: FormData): Promise<ActionResult> 
     section: "pipeline",
     entityType: "DiscoveryOutcome",
     entityId: outcomeRow.id,
-    summary: `Discovery call with ${lead.name} — ${OUTCOME_LABELS[d.outcome] ?? d.outcome}`,
+    summary: `Discovery call with ${lead.name} - ${OUTCOME_LABELS[d.outcome] ?? d.outcome}`,
     meta: { outcome: d.outcome, leadId: d.leadId, stage: nextStage },
   });
 

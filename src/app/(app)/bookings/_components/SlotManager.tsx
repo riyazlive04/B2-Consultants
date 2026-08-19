@@ -50,7 +50,7 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
     const res = await runBookingAutomationNow();
     setRunningEngine(false);
     if (!res.ok) return toast(res.error, "error");
-    toast(res.summary ? `Confirmation loop ran — ${res.summary}` : "Confirmation loop ran");
+    toast(res.summary ? `Confirmation loop ran - ${res.summary}` : "Confirmation loop ran");
   };
 
   return (
@@ -72,7 +72,7 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
         </Field>
       </div>
 
-      {/* Confirmation loop (Module E) — confirm-or-cancel + promote-next */}
+      {/* Confirmation loop (Module E) - confirm-or-cancel + promote-next */}
       <div className="mt-5 border-t border-line pt-4">
         <h4 className="font-display text-base font-semibold">Auto-cancel unconfirmed calls</h4>
         <p className="mt-0.5 text-xs text-muted">
@@ -133,7 +133,7 @@ export function SlotManager({
    * Render as a "Manage availability" button that opens this whole panel in a modal, instead of
    * as a flat block.
    *
-   * This screen is SETUP — generate slots for a date range, set the booking rules, prune the
+   * This screen is SETUP - generate slots for a date range, set the booking rules, prune the
    * upcoming list. It was a peer tab next to "Bookings" and "SSS Calendar", which gave a thing
    * opened once a quarter the same billing as the two views a specialist lives in, and made the
    * page read as three interchangeable panels. Collapsed, it sits next to the week navigation:

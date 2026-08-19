@@ -15,14 +15,14 @@ import {
 } from "@/server/qualification-actions";
 
 /**
- * Qualification questions (Founder Console → Qualification) — ER v2 Track D.
+ * Qualification questions (Founder Console → Qualification) - ER v2 Track D.
  *
  * These questions produce the BANT verdict that decides WHO GETS CALLED, so the panel is
  * built to make two things impossible to miss:
  *
  *  1. THE CUTOVER GATE. The catalogue runs in SHADOW until a full historical replay agrees
  *     with the shipped scorer on every past booking. Until then the live form still scores
- *     from its original columns, and the banner says so — an admin editing questions here
+ *     from its original columns, and the banner says so - an admin editing questions here
  *     needs to know their edits are not yet live.
  *
  *  2. VERSIONING. Editing an ANSWERED question creates version N+1 rather than mutating it,
@@ -38,7 +38,7 @@ export type AdminQuestion = {
   helpText: string | null;
   kind: QuestionKind;
   options: QuestionOption[];
-  /** Field names an external form may use for this question — see the mapping fieldset. */
+  /** Field names an external form may use for this question - see the mapping fieldset. */
   inboundKeys: string[];
   dimension: BantDimension;
   weight: number;
@@ -55,7 +55,7 @@ export type ShadowStatus = { total: number; scored: number; disagreements: numbe
  *
  * This panel is the reason the mapping is maintainable at all. Without it the founder is asked
  * to configure field names for a form they cannot see from here, and a mistake shows up only as
- * scores that are quietly too low — the failure mode that never gets reported because nothing
+ * scores that are quietly too low - the failure mode that never gets reported because nothing
  * looks broken.
  */
 function InboundReport({ report }: { report: IntakeMappingReport }) {
@@ -65,7 +65,7 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
    * The total failure, stated first and in plain words.
    *
    * Leads ARE arriving from a source that can carry answers, and NONE of them scored. That is not
-   * "no submissions yet" — it is a mapping that matches nothing, and it is invisible in every
+   * "no submissions yet" - it is a mapping that matches nothing, and it is invisible in every
    * other panel because an unscored lead looks exactly like an unqualified one. Production ran
    * this way for months: 111 Pabbly leads, 13 questions configured, zero scores, nothing on any
    * screen saying so.
@@ -83,7 +83,7 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
         <p role="alert" className="mt-2 rounded-field border border-bad bg-bad-soft px-3 py-2.5 text-sm text-bad">
           <strong>No lead has been scored in the last 7 days.</strong> {captured} lead
           {captured === 1 ? "" : "s"} arrived from a form that should carry qualification answers,
-          and not one produced a band score — so every discovery call is being prepared blind.
+          and not one produced a band score - so every discovery call is being prepared blind.
           Either the answers are not reaching us, or the field names below match no question.
           Start with &ldquo;Fields we are not reading&rdquo;.
         </p>
@@ -104,7 +104,7 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
             </>
           ) : (
             <>
-              No submission has left readable evidence yet — the next delivery will populate this
+              No submission has left readable evidence yet - the next delivery will populate this
               list even if nothing in it maps.
             </>
           )
@@ -131,7 +131,7 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
       {report.unresolved.length > 0 && (
         <div className="mt-3 rounded-field border border-warn bg-warn-soft p-3">
           <p className="text-sm font-semibold text-warn-ink">
-            Answers we could not recognise — these prospects are scoring too low
+            Answers we could not recognise - these prospects are scoring too low
           </p>
           <p className="mt-0.5 text-caption text-warn-ink">
             The question matched, the answer did not. Paste each value into that question&apos;s
@@ -226,7 +226,7 @@ export function QualificationPanel({
     <div className="space-y-5">
       <Hint>
         The booking form&apos;s qualification questions and how each answer scores. A dimension
-        takes the <strong>best</strong> answer it has, not the sum — high income still counts
+        takes the <strong>best</strong> answer it has, not the sum - high income still counts
         toward Budget when the invest answer is lukewarm.
       </Hint>
 
@@ -240,19 +240,19 @@ export function QualificationPanel({
       >
         {shadow.scored === 0 ? (
           <>
-            <strong>Shadow mode — no submissions scored yet.</strong> The live booking form
+            <strong>Shadow mode - no submissions scored yet.</strong> The live booking form
             still scores from its original columns. This catalogue is recorded alongside and
             compared, but nothing reads it.
           </>
         ) : shadow.disagreements > 0 ? (
           <>
-            <strong>Shadow mode — {shadow.disagreements} disagreement(s) across {shadow.scored} scored bookings.</strong>{" "}
+            <strong>Shadow mode - {shadow.disagreements} disagreement(s) across {shadow.scored} scored bookings.</strong>{" "}
             The catalogue in this database has drifted from the shipped scorer. Re-seed it
             (<code>prisma/seed-qualification.ts</code>) before anything is switched over.
           </>
         ) : (
           <>
-            <strong>Gate passed — {shadow.scored} bookings, zero disagreements.</strong> The
+            <strong>Gate passed - {shadow.scored} bookings, zero disagreements.</strong> The
             catalogue reproduces every historical verdict exactly, so the public form can be
             switched to it.
           </>
@@ -287,7 +287,7 @@ export function QualificationPanel({
                     <code>{q.key}</code> · v{q.version} · {DIMENSION_LABELS[q.dimension]}
                     {q.dimension !== "NONE" && q.weight !== 1 ? ` · weight ${q.weight}` : ""}
                     {q.answerCount > 0 && (
-                      <> · <strong>{q.answerCount} answered — editing creates v{q.version + 1}</strong></>
+                      <> · <strong>{q.answerCount} answered - editing creates v{q.version + 1}</strong></>
                     )}
                   </div>
                   {q.options.length > 0 && (
@@ -358,7 +358,7 @@ const DIMENSIONS: BantDimension[] = ["BUDGET", "AUTHORITY", "NEED", "TIMELINE", 
 const KINDS: QuestionKind[] = ["SELECT", "MULTI_SELECT", "BOOLEAN", "TEXT", "LONG_TEXT", "NUMBER"];
 
 /**
- * Aliases are merged onto the options for reading, but stored in their own column — so the
+ * Aliases are merged onto the options for reading, but stored in their own column - so the
  * Options JSON box must show them stripped, or a save would round-trip them back into the
  * frozen `options` value and the version guard would reject the next edit.
  */
@@ -398,7 +398,7 @@ function QuestionForm({
         </label>
         <label className="text-caption uppercase text-ink-3">
           Dimension
-          {/* SelectMenu (§5.5) — these two were the last raw <select>s in the console. */}
+          {/* SelectMenu (§5.5) - these two were the last raw <select>s in the console. */}
           <span className="mt-1 block">
             <SelectMenu
               name="dimension"
@@ -451,7 +451,7 @@ function QuestionForm({
       </div>
 
       <label className="text-caption uppercase text-ink-3">
-        Options — JSON: [{"{"}&quot;value&quot;,&quot;label&quot;,&quot;score&quot;{"}"}], score 0–5
+        Options - JSON: [{"{"}&quot;value&quot;,&quot;label&quot;,&quot;score&quot;{"}"}], score 0–5
         <textarea
           name="options"
           rows={4}
@@ -470,7 +470,7 @@ function QuestionForm({
         </legend>
         <p className="text-caption text-ink-3">
           What this question is called, and what its answers are called, on the form that feeds
-          Pabbly. Capitalisation, spaces, dashes and underscores are ignored — only add an entry
+          Pabbly. Capitalisation, spaces, dashes and underscores are ignored - only add an entry
           when the wording genuinely differs.
         </p>
 
@@ -485,7 +485,7 @@ function QuestionForm({
         </label>
 
         <label className="text-caption uppercase text-ink-3">
-          Answer wording — one option per line, <code>value: text, text</code>
+          Answer wording - one option per line, <code>value: text, text</code>
           <textarea
             name="answerAliases"
             rows={Math.max(3, question?.options.length ?? 3)}
@@ -506,7 +506,7 @@ function QuestionForm({
         </button>
         {question && question.answerCount > 0 && (
           <span className="text-caption text-warn-ink">
-            {question.answerCount} answers exist — this creates v{question.version + 1} and retires v{question.version}.
+            {question.answerCount} answers exist - this creates v{question.version + 1} and retires v{question.version}.
           </span>
         )}
       </div>

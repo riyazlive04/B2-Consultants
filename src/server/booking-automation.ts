@@ -11,15 +11,15 @@ import {
 } from "./whatsapp";
 
 /**
- * Bookings confirmation loop (Module E) — the in-house "confirm-or-cancel + promote-next" engine.
+ * Bookings confirmation loop (Module E) - the in-house "confirm-or-cancel + promote-next" engine.
  *
  * Three jobs, run in order each tick:
- *   1. ASK   — a booked call inside the confirm-request window that hasn't been asked yet gets one
+ *   1. ASK   - a booked call inside the confirm-request window that hasn't been asked yet gets one
  *              "please reply YES" message; `confirmSentAt` is stamped so we ask exactly once.
- *   2. CANCEL— a still-unconfirmed call inside the auto-cancel window (and past the reply grace) is
+ *   2. CANCEL- a still-unconfirmed call inside the auto-cancel window (and past the reply grace) is
  *              released: booking → CANCELLED, slot → OPEN, lead re-opened to DISCO_NOT_BOOKED, and
  *              the prospect told the slot was freed. Gated behind `autoCancelEnabled` (default OFF).
- *   3. PROMOTE— the freed slot is filled by moving the next booked call for the SAME caller on the
+ *   3. PROMOTE- the freed slot is filled by moving the next booked call for the SAME caller on the
  *              SAME day up into it, and that prospect is told their call moved earlier.
  *
  * A confirmation is set elsewhere: a WhatsApp "yes" (src/app/api/wati/webhook) or a manual
@@ -27,7 +27,7 @@ import {
  *
  * SAFE BY DESIGN: the send wrappers never throw; every state change is guarded so a concurrent
  * booking/cancel can't be clobbered; and no past slot is ever touched (those are no-show territory).
- * There is no autonomous clock — /api/cron/whatsapp drives this alongside the reminder engine, and
+ * There is no autonomous clock - /api/cron/whatsapp drives this alongside the reminder engine, and
  * the Admin "Run booking automation now" button calls it directly.
  */
 
@@ -95,7 +95,7 @@ export async function promoteIntoFreedSlot(freedSlotId: string, sentById?: strin
       await tx.appointmentSlot.update({ where: { id: freed.id }, data: { status: "OPEN" } });
       return false;
     }
-    // Point the booking at the new, earlier slot and reset its confirmation — the new time needs a
+    // Point the booking at the new, earlier slot and reset its confirmation - the new time needs a
     // fresh YES. confirmSentAt=now marks the reschedule notice below as the ask, and with the reply
     // grace it can't be auto-cancelled before the prospect has had a chance to answer.
     await tx.bookingRequest.update({
@@ -138,16 +138,16 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
   let promoted = 0;
 
   // Master switch. When off, the loop is entirely idle: no confirm-request messages leave, and
-  // nothing is auto-cancelled — so "off by default" genuinely means nothing automatic happens to a
+  // nothing is auto-cancelled - so "off by default" genuinely means nothing automatic happens to a
   // real prospect. The manual controls (block, postpone, mark-confirmed, cancel-with-promote) are
   // unaffected because they don't go through here.
   if (!rules.autoCancelEnabled) {
-    return { enabled: false, reason: "Confirmation loop is off — enable auto-cancel in Booking rules", ranAt, asked, cancelled, promoted };
+    return { enabled: false, reason: "Confirmation loop is off - enable auto-cancel in Booking rules", ranAt, asked, cancelled, promoted };
   }
 
   const now = Date.now();
 
-  // 1. ASK — booked, unconfirmed, unasked calls now inside the confirm-request window.
+  // 1. ASK - booked, unconfirmed, unasked calls now inside the confirm-request window.
   if (rules.confirmRequestLeadHours > 0) {
     const askCutoff = new Date(now + rules.confirmRequestLeadHours * HR);
     const toAsk = await prisma.bookingRequest.findMany({
@@ -167,7 +167,7 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
       const out = await sendBookingConfirmRequest(b.id);
       asked++;
       // `asked` counts the ask attempt (that's what the stamp records); the feed only claims a
-      // message the prospect actually received — a SKIPPED send means WhatsApp is off or paused.
+      // message the prospect actually received - a SKIPPED send means WhatsApp is off or paused.
       if (out.sent && b.slot) {
         await logSystemActivity(SYSTEM_ACTORS.bookings, {
           action: "whatsapp.send",
@@ -181,7 +181,7 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
     }
   }
 
-  // 2. CANCEL — still-unconfirmed calls inside the auto-cancel window, past the reply grace.
+  // 2. CANCEL - still-unconfirmed calls inside the auto-cancel window, past the reply grace.
   {
     const cancelCutoff = new Date(now + rules.autoCancelHours * HR);
     const graceBefore = new Date(now - REPLY_GRACE_MS);
@@ -228,14 +228,14 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
       });
       cancelled++;
       const out = await sendBookingAutoCancelled(b.id);
-      // One row for the release itself — that happened whether or not the notice got out, so
+      // One row for the release itself - that happened whether or not the notice got out, so
       // `notified` carries the part that didn't.
       await logSystemActivity(SYSTEM_ACTORS.bookings, {
         action: "booking.cancel",
         section: "bookings",
         entityType: "BookingRequest",
         entityId: b.id,
-        summary: `Auto-cancelled ${b.name}'s ${activityStamp(b.slot.startsAt)} call — no confirmation`,
+        summary: `Auto-cancelled ${b.name}'s ${activityStamp(b.slot.startsAt)} call - no confirmation`,
         meta: { reason: "no-confirmation", slotId: freedSlotId, notified: out.sent },
       });
 

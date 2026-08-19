@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { channelStates } from "../env";
 
 /**
- * The state this pins down is "flag on, credentials missing" — which is what production was in
+ * The state this pins down is "flag on, credentials missing" - which is what production was in
  * on 23 Jul 2026, and which every screen in the app reported as healthy while agreement OTPs
  * went nowhere. "off" and "misconfigured" must never collapse into the same answer.
  */
@@ -28,7 +28,7 @@ function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T): T {
   }
 }
 
-test("an unset flag is 'off', not a problem — opting out is a valid deployment", () => {
+test("an unset flag is 'off', not a problem - opting out is a valid deployment", () => {
   const s = withEnv({}, channelStates);
   assert.equal(s.wati, "off");
   assert.equal(s.email, "off");
@@ -43,7 +43,7 @@ test("flag on with credentials is 'armed'", () => {
   assert.equal(s.wati, "armed");
 });
 
-test("flag on with NO credentials is 'misconfigured' — the silent-failure state", () => {
+test("flag on with NO credentials is 'misconfigured' - the silent-failure state", () => {
   const s = withEnv({ WATI_ENABLED: "true" }, channelStates);
   assert.equal(s.wati, "misconfigured");
 });
@@ -61,7 +61,7 @@ test("a blank-string credential is treated as absent, not present", () => {
   assert.equal(s.wati, "misconfigured");
 });
 
-test("the flag is exact-match 'true' — '1' and 'yes' do not arm a channel", () => {
+test("the flag is exact-match 'true' - '1' and 'yes' do not arm a channel", () => {
   assert.equal(withEnv({ EMAIL_ENABLED: "1", RESEND_API_KEY: "k" }, channelStates).email, "off");
   assert.equal(withEnv({ EMAIL_ENABLED: "yes", RESEND_API_KEY: "k" }, channelStates).email, "off");
   assert.equal(withEnv({ EMAIL_ENABLED: "TRUE", RESEND_API_KEY: "k" }, channelStates).email, "armed");

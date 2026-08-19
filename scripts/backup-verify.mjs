@@ -8,7 +8,7 @@
 //   2. count every table in the SOURCE
 //   3. restore the dump into a throwaway scratch database
 //   4. count every table in the RESTORE
-//   5. diff the two — any mismatch fails the run with a non-zero exit code
+//   5. diff the two - any mismatch fails the run with a non-zero exit code
 //   6. drop the scratch database, prune old dumps
 //
 // Step 5 is the point. Steps 1–4 are what most "backup scripts" stop at.
@@ -20,7 +20,7 @@
 //   node scripts/backup-verify.mjs --retain 14    # prune dumps older than N days (default 14)
 //
 // ENVIRONMENT
-//   DIRECT_URL / DATABASE_URL   source. DIRECT_URL is preferred and usually REQUIRED —
+//   DIRECT_URL / DATABASE_URL   source. DIRECT_URL is preferred and usually REQUIRED -
 //                               see the note on pooled connections below.
 //   BACKUP_SCRATCH_URL          where to restore. Defaults to the project's local PG
 //                               (postgresql://b2:b2@localhost:5435/postgres).
@@ -55,7 +55,7 @@ const RETAIN_DAYS = Number(valueOf("--retain", "14"));
 // ───────────────────────────── binaries ─────────────────────────────
 
 /**
- * Same discovery strategy as scripts/local-db.mjs — PostgreSQL on Windows installs to Program
+ * Same discovery strategy as scripts/local-db.mjs - PostgreSQL on Windows installs to Program
  * Files and does NOT add itself to PATH, so "pg_dump: command not found" is the normal first
  * experience rather than an exceptional one.
  */
@@ -152,7 +152,7 @@ function parts(url) {
 }
 
 /**
- * Runs a libpq tool. The password goes in the ENVIRONMENT, never on the command line — argv is
+ * Runs a libpq tool. The password goes in the ENVIRONMENT, never on the command line - argv is
  * world-readable on most systems (`ps aux`), and this password is the production database's.
  */
 function pg(binary, args, { password, input, allowFail = false } = {}) {
@@ -208,7 +208,7 @@ function tableCounts(conn, database) {
   if (!tables.length) return new Map();
 
   // One statement, one round trip. Building it as a UNION ALL beats N psql invocations by a
-  // wide margin on a remote database — the round-trip to Supabase Singapore is ~205ms.
+  // wide margin on a remote database - the round-trip to Supabase Singapore is ~205ms.
   const sql = tables
     .map((t) => `SELECT '${t}' AS t, count(*) AS n FROM public."${t}"`)
     .join(" UNION ALL ");
@@ -246,7 +246,7 @@ if (DO_VERIFY) say(`Scratch: ${safeUrl(SCRATCH_URL)} → ${scratchDb}`);
 if (DO_VERIFY && scratch.host === src.host && scratch.port === src.port) {
   fail(
     `Refusing to run: the scratch target is the SAME server as the source (${src.host}:${src.port}).\n` +
-      `Point BACKUP_SCRATCH_URL at a different instance — the local one from ` +
+      `Point BACKUP_SCRATCH_URL at a different instance - the local one from ` +
       `\`npm run db:local\` is the intended target.`,
   );
 }
@@ -291,7 +291,7 @@ step("Restoring into a scratch database");
 // `postgres` is the maintenance DB; CREATE DATABASE cannot run inside the DB being created.
 query(scratch, `CREATE DATABASE "${scratchDb}"`, { database: "postgres" });
 // A new database already has a `public` schema, and the dump contains `CREATE SCHEMA public`.
-// Left alone, pg_restore reports an error and exits non-zero on an otherwise perfect restore —
+// Left alone, pg_restore reports an error and exits non-zero on an otherwise perfect restore -
 // noise that trains you to ignore the exit code, which is the one signal a scheduled backup has.
 // Dropping it first lets the dump recreate it and keeps a clean run genuinely clean.
 query(scratch, "DROP SCHEMA IF EXISTS public CASCADE", { database: scratchDb });
@@ -311,7 +311,7 @@ try {
   // an extension we didn't create). The row counts below are the real verdict, so a warning
   // here is reported and then judged on the data rather than trusted or panicked over.
   if (res.status !== 0) {
-    say(`  pg_restore reported warnings (exit ${res.status}) — the row diff below is the verdict:`);
+    say(`  pg_restore reported warnings (exit ${res.status}) - the row diff below is the verdict:`);
     say(
       (res.stderr || "")
         .split("\n")
@@ -349,7 +349,7 @@ try {
     say(`\n--keep-scratch: left ${scratchDb} in place for inspection.`);
   } else {
     step("Dropping the scratch database");
-    // WITH (FORCE) terminates leftover backends — without it a stray psql session makes the
+    // WITH (FORCE) terminates leftover backends - without it a stray psql session makes the
     // drop fail and the next run inherits a half-populated database named after today.
     query(scratch, `DROP DATABASE IF EXISTS "${scratchDb}" WITH (FORCE)`, { database: "postgres" });
   }

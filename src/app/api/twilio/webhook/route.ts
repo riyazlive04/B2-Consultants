@@ -5,29 +5,29 @@ import { prisma } from "@/lib/prisma";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 
 /**
- * Inbound Twilio webhook — two jobs, mirroring the WATI webhook's shape (see
+ * Inbound Twilio webhook - two jobs, mirroring the WATI webhook's shape (see
  * api/wati/webhook/route.ts):
- *  1. Genuine inbound SMS. Twilio POSTs Body/From/To (form-encoded) the moment a reply arrives —
+ *  1. Genuine inbound SMS. Twilio POSTs Body/From/To (form-encoded) the moment a reply arrives -
  *     this needs NO extra infrastructure beyond pointing the number's "A message comes in" webhook
  *     at this URL in the Twilio console. Logged as an INBOUND Message row, matched to a Lead by
  *     phone number.
  *  2. Delivery-status callbacks (queued/sent/delivered/failed/undelivered) → advance the matching
  *     Message row, matched by externalId (the Twilio MessageSid stored at send time in
- *     server/messaging.ts's sendSmsMessage — Twilio hands us this id up front, so the match is
- *     exact). NOTE: this half is implemented and ready but currently dormant — `src/lib/sms.ts`
+ *     server/messaging.ts's sendSmsMessage - Twilio hands us this id up front, so the match is
+ *     exact). NOTE: this half is implemented and ready but currently dormant - `src/lib/sms.ts`
  *     (marked read-only reference for this pass) never sets a `StatusCallback` param on outbound
  *     sends, so Twilio has no URL to call back to yet. Either add `StatusCallback` to the
  *     sendTwilioSms POST body, or set this URL as the Messaging Service's default status-callback
- *     URL in the Twilio console — both are one-line, no-code-change options.
+ *     URL in the Twilio console - both are one-line, no-code-change options.
  *
- * Auth: Twilio signs every request with X-Twilio-Signature — HMAC-SHA1 over
+ * Auth: Twilio signs every request with X-Twilio-Signature - HMAC-SHA1 over
  * "{webhook URL}{sorted POST params, key+value pairs concatenated, no separators}", keyed with the
  * account's own TWILIO_AUTH_TOKEN (the existing outbound-sending credential doubles as the signing
- * key — no separate webhook secret to provision). Fail-closed (503) when TWILIO_AUTH_TOKEN is unset.
+ * key - no separate webhook secret to provision). Fail-closed (503) when TWILIO_AUTH_TOKEN is unset.
  * The URL used for signing is reconstructed from X-Forwarded-Proto/Host (this app sits behind a
- * reverse proxy on the VPS — see lib/rate-limit.ts) and must exactly match, byte-for-byte with no
+ * reverse proxy on the VPS - see lib/rate-limit.ts) and must exactly match, byte-for-byte with no
  * query string, the webhook URL configured in Twilio's console, or the signature legitimately won't
- * match — that's Twilio's protection working as intended, not a bug here.
+ * match - that's Twilio's protection working as intended, not a bug here.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,7 +85,7 @@ async function handleStatus(sid: string, status: MessageStatus, errorCode: strin
 
 /**
  * Match the inbound sender to a Lead. Twilio's `From` always arrives in strict E.164. Stored
- * Lead.phone is not always — lead-intake.ts's own dedup logic does a plain exact match on
+ * Lead.phone is not always - lead-intake.ts's own dedup logic does a plain exact match on
  * `Lead.phone`, so this mirrors that first, then falls back to de-formatted variants (bare digits,
  * last-10 national number) rather than inventing a new normalization scheme for this one route.
  */
@@ -105,7 +105,7 @@ async function handleInbound(from: string, to: string, body: string, sid: string
     data: {
       channel: "SMS",
       direction: "INBOUND",
-      status: "DELIVERED", // "arrived" — INBOUND rows have no send outcome of their own
+      status: "DELIVERED", // "arrived" - INBOUND rows have no send outcome of their own
       leadId,
       toAddress: from, // counterparty's address, matching the OUTBOUND convention (toAddress = the other party)
       fromAddress: to || null,
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
       await handleInbound(from, to ?? "", body, sid);
     }
   } catch {
-    // Never fail the webhook on a processing hiccup — Twilio would retry-storm.
+    // Never fail the webhook on a processing hiccup - Twilio would retry-storm.
   }
 
   // Twilio parses the response as TwiML for the "message comes in" webhook; an empty <Response/>

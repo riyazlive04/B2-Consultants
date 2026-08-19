@@ -4,18 +4,18 @@ import { prisma } from "@/lib/prisma";
 import { istMonthRange, istToday } from "@/lib/dates";
 
 /**
- * The Tutor's own summary (rebuild spec §9) — shown at the top of German Note, which is where a
+ * The Tutor's own summary (rebuild spec §9) - shown at the top of German Note, which is where a
  * tutor is redirected on sign-in.
  *
  * §9 asks for six things. Five are built here:
- *   · own batches and enrolled students, WITH student IDs   — the spec is explicit about the IDs
- *   · session schedule                                       — already on the GN overview (ClassSession)
- *   · sessions delivered, feeding the head coach's daily log — read back from their own log
- *   · student progress and flags                             — recordings watched per batch
+ *   · own batches and enrolled students, WITH student IDs   - the spec is explicit about the IDs
+ *   · session schedule                                       - already on the GN overview (ClassSession)
+ *   · sessions delivered, feeding the head coach's daily log - read back from their own log
+ *   · student progress and flags                             - recordings watched per batch
  *   · book order status for their students
  *
  * The sixth, ATTENDANCE, has no model in the schema. It is not derivable from anything that exists
- * — a recording watch is not attendance at a live session — so it is left out rather than faked
+ * - a recording watch is not attendance at a live session - so it is left out rather than faked
  * from the nearest lookalike. Adding it is a migration, which needs sign-off.
  *
  * Scoping is by `Batch.tutorId`, the same predicate `getGnAccess` uses, so a tutor can never see
@@ -41,7 +41,7 @@ export type TutorDesk = {
   readonly students: TutorStudent[];
   readonly sessionsToday: number;
   readonly sessionsThisMonth: number;
-  /** Book orders for this tutor's students, counted by status — §9's "book order status". */
+  /** Book orders for this tutor's students, counted by status - §9's "book order status". */
   readonly bookOrders: { status: string; count: number }[];
   readonly bookOrdersHeld: number;
 };

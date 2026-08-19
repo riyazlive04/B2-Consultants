@@ -48,7 +48,7 @@ import {
  * The gamification rules, versioned by effective date.
  *
  * Editing the CURRENT ruleset changes how today's and future work is scored. Editing
- * a PAST one re-scores the period it governed — which is occasionally what you want
+ * a PAST one re-scores the period it governed - which is occasionally what you want
  * (you mistyped a number) and usually not. So the primary action is "New version
  * from today": it clones the live rules, stamps tomorrow's date on the copy, and
  * leaves history untouched.
@@ -83,7 +83,7 @@ const STUDENT_METRIC_OPTIONS = STUDENT_BADGE_METRICS.map((m) => ({
 const MILESTONE_OPTIONS = MILESTONE_ORDER.map((m) => ({ value: m, label: m.replace(/_/g, " ") }));
 
 /**
- * Column tracks, one per list editor. The header and the rows read the same string —
+ * Column tracks, one per list editor. The header and the rows read the same string -
  * that shared constant is the whole reason the two align. The trailing 2rem is the
  * remove button; the 1fr before it eats the slack so the fields don't stretch.
  */
@@ -177,7 +177,7 @@ export function GamificationPanel({ config }: { config: GamificationConfig }) {
     const res = await resetGamificationConfig();
     setBusy(false);
     if (!res.ok) return setError(res.error);
-    toast("Gamification rules reset — reload to see them");
+    toast("Gamification rules reset - reload to see them");
   };
 
   const isLive = selected.id === liveId;
@@ -220,12 +220,12 @@ export function GamificationPanel({ config }: { config: GamificationConfig }) {
         <p className="leading-5">
           {isFuture ? (
             <>
-              This version starts on <b>{formatDate(selected.effectiveFrom)}</b>. Nothing changes until then —
+              This version starts on <b>{formatDate(selected.effectiveFrom)}</b>. Nothing changes until then -
               edit freely.
             </>
           ) : isLive ? (
             <>
-              You are editing the <b>live</b> rules. Work already done keeps the XP it earned — but the
+              You are editing the <b>live</b> rules. Work already done keeps the XP it earned - but the
               rules in force since <b>{formatDate(selected.effectiveFrom)}</b> apply to every day from that date on, so
               recent XP will be recalculated. To change only future work, use <b>New version</b> instead.
             </>
@@ -375,7 +375,7 @@ function XpRulesEditor({ ruleset, patch }: EditorProps) {
   );
 }
 
-/** Label left, number right — the shape every scalar XP value takes. */
+/** Label left, number right - the shape every scalar XP value takes. */
 function XpField({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
   return (
     <label className="flex items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
@@ -422,7 +422,7 @@ function LevelsEditor({ ruleset, patch }: EditorProps) {
               value={l.minXp}
               onChange={(n) => set(levels.map((x, j) => (j === i ? { ...x, minXp: n } : x)))}
             />
-            {/* the band this level actually covers — the thing you're really editing */}
+            {/* the band this level actually covers - the thing you're really editing */}
             <NameCell className="text-ink-3">
               {l.minXp.toLocaleString("en-IN")}
               {levels[i + 1] ? `–${(levels[i + 1].minXp - 1).toLocaleString("en-IN")} XP` : "+ XP"}
@@ -464,7 +464,7 @@ function EmployeeBadgesEditor({ ruleset, patch }: EditorProps) {
       hint={
         <Hint>
           Pick what a badge counts and how many it takes. Raising a threshold only affects people who
-          haven&apos;t earned it yet — a badge already unlocked stays unlocked.
+          haven&apos;t earned it yet - a badge already unlocked stays unlocked.
         </Hint>
       }
     >
@@ -531,7 +531,7 @@ function QuestsEditor({ ruleset, patch }: EditorProps) {
     <EditorSection
       hint={
         <Hint>
-          Weekly quests are scored from the daily log — no extra data entry. A quest is assigned by the
+          Weekly quests are scored from the daily log - no extra data entry. A quest is assigned by the
           person&apos;s log variant, and pays out for every past week that already met the bar.
         </Hint>
       }
@@ -613,7 +613,7 @@ function StudentEditor({ ruleset, patch }: EditorProps) {
         hint={
           <Hint>
             The weights add up to {totalXp.toLocaleString("en-IN")} XP, and that total is the 100% mark on the
-            journey ring — reweight freely without the progress drifting.
+            journey ring - reweight freely without the progress drifting.
           </Hint>
         }
       >
@@ -652,9 +652,9 @@ function StudentEditor({ ruleset, patch }: EditorProps) {
         </div>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
           {([
-            ["hot", "🔥 Hot — idle up to"],
-            ["steady", "🚶 Steady — idle up to"],
-            ["cooling", "🌥️ Cooling — idle up to"],
+            ["hot", "🔥 Hot - idle up to"],
+            ["steady", "🚶 Steady - idle up to"],
+            ["cooling", "🌥️ Cooling - idle up to"],
           ] as const).map(([k, label]) => (
             <label key={k} className="flex items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
               <span className="min-w-0 truncate text-ink-2">{label}</span>

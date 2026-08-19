@@ -37,7 +37,7 @@ export function TargetBar({
   const [error, setError] = useState<string | null>(null);
   const [feeError, setFeeError] = useState<string | null>(null);
   const pacePct = expectedPct && expectedPct > 0 ? (pct / expectedPct) * 100 : null;
-  // PRD1 §5.4: the bar colour is fixed banding on % of target — Red <50, Amber
+  // PRD1 §5.4: the bar colour is fixed banding on % of target - Red <50, Amber
   // 50-80, Green >80. Month-pace is surfaced separately as the informational pill.
   const level = signalForPercent(pct);
   const meta = SIGNAL_META[level];
@@ -136,7 +136,7 @@ export function TargetBar({
             </button>
           )}
 
-          {/* PRD1 §5.4: fallback average program fee for valuing the open pipeline —
+          {/* PRD1 §5.4: fallback average program fee for valuing the open pipeline -
               only relevant until real income defines the fee per level. */}
           {editing && (
             <form action={submitFee} className="mt-2 flex flex-wrap items-center gap-2">

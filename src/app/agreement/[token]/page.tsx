@@ -8,7 +8,7 @@ import { SignCeremony } from "./_components/SignCeremony";
 import { SignedCopyLinks } from "./_components/SignedCopyLinks";
 
 /**
- * The student's signing page. PUBLIC — the token is the only credential.
+ * The student's signing page. PUBLIC - the token is the only credential.
  *
  * The document itself is served as a PDF from `[token]/pdf`, rendered by the same component that
  * will produce the sealed copy, and framed here. There is deliberately no HTML rendition of the
@@ -28,7 +28,7 @@ const REASONS: Record<TokenFailure, { title: string; body: string }> = {
   },
   used: {
     title: "Already signed",
-    body: "This agreement has been signed. Your countersigned copy was sent on WhatsApp — you can also open or download it here.",
+    body: "This agreement has been signed. Your countersigned copy was sent on WhatsApp - you can also open or download it here.",
   },
   declined: {
     title: "Agreement declined",

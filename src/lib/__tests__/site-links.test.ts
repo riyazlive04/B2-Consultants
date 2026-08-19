@@ -14,7 +14,7 @@ describe("pickForwardable", () => {
       utm_campaign: "lfmvp",
       fbclid: "abc123",
       gclid: "xyz",
-      // not on the allow-list — internal state that must not reach a third-party host
+      // not on the allow-list - internal state that must not reach a third-party host
       sessionId: "s-1",
       preview: "true",
     });
@@ -27,7 +27,7 @@ describe("pickForwardable", () => {
   });
 
   test("a repeated param takes the first value", () => {
-    // ?utm_source=facebook&utm_source=google — the first is what the platform set.
+    // ?utm_source=facebook&utm_source=google - the first is what the platform set.
     assert.equal(pickForwardable({ utm_source: ["facebook", "google"] }).utm_source, "facebook");
   });
 
@@ -40,7 +40,7 @@ describe("pickForwardable", () => {
 describe("buildForwardedHref", () => {
   const incoming = { utm_source: "facebook", fbclid: "abc" };
 
-  test("off by default — an unflagged link is returned untouched", () => {
+  test("off by default - an unflagged link is returned untouched", () => {
     assert.equal(
       buildForwardedHref("https://optin.b2consultants.de/lp", { incoming }),
       "https://optin.b2consultants.de/lp",
@@ -123,7 +123,7 @@ describe("isExternalHref", () => {
   });
 
   test("the opt-in subdomain is external to the marketing site", () => {
-    // Same registrable domain, different host — and it is a different platform entirely.
+    // Same registrable domain, different host - and it is a different platform entirely.
     assert.equal(isExternalHref("https://optin.b2consultants.de/lp", "b2consultants.de"), true);
   });
 

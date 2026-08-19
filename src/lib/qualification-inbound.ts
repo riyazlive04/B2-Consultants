@@ -1,7 +1,7 @@
 /**
  * Mapping an EXTERNAL form's qualification answers onto our question catalogue.
  *
- * Isomorphic and pure — no DB, no `server-only`. The DB side is `server/lead-qualification.ts`.
+ * Isomorphic and pure - no DB, no `server-only`. The DB side is `server/lead-qualification.ts`.
  *
  * ── Why this exists ──────────────────────────────────────────────────────────────
  * The landing page asks the band-score questions, Pabbly relays the submission, and until now
@@ -17,7 +17,7 @@
  *                 internal slug (`immediately`, `ready_now`)
  *
  * and both change whenever marketing rewrites the page. Hardcoding either would mean scores
- * silently falling to zero the next time someone edits a headline — the exact failure that is
+ * silently falling to zero the next time someone edits a headline - the exact failure that is
  * hardest to notice, because an unscored lead looks identical to a badly-qualified one.
  *
  * So matching is FOLDED (case, spacing and punctuation are discarded on both sides) and
@@ -39,7 +39,7 @@ import type { QuestionSpec, AnswerMap } from "./qualification";
  *
  * Deliberately aggressive. "When are you looking to start?", "when_start", "When-Start" and
  * "WHENSTART" all fold together, which is what makes the common case need no configuration at
- * all. The cost is that two questions whose names differ ONLY by punctuation would collide —
+ * all. The cost is that two questions whose names differ ONLY by punctuation would collide -
  * acceptable, because the catalogue's keys are slugs and cannot differ that way.
  */
 export function fold(s: string): string {
@@ -49,7 +49,7 @@ export function fold(s: string): string {
 /**
  * Payload keys that are contact or plumbing fields, not answers.
  *
- * Used ONLY to keep the "unrecognised fields" report readable — a report listing `utm_source`
+ * Used ONLY to keep the "unrecognised fields" report readable - a report listing `utm_source`
  * and `submission_id` every time is a report nobody reads twice. It never affects matching: a
  * question keyed `city` still matches a `city` field.
  */
@@ -67,15 +67,15 @@ const NON_ANSWER_KEYS = new Set(
 export type MappedAnswer = {
   /** Our catalogue key. */
   key: string;
-  /** The catalogue version the answer was read against — pinned onto the stored LeadAnswer. */
+  /** The catalogue version the answer was read against - pinned onto the stored LeadAnswer. */
   version: number;
-  /** The payload field it came from, verbatim — shown in Console so a mapping can be checked. */
+  /** The payload field it came from, verbatim - shown in Console so a mapping can be checked. */
   inboundKey: string;
   /** The answer text as posted, verbatim. This is the evidence. */
   rawValue: string;
   /** Our option value, once resolved. Null when the text matched no option. */
   value: string | null;
-  /** The 0–5 the resolved option carries. Null when unresolved — NOT zero. */
+  /** The 0–5 the resolved option carries. Null when unresolved - NOT zero. */
   score: number | null;
 };
 
@@ -91,7 +91,7 @@ export type InboundMapping = {
   unresolved: MappedAnswer[];
   /** Payload fields that look like answers but match no question at all. */
   unrecognisedKeys: string[];
-  /** True when at least one SCORED dimension got a resolved answer — i.e. worth storing. */
+  /** True when at least one SCORED dimension got a resolved answer - i.e. worth storing. */
   scorable: boolean;
 };
 
@@ -113,13 +113,13 @@ function questionKeys(q: QuestionSpec): string[] {
  * envelope). Non-string values are coerced: a form posting a number or a boolean for "years of
  * experience" or "willing to learn German" is ordinary, and rejecting those would lose real
  * answers. Arrays join on ", " so a MULTI_SELECT still leaves readable evidence, though only its
- * first resolvable member scores — MULTI_SELECT scoring is not in the catalogue's remit yet.
+ * first resolvable member scores - MULTI_SELECT scoring is not in the catalogue's remit yet.
  */
 export function mapInboundAnswers(
   payload: Record<string, unknown>,
   questions: QuestionSpec[],
 ): InboundMapping {
-  // Fold the payload once — questions × fields would otherwise be a scan per question.
+  // Fold the payload once - questions × fields would otherwise be a scan per question.
   const byFolded = new Map<string, { key: string; value: string }>();
   for (const [k, v] of Object.entries(payload)) {
     const text = coerce(v);
@@ -143,7 +143,7 @@ export function mapInboundAnswers(
       if (found) {
         hit = found;
         claimed.add(candidate);
-        break; // first alias in catalogue order wins — the order the founder listed them
+        break; // first alias in catalogue order wins - the order the founder listed them
       }
     }
     if (!hit) continue;

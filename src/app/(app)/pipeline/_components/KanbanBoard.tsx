@@ -16,7 +16,7 @@ import { useNewLeadPoll } from "./useNewLeadPoll";
  * and a drag-drop dependency is a lot of bundle for that.
  *
  * Optimistic, with a real rollback. A card that snaps back on failure is the entire honesty
- * of the feature — the server enforces ownership and the Won-needs-a-level rule, so a move
+ * of the feature - the server enforces ownership and the Won-needs-a-level rule, so a move
  * genuinely can be refused, and a board that kept the card in the new column would be showing
  * a stage the database doesn't have.
  *
@@ -40,7 +40,7 @@ export function KanbanBoard({ leads, stages }: { leads: KanbanLead[]; stages: st
   const [overStage, setOverStage] = useState<string | null>(null);
 
   // The board is shared (every role sees every open-stage lead), so unlike the leads table
-  // this polls unconditionally — a brand-new webhook lead lands in NEW_LEAD for everyone.
+  // this polls unconditionally - a brand-new webhook lead lands in NEW_LEAD for everyone.
   useNewLeadPoll("kanban", (fresh) => {
     const incoming = fresh as unknown as KanbanLead[];
     setRows((rs) => {
@@ -123,7 +123,7 @@ export function KanbanBoard({ leads, stages }: { leads: KanbanLead[]; stages: st
                       </div>
                     </div>
 
-                    {/* The keyboard path to the same action — now the app's own Select (§5.5)
+                    {/* The keyboard path to the same action - now the app's own Select (§5.5)
                         rather than an OS dropdown sitting on every card. */}
                     {lead.canMove && (
                       <div className="mt-2">

@@ -4,24 +4,24 @@
  * Until `deleteOpportunity` archived the lead alongside the card, deleting a card on the
  * Opportunities board archived the `Opportunity` row and nothing else. The `Lead` stayed active
  * and stayed assigned, so it kept appearing on its owner's My Desk queue and in the Pipeline
- * list — the person had been "deleted" everywhere except the two screens that matter.
+ * list - the person had been "deleted" everywhere except the two screens that matter.
  *
  * This archives the leads already stranded that way. The signature is exact:
  *
  *   • the lead is ACTIVE (`deletedAt: null`), and
- *   • it has at least one ARCHIVED opportunity — so somebody did delete its card, and
- *   • it has NO live opportunity on any pipeline — so it is off every board, not merely
+ *   • it has at least one ARCHIVED opportunity - so somebody did delete its card, and
+ *   • it has NO live opportunity on any pipeline - so it is off every board, not merely
  *     cleared from one custom process.
  *
  * A lead that never had a card is untouched: it was never deleted from anywhere, and the
  * absence of a card is not a deletion. That is the whole reason for the middle condition.
  *
  * Each lead is stamped with the `deletedAt` of its own most recent archived card, not with
- * "now" — that is the instant the person was actually deleted, it is what the retention sweep
+ * "now" - that is the instant the person was actually deleted, it is what the retention sweep
  * should age from, and matching instants is what lets `restoreOpportunity` put the pair back
  * together from the Archived tab.
  *
- * Idempotent — a second run finds nothing to do.
+ * Idempotent - a second run finds nothing to do.
  *
  * Dry run:  npx tsx scripts/archive-leads-stranded-by-board-delete.ts
  * Apply:    npx tsx scripts/archive-leads-stranded-by-board-delete.ts --force
@@ -56,7 +56,7 @@ async function main() {
   });
 
   if (!stranded.length) {
-    console.log("Nothing stranded — no active lead is off every board.");
+    console.log("Nothing stranded - no active lead is off every board.");
     return;
   }
 
@@ -64,7 +64,7 @@ async function main() {
   for (const l of stranded) {
     const card = l.opportunities[0];
     console.log(
-      `  ${l.name.padEnd(28)} ${l.stage.padEnd(20)} owner=${(l.assignedTo?.name ?? "—").padEnd(12)}` +
+      `  ${l.name.padEnd(28)} ${l.stage.padEnd(20)} owner=${(l.assignedTo?.name ?? "-").padEnd(12)}` +
         ` deleted ${card?.deletedAt?.toISOString() ?? "?"}`,
     );
   }

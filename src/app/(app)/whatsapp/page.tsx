@@ -39,7 +39,7 @@ export default async function WhatsAppPage() {
    * Hosts to offer as one-click additions.
    *
    * The domains ALREADY OBSERVED on real leads come first, because they are the only source that
-   * is evidence rather than assumption — if traffic is arriving from a host, that host is what a
+   * is evidence rather than assumption - if traffic is arriving from a host, that host is what a
    * gate has to name to let it through. Typing it from memory is how you list `b2consultants.de`
    * and silently block everyone who actually arrived on `optin.b2consultants.de`.
    *
@@ -59,19 +59,19 @@ export default async function WhatsAppPage() {
 
   const live = status.enabled;
   const stateLabel = live
-    ? "Live — WhatsApp reminders are active"
+    ? "Live - WhatsApp reminders are active"
     : status.paused
-      ? "Paused — sending is turned off in settings"
+      ? "Paused - sending is turned off in settings"
       : !status.envEnabled
-        ? "Off — set WATI_ENABLED=true (and credentials) to go live"
-        : "Not configured — add WATI endpoint + token to go live";
+        ? "Off - set WATI_ENABLED=true (and credentials) to go live"
+        : "Not configured - add WATI endpoint + token to go live";
 
   return (
     <div className="w-full space-y-6">
       <PageHeader
         icon={<MessageCircle size={20} />}
         title="WhatsApp"
-        subtitle="Outbound reminders via WATI — funnel, bookings, payments & student nudges."
+        subtitle="Outbound reminders via WATI - funnel, bookings, payments & student nudges."
         actions={<RunRemindersButton />}
       />
 
@@ -86,7 +86,7 @@ export default async function WhatsAppPage() {
             {stateLabel}
           </p>
           {/* The one control that stops (or starts) outbound messaging, at the top of the page
-              rather than buried in the settings form — Admin only, since arming this reaches
+              rather than buried in the settings form - Admin only, since arming this reaches
               real phones. */}
           {session.role === "ADMIN" && (
             <WhatsAppMasterSwitch

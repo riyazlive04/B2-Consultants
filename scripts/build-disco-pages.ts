@@ -86,7 +86,7 @@ function calendar(id: string, name: string, ownerId: string) {
 }
 
 /**
- * Ameen's overflow band. It sits ABOVE the calendar on the source page — the point is to catch
+ * Ameen's overflow band. It sits ABOVE the calendar on the source page - the point is to catch
  * someone before they conclude there is nothing available, so putting it underneath would be
  * showing the escape hatch only to people who already scrolled past the problem.
  */
@@ -123,7 +123,7 @@ function noSlotsBand(id: string) {
 }
 
 async function main() {
-  // Match on email — a display name is editable and two people can share one.
+  // Match on email - a display name is editable and two people can share one.
   const people = await prisma.user.findMany({
     where: { email: { in: ["asma@b2consultants.in", "ameen@b2consultants.in"] } },
     select: { id: true, name: true, email: true },
@@ -134,7 +134,7 @@ async function main() {
   if (!asmaId || !ameenId) {
     console.error(
       `Missing user: asma=${asmaId ?? "NOT FOUND"} ameen=${ameenId ?? "NOT FOUND"}. ` +
-        `Refusing to author a calendar with no owner — it would silently show everyone's slots.`,
+        `Refusing to author a calendar with no owner - it would silently show everyone's slots.`,
     );
     process.exit(1);
   }
@@ -156,7 +156,7 @@ async function main() {
       select: { id: true },
     });
     if (!step) {
-      console.error(`  ! no step "${p.slug}" — skipped`);
+      console.error(`  ! no step "${p.slug}" - skipped`);
       continue;
     }
     await prisma.funnelStep.update({ where: { id: step.id }, data: { blocks: p.blocks as never } });

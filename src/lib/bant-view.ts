@@ -2,8 +2,8 @@
  * The one shape every screen shows a band score in, and the one rule for choosing which stored
  * score to show.
  *
- * Isomorphic and pure. Exists because BANT is now recorded in two places — `BookingRequest`
- * (the booking form) and `Lead` (the landing page, at opt-in) — and "which one do I display"
+ * Isomorphic and pure. Exists because BANT is now recorded in two places - `BookingRequest`
+ * (the booking form) and `Lead` (the landing page, at opt-in) - and "which one do I display"
  * is a decision that must not be re-answered per screen. It was already re-answered per screen
  * for the booking-only case: `BookingsTable` renders `bantAvg ?? bantScore`, the outreach queue
  * renders `bantAvg` alone, Key Metrics renders `bantScoreAtQual ?? booking.bantAvg`. Adding a
@@ -14,13 +14,13 @@
 import type { BantVerdict } from "@prisma/client";
 import { bantVerdictFor } from "./booking-intake";
 
-/** Where a displayed score came from — shown to the reader, never inferred by them. */
+/** Where a displayed score came from - shown to the reader, never inferred by them. */
 export type BantOrigin = "booking" | "opt-in" | "manual";
 
 export type BantSnapshot = {
   /** 0–5 weighted average of the four dimensions. */
   avg: number;
-  /** 0–4 count of dimensions met — the figure the pipeline ranking consumes. */
+  /** 0–4 count of dimensions met - the figure the pipeline ranking consumes. */
   score: number;
   verdict: BantVerdict;
   budget: boolean;
@@ -46,7 +46,7 @@ export type BantColumns = {
  *
  * Precedence: the BOOKING's score, then the LEAD's. The booking form asks more, and asks it
  * after the prospect has committed to a call, so where both exist it is the better evidence.
- * The lead's is the landing page's answer set, taken at opt-in — earlier, thinner, and until
+ * The lead's is the landing page's answer set, taken at opt-in - earlier, thinner, and until
  * now discarded entirely.
  *
  * Returns null when neither exists. Callers MUST render that as "not scored" and not as zero:

@@ -1,5 +1,5 @@
 /**
- * Human-readable student numbers (§6.1) — "B2-0001".
+ * Human-readable student numbers (§6.1) - "B2-0001".
  *
  * Duplicate names are the problem this solves: the roster already holds two "Anna Smith"
  * and two "Karthik", and a payment has been credited to the wrong one. A cuid cannot be

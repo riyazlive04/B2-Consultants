@@ -40,13 +40,13 @@ const SignaturePad = dynamic(() => import("@/components/ui/SignaturePad").then((
 });
 
 /**
- * "Agreement pending — ready to send", wherever the founder happens to be looking.
+ * "Agreement pending - ready to send", wherever the founder happens to be looking.
  *
  * Driven ENTIRELY by the derived state: it never asks the founder to know the next step, and never
  * offers an action the state can't support. The loud button belongs to actionable states only; the
  * rest stay quiet so the card reads as a status line rather than a nag.
  *
- * "Start anyway" is always available — readiness is a prompt, not a gate.
+ * "Start anyway" is always available - readiness is a prompt, not a gate.
  */
 export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
   const { state, config, agreementId, documentNo, leadId, studentId } = summary;
@@ -74,7 +74,7 @@ export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
       const d = res.data!;
 
       if (d.kind === "needsSignature") {
-        setSignOpen(true); // first ever send — store the ink, then this runs again
+        setSignOpen(true); // first ever send - store the ink, then this runs again
         return;
       }
       if (d.kind === "needsForm") {
@@ -90,7 +90,7 @@ export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
         return;
       }
       // WhatsApp didn't go out. The database keeps only the token's HASH, so this response is the
-      // only place the link will ever exist — show it instead of navigating away from it.
+      // only place the link will ever exist - show it instead of navigating away from it.
       setIssued({ url: d.signingUrl, delivery: d.delivery });
       router.refresh();
     });
@@ -103,7 +103,7 @@ export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
       const res = await saveFounderSignature(signature.dataUrl, signature.device);
       if (!res.ok) return setError(res.error);
       setSignOpen(false);
-      toast("Signature saved — sending from now on is one tap.");
+      toast("Signature saved - sending from now on is one tap.");
       send();
     });
   }
@@ -128,7 +128,7 @@ export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
           </span>
           <div className="min-w-0">
             {/* Wraps rather than truncates: this card lives in the contact profile's 360px column,
-                where "Agreement pending — ready to send" is exactly the sentence that gets cut. */}
+                where "Agreement pending - ready to send" is exactly the sentence that gets cut. */}
             <p className="font-display text-sm font-semibold text-ink">{agreementStateHeadline(state)}</p>
             {documentNo && <p className="truncate text-caption text-muted">{documentNo}</p>}
           </div>
@@ -175,7 +175,7 @@ export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
             {issued.delivery}
           </p>
           <p className="mt-1.5 text-caption text-muted">
-            This link is shown once — only its hash is stored, so it cannot be recovered later.
+            This link is shown once - only its hash is stored, so it cannot be recovered later.
           </p>
           <div className="mt-2 flex items-center gap-2">
             <code className="flex-1 overflow-x-auto rounded-field bg-surface px-2 py-1.5 text-caption">

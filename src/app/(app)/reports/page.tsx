@@ -22,7 +22,7 @@ import AttributionTable from "./_components/AttributionTable";
 
 export const dynamic = "force-dynamic";
 
-/** What the money column means, per object — the same sum answers a different question each time. */
+/** What the money column means, per object - the same sum answers a different question each time. */
 const SUM_LABEL: Record<ReportObject, string> = {
   contacts: "Total",
   opportunities: "Pipeline value",
@@ -32,18 +32,18 @@ const SUM_LABEL: Record<ReportObject, string> = {
 /**
  * The Reports workbench (BUILD_CHECKLIST §10 / PRODUCT_AUDIT §15).
  *
- * Closes the audit's headline gap — *"every number lives on a page an engineer had to write,
- * there is no way to ask the data an ad hoc question"* — with no new schema, by making the whole
+ * Closes the audit's headline gap - *"every number lives on a page an engineer had to write,
+ * there is no way to ask the data an ad hoc question"* - with no new schema, by making the whole
  * query URL-driven (`?object=&groupBy=&measure=&range=`) rather than a new hardcoded page per
  * question. The URL *is* the saved report.
  *
  * The page answers four questions, in the order a founder asks them:
- *   1. **How much, and is it moving?**  → ReportSummary — totals with period-on-period deltas.
- *   2. **Which of these matters most?** → ReportChart — ranked bars, or a trend when the grouping
+ *   1. **How much, and is it moving?**  → ReportSummary - totals with period-on-period deltas.
+ *   2. **Which of these matters most?** → ReportChart - ranked bars, or a trend when the grouping
  *                                        is chronological. The form is chosen by data shape, never
  *                                        by a chart-type dropdown (§5.8).
- *   3. **Exactly what is in there?**    → ReportTable — every row, every measure, sortable, CSV.
- *   4. **What did each campaign cost?** → AttributionTable — spend → lead → enrolment economics.
+ *   3. **Exactly what is in there?**    → ReportTable - every row, every measure, sortable, CSV.
+ *   4. **What did each campaign cost?** → AttributionTable - spend → lead → enrolment economics.
  */
 export default async function ReportsPage({
   searchParams,
@@ -74,7 +74,7 @@ export default async function ReportsPage({
         icon={<BarChart3 size={22} strokeWidth={1.8} />}
         eyebrow="Insights"
         title="Reports"
-        subtitle="Pick an object, a period, and a field that matters — see how much, which way it is moving, and what sits behind the number. The link is the saved report."
+        subtitle="Pick an object, a period, and a field that matters - see how much, which way it is moving, and what sits behind the number. The link is the saved report."
       />
 
       <ReportControls
@@ -111,7 +111,7 @@ export default async function ReportsPage({
       />
 
       {/*
-        ER v2 Track F. The diagram's INSIGHT entity, computed rather than stored — every field
+        ER v2 Track F. The diagram's INSIGHT entity, computed rather than stored - every field
         of it is a division over rows that already exist, so a table would just be a cached
         quotient that goes stale the moment a lead converts.
       */}
@@ -119,7 +119,7 @@ export default async function ReportsPage({
         <SectionHeading
           icon={<Megaphone size={18} />}
           title="Campaign attribution"
-          description={`What each campaign cost per lead and per enrolled student — ${range.label.toLowerCase()}.`}
+          description={`What each campaign cost per lead and per enrolled student - ${range.label.toLowerCase()}.`}
         />
         <AttributionTable rows={attribution} />
       </section>

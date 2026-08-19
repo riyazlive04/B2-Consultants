@@ -9,14 +9,14 @@ import { Card, CardTitle, Pill } from "@/components/ui/kit";
  * ── Why this is here ────────────────────────────────────────────────────────────
  * "Automatic move mode" was reported as missing. It never was: a call outcome closes a lead, a
  * booking advances one, a discovery outcome routes one, and every lead-stage change moves its
- * card. All of it real, all of it enforced — and all of it spread across five modules with
+ * card. All of it real, all of it enforced - and all of it spread across five modules with
  * nothing on any screen saying it happens. From the board, a card that moved by itself was
  * indistinguishable from a card someone else had dragged.
  *
  * A closed disclosure, not a banner: this is the answer to a question people ask once, and it
  * should not cost the board vertical space every day.
  *
- * The list is `lib/stage-rules.ts`, which names the enforcing module for each rule — so this
+ * The list is `lib/stage-rules.ts`, which names the enforcing module for each rule - so this
  * cannot quietly become a lie without someone editing a rule and not the list.
  */
 export function StageRulesCard({
@@ -71,7 +71,7 @@ export function StageRulesCard({
         {manual.length > 0 && (
           <>
             <p className="mt-4 text-caption font-semibold uppercase tracking-wide text-ink-3">
-              Not automatic — a person decides
+              Not automatic - a person decides
             </p>
             <ul className="mt-2 space-y-2">
               {manual.map((r) => (

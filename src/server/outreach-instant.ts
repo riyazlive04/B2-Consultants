@@ -12,18 +12,18 @@ import { readOutreachConfig, renderStep, getJourney, markSent, sopWhatsAppSend }
  * The engine's `autoSendDue()` runs on the cron, so the earliest it can send is the next tick.
  * That is fine for a 36-hour confirmation ladder and wrong for this one message: the SOP's Step 2
  * gives the team a FIVE MINUTE reaction window, and the whole point of automating the intro is to
- * stop that window being spent waiting for a human — or for a scheduler. So this runs inline at
+ * stop that window being spent waiting for a human - or for a scheduler. So this runs inline at
  * capture, exactly as `sendBookingConfirmation` already does the moment a booking is created.
  *
  * The cron path is deliberately left in place rather than replaced. If an instant send is skipped
- * — WATI briefly down, the hourly cap hit — the step stays DUE and the engine retries it. Every
+ * - WATI briefly down, the hourly cap hit - the step stays DUE and the engine retries it. Every
  * failure mode here degrades to "the existing system handles it slightly later", never to
  * "the prospect was never contacted".
  *
  * ── The rule that keeps this safe ────────────────────────────────────────────────
  * This messages REAL people with no human in the loop, so every gate fails closed and the caller
  * gets told which one stopped it. In particular it will not fire for a lead that merely appeared
- * in the database — only for one that arrived through a live capture webhook. That is what stands
+ * in the database - only for one that arrived through a live capture webhook. That is what stands
  * between this feature and a spreadsheet import WhatsApping 23,500 people.
  */
 
@@ -31,11 +31,11 @@ import { readOutreachConfig, renderStep, getJourney, markSent, sopWhatsAppSend }
 export type InstantIntroSkip =
   | "disabled" // the founder has not switched it on
   | "source-not-eligible" // an import or a back-office entry, not a live capture
-  | "no-journey" // the lead has no OutreachJourney (should be impossible — logged loudly)
+  | "no-journey" // the lead has no OutreachJourney (should be impossible - logged loudly)
   | "no-phone" // nothing to message
-  | "already-sent" // the step is already SENT/SKIPPED — a redelivery, not a second message
+  | "already-sent" // the step is already SENT/SKIPPED - a redelivery, not a second message
   | "hourly-cap" // circuit breaker tripped
-  | "unresolved-vars" // the body would render with a blank — never send that
+  | "unresolved-vars" // the body would render with a blank - never send that
   | "send-skipped"; // WATI off, template unmapped, opted out… the row stays DUE
 
 export type InstantIntroResult = { sent: boolean; skipped: InstantIntroSkip | null };
@@ -63,7 +63,7 @@ export async function sendIntroNow(leadId: string, source: Source): Promise<Inst
     if (!journey) {
       // `upsertIntakeLead` creates the journey inside the same transaction as the lead, so this
       // means that invariant broke. Loud, because the SOP queue is blind to a journey-less lead.
-      console.error(`[outreach-instant] lead ${leadId} has no outreach journey — cannot send the intro`);
+      console.error(`[outreach-instant] lead ${leadId} has no outreach journey - cannot send the intro`);
       return skip("no-journey");
     }
     if (!journey.lead.phone) return skip("no-phone");
@@ -72,7 +72,7 @@ export async function sendIntroNow(leadId: string, source: Source): Promise<Inst
      * The circuit breaker, checked BEFORE materialising anything.
      *
      * Counted from `OutreachStepLog` rather than the WhatsApp log because that is the SOP's own
-     * record of "the intro went out", and it is the same table the write below touches — one
+     * record of "the intro went out", and it is the same table the write below touches - one
      * source of truth for the thing being limited.
      */
     const sentLastHour = await prisma.outreachStepLog.count({
@@ -85,7 +85,7 @@ export async function sendIntroNow(leadId: string, source: Source): Promise<Inst
     if (sentLastHour >= cfg.instantIntro.maxPerHour) {
       // Loud on purpose: at normal volume this can only mean something is wrong upstream.
       console.error(
-        `[outreach-instant] hourly cap reached (${sentLastHour}/${cfg.instantIntro.maxPerHour}) — ` +
+        `[outreach-instant] hourly cap reached (${sentLastHour}/${cfg.instantIntro.maxPerHour}) - ` +
           `not sending to lead ${leadId}. Steps stay DUE for a human. Check for a looping webhook or a bulk import.`,
       );
       return skip("hourly-cap");
@@ -109,7 +109,7 @@ export async function sendIntroNow(leadId: string, source: Source): Promise<Inst
         },
       });
     } catch {
-      /* already materialised — fine, fall through and check its status */
+      /* already materialised - fine, fall through and check its status */
     }
 
     const row = await getJourney(journey.id);
@@ -122,9 +122,9 @@ export async function sendIntroNow(leadId: string, source: Source): Promise<Inst
     const { body, unresolved } = renderStep(row, "INTRO_WHATSAPP", specialist);
     if (!body) return skip("send-skipped");
     if (unresolved.length) {
-      // An unresolved placeholder renders "Hi ," — the house rule is to leave it for a human
+      // An unresolved placeholder renders "Hi ," - the house rule is to leave it for a human
       // rather than send something broken.
-      console.warn(`[outreach-instant] lead ${leadId}: intro needs ${unresolved.join(", ")} — left DUE`);
+      console.warn(`[outreach-instant] lead ${leadId}: intro needs ${unresolved.join(", ")} - left DUE`);
       return skip("unresolved-vars");
     }
 
@@ -146,7 +146,7 @@ export async function sendIntroNow(leadId: string, source: Source): Promise<Inst
     });
     return { sent: true, skipped: null };
   } catch (err) {
-    // Swallowed by contract — see the header. The step, if it was created, is DUE for a human.
+    // Swallowed by contract - see the header. The step, if it was created, is DUE for a human.
     console.error(`[outreach-instant] sending the intro for lead ${leadId} failed:`, err);
     return { sent: false, skipped: null };
   }

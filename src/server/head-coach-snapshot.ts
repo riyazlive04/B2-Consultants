@@ -5,17 +5,17 @@ import { istToday } from "@/lib/dates";
 import { getStudentsOverview } from "@/server/students-metrics";
 
 /**
- * The Head Coach dashboard's own numbers (rebuild spec §5) — "which students need me, and how is
+ * The Head Coach dashboard's own numbers (rebuild spec §5) - "which students need me, and how is
  * the team performing?"
  *
  * ALMOST NONE OF THIS IS NEW. `getStudentsOverview()` already computes the counts, the 90/120
  * tracker and a rule-based at-risk radar with per-student flags; the head's home page simply never
- * showed any of it, offering a static "Students — Open board" tile instead. So this composes what
+ * showed any of it, offering a static "Students - Open board" tile instead. So this composes what
  * exists and adds only the two figures §5 names that nothing else computed: agreements awaiting a
  * signature, and sessions delivered today.
  *
  * NO FINANCIAL FIGURES. §5 is explicit, and the §3 matrix keeps Finance and Cash away from the
- * head, so nothing here reads money — not even indirectly through a revenue-bearing helper.
+ * head, so nothing here reads money - not even indirectly through a revenue-bearing helper.
  */
 
 export type AtRiskStudent = {
@@ -24,7 +24,7 @@ export type AtRiskStudent = {
   readonly programLevel: string;
   readonly dayNumber: number;
   readonly totalDays: number;
-  /** Null until a coach has set one — an unset signal is not the same as a green one. */
+  /** Null until a coach has set one - an unset signal is not the same as a green one. */
   readonly signalColour: string | null;
   readonly flags: string[];
 };
@@ -37,7 +37,7 @@ export type HeadCoachSnapshot = {
   readonly completedThisMonth: number;
   readonly droppedThisMonth: number;
   readonly avgSatisfaction: number | null;
-  /** Everyone the radar flagged, worst first — the "students needing attention" list. */
+  /** Everyone the radar flagged, worst first - the "students needing attention" list. */
   readonly atRisk: AtRiskStudent[];
   /** How many of those have never had a session logged, or none in over a fortnight. */
   readonly nonResponders: number;
@@ -45,7 +45,7 @@ export type HeadCoachSnapshot = {
   readonly agreementsSent: number;
   readonly agreementsViewed: number;
   readonly sessionsDeliveredToday: number;
-  /** Who logged today's sessions, most first — for the KPI card's expand popup. */
+  /** Who logged today's sessions, most first - for the KPI card's expand popup. */
   readonly sessionsByCoach: { name: string; sessions: number }[];
 };
 
@@ -58,7 +58,7 @@ export const getHeadCoachSnapshot = cache(async (): Promise<HeadCoachSnapshot> =
   const [overview, agreementsByStatus, sessionRows] = await Promise.all([
     getStudentsOverview(),
     // SENT and VIEWED are both "issued, not signed yet". DRAFT is the founder's queue, not the
-    // coach's — nobody is waiting on the student for an agreement that was never sent.
+    // coach's - nobody is waiting on the student for an agreement that was never sent.
     prisma.agreement.groupBy({
       by: ["status"],
       where: { status: { in: ["SENT", "VIEWED"] } },

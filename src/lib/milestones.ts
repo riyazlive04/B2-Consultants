@@ -1,5 +1,5 @@
 /**
- * Program milestones — pure progress + schedule rules (ER v2 Track I).
+ * Program milestones - pure progress + schedule rules (ER v2 Track I).
  *
  * The `Milestone` enum stays as the stable key and `MilestoneLog` stays as the append-only
  * audit trail; nothing here weakens either. What this adds is the diagram's `target_day`, so
@@ -30,7 +30,7 @@ export function programDays(duration: ProgramDuration): number | null {
 
 /**
  * The default milestone ladder, expressed as a FRACTION of the programme rather than fixed
- * days — so the same ladder seeds correctly for a 90-day Guided and a 120-day Elite without
+ * days - so the same ladder seeds correctly for a 90-day Guided and a 120-day Elite without
  * two hand-maintained lists that will drift.
  *
  * ONBOARDING is day 1, not day 0: the founders count the enrolment day as day one, and the
@@ -53,7 +53,7 @@ export type MilestoneSeed = { key: Milestone; name: string; targetDay: number; o
  *
  * Returns [] for a null length (Solo/LIFETIME): a milestone with no deadline is not a
  * milestone, and seeding day-0 rows for it would put every Solo student permanently "overdue"
- * on the at-risk radar — the precise false alarm that makes a radar get ignored.
+ * on the at-risk radar - the precise false alarm that makes a radar get ignored.
  */
 export function defaultMilestoneLadder(days: number | null): MilestoneSeed[] {
   if (days === null || days <= 0) return [];
@@ -80,7 +80,7 @@ export type MilestoneHealth = "ahead" | "on_track" | "due" | "overdue" | "done";
  *
  * ACHIEVED short-circuits to "done" BEFORE the deadline is consulted: a milestone hit late is
  * still hit, and colouring it red forever would punish the student for history they cannot
- * change — and would train the coach to ignore red.
+ * change - and would train the coach to ignore red.
  */
 export function milestoneHealth(
   status: MilestoneProgressStatus,
@@ -88,7 +88,7 @@ export function milestoneHealth(
   currentDay: number | null,
 ): MilestoneHealth {
   if (status === "ACHIEVED") return "done";
-  if (currentDay === null) return "on_track"; // not started yet — nothing can be late
+  if (currentDay === null) return "on_track"; // not started yet - nothing can be late
   if (currentDay > targetDay) return "overdue";
   if (currentDay === targetDay) return "due";
   if (status === "IN_PROGRESS") return "on_track";

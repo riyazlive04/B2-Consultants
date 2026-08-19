@@ -7,16 +7,16 @@ import { INDUSTRY_SUGGESTIONS, INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { CONSENT_LABEL, CONSENT_VALUE } from "@/lib/consent";
 
 /**
- * The discovery-call questionnaire — everything `submitBooking` reads except `slotId`.
+ * The discovery-call questionnaire - everything `submitBooking` reads except `slotId`.
  *
  * ── Why this is its own component ───────────────────────────────────────────────
  * Two surfaces now collect it: the standalone `/book` page and the `booking` block embedded in a
- * funnel step. These fields are not decoration — every `Select` name here maps to a BANT answer
+ * funnel step. These fields are not decoration - every `Select` name here maps to a BANT answer
  * that `scoreLeadAtOptIn` reads and the SOP routes on. Two copies would drift, and the drift would
  * present as "leads booked from the funnel score differently to leads booked from /book", which is
  * close to impossible to spot from the outside.
  *
- * It renders the fields ONLY — no <form>, no submit button. The caller owns the form element and
+ * It renders the fields ONLY - no <form>, no submit button. The caller owns the form element and
  * the action, because the two surfaces frame the submit differently.
  */
 
@@ -50,7 +50,7 @@ export function BookingIntakeFields({ headings = true }: { headings?: boolean })
           ── One column, and this exact order ─────────────────────────────────────────
           Both are load-bearing, not styling preferences. The order is Synamate's, and it is a
           qualification ladder: identity first, then credentials, then motivation, then the
-          commercial questions (salary, readiness to invest, who decides) last — asked only
+          commercial questions (salary, readiness to invest, who decides) last - asked only
           after the prospect has already invested effort in the form. Re-sorting it into a
           tidy two-column grid, as this form previously was, puts "what do you earn?" beside
           "what is your name?" and measurably costs completions.
@@ -64,7 +64,7 @@ export function BookingIntakeFields({ headings = true }: { headings?: boolean })
           </Field>
           {/*
             One number, bound to `phone`. The form asks for WhatsApp because that is the channel
-            the confirmation and every reminder actually go out on — and `phone` is the column
+            the confirmation and every reminder actually go out on - and `phone` is the column
             WATI sends to. A second "WhatsApp (if different)" field existed before and was the
             kind of optional duplicate that ends up holding the only reachable number.
           */}
@@ -152,7 +152,7 @@ export function BookingIntakeFields({ headings = true }: { headings?: boolean })
         </p>
       </section>
 
-      {/* honeypot — hidden from real users; bots fill it and get silently dropped */}
+      {/* honeypot - hidden from real users; bots fill it and get silently dropped */}
       <input
         type="text"
         name="company_website"
@@ -165,7 +165,7 @@ export function BookingIntakeFields({ headings = true }: { headings?: boolean })
 
       {/*
         GDPR consent (spec §15). `required` gives the prospect an instant browser-native message
-        instead of a server round-trip, but it is only a courtesy — submitBooking refuses
+        instead of a server round-trip, but it is only a courtesy - submitBooking refuses
         unconsented submissions regardless, since a client-side attribute is not a compliance control.
       */}
       <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-subtle bg-surface p-4 text-sm">

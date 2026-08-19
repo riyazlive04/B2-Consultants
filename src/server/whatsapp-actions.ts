@@ -177,7 +177,7 @@ export async function runRemindersNow(): Promise<WhatsAppActionResult> {
   const session = await requireAdmin();
   const run = await runDueReminders();
   revalidatePath("/whatsapp");
-  if (!run.enabled) return { ok: false, message: `Reminders not sent — ${run.reason}` };
+  if (!run.enabled) return { ok: false, message: `Reminders not sent - ${run.reason}` };
   const { sent, skipped, failed } = run.total;
   // The run itself is the admin's; the individual messages stay the engine's (sentById null),
   // so this row records the trigger, never "Asma messaged 40 leads".
@@ -186,17 +186,17 @@ export async function runRemindersNow(): Promise<WhatsAppActionResult> {
     section: "whatsapp",
     entityType: "AppSetting",
     entityId: "watiConfig",
-    summary: `Ran the WhatsApp reminder schedule — ${sent} sent, ${skipped} skipped, ${failed} failed`,
+    summary: `Ran the WhatsApp reminder schedule - ${sent} sent, ${skipped} skipped, ${failed} failed`,
     meta: { sent, skipped, failed },
   });
   return {
     ok: true,
-    message: `Reminder run complete — ${sent} sent, ${skipped} skipped, ${failed} failed`,
+    message: `Reminder run complete - ${sent} sent, ${skipped} skipped, ${failed} failed`,
   };
 }
 
 /**
- * Ask WATI what actually happened to recent sends. `Sent` only means WATI accepted the request —
+ * Ask WATI what actually happened to recent sends. `Sent` only means WATI accepted the request -
  * Meta can reject it afterwards (deleted template, marketing quality restriction) and reports that
  * via the webhook, which may never reach us. This reconciles the history against WATI's own log.
  */
@@ -205,18 +205,18 @@ export async function syncWhatsAppStatuses(): Promise<WhatsAppActionResult> {
   const r = await reconcileWhatsAppStatuses();
   revalidatePath("/whatsapp");
   if (r.error) return { ok: false, message: r.error };
-  if (r.updated === 0) return { ok: true, message: `Checked ${r.checked} message(s) — all up to date` };
+  if (r.updated === 0) return { ok: true, message: `Checked ${r.checked} message(s) - all up to date` };
   await logActivity(session, {
     action: "whatsapp.statuses.update",
     section: "whatsapp",
     entityType: "AppSetting",
     entityId: "watiConfig",
-    summary: `Synced WhatsApp delivery statuses — updated ${r.updated} of ${r.checked} message(s)`,
+    summary: `Synced WhatsApp delivery statuses - updated ${r.updated} of ${r.checked} message(s)`,
     meta: { checked: r.checked, updated: r.updated, failed: r.failed },
   });
   return {
     ok: true,
-    message: `Updated ${r.updated} of ${r.checked} message(s)${r.failed ? ` — ${r.failed} actually FAILED at Meta` : ""}`,
+    message: `Updated ${r.updated} of ${r.checked} message(s)${r.failed ? ` - ${r.failed} actually FAILED at Meta` : ""}`,
   };
 }
 
@@ -258,12 +258,12 @@ export async function refreshWatiTemplates(): Promise<WhatsAppActionResult> {
     section: "whatsapp",
     entityType: "AppSetting",
     entityId: "watiTemplateCatalog",
-    summary: `Refreshed the WATI template catalogue — ${res.templates.length} template(s), ${approved} approved`,
+    summary: `Refreshed the WATI template catalogue - ${res.templates.length} template(s), ${approved} approved`,
     meta: { total: res.templates.length, approved },
   });
   return {
     ok: true,
-    message: `Loaded ${res.templates.length} template(s) from WATI — ${approved} approved`,
+    message: `Loaded ${res.templates.length} template(s) from WATI - ${approved} approved`,
   };
 }
 
@@ -284,7 +284,7 @@ function parseLeadHours(raw: FormDataEntryValue | null): number[] {
 
 /**
  * Days-before-due for the EMI reminder. Unlike parseLeadHours, `0` is meaningful here
- * ("on the due day"), and a deliberately cleared box means OFF rather than "use defaults" —
+ * ("on the due day"), and a deliberately cleared box means OFF rather than "use defaults" -
  * so an admin can actually switch this touchpoint off from the settings form.
  */
 function parseLeadDays(raw: FormDataEntryValue | null): number[] {
@@ -307,7 +307,7 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
   for (const kind of WHATSAPP_KINDS) {
     const name = String(form.get(`tpl_${kind}_name`) ?? "").trim().slice(0, 200);
     const broadcast = String(form.get(`tpl_${kind}_broadcast`) ?? "").trim().slice(0, 200);
-    // The template's OWN variables, in approval order. Blank is valid — many approved
+    // The template's OWN variables, in approval order. Blank is valid - many approved
     // templates take none. Never defaulted: guessing here means a rejected send.
     const params = String(form.get(`tpl_${kind}_params`) ?? "")
       .split(",")
@@ -317,7 +317,7 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
     if (name) templates[kind] = { name, ...(broadcast ? { broadcastName: broadcast } : {}), params };
   }
 
-  // Per-touchpoint switches. An unchecked switch submits nothing, so absence means OFF — safe
+  // Per-touchpoint switches. An unchecked switch submits nothing, so absence means OFF - safe
   // here (unlike emiPreDueLive below) because turning a reminder off is the harmless direction,
   // and the settings form always renders all six.
   const on = (key: string) => form.get(key) === "on" || form.get(key) === "true";
@@ -337,8 +337,8 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
     noShowDelayHours: num(form, "noShowDelayHours", DEFAULT_CADENCE.noShowDelayHours),
     paymentRepeatHours: num(form, "paymentRepeatHours", DEFAULT_CADENCE.paymentRepeatHours),
     emiPreDueLeadDays: parseLeadDays(form.get("emiPreDueLeadDays")),
-    // Inverted on purpose. The form asks "send for REAL?" so that an unchecked box — or a
-    // form that never renders the field at all — resolves to a dry run. A `dryRun` checkbox
+    // Inverted on purpose. The form asks "send for REAL?" so that an unchecked box - or a
+    // form that never renders the field at all - resolves to a dry run. A `dryRun` checkbox
     // would fail the other way: one missing input and every student gets a real message.
     emiPreDueDryRun: !(form.get("emiPreDueLive") === "on" || form.get("emiPreDueLive") === "true"),
     studentRepeatHours: num(form, "studentRepeatHours", DEFAULT_CADENCE.studentRepeatHours),
@@ -353,7 +353,7 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
   const rawTest = String(form.get("testRecipient") ?? "").trim();
   const testRecipient = rawTest ? normalizeWhatsappNumber(rawTest, defaultCountry) : null;
   if (rawTest && !testRecipient) {
-    return { ok: false, message: `"${rawTest}" isn't a valid WhatsApp number — include the country code.` };
+    return { ok: false, message: `"${rawTest}" isn't a valid WhatsApp number - include the country code.` };
   }
 
   // Carried through, not rebuilt from the form: this screen does not render the domain gate (it
@@ -370,7 +370,7 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
       section: "whatsapp",
       entityType: "AppSetting",
       entityId: "watiConfig",
-      summary: `Updated the WhatsApp settings — changed ${diff.changed.join(", ")}`,
+      summary: `Updated the WhatsApp settings - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -379,11 +379,11 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
 }
 
 /**
- * The Admin master switch for outbound WhatsApp — one click, no form to save.
+ * The Admin master switch for outbound WhatsApp - one click, no form to save.
  *
  * WHY THIS EXISTS SEPARATELY FROM `saveWhatsAppSettings`: turning sending off is the thing you
  * reach for when something is going wrong, and until now it meant finding a checkbox in the middle
- * of a long settings form and submitting the whole thing — which also writes back every template
+ * of a long settings form and submitting the whole thing - which also writes back every template
  * mapping and cadence number on screen. This writes ONE field.
  *
  * It flips `paused`, which is the gate that is reachable at runtime. `WATI_ENABLED` is process
@@ -411,7 +411,7 @@ export async function setWhatsAppPaused(paused: boolean): Promise<WhatsAppAction
     entityId: "watiConfig",
     summary: paused
       ? "Turned WhatsApp sending OFF"
-      : "Turned WhatsApp sending ON — outbound messages can now leave the system",
+      : "Turned WhatsApp sending ON - outbound messages can now leave the system",
     meta: { paused },
   });
 
@@ -452,7 +452,7 @@ export async function setWhatsAppOptOut(rawPhone: string, on: boolean): Promise<
 }
 
 /**
- * Send a test to any number using the template mapped to the chosen touchpoint — so you verify the
+ * Send a test to any number using the template mapped to the chosen touchpoint - so you verify the
  * real template (and its media header), not a stand-in.
  */
 export async function sendTestWhatsApp(form: FormData): Promise<WhatsAppActionResult> {
@@ -484,7 +484,7 @@ export async function sendTestWhatsApp(form: FormData): Promise<WhatsAppActionRe
 /**
  * The domain gate: which hostnames WATI is allowed to serve.
  *
- * ADMIN ONLY, and audited as its own action rather than a generic settings diff — like the
+ * ADMIN ONLY, and audited as its own action rather than a generic settings diff - like the
  * master switch, this is the record of who narrowed or widened who can be messaged.
  *
  * The whole gate is written in one call (enabled + list together). A separate "toggle" and
@@ -512,8 +512,8 @@ export async function saveWhatsAppDomainGate(input: {
   const domains = [...seen].sort();
   /**
    * Arming an empty gate is refused rather than silently treated as "allow everything".
-   * `domainAllows` does pass everything in that state — deliberately, so a half-finished edit
-   * cannot take the system down — but a switch that reads ON while changing nothing is a lie
+   * `domainAllows` does pass everything in that state - deliberately, so a half-finished edit
+   * cannot take the system down - but a switch that reads ON while changing nothing is a lie
    * the founder would only discover by noticing messages they expected to be blocked.
    */
   if (input.enabled && domains.length === 0) {
@@ -530,7 +530,7 @@ export async function saveWhatsAppDomainGate(input: {
     entityId: "watiConfig",
     summary: input.enabled
       ? `WhatsApp restricted to ${domains.length} domain(s): ${domains.join(", ")}`
-      : "WhatsApp domain restriction turned OFF — every contact can be messaged again",
+      : "WhatsApp domain restriction turned OFF - every contact can be messaged again",
     meta: { before: was, after: { enabled: input.enabled, domains } },
   });
 

@@ -12,13 +12,13 @@ import {
  * and what gets stored cannot drift.
  *
  * Money is minor units throughout (paise / cents). The split uses BigInt because a fee is a
- * BigInt column — floating-point division on money is how a plan ends up 1 paise short.
+ * BigInt column - floating-point division on money is how a plan ends up 1 paise short.
  */
 
 export type MoneyMinor = { inr: bigint; eur: bigint };
 
 /**
- * The surcharge for choosing an N-part plan — a flat amount added ONCE to the fee, not per
+ * The surcharge for choosing an N-part plan - a flat amount added ONCE to the fee, not per
  * instalment. An unlisted length costs nothing: the table is an allow-list of priced plans,
  * so a length the founder never priced can never invent a charge.
  */
@@ -31,7 +31,7 @@ export function instalmentExtraFor(
   return { inr: BigInt(tier.extraInrMinor), eur: BigInt(tier.extraEurMinor) };
 }
 
-/** Fee + plan surcharge — what actually has to be collected once a plan is chosen. */
+/** Fee + plan surcharge - what actually has to be collected once a plan is chosen. */
 export function totalToCollect(fee: MoneyMinor, extra: MoneyMinor): MoneyMinor {
   return { inr: fee.inr + extra.inr, eur: fee.eur + extra.eur };
 }

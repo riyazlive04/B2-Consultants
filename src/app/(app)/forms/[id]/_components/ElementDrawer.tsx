@@ -5,11 +5,11 @@ import * as Icons from "lucide-react";
 import { ELEMENT_PALETTE, type PaletteItem } from "@/lib/sites-types";
 
 /**
- * The "Form Element" drawer — the left rail of the builder.
+ * The "Form Element" drawer - the left rail of the builder.
  *
  * Two tabs, matching the tool the team already uses: QUICK ADD is the generic toolkit (a single
  * line, a dropdown, an image), ADD OBJECT FIELDS is the set that writes a KNOWN key on the contact
- * record — Full Name, Email, Phone, City. That split is not decoration: picking "Email" from the
+ * record - Full Name, Email, Phone, City. That split is not decoration: picking "Email" from the
  * second tab means the answer reaches the CRM as the contact's email, while a "Single Line"
  * question called "email" is just an answer. Making the author remember which keys are magic is
  * exactly the job a palette should be doing for them.
@@ -22,7 +22,7 @@ import { ELEMENT_PALETTE, type PaletteItem } from "@/lib/sites-types";
  * Resolve a Lucide icon by name.
  *
  * The palette lives in `lib/sites-types`, which is imported by the SERVER (validation, the submit
- * action) and must stay free of React — so it names its icons as strings and the lookup happens
+ * action) and must stay free of React - so it names its icons as strings and the lookup happens
  * here. `Square` is the fallback rather than throwing: a typo in the palette should cost a
  * generic tile, not a blank screen where the builder used to be.
  */
@@ -86,7 +86,7 @@ export default function ElementDrawer({
                   // Disabled, not hidden. The team knows this palette; a missing tile reads as
                   // "the tool can't do that", a greyed one reads as "not yet".
                   disabled={it.soon}
-                  title={it.soon ? `${it.label} — not built yet` : `Add ${it.label}`}
+                  title={it.soon ? `${it.label} - not built yet` : `Add ${it.label}`}
                   onClick={() => onAdd(it)}
                   className={`flex h-[62px] flex-col items-center justify-center gap-1 rounded-field border border-line px-1 text-center transition-colors ${
                     it.soon ? "cursor-not-allowed opacity-40" : "hover:border-primary hover:bg-primary-soft"

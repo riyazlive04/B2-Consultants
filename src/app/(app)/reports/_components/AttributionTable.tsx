@@ -2,11 +2,11 @@ import { PERFORMANCE_LABELS } from "@/lib/attribution";
 import type { AttributionRow } from "@/server/insights-metrics";
 
 /**
- * Campaign attribution (ER v2 Track F) — the diagram's `INSIGHT` entity, rendered rather
+ * Campaign attribution (ER v2 Track F) - the diagram's `INSIGHT` entity, rendered rather
  * than stored.
  *
  * Two presentation rules carry the meaning:
- *   · a null ratio renders as "—", never as ₹0. A campaign with no spend recorded is not a
+ *   · a null ratio renders as "-", never as ₹0. A campaign with no spend recorded is not a
  *     campaign with a free lead, and showing 0 would sort it to the top of "cheapest
  *     acquisition" and get the budget moved onto it.
  *   · performance is banded against the PERIOD'S OWN MEDIAN, not a fixed threshold, so the
@@ -14,12 +14,12 @@ import type { AttributionRow } from "@/server/insights-metrics";
  */
 
 const inr = (paise: number | null) =>
-  paise === null ? "—" : `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
+  paise === null ? "-" : `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
 
 /**
  * §5.7 status badge tones.
  *
- * These were `text-ok-ink`, `text-warn-ink` and `bg-surface-3` — none of which exist in
+ * These were `text-ok-ink`, `text-warn-ink` and `bg-surface-3` - none of which exist in
  * tailwind.config.ts (`ok`/`warn` expose only `DEFAULT` and `soft`; `surface` only `DEFAULT`
  * and `2`). Tailwind emits nothing for a class it cannot resolve, so the "vs median" badge was
  * shipping as unstyled text on three of its four states: the column that decides where ad budget
@@ -74,7 +74,7 @@ export default function AttributionTable({ rows }: { rows: AttributionRow[] }) {
               <td className="px-4 py-3 text-right text-ink-2">{inr(r.cacInrMinor)}</td>
               <td className="px-4 py-3 text-right text-ink-2">{inr(Number(r.revenueInrMinor))}</td>
               <td className="px-4 py-3 text-right font-semibold text-ink">
-                {r.roas === null ? "—" : `${r.roas}×`}
+                {r.roas === null ? "-" : `${r.roas}×`}
               </td>
               <td className="px-4 py-3">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${BAND_STYLE[r.performance]}`}>
@@ -87,7 +87,7 @@ export default function AttributionTable({ rows }: { rows: AttributionRow[] }) {
       </table>
       <p className="border-t border-line px-4 py-3 text-caption text-ink-3">
         Leads and spend are counted inside the window; revenue is not. A lead captured in March
-        that enrolls in May earned its campaign that money — clipping revenue to the window
+        that enrolls in May earned its campaign that money - clipping revenue to the window
         would make every recent campaign look like a failure.
       </p>
     </div>

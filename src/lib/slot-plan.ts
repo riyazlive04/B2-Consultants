@@ -2,7 +2,7 @@
  * When a weekly booking pattern says a slot should exist.
  *
  * PURE, and deliberately not inside `booking-actions.ts`: that file is `"use server"`, so every
- * export there becomes a public RPC endpoint and may only be an async server action — a shared
+ * export there becomes a public RPC endpoint and may only be an async server action - a shared
  * helper cannot live in it. Two callers need this rule:
  *
  *   1. the founder's one-off "generate slots for this range" form (bookings → Slots), and
@@ -22,7 +22,7 @@ export type WeekdayKey = (typeof WEEKDAY_KEYS)[number];
 
 /**
  * `Date#getUTCDay()` on a UTC-midnight calendar date (how `parseDateInput` encodes an IST day)
- * gives the correct civil weekday regardless of the IST offset — the same trick `dates.ts`
+ * gives the correct civil weekday regardless of the IST offset - the same trick `dates.ts`
  * `istToday` uses. Reading it with `getDay()` instead would shift by a day for half the world.
  */
 export const WEEKDAY_FROM_JSDAY: Record<number, WeekdayKey> = {
@@ -32,9 +32,9 @@ export const WEEKDAY_FROM_JSDAY: Record<number, WeekdayKey> = {
 export type SlotPattern = {
   /** IST weekdays the pattern runs on. */
   weekdays: readonly WeekdayKey[];
-  /** IST wall-clock "HH:MM" — first slot may start at this time. */
+  /** IST wall-clock "HH:MM" - first slot may start at this time. */
   startTime: string;
-  /** IST wall-clock "HH:MM" — no slot may still be running after this time. */
+  /** IST wall-clock "HH:MM" - no slot may still be running after this time. */
   endTime: string;
   /** Minutes between consecutive slot STARTS, before the buffer is added. */
   intervalMins: number;
@@ -46,7 +46,7 @@ export type SlotPattern = {
  * How many slots one running day of the pattern yields.
  *
  * Lives here, next to `slotStartsForRange`, because the Console's availability editor needs to
- * show the founder what a pattern produces BEFORE it is saved — and it cannot call
+ * show the founder what a pattern produces BEFORE it is saved - and it cannot call
  * `slotStartsForRange`, which needs the server-side IST date helpers. Given the same rule was
  * already duplicated once (manual generator vs. cron), a second hand-rolled copy in a React
  * component was not worth the risk: `slot-plan.test.ts` pins this against the real generator.
@@ -80,7 +80,7 @@ export function slotsPerRunningDay(
  * duration. Dates are IST day keys ("YYYY-MM-DD"); `istWallToUtc` is injected rather than
  * imported so this module stays free of the date layer and is trivially testable.
  *
- * Returns instants in ascending order, and an empty array when the window fits no slot — a
+ * Returns instants in ascending order, and an empty array when the window fits no slot - a
  * legitimate answer (a 30-minute window cannot hold a 60-minute call), not an error.
  */
 export function slotStartsForRange(opts: {

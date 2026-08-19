@@ -11,7 +11,7 @@ import {
  * ── The rule this component exists to enforce ────────────────────────────────────
  * NOT SCORED IS NOT ZERO. Pass `null` and it renders "Not scored" in muted grey, not "0.0/5" in
  * red. A prospect nobody asked and a prospect who answered badly look nothing alike to a caller
- * deciding who to ring, and collapsing them is how a good lead gets buried — which is exactly
+ * deciding who to ring, and collapsing them is how a good lead gets buried - which is exactly
  * what happened while landing-page answers were being dropped at the webhook.
  *
  * The origin is always in the tooltip, because a 3.2 from a full booking form and a 3.2 from a
@@ -48,7 +48,7 @@ export function BantChip({
   return (
     <span
       className={`tnum inline-flex items-center gap-1 rounded-full font-semibold ${tone} ${pad}`}
-      title={`BANT ${bant.avg.toFixed(1)}/5 — ${bant.score} of 4 dimensions met, ${BANT_ORIGIN_LABELS[bant.origin]}`}
+      title={`BANT ${bant.avg.toFixed(1)}/5 - ${bant.score} of 4 dimensions met, ${BANT_ORIGIN_LABELS[bant.origin]}`}
     >
       {/* Spoken, so the meaning never rides on colour alone. */}
       <span className="sr-only">BANT score </span>
@@ -57,7 +57,7 @@ export function BantChip({
   );
 }
 
-/** The four dimensions as met/unmet pips — which part of the score is weak, at a glance. */
+/** The four dimensions as met/unmet pips - which part of the score is weak, at a glance. */
 export function BantDimensions({ bant }: { bant: BantSnapshot | null }) {
   if (!bant) return null;
   const dims: [string, string, boolean][] = [

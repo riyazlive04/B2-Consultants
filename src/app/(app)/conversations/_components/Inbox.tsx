@@ -50,7 +50,7 @@ export default function Inbox({
   const lastPollRef = useRef<{ latestAt: string | null; unread: number } | null>(null);
 
   // Live: poll a scoped "did anything change" signal (api/conversations/poll), not the whole
-  // force-dynamic page — router.refresh() on a dumb timer would re-run getInboxThreads' two
+  // force-dynamic page - router.refresh() on a dumb timer would re-run getInboxThreads' two
   // 400-row fetches every tick, per open tab (the same problem the top-bar NotificationBell already
   // hit and fixed the same way). Only refresh the page when the signal actually moved. Pauses while
   // the tab is hidden.
@@ -135,7 +135,7 @@ export default function Inbox({
           </div>
 
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
-            {activeThread.messages.length === 0 && <p className="text-center text-sm text-ink-3">No messages yet — start the conversation below.</p>}
+            {activeThread.messages.length === 0 && <p className="text-center text-sm text-ink-3">No messages yet - start the conversation below.</p>}
             {activeThread.messages.map((m) => {
               const out = m.direction === "OUTBOUND";
               const Icon = CHANNEL_ICON[m.channel];
@@ -160,7 +160,7 @@ export default function Inbox({
   );
 }
 
-/** Compact per-thread "Assign to" control — writes assignedToId onto every Message row for the
+/** Compact per-thread "Assign to" control - writes assignedToId onto every Message row for the
  *  lead (assignThread), so it stays uniform regardless of which row a future read looks at. */
 function AssignSelect({ leadId, users, assignedToId }: { leadId: string; users: AssignableUser[]; assignedToId: string | null }) {
   const router = useRouter();
@@ -283,8 +283,8 @@ function Composer({ leadId, templates, settings }: { leadId: string; templates: 
             options={chTemplates.map((t) => ({ value: t.id, label: t.name }))}
           />
         )}
-        {channel === "EMAIL" && !settings.email.enabled && <Pill tone="warn">Email off — logged only</Pill>}
-        {channel === "SMS" && !settings.sms.enabled && <Pill tone="warn">SMS off — logged only</Pill>}
+        {channel === "EMAIL" && !settings.email.enabled && <Pill tone="warn">Email off - logged only</Pill>}
+        {channel === "SMS" && !settings.sms.enabled && <Pill tone="warn">SMS off - logged only</Pill>}
         {channel === "WHATSAPP" && !settings.whatsapp.configured && <Pill tone="warn">WATI not configured</Pill>}
       </div>
 
@@ -299,7 +299,7 @@ function Composer({ leadId, templates, settings }: { leadId: string; templates: 
             <button
               onClick={() => waTemplates.length > 0 && setWaMode("TEMPLATE")}
               disabled={waTemplates.length === 0}
-              title={waTemplates.length === 0 ? "No WATI templates configured — see WhatsApp → Settings" : undefined}
+              title={waTemplates.length === 0 ? "No WATI templates configured - see WhatsApp → Settings" : undefined}
               className={`${tabCls(waMode === "TEMPLATE")} disabled:cursor-not-allowed disabled:opacity-40`}
             >
               Template

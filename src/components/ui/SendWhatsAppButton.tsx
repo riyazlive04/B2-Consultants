@@ -8,7 +8,7 @@ import type { WhatsAppActionResult } from "@/server/whatsapp-actions";
 
 /**
  * One reusable "Send WhatsApp" control, used across Pipeline, Bookings, Finance and Students.
- * `action` is a bound server action (e.g. sendLeadReminder.bind(null, id)) or a client thunk —
+ * `action` is a bound server action (e.g. sendLeadReminder.bind(null, id)) or a client thunk -
  * either way it returns a WhatsAppActionResult. `ok` → green toast; a skip/failure → red toast
  * with the reason (so "WhatsApp is off / no template / opted out" is honest, not a false success).
  * Refreshes the route on completion so the row's status badge updates.
@@ -43,7 +43,7 @@ export function SendWhatsAppButton({
   className?: string;
   /**
    * When this recipient was last messaged, ISO. Within 24h the control flips to "Sent · 2h ago"
-   * and a resend must be confirmed (Error Log L6 — the option stayed live after use, so the same
+   * and a resend must be confirmed (Error Log L6 - the option stayed live after use, so the same
    * person could be chased twice).
    *
    * Deliberately NOT hidden outright: a genuine "the first one didn't arrive" resend is a real
@@ -67,7 +67,7 @@ export function SendWhatsAppButton({
     if (recentlySent) {
       const ok = await askConfirm({
         title: "Send another reminder?",
-        body: `The last one went out ${sentAgo(sentAt!)}. Only resend if you know it did not arrive — a duplicate chase reads as careless to someone who has already paid attention.`,
+        body: `The last one went out ${sentAgo(sentAt!)}. Only resend if you know it did not arrive - a duplicate chase reads as careless to someone who has already paid attention.`,
         confirmLabel: "Send again",
       });
       if (!ok) return;
@@ -115,7 +115,7 @@ export function SendWhatsAppButton({
         type="button"
         onClick={run}
         disabled={pending}
-        title={recentlySent ? `${label} — last sent ${sentAgo(sentAt!)}` : label}
+        title={recentlySent ? `${label} - last sent ${sentAgo(sentAt!)}` : label}
         aria-label={label}
         className={className ?? "inline-flex items-center text-muted hover:text-accent disabled:opacity-50"}
       >

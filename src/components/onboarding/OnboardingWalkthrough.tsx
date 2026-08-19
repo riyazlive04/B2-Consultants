@@ -9,13 +9,13 @@ import { GUIDES } from "@/lib/guide-content";
 /**
  * Post-invite first-touch tour (BUILD_CHECKLIST §1). Shows ONCE, right after a newly
  * accepted invite lands on their landing page (Home for ADMIN/HEAD/USER, or wherever
- * STUDENT/TUTOR get redirected to — see each page's `initialOpen` wiring).
+ * STUDENT/TUTOR get redirected to - see each page's `initialOpen` wiring).
  *
- * "Shown once" marker: localStorage, keyed by user id — NOT User.sectionAccess /
+ * "Shown once" marker: localStorage, keyed by user id - NOT User.sectionAccess /
  * User.capabilities. Both of those Json? fields get wholesale-overwritten any time an
  * Admin edits or resets a user's access (see `overridesFor` in
  * src/server/users-actions.ts, which rebuilds the whole object from the access form
- * every save, and `resetUserAccess`, which nulls it outright) — an extra key stashed
+ * every save, and `resetUserAccess`, which nulls it outright) - an extra key stashed
  * there would silently vanish the next time access is touched, un-dismissing the tour
  * for someone who already saw it. localStorage has no such write path to collide with.
  */
@@ -23,7 +23,7 @@ import { GUIDES } from "@/lib/guide-content";
 const ROLE_COPY: Record<AppRole, { title: string; blurb: string }> = {
   ADMIN: {
     title: "Founder / Admin",
-    blurb: "You hold every module here — finance, pipeline, people and the founder console.",
+    blurb: "You hold every module here - finance, pipeline, people and the founder console.",
   },
   HEAD: {
     title: "Head coach",
@@ -35,11 +35,11 @@ const ROLE_COPY: Record<AppRole, { title: string; blurb: string }> = {
   },
   STUDENT: {
     title: "Student",
-    blurb: "This is your own journey — milestones, class recordings and the community.",
+    blurb: "This is your own journey - milestones, class recordings and the community.",
   },
   TUTOR: {
     title: "Tutor",
-    blurb: "This is your German Note home — your batches, recordings and the community.",
+    blurb: "This is your German Note home - your batches, recordings and the community.",
   },
 };
 
@@ -68,7 +68,7 @@ export function OnboardingWalkthrough({
       if (window.localStorage.getItem(onboardingKey(userId))) return;
       window.localStorage.setItem(onboardingKey(userId), new Date().toISOString());
     } catch {
-      // localStorage unavailable (private mode, disabled storage, etc.) — still show
+      // localStorage unavailable (private mode, disabled storage, etc.) - still show
       // it for this load; there's just no durable "seen it" record to rely on next time.
     }
     setOpen(true);
@@ -107,7 +107,7 @@ export function OnboardingWalkthrough({
       body:
         sections.length === 0 ? (
           <p className="text-sm text-muted">
-            Your admin hasn&apos;t turned on any modules for your role yet — check back soon.
+            Your admin hasn&apos;t turned on any modules for your role yet - check back soon.
           </p>
         ) : (
           <ul className="space-y-2.5 text-sm">
@@ -128,7 +128,7 @@ export function OnboardingWalkthrough({
       body: (
         <div className="space-y-3 text-sm">
           <p className="text-muted">
-            Every feature you can open has a short how-to in the App Guide — find it any time from
+            Every feature you can open has a short how-to in the App Guide - find it any time from
             the sidebar.
           </p>
           {sections[0] && (

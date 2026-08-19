@@ -8,15 +8,15 @@ import { getFinancePostingConfig } from "./founder-config";
 /**
  * Invoice-issuance ledger posting (audit §C #22).
  *
- * finance-posting.paymentEntryDraft only ever CREDITS Accounts receivable (1100) — cash came in
- * against an invoice — so with no matching issuance debit, AR is one-sided and drifts negative
+ * finance-posting.paymentEntryDraft only ever CREDITS Accounts receivable (1100) - cash came in
+ * against an invoice - so with no matching issuance debit, AR is one-sided and drifts negative
  * over time. This posts the missing half: Dr AR / Cr Income when an invoice is issued.
  *
  * OFF by default: gated on financePosting.invoiceIssuancePosting.enabled, because it writes to the
  * real double-entry ledger. When off, this is a no-op and the books behave exactly as before.
  *
  * NOT a "use server" module: an internal server-only helper the payment/status actions call after
- * they've authenticated. Idempotent and best-effort — a posting hiccup must never undo the invoice
+ * they've authenticated. Idempotent and best-effort - a posting hiccup must never undo the invoice
  * write that triggered it. Idempotency + concurrency-safety come from postEntryOnce /
  * voidEntryForSource keyed on (sourceType "INVOICE", sourceId = invoice.id), the same
  * one-live-entry-per-source guard the rest of the ledger uses.

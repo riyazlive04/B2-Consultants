@@ -27,7 +27,7 @@ import {
 /**
  * Issue / remind / void / clone.
  *
- * The signing URL is shown once, after issuing, and never again — the database keeps only its
+ * The signing URL is shown once, after issuing, and never again - the database keeps only its
  * SHA-256. If the WhatsApp send is skipped (WATI off, template unmapped, number opted out) this
  * panel is the founder's only route to the link, so it refuses to disappear on its own.
  */
@@ -66,7 +66,7 @@ export function AgreementActions({
       const res = await issueAgreementWithSavedSignature(id, collectReportedDevice());
       if (!res.ok) return toast(res.error, "error");
       if (res.data!.kind === "needsSignature") {
-        setSignOpen("save"); // nothing stored yet — draw once, then this sends
+        setSignOpen("save"); // nothing stored yet - draw once, then this sends
         return;
       }
       applyIssued(res.data as { signingUrl: string; delivery: string; sent: boolean });
@@ -83,7 +83,7 @@ export function AgreementActions({
       if (signOpen === "save") {
         const saved = await saveFounderSignature(signature.dataUrl, signature.device);
         if (!saved.ok) return setError(saved.error);
-        toast("Signature saved — next time this is one tap.");
+        toast("Signature saved - next time this is one tap.");
       }
       // The founder's own device is captured too: the certificate names both signatories.
       const res = await issueAgreement(id, signature.dataUrl, signature.device);
@@ -213,7 +213,7 @@ export function AgreementActions({
         title={signOpen === "save" ? "Save your countersignature" : "Countersign the agreement"}
         subtitle={
           signOpen === "save"
-            ? `Draw it once — every agreement after this one sends in a single tap. ${studentName} then receives the link on WhatsApp.`
+            ? `Draw it once - every agreement after this one sends in a single tap. ${studentName} then receives the link on WhatsApp.`
             : `You sign first, then ${studentName} receives the link on WhatsApp.`
         }
       >

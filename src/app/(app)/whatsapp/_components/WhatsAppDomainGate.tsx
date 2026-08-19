@@ -14,7 +14,7 @@ import { saveWhatsAppDomainGate } from "@/server/whatsapp-actions";
  *
  * ── The thing this screen must not let someone do by accident ──────────────────
  * Switching the gate on narrows who can be messaged. The panel therefore states, in the room,
- * what the rule actually is — including the part people get wrong: a contact whose origin was
+ * what the rule actually is - including the part people get wrong: a contact whose origin was
  * never recorded is NOT blocked. Most of the database is in that state and always will be, so a
  * founder who reads "only these domains" as "only these contacts" would expect a silence that
  * never comes, and would go looking for a bug instead of a setting.
@@ -29,7 +29,7 @@ export function WhatsAppDomainGate({
 }: {
   enabled: boolean;
   domains: string[];
-  /** Hosts this app already knows about — one click to add, never added on our own initiative. */
+  /** Hosts this app already knows about - one click to add, never added on our own initiative. */
   suggestions: string[];
 }) {
   const router = useRouter();
@@ -56,7 +56,7 @@ export function WhatsAppDomainGate({
       const ok = await askConfirm({
         title: "Restrict WhatsApp to these domains?",
         body:
-          `Contacts recorded as arriving from anywhere else will stop receiving WhatsApp — confirmations, ` +
+          `Contacts recorded as arriving from anywhere else will stop receiving WhatsApp - confirmations, ` +
           `reminders, everything. Contacts with no recorded domain are not affected.`,
         confirmLabel: "Restrict",
       });
@@ -81,7 +81,7 @@ export function WhatsAppDomainGate({
             <p className="mt-0.5 max-w-2xl text-sm text-ink-2">
               {on
                 ? "Only contacts recorded as arriving from these domains are messaged."
-                : "Off — every contact can be messaged, wherever they came from."}
+                : "Off - every contact can be messaged, wherever they came from."}
             </p>
           </div>
         </div>
@@ -98,7 +98,7 @@ export function WhatsAppDomainGate({
 
       <div className="mt-4 flex flex-wrap items-end gap-2">
         <div className="min-w-[18rem] flex-1">
-          <Field label="Add a domain" hint="Paste a URL or type a hostname — b2app.sirahagents.com">
+          <Field label="Add a domain" hint="Paste a URL or type a hostname - b2app.sirahagents.com">
             <TextInput
               kind="text"
               value={draft}
@@ -159,7 +159,7 @@ export function WhatsAppDomainGate({
       <p className="mt-4 rounded-field border border-line bg-surface-2 px-4 py-3 text-caption text-ink-2">
         A contact whose origin was never recorded is <strong>not</strong> blocked. Origins are only
         observed from the funnel and booking pages, so every contact imported from Synamate has none
-        and always will — reading those as &ldquo;not on the list&rdquo; would silence almost the whole
+        and always will - reading those as &ldquo;not on the list&rdquo; would silence almost the whole
         database the moment this is switched on.
       </p>
 

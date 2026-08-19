@@ -5,7 +5,7 @@ import { eurMinorToInrMinor } from "@/lib/fx";
 import { economicsFor, bandByMedian, type SourceTotals, type SourceEconomics, type Performance } from "@/lib/attribution";
 
 /**
- * Campaign attribution (ER v2 Track F) — the report that stands in for the diagram's
+ * Campaign attribution (ER v2 Track F) - the report that stands in for the diagram's
  * `INSIGHT` entity.
  *
  * INSIGHT is NOT a table here, deliberately. Every field of it (`metric`,
@@ -23,7 +23,7 @@ export type AttributionRow = SourceEconomics & { performance: Performance };
  * The window applies to LEADS and SPEND, not to revenue: a lead captured in March that
  * enrolls in May earned its campaign that money, and clipping revenue to the window would
  * make every recent campaign look like a failure. This is cohort attribution, not cash
- * accounting — the Finance screens are where the period matters.
+ * accounting - the Finance screens are where the period matters.
  */
 export const getAttribution = cache(async (from: Date, to: Date): Promise<AttributionRow[]> => {
   const sources = await prisma.marketingSource.findMany({

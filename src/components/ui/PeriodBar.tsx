@@ -20,7 +20,7 @@ import { Btn, IconButton, SegmentedControl } from "./controls";
  *
  * Writes `?period=` (and `?on=` / `?from=&to=`) and lets the SERVER re-render. Deliberately not
  * client-side filtering: these screens read money and 23k leads out of Postgres, and the whole
- * point of the control is that the QUERY changes — a client filter over an already-capped page
+ * point of the control is that the QUERY changes - a client filter over an already-capped page
  * would show "July" as whatever subset of July happened to be in the first 300 rows.
  *
  * Every OTHER query param is preserved on navigation, so a period change never silently drops
@@ -28,7 +28,7 @@ import { Btn, IconButton, SegmentedControl } from "./controls";
  *
  * ── Why the buttons are `SegmentedControl` and not their own markup ──────────────
  * This shipped with hand-rolled pill buttons: `bg-ink text-surface` when active, each segment
- * sized to its own label. That was wrong twice over. The colour was a one-off — every other
+ * sized to its own label. That was wrong twice over. The colour was a one-off - every other
  * toggle in the app marks its active segment with the primary tint (`bg-primary-soft`), so this
  * one control invented a dark navy state that appears nowhere else. And five different widths
  * read as five unrelated buttons rather than one control with five positions. It is now the
@@ -36,7 +36,7 @@ import { Btn, IconButton, SegmentedControl } from "./controls";
  *
  * ── Why the selection is optimistic ─────────────────────────────────────────────
  * Clicking a segment starts a SERVER round trip, and this app's server is in Mumbai while its
- * database is in Singapore — a single query costs ~600ms, so a page can take seconds to come
+ * database is in Singapore - a single query costs ~600ms, so a page can take seconds to come
  * back. The old control repainted only once the server answered, which meant a click did nothing
  * visible for a second or more and people clicked again. `resolvePeriod` is pure, so the new
  * selection AND its label can both be computed in the browser the instant the button is pressed;
@@ -59,9 +59,9 @@ export function PeriodBar({
   /**
    * Which query params this control writes.
    *
-   *   "period"  →  `?period=month&on=…`  — the default, for pages whose whole query is scoped
+   *   "period"  →  `?period=month&on=…`  - the default, for pages whose whole query is scoped
    *                by the window.
-   *   "dates"   →  `?from=YYYY-MM-DD&to=YYYY-MM-DD` — for pages that ALREADY have a from/to date
+   *   "dates"   →  `?from=YYYY-MM-DD&to=YYYY-MM-DD` - for pages that ALREADY have a from/to date
    *                filter (Contacts). Writing `?period=` there would create a second, competing
    *                date mechanism on one screen, where the two could disagree and the user could
    *                not tell which had won. This makes the bar a set of shortcuts INTO the filter
@@ -87,7 +87,7 @@ export function PeriodBar({
   /**
    * What the control SHOWS, which leads what the server has by one round trip.
    *
-   * Cleared whenever the real `spec` arrives — including when the server resolves to something
+   * Cleared whenever the real `spec` arrives - including when the server resolves to something
    * other than what was clicked (a clamped custom range, say). The prop is always the authority;
    * this only covers the gap while it is in flight.
    */
@@ -104,7 +104,7 @@ export function PeriodBar({
   const go = (next: PeriodSpec) => {
     setOptimistic(next);
     // Merge, don't replace. `?owner=` and `?stage=` belong to the page's own filter bar and
-    // must survive a period change — losing them silently is how a filtered view lies.
+    // must survive a period change - losing them silently is how a filtered view lies.
     const params = new URLSearchParams(searchParams.toString());
     for (const key of ["period", "on", "from", "to", "range"]) params.delete(key);
 
@@ -120,7 +120,7 @@ export function PeriodBar({
       for (const [k, v] of new URLSearchParams(periodQuery(next))) params.set(k, v);
     }
 
-    // Any window change starts back at page 1 — a cursor from the previous window points into
+    // Any window change starts back at page 1 - a cursor from the previous window points into
     // rows the new `where` clause may not contain at all.
     params.delete("cursor");
     // A transition keeps the OLD page interactive and gives us `pending`, instead of the router
@@ -171,7 +171,7 @@ export function PeriodBar({
         >
           <ChevronRight size={16} />
         </IconButton>
-        {/* Only offered when it would DO something — a live "Today" that is already today is a
+        {/* Only offered when it would DO something - a live "Today" that is already today is a
             control that teaches people the page ignores them. */}
         {!atNow && shownSpec.kind !== "all" && (
           <Btn size="sm" variant="ghost" onClick={() => go({ kind: shownSpec.kind, anchor: "" })}>
@@ -201,7 +201,7 @@ export function PeriodBar({
             <label className="block text-xs font-semibold text-ink-2">
               To
               <div className="mt-1.5">
-                {/* Inclusive — `resolvePeriod` adds the extra day, so a range ending today
+                {/* Inclusive - `resolvePeriod` adds the extra day, so a range ending today
                     includes today. */}
                 <DatePicker name="to" required defaultValue={spec.to ?? ""} />
               </div>

@@ -8,13 +8,13 @@ import { levelOptions } from "@/lib/levels";
 import { toDateInputValue, istToday } from "@/lib/dates";
 
 /**
- * The dependencies the quick-record forms need — the live FX rate (so the ₹↔€ preview matches
+ * The dependencies the quick-record forms need - the live FX rate (so the ₹↔€ preview matches
  * what the server will stamp), the student list for the income autocomplete, and the level list.
  *
  * Fetched lazily when the Record modal first opens rather than shipped with every page: the CTA
  * lives in the shell on every screen, and none of this is needed until someone actually clicks it.
  * Guarded by the same capability the write actions check, so it never leaks the roster to a viewer
- * who couldn't record anyway — it returns null instead.
+ * who couldn't record anyway - it returns null instead.
  */
 export type RecordFormData = {
   today: string;

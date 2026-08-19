@@ -4,7 +4,7 @@ import { slotStartsForRange, slotsPerRunningDay, WEEKDAY_FROM_JSDAY } from "../s
 
 /**
  * The manual generator and the nightly top-up both call this. If they ever disagree by so much
- * as a second, dedupe stops working and the calendar fills with near-duplicate pairs — so the
+ * as a second, dedupe stops working and the calendar fills with near-duplicate pairs - so the
  * arithmetic is pinned here rather than left to two callers to reproduce.
  */
 
@@ -97,7 +97,7 @@ test("an inverted range yields nothing rather than looping", () => {
 /**
  * The Console's availability editor previews a pattern with `slotsPerRunningDay` before the
  * founder saves it. If that count could disagree with what the cron then creates, the preview
- * would be a lie on the one screen whose whole job is stopping an empty calendar — so it is
+ * would be a lie on the one screen whose whole job is stopping an empty calendar - so it is
  * pinned against the real generator across every edge the cases above cover.
  */
 test("the preview count matches what the generator actually produces", () => {
@@ -133,7 +133,7 @@ test("the preview count matches what the generator actually produces", () => {
   }
 });
 
-test("re-running the same range is byte-identical — this is what makes dedupe work", () => {
+test("re-running the same range is byte-identical - this is what makes dedupe work", () => {
   const args = {
     ...base,
     startDate: "2026-07-20",

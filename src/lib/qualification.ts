@@ -1,5 +1,5 @@
 /**
- * Qualification catalogue — configurable questions, and scoring over their ANSWERS
+ * Qualification catalogue - configurable questions, and scoring over their ANSWERS
  * (ER v2 Track D).
  *
  * Isomorphic and pure. The DB side is `server/qualification.ts` (reads) and
@@ -8,13 +8,13 @@
  * ── Why this exists ──────────────────────────────────────────────────────────────
  * The questionnaire was 18 hardcoded columns on `BookingRequest` with the weights buried in
  * `booking-intake.ts`. The founders could not add, remove or reweight a question without
- * shipping a migration — even though the resulting BANT verdict decides who gets called.
+ * shipping a migration - even though the resulting BANT verdict decides who gets called.
  *
  * ── The safety property ──────────────────────────────────────────────────────────
  * `scoreFromAnswers` MUST agree with `computeBant` for every submission that today's form
  * can produce. It is not "equivalent by inspection": `catalogueFromIntake()` DERIVES the
- * question catalogue from INTAKE_OPTIONS and BANT_ANSWER_SCORES — the very tables
- * `computeBant` scores against — so the two cannot drift by transcription. The seed writes
+ * question catalogue from INTAKE_OPTIONS and BANT_ANSWER_SCORES - the very tables
+ * `computeBant` scores against - so the two cannot drift by transcription. The seed writes
  * that derived catalogue, and the shadow phase compares the two scorers on live traffic.
  *
  * The one rule that is easy to get wrong and expensive to get wrong: a dimension's score is
@@ -28,7 +28,7 @@ import { INTAKE_OPTIONS, BANT_ANSWER_SCORES, bantVerdictFor, type BantResult } f
 /**
  * One option on a SELECT-style question. `score` is the 0–5 weighted layer.
  *
- * `aliases` are additional ANSWER TEXTS an external form may send for this option — the landing
+ * `aliases` are additional ANSWER TEXTS an external form may send for this option - the landing
  * page posts its own wording, not our slug. Optional so every option written before inbound
  * mapping existed stays valid; `value` and `label` are always accepted without being listed.
  * See `lib/qualification-inbound.ts` for the matching rules.
@@ -54,7 +54,7 @@ export type QuestionSpec = {
 /** The four scored dimensions, in the order the average is taken over. */
 export const SCORED_DIMENSIONS = ["BUDGET", "AUTHORITY", "NEED", "TIMELINE"] as const;
 
-/** A dimension counts as "met" at ≥3/5 — the same constant `computeBant` uses. */
+/** A dimension counts as "met" at ≥3/5 - the same constant `computeBant` uses. */
 const DIMENSION_MET_AT = 3;
 
 /** Answers keyed by question `key`, exactly as the form posts them. */
@@ -64,8 +64,8 @@ export type AnswerMap = Record<string, string | null | undefined>;
  * The 0–5 score one answer contributes.
  *
  * `weight` multiplies and the result is clamped back into 0–5, so the average stays on the
- * same scale the verdict thresholds are expressed in. A weight of 1 — what the seed uses
- * everywhere — is the identity, which is what makes the derived catalogue reproduce
+ * same scale the verdict thresholds are expressed in. A weight of 1 - what the seed uses
+ * everywhere - is the identity, which is what makes the derived catalogue reproduce
  * `computeBant` exactly.
  */
 export function optionScore(q: QuestionSpec, value: string | null | undefined): number {
@@ -78,7 +78,7 @@ export function optionScore(q: QuestionSpec, value: string | null | undefined): 
 /**
  * Score a submission against a question catalogue.
  *
- * Always divides by the four scored dimensions, never by "dimensions that had a question" —
+ * Always divides by the four scored dimensions, never by "dimensions that had a question" -
  * a catalogue with no Budget question means Budget scores 0, not that Budget is excluded
  * from the mean. Dropping it from the denominator would quietly inflate every verdict.
  */
@@ -105,7 +105,7 @@ export function scoreFromAnswers(answers: AnswerMap, questions: QuestionSpec[]):
 
 /**
  * Which BANT dimension each of today's hardcoded questions feeds. Mirrors the section
- * comments in `booking-intake.ts` — questions absent from BANT_ANSWER_SCORES score nothing
+ * comments in `booking-intake.ts` - questions absent from BANT_ANSWER_SCORES score nothing
  * and are kept for context, exactly as they are today.
  */
 export const DIMENSION_BY_KEY: Record<string, BantDimension> = {
@@ -138,7 +138,7 @@ export const QUESTION_TEXT: Record<string, string> = {
  * DERIVE the question catalogue from the shipped intake tables.
  *
  * This is the whole safety argument for Track D's cutover. A hand-written seed would be
- * "equivalent by inspection" — a claim that survives exactly until someone mistypes a 3 as a
+ * "equivalent by inspection" - a claim that survives exactly until someone mistypes a 3 as a
  * 5 in a 40-row score table and nobody notices, because the resulting verdict still looks
  * plausible. Deriving it makes divergence impossible by construction: the scores here ARE
  * BANT_ANSWER_SCORES, and the options here ARE INTAKE_OPTIONS.

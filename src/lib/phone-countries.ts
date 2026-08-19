@@ -3,8 +3,8 @@
  *
  * ── Why the whole world and not "the countries we sell to" ─────────────────────────────────────
  * This list is the difference between someone being able to leave their number and not. The
- * audience is professionals applying to move country — the one population most likely to be
- * dialling from somewhere unexpected — and a missing entry is a lead that cannot submit at all.
+ * audience is professionals applying to move country - the one population most likely to be
+ * dialling from somewhere unexpected - and a missing entry is a lead that cannot submit at all.
  * It is 240 rows of static data; there is no reason to trim it.
  *
  * ── Why the flag is derived, not stored ────────────────────────────────────────────────────────
@@ -12,7 +12,7 @@
  * it means the data is three fields wide instead of four and cannot disagree with itself.
  *
  * NOTE ON WINDOWS: Windows ships no flag glyphs, so `🇮🇳` renders there as the letters "IN".
- * That is a platform limitation, not a bug to work around with images — the dial code is shown
+ * That is a platform limitation, not a bug to work around with images - the dial code is shown
  * beside it either way, so the control stays usable and unambiguous. The traffic this form takes
  * is overwhelmingly mobile, where flags render properly.
  */
@@ -28,7 +28,7 @@ export function flagOf(iso2: string): string {
 }
 
 /**
- * Sorted by name, except that the markets this business actually serves are pinned to the top —
+ * Sorted by name, except that the markets this business actually serves are pinned to the top -
  * see PRIORITY. Scrolling past 90 countries to reach India, on a phone, is the kind of friction
  * that costs a submission.
  */
@@ -123,7 +123,7 @@ export function countryByIso(iso2: string | undefined): Country {
 /**
  * Split a stored phone into its dial code and the rest.
  *
- * Longest dial code first, because `+1` is the United States and `+1868` is Trinidad — matching
+ * Longest dial code first, because `+1` is the United States and `+1868` is Trinidad - matching
  * the short one first would put every Caribbean number in the wrong country. Anything that does
  * not start with a `+` is treated as a local number under `fallbackIso`, which is what a value
  * typed before this control existed looks like.

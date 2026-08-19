@@ -7,7 +7,7 @@ import { normalizeWhatsappNumber } from "@/lib/phone";
 import { readWatiSettings } from "@/lib/wati";
 
 /**
- * Inbound WATI webhook — two jobs:
+ * Inbound WATI webhook - two jobs:
  *  1. Delivery-status callbacks (sent / delivered / read / failed) → advance the matching
  *     WhatsAppMessage row by its watiMessageId.
  *  2. Incoming replies → mark the last outbound message to that number REPLIED (the SALES-LOGIC
@@ -60,12 +60,12 @@ function isStopMessage(text: string): boolean {
  *
  * The SOP's confirmation templates say "Please reply *YES* to confirm your participation", and the
  * Key Metrics "WhatsApp Confirmed" column is meant to mean exactly that. Treating any inbound text
- * as a confirmation — which is what this webhook used to do — marks "no thanks, not interested" as
+ * as a confirmation - which is what this webhook used to do - marks "no thanks, not interested" as
  * confirmed, and the prospect keeps a slot they've just declined.
  *
  * Deliberately narrow and fail-closed: an unrecognised reply is NOT a confirmation, it simply
  * stays a reply for the specialist to read and action by hand (outreach-actions.setWhatsappConfirmed).
- * Accepting a few common phrasings around the SOP's own instruction is the whole scope here — this
+ * Accepting a few common phrasings around the SOP's own instruction is the whole scope here - this
  * is not sentiment analysis, and it must never guess.
  */
 function isConfirmationMessage(text: string): boolean {
@@ -81,7 +81,7 @@ function isConfirmationMessage(text: string): boolean {
  * WATI's `sendTemplateMessage` response does NOT return a message id (verified against the live
  * API: it answers `{result: true, info: "Success"}`), so `watiMessageId` is usually null on our
  * rows and matching by id alone would silently drop every status update. We therefore fall back to
- * the most recent OUTBOUND message to that number — which is what the callback is about.
+ * the most recent OUTBOUND message to that number - which is what the callback is about.
  * If the callback carries an id and we can back-fill it, we do, so later callbacks match exactly.
  */
 async function handleStatus(watiId: string | undefined, sender: string | null, status: WhatsAppStatus): Promise<void> {
@@ -144,7 +144,7 @@ async function confirmJourneyFor(leadId: string): Promise<void> {
 /**
  * Apply a prospect's YES to their upcoming booking (Bookings confirmation loop, Module E). Sets
  * `confirmedAt`, which is exactly what stops the auto-cancel engine from releasing the slot. Only a
- * live BOOKED, still-unconfirmed booking is touched — a YES after the fact changes nothing.
+ * live BOOKED, still-unconfirmed booking is touched - a YES after the fact changes nothing.
  */
 async function confirmBookingFor(bookingRequestId: string): Promise<void> {
   const b = await prisma.bookingRequest.findUnique({
@@ -171,7 +171,7 @@ async function handleInbound(sender: string, text: string): Promise<void> {
       update: { reason: `STOP reply: "${text.slice(0, 120)}"` },
     });
   } else if (lastOutbound) {
-    // A reply marks the outbound thread REPLIED — that is a delivery fact and stays as it was.
+    // A reply marks the outbound thread REPLIED - that is a delivery fact and stays as it was.
     await prisma.whatsAppMessage.update({ where: { id: lastOutbound.id }, data: { status: "REPLIED" } });
 
     // …but REPLIED is NOT the same as confirmed. The SOP's "WhatsApp Confirmed" / "Sales Call
@@ -208,7 +208,7 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // Endpoint-keyed, not IP-keyed — every callback comes from WATI's own egress, so a per-IP
+  // Endpoint-keyed, not IP-keyed - every callback comes from WATI's own egress, so a per-IP
   // bucket was a global bucket that would silently reset on a vendor IP change. High ceiling
   // because this route is chatty by design (a delivery-status callback per message), and
   // `Retry-After` so a throttled callback is retried rather than dropped: losing a status
@@ -243,7 +243,7 @@ export async function POST(req: NextRequest) {
       await handleStatus(watiId, sender, mapped);
     }
   } catch {
-    // Never fail the webhook on a processing hiccup — WATI would retry-storm. Swallow + 200.
+    // Never fail the webhook on a processing hiccup - WATI would retry-storm. Swallow + 200.
   }
 
   return NextResponse.json({ ok: true });

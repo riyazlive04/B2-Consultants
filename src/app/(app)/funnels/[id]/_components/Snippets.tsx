@@ -27,9 +27,9 @@ const labelCls = "block text-caption font-semibold uppercase tracking-wide text-
  * A live thumbnail of what the snippet actually is.
  *
  * The real renderer at a third of the size, rather than an icon or a name in a list. A library of
- * fourteen entries called "Hero — headline and CTA" is a library nobody browses; what people
+ * fourteen entries called "Hero - headline and CTA" is a library nobody browses; what people
  * recognise is the shape of the band. `pointer-events-none` because this is a picture of a page,
- * not a page — a link inside it must not be clickable.
+ * not a page - a link inside it must not be clickable.
  */
 function Thumb({ blocks }: { blocks: Block[] }) {
   return (
@@ -52,7 +52,7 @@ export function SnippetPicker({
   onClose: () => void;
   snippets: SnippetRow[];
   scope: "SECTION" | "PAGE";
-  /** Receives blocks that have ALREADY been re-keyed — the caller can splice them in as they are. */
+  /** Receives blocks that have ALREADY been re-keyed - the caller can splice them in as they are. */
   onInsert: (blocks: Block[], snippet: SnippetRow) => void;
 }) {
   const router = useRouter();
@@ -69,7 +69,7 @@ export function SnippetPicker({
   }, [snippets, scope, query]);
 
   async function remove(s: SnippetRow) {
-    if (!(await askConfirm({ title: `Delete "${s.name}" from the library?`, body: "Pages already using it keep their copy — only the saved original goes.", danger: true }))) return;
+    if (!(await askConfirm({ title: `Delete "${s.name}" from the library?`, body: "Pages already using it keep their copy - only the saved original goes.", danger: true }))) return;
     const res = await deleteSnippet(s.id);
     if (res.ok) { toast("Removed from the library"); router.refresh(); } else toast(res.error, "error");
   }
@@ -86,7 +86,7 @@ export function SnippetPicker({
 
         {groups.length === 0 ? (
           <p className="py-8 text-center text-sm text-ink-3">
-            {query ? "Nothing matches that." : scope === "PAGE" ? "No page templates saved yet." : "No saved sections yet — build a band, then use “Save as section”."}
+            {query ? "Nothing matches that." : scope === "PAGE" ? "No page templates saved yet." : "No saved sections yet - build a band, then use “Save as section”."}
           </p>
         ) : (
           groups.map(([category, rows]) => (
@@ -105,7 +105,7 @@ export function SnippetPicker({
                         </p>
                       </div>
                       {s.builtIn ? (
-                        <span title="Built-in — can't be deleted" className="text-ink-3"><Lock size={13} /></span>
+                        <span title="Built-in - can't be deleted" className="text-ink-3"><Lock size={13} /></span>
                       ) : (
                         <IconButton label={`Delete ${s.name}`} onClick={() => remove(s)}><Trash2 size={13} /></IconButton>
                       )}
@@ -125,7 +125,7 @@ export function SnippetPicker({
 }
 
 /**
- * Save a selection — one node, or a whole page — into the library.
+ * Save a selection - one node, or a whole page - into the library.
  *
  * `category` is free text with the existing ones offered as a datalist rather than a fixed
  * dropdown: the team's own grouping ("Nurture", "Webinar") should not need a migration, and an

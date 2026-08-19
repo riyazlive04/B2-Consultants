@@ -1,19 +1,19 @@
 import type { GnWorkshopProduct } from "@prisma/client";
 
 /**
- * German Note workshop economics — the reasoned model behind every conversion's
+ * German Note workshop economics - the reasoned model behind every conversion's
  * P&L. The workflow is a funnel: an ad drives reach → clicks → a free taster →
  * a share of attendees CONVERT into a level course (A1 / A2 / B1 or a bundle).
  *
  * What is an INPUT vs what is DERIVED (this is the whole point):
- *  - PRICE a client pays is an input — it moves per intake and per deal (EMI,
+ *  - PRICE a client pays is an input - it moves per intake and per deal (EMI,
  *    negotiation, carry-over credit), so it is captured per conversion.
  *  - COST of delivery is structural and stable, so it is DERIVED here from the
  *    product, never re-keyed per client:
  *        COGS(product) = Σ over enrolled levels of (books + tutor)
  *  - AD SPEND per conversion is DERIVED at read time: a workshop's total ad
  *    spend split evenly across the conversions that came FROM the ad campaign
- *    (source = AD). Organic / referral / free seats carry no ad cost — exactly
+ *    (source = AD). Organic / referral / free seats carry no ad cost - exactly
  *    how the founders' workbook allocates it.
  *
  * A conversion may override books/tutor for a genuine exception (sponsored book,

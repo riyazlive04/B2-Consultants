@@ -1,7 +1,7 @@
 /**
- * Instalment-plan arithmetic — the surcharge lookup, the exact split, and the due-date walk.
+ * Instalment-plan arithmetic - the surcharge lookup, the exact split, and the due-date walk.
  *
- * All pure, no DB, no clock: dates are passed in. The split cases carry the weight — a plan
+ * All pure, no DB, no clock: dates are passed in. The split cases carry the weight - a plan
  * that doesn't sum back to the total means a receivable that can never reach zero, so the
  * student stays "owing" forever after paying in full. That is the failure this file exists
  * to prevent, and it only shows up on totals that don't divide evenly.
@@ -37,7 +37,7 @@ describe("instalmentExtraFor", () => {
     assert.deepEqual(instalmentExtraFor(3, CONFIG), m(60_000, 550));
   });
 
-  test("an unpriced length costs nothing — never an invented charge", () => {
+  test("an unpriced length costs nothing - never an invented charge", () => {
     assert.deepEqual(instalmentExtraFor(7, CONFIG), m(0, 0));
   });
 
@@ -48,7 +48,7 @@ describe("instalmentExtraFor", () => {
   });
 
   test("the surcharge is flat, NOT per instalment", () => {
-    // ₹600 once on a 3-part plan — the whole point of the founder's answer.
+    // ₹600 once on a 3-part plan - the whole point of the founder's answer.
     const extra = instalmentExtraFor(3, CONFIG);
     assert.equal(extra.inr, BigInt(60_000));
     assert.notEqual(extra.inr, BigInt(60_000) * BigInt(3));
@@ -73,7 +73,7 @@ describe("splitInstalments", () => {
     assert.deepEqual(rows.map((r) => r.inr), [BigInt(5_020_000), BigInt(5_020_000), BigInt(5_020_000)]);
   });
 
-  test("an indivisible total still sums back exactly — remainder on the last row", () => {
+  test("an indivisible total still sums back exactly - remainder on the last row", () => {
     // 100 paise over 3 → 33 / 33 / 34
     const rows = splitInstalments(m(100), 3);
     assert.deepEqual(rows.map((r) => Number(r.inr)), [33, 33, 34]);
@@ -132,7 +132,7 @@ describe("instalmentDueDates", () => {
     assert.equal(first.toISOString(), before);
   });
 
-  test("no drift accumulates — the nth date is exactly n intervals out", () => {
+  test("no drift accumulates - the nth date is exactly n intervals out", () => {
     const dates = instalmentDueDates(first, 12, 30);
     const days = (dates[11].getTime() - dates[0].getTime()) / 86_400_000;
     assert.equal(days, 11 * 30);

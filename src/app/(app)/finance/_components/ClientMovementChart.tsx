@@ -13,17 +13,17 @@ import type { ClientMovementMonth } from "@/server/annual-metrics";
  * be read as what moved it.
  *
  * The base gets its OWN band above the bars (Error Log F5). It used to be overlaid on the same
- * axis, which put it in the y-range 126–202 — below the zero line and squarely inside the red
+ * axis, which put it in the y-range 126–202 - below the zero line and squarely inside the red
  * churn bars, so the one thing the movement is supposed to be read against was buried under the
  * movement itself, and drifted into the month labels whenever the roster was small. Two stacked
  * panels on a shared x-axis keep "how big is the base" and "what moved it" legible at once.
  *
  * DRAWN IN MEASURED PIXELS, NOT A `viewBox` (§5.8). It used to be `viewBox="0 0 720 286"`
- * stretched to the card with `fontSize="9"` — but a viewBox unit is only 9px when the card is
+ * stretched to the card with `fontSize="9"` - but a viewBox unit is only 9px when the card is
  * 720px wide. In the Finance column on a 320px phone the card is 238px, so every label rendered
  * at 9 × (238/720) = **3px**: the Jan–Dec axis was a row of grey dashes. Taking the width from
  * `ChartFrame` means one SVG unit is one CSS pixel, so the 12px below is actually 12px at every
- * size — the same fix `AnnualChart` and `CashChart` already had.
+ * size - the same fix `AnnualChart` and `CashChart` already had.
  */
 
 const PAD_R = 14;
@@ -126,7 +126,7 @@ function Plot({
   // the axis thins to every 2nd or 3rd month rather than shrinking the type past the floor.
   const every = slot >= 26 ? 1 : slot >= 17 ? 2 : 3;
 
-  // Indexed by m.month, not by position in `elapsed` — future months only ever fall at the end
+  // Indexed by m.month, not by position in `elapsed` - future months only ever fall at the end
   // today, but keying off the real month survives that ordering changing.
   const pt = (m: ClientMovementMonth) => `${xC(m.month).toFixed(1)},${yBase(m.activeEnd).toFixed(1)}`;
   const baseline = elapsed.map(pt).join(" ");
@@ -155,7 +155,7 @@ function Plot({
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
       >
-        {/* recurring base — its own band, with a scale so the number is readable without hovering */}
+        {/* recurring base - its own band, with a scale so the number is readable without hovering */}
         <line x1={PAD_L} x2={W - PAD_R} y1={BASE_TOP} y2={BASE_TOP} stroke="var(--line)" strokeWidth="1" />
         <line x1={PAD_L} x2={W - PAD_R} y1={BASE_BOT} y2={BASE_BOT} stroke="var(--line)" strokeWidth="1" />
         <text x={PAD_L - 6} y={BASE_TOP + 4} textAnchor="end" fontSize={AXIS_FONT} fill="var(--muted)">
@@ -246,7 +246,7 @@ function Plot({
         {h && hover !== null && !h.isFuture && (
           <g pointerEvents="none">
             {(() => {
-              // Clamped to the plot so the bubble cannot hang off a narrow card — at 238px wide
+              // Clamped to the plot so the bubble cannot hang off a narrow card - at 238px wide
               // the old fixed 128px box left no room to sit either side of a late-year month.
               const boxW = Math.min(128, Math.max(96, W - 16));
               const half = boxW / 2;

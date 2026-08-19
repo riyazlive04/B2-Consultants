@@ -23,7 +23,7 @@ import { getAgreementWorkflow } from "./founder-config";
  * per-candidate query would be an N+1 the founder feels on every page load. Two findMany calls and
  * one whatsapp lookup cover the whole list.
  *
- * NEVER select `pdfBytes` here — see the header of agreement-metrics.ts.
+ * NEVER select `pdfBytes` here - see the header of agreement-metrics.ts.
  */
 
 const AGR_SELECT = {
@@ -49,7 +49,7 @@ type AgreementRow = {
  *
  * A signed one always wins: `cloneAgreement` deliberately does NOT void a SIGNED row (it is
  * superseded, and both survive), so "latest by createdAt" alone would let a fresh revision draft
- * hide an executed contract. Otherwise it's the newest row that hasn't been withdrawn — voiding is
+ * hide an executed contract. Otherwise it's the newest row that hasn't been withdrawn - voiding is
  * exactly how the founder says "that one no longer counts".
  */
 export function pickCurrentAgreement(rows: AgreementRow[]): LatestAgreement {
@@ -68,7 +68,7 @@ export function pickCurrentAgreement(rows: AgreementRow[]): LatestAgreement {
 
 /**
  * Statuses that mean a message genuinely left the building. SKIPPED (WATI off, no template, opted
- * out) and FAILED must never count — the whole point of COMPLETED is that the student actually has
+ * out) and FAILED must never count - the whole point of COMPLETED is that the student actually has
  * their copy, so a row proving we *tried* is not delivery. Mirrors `SUCCESSFUL` in whatsapp.ts.
  */
 const DELIVERED_WA: WhatsAppStatus[] = ["QUEUED", "SENT", "DELIVERED", "READ", "REPLIED"];
@@ -95,7 +95,7 @@ export type ClientAgreementInfo = {
 };
 
 /**
- * The agreement state of ONE client — the contact profile's card and the one-click action both
+ * The agreement state of ONE client - the contact profile's card and the one-click action both
  * read this. Accepts either side of the link: agreements hang off a Lead, a Student, or both.
  */
 export async function getClientAgreementState(opts: {
@@ -139,7 +139,7 @@ async function resolveLeadStage(opts: { leadId?: string | null; studentId?: stri
 }
 
 /**
- * The client-safe projection of a client's agreement position — what the task card renders.
+ * The client-safe projection of a client's agreement position - what the task card renders.
  *
  * `missing` is computed from the same prefill the form would open on, so the card can promise a
  * one-click send only when the CRM genuinely has every field a contract needs.
@@ -186,7 +186,7 @@ export async function getAgreementTaskCounts(): Promise<AgreementTaskCounts> {
   const [drafts, readyLeads, awaitingSignature, expired, signedNoCopy] = await Promise.all([
     prisma.agreement.count({ where: { status: "DRAFT" } }),
     // Eligible leads that have never had an agreement that still counts. A withdrawn (VOIDED /
-    // DECLINED) one leaves the client back in "ready" — which is exactly what the founder wants
+    // DECLINED) one leaves the client back in "ready" - which is exactly what the founder wants
     // to be reminded of.
     prisma.lead.count({
       where: {
@@ -204,7 +204,7 @@ export async function getAgreementTaskCounts(): Promise<AgreementTaskCounts> {
     prisma.agreement.count({
       where: { status: { in: ["SENT", "VIEWED"] }, expiresAt: { lte: now } },
     }),
-    // Signed, but the copy never actually reached them — the gap between SIGNED and COMPLETED.
+    // Signed, but the copy never actually reached them - the gap between SIGNED and COMPLETED.
     prisma.agreement.count({
       where: {
         status: "SIGNED",
@@ -220,21 +220,21 @@ export async function getAgreementTaskCounts(): Promise<AgreementTaskCounts> {
 
 // ───────────────────────────── The picker's candidate list ─────────────────────────────
 
-/** One row in the searchable picker. Serializable — it crosses to a client component. */
+/** One row in the searchable picker. Serializable - it crosses to a client component. */
 export type AgreementCandidate = {
   kind: "lead" | "student";
   id: string;
   name: string;
   phone: string | null;
   email: string | null;
-  /** Pipeline stage / programme + coach — the context that makes two same-named rows distinguishable. */
+  /** Pipeline stage / programme + coach - the context that makes two same-named rows distinguishable. */
   subtitle: string;
   state: AgreementState;
   group: AgreementGroup;
 };
 
 // An agreement only makes sense once a deal is real. Everything earlier is still noise in a picker
-// whose whole job is to be scannable — but the founder can still reach those leads via search,
+// whose whole job is to be scannable - but the founder can still reach those leads via search,
 // because we keep WON/LOST-adjacent stages out rather than filtering to a single stage.
 const CANDIDATE_STAGES = [
   "PROPOSAL_SENT",

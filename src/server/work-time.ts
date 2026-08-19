@@ -68,7 +68,7 @@ export async function addWorkSeconds(userId: string, seconds: number): Promise<n
   return row.seconds;
 }
 
-/** Zero today's row for a user. Scoped to their own day — never anyone else's. */
+/** Zero today's row for a user. Scoped to their own day - never anyone else's. */
 export async function resetToday(userId: string): Promise<void> {
   const day = istToday();
   await prisma.workDay.updateMany({ where: { userId, day }, data: { seconds: 0 } });

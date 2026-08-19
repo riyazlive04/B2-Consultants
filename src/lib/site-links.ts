@@ -9,7 +9,7 @@
  *
  * Different hostname means no shared cookie and no shared session. A visitor who arrived from a
  * Meta ad carrying `utm_source=facebook&fbclid=…` lands on our page with that context, clicks the
- * CTA, and — unless we carry it — arrives at the funnel with nothing. Every opt-in then looks like
+ * CTA, and - unless we carry it - arrives at the funnel with nothing. Every opt-in then looks like
  * direct traffic.
  *
  * The cost is not abstract. The whole point of rebuilding these pages is to answer "does the new
@@ -32,7 +32,7 @@ const FORWARDED = [
   "utm_term",
   "utm_content",
   "utm_id",
-  // Click identifiers — the ONLY reliable join key back to an ad platform's own reporting. UTMs
+  // Click identifiers - the ONLY reliable join key back to an ad platform's own reporting. UTMs
   // are author-supplied and get mistyped; these are minted by the platform.
   "fbclid",
   "gclid",
@@ -64,7 +64,7 @@ export function pickForwardable(sp: IncomingParams | undefined): Record<string, 
  * Build the outgoing href for a CTA or nav item.
  *
  * Returns `href` untouched when forwarding is off, when there is nothing to forward, or when the
- * target is not an http(s)/relative URL — a `mailto:` or `tel:` link has no query string to carry
+ * target is not an http(s)/relative URL - a `mailto:` or `tel:` link has no query string to carry
  * and appending one would corrupt it.
  *
  * Params ALREADY present on the href win. An author who wrote `?utm_campaign=spring` on the button
@@ -107,7 +107,7 @@ export function buildForwardedHref(
 }
 
 /**
- * Whether a link leaves this site. Used by the renderer to decide `target`/`rel` — and it is why
+ * Whether a link leaves this site. Used by the renderer to decide `target`/`rel` - and it is why
  * `forwardParams` is opt-in per link rather than global: forwarding to our OWN pages is harmless
  * but noisy, while forwarding to the GHL funnel is the entire point.
  */

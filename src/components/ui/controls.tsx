@@ -15,7 +15,7 @@ import { useFormStatus } from "react-dom";
 
 /**
  * §5.4 defines the core variants: Primary / Soft / Ghost / Danger.
- * `outline` is the bordered secondary — added because ~50 call sites hand-rolled a
+ * `outline` is the bordered secondary - added because ~50 call sites hand-rolled a
  * `border … hover:border-primary` button for want of one, drifting on disabled/focus
  * styling each time. `secondary` is a deprecated alias of `soft` so existing call
  * sites keep compiling; it renders the Soft style.
@@ -79,7 +79,7 @@ export function Btn({
   );
 }
 
-/** A square button carrying only an icon. `label` is required — it's the accessible name. */
+/** A square button carrying only an icon. `label` is required - it's the accessible name. */
 export function IconButton({
   label,
   children,
@@ -93,7 +93,7 @@ export function IconButton({
   onClick?: () => void;
   disabled?: boolean;
   tone?: "neutral" | "danger";
-  /** `md` = 40px (§7 hit-target floor). `sm` = 36px, the §5.4 compact size — dense table rows only. */
+  /** `md` = 40px (§7 hit-target floor). `sm` = 36px, the §5.4 compact size - dense table rows only. */
   size?: BtnSize;
 }) {
   return (
@@ -165,7 +165,7 @@ export function Switch({
   );
 }
 
-/** A switch with its title and one line of explanation — the Capabilities row. */
+/** A switch with its title and one line of explanation - the Capabilities row. */
 export function SwitchRow({
   title,
   description,
@@ -217,7 +217,7 @@ export function CheckCard({
   return (
     <label
       title={title}
-      /* `relative` contains the sr-only input below — absolute with no offsets, so without a
+      /* `relative` contains the sr-only input below - absolute with no offsets, so without a
          positioned ancestor it lands at its static position in page coordinates, unclipped, and
          widens the document. */
       className={`relative flex cursor-pointer items-center gap-3 rounded-field border px-3.5 py-3 text-sm transition-colors ${
@@ -249,7 +249,7 @@ export function CheckCard({
   );
 }
 
-/** Role presets, period pickers, view switchers — one visual answer for all of them. */
+/** Role presets, period pickers, view switchers - one visual answer for all of them. */
 export function SegmentedControl<T extends string>({
   value,
   onChange,
@@ -273,7 +273,7 @@ export function SegmentedControl<T extends string>({
    * Give every segment the SAME width instead of sizing each to its own label.
    *
    * Without this a row reading "Week · Month · Quarter · Year · All" renders five different
-   * widths, which reads as five unrelated buttons rather than one control with five positions —
+   * widths, which reads as five unrelated buttons rather than one control with five positions -
    * and the eye lands on "Quarter" simply because it is the widest word.
    */
   grow?: boolean;
@@ -333,7 +333,7 @@ export function CopyField({ value, label }: { value: string; label: string }) {
             await navigator.clipboard.writeText(value);
             setCopied(true);
           } catch {
-            /* the input is selectable — the user can copy manually */
+            /* the input is selectable - the user can copy manually */
           }
         }}
       >

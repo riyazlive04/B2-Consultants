@@ -12,15 +12,15 @@ import { Card, Hint, NumInput, SaveBar } from "./kit";
  * Daily-log targets editor (Founder Console → Daily Targets).
  *
  * One target per role, on its headline metric. The Daily Log timeline grades each entry
- * against it — hit the target and the day reads "On target", well over is "Standout", well
+ * against it - hit the target and the day reads "On target", well over is "Standout", well
  * under is "Below par". Leave a target at 0 and that role's status falls back to the person's
  * own recent average, so the feature works either way.
  */
 
 const ROWS: { key: keyof DailyLogTargets; label: string; hint: string }[] = [
-  { key: "DISCOVERY_SPECIALIST", label: "Discovery Specialist — calls / day", hint: "Discovery calls completed, per working day." },
-  { key: "APPOINTMENT_SETTER", label: "Appointment Setter — appointments / day", hint: "Discovery calls booked, per working day." },
-  { key: "DELIVERY_COACH", label: "Delivery Coach — sessions / day", hint: "Coaching sessions delivered, per working day." },
+  { key: "DISCOVERY_SPECIALIST", label: "Discovery Specialist - calls / day", hint: "Discovery calls completed, per working day." },
+  { key: "APPOINTMENT_SETTER", label: "Appointment Setter - appointments / day", hint: "Discovery calls booked, per working day." },
+  { key: "DELIVERY_COACH", label: "Delivery Coach - sessions / day", hint: "Coaching sessions delivered, per working day." },
 ];
 
 export function DailyTargetsPanel({ targets }: { targets: DailyLogTargets }) {

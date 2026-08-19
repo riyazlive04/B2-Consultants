@@ -330,7 +330,7 @@ function buildSuggestions(x: {
   const missingBy = (g: TemplateGroup) => x.templateChecks.filter((c) => c.group === g && !c.present);
   const isMissing = (key: string) => x.templateChecks.some((c) => c.key === key && !c.present);
 
-  // 1 · Un-edited template text — the manual's #1 rule.
+  // 1 · Un-edited template text - the manual's #1 rule.
   if (x.placeholders.length > 0) {
     out.push({
       level: "risk",
@@ -356,7 +356,7 @@ function buildSuggestions(x: {
   if (x.matchScore < 50) {
     out.push({
       level: "risk",
-      title: `JD match is low (${x.matchScore}%) — mirror the job's language`,
+      title: `JD match is low (${x.matchScore}%) - mirror the job's language`,
       detail: x.missingTerms.length
         ? `Weave in these JD terms where they're TRUE of the student: ${x.missingTerms.slice(0, 8).join(", ")}. Never keyword-stuff.`
         : "Re-read the JD and echo its wording for the same skills the student already has.",
@@ -375,7 +375,7 @@ function buildSuggestions(x: {
       level: "watch",
       title: `Rebuild ${x.weakBullets.length} weak bullet${x.weakBullets.length > 1 ? "s" : ""}`,
       detail:
-        "They have no action verb and no number. Recast each as “Verb + what + measurable result” — e.g. “Reduced onboarding time 40% by automating…”.",
+        "They have no action verb and no number. Recast each as “Verb + what + measurable result” - e.g. “Reduced onboarding time 40% by automating…”.",
     });
   }
 
@@ -384,7 +384,7 @@ function buildSuggestions(x: {
     out.push({
       level: "watch",
       title: "Add numbers to the achievements",
-      detail: `Only ${Math.round(x.quantRatio * 100)}% of bullets carry a metric. Aim for 4 in 10 — %, ₹/€, time saved, team size, volume.`,
+      detail: `Only ${Math.round(x.quantRatio * 100)}% of bullets carry a metric. Aim for 4 in 10 - %, ₹/€, time saved, team size, volume.`,
     });
   }
 
@@ -415,22 +415,22 @@ function buildSuggestions(x: {
   if (x.cvWords > 0 && x.cvWords < 250) {
     out.push({
       level: "watch",
-      title: "Too thin — flesh it out",
+      title: "Too thin - flesh it out",
       detail: `${x.cvWords} words. A German CV carries detail: expand tasks into outcome-driven bullets.`,
     });
   } else if (x.cvWords > 1100) {
     out.push({
       level: "watch",
-      title: "Too long — tighten to ~2 pages",
+      title: "Too long - tighten to ~2 pages",
       detail: `${x.cvWords} words gets skimmed. Cut the oldest roles and trim bullets to the ones that fit this JD.`,
     });
   }
 
-  // 9 · Nothing major — polish.
+  // 9 · Nothing major - polish.
   if (out.every((s) => s.level !== "risk")) {
     out.push({
       level: "ok",
-      title: "Solid base — final polish",
+      title: "Solid base - final polish",
       detail:
         "Proof for reverse-chronological order (newest first), consistent date format, a professional photo, and tailor the top bullets to each JD before sending.",
     });

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 /**
- * Segmented tabs — full ARIA tab/tabpanel wiring with roving focus and
+ * Segmented tabs - full ARIA tab/tabpanel wiring with roving focus and
  * left/right arrow-key navigation.
  *
  * The active marker is a single element that TRAVELS (§6). One object moving from
@@ -30,7 +30,7 @@ export function Tabs({
   const [active, setActive] = useState(initial);
   const baseId = useId();
   const listRef = useRef<HTMLDivElement>(null);
-  // Until the first measurement lands, the indicator must not animate — otherwise it
+  // Until the first measurement lands, the indicator must not animate - otherwise it
   // flies in from the left edge on mount. It renders in place, THEN gains a transition.
   const [ready, setReady] = useState(false);
   const underline = variant === "underline";
@@ -40,7 +40,7 @@ export function Tabs({
     const list = listRef.current;
     const el = list?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[active];
     if (!list || !el) return;
-    // offsetLeft/Top are relative to the tablist because it is `relative` — the
+    // offsetLeft/Top are relative to the tablist because it is `relative` - the
     // offset parent. Measuring both axes keeps the marker correct when the strip
     // flex-wraps to a second line on a narrow window.
     const h = underline ? 2 : el.offsetHeight;
@@ -61,7 +61,7 @@ export function Tabs({
   }, [measure]);
 
   // Labels carry live counts ("Badges (23)"), the strip can wrap, and the webfont
-  // lands after first paint — all of which resize the tabs under the marker.
+  // lands after first paint - all of which resize the tabs under the marker.
   useEffect(() => {
     const list = listRef.current;
     if (!list || typeof ResizeObserver === "undefined") return;
@@ -96,7 +96,7 @@ export function Tabs({
             : "relative flex flex-wrap gap-1 rounded-field bg-surface-2 p-1"
         }
       >
-        {/* The travelling marker. Decorative — the tabs carry the state for AT. */}
+        {/* The travelling marker. Decorative - the tabs carry the state for AT. */}
         <span
           aria-hidden
           data-ready={ready}

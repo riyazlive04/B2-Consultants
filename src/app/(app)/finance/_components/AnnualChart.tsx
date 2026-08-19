@@ -13,12 +13,12 @@ import type { AnnualPerformance } from "@/server/annual-metrics";
  *
  * WAS: a green target line and a blue achieved line racing each other with a shaded gap, which
  * answers "are we ahead or behind" but not "behind by how much, starting when, and what does it
- * take from here" — the questions this dashboard is actually for. Rebuilt on the shared
+ * take from here" - the questions this dashboard is actually for. Rebuilt on the shared
  * `TimeSeriesChart` (area mode) so plan, actual and the run-rate projection get the same
  * measured-pixel axis, wrapping legend and hover tooltip as every other chart on the page,
  * instead of a bespoke `viewBox` SVG with its own 9px text.
  *
- * Only the ACTUAL line gets the area fill (`TimeSeriesChart` never fills a `compare` series) —
+ * Only the ACTUAL line gets the area fill (`TimeSeriesChart` never fills a `compare` series) -
  * plan and the projection are context, drawn dashed so they read as "not measured" at a glance.
  */
 export function AnnualChart({ data }: { data: AnnualPerformance }) {
@@ -47,14 +47,14 @@ export function AnnualChart({ data }: { data: AnnualPerformance }) {
       : { label: "Gap to close", value: compact(Math.max(0, gapInr)) },
   ];
 
-  // The one-paragraph "so what" beneath the chart — branches on the shape of the year rather
+  // The one-paragraph "so what" beneath the chart - branches on the shape of the year rather
   // than always narrating a shortfall, so a business that is ahead of plan doesn't get told to
   // panic in red.
   const insight = (() => {
     if (gapInr <= 0) {
       return {
         tone: "ok" as const,
-        text: `Already at ${compact(achievedToDateInr)} against a ${compact(fullYearTargetInr)} full-year plan, with ${remainingMonths} month${remainingMonths === 1 ? "" : "s"} still to run — ${compact(-gapInr)} ahead of pace.`,
+        text: `Already at ${compact(achievedToDateInr)} against a ${compact(fullYearTargetInr)} full-year plan, with ${remainingMonths} month${remainingMonths === 1 ? "" : "s"} still to run - ${compact(-gapInr)} ahead of pace.`,
       };
     }
     const peak = elapsed.reduce((top, m) => (m.achievedInr > top.achievedInr ? m : top), elapsed[0]);

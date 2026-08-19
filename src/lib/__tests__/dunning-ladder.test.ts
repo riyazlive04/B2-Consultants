@@ -65,12 +65,12 @@ describe("which rung fires", () => {
   });
 });
 
-describe("non-skipping — the thing that makes this feel human", () => {
+describe("non-skipping - the thing that makes this feel human", () => {
   /**
    * THE FAILURE MODE THIS PREVENTS. On the first armed run the engine meets a backlog of
    * instalments that are already weeks overdue. Every offset is satisfied for all of them. A
    * naive implementation sends all three rungs at once, and the student receives "just a
-   * reminder, due in three days", "you missed it" and "final notice" within the same minute —
+   * reminder, due in three days", "you missed it" and "final notice" within the same minute -
    * which tells them immediately that they are talking to a broken machine.
    */
   test("an instalment first seen ten days overdue gets ONLY the final notice", () => {

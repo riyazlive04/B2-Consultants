@@ -39,7 +39,7 @@ import { ReviewPanel } from "./ReviewPanel";
 import { TemplateEditor } from "./TemplateEditor";
 import { CvCheckClient } from "./CvCheckClient";
 
-// Heavy form editor — code-split out of the initial CV Studio bundle (BUILD_CHECKLIST.md §12).
+// Heavy form editor - code-split out of the initial CV Studio bundle (BUILD_CHECKLIST.md §12).
 const ResumeEditor = dynamic(() => import("./ResumeEditor").then((m) => m.ResumeEditor), {
   ssr: false,
   loading: () => <p className="p-6 text-center text-sm text-ink-3">Loading editor…</p>,
@@ -177,7 +177,7 @@ function Builder({
         const parsed = await importResumeFromText(j.text);
         if (!parsed.ok || !parsed.data) throw new Error(parsed.ok ? "Import failed." : parsed.error);
         const name = parsed.data.header.fullName?.trim();
-        create(name ? `${name} — CV` : file.name.replace(/\.[^.]+$/, ""), "EN", parsed.data);
+        create(name ? `${name} - CV` : file.name.replace(/\.[^.]+$/, ""), "EN", parsed.data);
         if (parsed.note) setError(parsed.note);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Import failed.");
@@ -302,7 +302,7 @@ function NewCvModal({
   return (
     <Modal open={open} onClose={onClose} title="New CV" subtitle="A blank CV in the B2 template. You can rename it any time." size="sm">
       <div className="space-y-4">
-        <Field label="Title"><TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Jane Doe — Engineering CV" /></Field>
+        <Field label="Title"><TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Jane Doe - Engineering CV" /></Field>
         <Field label="Language">
           <Select value={language} onChange={(e) => setLanguage(e.target.value)} options={[{ value: "EN", label: "English" }, { value: "DE", label: "German" }]} />
         </Field>

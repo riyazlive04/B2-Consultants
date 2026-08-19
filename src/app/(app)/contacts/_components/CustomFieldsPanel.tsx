@@ -68,7 +68,7 @@ export default function CustomFieldsPanel({ defs, canManage }: { defs: CustomFie
       key: "options", header: "Options", sortable: false,
       cell: (d) => (
         <div className="flex flex-wrap gap-1">
-          {Array.isArray(d.options) ? (d.options as string[]).map((o) => <Chip key={o}>{o}</Chip>) : <span className="text-ink-3">—</span>}
+          {Array.isArray(d.options) ? (d.options as string[]).map((o) => <Chip key={o}>{o}</Chip>) : <span className="text-ink-3">-</span>}
         </div>
       ),
     },

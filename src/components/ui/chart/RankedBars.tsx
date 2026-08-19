@@ -7,11 +7,11 @@ import { InfoHint } from "../InfoHint";
 import { ChartSrTable } from "./ChartFrame";
 
 /**
- * Ranked horizontal bars — "which of these is biggest, and is it growing?" (§5.8 "Bar").
+ * Ranked horizontal bars - "which of these is biggest, and is it growing?" (§5.8 "Bar").
  *
  * WHY HORIZONTAL, AND WHY NOT A PIE.
- * The categories this app ranks are named things with long labels — "Ghosted Blueprint",
- * "Instagram Reels", "Referral — existing student". Vertical columns give a label the bar's own
+ * The categories this app ranks are named things with long labels - "Ghosted Blueprint",
+ * "Instagram Reels", "Referral - existing student". Vertical columns give a label the bar's own
  * width (~40px) and it truncates or rotates; a horizontal bar gives it a whole line. And the
  * question here is *ranking*, not *share*: a pie answers "what fraction" and forces an angle
  * comparison for everything else, which is the slowest read in visualisation. Share is available
@@ -23,7 +23,7 @@ import { ChartSrTable } from "./ChartFrame";
  * lengths in different rows; a marker puts "where you were" directly on "where you are", so the
  * gap between them IS the answer, read in one movement.
  *
- * HTML, not SVG — unlike the trend charts. Rows here are text-led and often clickable, and HTML
+ * HTML, not SVG - unlike the trend charts. Rows here are text-led and often clickable, and HTML
  * gives real truncation, real links, real focus rings and free keyboard order. SVG would mean
  * re-implementing all four.
  */
@@ -32,7 +32,7 @@ export type RankedRow = {
   key: string;
   label: string;
   value: number;
-  /** Pre-formatted for display — money, count and percent format differently (§3). */
+  /** Pre-formatted for display - money, count and percent format differently (§3). */
   display: string;
   /** Same measure, previous period. `null` means "this group did not exist then". */
   compareValue?: number | null;
@@ -41,17 +41,17 @@ export type RankedRow = {
   color?: string;
   /** Drill-down: the row becomes a link to the filtered list behind the number. */
   href?: string;
-  /** One extra fact shown after the label — a win rate, a count behind a sum. */
+  /** One extra fact shown after the label - a win rate, a count behind a sum. */
   meta?: string;
   /**
-   * Extra reference ticks on this row's track — a target, a threshold, a benchmark.
+   * Extra reference ticks on this row's track - a target, a threshold, a benchmark.
    *
    * `compareValue` above is the special case "where this was last period". This is the general
    * one, and it is what turns the chart into a proper bullet chart: the L1 desk needs "target"
    * and "amber threshold" markers, neither of which is a previous value.
    */
   markers?: Array<{ value: number; label: string; color?: string }>;
-  /** Overrides the row's own bar colour — e.g. signal-coloured by whether it met target. */
+  /** Overrides the row's own bar colour - e.g. signal-coloured by whether it met target. */
   barColor?: string;
   /**
    * Plain-English definition, revealed on hover AND keyboard focus via `InfoHint`.
@@ -75,7 +75,7 @@ export function RankedBars({
   maxRows,
 }: {
   rows: readonly RankedRow[];
-  /** Adds a "% of total" column. Turn OFF for measures that don't sum — averages, rates. */
+  /** Adds a "% of total" column. Turn OFF for measures that don't sum - averages, rates. */
   showShare?: boolean;
   /** e.g. "vs previous 30 days". Presence of this is what turns the comparison markers on. */
   compareLabel?: string;
@@ -85,12 +85,12 @@ export function RankedBars({
   emptyTitle?: string;
   emptyBody?: string;
   footnote?: React.ReactNode;
-  /** Cap the drawn rows. The caller keeps the full set in its table — nothing is lost, only deferred. */
+  /** Cap the drawn rows. The caller keeps the full set in its table - nothing is lost, only deferred. */
   maxRows?: number;
 }) {
   const shown = maxRows ? rows.slice(0, maxRows) : rows;
   const total = rows.reduce((s, r) => s + (Number.isFinite(r.value) ? r.value : 0), 0);
-  // Scale to the largest bar, including every marker — a marker past the end of its own track
+  // Scale to the largest bar, including every marker - a marker past the end of its own track
   // would otherwise be clipped and silently read as "no change" (or, for a target marker, as
   // "target met", which is the worst possible misreading).
   const max = Math.max(
@@ -114,7 +114,7 @@ export function RankedBars({
   return (
     <figure className="m-0">
       {/* `.bar-rows` opens a CSS container (globals.css) so the columns below respond to THIS
-          list's width, not the window's. See the note there — viewport breakpoints silently
+          list's width, not the window's. See the note there - viewport breakpoints silently
           broke this component inside narrow cards. */}
       <ul className="bar-rows space-y-1">
         {shown.map((r, i) => {
@@ -152,7 +152,7 @@ export function RankedBars({
                   />
                 )}
 
-                {/* Reference markers — target, threshold, benchmark. Full-height so they read as
+                {/* Reference markers - target, threshold, benchmark. Full-height so they read as
                     a line the bar is measured against, rather than as part of the bar. */}
                 {(r.markers ?? []).map((m, mi) => {
                   const left = max > 0 ? (Math.max(0, m.value) / max) * 100 : 0;
@@ -182,11 +182,11 @@ export function RankedBars({
                 <span className="bar-row__delta w-16 flex-none justify-end">
                   {delta === null ? (
                     // `pctChange` returns null when the base is zero or non-finite. A group with
-                    // no records last period is NEW, not unchanged — and this must read exactly
+                    // no records last period is NEW, not unchanged - and this must read exactly
                     // as the table does, or the same fact appears twice on one screen under two
                     // different words.
                     <span className="text-caption text-ink-3">
-                      {!r.compareValue ? "new" : "—"}
+                      {!r.compareValue ? "new" : "-"}
                     </span>
                   ) : (
                     <span
@@ -241,7 +241,7 @@ export function RankedBars({
           )}
           {maxRows && rows.length > maxRows && (
             <span>
-              Top {maxRows} of {rows.length} — the full set is in the table below.
+              Top {maxRows} of {rows.length} - the full set is in the table below.
             </span>
           )}
           {footnote}

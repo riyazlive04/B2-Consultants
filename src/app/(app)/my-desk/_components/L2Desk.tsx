@@ -26,7 +26,7 @@ import { LogOutcomeModal } from "./LogOutcomeModal";
 import { useOfflineCalls } from "./useOfflineCalls";
 
 /**
- * Level 2 — Discovery Specialist desk (rebuild spec §7).
+ * Level 2 - Discovery Specialist desk (rebuild spec §7).
  *
  * Opens to today's calendar. The routing panel is the only way a call leaves this list, so
  * the outcome, the stage and the booking status can never drift apart.
@@ -56,7 +56,7 @@ function DialLink({ phone, name }: { phone: string; name: string }) {
  * The routing panel. Three destinations, each stating its own follow-up, plus the two
  * outcomes that are not routes at all (follow-up, no-show).
  *
- * BANT sits on the same form because the specialist has just finished the conversation —
+ * BANT sits on the same form because the specialist has just finished the conversation -
  * asking them to reopen the lead afterwards is how it ends up never being filled in.
  */
 function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
@@ -64,7 +64,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
   const [outcome, setOutcome] = useState<string>("QUALIFIED_FOR_SSS");
 
   return (
-    <Modal open onClose={onClose} title={`Record outcome — ${call.name}`} subtitle={`${timeIst(call.startsAt)} IST`}>
+    <Modal open onClose={onClose} title={`Record outcome - ${call.name}`} subtitle={`${timeIst(call.startsAt)} IST`}>
       <form
         action={async (form) => {
           setError(null);
@@ -103,7 +103,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
           ))}
         </fieldset>
 
-        {/* Not routes — the call didn't reach a decision. Kept visually apart so they can't
+        {/* Not routes - the call didn't reach a decision. Kept visually apart so they can't
             be picked by accident while scanning the three real destinations. */}
         <div className="flex flex-wrap gap-2 border-t border-line pt-3">
           <Btn
@@ -133,7 +133,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
 
         {/* Pre-ticked from what the prospect answered at intake, so this is a CONFIRMATION of
             evidence we already hold rather than a blank form to fill from memory after a
-            20-minute call. The specialist still owns the verdict — every box is editable, and
+            20-minute call. The specialist still owns the verdict - every box is editable, and
             what they submit is what is stored. The note says where the ticks came from, because
             a pre-ticked box with no explanation is worse than an empty one. */}
         <fieldset className="grid grid-cols-2 gap-2 border-t border-line pt-3">
@@ -198,7 +198,7 @@ function CallPrep({ call }: { call: L2Call }) {
           )}
           {call.answers.length === 0 ? (
             <p className="text-caption text-muted">
-              A score was recorded but the individual answers were not — this prospect was scored
+              A score was recorded but the individual answers were not - this prospect was scored
               before their answers were being kept.
             </p>
           ) : (
@@ -236,7 +236,7 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
           {call.recorded ? (
             <Pill tone="good">Recorded</Pill>
           ) : call.needsChase ? (
-            <Pill tone="bad">Chase — no outcome yet</Pill>
+            <Pill tone="bad">Chase - no outcome yet</Pill>
           ) : call.confirmed ? (
             <Pill tone="good">Confirmed</Pill>
           ) : (
@@ -284,7 +284,7 @@ function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead) => void }) 
         </p>
       </div>
       {/* Two clearly distinct actions, matching L1's row exactly (Error Log L3): "Call" dials,
-          "Log outcome" records. This row used to offer only the dial link — so a discovery
+          "Log outcome" records. This row used to offer only the dial link - so a discovery
           specialist could ring one of her own leads and had nowhere to write down what happened.
           Shown even without a phone number: a call can be returned on WhatsApp or the number can
           be wrong, and "wrong number" is itself an outcome worth recording. */}
@@ -299,7 +299,7 @@ function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead) => void }) 
 export function L2Desk({ desk }: { desk: L2DeskData }) {
   const router = useRouter();
   const [routing, setRouting] = useState<L2Call | null>(null);
-  /** A lead being logged against from "Your leads" — the chase form, not the routing form. */
+  /** A lead being logged against from "Your leads" - the chase form, not the routing form. */
   const [logging, setLogging] = useState<L2Lead | null>(null);
 
   /**
@@ -314,7 +314,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
 
   return (
     <div className="space-y-8">
-      {/* Polls every 30s and pops any lead newly assigned to me — including one with no
+      {/* Polls every 30s and pops any lead newly assigned to me - including one with no
           booked slot yet, which otherwise has no live signal on this desk at all. */}
       <NewLeadWatcher onSeen={() => router.refresh()} />
 
@@ -347,7 +347,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
         {chase.length > 0 && (
           <p className="rounded-card bg-warn-soft p-3 text-caption text-warn">
             {chase.length} call{chase.length === 1 ? " has" : "s have"} passed without an outcome. Ring the
-            prospect directly before recording a no-show — a missed call is not a no-show until you have tried.
+            prospect directly before recording a no-show - a missed call is not a no-show until you have tried.
           </p>
         )}
       </section>
@@ -366,7 +366,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
         {desk.myLeads.length === 0 ? (
           <EmptyState
             title="No leads to book"
-            body="Leads assigned to you — from the first-call rotation or a manual reassign — appear here until a discovery call is booked for them."
+            body="Leads assigned to you - from the first-call rotation or a manual reassign - appear here until a discovery call is booked for them."
           />
         ) : (
           <Card>
@@ -383,7 +383,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
         <SectionHeading
           icon={<Target size={18} />}
           title="Your targets"
-          description="This month against the Level 2 job description — furthest behind first"
+          description="This month against the Level 2 job description - furthest behind first"
         />
         <Card>
           <TargetAttainment

@@ -11,7 +11,7 @@ import { syncDefaultOpportunity } from "./opportunity-sync";
 import type { ActionResult } from "./finance-actions";
 
 /**
- * Per-dial call logging — the fact behind the telecaller desk.
+ * Per-dial call logging - the fact behind the telecaller desk.
  *
  * Before this, "calls made" existed only as a DailyLog number the telecaller typed in at the
  * end of the day: an aggregate, self-reported, and unlinked to any lead. Nothing recorded that
@@ -19,10 +19,10 @@ import type { ActionResult } from "./finance-actions";
  * had no answer. Each row here is one dial.
  *
  * Append-only, like DailyLog: a mis-logged call is corrected by logging another, never by
- * editing history — the counts a bonus is paid on must not be silently rewritable. Deletion is
+ * editing history - the counts a bonus is paid on must not be silently rewritable. Deletion is
  * Admin-only and exists for genuine mistakes (a test row, a double-tap), not for tidying.
  *
- * Gate: `pipeline` — the section Asma/Nilofer already have for lead work. A telecaller can log
+ * Gate: `pipeline` - the section Asma/Nilofer already have for lead work. A telecaller can log
  * a call against any lead they can see; the row stamps who they are from the session, never
  * from the form, so a call can't be logged in someone else's name.
  */
@@ -62,7 +62,7 @@ function firstError(e: z.ZodError): string {
   return e.issues[0]?.message ?? "Invalid input";
 }
 
-/** Log one dial against a lead. `calledAt` is server-stamped — never trusted from the client. */
+/** Log one dial against a lead. `calledAt` is server-stamped - never trusted from the client. */
 export async function logCall(leadId: string, form: FormData): Promise<ActionResult> {
   const session = await requireSection("pipeline");
   const parsed = callSchema.safeParse(Object.fromEntries(form));
@@ -88,7 +88,7 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
       },
     });
     // Keep speed-to-lead honest: the first connected conversation IS first contact. Mirrors
-    // markLeadContacted's rule — only the first one counts, so a later call can't reset the
+    // markLeadContacted's rule - only the first one counts, so a later call can't reset the
     // clock and flatter the speed metric. Only SPOKE qualifies: a no-answer isn't contact.
     if (d.outcome === "SPOKE") {
       await tx.lead.updateMany({
@@ -104,7 +104,7 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
       await tx.leadStageHistory.create({
         data: { leadId, fromStage: lead.stage, toStage: nextStage, changedById: session.user.id },
       });
-      // Without this the Opportunities board keeps showing the deal in its old column —
+      // Without this the Opportunities board keeps showing the deal in its old column -
       // the same drift every other stage-writing path calls this to avoid.
       await syncDefaultOpportunity(tx, leadId, nextStage);
     }
@@ -120,8 +120,8 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
     // both records a call AND moves a card, and the founder's activity feed should not make
     // someone open the row to find out which happened.
     summary: nextStage
-      ? `Logged a call with ${lead.name} — ${outcomeLabel(d.outcome)}, moved to ${LEAD_STAGE_LABELS[nextStage] ?? nextStage}`
-      : `Logged a call with ${lead.name} — ${outcomeLabel(d.outcome)}`,
+      ? `Logged a call with ${lead.name} - ${outcomeLabel(d.outcome)}, moved to ${LEAD_STAGE_LABELS[nextStage] ?? nextStage}`
+      : `Logged a call with ${lead.name} - ${outcomeLabel(d.outcome)}`,
     meta: { outcome: d.outcome, leadId, ...(nextStage ? { toStage: nextStage } : {}) },
   });
 
@@ -134,7 +134,7 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
 export async function deleteCallLog(id: string): Promise<ActionResult> {
   const session = await requireSection("pipeline");
   if (session.role !== "ADMIN") {
-    return { ok: false, error: "Only an admin can remove a logged call — log a correcting call instead." };
+    return { ok: false, error: "Only an admin can remove a logged call - log a correcting call instead." };
   }
   const removed = await prisma.callLog
     .delete({ where: { id }, include: { lead: { select: { name: true } } } })
@@ -145,7 +145,7 @@ export async function deleteCallLog(id: string): Promise<ActionResult> {
       section: "pipeline",
       entityType: "CallLog",
       entityId: removed.id,
-      summary: `Removed a logged call with ${removed.lead.name} — ${outcomeLabel(removed.outcome)}`,
+      summary: `Removed a logged call with ${removed.lead.name} - ${outcomeLabel(removed.outcome)}`,
       meta: { outcome: removed.outcome, leadId: removed.leadId },
     });
   }

@@ -3,8 +3,8 @@
  *
  * All of these render the `.skeleton` shimmer from globals.css, which already
  * respects `prefers-reduced-motion` (the animation flattens to a static fill).
- * Shapes here deliberately mirror the real components they stand in for —
- * MetricCard, DataTable, Card — so the swap to real content doesn't jump.
+ * Shapes here deliberately mirror the real components they stand in for -
+ * MetricCard, DataTable, Card - so the swap to real content doesn't jump.
  *
  * Every block is decorative: the wrapper carries `aria-busy` + a label, and the
  * blocks themselves are hidden from the accessibility tree.
@@ -39,7 +39,7 @@ export function SkeletonPageHeader() {
   );
 }
 
-/** A row of stat tiles — mirrors the MetricCard grid used across the app. */
+/** A row of stat tiles - mirrors the MetricCard grid used across the app. */
 export function SkeletonMetricCards({ count = 4 }: { count?: number }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -57,7 +57,7 @@ export function SkeletonMetricCards({ count = 4 }: { count?: number }) {
   );
 }
 
-/** A card shell with an optional title bar — mirrors <Card>. */
+/** A card shell with an optional title bar - mirrors <Card>. */
 export function SkeletonCard({
   className = "",
   bodyHeight = "h-40",
@@ -82,7 +82,7 @@ export function SkeletonCard({
   );
 }
 
-/** Table shell — toolbar, header row, then striped body rows (mirrors DataTable). */
+/** Table shell - toolbar, header row, then striped body rows (mirrors DataTable). */
 export function SkeletonTable({ rows = 6, cols = 5 }: { rows?: number; cols?: number }) {
   return (
     <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">

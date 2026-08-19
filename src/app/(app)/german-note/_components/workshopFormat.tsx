@@ -55,9 +55,9 @@ export function inr(minor: number, compact = false): string {
   return formatInrMinor(minor, { compact });
 }
 
-/** A 0..1 fraction → "48.8%"; null → "—". */
+/** A 0..1 fraction → "48.8%"; null → "-". */
 export function pct(frac: number | null): string {
-  return frac === null ? "—" : formatPct(frac * 100);
+  return frac === null ? "-" : formatPct(frac * 100);
 }
 
 export function ProductChip({ product }: { product: GnWorkshopProduct }) {

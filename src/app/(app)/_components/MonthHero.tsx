@@ -11,12 +11,12 @@ import { BUSINESS_LINE_LABELS, lineForKind, type BusinessLineView } from "@/lib/
 import { MonthHeroView, type HeroFigures, type HeroLabels, type HeroRatios } from "./MonthHeroView";
 
 /**
- * "This month" money hero (Admin only) — the one question that leads the founder's day: am I on
+ * "This month" money hero (Admin only) - the one question that leads the founder's day: am I on
  * pace to hit the target, and where does the rest come from?
  *
  * This half does the reads and the arithmetic; MonthHeroView renders it. The split exists because
  * the hero has to follow the app's ₹/€ toggle, and a server component cannot read the client
- * context that holds it — which is why every figure here is computed as a `{inr, eur}` PAIR.
+ * context that holds it - which is why every figure here is computed as a `{inr, eur}` PAIR.
  *
  * Where each EUR figure comes from matters:
  *   - collections / receivables / last month's comparator: summed from each record's OWN stamped
@@ -35,12 +35,12 @@ export async function MonthHero({ line = "ALL" }: { line?: BusinessLineView } = 
   const [trendIncomes, target, pendingRows, pipeline, levels, fx] = await Promise.all([
     prisma.income.findMany({
       where: { ...ACTIVE, date: { gte: prevMonthStart } },
-      // `programLevel` decides which business the money belongs to — derived, never stored,
+      // `programLevel` decides which business the money belongs to - derived, never stored,
       // so historic rows segment correctly with no backfill (see lib/business-line.ts).
       select: { date: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true, programLevel: true },
     }),
     prisma.monthlyTarget.findUnique({ where: { month: monthStart } }),
-    getPendingRows(), // React-cached — shared with notifications, no extra cost
+    getPendingRows(), // React-cached - shared with notifications, no extra cost
     getPipelineSnapshot(),
     getActiveLevels(),
     getTodayInrPerEur(),
@@ -49,7 +49,7 @@ export async function MonthHero({ line = "ALL" }: { line?: BusinessLineView } = 
   type Row = (typeof trendIncomes)[number];
   /** INR aggregate of one row: its rupee part + its euro part at the row's own stamped rate. */
   const inrOf = (r: Row) => Number(r.amountInrMinor) + Number(r.amountEurMinor) * Number(r.fxRateUsed);
-  /** EUR aggregate of the same row, at that same stamped rate — the mirror of aggEurMinor. */
+  /** EUR aggregate of the same row, at that same stamped rate - the mirror of aggEurMinor. */
   const eurOf = (r: Row) => Number(r.amountEurMinor) + Number(r.amountInrMinor) / Number(r.fxRateUsed);
 
   const rate = Number(fx.rate);
@@ -82,7 +82,7 @@ export async function MonthHero({ line = "ALL" }: { line?: BusinessLineView } = 
   // Ratios are INR-based on purpose: the EUR target is a today-rate conversion, so deriving the
   // pace from it would make "am I on track" wobble with the ECB rather than with the business.
   const pacePct = expected.inr > 0 ? (collected.inr / expected.inr) * 100 : null;
-  // Green ONLY at/ahead of pace — a chip that says "behind pace" must never wear green.
+  // Green ONLY at/ahead of pace - a chip that says "behind pace" must never wear green.
   const paceSignal: SignalLevel | null =
     pacePct === null ? null : pacePct >= 100 ? "ok" : pacePct >= 75 ? "watch" : "risk";
 
@@ -149,7 +149,7 @@ export async function MonthHero({ line = "ALL" }: { line?: BusinessLineView } = 
       p.status === "ACTIVE" && p.balance.inr > 0 && p.nextDueDate &&
       new Date(p.nextDueDate) >= today && new Date(p.nextDueDate) < monthEnd,
   );
-  // Receivables carry a real EUR balance (each from its own stamped rate) — no conversion here.
+  // Receivables carry a real EUR balance (each from its own stamped rate) - no conversion here.
   const dueThisMonth = dueRows.reduce(
     (a, p) => ({ inr: a.inr + p.balance.inr, eur: a.eur + p.balance.eur }),
     { inr: 0, eur: 0 },

@@ -1,7 +1,7 @@
 /**
  * Targeted, non-destructive seed for the TUTOR + GN-student portal logins so the
  * app can be explored by role locally. Unlike `npm run db:demo`, this touches only
- * these two accounts (and one batch membership) — it never truncates or rebuilds
+ * these two accounts (and one batch membership) - it never truncates or rebuilds
  * demo data, so it is safe to run against a database you care about.
  *
  * Idempotent: existing accounts have their password re-set; missing ones are created.
@@ -44,12 +44,12 @@ async function main() {
     return user!.id;
   };
 
-  // 1) Tutor login (Lena Fischer) — align to the standard local password.
+  // 1) Tutor login (Lena Fischer) - align to the standard local password.
   const tutorEmail = process.env.SEED_TUTOR_EMAIL || "tutor.demo@b2consultants.in";
   const tutorPassword = process.env.SEED_TUTOR_PASSWORD || "deutsch-2026";
   await ensureUser("Lena Fischer", tutorEmail, tutorPassword, "TUTOR");
 
-  // 2) GN-student portal login (Meghna Suresh) — create the account, link it to her
+  // 2) GN-student portal login (Meghna Suresh) - create the account, link it to her
   //    existing Student record, and make sure she is in a GN batch so the portal isn't empty.
   const gnEmail = process.env.SEED_GN_STUDENT_EMAIL || "gn.student.demo@b2consultants.in";
   const gnPassword = process.env.SEED_GN_STUDENT_PASSWORD || "hallo-2026";
@@ -80,7 +80,7 @@ async function main() {
       console.log(`  Meghna already in batch "${batch.name}"`);
     }
   } else {
-    console.log("  (no ACTIVE GN_A1 batch found — portal will show no batch)");
+    console.log("  (no ACTIVE GN_A1 batch found - portal will show no batch)");
   }
 
   console.log("\nRole logins ready:");

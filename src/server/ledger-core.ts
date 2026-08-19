@@ -33,7 +33,7 @@ const ONE = new Prisma.Decimal(1);
 export type DraftLine = {
   accountCode: AccountCode;
   side: "debit" | "credit";
-  /** minor units of `currency` — paise for INR, cents for EUR */
+  /** minor units of `currency` - paise for INR, cents for EUR */
   amountMinor: bigint;
   currency: Currency;
   /** INR per 1 unit of `currency`, as at the transaction date. Must be 1 for INR. */
@@ -57,7 +57,7 @@ export class LedgerError extends Error {
   }
 }
 
-/** "YYYY-MM" — the same key `period_lock.month` and the Finance month picker use. */
+/** "YYYY-MM" - the same key `period_lock.month` and the Finance month picker use. */
 export function monthKeyOf(date: Date): string {
   return date.toISOString().slice(0, 7);
 }
@@ -68,13 +68,13 @@ export async function isPeriodLocked(db: LedgerDb, date: Date): Promise<boolean>
 
 /**
  * The one place a write into a closed month is refused. Both `postEntry` and `voidEntry` go
- * through it — a reversal is a posting like any other, and letting it skip the check meant a
+ * through it - a reversal is a posting like any other, and letting it skip the check meant a
  * void could write into a month the founder had already closed and reported.
  */
 async function assertPeriodOpen(db: LedgerDb, date: Date): Promise<void> {
   if (await isPeriodLocked(db, date)) {
     const month = monthKeyOf(date);
-    throw new LedgerError(`Accounting period ${month} is locked — no entry can be posted into it.`);
+    throw new LedgerError(`Accounting period ${month} is locked - no entry can be posted into it.`);
   }
 }
 
@@ -102,7 +102,7 @@ async function resolveAccountIds(
   const missing = wanted.filter((c) => !byCode.has(c));
   if (missing.length) {
     throw new LedgerError(
-      `Chart of accounts is missing ${missing.join(", ")} — run \`npm run db:ledger\` to seed it.`,
+      `Chart of accounts is missing ${missing.join(", ")} - run \`npm run db:ledger\` to seed it.`,
     );
   }
   return byCode;
@@ -131,7 +131,7 @@ export async function postEntry(tx: LedgerDb, draft: DraftEntry): Promise<string
   }
   if (debits !== credits) {
     throw new LedgerError(
-      `Entry does not balance: debits ${debits} ≠ credits ${credits} (INR paise) — ${draft.narration}`,
+      `Entry does not balance: debits ${debits} ≠ credits ${credits} (INR paise) - ${draft.narration}`,
     );
   }
 
@@ -170,7 +170,7 @@ export async function postEntry(tx: LedgerDb, draft: DraftEntry): Promise<string
 /**
  * Post unless this source row already has a LIVE entry. Returns null when it does.
  *
- * This is what stops a retried action — or a re-run backfill — from booking the same
+ * This is what stops a retried action - or a re-run backfill - from booking the same
  * revenue twice. The `journal_entry_one_live_source` trigger enforces the same rule at
  * the database, including the advisory lock that makes it safe under concurrency.
  */
@@ -197,7 +197,7 @@ export async function liveEntryForSource(
 
 /**
  * What a void leaves the caller to do. `reversalId` for the audit payload; `restateOn` is the
- * date any re-post MUST carry — see `voidEntry` for why it is not always the record's own date.
+ * date any re-post MUST carry - see `voidEntry` for why it is not always the record's own date.
  */
 export type VoidResult = {
   reversalId: string;
@@ -212,7 +212,7 @@ export type VoidResult = {
  * the correction is refused.
  *
  * This used to date every reversal `on` (today) while the caller's restatement kept the
- * original's date. The all-time trial balance still balanced — it sums VOID lines by design —
+ * original's date. The all-time trial balance still balanced - it sums VOID lines by design -
  * so `verify-ledger.ts` passed throughout. But any PERIOD-SCOPED read counted the original in
  * its own month with nothing to cancel it, and showed the bare reversal as a phantom negative
  * in the current one. Confirmed live at ₹45,000: June overstated, July understated.
@@ -250,7 +250,7 @@ export async function voidEntry(
   const reversal = await tx.journalEntry.create({
     data: {
       date: reversalDate,
-      narration: `Reversal of "${original.narration}" — ${opts.reason}`,
+      narration: `Reversal of "${original.narration}" - ${opts.reason}`,
       sourceType: original.sourceType,
       // sourceId stays null: the reversal is not the source row, and reusing the id would
       // collide with the (sourceType, sourceId) uniqueness that prevents double-posting.
@@ -282,7 +282,7 @@ export async function voidEntry(
  * Void the live entry for a source row, if it has one. Used when Finance edits or deletes
  * a record: the old entry is reversed, and an edit then posts the restated one.
  *
- * Callers that re-post MUST honour the returned `restateOn` — `restatedDate` below is the
+ * Callers that re-post MUST honour the returned `restateOn` - `restatedDate` below is the
  * one-liner for it.
  */
 export async function voidEntryForSource(
@@ -345,7 +345,7 @@ export type AuditInput = {
  * Append to the hash-chained audit log (SPEC §3, §10.1).
  *
  * The advisory lock serialises concurrent appends. Without it, two writers read the same
- * `prevHash` and the chain forks into two branches that each verify on their own — the
+ * `prevHash` and the chain forks into two branches that each verify on their own - the
  * failure mode that makes an audit trail worthless in front of an auditor.
  */
 export async function appendAudit(tx: LedgerDb, input: AuditInput): Promise<void> {
@@ -364,7 +364,7 @@ export async function appendAudit(tx: LedgerDb, input: AuditInput): Promise<void
 
 /**
  * Walk the chain and recompute every link (SPEC §15 "hash verifies"). Returns the first row
- * whose recorded hash disagrees with the recomputed one — the point where history was altered.
+ * whose recorded hash disagrees with the recomputed one - the point where history was altered.
  */
 export async function verifyAuditChain(
   db: LedgerDb,
@@ -435,7 +435,7 @@ export async function getTrialBalance(db: LedgerDb, upTo?: Date) {
   return { rows, totalDebit, totalCredit, balanced: totalDebit === totalCredit };
 }
 
-/** Half-open UTC bounds of a "YYYY-MM" key — the same convention `monthKeyOf` produces. */
+/** Half-open UTC bounds of a "YYYY-MM" key - the same convention `monthKeyOf` produces. */
 export function monthBounds(month: string): { start: Date; end: Date } {
   const start = new Date(`${month}-01T00:00:00.000Z`);
   const end = new Date(start);
@@ -444,12 +444,12 @@ export function monthBounds(month: string): { start: Date; end: Date } {
 }
 
 /**
- * Net movement per account WITHIN one month — the period-scoped counterpart to the cumulative
+ * Net movement per account WITHIN one month - the period-scoped counterpart to the cumulative
  * trial balance above, and the read a monthly P&L is built from.
  *
  * It exists as much for the test suite as for the app. `getTrialBalance` sums every line ever
  * posted, so a reversal dated into the wrong month still cancels its original somewhere in the
- * total and the books balance perfectly — which is exactly how the mis-dated-reversal defect
+ * total and the books balance perfectly - which is exactly how the mis-dated-reversal defect
  * survived `verify-ledger.ts`. **Balance is not correctness.** Only a period-scoped read can see
  * that kind of error, so the fix and this reader arrived together.
  *
@@ -474,7 +474,7 @@ export async function getPeriodMovements(
   for (const g of grouped) {
     const code = codeById.get(g.accountId);
     if (!code) continue;
-    // debit-positive, so an expense reads positive and revenue reads negative — the same
+    // debit-positive, so an expense reads positive and revenue reads negative - the same
     // orientation as the trial balance columns.
     out.set(code, (g._sum.baseDebitMinor ?? BigInt(0)) - (g._sum.baseCreditMinor ?? BigInt(0)));
   }
@@ -484,7 +484,7 @@ export async function getPeriodMovements(
 /**
  * The read-only Journal view (SPEC §10.4): newest entries with their lines.
  *
- * `q` filters across the whole ledger — not just the current page — so a search spans every
+ * `q` filters across the whole ledger - not just the current page - so a search spans every
  * entry, then paginates the matches. It matches the narration, who posted it, and any leg's
  * account code or name (case-insensitive), which is how a human refers to an entry.
  */

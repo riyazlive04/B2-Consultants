@@ -26,7 +26,7 @@ import { SystemHealthPanel, type CronRowView, type ErrorRowView } from "./System
 /**
  * Founder Console → Maintenance. One screen for the automations the app never had a clock to run
  * (audit §C): the daily housekeeping, the ledger auto-posting switches, the scheduled digest, and a
- * one-click commission payout run. Everything here is ticked by /api/cron/daily — so if CRON_SECRET
+ * one-click commission payout run. Everything here is ticked by /api/cron/daily - so if CRON_SECRET
  * isn't set, the panel says so rather than claiming a rule that can never fire.
  */
 export function MaintenancePanel({
@@ -59,7 +59,7 @@ export function MaintenancePanel({
         </p>
       )}
       {/* Health goes FIRST, above the switches. Reading "the digest is on" is misleading if the
-          job that would send it hasn't been called in a week — the state has to be visible before
+          job that would send it hasn't been called in a week - the state has to be visible before
           the settings it governs. */}
       <SystemHealthPanel {...health} />
       <MaintenanceCard config={maintenance} />
@@ -167,7 +167,7 @@ function PostingCard({ config }: { config: FinancePostingConfig }) {
       <Hint>
         Both write to the real double-entry ledger, so both ship <strong>off</strong>. Issuance posting
         makes Accounts receivable two-sided (Dr AR / Cr Income when an invoice is issued). Recording
-        commission as owed books Dr Team-salaries / Cr Accounts-payable when you record a payout run —
+        commission as owed books Dr Team-salaries / Cr Accounts-payable when you record a payout run -
         it logs the cost as money owed, not as cash leaving the bank.
       </Hint>
       <div className="mt-4 space-y-4">
@@ -261,7 +261,7 @@ function ReportCard({ config }: { config: ScheduledReportConfig }) {
         </Field>
         <Field
           label="Also send to WhatsApp"
-          hint="Comma-separated numbers with country code. Sent IN ADDITION to email, never instead of it — see below."
+          hint="Comma-separated numbers with country code. Sent IN ADDITION to email, never instead of it - see below."
         >
           <TextIn
             ariaLabel="WhatsApp recipients"
@@ -277,7 +277,7 @@ function ReportCard({ config }: { config: ScheduledReportConfig }) {
             The WhatsApp copy goes out as a <strong>session message</strong>, which Meta only
             allows inside the 24 hours after that number last messaged the business. If nobody has
             messaged recently it will be logged as skipped and the emailed copy is what you&apos;ll
-            get. Making this reliable needs a WhatsApp template approved by Meta for the digest —
+            get. Making this reliable needs a WhatsApp template approved by Meta for the digest -
             one doesn&apos;t exist yet.
           </p>
         )}
@@ -306,7 +306,7 @@ function CommissionPayoutCard() {
       <Hint>
         Snapshots this month&apos;s deal-team commission totals into a durable payout record. If
         recording as money owed is on above, it also posts Dr Team-salaries / Cr Accounts-payable for
-        the total — money owed, never a cash payment, so it can&apos;t overstate the bank. Idempotent
+        the total - money owed, never a cash payment, so it can&apos;t overstate the bank. Idempotent
         per month.
       </Hint>
       <div className="mt-4">

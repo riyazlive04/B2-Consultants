@@ -1,15 +1,15 @@
 /**
- * Trainer fee — the batch-size rule from spec Part 2 §5.
+ * Trainer fee - the batch-size rule from spec Part 2 §5.
  *
  * Pure and DB-free: every input is passed in, so this is the whole rule under test.
  *
  * The boundary cases carry the weight. The rule reads "≥ 5 students → ₹7,000", and an
  * off-by-one there is invisible on screen but pays the tutor the wrong rate on every batch
- * that lands exactly on 5 — which, at a target class size of 8, is a lot of them.
+ * that lands exactly on 5 - which, at a target class size of 8, is a lot of them.
  *
  * Guarding a specific past bug: the shipped code keyed this rate on LEVEL (A1=7000,
- * A2=8000, B1=12000) rather than on headcount. Those numbers look right — 7,000 and 8,000
- * both appear — so the mistake reads as correct until you check which variable moves them.
+ * A2=8000, B1=12000) rather than on headcount. Those numbers look right - 7,000 and 8,000
+ * both appear - so the mistake reads as correct until you check which variable moves them.
  * `rateIgnoresLevelByDefault` is the case that would have caught it.
  *
  * Run: npm test
@@ -20,7 +20,7 @@ import { test, describe } from "node:test";
 import { tutorRatePerHeadRupees, tutorFeeForBatchInrMinor, tutorFeeBandLabel } from "../tutor-fee";
 import { DEFAULT_TUTOR_FEE_CONFIG, coerceTutorFeeConfig } from "../config-schema";
 
-describe("tutor fee — rate bands", () => {
+describe("tutor fee - rate bands", () => {
   test("5 students earns the at-or-above rate (FIN-004)", () => {
     assert.equal(tutorRatePerHeadRupees("A1", 5, DEFAULT_TUTOR_FEE_CONFIG), 7000);
   });
@@ -45,7 +45,7 @@ describe("tutor fee — rate bands", () => {
   });
 });
 
-describe("tutor fee — totals (paise)", () => {
+describe("tutor fee - totals (paise)", () => {
   test("the spec's worked examples reproduce exactly", () => {
     // Part 2 §5: "5 people → 5 × ₹7,000; 3 people → ₹8,000 tier"
     assert.equal(tutorFeeForBatchInrMinor("A1", 5, DEFAULT_TUTOR_FEE_CONFIG), 3_500_000); // ₹35,000
@@ -63,7 +63,7 @@ describe("tutor fee — totals (paise)", () => {
   });
 });
 
-describe("tutor fee — config", () => {
+describe("tutor fee - config", () => {
   const tuned = coerceTutorFeeConfig({
     thresholdStudents: 4,
     ratesByLevel: {
@@ -98,7 +98,7 @@ describe("tutor fee — config", () => {
   });
 });
 
-describe("tutor fee — band label", () => {
+describe("tutor fee - band label", () => {
   test("states which side of the threshold a batch landed on", () => {
     assert.match(tutorFeeBandLabel("A1", 5), /at-or-above 5/);
     assert.match(tutorFeeBandLabel("A1", 5), /7,000/);

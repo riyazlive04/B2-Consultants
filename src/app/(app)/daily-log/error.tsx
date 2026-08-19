@@ -6,7 +6,7 @@ import { AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 
-/** Error boundary for the Daily Log — a failed read must never lose someone's unsent numbers. */
+/** Error boundary for the Daily Log - a failed read must never lose someone's unsent numbers. */
 export default function DailyLogError({
   error,
   reset,
@@ -27,7 +27,7 @@ export default function DailyLogError({
           </span>
           <h1 className="font-display text-xl font-bold tracking-tight text-ink">Couldn’t load your daily log</h1>
           <p className="max-w-sm text-sm text-muted">
-            Something went wrong reaching the server. Your entries are safe — nothing was lost. Try again,
+            Something went wrong reaching the server. Your entries are safe - nothing was lost. Try again,
             and if it keeps happening, refresh the page.
           </p>
           {process.env.NODE_ENV === "development" && error?.message && (

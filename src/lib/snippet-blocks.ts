@@ -7,19 +7,19 @@ import type { Block } from "./sites-types";
  * A built-in is a `SectionSnippet` row like any other, so the picker has ONE source, snippets the
  * team saves sort alongside the shipped ones, and a built-in can be edited after insertion
  * without anything special happening. What `builtIn` buys is only that the delete button is
- * withheld — you cannot empty the library by tidying it.
+ * withheld - you cannot empty the library by tidying it.
  *
  * The definitions live here because they are content we author and want in review and in git,
  * not rows someone typed into a production database once.
  *
  * ── Why the copy is real ──────────────────────────────────────────────────────────────────────
  * Lorem ipsum in a page template gets shipped. The strings below are B2's actual proposition,
- * so a section dropped onto a page and left alone still reads as this business — and the parts
+ * so a section dropped onto a page and left alone still reads as this business - and the parts
  * that MUST be changed (a form to pick, a video to point at) are left visibly empty instead.
  */
 
 let seq = 0;
-/** Ids here are placeholders — every insert re-generates them, so two copies cannot collide. */
+/** Ids here are placeholders - every insert re-generates them, so two copies cannot collide. */
 const nid = (p: string) => `${p}${(seq++).toString(36)}`;
 
 const section = (background: Block["background"], children: Block[], pad = 72): Block => ({
@@ -57,7 +57,7 @@ const bullets = (items: string[]): Block => ({ id: nid("bl"), type: "bullets", i
 const stat = (text: string, label: string): Block => ({ id: nid("st"), type: "stat", text, label, style: { align: "center" } });
 const spacer = (size: number): Block => ({ id: nid("sp"), type: "spacer", size });
 
-/** A form node with NO form chosen — the author picks one, and an unset embed renders as a
+/** A form node with NO form chosen - the author picks one, and an unset embed renders as a
  *  visible placeholder rather than as a silently missing opt-in. */
 const formSlot = (): Block => ({ id: nid("form"), type: "form" });
 
@@ -79,12 +79,12 @@ export type SnippetSeed = {
 
 const SECTIONS: SnippetSeed[] = [
   {
-    name: "Hero — headline and CTA",
+    name: "Hero - headline and CTA",
     category: "Hero",
     scope: "SECTION",
     blocks: [section("plain", [
       eyebrow("FOR EXPERIENCED PROFESSIONALS"),
-      h("Land a role in Germany — with a plan, not a job board"),
+      h("Land a role in Germany - with a plan, not a job board"),
       sub("One-to-one coaching that takes you from CV to signed offer."),
       spacer(12),
       cta("Apply for Guided Mode →"),
@@ -92,7 +92,7 @@ const SECTIONS: SnippetSeed[] = [
     ], 88)],
   },
   {
-    name: "Hero — copy beside a form",
+    name: "Hero - copy beside a form",
     category: "Hero",
     scope: "SECTION",
     blocks: [section("plain", [
@@ -119,11 +119,11 @@ const SECTIONS: SnippetSeed[] = [
       spacer(20),
       { id: nid("vid"), type: "video", url: "", alt: "Programme walkthrough" },
       spacer(20),
-      cta("I'm ready — book my call →"),
+      cta("I'm ready - book my call →"),
     ], 72)],
   },
   {
-    name: "What you get — checklist",
+    name: "What you get - checklist",
     category: "Body",
     scope: "SECTION",
     blocks: [section("plain", [
@@ -136,7 +136,7 @@ const SECTIONS: SnippetSeed[] = [
     ], 72)],
   },
   {
-    name: "Proof — three stats",
+    name: "Proof - three stats",
     category: "Social proof",
     scope: "SECTION",
     blocks: [section("muted", [
@@ -146,16 +146,16 @@ const SECTIONS: SnippetSeed[] = [
     ], 64)],
   },
   {
-    name: "Testimonials — three cards",
+    name: "Testimonials - three cards",
     category: "Social proof",
     scope: "SECTION",
     blocks: [section("plain", [
       h("What they said afterwards", 38),
       spacer(24),
       row([
-        col([testimonial("I had been applying for eight months with nothing. Three weeks after we rewrote the CV I had two interviews.", "Priya S. — Data Engineer", "PS", "blue")]),
-        col([testimonial("The salary conversation alone paid for the programme several times over.", "Rahul M. — Product Manager", "RM", "green")]),
-        col([testimonial("What I actually needed was to stop guessing. The plan removed all of it.", "Anjali K. — QA Lead", "AK", "orange")]),
+        col([testimonial("I had been applying for eight months with nothing. Three weeks after we rewrote the CV I had two interviews.", "Priya S. - Data Engineer", "PS", "blue")]),
+        col([testimonial("The salary conversation alone paid for the programme several times over.", "Rahul M. - Product Manager", "RM", "green")]),
+        col([testimonial("What I actually needed was to stop guessing. The plan removed all of it.", "Anjali K. - QA Lead", "AK", "orange")]),
       ]),
     ], 72)],
   },
@@ -166,22 +166,22 @@ const SECTIONS: SnippetSeed[] = [
     blocks: [section("plain", [
       pill("OUR GUARANTEE"),
       spacer(12),
-      sub("Do the work and you will get interviews — or we keep coaching you, free, until you do."),
+      sub("Do the work and you will get interviews - or we keep coaching you, free, until you do."),
     ], 56)],
   },
   {
-    name: "Closing CTA — dark band",
+    name: "Closing CTA - dark band",
     category: "Closing",
     scope: "SECTION",
     blocks: [section("dark", [
       h("There are a limited number of places each month", 36),
-      p("The call is free and it is a real conversation — we will tell you if this is not the right fit."),
+      p("The call is free and it is a real conversation - we will tell you if this is not the right fit."),
       spacer(20),
       cta("Book my free call →", "/book", "accent"),
     ], 80)],
   },
   {
-    name: "Header — logo bar",
+    name: "Header - logo bar",
     category: "Header & footer",
     scope: "SECTION",
     blocks: [section("plain", [
@@ -192,7 +192,7 @@ const SECTIONS: SnippetSeed[] = [
     ], 18)],
   },
   {
-    name: "Footer — legal strip",
+    name: "Footer - legal strip",
     category: "Header & footer",
     scope: "SECTION",
     blocks: [section("muted", [
@@ -253,7 +253,7 @@ const PAGES: SnippetSeed[] = [
       section("plain", [
         pill("YOU'RE BOOKED", "green"),
         spacer(16),
-        h("That's confirmed — check your inbox", 40),
+        h("That's confirmed - check your inbox", 40),
         p("The invitation is on its way, with a calendar link and the joining details."),
         spacer(24),
         card([

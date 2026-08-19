@@ -12,16 +12,16 @@ import { OUTCOME_LABELS, summarise, type ProjectedEnrollment, type StepOutcome }
 import { ACTION_LABELS, type TriggerConfig, type TriggerType, type WorkflowAction } from "@/lib/automation-types";
 
 /**
- * Dry run panel — "if this had been live last month, what would it have done?"
+ * Dry run panel - "if this had been live last month, what would it have done?"
  *
  * The question this screen exists to answer is not "does the builder work" but "is it safe to
- * arm this at 23,000 contacts". So the layout leads with the three numbers that decide that —
+ * arm this at 23,000 contacts". So the layout leads with the three numbers that decide that -
  * how many events fired, how many the trigger accepted, how many people would actually be
- * enrolled — then what those people would RECEIVE, and only then the per-step detail.
+ * enrolled - then what those people would RECEIVE, and only then the per-step detail.
  *
  * It previews the definition on screen, unsaved edits included, which is the only version that
  * matters before you commit. When that differs from what's saved, the panel says so, because
- * publishing arms the SAVED definition — previewing one thing and arming another is the exact
+ * publishing arms the SAVED definition - previewing one thing and arming another is the exact
  * mistake this feature is meant to prevent.
  *
  * Every unreachable contact, off channel and deleted template is shown as prominently as the
@@ -48,7 +48,7 @@ const OUTCOME_TONE: Record<StepOutcome, Tone> = {
 
 const n = (v: number) => v.toLocaleString("en-IN");
 
-/** "3 days", "4 hours", "25 minutes" — how long one contact stays in the workflow. */
+/** "3 days", "4 hours", "25 minutes" - how long one contact stays in the workflow. */
 function duration(mins: number): string {
   if (mins <= 0) return "instant";
   if (mins < 60) return `${mins} min`;
@@ -76,7 +76,7 @@ export default function WorkflowDryRun({
   triggerType: TriggerType;
   triggerConfig: TriggerConfig;
   actions: WorkflowAction[];
-  /** the editor holds changes that haven't been saved — publishing would arm something else */
+  /** the editor holds changes that haven't been saved - publishing would arm something else */
   dirty: boolean;
   disabled: boolean;
 }) {
@@ -127,7 +127,7 @@ export default function WorkflowDryRun({
       {dirty && (
         <p className="mb-4 flex items-start gap-2 rounded-field border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-          You have unsaved edits. This previews what's on screen — save before publishing, or you'll arm the older version.
+          You have unsaved edits. This previews what's on screen - save before publishing, or you'll arm the older version.
         </p>
       )}
 
@@ -137,7 +137,7 @@ export default function WorkflowDryRun({
           title="Nothing previewed yet"
           body={
             actions.length === 0
-              ? "Add an action first — there's nothing to project."
+              ? "Add an action first - there's nothing to project."
               : "Pick a window and hit Preview. You'll see exactly who this would have enrolled, what each of them would have received, and where it would have failed."
           }
         />
@@ -170,7 +170,7 @@ function Results({
       {!report.engineEnabled && (
         <p className="flex items-start gap-2 rounded-field border border-risk bg-risk-soft px-3 py-2 text-sm text-risk">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-          The automation engine is switched off globally, so nothing is running right now — this is what would happen
+          The automation engine is switched off globally, so nothing is running right now - this is what would happen
           once it's back on. <Link href="/automation/settings" className="underline">Settings</Link>
         </p>
       )}
@@ -214,7 +214,7 @@ function Results({
               label="Logged only"
               value={sends.loggedOnly.email + sends.loggedOnly.sms}
               tone={sends.loggedOnly.email + sends.loggedOnly.sms > 0 ? "warn" : "neutral"}
-              detail="channel is off — nobody receives these"
+              detail="channel is off - nobody receives these"
             />
             <Tile
               label="Can't reach"
@@ -255,7 +255,7 @@ function Results({
         </section>
       )}
 
-      {/* Per-step breakdown — where in the list things go wrong. */}
+      {/* Per-step breakdown - where in the list things go wrong. */}
       {r.enrolled > 0 && (
         <section>
           <h4 className="mb-2 text-label font-semibold uppercase text-ink-3">Step by step</h4>
@@ -309,7 +309,7 @@ function Results({
         </section>
       )}
 
-      {/* "Show me one" — the individual runs, step by step. */}
+      {/* "Show me one" - the individual runs, step by step. */}
       {r.sample.length > 0 && (
         <section>
           <h4 className="mb-2 text-label font-semibold uppercase text-ink-3">

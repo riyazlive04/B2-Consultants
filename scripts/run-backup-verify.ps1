@@ -1,6 +1,6 @@
 # Scheduled wrapper for scripts/backup-verify.mjs.
 #
-# Same shape as run-cron-daily.ps1 — a Task Scheduler entry points here, this loads the project's
+# Same shape as run-cron-daily.ps1 - a Task Scheduler entry points here, this loads the project's
 # .env and runs the backup, and the transcript lands next to the app so a failure is diagnosable
 # after the fact rather than only while you are watching.
 #
@@ -8,7 +8,7 @@
 #   schtasks /Create /TN "B2 backup verify" /SC DAILY /ST 02:30 ^
 #     /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\path\to\scripts\run-backup-verify.ps1"
 #
-# The scratch restore target must be reachable — start the local instance first
+# The scratch restore target must be reachable - start the local instance first
 # (`npm run db:local`) or point BACKUP_SCRATCH_URL at a database that is always up.
 
 $ErrorActionPreference = "Stop"

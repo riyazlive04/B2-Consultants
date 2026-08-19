@@ -2,7 +2,7 @@
 //
 // Uses the binaries of an existing PostgreSQL installation (initdb/pg_ctl/psql)
 // to run a project-local instance with its own data directory (.pgdata/), on
-// the same port and credentials as the docker-compose db service — so the
+// the same port and credentials as the docker-compose db service - so the
 // DATABASE_URL from .env.example works unchanged:
 //
 //   postgresql://b2:b2@localhost:5435/b2_dashboard?schema=public

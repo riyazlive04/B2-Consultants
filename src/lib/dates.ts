@@ -46,7 +46,7 @@ const IST_OFFSET_MS = 5.5 * 3600000;
  * Convert an IST day boundary (expressed as UTC midnight, the @db.Date encoding)
  * to the real UTC INSTANT it represents: 00:00 IST = 18:30 UTC the previous day.
  * Use this whenever an IST month/week range filters a TIMESTAMP column
- * (changedAt / createdAt / statusChangedAt) — querying those with the raw
+ * (changedAt / createdAt / statusChangedAt) - querying those with the raw
  * UTC-midnight boundary shifts the window 5.5h late and misbuckets everything
  * that happens between 00:00 and 05:30 IST on the boundary day.
  */
@@ -67,7 +67,7 @@ export function istMonthInstantRange(ref = istToday()): { start: Date; end: Date
  * running one query per month. Taking the UTC month of the raw instant would push everything
  * between 00:00 and 05:30 IST on the 1st into the previous month.
  *
- * For a `@db.Date` column, use `d.toISOString().slice(0, 7)` directly — those are already
+ * For a `@db.Date` column, use `d.toISOString().slice(0, 7)` directly - those are already
  * UTC-midnight day boundaries and must NOT be shifted.
  */
 export function istMonthKeyOf(instant: Date): string {
@@ -136,7 +136,7 @@ export function kpiInstantRange(key: KpiRangeKey, ref = istToday()): { start: Da
  * asking "how has cash moved this year" had no way to see it.
  *
  * NOT the spec's literal list. F6 asks for "last 7 days / 12 weeks / 12 months / 4 quarters",
- * but a CashPosition is one entry PER WEEK — a 7-day window plots a single point and a straight
+ * but a CashPosition is one entry PER WEEK - a 7-day window plots a single point and a straight
  * line through it, which looks broken rather than informative. These four windows all yield a
  * readable series from weekly data while covering the same span of intent: recent detail through
  * to the whole year.
@@ -155,7 +155,7 @@ export function parseCashPeriod(v: string | string[] | undefined): CashPeriodKey
   return raw === "6m" || raw === "12m" || raw === "4q" ? raw : "12w";
 }
 
-/** Start of the window, as a UTC-midnight date. Exclusive of nothing — callers filter `>=`. */
+/** Start of the window, as a UTC-midnight date. Exclusive of nothing - callers filter `>=`. */
 export function cashPeriodStart(key: CashPeriodKey, ref = istToday()): Date {
   const d = new Date(ref);
   switch (key) {

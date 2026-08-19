@@ -16,7 +16,7 @@ import { toast } from "@/components/ui/feedback";
  *
  * DESIGNED AROUND THE ONE INTERACTION A TUTOR WILL ACTUALLY DO: press "all present", then
  * correct the two or three exceptions. A per-student dropdown that starts empty is technically
- * more neutral and would be left blank every week — an attendance feature nobody fills in
+ * more neutral and would be left blank every week - an attendance feature nobody fills in
  * produces exactly the data we have today, which is none.
  *
  * The sheet is fetched on OPEN rather than shipped with the page. A batch's calendar holds dozens
@@ -89,7 +89,7 @@ export function AttendanceSheetModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Attendance — ${sessionTitle}`} size="md">
+    <Modal open={open} onClose={onClose} title={`Attendance - ${sessionTitle}`} size="md">
       {loading && <p className="py-6 text-center text-sm text-muted">Loading the register…</p>}
 
       {!loading && error && !sheet && <FormError message={error} />}
@@ -138,7 +138,7 @@ export function AttendanceSheetModal({
                         }`}
                         onClick={() =>
                           // Clicking the active button CLEARS it. That is the only way to get
-                          // back to "not marked", which is a real state — see the note in
+                          // back to "not marked", which is a real state - see the note in
                           // server/attendance.ts on why an empty row differs from ABSENT.
                           setDraft((d) => ({ ...d, [r.studentId]: active ? null : s }))
                         }

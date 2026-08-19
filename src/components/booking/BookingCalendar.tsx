@@ -8,7 +8,7 @@ import { FormError, SubmitButton } from "@/components/ui/form";
 import { BookingIntakeFields } from "./BookingIntakeFields";
 
 /**
- * The embedded discovery-call booker — a month grid, that day's times, then the questionnaire.
+ * The embedded discovery-call booker - a month grid, that day's times, then the questionnaire.
  *
  * ── Why a month grid and not the flat day-by-day list `/book` uses ──────────────
  * A funnel step shows ONE person's calendar, and one person's open slots are sparse: Ameen had a
@@ -19,7 +19,7 @@ import { BookingIntakeFields } from "./BookingIntakeFields";
  * ── Times are rendered in the VISITOR's zone, and that is a deliberate change ────
  * `/book` prints IST and CET as fixed strings and offers the visitor's local time as an extra.
  * Here the visitor's own zone is the primary reading, because this page is the last thing between
- * a prospect and a booked call — "19:00" meaning a time they have to convert themselves is how
+ * a prospect and a booked call - "19:00" meaning a time they have to convert themselves is how
  * people no-show. The zone in use is named under the grid so it is never ambiguous. The slot's
  * identity is still its id and its UTC instant; nothing about the stored booking changes.
  */
@@ -33,7 +33,7 @@ export type CalendarSlot = {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/** The visitor's own zone, falling back to IST — this audience is overwhelmingly in India. */
+/** The visitor's own zone, falling back to IST - this audience is overwhelmingly in India. */
 function detectZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
@@ -46,7 +46,7 @@ function detectZone(): string {
  * The calendar day a UTC instant falls on IN A GIVEN ZONE, as "YYYY-MM-DD".
  *
  * Via `en-CA` because it formats as ISO already. Doing this by hand with `getDate()` would use the
- * SERVER's zone and put a 23:00 IST slot on the previous day for anyone west of it — the exact
+ * SERVER's zone and put a 23:00 IST slot on the previous day for anyone west of it - the exact
  * class of bug that makes a booking land on the wrong date.
  */
 function dayKeyInZone(iso: string, zone: string): string {
@@ -75,7 +75,7 @@ function offsetLabel(zone: string): string {
   }
 }
 
-/** "GMT+05:30 Asia/Calcutta" — offset first, because that is what people scan for. */
+/** "GMT+05:30 Asia/Calcutta" - offset first, because that is what people scan for. */
 function zoneLabel(zone: string): string {
   const off = offsetLabel(zone);
   return off ? `${off} ${zone}` : zone;
@@ -84,7 +84,7 @@ function zoneLabel(zone: string): string {
 /**
  * Every zone the browser knows, so someone booking from Berlin or Dubai can say so.
  *
- * `supportedValuesOf` is the whole IANA list (~400 entries) and is not in older Safari — hence the
+ * `supportedValuesOf` is the whole IANA list (~400 entries) and is not in older Safari - hence the
  * fallback to the handful this audience actually books from. The visitor's own detected zone is
  * merged in either way, so the control can always represent where they really are.
  */
@@ -104,7 +104,7 @@ function zoneOptions(detected: string): string[] {
   return all.includes(detected) ? all : [detected, ...all];
 }
 
-/** Local midnight "YYYY-MM-DD" for the day-grid keys — never via toISOString (that is UTC). */
+/** Local midnight "YYYY-MM-DD" for the day-grid keys - never via toISOString (that is UTC). */
 function todayKeyInZone(zone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" })
     .format(new Date());
@@ -132,14 +132,14 @@ export function BookingCalendar({
    * Detecting it in the initialiser looks right and is a hydration bug: on the server
    * `Intl...timeZone` is the SERVER's zone, on the client it is the browser's, so the two renders
    * disagreed about which day every slot falls on and React discarded the server HTML. The zone
-   * offset labels are worse — Node's ICU prints "GMT" for Africa/Abidjan where the browser prints
+   * offset labels are worse - Node's ICU prints "GMT" for Africa/Abidjan where the browser prints
    * "GMT+00:00", so even the <option> text mismatched.
    *
    * Fixed default → server and first client render are identical → hydration succeeds; the effect
    * then switches to the real zone and everything re-labels. IST is the right default for this
    * audience, so most visitors never see a change.
    *
-   * Changing the zone re-labels every date and time from the same UTC instants — a slot can move
+   * Changing the zone re-labels every date and time from the same UTC instants - a slot can move
    * to a different calendar DAY, which is why the grid is derived from `zone` rather than fixed.
    */
   const router = useRouter();
@@ -168,7 +168,7 @@ export function BookingCalendar({
     return map;
   }, [slots, zone]);
 
-  // Open on the month holding the first available day, not on today — a calendar that opens on an
+  // Open on the month holding the first available day, not on today - a calendar that opens on an
   // empty month looks like there is no availability at all.
   const firstDay = useMemo(() => [...byDay.keys()].sort()[0] ?? null, [byDay]);
   const [cursor, setCursor] = useState(() => {
@@ -192,7 +192,7 @@ export function BookingCalendar({
    *
    * Also the recovery path: switching timezone can move a slot onto a different calendar day, and
    * without this the previously-selected date would still be highlighted while its time list had
-   * silently emptied — a dead-looking widget with no way to tell what went wrong.
+   * silently emptied - a dead-looking widget with no way to tell what went wrong.
    */
   useEffect(() => {
     if (firstDay && (!selectedDay || !byDay.has(selectedDay))) {
@@ -213,8 +213,8 @@ export function BookingCalendar({
     if (!res.ok) return setError(res.error);
     if (redirectTo) {
       /**
-       * `setDone` FIRST, then navigate. The push is not instant — it is a server round trip for
-       * the confirmation page — and without this the form sits there looking unsubmitted, which
+       * `setDone` FIRST, then navigate. The push is not instant - it is a server round trip for
+       * the confirmation page - and without this the form sits there looking unsubmitted, which
        * is exactly when someone presses "Confirm my call" a second time. The slot is already
        * gone by then, so the retry fails with "no longer available" on a booking that in fact
        * succeeded. The success card covers that gap and is then replaced by the new page.
@@ -257,7 +257,7 @@ export function BookingCalendar({
           <p className="mt-3 flex items-center gap-2 text-sm text-ink-2">
             <Clock size={15} className="text-ink-3" /> {slots[0]?.durationMins ?? 20} min
           </p>
-          {/* Shown as soon as a DAY is picked, not a time — picking the date is the moment the
+          {/* Shown as soon as a DAY is picked, not a time - picking the date is the moment the
               prospect has decided something, and echoing it back is what confirms the click
               landed on the day they meant. */}
           {selectedDay && daySlots[0] && (
@@ -274,7 +274,7 @@ export function BookingCalendar({
 
           {slots.length === 0 ? (
             <p className="mt-4 rounded-field border border-dashed border-line p-6 text-center text-sm text-muted">
-              No times are open right now. Please check back shortly — new slots are released regularly.
+              No times are open right now. Please check back shortly - new slots are released regularly.
             </p>
           ) : (
             <div className="mt-4 flex flex-col gap-8 sm:flex-row sm:items-start">
@@ -315,7 +315,7 @@ export function BookingCalendar({
                           disabled={!has}
                           aria-pressed={isSelected}
                           aria-current={isToday ? "date" : undefined}
-                          aria-label={`${cell.day} ${monthLabel}${isToday ? " (today)" : ""}${has ? "" : " — no times"}`}
+                          aria-label={`${cell.day} ${monthLabel}${isToday ? " (today)" : ""}${has ? "" : " - no times"}`}
                           onClick={() => { setSelectedDay(cell.key); setSlotId(null); }}
                           className={`grid h-9 w-9 place-items-center rounded-full text-sm transition-colors ${
                             isSelected
@@ -396,7 +396,7 @@ export function BookingCalendar({
 
       {/*
         The questionnaire appears only once a time is held. Showing thirty fields before the
-        prospect has committed to anything is what makes a booking form feel like a tax return —
+        prospect has committed to anything is what makes a booking form feel like a tax return -
         and the slot is the thing that can run out, so it goes first.
       */}
       {slotId && (

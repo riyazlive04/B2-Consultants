@@ -72,7 +72,7 @@ export async function getWhatsAppAdminData(): Promise<WhatsAppAdminData> {
     counts.total += g._count._all;
   }
 
-  // Which touchpoints make up a status bucket, for that tile's expand popup — top 4 + "Other".
+  // Which touchpoints make up a status bucket, for that tile's expand popup - top 4 + "Other".
   const kindBreakdown = (statuses: WhatsAppStatus[], limit = 4) => {
     const byKind = new Map<WhatsAppKind, number>();
     for (const g of grouped) {

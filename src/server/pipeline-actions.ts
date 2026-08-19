@@ -45,7 +45,7 @@ const leadSchema = z.object({
    * Optional, and new.
    *
    * `Lead.email` has always existed and every capture path fills it; this form was the one entry
-   * point that could not. That made the manual path strictly worse than the webhook — the row it
+   * point that could not. That made the manual path strictly worse than the webhook - the row it
    * created could never be matched on email by the dedupe, by the duplicates report, or by a
    * later opt-in from the same person on a different number.
    */
@@ -96,15 +96,15 @@ export async function createLead(form: FormData): Promise<ActionResult> {
   if (d.stage === "WON" && !d.wonLevel) {
     return { ok: false, error: "Pick the program level this lead enrolled in (Won)" };
   }
-  if (d.wonLevel && !(await isKnownLevel(d.wonLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
+  if (d.wonLevel && !(await isKnownLevel(d.wonLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
   /**
-   * Duplicate check at the point of entry (issue 1.3) — the same normalized-phone dedup the
+   * Duplicate check at the point of entry (issue 1.3) - the same normalized-phone dedup the
    * capture path uses, so the same person isn't split across two pipeline rows.
    *
    * EMAIL IS CHECKED TOO. This passed `{ phone: d.phone }` alone while Contacts' "Add contact"
    * passed both, so the identical person was blocked on one screen and silently duplicated on
-   * the other — and typing a lead by hand is exactly where someone re-enters a person whose
+   * the other - and typing a lead by hand is exactly where someone re-enters a person whose
    * number they no longer have. `findDuplicateLead` already takes both and prefers phone.
    */
   const dup = await findDuplicateLead({ phone: d.phone, email: d.email });
@@ -130,7 +130,7 @@ export async function createLead(form: FormData): Promise<ActionResult> {
       // Name the field that matched. "A lead with this phone number already exists" was shown
       // even when the collision was on email, which sends the typist to check a number that is
       // not the problem.
-      error: `A lead with this ${dup.on === "email" ? "email address" : "phone number"} already exists — ${dup.lead.name}. Open that lead instead of adding a new one.`,
+      error: `A lead with this ${dup.on === "email" ? "email address" : "phone number"} already exists - ${dup.lead.name}. Open that lead instead of adding a new one.`,
     };
   }
   // Auto-assign an owner on creation (issues 1.1/1.2) via the configured first-call rotation;
@@ -167,7 +167,7 @@ export async function createLead(form: FormData): Promise<ActionResult> {
     section: "pipeline",
     entityType: "Lead",
     entityId: created.id,
-    summary: `Added lead ${created.name} — ${LEAD_STAGE_LABELS[d.stage] ?? d.stage}`,
+    summary: `Added lead ${created.name} - ${LEAD_STAGE_LABELS[d.stage] ?? d.stage}`,
     meta: { stage: d.stage, leadSource: d.leadSource, wonLevel: created.wonLevel },
   });
 
@@ -189,7 +189,7 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
   if (d.stage === "WON" && !d.wonLevel) {
     return { ok: false, error: "Pick the program level this lead enrolled in (Won)" };
   }
-  if (d.wonLevel && !(await isKnownLevel(d.wonLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
+  if (d.wonLevel && !(await isKnownLevel(d.wonLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
   const data = {
     name: d.name,
@@ -221,7 +221,7 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
       section: "pipeline",
       entityType: "Lead",
       entityId: id,
-      summary: `Edited lead ${d.name} — changed ${fieldList(diff.changed)}`,
+      summary: `Edited lead ${d.name} - changed ${fieldList(diff.changed)}`,
       meta: diff,
     });
   }
@@ -241,7 +241,7 @@ export async function deleteLead(id: string): Promise<ActionResult> {
     section: "pipeline",
     entityType: "Lead",
     entityId: lead.id,
-    summary: `Archived lead ${lead.name} — ${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage}`,
+    summary: `Archived lead ${lead.name} - ${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage}`,
     meta: { stage: lead.stage, leadSource: lead.leadSource, phone: lead.phone },
   });
   revalidatePath("/pipeline");
@@ -310,7 +310,7 @@ export async function assignLead(id: string, userId: string): Promise<ActionResu
 
 const assignBatchSchema = z.object({
   /**
-   * Ignored when `splitByShare` is set — the rotation decides instead. Still required, because
+   * Ignored when `splitByShare` is set - the rotation decides instead. Still required, because
    * making it conditional would let a mis-wired form silently hand a batch to nobody.
    */
   userId: z.string().min(1, "Pick who these leads go to"),
@@ -326,19 +326,19 @@ const assignBatchSchema = z.object({
 /**
  * Hand a batch of unassigned leads to one caller.
  *
- * WHY THIS EXISTS. Assignment was one lead at a time — `assignLead(id, userId)` behind a
- * dropdown on a single row — and `pickFirstCaller`'s rotation only fires on NEW intake. Neither
+ * WHY THIS EXISTS. Assignment was one lead at a time - `assignLead(id, userId)` behind a
+ * dropdown on a single row - and `pickFirstCaller`'s rotation only fires on NEW intake. Neither
  * touches an imported backlog. The result, live on 29 Jul 2026: **23,430 of 23,435 leads are
  * unassigned**, Nilofer's desk holds 3 leads and Asma's holds 2.
  *
  * That is the true reason My Desk reads as empty. The desk is not broken and its queue is not
- * unbounded — `l1-desk-metrics.ts` already scopes to `assignedToId` and caps the backlog at 200,
+ * unbounded - `l1-desk-metrics.ts` already scopes to `assignedToId` and caps the backlog at 200,
  * ordered oldest-first. There is simply nothing assigned to anyone, and no screen in the app
  * could have changed that at a rate above one lead per click.
  *
  * The cap is the point as much as the batch is. 23,435 leads is not a work queue, it is a
  * graveyard; the JD's quota is ~30 dials a day. Handing someone a day's work at a time is what
- * makes the queue mean something — so this refuses to hand out more than {@link MAX_HANDOUT}.
+ * makes the queue mean something - so this refuses to hand out more than {@link MAX_HANDOUT}.
  */
 export async function assignLeadBatch(input: unknown): Promise<ActionResult & { assigned?: number }> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
@@ -351,8 +351,8 @@ export async function assignLeadBatch(input: unknown): Promise<ActionResult & { 
    * Split mode ignores `userId` entirely and shares the batch across the rotation.
    *
    * This is where the founder's weighting stops being decorative. `pickFirstCaller` only ever
-   * governed NEW intake, and the backlog dwarfs it — 23,430 unassigned leads against a few dozen
-   * a day — so a share set in Console previously decided almost nothing about who actually calls
+   * governed NEW intake, and the backlog dwarfs it - 23,430 unassigned leads against a few dozen
+   * a day - so a share set in Console previously decided almost nothing about who actually calls
    * whom. The hand-out is the lever that moves the volume.
    */
   if (splitByShare) return assignSplitByShare({ count, leadSource, oldestFirst, session });
@@ -366,7 +366,7 @@ export async function assignLeadBatch(input: unknown): Promise<ActionResult & { 
 
   /**
    * The callable slice, matching `l1-desk-metrics.ts` exactly. A lead the desk would never show
-   * must not be handed out — assigning a WON deal or a number-less contact would inflate the
+   * must not be handed out - assigning a WON deal or a number-less contact would inflate the
    * caller's queue with rows they cannot action, which is how a work list stops being trusted.
    */
   const candidates = await prisma.lead.findMany({
@@ -421,7 +421,7 @@ async function assignSplitByShare(args: {
   const { count, leadSource, oldestFirst, session } = args;
 
   const split = await getFirstCallSplit();
-  // Off today (Saturday) or already at their ceiling — the same eligibility the live rotation
+  // Off today (Saturday) or already at their ceiling - the same eligibility the live rotation
   // applies, so a hand-out cannot put work somewhere `pickFirstCaller` would refuse to.
   const eligible = split.members.filter((m) => !m.offToday && !m.atDailyCap);
   if (!eligible.length) {
@@ -429,7 +429,7 @@ async function assignSplitByShare(args: {
       ok: false,
       error:
         split.members.length === 0
-          ? "Nobody is in the first-call rotation — set shares in Console → Call Distribution."
+          ? "Nobody is in the first-call rotation - set shares in Console → Call Distribution."
           : "Everyone in the rotation is off today or at their daily cap.",
     };
   }
@@ -448,7 +448,7 @@ async function assignSplitByShare(args: {
   });
   if (!candidates.length) return { ok: false, error: "No unassigned, callable leads match that filter." };
 
-  // Allocate against what we ACTUALLY found, not what was asked for — otherwise a request for 200
+  // Allocate against what we ACTUALLY found, not what was asked for - otherwise a request for 200
   // that matches 50 would hand out shares computed on 200 and over-assign the first person.
   const allocation = allocateByShare(candidates.length, eligible);
 
@@ -476,7 +476,7 @@ async function assignSplitByShare(args: {
     entityId: "split",
     // Names the actual split in the feed. "Handed out 200 leads" would leave the founder opening
     // the meta to answer the only question they will have.
-    summary: `Handed ${assigned} lead${assigned === 1 ? "" : "s"} out by share — ${perPerson
+    summary: `Handed ${assigned} lead${assigned === 1 ? "" : "s"} out by share - ${perPerson
       .map((p) => `${p.name} ${p.count}`)
       .join(" · ")}`,
     meta: { mode: "split", requested: count, assigned, perPerson, leadSource: leadSource ?? null, oldestFirst },
@@ -487,7 +487,7 @@ async function assignSplitByShare(args: {
   return { ok: true, assigned };
 }
 
-/** How many unassigned, callable leads are left to hand out — the denominator for the panel. */
+/** How many unassigned, callable leads are left to hand out - the denominator for the panel. */
 export async function countAssignableLeads(leadSource?: string): Promise<number> {
   await requireSection("pipeline");
   return prisma.lead.count({
@@ -520,7 +520,7 @@ const outcomeSchema = z.object({
  * The Outreach SOP's role boundary (checklist §P: "'Highly Qualified' is writable only by the
  * Discovery Specialist").
  *
- * `requireSection("pipeline")` admits every USER and HEAD — including the outreach specialist,
+ * `requireSection("pipeline")` admits every USER and HEAD - including the outreach specialist,
  * whose own SOP says they may only READ this verdict to decide whether Step 19 runs. So the flag
  * gets its own guard, checked only when someone actually tries to CHANGE it: entering an ordinary
  * discovery outcome stays open to anyone with the pipeline screen, which is the existing
@@ -530,7 +530,7 @@ const outcomeSchema = z.object({
  * and now the SSS confirmation ladder.
  */
 async function guardHighlyQualified(current: boolean, next: boolean): Promise<ActionResult | null> {
-  if (current === next) return null; // not a change — nothing to guard
+  if (current === next) return null; // not a change - nothing to guard
   const { allowed, denied } = await capabilityCheck("outreach.qualify");
   return allowed ? null : denied;
 }
@@ -569,7 +569,7 @@ export async function createOutcome(form: FormData): Promise<ActionResult> {
     section: "pipeline",
     entityType: "DiscoveryOutcome",
     entityId: row.id,
-    summary: `Recorded a discovery outcome for ${lead.name} — ${CALL_OUTCOME_LABELS[d.outcome] ?? d.outcome}${hq ? " (Highly Qualified)" : ""}`,
+    summary: `Recorded a discovery outcome for ${lead.name} - ${CALL_OUTCOME_LABELS[d.outcome] ?? d.outcome}${hq ? " (Highly Qualified)" : ""}`,
     meta: { outcome: d.outcome, highlyQualified: hq, leadId: d.leadId },
   });
 
@@ -617,7 +617,7 @@ export async function updateOutcome(id: string, form: FormData): Promise<ActionR
       section: "pipeline",
       entityType: "DiscoveryOutcome",
       entityId: id,
-      summary: `Edited the discovery outcome for ${existing.lead.name} — changed ${fieldList(diff.changed)}`,
+      summary: `Edited the discovery outcome for ${existing.lead.name} - changed ${fieldList(diff.changed)}`,
       meta: diff,
     });
   }
@@ -638,7 +638,7 @@ export async function deleteOutcome(id: string): Promise<ActionResult> {
     section: "pipeline",
     entityType: "DiscoveryOutcome",
     entityId: row.id,
-    summary: `Deleted the discovery outcome for ${row.lead.name} — ${CALL_OUTCOME_LABELS[row.outcome] ?? row.outcome}`,
+    summary: `Deleted the discovery outcome for ${row.lead.name} - ${CALL_OUTCOME_LABELS[row.outcome] ?? row.outcome}`,
     meta: { outcome: row.outcome, leadId: row.leadId },
   });
   revalidatePath("/pipeline");
@@ -719,13 +719,13 @@ export async function setPipelineAvgFee(form: FormData): Promise<ActionResult> {
 }
 
 /**
- * Move one lead to a stage — the drag-and-drop pipeline's only write (Part 2 §9, §18.6).
+ * Move one lead to a stage - the drag-and-drop pipeline's only write (Part 2 §9, §18.6).
  *
  * Narrow on purpose. `updateLead` takes the whole form, so reusing it for a drag would mean
  * the board POSTing every field of a lead it never showed, and a stale card could silently
  * revert a name someone else had just fixed. This touches `stage` and nothing else.
  *
- * Enforces the SAME ownership rule as updateLead — a USER may only move leads they entered —
+ * Enforces the SAME ownership rule as updateLead - a USER may only move leads they entered -
  * because a board is a different way to look at the pipeline, not a different set of rules.
  * The stage-history row is written in the same transaction, so a move can never happen
  * without its audit trail.
@@ -748,7 +748,7 @@ export async function moveLeadStage(id: string, toStage: string): Promise<Action
   if (lead.stage === stage) return { ok: true }; // dropped back where it started
 
   // WON needs the program level, which a drag can't supply. Refuse rather than write a WON
-  // lead with no level — that row feeds revenue and commission, and a half-made one is worse
+  // lead with no level - that row feeds revenue and commission, and a half-made one is worse
   // than a card that wouldn't move.
   if (stage === "WON" && !lead.wonLevel) {
     return { ok: false, error: "Open the lead and pick the program level to mark it Won." };
@@ -781,7 +781,7 @@ export async function moveLeadStage(id: string, toStage: string): Promise<Action
  * Read a call note and SUGGEST the structured fields (outcome, BANT, follow-up date).
  *
  * Read-only: it writes nothing, logs no activity, and its result is applied to the form for
- * the human to confirm — the save still goes through `createOutcome`/`updateOutcome` with
+ * the human to confirm - the save still goes through `createOutcome`/`updateOutcome` with
  * every guard those already carry, `highlyQualified` included.
  *
  * Gated to the same section as the form it serves. The rate-limit key is the caller's id, so

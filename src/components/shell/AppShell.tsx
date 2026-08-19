@@ -46,7 +46,7 @@ export function AppShell({
   /** What the sidebar LISTS. Excludes `offRail` sections. */
   items: NavItem[];
   /**
-   * What the viewer may OPEN. A superset of `items` — an `offRail` section (Opportunities,
+   * What the viewer may OPEN. A superset of `items` - an `offRail` section (Opportunities,
    * Outreach) is reachable but not listed, and `useCanNavigate` must say yes to it or every
    * cross-link into one would be silently stripped from the pages that surface them.
    *
@@ -67,7 +67,7 @@ export function AppShell({
   // §5.1: the rail collapses to icons below 1100px, regardless of preference.
   const [narrow, setNarrow] = useState(false);
 
-  // Per-group collapse — the rail has ~27 items and used to overflow ~400px below the
+  // Per-group collapse - the rail has ~27 items and used to overflow ~400px below the
   // fold with no way to fold a section. Collapsed group labels persist per-device.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -110,7 +110,7 @@ export function AppShell({
   // close the mobile drawer on navigation + lock scroll + Esc
   useEffect(() => setDrawer(false), [pathname]);
   useEffect(() => {
-    // Shared counter, never a private save/restore — a drawer closed after a modal would
+    // Shared counter, never a private save/restore - a drawer closed after a modal would
     // otherwise write `overflow: hidden` back onto an empty page (lib/scroll-lock.ts).
     if (drawer) return lockBodyScroll();
   }, [drawer]);
@@ -147,7 +147,7 @@ export function AppShell({
     { ADMIN: "Admin", HEAD: "Head coach", USER: "Telecaller", STUDENT: "Student", TUTOR: "Tutor" }[user.role] ??
     user.role;
 
-  // The brand subtitle names the seat you're actually in — it used to read
+  // The brand subtitle names the seat you're actually in - it used to read
   // "Founder Dashboard" for everyone, which was wrong for every non-Admin role.
   const workspaceLabel =
     {
@@ -159,7 +159,7 @@ export function AppShell({
     }[user.role] ?? "Workspace";
 
   // `items` arrives pre-sorted in the founder's order. Group by its `group`, and let
-  // each group land where its first item does — so reordering a section can move its
+  // each group land where its first item does - so reordering a section can move its
   // whole group up the rail, and no section can be orphaned by a group that isn't listed.
   const groups: { label: string; items: NavItem[] }[] = [];
   for (const item of items) {
@@ -170,7 +170,7 @@ export function AppShell({
 
   const Avatar = ({ size = 36 }: { size?: number }) =>
     user.image ? (
-      // `user.image` is an arbitrary https URL or data: URL (see profile-actions.ts) — not a
+      // `user.image` is an arbitrary https URL or data: URL (see profile-actions.ts) - not a
       // fixed domain we can whitelist, so this opts out of the optimizer rather than widening
       // next.config's remotePatterns to any host.
       <Image
@@ -256,7 +256,7 @@ export function AppShell({
           below the fold), and with it hidden there was no signal those sections existed. */}
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto">
         {groups.map((g) => {
-          // Collapse only applies to the labelled (expanded) rail — the icon rail has no
+          // Collapse only applies to the labelled (expanded) rail - the icon rail has no
           // labels to click, so its items always show.
           const isCollapsed = !compact && collapsedGroups.has(g.label);
           return (
@@ -348,7 +348,7 @@ export function AppShell({
   return (
     <div className="flex min-h-screen bg-canvas">
       {/* Skip link (WCAG 2.4.1): the first focusable element, so a keyboard/SR user can
-          jump past the ~27-item rail straight to the page — the most-repeated interaction
+          jump past the ~27-item rail straight to the page - the most-repeated interaction
           in the app. Off-screen until focused, then it drops in at the top-left. */}
       <a
         href="#main"
@@ -356,7 +356,7 @@ export function AppShell({
       >
         Skip to content
       </a>
-      {/* desktop rail — flat white sidebar on a hairline border (§5.1) */}
+      {/* desktop rail - flat white sidebar on a hairline border (§5.1) */}
       <aside
         className={`sticky top-0 hidden h-screen flex-none border-r border-line bg-surface transition-[width] duration-200 md:block ${
           compactRail ? "w-[76px]" : "w-[240px]"
@@ -377,7 +377,7 @@ export function AppShell({
           >
             <Menu size={20} />
           </button>
-          {/* The wordmark yields below 375px — on a 320px phone the hamburger already says "this
+          {/* The wordmark yields below 375px - on a 320px phone the hamburger already says "this
               is the app", and the alternative was squashing the icon buttons under their 40px hit
               target (§7). Between 375 and md it stays. */}
           <Link href="/" className="hidden flex-none items-center gap-2 min-[375px]:flex md:hidden">
@@ -385,13 +385,13 @@ export function AppShell({
           </Link>
 
           {/* The always-visible metric strip: search · month · runway · theme · alerts · user.
-              On a phone this cluster is what overflows the viewport — it needs ~310px next to the
+              On a phone this cluster is what overflows the viewport - it needs ~310px next to the
               hamburger and wordmark, which is more than a 390px screen has once padding is paid.
               Everything here is `flex-none`: letting flex resolve the shortfall by shrinking meant
               a 40px icon button rendering at 18px, i.e. an unhittable target (§7) AND still 6px of
               overflow. So the strip sheds whole controls at breakpoints instead, keeping what a
               phone cannot get elsewhere: search (no ⌘K without a keyboard), Record, alerts and the
-              profile link. Month, theme, runway and logout all have another home — logout is in the
+              profile link. Month, theme, runway and logout all have another home - logout is in the
               drawer rail, runway is on the dashboard. */}
           <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-2 md:gap-3">
             <button
@@ -400,7 +400,7 @@ export function AppShell({
               aria-label={`Search contacts, opportunities, invoices (${modLabel})`}
               title={`Search (${modLabel})`}
               /* The 13rem box and its ⌘K hint wait for `lg`, not `md`. At exactly `md` the rail has
-                 just appeared and the tablet is at its tightest — a 208px search field there cost
+                 just appeared and the tablet is at its tightest - a 208px search field there cost
                  44px more than the row had, so the whole page scrolled sideways. A tablet also has
                  no physical keyboard to press the shortcut this chip advertises. */
               className="flex h-10 flex-none items-center gap-2 rounded-full border border-line-strong bg-surface-2 px-3 text-sm text-ink-2 transition-colors hover:bg-surface hover:text-ink lg:w-52"
@@ -411,22 +411,22 @@ export function AppShell({
                 {modLabel}
               </kbd>
             </button>
-            {/* Record CTA — writes income and expenses, so it is gated on FINANCE ACCESS, not
-                on the role (Error Log O2). Gating on `role === "ADMIN"` alone left the button —
-                and the modal behind it — in the top bar even when Finance had been switched off
+            {/* Record CTA - writes income and expenses, so it is gated on FINANCE ACCESS, not
+                on the role (Error Log O2). Gating on `role === "ADMIN"` alone left the button -
+                and the modal behind it - in the top bar even when Finance had been switched off
                 in the founder console, which is the "section removed but still reachable" case.
                 `items` is already the caller's filtered section list, so this asks the same
                 question the sidebar does and cannot drift from it. */}
             {items.some((i) => i.href === "/finance") && <RecordButton />}
             {/* Both business clocks. It replaces the month label, which was the least-used thing
-                in this strip — the current month is on every dated screen below, whereas "what
+                in this strip - the current month is on every dated screen below, whereas "what
                 time is it in Germany" had no answer anywhere except a card on /profile. */}
             <NavClock />
             {/* Runway is the widest thing in the strip (~84px) and the one figure that is also on
                 the dashboard a tap away, so it is what buys the phone its space back. */}
             <span className="hidden flex-none sm:inline-flex">{runwaySlot}</span>
             {/* Theme falls back to the OS `prefers-color-scheme` when this is hidden, so a
-                phone still gets the right mode — it just can't override it from the top bar. */}
+                phone still gets the right mode - it just can't override it from the top bar. */}
             <span className="hidden sm:inline-flex">
               <ThemeToggle />
             </span>
@@ -437,7 +437,7 @@ export function AppShell({
                 {user.name}
               </span>
             </Link>
-            {/* PRD §6: logout lives in the top bar (username · month · logout) — from `sm` up.
+            {/* PRD §6: logout lives in the top bar (username · month · logout) - from `sm` up.
                 Below that the phone drawer's rail carries its own "Log out", so nothing is lost. */}
             <button
               type="button"
@@ -454,7 +454,7 @@ export function AppShell({
         {/* Full-width content: pages set their own max-width. Synamate-parity list pages
             (Contacts, Opportunities, Payments, …) go edge-to-edge; classic pages stay centred.
 
-            `overflow-x-clip` is the app-wide guard against PHANTOM horizontal scroll — the page
+            `overflow-x-clip` is the app-wide guard against PHANTOM horizontal scroll - the page
             scrolling sideways into blank space because something nobody can see sticks out to the
             right. Absolutely-positioned decorations still join the scrollable area even at
             `opacity: 0`, so every un-hovered hint tooltip and every visually-hidden chart data
@@ -462,7 +462,7 @@ export function AppShell({
             `clip`, NOT `hidden`: `hidden` would make this a scroll container, which breaks every
             `position: sticky` table header inside it and would let JS scroll the clipped content
             into view. `clip` just refuses to paint past the padding box and never scrolls.
-            Real popovers are unaffected — Popover/Modal/toasts portal to `document.body`, so they
+            Real popovers are unaffected - Popover/Modal/toasts portal to `document.body`, so they
             are not descendants of this box. */}
         <main
           id="main"
@@ -493,7 +493,7 @@ export function AppShell({
         </div>
       )}
 
-      {/* Global ⌘K command palette (BUILD_CHECKLIST.md §3) — one instance for the whole shell,
+      {/* Global ⌘K command palette (BUILD_CHECKLIST.md §3) - one instance for the whole shell,
           so it's available from Contacts, Opportunities, Payments and everywhere else. Fed the
           user's own visible sections so ⌘K can navigate anywhere, not just to the 3 record types. */}
       <CommandPalette sections={items.map((it) => ({ label: it.label, href: it.href }))} />

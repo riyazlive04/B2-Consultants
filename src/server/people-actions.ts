@@ -14,7 +14,7 @@ import { logActivity, diffFields } from "./activity-log";
 import { LOG_FIELD_UNIT } from "@/lib/labels";
 import type { ActionResult } from "./finance-actions";
 
-/** The numeric daily-log field keys — the allowed values for the auto-captured record. */
+/** The numeric daily-log field keys - the allowed values for the auto-captured record. */
 const LOG_NUMERIC_KEYS = new Set(Object.keys(LOG_FIELD_UNIT));
 
 /** People section (PRD2 §3). Profiles/OKR-setting/org order = Admin.
@@ -40,7 +40,7 @@ const profileSchema = z.object({
   // First-call rotation (client notes: 80/20 split, Asma off Saturdays)
   firstCallSharePct: blankToUndefined(intInRange(0, 100, "Share must be")),
   worksSaturdays: z.string().optional(), // checkbox
-  // How many calls a day this person is expected to make — drives the My Desk bar and the
+  // How many calls a day this person is expected to make - drives the My Desk bar and the
   // once-a-day greeting. Blank/0 = no target, which hides the bar rather than showing 0/0.
   dailyCallTarget: blankToUndefined(intInRange(0, 999, "Daily call target must be")),
 });
@@ -78,7 +78,7 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
         section: "people",
         entityType: "TeamProfile",
         entityId: id,
-        summary: `Updated ${d.fullName}'s team profile — changed ${diff.changed.join(", ")}`,
+        summary: `Updated ${d.fullName}'s team profile - changed ${diff.changed.join(", ")}`,
         meta: { changed: diff.changed, before: diff.before, after: diff.after },
       });
     }
@@ -94,7 +94,7 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
       section: "people",
       entityType: "TeamProfile",
       entityId: created.id,
-      summary: `Added ${d.fullName} to the team — ${d.roleTitle}`,
+      summary: `Added ${d.fullName} to the team - ${d.roleTitle}`,
       meta: { roleTitle: d.roleTitle, dashboardRole: d.dashboardRole, email: d.email, linked: !!user },
     });
   }
@@ -135,7 +135,7 @@ export async function moveProfile(id: string, direction: "up" | "down"): Promise
 const okrSchema = z.object({
   teamProfileId: z.string().min(1),
   month: z.string().regex(/^\d{4}-\d{2}$/, "Pick a month"),
-  // title / targetValue / currentProgress stay free text — "Increase show-up rate to 80%",
+  // title / targetValue / currentProgress stay free text - "Increase show-up rate to 80%",
   // "50 calls", "3 students" are all legitimate values.
   title: z.string().trim().min(1, "OKR title is required"),
   targetValue: z.string().trim().min(1, "Target value is required"),
@@ -198,7 +198,7 @@ export async function saveOkr(id: string | null, form: FormData): Promise<Action
         section: "people",
         entityType: "OKR",
         entityId: id,
-        summary: `Updated ${who}'s OKR "${d.title}" — changed ${diff.changed.join(", ")}`,
+        summary: `Updated ${who}'s OKR "${d.title}" - changed ${diff.changed.join(", ")}`,
         meta: { changed: diff.changed, before: diff.before, after: diff.after },
       });
     }
@@ -209,7 +209,7 @@ export async function saveOkr(id: string | null, form: FormData): Promise<Action
       section: "people",
       entityType: "OKR",
       entityId: okr.id,
-      summary: `Set a new OKR for ${who} — "${d.title}", target ${d.targetValue}`,
+      summary: `Set a new OKR for ${who} - "${d.title}", target ${d.targetValue}`,
       meta: { month: d.month, title: d.title, targetValue: d.targetValue },
     });
   }
@@ -253,7 +253,7 @@ export async function updateOwnOkrProgress(id: string, form: FormData): Promise<
       section: "people",
       entityType: "OKR",
       entityId: id,
-      summary: `Updated ${okr.teamProfile.fullName}'s progress on "${okr.title}" — now ${progress || "blank"}`,
+      summary: `Updated ${okr.teamProfile.fullName}'s progress on "${okr.title}" - now ${progress || "blank"}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -285,7 +285,7 @@ const logSchema = z.object({
   studentsCheckedInOn: num.optional(),
   assignmentsReviewed: num.optional(),
   studentsFlaggedAtRisk: num.optional(),
-  // Free text (a blocker can read however the person needs it to), but capped — this
+  // Free text (a blocker can read however the person needs it to), but capped - this
   // field was previously unbounded, so the 2000-char client maxLength was the only limit.
   notes: optionalRule("text"),
 });
@@ -299,7 +299,7 @@ function daysOld(logDate: Date, today: Date): number {
 }
 
 export async function submitDailyLog(form: FormData): Promise<ActionResult> {
-  // Same guard as the /daily-log page (HEAD/USER + overrides) — requireSession
+  // Same guard as the /daily-log page (HEAD/USER + overrides) - requireSession
   // alone would let a STUDENT account write daily-log rows.
   const session = await requireSection("daily-log");
   const parsed = logSchema.safeParse(Object.fromEntries(form));
@@ -309,7 +309,7 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
   const today = istToday(); // date auto-filled as today; future dates impossible (PRD2 §3.3)
   const eod = await getDailyLogEod();
 
-  // Which fields the UI pre-filled from real activity — recorded so the timeline can badge
+  // Which fields the UI pre-filled from real activity - recorded so the timeline can badge
   // this entry as auto-captured later (today's auto-capture is recomputed live; history isn't).
   let autoKeys: string[] = [];
   try {
@@ -341,12 +341,12 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
 
   // ── Amend path: replacing an EOD_AUTO row with the real numbers ──
   // `logId` is only ever sent by the form when it is showing an auto-saved row. Every
-  // condition is re-checked here from the DB — the id arrives from the client.
+  // condition is re-checked here from the DB - the id arrives from the client.
   const logId = String(form.get("logId") ?? "").trim();
   if (logId) {
     const existing = await prisma.dailyLog.findUnique({ where: { id: logId } });
     if (!existing || existing.userId !== session.user.id) {
-      // Same message for "not found" and "not yours" — don't confirm other people's log ids.
+      // Same message for "not found" and "not yours" - don't confirm other people's log ids.
       return { ok: false, error: "That log entry isn't yours to edit." };
     }
     if (existing.source !== "EOD_AUTO") {
@@ -369,7 +369,7 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
       where: { id: existing.id },
       data: {
         ...values,
-        // The member has now put their name to these numbers — it stops being a machine
+        // The member has now put their name to these numbers - it stops being a machine
         // guess, and re-locks under the normal one-shot rule.
         source: "HUMAN",
         autoCapturedKeys: autoKeys.length ? autoKeys : Prisma.DbNull,
@@ -402,7 +402,7 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
   if (eod.enabled && istMinutesOfDay(new Date()) >= eod.cutoffMinutes) {
     return {
       ok: false,
-      error: `Today's ${formatIstMinutes(eod.cutoffMinutes)} cutoff has passed — today's log is closed. Contact Admin to make changes.`,
+      error: `Today's ${formatIstMinutes(eod.cutoffMinutes)} cutoff has passed - today's log is closed. Contact Admin to make changes.`,
     };
   }
 

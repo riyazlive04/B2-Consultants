@@ -10,13 +10,13 @@ import { intakeLabel, INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { DIMENSION_BY_KEY, QUESTION_TEXT } from "@/lib/qualification";
 
 /**
- * Level 2 — Discovery Specialist desk (rebuild spec §7).
+ * Level 2 - Discovery Specialist desk (rebuild spec §7).
  *
  * Opens to: *who is on my calendar today, and who hasn't shown?*
  *
  * The JD draws a line this file has to respect: a missed call is NOT a no-show until the
  * specialist has rung the prospect directly. So a slot whose time has passed with nobody
- * marked present is surfaced as "chase" — an action — rather than silently counted against
+ * marked present is surfaced as "chase" - an action - rather than silently counted against
  * the show rate. Only an explicit NO_SHOW does that.
  */
 
@@ -30,13 +30,13 @@ export type L2Call = {
   phone: string;
   startsAt: string;
   confirmed: boolean;
-  /** True once this call has an outcome recorded — the row drops out of the work list. */
+  /** True once this call has an outcome recorded - the row drops out of the work list. */
   recorded: boolean;
   /** The slot's time has passed, nobody has recorded anything: ring them before judging. */
   needsChase: boolean;
   zoomLink: string | null;
   /**
-   * What the prospect said when they qualified, and how it scored — the whole reason the
+   * What the prospect said when they qualified, and how it scored - the whole reason the
    * landing page asks the band-score questions.
    *
    * Null means genuinely unscored, never zero. `origin` tells the specialist how much evidence
@@ -76,7 +76,7 @@ export type L2Desk = {
   today: L2Call[];
   /**
    * Leads owned by me (first-call rotation, or a manual reassign) that have no booked
-   * slot yet — the only place they are visible on this desk, since `today` only reads
+   * slot yet - the only place they are visible on this desk, since `today` only reads
    * `AppointmentSlot`. Without this list, a lead handed to a Discovery Specialist before
    * anyone books a call for them is invisible here even though `Lead.assignedToId` is
    * set correctly.
@@ -103,7 +103,7 @@ const SCORED_BOOKING_KEYS = [
 /**
  * The answers behind the score, as the discovery specialist should read them.
  *
- * Booking columns first, falling back to the lead's stored `LeadAnswer` rows — the same
+ * Booking columns first, falling back to the lead's stored `LeadAnswer` rows - the same
  * precedence `resolveBant` applies to the score itself, so the number and the answers under it
  * can never describe different submissions.
  *
@@ -141,7 +141,7 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
   const month = istMonthInstantRange();
 
   /**
-   * `DiscoveryOutcome.callDate` is `@db.Date`, NOT a timestamp — so it must be filtered with
+   * `DiscoveryOutcome.callDate` is `@db.Date`, NOT a timestamp - so it must be filtered with
    * DATE boundaries, never the instant boundaries used for `startsAt` above.
    *
    * Filtering a DATE column with an instant silently shifts the window by a day: the IST day
@@ -161,7 +161,7 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
         startsAt: { gte: day.start, lt: day.end },
         // Today's list reaches its people through AppointmentSlot → BookingRequest → Lead, so
         // it never passed through the `deletedAt` filter every other desk read uses: an archived
-        // lead with a booked slot stayed on this list. `leadId: null` is kept deliberately — a
+        // lead with a booked slot stayed on this list. `leadId: null` is kept deliberately - a
         // booking made by someone who never became a lead is still a call that must be taken.
         booking: { is: { OR: [{ leadId: null }, { lead: { deletedAt: null } }] } },
       },
@@ -178,7 +178,7 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
             lead: {
               select: {
                 id: true,
-                // The landing page's score, for a prospect who never filled our booking form —
+                // The landing page's score, for a prospect who never filled our booking form -
                 // this is the case that used to arrive here blank.
                 bantAvg: true, bantScore: true, bantVerdict: true, bantSource: true,
                 bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true,
@@ -211,7 +211,7 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
     prisma.appointmentSlot.findMany({
       where: {
         assignedToId: userId,
-        // "This month, and already in the past" — the earlier of month-end and now, since
+        // "This month, and already in the past" - the earlier of month-end and now, since
         // a duplicate `lt` key would silently keep only one of the two bounds.
         startsAt: { gte: month.start, lt: new Date(Math.min(month.end.getTime(), now.getTime())) },
         booking: { isNot: null },
@@ -228,7 +228,7 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
       },
     }),
 
-    // Leads I own that have no booked slot yet — NEW_LEAD (fresh, from the first-call
+    // Leads I own that have no booked slot yet - NEW_LEAD (fresh, from the first-call
     // rotation or a manual reassign) or DISCO_NOT_BOOKED (a booking that fell through and
     // was reopened). Anything already booked shows up in `today`/`monthSlots` instead, via
     // the AppointmentSlot it claimed, not via this stage-based list.
@@ -263,7 +263,7 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
     });
 
   // Show rate: only slots with a settled verdict count. A booking still sitting at BOOKED
-  // after its time is unresolved — it is in the chase list, not in the statistics.
+  // after its time is unresolved - it is in the chase list, not in the statistics.
   let showTotal = 0, showHit = 0;
   for (const s of monthSlots) {
     const st = s.booking?.status;

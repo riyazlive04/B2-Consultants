@@ -42,7 +42,7 @@ export async function getBookingsOverview() {
         // The lead's own columns too, so `resolveBant` can fall back to the LANDING PAGE's
         // opt-in score for a booking that carries none. Without them a prospect who answered
         // the qualification questions at opt-in but not at booking showed as unscored here
-        // while showing a score on My Desk — the same person, two answers.
+        // while showing a score on My Desk - the same person, two answers.
         lead: {
           select: {
             id: true,
@@ -52,7 +52,7 @@ export async function getBookingsOverview() {
         },
       },
     }),
-    // Upcoming OPEN slots — the pool the "Postpone to…" picker draws from.
+    // Upcoming OPEN slots - the pool the "Postpone to…" picker draws from.
     prisma.appointmentSlot.findMany({
       where: { status: "OPEN", startsAt: { gt: now } },
       orderBy: { startsAt: "asc" },
@@ -120,7 +120,7 @@ export async function getBookingsOverview() {
       // Confirmation loop (Module E): confirmed = the prospect said YES (WhatsApp) or was marked so.
       confirmed: b.confirmedAt !== null,
       confirmSent: b.confirmSentAt !== null,
-      // The ONE resolved snapshot every surface renders — booking score first, then the lead's
+      // The ONE resolved snapshot every surface renders - booking score first, then the lead's
       // opt-in score, null when nobody has scored them. Callers must show null as "not scored".
       bant: resolveBant(b, b.lead),
       whenStart: intakeLabel("whenStartGermany", b.whenStartGermany),
@@ -155,7 +155,7 @@ export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
        * Enough columns for `resolveBant`, plus the LEAD's own score.
        *
        * The calendar used to render `bantScore` straight off the booking as "BANT n/4", which is
-       * the raw dimensions-met count and NOT what the table three inches below it shows — that
+       * the raw dimensions-met count and NOT what the table three inches below it shows - that
        * one goes through `resolveBant` and can display the weighted average, or the landing
        * page's opt-in score when the booking has none. Two surfaces, same prospect, different
        * numbers. `lib/bant-view.ts` exists precisely so this question is answered once.
@@ -189,7 +189,7 @@ export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
           status: s.booking.status,
           confirmed: s.booking.confirmedAt !== null,
           // Null when nobody has scored this prospect. The caller MUST render that as
-          // "not scored" and never as 0 — see resolveBant's contract.
+          // "not scored" and never as 0 - see resolveBant's contract.
           bant: resolveBant(s.booking, s.booking.lead),
         }
       : null,

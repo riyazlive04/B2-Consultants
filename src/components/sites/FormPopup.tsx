@@ -8,20 +8,20 @@ import type { PublicForm as PublicFormType } from "@/server/forms-metrics";
 import PublicForm from "./PublicForm";
 
 /**
- * A form raised in a dialog from a CTA — the pattern the live opt-in page uses, where the button
+ * A form raised in a dialog from a CTA - the pattern the live opt-in page uses, where the button
  * and the video still both open the same capture form instead of navigating anywhere.
  *
  * ── Why this is not `components/ui/Modal` ──────────────────────────────────────────────────────
  * Same reason `SitePageRenderer` is not `SiteBlocks`: that Modal is a DASHBOARD control. It wears
  * the app's frosted-glass treatment and a left-aligned `text-h2` header sized for an internal
  * entry form. This dialog is the single most important thing a cold visitor from a paid ad ever
- * sees, and it is a sales asset — a solid white card with a large centred promise on it. The two
+ * sees, and it is a sales asset - a solid white card with a large centred promise on it. The two
  * will keep diverging, and coupling them would mean every change to the founder's "Add student"
  * dialog is also a change to the page the ad budget lands on.
  *
  * What is NOT duplicated is the behaviour that has to be right: scroll locking goes through the
  * shared counter in `lib/scroll-lock` (a private one strands the lock when overlays interleave),
- * and focus handling below is the same contract — focus in on open, Tab trapped, focus handed
+ * and focus handling below is the same contract - focus in on open, Tab trapped, focus handed
  * back to the trigger on close.
  *
  * Portalled to <body> deliberately: `position: fixed` stops being viewport-relative as soon as any
@@ -53,7 +53,7 @@ export function FormPopup({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // Open/close lifecycle. Keyed on `open` alone — callers pass an inline `onClose`, whose identity
+  // Open/close lifecycle. Keyed on `open` alone - callers pass an inline `onClose`, whose identity
   // changes every render, and folding it in here would churn the scroll lock and yank focus back
   // to the trigger while someone is mid-way through typing their phone number.
   useEffect(() => {
@@ -138,7 +138,7 @@ export function FormPopup({
  * The clickable thing plus the dialog it raises.
  *
  * Renders a real `<button>` around whatever the block draws, so the CTA is reachable by keyboard
- * and announced as opening a dialog. It is NOT an `<a href="#">` dressed up — a link that goes
+ * and announced as opening a dialog. It is NOT an `<a href="#">` dressed up - a link that goes
  * nowhere is a broken link to a screen reader, and middle-clicking it would open a blank tab.
  */
 export function FormPopupTrigger({

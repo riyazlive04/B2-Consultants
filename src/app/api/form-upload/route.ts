@@ -12,7 +12,7 @@ import { buildStorageKey, publicUrl, storageConfig, uploadObject } from "@/lib/s
  * ── The thing to be careful about ──────────────────────────────────────────────────────────────
  * `/api/media/upload` carries a warning that an unauthenticated endpoint writing to a public
  * bucket is free anonymous file hosting on the company's domain, and that it will be found. This
- * endpoint is unauthenticated by necessity — the person uploading their CV has no account — so
+ * endpoint is unauthenticated by necessity - the person uploading their CV has no account - so
  * every one of those words still applies and the defences have to come from somewhere else:
  *
  *  1. It is bound to a FORM. The request must name a published form that actually contains a
@@ -20,11 +20,11 @@ import { buildStorageKey, publicUrl, storageConfig, uploadObject } from "@/lib/s
  *  2. Rate limited per IP and globally, on the same buckets as form submission.
  *  3. Content is sniffed from its MAGIC BYTES, never from the client's `Content-Type` or the
  *     filename. The stored object is served with the type WE determined.
- *  4. Allow-list only: images, PDF, and Word documents — what a CV or a certificate arrives as.
+ *  4. Allow-list only: images, PDF, and Word documents - what a CV or a certificate arrives as.
  *     Explicitly not SVG (a script-bearing document) and not archives or anything executable.
  *  5. Size capped, and capped again against the field's own smaller limit if the author set one.
  *
- * A route handler rather than a server action because actions cannot stream a file body — the
+ * A route handler rather than a server action because actions cannot stream a file body - the
  * whole payload would be serialised into the action argument.
  */
 
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
   const item = normaliseItems(dbForm.fields).find((i) => i.id === itemId && i.type === "file");
   if (!item) return NextResponse.json({ ok: false, error: "This form does not accept uploads here." }, { status: 400 });
 
-  // (5) The field's own cap, never above ours — the page can claim anything.
+  // (5) The field's own cap, never above ours - the page can claim anything.
   const limit = Math.min(MAX_BYTES, Math.max(1, item.maxSizeMb ?? 10) * 1024 * 1024);
   if (file.size > limit) {
     return NextResponse.json({ ok: false, error: `File is too large (max ${Math.floor(limit / 1024 / 1024)} MB)` }, { status: 413 });
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // The stored name comes from OUR sniff, not the client's filename — the extension is part of a
+  // The stored name comes from OUR sniff, not the client's filename - the extension is part of a
   // URL path, and a filename is attacker-controlled.
   const key = `form-uploads/${buildStorageKey(`upload.${kind.ext}`, randomBytes(8).toString("hex"), new Date())}`;
   const up = await uploadObject(cfg, key, buf, kind.mime);

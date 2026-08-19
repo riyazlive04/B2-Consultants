@@ -17,7 +17,7 @@ import { getSectionsConfig } from "@/server/founder-config";
 export const runtime = "nodejs"; // mammoth + pdf-parse are Node libraries (Buffer, no edge)
 export const dynamic = "force-dynamic";
 
-const MAX_BYTES = 8 * 1024 * 1024; // 8 MB — a CV is a few hundred KB; this is generous
+const MAX_BYTES = 8 * 1024 * 1024; // 8 MB - a CV is a few hundred KB; this is generous
 const PDF = "application/pdf";
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
@@ -68,12 +68,12 @@ export async function POST(req: Request) {
       text = buffer.toString("utf8");
     } else if (name.endsWith(".doc")) {
       return NextResponse.json(
-        { error: "Legacy .doc isn't supported — re-save as .docx or PDF, or paste the text." },
+        { error: "Legacy .doc isn't supported - re-save as .docx or PDF, or paste the text." },
         { status: 415 },
       );
     } else {
       return NextResponse.json(
-        { error: "Unsupported file. Upload a .pdf, .docx or .txt — or paste the text." },
+        { error: "Unsupported file. Upload a .pdf, .docx or .txt - or paste the text." },
         { status: 415 },
       );
     }
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     text = tidy(text);
     if (!text) {
       return NextResponse.json(
-        { error: "No selectable text found — a scanned/image PDF can't be read. Paste the text instead." },
+        { error: "No selectable text found - a scanned/image PDF can't be read. Paste the text instead." },
         { status: 422 },
       );
     }

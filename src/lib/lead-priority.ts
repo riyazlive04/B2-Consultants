@@ -1,12 +1,12 @@
 /**
- * Which lead to work next — one scorer, founder-tunable.
+ * Which lead to work next - one scorer, founder-tunable.
  *
  * ── Why this exists ──────────────────────────────────────────────────────────────
  * The app had TWO rankings that disagreed, both hardcoded:
  *
- *   • `/pipeline`'s "Call these first" — stage weight + BANT×10 + highly-qualified 15 +
+ *   • `/pipeline`'s "Call these first" - stage weight + BANT×10 + highly-qualified 15 +
  *     new-this-week 10 − idle penalty.
- *   • The L1 desk — sorted each bucket by ARRIVAL TIME only. So the BANT score shown on every
+ *   • The L1 desk - sorted each bucket by ARRIVAL TIME only. So the BANT score shown on every
  *     row changed nothing about the order a caller worked in. A 4.6/5 lead and a 0.5/5 lead that
  *     arrived the same morning were rung in the order they landed.
  *
@@ -15,7 +15,7 @@
  * on it consistently. This is that single act.
  *
  * ── Pure, and deliberately so ────────────────────────────────────────────────────
- * No prisma, no clock — `now` is passed in. The weights are the thing most likely to be argued
+ * No prisma, no clock - `now` is passed in. The weights are the thing most likely to be argued
  * about, so they must be adjustable and testable without a database.
  *
  * ── The default weights reproduce today's pipeline ranking EXACTLY ───────────────
@@ -41,7 +41,7 @@ export type PriorityWeights = {
    * Ceiling on the idle penalty.
    *
    * Uncapped, a year-old lead would score so far below zero that nothing could ever lift it back
-   * into view — which is a decision to abandon it, not to deprioritise it. The cap keeps a stale
+   * into view - which is a decision to abandon it, not to deprioritise it. The cap keeps a stale
    * lead beatable rather than buried.
    */
   idlePenaltyMax: number;
@@ -64,7 +64,7 @@ export const DEFAULT_PRIORITY_WEIGHTS: PriorityWeights = {
 export type PriorityInput = {
   /** 0–4 dimensions met. Null = never scored, which is NOT the same as scoring zero. */
   bantScore: number | null;
-  /** When the lead arrived — drives freshness. */
+  /** When the lead arrived - drives freshness. */
   arrivedAt: Date;
   /** Last time anything moved on this lead. Null = nothing ever has. */
   lastActivityAt: Date | null;
@@ -82,7 +82,7 @@ export type PriorityInput = {
 
 export type PriorityResult = {
   score: number;
-  /** Human-readable, in the order applied — this is what the UI shows as "why". */
+  /** Human-readable, in the order applied - this is what the UI shows as "why". */
   reasons: string[];
 };
 
@@ -92,7 +92,7 @@ const daysBetween = (from: Date, to: Date) => Math.floor((to.getTime() - from.ge
 /**
  * Score one lead.
  *
- * An UNSCORED lead (`bantScore: null`) contributes nothing from BANT rather than a zero — the
+ * An UNSCORED lead (`bantScore: null`) contributes nothing from BANT rather than a zero - the
  * same distinction the BANT chip makes on screen. Scoring it as zero would push every prospect
  * nobody has got round to asking below every prospect who answered badly, which is precisely
  * backwards: one is an absence of evidence, the other is evidence.
@@ -121,7 +121,7 @@ export function priorityScore(
     reasons.push("New this week");
   }
 
-  // Idle is measured from the last thing that HAPPENED, falling back to arrival — a lead nobody
+  // Idle is measured from the last thing that HAPPENED, falling back to arrival - a lead nobody
   // has touched since it landed is idle from the moment it landed.
   const idleDays = daysBetween(input.lastActivityAt ?? input.arrivedAt, now);
   if (idleDays > weights.idleAfterDays) {

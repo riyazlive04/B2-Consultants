@@ -11,20 +11,20 @@ import { answerToText, isStaticItem, normaliseItems, type FormAnswers } from "@/
 import { logActivity } from "@/server/activity-log";
 
 /**
- * Server-side CSV export — the file follows the FILTER, not the page.
+ * Server-side CSV export - the file follows the FILTER, not the page.
  *
  * ── Why this route exists ───────────────────────────────────────────────────────
  * Export was a `DataTable` button that serialised the rows currently rendered. Those rows are a
  * capped, paginated slice, so "download all leads for July" silently produced whatever part of
- * July had fitted on screen — an export that looks complete and is not, which is worse than no
+ * July had fitted on screen - an export that looks complete and is not, which is worse than no
  * export at all. This runs the same `where` clause the screen ran, with no page cap.
  *
  * ── Guards, in order ────────────────────────────────────────────────────────────
- *   · `requireSection` — the same gate the screen itself is behind. An export endpoint that
+ *   · `requireSection` - the same gate the screen itself is behind. An export endpoint that
  *     skipped it would be a way to read a section you cannot open.
- *   · `MAX_ROWS` — a stated ceiling, and the file SAYS when it truncated (see below). A silent
+ *   · `MAX_ROWS` - a stated ceiling, and the file SAYS when it truncated (see below). A silent
  *     cap on an export is the same lie as the paginated one it replaces.
- *   · `logActivity` — 23,545 lead records with names, phones and emails leaving the building is
+ *   · `logActivity` - 23,545 lead records with names, phones and emails leaving the building is
  *     the single largest data movement this app permits. It leaves a trace.
  *
  * Rows are read in keyset-paginated batches and streamed, so the whole table is never held in
@@ -41,7 +41,7 @@ const BATCH = 1_000;
 type ExportDef = {
   section: Parameters<typeof requireSection>[0];
   /**
-   * A function when the columns are not knowable until the request arrives — a form's export has
+   * A function when the columns are not knowable until the request arrives - a form's export has
    * one column per question, and every form has different questions.
    */
   header: string[] | ((req: NextRequest) => Promise<string[]>);
@@ -49,7 +49,7 @@ type ExportDef = {
   run: (req: NextRequest, period: { start: Date; endExclusive: Date }) => AsyncIterable<unknown[][]>;
 };
 
-/** Keyset pagination over `id` — stable, index-backed, and unaffected by rows inserted mid-export. */
+/** Keyset pagination over `id` - stable, index-backed, and unaffected by rows inserted mid-export. */
 async function* batched<T extends { id: string }>(
   fetchPage: (cursorId: string | null, take: number) => Promise<T[]>,
   toRow: (row: T) => unknown[],
@@ -59,7 +59,7 @@ async function* batched<T extends { id: string }>(
   for (;;) {
     const take = Math.min(BATCH, MAX_ROWS - emitted);
     if (take <= 0) {
-      yield [[`… truncated at the ${MAX_ROWS.toLocaleString("en-IN")}-row export limit — narrow the filter and export again`]];
+      yield [[`… truncated at the ${MAX_ROWS.toLocaleString("en-IN")}-row export limit - narrow the filter and export again`]];
       return;
     }
     const rows: T[] = await fetchPage(cursor, take);
@@ -73,8 +73,8 @@ async function* batched<T extends { id: string }>(
 
 const EXPORTS: Record<string, ExportDef> = {
   /**
-   * Leads / contacts. Honours every filter the Contacts screen exposes — search, owner, stage,
-   * source, city, tag and the date range — by reusing `contactsWhere`.
+   * Leads / contacts. Honours every filter the Contacts screen exposes - search, owner, stage,
+   * source, city, tag and the date range - by reusing `contactsWhere`.
    */
   leads: {
     section: "contacts",
@@ -114,7 +114,7 @@ const EXPORTS: Record<string, ExportDef> = {
           LEAD_SOURCE_LABELS[l.leadSource] ?? l.leadSource,
           l.assignedTo?.name ?? "",
           l.createdAt, l.contactedAt,
-          // "" not 0 — an unscored lead is one nobody asked, not one that scored zero.
+          // "" not 0 - an unscored lead is one nobody asked, not one that scored zero.
           l.bantAvg ?? "", l.bantVerdict ?? "",
           l.notes,
         ],
@@ -186,7 +186,7 @@ const EXPORTS: Record<string, ExportDef> = {
   },
 
   /**
-   * One form's responses — Google Forms' "Download responses (.csv)".
+   * One form's responses - Google Forms' "Download responses (.csv)".
    *
    * The columns are the form's own questions, in the order the form asks them, resolved per
    * request. Answers are keyed by `key` rather than by position, so a question added later does
@@ -268,7 +268,7 @@ export async function GET(req: NextRequest, { params }: { params: { entity: stri
     section: def.section,
     entityType: "Export",
     entityId: params.entity,
-    summary: `Exported ${params.entity} as CSV — ${period.label}`,
+    summary: `Exported ${params.entity} as CSV - ${period.label}`,
     meta: { entity: params.entity, period: period.label, filters: Object.fromEntries(req.nextUrl.searchParams) },
   });
 

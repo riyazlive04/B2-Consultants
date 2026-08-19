@@ -7,8 +7,8 @@ import type { LeadSource } from "@prisma/client";
  *
  * These senders all POST "some object with the opt-in fields in it somewhere", with no schema
  * we control and field names that differ per sender and per form. So the rule here is: read
- * permissively, cap hard, and never trust a key's spelling. The alternative — one bespoke parser
- * per sender — is how the same off-by-one field-name bug gets fixed twice.
+ * permissively, cap hard, and never trust a key's spelling. The alternative - one bespoke parser
+ * per sender - is how the same off-by-one field-name bug gets fixed twice.
  */
 
 /** Case-insensitive field read across a list of aliases; first non-empty alias wins. */
@@ -24,7 +24,7 @@ export function pick(obj: Record<string, unknown>, ...keys: string[]): string | 
 
 export const cap = (v: string | undefined, max: number) => (v ? v.slice(0, max) : v);
 
-/** Constant-time secret compare — a plain !== leaks length/prefix timing. */
+/** Constant-time secret compare - a plain !== leaks length/prefix timing. */
 export function secretMatches(provided: string, secret: string): boolean {
   const a = crypto.createHash("sha256").update(provided).digest();
   const b = crypto.createHash("sha256").update(secret).digest();

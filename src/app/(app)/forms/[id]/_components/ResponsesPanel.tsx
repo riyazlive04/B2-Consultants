@@ -12,7 +12,7 @@ import { SegmentedControl, IconButton } from "@/components/ui/controls";
 import { DateText } from "@/components/ui/DateText";
 
 /**
- * Responses — Google Forms' three views: Summary, Question-by-question and Individual.
+ * Responses - Google Forms' three views: Summary, Question-by-question and Individual.
  *
  * The old screen had one: a flat list showing the first six answers of the most recent hundred
  * submissions, truncated with no indication that it was truncating. That is fine for "did anything
@@ -37,7 +37,7 @@ export function ResponsesPanel({ form }: { form: FormDetail }) {
               The form is live at <span className="font-mono">/f/{form.slug}</span>.
             </>
           ) : (
-            <>It is still a draft — publish it before sharing the link.</>
+            <>It is still a draft - publish it before sharing the link.</>
           )}
         </p>
       </Card>
@@ -148,7 +148,7 @@ function QuestionSummaryCard({ summary, total }: { summary: QuestionSummary; tot
           </ul>
           {answered > samples.length && (
             <p className="mt-2 text-caption text-ink-3">
-              and {answered - samples.length} more — the CSV has every one
+              and {answered - samples.length} more - the CSV has every one
             </p>
           )}
         </>

@@ -16,7 +16,7 @@ export default async function SitesPage() {
       <ListHeader
         title="Website"
         count={sites.length}
-        subtitle="public marketing pages — published straight to the web"
+        subtitle="public marketing pages - published straight to the web"
       />
       <SitesList sites={sites} canManage={canManage} />
     </div>

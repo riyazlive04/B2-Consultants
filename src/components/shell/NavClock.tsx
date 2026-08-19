@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useDualClock, timeIn, ZONES, type Zone } from "@/lib/use-dual-clock";
 
 /**
- * Both business clocks in the top bar — 🇮🇳 14:32:07 · 🇩🇪 11:02:07.
+ * Both business clocks in the top bar - 🇮🇳 14:32:07 · 🇩🇪 11:02:07.
  *
  * The dual clock already existed, buried on /profile, which is nowhere near where it is needed:
  * the question "is it a reasonable hour to ring Germany right now" is asked mid-call, from
@@ -17,16 +17,16 @@ import { useDualClock, timeIn, ZONES, type Zone } from "@/lib/use-dual-clock";
  * ── Responsive contract ──────────────────────────────────────────────────────────
  * The top bar sheds WHOLE controls at breakpoints rather than shrinking them (a 40px button
  * rendered at 18px is an unhittable target). So:
- *   ≥ lg   both zones — the full answer
- *   ≥ sm   the OTHER zone only — your own local time is on your device's own clock; the one you
+ *   ≥ lg   both zones - the full answer
+ *   ≥ sm   the OTHER zone only - your own local time is on your device's own clock; the one you
  *          cannot get anywhere else is the far end
- *   < sm   hidden — a phone has neither the room nor the need
+ *   < sm   hidden - a phone has neither the room nor the need
  */
 export function NavClock() {
   /**
    * Seconds, ticking once a second.
    *
-   * This started as HH:MM on a one-minute interval, which was reported as "not live" — and it was
+   * This started as HH:MM on a one-minute interval, which was reported as "not live" - and it was
    * right. A minute clock is visually indistinguishable from a stopped one: nobody watches the top
    * bar for sixty seconds to find out whether it is working, so the only honest way to show that a
    * clock is running is to let it run. The state is local to this component, so a tick re-renders
@@ -34,7 +34,7 @@ export function NavClock() {
    */
   const { zone, now } = useDualClock(1000);
 
-  // Until mounted `now` is null — render the same placeholder the server did, or hydration
+  // Until mounted `now` is null - render the same placeholder the server did, or hydration
   // throws away the header. See useDualClock for the full reasoning.
   const other: Zone = zone === "IN" ? "DE" : "IN";
 
@@ -53,7 +53,7 @@ export function NavClock() {
       href="/profile"
       title={
         now
-          ? `${ZONES.IN.label} ${timeIn(ZONES.IN.tz, now)} · ${ZONES.DE.label} ${timeIn(ZONES.DE.tz, now)} — change your zone in your profile`
+          ? `${ZONES.IN.label} ${timeIn(ZONES.IN.tz, now)} · ${ZONES.DE.label} ${timeIn(ZONES.DE.tz, now)} - change your zone in your profile`
           : "Indian and German time"
       }
       className="hidden h-10 flex-none items-center gap-2 rounded-full border border-line-strong bg-surface-2 px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-surface hover:text-ink sm:flex"

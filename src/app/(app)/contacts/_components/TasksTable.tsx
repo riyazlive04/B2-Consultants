@@ -30,7 +30,7 @@ export default function TasksTable({ rows, owners }: { rows: Row[]; owners: { id
   const formRef = useRef<HTMLFormElement>(null);
 
   const shown = useMemo(() => rows.filter((r) => (showDone ? true : r.status === "OPEN")), [rows, showDone]);
-  const ownerOpts = [{ value: "", label: "— unassigned —" }, ...owners.map((o) => ({ value: o.id, label: o.name }))];
+  const ownerOpts = [{ value: "", label: "- unassigned -" }, ...owners.map((o) => ({ value: o.id, label: o.name }))];
 
   async function submit(fd: FormData) {
     setError(null);
@@ -83,16 +83,16 @@ export default function TasksTable({ rows, owners }: { rows: Row[]; owners: { id
             {r.contactName}
           </Link>
         ) : (
-          <span className="text-sm text-ink-2">—</span>
+          <span className="text-sm text-ink-2">-</span>
         ),
       value: (r) => r.contactName,
     },
     {
       key: "due", header: "Due",
-      cell: (r) => (r.dueAt ? <DateText date={r.dueAt} /> : <span className="text-ink-3">—</span>),
+      cell: (r) => (r.dueAt ? <DateText date={r.dueAt} /> : <span className="text-ink-3">-</span>),
       value: (r) => (r.dueAt ? r.dueAt.getTime() : null),
     },
-    { key: "assignee", header: "Assignee", cell: (r) => r.assigneeName ?? "—", value: (r) => r.assigneeName },
+    { key: "assignee", header: "Assignee", cell: (r) => r.assigneeName ?? "-", value: (r) => r.assigneeName },
     {
       key: "actions", header: "Actions", align: "right", sortable: false,
       cell: (r) => (

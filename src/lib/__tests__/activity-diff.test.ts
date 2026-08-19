@@ -1,9 +1,9 @@
 /**
- * Activity log — the update diff.
+ * Activity log - the update diff.
  *
  * Pure in, pure out, no DB. The Decimal case is the reason this file exists: a Prisma
  * Decimal JSON-serialises to `{}`, so a naive comparison marks every amount equal to every
- * other amount, and an edited fee logs as "nothing changed" — silently, while looking fine.
+ * other amount, and an edited fee logs as "nothing changed" - silently, while looking fine.
  * That's the worst failure this feature could have, so it's pinned here.
  *
  * Run: npm test
@@ -28,7 +28,7 @@ describe("diffFields", () => {
     assert.deepEqual(d.after, { stage: "QUALIFIED" });
   });
 
-  test("only keys present in `after` are compared — a form diffs what it touches", () => {
+  test("only keys present in `after` are compared - a form diffs what it touches", () => {
     const d = diffFields({ name: "Priya", stage: "NEW" }, { name: "Priya" });
     assert.deepEqual(d.changed, []);
   });
@@ -73,7 +73,7 @@ describe("diffFields", () => {
     assert.deepEqual(d.changed, []);
   });
 
-  test("null and undefined are the same absence — clearing an already-empty field isn't an edit", () => {
+  test("null and undefined are the same absence - clearing an already-empty field isn't an edit", () => {
     const d = diffFields({ notes: null } as Record<string, unknown>, { notes: undefined });
     assert.deepEqual(d.changed, []);
   });
@@ -94,7 +94,7 @@ describe("diffFields", () => {
    * diffFields runs at the call site, outside logActivity's try/catch, so an unhandled throw
    * here would propagate into a real action and roll back the write it was meant to record.
    */
-  describe("BigInt money — must never throw", () => {
+  describe("BigInt money - must never throw", () => {
     test("a changed amount diffs without throwing", () => {
       const d = diffFields(
         { amountInrMinor: BigInt(12000000) } as Record<string, unknown>,
@@ -113,7 +113,7 @@ describe("diffFields", () => {
       assert.deepEqual(d.changed, []);
     });
 
-    test("the result is JSON-serialisable — it has to survive the Json column", () => {
+    test("the result is JSON-serialisable - it has to survive the Json column", () => {
       const d = diffFields(
         { amountInrMinor: BigInt(1) } as Record<string, unknown>,
         { amountInrMinor: BigInt(2) },
@@ -134,7 +134,7 @@ describe("sanitiseMeta", () => {
     assert.doesNotThrow(() => JSON.stringify(out));
   });
 
-  test("a meta full of amounts survives JSON — otherwise the entry is lost silently", () => {
+  test("a meta full of amounts survives JSON - otherwise the entry is lost silently", () => {
     const meta = { before: { fee: BigInt(1) }, after: { fee: BigInt(2) }, changed: ["fee"] };
     assert.doesNotThrow(() => JSON.stringify(sanitiseMeta(meta)));
   });
@@ -143,7 +143,7 @@ describe("sanitiseMeta", () => {
     assert.deepEqual(sanitiseMeta({ at: new Date("2026-07-17T00:00:00Z") }), { at: "2026-07-17T00:00:00.000Z" });
   });
 
-  test("a buffer is summarised, never inlined — a sealed PDF must not land in the log", () => {
+  test("a buffer is summarised, never inlined - a sealed PDF must not land in the log", () => {
     assert.deepEqual(sanitiseMeta({ pdf: Buffer.alloc(2048) }), { pdf: "[2048 bytes]" });
   });
 

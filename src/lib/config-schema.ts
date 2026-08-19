@@ -1,10 +1,10 @@
 /**
  * Validation for everything the founder can edit.
  *
- * Read path:  coerce*(json) — a row that doesn't parse falls back to the shipped
+ * Read path:  coerce*(json) - a row that doesn't parse falls back to the shipped
  *             defaults rather than crashing the app. Nothing invalid can be in
  *             there anyway, because…
- * Write path: *Schema.safeParse(input) — the server action refuses to persist
+ * Write path: *Schema.safeParse(input) - the server action refuses to persist
  *             anything that wouldn't survive the read.
  *
  * zod lives ONLY here and in server modules. `gamification.ts` and `sections.ts`
@@ -45,7 +45,7 @@ const tier = z.enum(["bronze", "silver", "gold", "legend"]);
 const variant = z.enum(["ANY", "DISCOVERY_SPECIALIST", "APPOINTMENT_SETTER", "DELIVERY_COACH"]);
 const milestone = z.enum(MILESTONE_ORDER);
 
-/** `unique(rows, r => r.key)` as a zod refinement — duplicate keys silently shadow each other. */
+/** `unique(rows, r => r.key)` as a zod refinement - duplicate keys silently shadow each other. */
 function uniqueBy<T>(pick: (row: T) => string, label: string) {
   return (rows: T[], ctx: z.RefinementCtx) => {
     const seen = new Set<string>();
@@ -238,7 +238,7 @@ export const rewardTriggerSchema = z.discriminatedUnion("kind", [
 ]);
 
 /** A trigger that no longer parses (a metric was renamed in code) disables its rule
- *  rather than throwing — the founder sees it flagged in the console instead. */
+ *  rather than throwing - the founder sees it flagged in the console instead. */
 export function parseRewardTrigger(value: unknown): RewardTrigger | null {
   const parsed = rewardTriggerSchema.safeParse(value);
   return parsed.success ? (parsed.data as RewardTrigger) : null;
@@ -263,7 +263,7 @@ export const DEFAULT_REJECTION_BODY =
   "Thank you for your interest in B2 Consultants and for taking the time to share your details.\n\n" +
   "After reviewing your responses, we don't think our program is the right fit for you at this stage, " +
   "so we won't be scheduling a call at this time.\n\n" +
-  "Your goals and circumstances may change over time — you're very welcome to reach out again in the " +
+  "Your goals and circumstances may change over time - you're very welcome to reach out again in the " +
   "future. We wish you all the best on your journey.\n\n" +
   "Warm regards,\nThe B2 Consultants Team";
 
@@ -277,7 +277,7 @@ export const bookingRulesConfigSchema = z
     autoDisqualify: z.boolean().default(true),
     rejectionSubject: z.string().trim().min(1).max(200).default(DEFAULT_REJECTION_SUBJECT),
     rejectionBody: z.string().trim().min(1).max(4000).default(DEFAULT_REJECTION_BODY),
-    // ── Confirmation loop (Module E) — confirm-or-cancel + promote-next.
+    // ── Confirmation loop (Module E) - confirm-or-cancel + promote-next.
     // autoCancelEnabled is the destructive master switch (default OFF): only when it is on does the
     // engine release an unconfirmed slot. The two window fields drive the cadence; promoteNext
     // governs whether the next same-caller/same-day call is moved up into a freed slot.
@@ -323,13 +323,13 @@ export function coerceBookingRulesConfig(value: unknown): BookingRulesConfig {
  * /book calendar never runs dry.
  *
  * WHY THIS EXISTS: slots were only ever created by a one-off "generate for this range" form. On
- * 23 Jul 2026 the last slot was 15 Jul — the booking page, the top of the entire funnel, had
+ * 23 Jul 2026 the last slot was 15 Jul - the booking page, the top of the entire funnel, had
  * been showing an empty calendar for 8 days and nothing anywhere said so. A one-off batch cannot
  * fail safe; a pattern the cron replays can.
  *
  * `enabled` ships FALSE like every other engine here: turning it on is the founder's decision,
  * and an un-configured pattern must never start writing rows into a live calendar. But unlike
- * the other engines this one is INERT rather than destructive — it only ever creates OPEN slots
+ * the other engines this one is INERT rather than destructive - it only ever creates OPEN slots
  * on instants that have none, and never touches a BOOKED or BLOCKED row.
  */
 export const slotPatternConfigSchema = z.object({
@@ -340,7 +340,7 @@ export const slotPatternConfigSchema = z.object({
   intervalMins: z.number().int().min(15).max(240).default(30),
   durationMins: z.number().int().refine((v) => v === 30 || v === 60).default(30),
   /**
-   * How many days ahead to keep stocked. Capped at `maxAdvanceDays` by the job itself —
+   * How many days ahead to keep stocked. Capped at `maxAdvanceDays` by the job itself -
    * generating past the window the public page will show is pure waste.
    */
   horizonDays: z.number().int().min(1).max(120).default(21),
@@ -375,7 +375,7 @@ export function coerceSlotPatternConfig(value: unknown): SlotPatternConfig {
  * the whole company had one standing availability. The funnel needs the opposite: the VSL hands
  * off to "Book a call with Asma" and "Book a call with Ameen", and each page renders a calendar
  * scoped to that person (`booking` block → `bookingOwnerId`). With one pattern only one of those
- * two pages could ever have times in it — in production that was Asma with 73 open slots and
+ * two pages could ever have times in it - in production that was Asma with 73 open slots and
  * Ameen with zero, so half the funnel's traffic hit a dead calendar.
  *
  * `name` is for the humans in the console; nothing keys off it. `id` is what survives a rename.
@@ -388,7 +388,7 @@ export const bookingCalendarSchema = slotPatternConfigSchema.extend({
 export type BookingCalendar = z.infer<typeof bookingCalendarSchema>;
 
 /**
- * Capped at 12. Not a storage limit — every calendar is another pass over the horizon in the
+ * Capped at 12. Not a storage limit - every calendar is another pass over the horizon in the
  * hourly top-up, and a console that can grow without bound is how you end up generating tens of
  * thousands of slots nobody offers.
  */
@@ -404,19 +404,19 @@ export const DEFAULT_BOOKING_CALENDARS_CONFIG: BookingCalendarsConfig = { calend
  * Read the calendar list, MIGRATING the legacy single-pattern document in place.
  *
  * The old shape is a bare `SlotPatternConfig` under the same AppSetting key. Rather than a data
- * migration — which would have to run before the first deploy that reads this, and would strand
- * anyone who rolled back — the old shape is simply understood on read and rewritten the next
+ * migration - which would have to run before the first deploy that reads this, and would strand
+ * anyone who rolled back - the old shape is simply understood on read and rewritten the next
  * time the console saves. Production's live pattern (Asma, Mon–Fri 18:00–21:00) therefore keeps
  * generating slots across the deploy without anyone touching it.
  */
 export function coerceBookingCalendarsConfig(value: unknown): BookingCalendarsConfig {
   /**
-   * The `calendars` key must be PRESENT to take the list branch — testing only `safeParse` was a
+   * The `calendars` key must be PRESENT to take the list branch - testing only `safeParse` was a
    * bug with teeth. `calendars` carries `.default([])`, and a Zod object strips keys it does not
    * know, so the legacy `{enabled, weekdays, startTime, …}` document parsed *successfully* as
    * `{calendars: []}`. The legacy branch below was unreachable, and the first deploy would have
    * read production's live pattern as "no availability configured": the hourly job stops, the
-   * calendar drains to the horizon, and every booking page goes empty — the exact outage this
+   * calendar drains to the horizon, and every booking page goes empty - the exact outage this
    * whole feature exists to prevent, reintroduced by the migration meant to avoid it.
    */
   const hasList = typeof value === "object" && value !== null && "calendars" in value;
@@ -426,7 +426,7 @@ export function coerceBookingCalendarsConfig(value: unknown): BookingCalendarsCo
   }
 
   /**
-   * Every field of `slotPatternConfigSchema` has a default, so it parses ANY object — including
+   * Every field of `slotPatternConfigSchema` has a default, so it parses ANY object - including
    * an unrelated or corrupt document, which would then surface as a phantom "Discovery calls"
    * card in the console. Require some actual evidence of a pattern before claiming to have found
    * one; a doc with none is not a legacy pattern, it is garbage, and belongs on the empty default.
@@ -450,7 +450,7 @@ export function coerceBookingCalendarsConfig(value: unknown): BookingCalendarsCo
  * pattern as the configs above: no row = the defaults below, which reproduce the engine's
  * behaviour exactly as it was before this document existed.
  *
- * Every field here is READ BY THE ENGINE (src/server/automation.ts) — see the call sites
+ * Every field here is READ BY THE ENGINE (src/server/automation.ts) - see the call sites
  * named in each comment. Nothing in this document is decorative.
  */
 export const workflowSettingsSchema = z.object({
@@ -463,7 +463,7 @@ export const workflowSettingsSchema = z.object({
    */
   allowReEnrollment: z.boolean(),
   /**
-   * Don't deliver SEND_EMAIL / SEND_SMS inside this IST window — the enrollment parks and
+   * Don't deliver SEND_EMAIL / SEND_SMS inside this IST window - the enrollment parks and
    * resumes when the window closes. Hours are IST (the app's business timezone, fixed +5:30).
    * A window may wrap midnight (start 21, end 9). start === end means "no quiet window".
    * `advanceEnrollment`.
@@ -499,13 +499,13 @@ export function coerceWorkflowSettings(value: unknown): WorkflowSettings {
  * `server/commission-metrics.ts` on every report; a missing/invalid row falls back to the
  * shipped defaults (the rates that were hardcoded before this was configurable).
  *
- *   - bothCallsPct — one person did BOTH the first call and the discovery call.
- *   - splitPct     — first call and discovery split between two people (each earns this),
+ *   - bothCallsPct - one person did BOTH the first call and the discovery call.
+ *   - splitPct     - first call and discovery split between two people (each earns this),
  *                    and also the rate for a lone first-call or lone discovery leg.
- *   - closerPct    — the L3 closer who ran the SSS/sales call, on top of any earlier leg.
+ *   - closerPct    - the L3 closer who ran the SSS/sales call, on top of any earlier leg.
  *
  * Decimals are allowed (e.g. 2.5%). All three are a percentage of the payment actually
- * received — the split is a cut of real cash in, calculated per payment.
+ * received - the split is a cut of real cash in, calculated per payment.
  */
 export const commissionRulesConfigSchema = z.object({
   bothCallsPct: z.number().min(0).max(100),
@@ -513,7 +513,7 @@ export const commissionRulesConfigSchema = z.object({
   closerPct: z.number().min(0).max(100),
   /**
    * The stand-in's share of a covered leg (spec Part 2 §7.1: "the substitute keeps 20%, the
-   * original owner keeps 80% of that portion — configurable"). Applies ONLY to a leg whose
+   * original owner keeps 80% of that portion - configurable"). Applies ONLY to a leg whose
    * DiscoveryOutcome names a `coveredForId`; the owner takes the remainder (100 − this).
    *
    * It splits the leg, it does not add to it: a covered discovery still costs the business
@@ -545,19 +545,19 @@ export function coerceCommissionRulesConfig(value: unknown): CommissionRulesConf
  *     rate = (students >= thresholdStudents) ? atOrAbove : below
  *
  * and it is charged PER HEAD per level, so a 5-student A1 batch costs 5 × ₹7,000. A thin
- * batch pays the tutor more per head — the founder's stated volume tradeoff, not a typo.
+ * batch pays the tutor more per head - the founder's stated volume tradeoff, not a typo.
  *
  * Rates are per-level because Part 2 §5 says they are "configurable and can differ per
  * level"; they default flat to the only two numbers the founder actually stated (§18.2
  * left the full per-level table open, so inventing one here would be fiction).
  *
- * Rates are WHOLE RUPEES — this is what the founder types into the console. Callers in
+ * Rates are WHOLE RUPEES - this is what the founder types into the console. Callers in
  * lib/tutor-fee.ts convert to paise; nothing else should do that arithmetic itself.
  *
  * NOT the same thing as GN_LEVEL_COST.tutor in lib/gn-workshop-pricing.ts. That is a
  * per-conversion COGS figure reconciled against the founders' PDF workbook and answers
  * "what did this sale cost to deliver". This answers "what do we pay the tutor to run this
- * batch". They are kept apart until §18.2 is settled — merging them would silently restate
+ * batch". They are kept apart until §18.2 is settled - merging them would silently restate
  * historical workshop P&L.
  */
 export const TUTOR_FEE_LEVELS = ["A1", "A2", "B1"] as const;
@@ -596,11 +596,11 @@ export function coerceTutorFeeConfig(value: unknown): TutorFeeConfig {
 // ─────────────────────────── instalment plans ───────────────────────────
 
 /**
- * What paying in instalments COSTS, and how far apart the instalments fall — founder-editable
+ * What paying in instalments COSTS, and how far apart the instalments fall - founder-editable
  * via AppSetting("instalmentPlans"), read by the EMI generator on the Finance → Pending tab.
  *
  * One row per plan length: "3 instalments → ₹600" means a 3-part plan adds ₹600 ONCE to the
- * agreed fee (not ₹600 per instalment). A length with no row, or a row at 0, adds nothing —
+ * agreed fee (not ₹600 per instalment). A length with no row, or a row at 0, adds nothing -
  * which is the default for every length except the one the founder named, because a surcharge
  * that appears without being typed is the one mistake this table must not make.
  *
@@ -624,7 +624,7 @@ export const instalmentPlanConfigSchema = z.object({
   tiers: z
     .array(instalmentTierSchema)
     .max(INSTALMENT_COUNT_MAX - INSTALMENT_COUNT_MIN + 1)
-    // Two rows for the same length would make the surcharge depend on array order —
+    // Two rows for the same length would make the surcharge depend on array order -
     // silently, and differently for whoever read it last.
     .superRefine((tiers, ctx) => {
       const seen = new Set<number>();
@@ -632,7 +632,7 @@ export const instalmentPlanConfigSchema = z.object({
         if (seen.has(t.count)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: `There are two rows for ${t.count} instalments — keep one`,
+            message: `There are two rows for ${t.count} instalments - keep one`,
           });
           return;
         }
@@ -683,7 +683,7 @@ export const bookOrderConfigSchema = z.object({
 export type BookOrderConfig = z.infer<typeof bookOrderConfigSchema>;
 
 export const DEFAULT_BOOK_ORDER_CONFIG: BookOrderConfig = {
-  orderThresholdInrMinor: 3_000_000, // ₹30,000 — the spec's example, pending §18.3
+  orderThresholdInrMinor: 3_000_000, // ₹30,000 - the spec's example, pending §18.3
   requireFreshQuotePerLevel: true,
 };
 
@@ -695,9 +695,9 @@ export function coerceBookOrderConfig(value: unknown): BookOrderConfig {
 // ───────────────────────────── pipeline mode ─────────────────────────────
 
 /**
- * Rules-driven vs drag-and-drop pipeline (spec Part 2 §9, §18.6 — the founders were offered
+ * Rules-driven vs drag-and-drop pipeline (spec Part 2 §9, §18.6 - the founders were offered
  * both and hadn't picked). Config, not a schema change: the same Pipeline data renders either
- * way, so this only decides who moves a card — a rule, or a hand.
+ * way, so this only decides who moves a card - a rule, or a hand.
  */
 export const pipelineConfigSchema = z.object({
   mode: z.enum(["rules", "drag_drop"]),
@@ -705,7 +705,7 @@ export const pipelineConfigSchema = z.object({
    * File every newly captured lead onto the default Opportunity board.
    *
    * Defaults ON, which is a deliberate exception to this file's usual off-by-default rule. The
-   * previous behaviour was not a considered "off" — nothing created an opportunity from an
+   * previous behaviour was not a considered "off" - nothing created an opportunity from an
    * inbound lead at all, which is why production ran with 23,545 leads and one card. Shipping
    * this switched off would preserve a bug behind a toggle.
    *
@@ -718,7 +718,7 @@ export const pipelineConfigSchema = z.object({
 
 export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;
 
-/** Rules is the shipped behaviour, so it stays the default — the mode toggle is opt-in. */
+/** Rules is the shipped behaviour, so it stays the default - the mode toggle is opt-in. */
 export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = { mode: "rules", autoCreateOpportunity: true };
 
 export function coercePipelineConfig(value: unknown): PipelineConfig {
@@ -734,7 +734,7 @@ export function coercePipelineConfig(value: unknown): PipelineConfig {
  *
  * WHAT IS AND ISN'T REUSED: only the ink. The device our server OBSERVES (IP + User-Agent) is
  * captured fresh on every issue, and the ISSUED event records `signature: "saved"` plus this
- * `savedAt` — so the audit trail states plainly that stored ink was stamped at issue time rather
+ * `savedAt` - so the audit trail states plainly that stored ink was stamped at issue time rather
  * than implying a live draw. `savedDevice` records the session the signature was originally
  * captured in, which is the other half of that sentence.
  *
@@ -768,9 +768,9 @@ export function coerceSavedSignature(value: unknown): SavedSignature | null {
  * the picker regardless of this setting. It only decides which clients get the "Agreement pending"
  * card / dashboard task before a draft exists.
  *
- *   - DEPOSIT — prompt once the deposit is paid (stage DEPOSIT_PAID) or the deal is won.
- *   - WON     — prompt only when the deal is fully won.
- *   - EITHER  — prompt at deposit, won, OR "agreed but no deposit yet" (confirmed intention). Default.
+ *   - DEPOSIT - prompt once the deposit is paid (stage DEPOSIT_PAID) or the deal is won.
+ *   - WON     - prompt only when the deal is fully won.
+ *   - EITHER  - prompt at deposit, won, OR "agreed but no deposit yet" (confirmed intention). Default.
  */
 export const agreementWorkflowSchema = z.object({
   readiness: z.enum(["DEPOSIT", "WON", "EITHER"]),
@@ -794,7 +794,7 @@ export function coerceAgreementWorkflow(value: unknown): AgreementWorkflowConfig
  * sessions). Read by the Daily Log timeline to colour each entry's status badge:
  * hit the target → "On target", well over → "Standout", well under → "Below par".
  *
- * A target of 0 means "no target set" — the timeline then falls back to the person's own
+ * A target of 0 means "no target set" - the timeline then falls back to the person's own
  * rolling average, so the feature works out of the box and only gets sharper once set.
  */
 const dailyTarget = z.number().int().min(0).max(999);
@@ -824,7 +824,7 @@ export function coerceDailyLogTargets(value: unknown): DailyLogTargets {
  * "Every telecaller's log is saved by EOD." Founder-editable via AppSetting("dailyLogEod").
  * Read by the submit action, the EOD job (`server/daily-log-eod.ts`) and the notification centre.
  *
- * Times are MINUTES since IST midnight (0..1439), matching `istMinutesOfDay` in lib/dates.ts —
+ * Times are MINUTES since IST midnight (0..1439), matching `istMinutesOfDay` in lib/dates.ts -
  * an hour-only field couldn't express 9:30pm, and IST is a fixed +05:30 with no DST, so the
  * arithmetic is exact.
  *
@@ -832,15 +832,15 @@ export function coerceDailyLogTargets(value: unknown): DailyLogTargets {
  * `istToday()`, so a missed day can never be logged late). What this adds is making the deadline
  * EXPLICIT and making the rule actually happen:
  *
- *   nudgeMinutes  — from here, an unlogged member sees a "log before cutoff" notification.
- *   cutoffMinutes — the deadline. After it, no NEW log for today (see submitDailyLog).
- *   autoSave      — at cutoff, write what activity we can derive for anyone who didn't log,
+ *   nudgeMinutes  - from here, an unlogged member sees a "log before cutoff" notification.
+ *   cutoffMinutes - the deadline. After it, no NEW log for today (see submitDailyLog).
+ *   autoSave      - at cutoff, write what activity we can derive for anyone who didn't log,
  *                   stamped EOD_AUTO, so no day is ever blank. Needs the cron to tick.
- *   amendWindowDays — how long an EOD_AUTO row stays amendable by its owner. This is the
+ *   amendWindowDays - how long an EOD_AUTO row stays amendable by its owner. This is the
  *                   counterweight to autoSave: auto-capture cannot see every field, so an
  *                   unamended EOD_AUTO row reads LOW on the Telecaller Pay board. 1 = the
  *                   member can still fix it the next morning. 0 = auto rows are final.
- *   founderSummary — after cutoff, Admin's notification centre reports who logged and who didn't.
+ *   founderSummary - after cutoff, Admin's notification centre reports who logged and who didn't.
  *
  * `enabled` gates ALL of the above and ships FALSE, like every other engine in this app: it
  * both writes rows and refuses submissions, so it should never switch itself on at install.
@@ -856,7 +856,7 @@ export const dailyLogEodSchema = z
     amendWindowDays: z.number().int().min(0).max(7),
     founderSummary: z.boolean(),
   })
-  // A nudge at or after the cutoff could never fire — the window it belongs to is already shut.
+  // A nudge at or after the cutoff could never fire - the window it belongs to is already shut.
   .refine((c) => c.nudgeMinutes < c.cutoffMinutes, {
     message: "The nudge time must be before the cutoff",
     path: ["nudgeMinutes"],
@@ -878,7 +878,7 @@ export function coerceDailyLogEod(value: unknown): DailyLogEodConfig {
   return parsed.success ? parsed.data : DEFAULT_DAILY_LOG_EOD;
 }
 
-/** "9:00 PM" for an IST minute-of-day — used by the config UI and the deadline copy. */
+/** "9:00 PM" for an IST minute-of-day - used by the config UI and the deadline copy. */
 export function formatIstMinutes(minutes: number): string {
   const h24 = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -887,7 +887,7 @@ export function formatIstMinutes(minutes: number): string {
   return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
-/** "21:00" — the <input type="time"> encoding for an IST minute-of-day. */
+/** "21:00" - the <input type="time"> encoding for an IST minute-of-day. */
 export function istMinutesToTimeInput(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
@@ -905,15 +905,15 @@ export function timeInputToIstMinutes(value: string): number | null {
 // ───────────────────────────── SSS (sales) call ─────────────────────────────
 
 /**
- * Success Strategy Session config — the founder-run sales/closing call. Founder-editable via
+ * Success Strategy Session config - the founder-run sales/closing call. Founder-editable via
  * AppSetting("sssConfig"), same lazy-default pattern as the configs above. Read by the SSS slot
  * engine (`server/sss-slots.ts`).
  *
- *   - ownerId              — the User who runs the SSS by default (e.g. Ameen). New slots default
+ *   - ownerId              - the User who runs the SSS by default (e.g. Ameen). New slots default
  *                            to this owner; null = unset (the founder must pick one before slots
  *                            can be generated). Set on the Founder Console → SSS Calendar.
- *   - slotDurationMins     — default length of a generated SSS slot.
- *   - rescheduleWithinDays — when a booked slot/day is blocked, how far ahead to search for the
+ *   - slotDurationMins     - default length of a generated SSS slot.
+ *   - rescheduleWithinDays - when a booked slot/day is blocked, how far ahead to search for the
  *                            next OPEN slot to auto-move the prospect into. Past this window they're
  *                            flagged for manual rebooking rather than moved.
  */
@@ -949,17 +949,17 @@ export const goalPeriodSchema = z.enum(["MONTH", "QUARTER", "YEAR"]);
  * Founder-editable via AppSetting("maintenanceConfig"), same lazy-default pattern as every
  * config above. Read by `server/daily-maintenance.ts`, ticked by /api/cron/daily.
  *
- *   fxPrewarm     — warm the day's INR/EUR rate before a user request pays the fetch latency
+ *   fxPrewarm     - warm the day's INR/EUR rate before a user request pays the fetch latency
  *                   (lib/fx.getTodayInrPerEur). Purely a cache-warm; ships ON because it can
  *                   never do anything but avoid a stall.
- *   overdueSweep  — flip SENT invoices and DUE instalments to OVERDUE once their due date has
+ *   overdueSweep  - flip SENT invoices and DUE instalments to OVERDUE once their due date has
  *                   passed. Non-destructive status correctness; ships ON. PARTIAL invoices are
- *                   left alone on purpose — the status column can't hold "partly-paid AND late".
- *   retention     — hard-delete aged growth rows older than the window. This DELETES data, so it
+ *                   left alone on purpose - the status column can't hold "partly-paid AND late".
+ *   retention     - hard-delete aged growth rows older than the window. This DELETES data, so it
  *                   ships OFF and every window defaults generously. 0 days on any line means
  *                   "keep forever" (that line is skipped). Append-only audit tables (daily logs,
  *                   stage/milestone/signal history, the hash-chained audit trail) are NEVER
- *                   touched — only WhatsApp message rows and expired, unaccepted user invites.
+ *                   touched - only WhatsApp message rows and expired, unaccepted user invites.
  */
 const retentionDays = z.number().int().min(0).max(3650);
 
@@ -989,7 +989,7 @@ export function coerceMaintenanceConfig(value: unknown): MaintenanceConfig {
 // ───────────────────────── scheduled report email ─────────────────────────
 
 /**
- * "Email me the numbers" — a founder digest delivered on a cadence over the existing Resend
+ * "Email me the numbers" - a founder digest delivered on a cadence over the existing Resend
  * seam (lib/email.ts). Founder-editable via AppSetting("scheduledReport"). Read + sent by
  * `server/scheduled-report.ts` from the daily cron, guarded so it fires exactly once per period.
  *
@@ -1014,14 +1014,14 @@ export const scheduledReportConfigSchema = z.object({
    * WhatsApp numbers to also send the digest to (E.164-ish, country code required).
    *
    * WHY THIS IS A SEPARATE LIST AND NOT A "channel" SWITCH: the founders read WhatsApp and not
-   * email, so this is the delivery that actually gets read — but it comes with a real constraint.
+   * email, so this is the delivery that actually gets read - but it comes with a real constraint.
    * Meta only permits a business-initiated WhatsApp message via a PRE-APPROVED TEMPLATE, and no
    * template exists for a six-number digest (drafting and submitting one is its own piece of
    * work). So this send goes out as a free-form SESSION message, which only lands if the
    * recipient has messaged the business in the last 24 hours.
    *
    * That makes it genuinely useful for a founder who chats with the business number regularly,
-   * and useless otherwise — which is why email is never turned off in exchange for it. Both go.
+   * and useless otherwise - which is why email is never turned off in exchange for it. Both go.
    */
   whatsappRecipients: z.array(z.string().trim().min(8).max(20)).max(5),
 });
@@ -1049,16 +1049,16 @@ export function coerceScheduledReportConfig(value: unknown): ScheduledReportConf
  * Two accounting-correctness switches, both OFF by default because they post to the real
  * double-entry ledger (audit §C #22/#23). Founder-editable via AppSetting("financePosting").
  *
- *   invoiceIssuancePosting — post Dr Accounts-receivable / Cr Income when an invoice is issued,
+ *   invoiceIssuancePosting - post Dr Accounts-receivable / Cr Income when an invoice is issued,
  *     so AR is two-sided instead of only ever being credited by payments (finance-posting.ts's
  *     documented gap). Read by `server/invoice-posting.ts`.
- *   commissionAccrual — when a commission payout run is recorded, also post Dr Team-salaries /
- *     Cr Accounts-payable for the month's total (an accrual, NOT a cash payment — so it never
+ *   commissionAccrual - when a commission payout run is recorded, also post Dr Team-salaries /
+ *     Cr Accounts-payable for the month's total (an accrual, NOT a cash payment - so it never
  *     asserts money left the bank). Read by `server/commission-actions.ts`. With this OFF the
  *     payout run is still recorded as a snapshot; only the ledger posting is withheld.
- *   tutorFeeAccrual — when a tutor fee is APPROVED, post Dr COGS-Tutor-fees / Cr
+ *   tutorFeeAccrual - when a tutor fee is APPROVED, post Dr COGS-Tutor-fees / Cr
  *     Accounts-payable (ER v2 Track C). Also an accrual: the CASH leg is the Expense row the
- *     founder records when they actually pay the trainer, which hits a different account —
+ *     founder records when they actually pay the trainer, which hits a different account -
  *     that separation is what stops the fee being counted twice. Read by
  *     `server/tutor-fee-actions.ts`. With this OFF the fee report is still complete and
  *     correct; only the ledger posting is withheld.
@@ -1085,7 +1085,7 @@ export function coerceFinancePostingConfig(value: unknown): FinancePostingConfig
 // ───────────────────────────── call distribution ─────────────────────────────
 
 /**
- * How work is shared out, and which lead is worked first — the founder's two dials.
+ * How work is shared out, and which lead is worked first - the founder's two dials.
  *
  * WHAT LIVES HERE vs ON THE PERSON. Each individual's SHARE stays on `TeamProfile`
  * (`firstCallSharePct`), because it belongs to them and follows them through the org chart. What
@@ -1116,7 +1116,7 @@ export const callDistributionSchema = z.object({
    * Whether "Hand out leads" splits the batch across the rotation by share.
    *
    * Off = the historical behaviour: everything goes to one named person. That is where the volume
-   * actually is — the backlog dwarfs live intake — so leaving this off means the configured
+   * actually is - the backlog dwarfs live intake - so leaving this off means the configured
    * weighting governs only a trickle.
    */
   handOutSplitsByShare: z.boolean(),
@@ -1168,11 +1168,11 @@ export function coerceCallDistribution(value: unknown): CallDistributionConfig {
  * AppSetting("speedToLeadAlert"); read + sent by server/speed-to-lead-alert.ts on the
  * /api/cron/alerts tick.
  *
- * Ships OFF — it sends real email.
+ * Ships OFF - it sends real email.
  *
  * THE DEFAULTS ARE SHAPED BY THE BACKLOG. Production holds ~23,435 leads, essentially none ever
  * contacted. An alert defined as "any lead past its deadline" would fire on all of them, on every
- * tick, forever — and be muted within two days, which is worse than no alert because it also
+ * tick, forever - and be muted within two days, which is worse than no alert because it also
  * carries the false assurance of having been configured. So:
  *
  *   lookbackMinutes  only leads that arrived in the last N minutes are alertable. The standing
@@ -1221,7 +1221,7 @@ export type DunningChannel = z.infer<typeof dunningChannelSchema>;
  * Ships OFF: it emails and WhatsApps paying students, which is the highest-consequence outbound
  * this app has.
  *
- * `dayOffset` is relative to the due date — NEGATIVE is before it. The defaults (-3 / +1 / +7)
+ * `dayOffset` is relative to the due date - NEGATIVE is before it. The defaults (-3 / +1 / +7)
  * are a nudge, a miss and a final notice.
  *
  * `perRunCap` is not a performance setting. The first armed run faces the entire standing
@@ -1271,7 +1271,7 @@ export function coerceDunningConfig(value: unknown): DunningConfig {
  * read by lib/attendance.ts (pure) through server/attendance.ts.
  *
  * These are thresholds on a RECORDED fact, so unlike the engines above there is nothing to ship
- * "off" — the signal is a read, not a send. What ships off is acting on it.
+ * "off" - the signal is a read, not a send. What ships off is acting on it.
  *
  * `amberRatePct` / `redRatePct` are attendance percentages, so LOWER is worse. `consecutiveMissed`
  * is the separate alarm: a student at 80% overall who has missed the last three classes in a row

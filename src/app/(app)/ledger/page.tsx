@@ -25,7 +25,7 @@ const PAGE_SIZE = 25;
  *
  * Its whole job is trust: every figure on Finance and Cash Health is a slice of what is
  * shown here, so the founder can follow any rupee back to a balanced entry. Nothing on
- * this page is editable — corrections happen in Finance and arrive here as a void plus a
+ * this page is editable - corrections happen in Finance and arrive here as a void plus a
  * restated entry, which is why voided entries stay visible rather than disappearing.
  */
 export default async function LedgerPage({
@@ -58,7 +58,7 @@ export default async function LedgerPage({
         icon={<Scale size={22} strokeWidth={1.8} />}
         eyebrow="Accounting"
         title="Ledger"
-        subtitle="Every rupee on Finance and Cash Health traces to a balanced entry here. Read-only by design — corrections are posted, never edited."
+        subtitle="Every rupee on Finance and Cash Health traces to a balanced entry here. Read-only by design - corrections are posted, never edited."
       />
 
       <Grid cols={4}>
@@ -84,7 +84,7 @@ export default async function LedgerPage({
         </Panel>
       </Grid>
 
-      {/* The assertion the design system asks for (§5.10) — stated, not implied. */}
+      {/* The assertion the design system asks for (§5.10) - stated, not implied. */}
       {trial.balanced ? (
         <div className="flex items-center gap-2 rounded-field bg-good-soft px-4 py-3 text-sm font-medium text-good">
           <CheckCircle2 size={16} />

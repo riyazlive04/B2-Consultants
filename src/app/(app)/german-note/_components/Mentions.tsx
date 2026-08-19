@@ -31,7 +31,7 @@ export function MentionText({ body, candidates }: { body: string; candidates: Me
  * Typing `@` then a name filters the batch/community members; picking one
  * inserts the full display name.
  *
- * Keyboard: the textarea keeps focus and drives the listbox — ↑/↓ move the active
+ * Keyboard: the textarea keeps focus and drives the listbox - ↑/↓ move the active
  * option, Enter selects it, Esc dismisses. The options are real buttons too, so a
  * mouse click (onMouseDown, which must preventDefault to stop the textarea
  * blurring) and a native button activation (onClick → Enter/Space) both select.

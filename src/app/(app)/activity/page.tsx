@@ -17,13 +17,13 @@ export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
 
 /**
- * The activity log — who did what, when, across the whole app.
+ * The activity log - who did what, when, across the whole app.
  *
  * Gated on the `activity` section, which is `locked` in the catalogue: ADMIN-only and not
  * switchable off. A log the people it reports on can read or hide is not a log.
  *
  * Two views over one query. The FEED is for "what's been happening today"; the TABLE is for
- * "what exactly did Asma do at 3pm" — timestamps to the second, in IST, always. Both live in
+ * "what exactly did Asma do at 3pm" - timestamps to the second, in IST, always. Both live in
  * the URL alongside the filters, so any view of this page is a link worth sending.
  */
 export default async function ActivityPage({ searchParams }: { searchParams: SP }) {
@@ -62,7 +62,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
         icon={<ShieldCheck size={22} strokeWidth={1.8} />}
         eyebrow="Oversight"
         title="Activity Log"
-        subtitle="Every action anyone takes in the app, stamped with the exact time it happened. Append-only — entries can never be edited or removed, including by an admin."
+        subtitle="Every action anyone takes in the app, stamped with the exact time it happened. Append-only - entries can never be edited or removed, including by an admin."
       />
 
       <Grid cols={3}>
@@ -81,7 +81,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
         <Card title={<CardTitle icon={<ShieldCheck size={17} />}>Activity</CardTitle>}>
           <EmptyState
             title="Nothing logged yet"
-            body="The log starts filling the moment anyone records a call, edits a lead, or changes a setting. It only captures actions taken from now on — it can't reconstruct what happened before it existed."
+            body="The log starts filling the moment anyone records a call, edits a lead, or changes a setting. It only captures actions taken from now on - it can't reconstruct what happened before it existed."
           />
         </Card>
       ) : (

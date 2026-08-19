@@ -24,7 +24,7 @@ import { sendWhatsApp } from "./whatsapp";
 import { logPublicActivity } from "./activity-log";
 
 /**
- * The public signing surface. PUBLIC by necessity — the student has no session — so the token is
+ * The public signing surface. PUBLIC by necessity - the student has no session - so the token is
  * the only credential and every failure mode is re-checked on every call.
  *
  * The identity binding is a one-time code delivered to the same WhatsApp number the link went to.
@@ -64,7 +64,7 @@ export async function inspectAgreement(token: string): Promise<
   };
 }
 
-/** Send (or re-send) the one-time code to the number on the agreement — never to a number the caller supplies. */
+/** Send (or re-send) the one-time code to the number on the agreement - never to a number the caller supplies. */
 export async function requestSignOtp(
   token: string,
 ): Promise<ActionResult<{ maskedPhone: string; devCode?: string }>> {
@@ -84,7 +84,7 @@ export async function requestSignOtp(
   const data = row.data as unknown as AgreementData;
 
   const { code, codeHash, expiresAt } = mintOtp();
-  // A fresh code resets the attempt counter — otherwise five typos would lock the student out
+  // A fresh code resets the attempt counter - otherwise five typos would lock the student out
   // of their own contract permanently.
   await prisma.agreement.update({
     where: { id: row.id },
@@ -95,7 +95,7 @@ export async function requestSignOtp(
     kind: "AGREEMENT_OTP",
     to: data.student.phone,
     vars: { name: firstName(data.student.fullName), code },
-    bodySummary: `Agreement ${row.documentNo} — signing code`,
+    bodySummary: `Agreement ${row.documentNo} - signing code`,
     agreementId: row.id,
     leadId: row.leadId,
     studentId: row.studentId,
@@ -135,7 +135,7 @@ const signSchema = z.object({
 });
 
 /**
- * Verify, seal, burn — in that order, and in ONE write.
+ * Verify, seal, burn - in that order, and in ONE write.
  *
  * The render happens BEFORE the compare-and-set, which looks backwards until you remember the
  * `agreement_seal_immutable` trigger: once `signedAt` is set, `pdfBytes` can never be written.
@@ -258,7 +258,7 @@ export async function signAgreement(input: {
   });
 
   // The student has no session, but the token plus the one-time code just proved who they
-  // are — so this is a named action, not an anonymous one, and it belongs on the founder's
+  // are - so this is a named action, not an anonymous one, and it belongs on the founder's
   // feed next to the staff action that issued it. The AgreementEvent trail above stays the
   // legal record; this is the human-readable line.
   await logPublicActivity(
@@ -278,7 +278,7 @@ export async function signAgreement(input: {
    *
    * This runs AFTER the burn, never before: a failed WhatsApp send must not cost the student a
    * signature they already made. The row is fail-safe (it resolves an outcome, never throws), so
-   * the worst case is a SKIPPED row and the agreement resting at "Signed — deliver copy" on the
+   * the worst case is a SKIPPED row and the agreement resting at "Signed - deliver copy" on the
    * founder's dashboard until it goes out. That's also the line between SIGNED and COMPLETED:
    * `deriveAgreementState` only reads a SUCCESSFUL send as delivered.
    *
@@ -292,7 +292,7 @@ export async function signAgreement(input: {
       copy_url: signedCopyUrl(token),
       document_no: row.documentNo,
     },
-    bodySummary: `Agreement ${row.documentNo} — countersigned copy`,
+    bodySummary: `Agreement ${row.documentNo} - countersigned copy`,
     agreementId: row.id,
     leadId: row.leadId,
     studentId: row.studentId,
@@ -330,7 +330,7 @@ export async function declineAgreement(token: string, reason: string): Promise<A
     meta: { reason: reason.slice(0, 500) },
   });
 
-  // Only the token backs this one — declining asks for no code — but the link went to their
+  // Only the token backs this one - declining asks for no code - but the link went to their
   // number, and a decline the founder never sees is a deal that goes quiet for no visible
   // reason. The name comes from the agreement row, never from the request.
   const declinedBy = (found.row.data as unknown as AgreementData).student.fullName;

@@ -10,7 +10,7 @@ import { setWhatsAppPaused } from "@/server/whatsapp-actions";
 /**
  * Admin master switch for outbound WhatsApp.
  *
- * Turning it OFF is deliberately one click with no confirmation — this is the control someone
+ * Turning it OFF is deliberately one click with no confirmation - this is the control someone
  * reaches for when messages are going out that shouldn't be, and a dialog in the way of stopping
  * them is a dialog in the wrong place. Turning it ON asks first, because that is the direction
  * that reaches real phones.
@@ -44,7 +44,7 @@ export function WhatsAppMasterSwitch({
         title: "Turn WhatsApp sending on?",
         body: testRecipient
           ? `Reminders that are already due will go out as soon as this is on. Every message is currently redirected to the test number ${testRecipient}, so no lead will be contacted until that is cleared in Settings.`
-          : "Reminders that are already due will go out as soon as this is on, to REAL recipients — there is no test number set. Anything overdue is sent in one batch, not spread out.",
+          : "Reminders that are already due will go out as soon as this is on, to REAL recipients - there is no test number set. Anything overdue is sent in one batch, not spread out.",
         confirmLabel: "Turn on",
       });
       if (!ok) return;

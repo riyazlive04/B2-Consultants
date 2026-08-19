@@ -20,7 +20,7 @@ export default async function AgreementsPage() {
       <PageHeader
         icon={<FileSignature size={20} />}
         title="Agreements"
-        subtitle="Draft, countersign and issue coaching agreements — signed over WhatsApp."
+        subtitle="Draft, countersign and issue coaching agreements - signed over WhatsApp."
         actions={
           <Link
             href="/agreements/new"
@@ -116,12 +116,12 @@ export default async function AgreementsPage() {
                             code={r.studentCode}
                           />
                         ) : (
-                          "—"
+                          "-"
                         )}
                       </td>
-                      <td className="px-4 py-3 text-muted">{d?.batch.number ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted">{d?.batch.number ?? "-"}</td>
                       <td className="px-4 py-3 text-right tabular-nums">
-                        {d ? formatInrMinor(BigInt(d.payment.totalInrMinor)) : "—"}
+                        {d ? formatInrMinor(BigInt(d.payment.totalInrMinor)) : "-"}
                       </td>
                       <td className="px-4 py-3">
                         {/* Derived, not raw: an elapsed TTL is never written back to the row. */}

@@ -6,7 +6,7 @@ import { Clock } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
 
 /**
- * App-styled time picker — the third native popup replaced (see {@link MonthPicker}).
+ * App-styled time picker - the third native popup replaced (see {@link MonthPicker}).
  *
  * Two columns of buttons rather than a spinner or a free-text field: every time this app asks
  * for is a slot boundary or a cutoff ("15:00", "21:00"), so a list of real choices is both
@@ -86,7 +86,7 @@ export function TimePicker({
   const minutes = Array.from({ length: Math.ceil(60 / stepMins) }, (_, i) => (i * stepMins) % 60);
   const hours = Array.from({ length: 24 }, (_, h) => h);
 
-  // Scroll the chosen hour/minute into view when the panel opens — with 24 hours in a scroller,
+  // Scroll the chosen hour/minute into view when the panel opens - with 24 hours in a scroller,
   // opening at the top would hide the current selection more often than not.
   const hourColRef = useRef<HTMLDivElement>(null);
   const minColRef = useRef<HTMLDivElement>(null);

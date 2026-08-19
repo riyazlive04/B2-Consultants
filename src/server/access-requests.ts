@@ -13,7 +13,7 @@ import type { ActionResult } from "./finance-actions";
  * seat on the login screen; the request lands in People → Users & access for
  * the Admin to approve (pre-fills the create-user form) or decline.
  *
- * Requests live in the AppSetting key/value store — a handful of rows for a
+ * Requests live in the AppSetting key/value store - a handful of rows for a
  * single-org tool doesn't warrant a table, and this keeps the schema untouched.
  */
 
@@ -31,7 +31,7 @@ export type AccessRequest = {
    * un-representable would make the approval screen crash on exactly the rows an admin most
    * needs to see in order to decline them.
    *
-   * New ADMIN requests cannot be created — see `submitSchema`.
+   * New ADMIN requests cannot be created - see `submitSchema`.
    */
   role: "ADMIN" | "HEAD" | "USER" | "TUTOR" | "STUDENT";
   note: string;
@@ -52,7 +52,7 @@ async function writeQueue(queue: AccessRequest[]): Promise<void> {
 }
 
 /**
- * PUBLIC input, so this is the real gate — the login screen's character filters are UX only and a
+ * PUBLIC input, so this is the real gate - the login screen's character filters are UX only and a
  * crafted POST never runs them. `rule()` keeps the two definitions of "a name" / "an email" from
  * drifting apart; `note` keeps its own 500 cap (tighter than the shared text kind's 2000).
  */
@@ -60,7 +60,7 @@ const submitSchema = z.object({
   name: rule("name"),
   email: rule("email"),
   /**
-   * ADMIN IS NOT REQUESTABLE. This enum is the real gate — the login screen's role picker is UX,
+   * ADMIN IS NOT REQUESTABLE. This enum is the real gate - the login screen's role picker is UX,
    * and a crafted POST never renders it, so dropping "Founder / Admin" from that list without
    * narrowing this would have left full finance-and-compliance access one HTTP request away for
    * anyone who found the endpoint. An admin seat is created BY an admin in People → Users & access.
@@ -74,7 +74,7 @@ const submitSchema = z.object({
 
 /**
  * PUBLIC (called from the login screen, pre-auth). Always answers ok on valid
- * input — whether the email already has an account or a pending request is
+ * input - whether the email already has an account or a pending request is
  * not revealed to an unauthenticated caller.
  */
 export async function submitAccessRequest(input: {
@@ -98,7 +98,7 @@ export async function submitAccessRequest(input: {
 
   if (!existingUser && !duplicate) {
     if (queue.length >= MAX_PENDING) {
-      return { ok: false, error: "Too many pending requests — contact your admin directly." };
+      return { ok: false, error: "Too many pending requests - contact your admin directly." };
     }
     queue.unshift({
       id: `rq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -139,7 +139,7 @@ export async function declineAccessRequest(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Drop any pending request for this email — called after the account is created. */
+/** Drop any pending request for this email - called after the account is created. */
 export async function consumeAccessRequest(email: string): Promise<void> {
   await requireCapability("users.manage");
   const queue = await readQueue();

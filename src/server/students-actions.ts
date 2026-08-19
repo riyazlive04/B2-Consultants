@@ -115,7 +115,7 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
     section: "students",
     entityType: "Student",
     entityId: student.id,
-    summary: `Enrolled ${student.fullName} — ${e.data.programLevel}`,
+    summary: `Enrolled ${student.fullName} - ${e.data.programLevel}`,
     meta: {
       programLevel: e.data.programLevel,
       enrollmentDate: e.data.enrollmentDate,
@@ -131,7 +131,7 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
 /**
  * Convert a qualified lead into a Student without re-keying anything (issue 2.1). Carries the
  * lead's name/email/phone/industry/source forward and stamps Student.leadId so the two records
- * stay joined. No enrollment is created — the program level isn't known at convert time; the
+ * stay joined. No enrollment is created - the program level isn't known at convert time; the
  * founder adds it from the new student record (which is visible immediately even without one).
  * Idempotent: a lead already converted returns its existing student instead of a duplicate.
  */
@@ -160,7 +160,7 @@ export async function convertLeadToStudent(
     },
   });
 
-  // Same name-match backfill createStudent does — a payment recorded before conversion links up.
+  // Same name-match backfill createStudent does - a payment recorded before conversion links up.
   const candidates = await prisma.income.findMany({ where: { studentId: null } });
   const ids = candidates.filter((i) => nameKey(i.studentName) === nameKey(student.fullName)).map((i) => i.id);
   if (ids.length) {
@@ -206,7 +206,7 @@ export async function updateStudent(id: string, form: FormData): Promise<ActionR
       section: "students",
       entityType: "Student",
       entityId: id,
-      summary: `Updated ${data.fullName} — changed ${diff.changed.join(", ")}`,
+      summary: `Updated ${data.fullName} - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -269,7 +269,7 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
   return { ok: true };
 }
 
-/** Set / change the L3 closer (sales-call rep) on an enrollment — the third leg of the
+/** Set / change the L3 closer (sales-call rep) on an enrollment - the third leg of the
  *  commission split. An empty id clears it. */
 export async function setEnrollmentCloser(enrollmentId: string, closerId: string): Promise<ActionResult> {
   const session = await requireAdmin();
@@ -364,7 +364,7 @@ export async function updateTracker(enrollmentId: string, form: FormData): Promi
 
   const data = {
     lastSessionDate: d.lastSessionDate?.trim() ? parseDateInput(d.lastSessionDate) : null,
-    // A blank counter box means "leave it" — never silently reset audited
+    // A blank counter box means "leave it" - never silently reset audited
     // progress to 0 (these feed journey XP and the at-risk radar).
     totalSessionsCompleted: d.totalSessionsCompleted?.trim() ? parseInt(d.totalSessionsCompleted, 10) : existing.totalSessionsCompleted,
     totalSessionsPlanned: d.totalSessionsPlanned?.trim() ? parseInt(d.totalSessionsPlanned, 10) : existing.totalSessionsPlanned,
@@ -416,7 +416,7 @@ export async function updateTracker(enrollmentId: string, form: FormData): Promi
       section: "students",
       entityType: "Enrollment",
       entityId: enrollmentId,
-      summary: `Updated ${existing.student.fullName}'s tracker — changed ${diff.changed.join(", ")}`,
+      summary: `Updated ${existing.student.fullName}'s tracker - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after, milestoneNote: d.milestoneNote || null },
     });
   }
@@ -464,7 +464,7 @@ export async function generateSprintPlan(enrollmentId: string): Promise<ActionRe
       return { enrollmentId, weekIndex: i + 1, weekStart, weekEnd };
     }),
   });
-  // The weeks have no id worth pointing at individually — the enrollment is the entity
+  // The weeks have no id worth pointing at individually - the enrollment is the entity
   // the founder would click through to.
   await logActivity(session, {
     action: "sprintplan.create",
@@ -516,7 +516,7 @@ export async function saveSprintWeek(weekId: string, form: FormData): Promise<Ac
       section: "students",
       entityType: "SprintWeek",
       entityId: weekId,
-      summary: `Saved week ${week.weekIndex} of ${week.enrollment.student.fullName}'s sprint plan — ${d.status}`,
+      summary: `Saved week ${week.weekIndex} of ${week.enrollment.student.fullName}'s sprint plan - ${d.status}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -529,7 +529,7 @@ export async function saveSprintWeek(weekId: string, form: FormData): Promise<Ac
 const satisfactionSchema = z.object({
   date: z.string().min(10),
   // Digits-only + bounded, matching the form's `kind="int"` boxes. These stay STRING schemas
-  // (that's what intInRange returns) — the create below is what turns them into Ints.
+  // (that's what intInRange returns) - the create below is what turns them into Ints.
   satisfactionScore: intInRange(1, 10, "Satisfaction score must be"),
   npsScore: intInRange(0, 10, "Recommend score must be"),
   testimonialReceived: z.string().optional(),
@@ -601,7 +601,7 @@ export async function linkIncomeToStudent(incomeId: string, form: FormData): Pro
 
 // ── Student portal accounts (Role.STUDENT) ─────────────────────
 // Same provisioning trick as users-actions.ts: a local better-auth instance
-// with sign-up enabled, only ever called inside admin-guarded actions —
+// with sign-up enabled, only ever called inside admin-guarded actions -
 // public sign-up on the real auth instance stays OFF.
 
 const portalAuth = betterAuth({
@@ -651,7 +651,7 @@ export async function createStudentLogin(studentId: string, form: FormData): Pro
       }),
       prisma.student.update({ where: { id: studentId }, data: { userId: res.user.id } }),
     ]);
-    // The chosen password is never recorded — only that access now exists, and for whom.
+    // The chosen password is never recorded - only that access now exists, and for whom.
     await logActivity(session, {
       action: "student.login.create",
       section: "students",
@@ -703,7 +703,7 @@ export async function revokeStudentLogin(studentId: string): Promise<ActionResul
  *
  * ── Why it reuses `updateTracker` rather than writing its own update ────────────
  * Every tracker write must append a `MilestoneLog` when the milestone moves and a
- * `SignalChangeLog` when the colour changes — those two audit trails feed the at-risk radar, the
+ * `SignalChangeLog` when the colour changes - those two audit trails feed the at-risk radar, the
  * journey XP and the student's own timeline. A second write path would inevitably drift from
  * the first, and the drift would be silent: the data would look updated and the history would be
  * missing. So this is a LOOP over the audited action, not a bulk SQL update.
@@ -711,7 +711,7 @@ export async function revokeStudentLogin(studentId: string): Promise<ActionResul
  * ── Partial success is real and is reported ────────────────────────────────────
  * Each row is independent. One bad row (a stale enrollment, a validation slip) must not discard
  * eleven good ones, so failures are collected and named rather than thrown. A silent partial
- * save is the worst outcome available here — the coach would believe the round was recorded.
+ * save is the worst outcome available here - the coach would believe the round was recorded.
  */
 export type BatchTrackerResult =
   | { ok: true; updated: number; skipped: number; failures: { name: string; error: string }[] }
@@ -735,7 +735,7 @@ export async function updateTrackerBatch(form: FormData): Promise<BatchTrackerRe
   const touched = form.getAll("touched").map(String).filter(Boolean);
   if (touched.length === 0) return { ok: true, updated: 0, skipped: 0, failures: [] };
   if (touched.length > MAX_BATCH_ROWS) {
-    return { ok: false, error: `That is more than ${MAX_BATCH_ROWS} students at once — save in smaller batches.` };
+    return { ok: false, error: `That is more than ${MAX_BATCH_ROWS} students at once - save in smaller batches.` };
   }
 
   const names = new Map(
@@ -753,7 +753,7 @@ export async function updateTrackerBatch(form: FormData): Promise<BatchTrackerRe
   for (const enrollmentId of touched) {
     const name = names.get(enrollmentId) ?? "Unknown student";
     if (!names.has(enrollmentId)) {
-      failures.push({ name, error: "That enrollment no longer exists — reload the page." });
+      failures.push({ name, error: "That enrollment no longer exists - reload the page." });
       continue;
     }
 

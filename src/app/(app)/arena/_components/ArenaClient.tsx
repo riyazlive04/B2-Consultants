@@ -17,8 +17,8 @@ import { formatDate } from "@/lib/format";
  * The Arena.
  *
  * ── What was wrong with the old layout ──────────────────────────────────────────
- * Five full-width blocks in one long scroll — my card, leaderboard, quests, badge gallery, XP
- * feed, then a 70-line prose panel explaining the rules — using THREE different control idioms
+ * Five full-width blocks in one long scroll - my card, leaderboard, quests, badge gallery, XP
+ * feed, then a 70-line prose panel explaining the rules - using THREE different control idioms
  * for the same job: a pill group for the leaderboard period, a free-floating chip row for the
  * badge-gallery person picker, and nothing at all for quests. The leaderboard, which is what
  * people open the page for, started below a full-width hero. The longest block on the page was
@@ -26,11 +26,11 @@ import { formatDate } from "@/lib/format";
  *
  * ── What this is instead ────────────────────────────────────────────────────────
  *   1. Two columns above the fold: my card beside the leaderboard.
- *   2. ONE period control, at the top, driving the leaderboard, the XP feed and the header —
+ *   2. ONE period control, at the top, driving the leaderboard, the XP feed and the header -
  *      so "this week" means the same thing everywhere on the screen.
  *   3. The badge-gallery person picker is the shared `Tabs` component, not a third idiom.
  *   4. The admin quest board uses `QuestCard compact`, not its own hand-rolled bars.
- *   5. "How XP works" is a closed disclosure — reference, on request.
+ *   5. "How XP works" is a closed disclosure - reference, on request.
  *   6. Per-section empty states. With one call log and no bookings on live, most of this page is
  *      empty, and it should say why rather than render blank cards.
  */
@@ -57,9 +57,9 @@ export function ArenaClient({
   players: Player[];
   feed: Array<XpEvent & { name: string }>;
   meUserId: string;
-  /** Monday of the current scoring week, resolved server-side — the client clock may be wrong. */
+  /** Monday of the current scoring week, resolved server-side - the client clock may be wrong. */
   weekStart: string;
-  /** the rules in force today — the panel below is generated from them, never hardcoded */
+  /** the rules in force today - the panel below is generated from them, never hardcoded */
   ruleset: Ruleset;
 }) {
   const [period, setPeriod] = useState<Period>("week");
@@ -100,7 +100,7 @@ export function ArenaClient({
     },
     {
       key: "streak", header: "Streak", align: "right",
-      cell: (p) => (p.streak > 0 ? `🔥 ${p.streak}d` : "—"),
+      cell: (p) => (p.streak > 0 ? `🔥 ${p.streak}d` : "-"),
       value: (p) => p.streak,
     },
     {
@@ -114,7 +114,7 @@ export function ArenaClient({
     return (
       <EmptyState
         title="The Arena is empty"
-        body="It lights up once team profiles exist and daily work is logged — XP is derived from work already recorded elsewhere, so there is nothing to enter here."
+        body="It lights up once team profiles exist and daily work is logged - XP is derived from work already recorded elsewhere, so there is nothing to enter here."
       />
     );
   }
@@ -142,7 +142,7 @@ export function ArenaClient({
     <div className="space-y-8">
       {/* ── Above the fold: me, and the board ─────────────────────────────────────────
           Two columns. The leaderboard is what the page is FOR, and it used to start below a
-          full-width hero — on a laptop you had to scroll to see whether you were winning. */}
+          full-width hero - on a laptop you had to scroll to see whether you were winning. */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         {me ? (
           <Card className="rise-in">
@@ -175,7 +175,7 @@ export function ArenaClient({
         ) : (
           <Card>
             <p className="text-sm text-muted">
-              You have no player card — the Arena scores work logged against a team profile, and
+              You have no player card - the Arena scores work logged against a team profile, and
               your login is not linked to one. Everyone else&apos;s standing is on the right.
             </p>
           </Card>
@@ -247,7 +247,7 @@ export function ArenaClient({
       </section>
 
       {/* ── Badges + XP feed, side by side ───────────────────────────────────────────
-          The gallery's person picker is `Tabs` — the app's own idiom — rather than the third
+          The gallery's person picker is `Tabs` - the app's own idiom - rather than the third
           bespoke chip row this page used to carry. */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card title={<CardTitle icon={<Medal size={18} />}>Badge gallery</CardTitle>}>
@@ -259,7 +259,7 @@ export function ArenaClient({
             <Tabs
               variant="underline"
               tabs={[
-                // Your own first — the common case is checking your own shelf.
+                // Your own first - the common case is checking your own shelf.
                 ...(me ? [me] : []),
                 ...players.filter((p) => p.userId !== meUserId),
               ].map((p) => ({
@@ -291,13 +291,13 @@ export function ArenaClient({
           ) : (
             <p className="text-sm text-muted">
               No XP yet. It starts flowing with the first daily log, call outcome or pipeline move
-              — everything here is derived from work recorded elsewhere.
+              - everything here is derived from work recorded elsewhere.
             </p>
           )}
         </Card>
       </div>
 
-      {/* Reference material, on request — not 70 lines of prose under the live data. */}
+      {/* Reference material, on request - not 70 lines of prose under the live data. */}
       <XpRulesPanel ruleset={ruleset} />
     </div>
   );
@@ -370,7 +370,7 @@ function XpRulesPanel({ ruleset }: { ruleset: Ruleset }) {
         )}
 
         <p className="mt-3 text-caption text-muted">
-          Everything is computed from the audited history — daily logs, pipeline stage changes,
+          Everything is computed from the audited history - daily logs, pipeline stage changes,
           milestone logs, signal changes and OKRs. Corrections and backward moves earn nothing.
           Work is scored by the rules that were in force on the day it happened, so tuning a rule
           never re-prices what someone already earned.

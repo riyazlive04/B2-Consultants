@@ -14,7 +14,7 @@ import { toast } from "@/components/ui/feedback";
 import { NewLeadWatcher } from "./NewLeadWatcher";
 import { LEAD_STAGE_LABELS, LEAD_SOURCE_LABELS } from "@/lib/labels";
 
-/** Outcomes in the order a telecaller actually meets them — connected first. */
+/** Outcomes in the order a telecaller actually meets them - connected first. */
 const OUTCOME_OPTIONS = [
   { value: "SPOKE", label: "Spoke to them" },
   { value: "NO_ANSWER", label: "No answer" },
@@ -33,7 +33,7 @@ function sinceLabel(iso: string | null): string {
 }
 
 /**
- * Click-to-dial. `tel:` is the whole mechanism — on a phone it opens the dialer with the
+ * Click-to-dial. `tel:` is the whole mechanism - on a phone it opens the dialer with the
  * number filled in, which is exactly the ask ("if they are logged in through mobile, an
  * option to directly dial"). No telephony integration, nothing to configure, works offline.
  *
@@ -56,7 +56,7 @@ function DialLink({ phone, name }: { phone: string; name: string }) {
 function LogCallModal({ lead, onClose }: { lead: DeskLead; onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   return (
-    <Modal open onClose={onClose} title={`Log call — ${lead.name}`} subtitle={lead.phone}>
+    <Modal open onClose={onClose} title={`Log call - ${lead.name}`} subtitle={lead.phone}>
       <form
         action={async (form) => {
           setError(null);
@@ -71,7 +71,7 @@ function LogCallModal({ lead, onClose }: { lead: DeskLead; onClose: () => void }
           <Select name="outcome" options={OUTCOME_OPTIONS} defaultValue="SPOKE" />
         </Field>
         <Field label="Notes (optional)">
-          {/* An explicit 500 to match callSchema's cap — the caller's maxLength wins over
+          {/* An explicit 500 to match callSchema's cap - the caller's maxLength wins over
               kind="text"'s 2000, so the field can't outrun what the action will accept. */}
           <TextInput kind="text" name="notes" maxLength={500} placeholder="What did they say?" />
         </Field>
@@ -150,7 +150,7 @@ export function DeskClient({ desk }: { desk: TelecallerDesk }) {
                 </div>
                 <p className="mt-1 text-xs text-muted">
                   {g.met
-                    ? `Target reached${g.metOn ? ` on ${g.metOn}` : ""} — incentive unlocked.`
+                    ? `Target reached${g.metOn ? ` on ${g.metOn}` : ""} - incentive unlocked.`
                     : `${Math.max(0, g.goal.targetValue - g.actual).toLocaleString("en-IN")} to go.`}
                 </p>
               </div>
@@ -161,7 +161,7 @@ export function DeskClient({ desk }: { desk: TelecallerDesk }) {
 
       <Card
         title={`Today's call list (${desk.worklist.length})`}
-        subtitle="Your open leads with no call logged today — never-called first."
+        subtitle="Your open leads with no call logged today - never-called first."
         flush
       >
         {desk.worklist.length === 0 ? (

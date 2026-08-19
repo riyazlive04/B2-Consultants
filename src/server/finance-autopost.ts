@@ -14,7 +14,7 @@ import { expenseEntryDraft } from "./finance-posting";
  * forge expense/income rows. Here they're plain functions the client can never reach.
  *
  * The linked entry tracks its source across create / edit / status-change / delete, so the two can
- * never fork. Linked by (source, externalRef) — no schema change, idempotent re-runs. Both are
+ * never fork. Linked by (source, externalRef) - no schema change, idempotent re-runs. Both are
  * best-effort: a hiccup must never undo the payout/payment write that triggered it.
  */
 
@@ -115,7 +115,7 @@ export type PaymentForSync = {
 
 /**
  * Mirror an invoice payment into an Income row (revenue + LTV). Pass the payment to upsert, or
- * `null` to remove it. Table-only by design — the payment already carries its Dr Cash / Cr AR
+ * `null` to remove it. Table-only by design - the payment already carries its Dr Cash / Cr AR
  * ledger entry, so posting the Income to the ledger too would double the cash.
  */
 export async function syncPaymentIncome(
@@ -148,6 +148,6 @@ export async function syncPaymentIncome(
       await prisma.income.create({ data: { ...data, source: "MANUAL", externalRef: ref } });
     }
   } catch {
-    // best-effort — never fail the payment write over an income-mirror hiccup
+    // best-effort - never fail the payment write over an income-mirror hiccup
   }
 }

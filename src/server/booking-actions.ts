@@ -50,7 +50,7 @@ const HOW_TO_CHANNEL: Record<string, LeadSource> = {
   /**
    * `LeadSource` has no FACEBOOK or GOOGLE member, so both coarsen to OTHER here. Nothing is
    * lost: the precise answer is stored verbatim on `BookingRequest.howKnowUs`, which is what
-   * the closer reads — only the roll-up enum blurs. FACEBOOK is deliberately NOT mapped to
+   * the closer reads - only the roll-up enum blurs. FACEBOOK is deliberately NOT mapped to
    * META_ADS: that value means "arrived via the Meta Lead Ads webhook", and using it for
    * someone who typed a form would corrupt paid-channel attribution.
    *
@@ -65,7 +65,7 @@ const HOW_TO_CHANNEL: Record<string, LeadSource> = {
 };
 
 /**
- * Stages a booking must NOT drag a lead out of — they are already at, or past, the booked-call
+ * Stages a booking must NOT drag a lead out of - they are already at, or past, the booked-call
  * column. Everything else advances (see the note at the update itself).
  *
  * `STRATEGY_CALL_BOOKED` is here because it is the destination: rebooking would otherwise write
@@ -95,7 +95,7 @@ const requiredChoice = (field: keyof typeof INTAKE_OPTIONS, message: string) =>
 const bookingSchema = z.object({
   slotId: z.string().min(1, "Please choose an available time").max(64),
   // Character rules come from lib/field-rules so the browser filter and this parse can't drift.
-  // These are the PUBLIC form's fields — the filter is unreachable for a crafted POST, so the
+  // These are the PUBLIC form's fields - the filter is unreachable for a crafted POST, so the
   // schema is the only real gate here.
   name: rule("name"),
   // The email rule folds to lowercase (not just trims): this address is the key the SOP's Step 10
@@ -107,7 +107,7 @@ const bookingSchema = z.object({
    * ── Required, because the form marks them required ────────────────────────────
    * The public questionnaire now stars every one of these. Leaving the schema permissive would
    * mean the browser is the only thing enforcing them, and a crafted POST could bank a booked
-   * slot with no LinkedIn, no salary band and no BANT answers at all — which is precisely the
+   * slot with no LinkedIn, no salary band and no BANT answers at all - which is precisely the
    * submission the auto-disqualify gate cannot judge.
    *
    * Everything BELOW this block stays optional: those fields were removed from the form, and
@@ -141,7 +141,7 @@ const bookingSchema = z.object({
   commitment: optional("commitment"),
   // GDPR consent (spec §15). Optional in the SCHEMA but mandatory in the ACTION: an unticked
   // checkbox posts nothing at all, and a bare z.literal would fail with "Invalid literal
-  // value" — useless to a prospect. Parsed loosely, then refused explicitly below.
+  // value" - useless to a prospect. Parsed loosely, then refused explicitly below.
   consent: z.string().optional(),
   // spam honeypot - real users never fill this hidden field
   company_website: z.string().optional(),
@@ -178,9 +178,9 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   // Public endpoint, and the most expensive one here: a submission consumes a finite calendar
   // slot AND fires a WATI confirmation. Two dimensions, charged atomically:
   //
-  //   per-IP    5 burst then 5 / 10 min — generous for a human correcting form errors, and
+  //   per-IP    5 burst then 5 / 10 min - generous for a human correcting form errors, and
   //             tight enough that one client can't exhaust the open slots.
-  //   global    40 burst then 40 / 10 min — the per-IP rule does nothing against a hundred
+  //   global    40 burst then 40 / 10 min - the per-IP rule does nothing against a hundred
   //             IPs each politely taking their allowance until the calendar is empty. The
   //             booking diary is a shared resource, so it needs a shared ceiling.
   //
@@ -203,13 +203,13 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   if (d.company_website) return { ok: true }; // honeypot tripped - silently drop
 
   // ── Consent gate (spec §15, §19.1-C1) ────────────────────────────────────────
-  // "No lead/student data is stored without explicit consent" — GDPR, and our prospects are
+  // "No lead/student data is stored without explicit consent" - GDPR, and our prospects are
   // in Germany and India. This sits ABOVE every write below: both the auto-disqualify branch
   // and the booked branch call upsertIntakeLead, so refusing here is what makes "no consent,
   // no row" true of the whole action rather than of one path.
   //
   // Fails CLOSED. A tampered POST, or a stale page cached from before this field existed,
-  // posts no consent and is refused — the safe direction for a rule about not storing people.
+  // posts no consent and is refused - the safe direction for a rule about not storing people.
   if (d.consent !== CONSENT_VALUE) {
     return { ok: false, error: "Please tick the consent box so we can store your details and contact you." };
   }
@@ -224,7 +224,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   // proof and the data it authorises land together or not at all.
   //
   // `region` stays null deliberately. Spec §15 asks for it, but the form has no country
-  // field and `city` is free text — deriving "DE" from a typed city name would be a guess
+  // field and `city` is free text - deriving "DE" from a typed city name would be a guess
   // recorded as a fact, which is worse than an honest blank. Needs a country field to fill.
   const consentFor = (leadId: string) => ({
     leadId,
@@ -248,7 +248,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     utm,
     notes: clean(d.reasonForCall),
     // Observed from this request, so a prospect who books through the funnel carries the host
-    // they booked on. Only fills a blank — see `acceptReturningOptIn`.
+    // they booked on. Only fills a blank - see `acceptReturningOptIn`.
     originDomain: await observedOriginDomain(),
   };
 
@@ -279,7 +279,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     commitment: clean(d.commitment),
     howKnowUs: clean(d.howKnowUs),
     ...bant,
-    // ER v2 Track D — SHADOW ONLY. What the configurable question catalogue would have
+    // ER v2 Track D - SHADOW ONLY. What the configurable question catalogue would have
     // scored this submission. Recorded beside the live verdict and read by nothing: the
     // decision below still comes from `bant`, exactly as it did before the catalogue
     // existed. `shadowScore` swallows its own errors and returns nulls, because a
@@ -294,7 +294,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   // sales rule, don't hold a call: record the intake as a CANCELLED booking WITHOUT claiming a
   // slot (it stays OPEN for a qualified prospect), move the lead to LOST with an audited reason,
   // and send the polite rejection template. Founder-gated (default on). The email is still
-  // behind the Resend seam, so with email off it's logged SKIPPED — never sent unconfigured.
+  // behind the Resend seam, so with email off it's logged SKIPPED - never sent unconfigured.
   if (rules.autoDisqualify && bant.bantVerdict === "CANCEL") {
     const { lead } = await upsertIntakeLead(leadInput);
     await prisma.$transaction(async (tx) => {
@@ -307,7 +307,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
         select: { stage: true, notes: true },
       });
       if (fresh && fresh.stage !== "LOST") {
-        const reason = `Auto-disqualified at intake — BANT ${bant.bantAvg.toFixed(1)}/5`;
+        const reason = `Auto-disqualified at intake - BANT ${bant.bantAvg.toFixed(1)}/5`;
         await tx.lead.update({
           where: { id: lead.id },
           data: { stage: "LOST", notes: fresh.notes ? `${fresh.notes} · ${reason}` : reason },
@@ -317,11 +317,11 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
         });
       }
 
-      // Close the SOP journey too (Step 17 — NO → terminal). A BANT CANCEL is a "Not Qualified"
+      // Close the SOP journey too (Step 17 - NO → terminal). A BANT CANCEL is a "Not Qualified"
       // verdict, so record it and move the journey to IGNORED; otherwise a disqualified prospect
       // would sit in the active outreach queue being chased forever. The CANCELLED booking is
       // deliberately NOT linked (bookingId stays null): the engine's cross-check excludes CANCELLED
-      // bookings, and Key Metrics is a booked-prospects surface — a LOST lead doesn't belong there.
+      // bookings, and Key Metrics is a booked-prospects surface - a LOST lead doesn't belong there.
       const journey = await tx.outreachJourney.findUnique({
         where: { leadId: lead.id },
         select: { id: true, qualified: true, phase: true },
@@ -340,7 +340,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
       }
     });
 
-    // Application Logic §4.3 stage 2 — the booking form's verdict supersedes whatever the
+    // Application Logic §4.3 stage 2 - the booking form's verdict supersedes whatever the
     // landing page scored at opt-in. Mirrored even on the disqualify path: "why was this lead
     // closed" is answered by the score that closed it, and reading it off the Lead is what every
     // pipeline surface does.
@@ -359,7 +359,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     return { ok: true };
   }
 
-  // ── Qualified / doubt / confirm — book the slot ───────────────────────────────
+  // ── Qualified / doubt / confirm - book the slot ───────────────────────────────
   // Slot must exist, be OPEN, and sit inside the founder's booking window (min notice from
   // now, max advance out) - same rules the public page used to filter its slot list, checked
   // again here in case the page was left open a while or the config changed since it loaded.
@@ -401,12 +401,12 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
        * A booked call = STRATEGY_CALL_BOOKED, the board's "Discovery Call Booked" column.
        *
        * This used to jump straight to DISCO_BOOKED ("Pre-Qualified & Confirmed"), which claimed
-       * the prospect had been qualified AND their call confirmed the instant they picked a slot —
+       * the prospect had been qualified AND their call confirmed the instant they picked a slot -
        * neither of which has happened yet. Qualification moves them on from here.
        *
        * The guard is a HOLD list rather than an allow list. It used to advance only NEW_LEAD and
        * WHATSAPP_SENT, so a prospect who already existed in any OTHER stage booked a call and the
-       * board did not move at all — the 8,086 leads sitting in Cancelled/Unqualified could each
+       * board did not move at all - the 8,086 leads sitting in Cancelled/Unqualified could each
        * book a discovery call and stay filed as written off. Someone who was given up on and comes
        * back to book is the single most valuable card on the board, and it was invisible.
        *
@@ -423,14 +423,14 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
       }
 
       // SOP Steps 10–11, synchronously. A prospect who books directly on the public form would
-      // otherwise stay unlinked from their booking — the ONLY thing that links the two is the
+      // otherwise stay unlinked from their booking - the ONLY thing that links the two is the
       // async engine's Step 10 cross-check, and that engine is off by default. So without this,
       // a booked prospect's BANT score never reaches the Qualified verdict (Step 11) or Key
       // Metrics (Step 12): the outreach tab shows them as "not booked" while /bookings shows them
-      // booked. Link the journey here and derive Qualified from BANT — the same pure function the
+      // booked. Link the journey here and derive Qualified from BANT - the same pure function the
       // engine uses, so the two paths can never disagree. Guarded so it can't clobber a link or a
       // human's prior verdict; a lead created outside intake (manual back-office entry) may have no
-      // journey, which is fine — updateMany-style tolerance via the null check.
+      // journey, which is fine - updateMany-style tolerance via the null check.
       const journey = await tx.outreachJourney.findUnique({
         where: { leadId: lead.id },
         select: { id: true, bookingId: true, qualified: true },
@@ -456,7 +456,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     throw e;
   }
 
-  // Application Logic §4.3 stage 2 — the fuller booking intake supersedes the landing page's
+  // Application Logic §4.3 stage 2 - the fuller booking intake supersedes the landing page's
   // opt-in score on the Lead. Outside the transaction: the authoritative copy is already
   // committed on `BookingRequest`, so this is a convenience mirror for the pipeline surfaces and
   // must not be able to roll a confirmed booking back.
@@ -552,7 +552,7 @@ export async function generateSlots(form: FormData): Promise<ActionResult> {
       })),
     });
     // createMany returns no ids and a re-run is idempotent, so the batch itself is the
-    // entity here — "batch" can never collide with a real slot's cuid.
+    // entity here - "batch" can never collide with a real slot's cuid.
     await logActivity(session, {
       action: "slot.create",
       section: "bookings",
@@ -581,7 +581,7 @@ const bookingRulesFormSchema = z.object({
   bufferMinutes: z.coerce.number().int().min(0).max(240),
   minNoticeHours: z.coerce.number().int().min(0).max(240),
   maxAdvanceDays: z.coerce.number().int().min(1).max(365),
-  // Confirmation loop (Module E) — the two window fields; the toggles are read separately below
+  // Confirmation loop (Module E) - the two window fields; the toggles are read separately below
   // because an unchecked HTML checkbox submits nothing at all.
   confirmRequestLeadHours: z.coerce.number().int().min(0).max(240),
   autoCancelHours: z.coerce.number().int().min(0).max(240),
@@ -601,7 +601,7 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
     autoCancelEnabled: form.get("autoCancelEnabled") === "on",
     promoteNext: form.get("promoteNext") === "on",
   };
-  // Validate the full merged config — including the "ask lead > cancel window" refinement — before
+  // Validate the full merged config - including the "ask lead > cancel window" refinement - before
   // persisting; an invalid combo would otherwise coerce back to defaults on the next read.
   const valid = bookingRulesConfigSchema.safeParse(next);
   if (!valid.success) return { ok: false, error: firstError(valid.error) };
@@ -613,7 +613,7 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
       section: "bookings",
       entityType: "AppSetting",
       entityId: BOOKING_RULES_KEY,
-      summary: `Updated the booking rules — changed ${diff.changed.join(", ")}`,
+      summary: `Updated the booking rules - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -645,7 +645,7 @@ const BOOKING_STATUSES = ["BOOKED", "RESCHEDULED", "CANCELLED", "COMPLETED", "NO
 
 /**
  * Admin sets a booking's outcome. CANCELLED / NO_SHOW free the slot back to OPEN AND detach the
- * booking from it (nulling the unique slotId) so the slot is cleanly re-bookable — leaving the old
+ * booking from it (nulling the unique slotId) so the slot is cleanly re-bookable - leaving the old
  * booking attached would collide the next time that slot is booked. NO_SHOW also moves the lead to
  * NO_SHOW for the pipeline's deal-risk view. On a CANCELLED, the freed slot is offered to the next
  * same-caller/same-day call (promote-next), if that toggle is on.
@@ -655,7 +655,7 @@ const BOOKING_STATUSES = ["BOOKED", "RESCHEDULED", "CANCELLED", "COMPLETED", "NO
  *
  * OPEN only when someone could actually book it. The public form refuses anything inside
  * `minNoticeHours`, so releasing a slot that starts within the hour publishes capacity that
- * does not exist — the calendar shows a free slot the booking page will reject. Inside the
+ * does not exist - the calendar shows a free slot the booking page will reject. Inside the
  * window it is BLOCKED instead: still not sold, but honestly unusable.
  *
  * Shared by cancel/no-show and by reschedule, because both hand a slot back and both had the
@@ -688,13 +688,13 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
    * M2: a freed slot only returns to availability if someone could actually take it.
    *
    * The public booking form refuses anything inside `minNoticeHours`, so releasing a slot that
-   * starts in one hour used to publish a slot nobody can book — the calendar showed capacity
+   * starts in one hour used to publish a slot nobody can book - the calendar showed capacity
    * that did not exist, and the founder had no way to tell the difference. Inside the notice
    * window the slot is BLOCKED instead: still not sold, but honestly marked as unusable.
    *
    * The cancellation itself is never refused. Spec §M2 frames this as "require cancellation
    * 12–24 hours before", but blocking a late cancel would force a call that is not happening to
-   * stay marked BOOKED — which corrupts the show-rate the L2 desk reports on. Recording reality
+   * stay marked BOOKED - which corrupts the show-rate the L2 desk reports on. Recording reality
    * beats enforcing a policy the calendar cannot undo.
    */
   const rules = await getBookingRulesConfig();
@@ -755,13 +755,13 @@ export async function setSlotBlocked(id: string, blocked: boolean): Promise<Acti
   if (!slot) return { ok: false, error: "Slot not found" };
   if (slot.status === "BOOKED") return { ok: false, error: "Cancel the booking before blocking this slot" };
   const next = blocked ? "BLOCKED" : "OPEN";
-  if (slot.status === next) return { ok: true }; // already there — no-op
+  if (slot.status === next) return { ok: true }; // already there - no-op
   // Guard the transition so we never blindly flip a slot that changed under us.
   const res = await prisma.appointmentSlot.updateMany({
     where: { id, status: blocked ? "OPEN" : "BLOCKED" },
     data: { status: next },
   });
-  if (res.count === 0) return { ok: false, error: "Slot changed — refresh and try again" };
+  if (res.count === 0) return { ok: false, error: "Slot changed - refresh and try again" };
   await logActivity(session, {
     action: blocked ? "slot.block" : "slot.unblock",
     section: "bookings",
@@ -786,12 +786,12 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
     select: { slotId: true, status: true, name: true, slot: { select: { startsAt: true } } },
   });
   if (!booking) return { ok: false, error: "Booking not found" };
-  if (booking.status === "CANCELLED") return { ok: false, error: "This booking is cancelled — it can't be moved" };
+  if (booking.status === "CANCELLED") return { ok: false, error: "This booking is cancelled - it can't be moved" };
   if (booking.slotId === newSlotId) return { ok: false, error: "That's already this booking's slot" };
 
   const target = await prisma.appointmentSlot.findUnique({ where: { id: newSlotId }, select: { status: true, startsAt: true } });
   if (!target) return { ok: false, error: "That slot no longer exists" };
-  if (target.status !== "OPEN") return { ok: false, error: "That slot isn't open — pick another time" };
+  if (target.status !== "OPEN") return { ok: false, error: "That slot isn't open - pick another time" };
   if (target.startsAt.getTime() <= Date.now()) return { ok: false, error: "Pick a slot in the future" };
 
   try {
@@ -806,7 +806,7 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
         where: { id: bookingId },
         data: { slotId: newSlotId, status: "BOOKED", confirmedAt: null, confirmSentAt: null },
       });
-      // …then release the old slot — OPEN only if it is still far enough out to be re-booked.
+      // …then release the old slot - OPEN only if it is still far enough out to be re-booked.
       if (booking.slotId) {
         const rules = await getBookingRulesConfig();
         await tx.appointmentSlot.update({
@@ -817,7 +817,7 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
     });
   } catch (e) {
     if (e instanceof Error && e.message === "SLOT_TAKEN") {
-      return { ok: false, error: "That time was just taken — pick another slot." };
+      return { ok: false, error: "That time was just taken - pick another slot." };
     }
     throw e;
   }

@@ -1,5 +1,5 @@
 /**
- * The shape of an ATS review result — produced by the Claude reviewer OR the offline
+ * The shape of an ATS review result - produced by the Claude reviewer OR the offline
  * deterministic analyser, stored on ResumeReview.result, and rendered by the UI. Kept
  * isomorphic and defensively coerced because it arrives from three directions: a model
  * (untrusted JSON), the analyser (trusted), and the DB (a past row of either).

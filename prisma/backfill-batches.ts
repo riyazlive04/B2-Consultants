@@ -7,7 +7,7 @@
  * ── The problem this closes ──────────────────────────────────────────────────────
  * German Note ran TWO batch worlds: real `gn_batch` rows for the LMS, and free-text labels
  * ("B26", "b 26") typed onto GnWorkshopConversion.batchA1 / batchA2 / batchB1. The second
- * kind cannot be joined to anything — no roster, no tutor, no fee, no P&L.
+ * kind cannot be joined to anything - no roster, no tutor, no fee, no P&L.
  *
  * This resolves each label to a Batch, creating one where the label is new. `normalizeBatchCode`
  * collapses the spellings ("b26", " B 26 ", "b-26" → "B26") so one cohort does not become
@@ -16,7 +16,7 @@
  * ── What it will NOT do ──────────────────────────────────────────────────────────
  * A label that normalises to nothing, or that matches more than one existing batch at a
  * different level, is LEFT UNLINKED and printed. The free text stays as the historical
- * snapshot either way — exactly like BookOrder.shipToAddress — so nothing is lost.
+ * snapshot either way - exactly like BookOrder.shipToAddress - so nothing is lost.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -66,7 +66,7 @@ async function main() {
     for (const col of COLUMNS) {
       const raw = c[col.label];
       if (!raw || !raw.trim()) continue;
-      if (c[col.id]) continue; // already resolved — idempotent
+      if (c[col.id]) continue; // already resolved - idempotent
 
       const code = normalizeBatchCode(raw);
       if (!code) {
@@ -80,8 +80,8 @@ async function main() {
       let batch = byCode.get(code);
 
       if (batch && batch.level !== col.level) {
-        // The same label used for two different levels. Real ambiguity — the founders reuse
-        // batch numbers across levels — so resolve per (code, level) rather than guessing.
+        // The same label used for two different levels. Real ambiguity - the founders reuse
+        // batch numbers across levels - so resolve per (code, level) rather than guessing.
         const perLevel = existing.find((b) => b.code === code && b.level === col.level);
         if (perLevel) {
           batch = perLevel;
@@ -104,7 +104,7 @@ async function main() {
           data: {
             line: "GERMAN_NOTE",
             code,
-            name: `${code} — ${col.level.replace("GN_", "")}`,
+            name: `${code} - ${col.level.replace("GN_", "")}`,
             level: col.level,
             notes: `Reconstructed from workshop conversion labels (ER v2 Track A backfill).`,
           },
@@ -129,9 +129,9 @@ async function main() {
   console.log(`\n${APPLY ? "Linked" : "Would link"} ${linked} per-level batch assignment(s).`);
   console.log(`${APPLY ? "Created" : "Would create"} ${new Set(created).size} batch(es): ${[...new Set(created)].join(", ") || "none"}`);
 
-  console.log(`\nLeft unlinked (deliberately — never guessed): ${unresolved.length}`);
+  console.log(`\nLeft unlinked (deliberately - never guessed): ${unresolved.length}`);
   for (const u of unresolved.slice(0, 40)) {
-    console.log(`  ${u.who} · ${u.column} = "${u.raw}" — ${u.reason}`);
+    console.log(`  ${u.who} · ${u.column} = "${u.raw}" - ${u.reason}`);
   }
   if (unresolved.length > 40) console.log(`  … and ${unresolved.length - 40} more`);
 

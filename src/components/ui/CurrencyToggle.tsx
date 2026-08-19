@@ -9,7 +9,7 @@ import { money, moneyAlt, type Ccy, type MoneyAgg } from "@/lib/money-display";
  *
  * It started inside `FinanceKpis`, so only the KPI grid flipped; then it moved up to a Finance
  * page context so the business-line totals and the revenue chart came with it. It now lives here,
- * in the shared kit, because the same question is asked on the HOME DASHBOARD — and two
+ * in the shared kit, because the same question is asked on the HOME DASHBOARD - and two
  * providers reading the same localStorage key would drift apart the moment one page wrote it.
  *
  * The toggle does not convert anything. Every amount is stored as both an INR and a EUR
@@ -24,7 +24,7 @@ const STORAGE_KEY = "b2_finance_ccy";
 const CcyContext = createContext<{ ccy: Ccy; setCcy: (c: Ccy) => void } | null>(null);
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
-  // INR on the server and on first paint, then the saved choice — reading localStorage during
+  // INR on the server and on first paint, then the saved choice - reading localStorage during
   // render would differ from the server HTML and throw a hydration mismatch.
   const [ccy, setCcyState] = useState<Ccy>("INR");
 
@@ -33,7 +33,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       const s = localStorage.getItem(STORAGE_KEY);
       if (s === "INR" || s === "EUR") setCcyState(s);
     } catch {
-      /* private mode / storage disabled — the default is fine */
+      /* private mode / storage disabled - the default is fine */
     }
   }, []);
 
@@ -66,7 +66,7 @@ export function Money({ amount, compact = true }: { amount: MoneyAgg; compact?: 
   return <>{money(amount, ccy, { compact })}</>;
 }
 
-/** The other currency's figure — the "· 460 €" tail beneath a primary amount. */
+/** The other currency's figure - the "· 460 €" tail beneath a primary amount. */
 export function MoneyAlt({ amount, compact = true }: { amount: MoneyAgg; compact?: boolean }) {
   const { ccy } = useCcy();
   return <>{moneyAlt(amount, ccy, { compact })}</>;

@@ -3,7 +3,7 @@
  *
  * The meeting's first complaint was that B2 and German Note could not be told apart in a
  * single combined revenue figure. The split is DERIVED from each row's programme level, so
- * these tests defend the derivation rule rather than any particular level code — a German
+ * these tests defend the derivation rule rather than any particular level code - a German
  * level added later from the admin (C1, C2) must land on the German Note side without a
  * code change, which is exactly what `lineForKind` buys and a `GN_` name-prefix would not.
  *
@@ -26,7 +26,7 @@ describe("business line derivation", () => {
     assert.equal(lineForKind("OTHER"), "B2");
   });
 
-  test("an unmapped or missing level never throws — it falls to B2", () => {
+  test("an unmapped or missing level never throws - it falls to B2", () => {
     // A level code present on old income rows but since deleted from the Level table
     // yields `undefined` here. Revenue must still be counted somewhere, not dropped.
     assert.equal(lineForKind(undefined), "B2");

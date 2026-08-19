@@ -11,7 +11,7 @@ import type { ActionResult } from "./finance-actions";
  * Job descriptions (ER v2 Track H).
  *
  * A REUSABLE JD, so the same posting can be matched against many CVs and applied to by many
- * students — previously a JD existed only as free text pasted into one review, which meant
+ * students - previously a JD existed only as free text pasted into one review, which meant
  * "how did our students do against this role" could not be asked.
  *
  * `ResumeReview.jdText` STAYS as the frozen snapshot of what was actually matched: a JD can
@@ -86,7 +86,7 @@ export async function setJobDescriptionActive(jdId: string, active: boolean): Pr
   return { ok: true };
 }
 
-/** Attach a resume to a student — the ER's `STUDENT ||--o{ CV`. */
+/** Attach a resume to a student - the ER's `STUDENT ||--o{ CV`. */
 export async function linkResumeToStudent(resumeId: string, studentId: string | null): Promise<ActionResult> {
   const session = await requireSection("cv-check");
   const resume = await prisma.resume.findUnique({ where: { id: resumeId }, select: { title: true } });

@@ -1,13 +1,13 @@
 /**
  * Rendering a notification's money into the reader's currency.
  *
- * Lives in lib/ — NOT beside `computeNotifications` — because `server/notifications.ts` is
+ * Lives in lib/ - NOT beside `computeNotifications` - because `server/notifications.ts` is
  * `server-only`, and the two components that render a notification (the dashboard band and the
  * shell's bell) are both client components. Importing a value out of a server-only module from a
  * client component is a build error, so the shared piece has to be isomorphic.
  *
  * Money is not baked into a notification's title/body. A notification is read on a page with a
- * ₹/€ toggle, so the amount travels as both aggregates and is substituted here at render time —
+ * ₹/€ toggle, so the amount travels as both aggregates and is substituted here at render time -
  * a row saying "₹3,25,500" while every figure beside it said euros was the bug this replaced.
  */
 

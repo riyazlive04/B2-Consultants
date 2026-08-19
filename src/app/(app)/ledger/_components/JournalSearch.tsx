@@ -8,7 +8,7 @@ import { Search, X } from "lucide-react";
  * The Journal search box.
  *
  * It drives the `?q=` param the Ledger page reads and hands to `getJournal`, so the filter
- * runs in the database across EVERY entry — not just the 25 rendered on the current page —
+ * runs in the database across EVERY entry - not just the 25 rendered on the current page -
  * and the matches are then paginated. Typing is debounced, and any new query jumps back to
  * page 1 so results can't sit past the end of a page the reader is no longer on.
  */

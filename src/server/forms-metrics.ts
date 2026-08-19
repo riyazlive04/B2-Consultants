@@ -16,7 +16,7 @@ import { summariseAnswers, type QuestionSummary } from "@/lib/form-summary";
  *
  * EVERY read goes through `normaliseItems`/`normaliseSettings`. The `fields` and `settings`
  * columns are `Json`, and rows written before the Google-parity rebuild are still in the old
- * shape — options as bare strings, no item ids, no sections. Normalising on read is what lets that
+ * shape - options as bare strings, no item ids, no sections. Normalising on read is what lets that
  * rebuild ship without a migration and without a flag day: an old row is upgraded the moment it is
  * looked at, and persisted in the new shape the next time it is saved.
  */

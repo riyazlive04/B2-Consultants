@@ -1,4 +1,4 @@
-/** Shared shapes for the Automation engine (Phase 5) — Synamate "Workflows". Isomorphic. */
+/** Shared shapes for the Automation engine (Phase 5) - Synamate "Workflows". Isomorphic. */
 
 export type TriggerType =
   | "FORM_SUBMITTED"
@@ -27,14 +27,14 @@ export type WorkflowAction = {
   subject?: string;
   body?: string;
   /**
-   * SEND_WHATSAPP — which WATI template slot to send, a `WhatsAppKind` (lib/whatsapp.ts).
+   * SEND_WHATSAPP - which WATI template slot to send, a `WhatsAppKind` (lib/whatsapp.ts).
    *
    * A KIND, not a template name: the WATI template each kind maps to is chosen in
    * WhatsApp → Settings, so a workflow keeps working when a template is re-approved under a
    * new name, and one place stays authoritative about which template is live.
    *
    * The engine supplies only the variables it can know about a contact (name, and links it can
-   * build). A template needing per-booking values — `b2_booking_confirmation` wants slot_time —
+   * build). A template needing per-booking values - `b2_booking_confirmation` wants slot_time -
    * cannot be filled from a workflow step, and `sendWhatsApp` refuses it as a SKIP with the
    * missing variable named, rather than sending a half-built message.
    */
@@ -48,7 +48,7 @@ export type WorkflowAction = {
   taskAssigneeId?: string;
   // WAIT
   waitMinutes?: number;
-  // IF_TAG — branch: jump to `thenStep` if the contact currently has `tag`, else `elseStep`.
+  // IF_TAG - branch: jump to `thenStep` if the contact currently has `tag`, else `elseStep`.
   // Both are 0-based indexes into the workflow's `actions` array; a value >= actions.length ends
   // the workflow (same as running off the end of the list).
   thenStep?: number;
@@ -56,9 +56,9 @@ export type WorkflowAction = {
 };
 
 export type TriggerConfig = {
-  formId?: string; // FORM_SUBMITTED — specific form, or empty = any
-  tag?: string; // TAG_ADDED — specific tag, or empty = any
-  stage?: string; // STAGE_CHANGED — specific LeadStage, or empty = any
+  formId?: string; // FORM_SUBMITTED - specific form, or empty = any
+  tag?: string; // TAG_ADDED - specific tag, or empty = any
+  stage?: string; // STAGE_CHANGED - specific LeadStage, or empty = any
 };
 
 export const TRIGGER_LABELS: Record<TriggerType, string> = {

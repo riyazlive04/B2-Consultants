@@ -4,8 +4,8 @@
  * ── The problem ─────────────────────────────────────────────────────────────────
  * Every screen that shows money or leads answered this differently, or not at all:
  *
- *   Finance      no control — hardcoded to `istMonthRange()`, i.e. the current calendar month
- *   Pipeline     no control — and a `<Pill>This month</Pill>` that LOOKS like one but is text
+ *   Finance      no control - hardcoded to `istMonthRange()`, i.e. the current calendar month
+ *   Pipeline     no control - and a `<Pill>This month</Pill>` that LOOKS like one but is text
  *   Payments     no control
  *   Outreach     no control
  *   Cash         `?period=`
@@ -13,8 +13,8 @@
  *   Contacts     rich filters, no date filter at all
  *
  * So "show me July" was unanswerable on the four screens where it is asked most, two screens
- * disagreed about the query-string name, and CSV export — which exports the rows currently on
- * screen — could therefore only ever export the current month.
+ * disagreed about the query-string name, and CSV export - which exports the rows currently on
+ * screen - could therefore only ever export the current month.
  *
  * ── The contract ────────────────────────────────────────────────────────────────
  * IST-anchored and HALF-OPEN: `[start, endExclusive)`. Both match `istMonthRange`, which the
@@ -22,7 +22,7 @@
  * double-counts a day. `previous` is the immediately preceding window of the same length, which
  * is what every "vs last period" delta on the app needs.
  *
- * Pure and isomorphic — no `server-only`, no DB. The server parses it from `searchParams`, the
+ * Pure and isomorphic - no `server-only`, no DB. The server parses it from `searchParams`, the
  * client renders `<PeriodBar>` from it, and both agree because there is one parser.
  */
 
@@ -34,7 +34,7 @@ export type PeriodSpec = {
   kind: PeriodKind;
   /** Any day inside the wanted window, as YYYY-MM-DD. Ignored when `kind` is "all". */
   anchor: string;
-  /** Only for `kind: "custom"` — an explicit inclusive-start / inclusive-end pair. */
+  /** Only for `kind: "custom"` - an explicit inclusive-start / inclusive-end pair. */
   from?: string;
   to?: string;
 };
@@ -48,7 +48,7 @@ export type ResolvedPeriod = {
   label: string;
   /** The window immediately before this one, same length. Null for "all". */
   previous: { start: Date; endExclusive: Date } | null;
-  /** Round-trips through `parsePeriod` — for building links that keep the current view. */
+  /** Round-trips through `parsePeriod` - for building links that keep the current view. */
   query: string;
 };
 
@@ -64,7 +64,7 @@ const isDateStr = (v: unknown): v is string => typeof v === "string" && /^\d{4}-
 /**
  * Read a period off a URL's query params.
  *
- * Deliberately TOTAL — it never throws and never returns null. A malformed `?period=` is a
+ * Deliberately TOTAL - it never throws and never returns null. A malformed `?period=` is a
  * bookmark someone edited or a link that aged out, and answering it with a crash (or an empty
  * screen) is worse than answering it with this month. Unknown input falls back silently.
  *
@@ -78,7 +78,7 @@ export function parsePeriod(params: {
   /**
    * Legacy names still in the wild: Cash shipped `?period=` with its own vocabulary and Reports
    * shipped `?range=`. Both are accepted so existing bookmarks and dashboard links keep working
-   * — this is a rename, and a rename that breaks saved links is a regression.
+   * - this is a rename, and a rename that breaks saved links is a regression.
    */
   range?: string;
 } = {}): PeriodSpec {
@@ -169,7 +169,7 @@ export function resolvePeriod(spec: PeriodSpec = DEFAULT_PERIOD, today = istToda
     }
   }
 
-  // The window immediately before, of the SAME length — so a 7-day week compares with the prior
+  // The window immediately before, of the SAME length - so a 7-day week compares with the prior
   // 7 days and a 31-day month with the prior 31, not with "last calendar month" of a different
   // length. Calendar kinds shift by their own unit so "vs last month" stays intuitive.
   const previous = (() => {
@@ -208,7 +208,7 @@ export function periodQuery(spec: PeriodSpec): string {
 }
 
 /**
- * The spec one window earlier or later — what the ‹ › arrows navigate to.
+ * The spec one window earlier or later - what the ‹ › arrows navigate to.
  *
  * "all" has no neighbours and returns itself, so the arrows can be rendered disabled rather
  * than special-cased at every call site.
@@ -224,14 +224,14 @@ export function shiftPeriod(spec: PeriodSpec, direction: -1 | 1, today = istToda
     return { kind: "custom", anchor: toDateInputValue(from), from: toDateInputValue(from), to: toDateInputValue(to) };
   }
 
-  // Anchor on a day INSIDE the neighbouring window rather than on its boundary — a boundary
+  // Anchor on a day INSIDE the neighbouring window rather than on its boundary - a boundary
   // date re-resolves to the same window under a different `kind` and the arrows would stick.
   const next = new Date(direction === 1 ? r.endExclusive : r.start);
   if (direction === -1) next.setUTCDate(next.getUTCDate() - 1);
   return { kind: spec.kind, anchor: toDateInputValue(next) };
 }
 
-/** True when this window contains today — the "Today"/"This month" button is then a no-op. */
+/** True when this window contains today - the "Today"/"This month" button is then a no-op. */
 export function periodIsCurrent(r: ResolvedPeriod, today = istToday()): boolean {
   return today >= r.start && today < r.endExclusive;
 }

@@ -7,9 +7,9 @@ import { ArenaClient } from "./_components/ArenaClient";
 export const dynamic = "force-dynamic";
 
 /**
- * The Arena — team gamification hub (leaderboard, quests, badges, XP feed).
+ * The Arena - team gamification hub (leaderboard, quests, badges, XP feed).
  * Every number here is DERIVED from work already recorded elsewhere (daily
- * logs, pipeline moves, student milestones, OKRs) — there is nothing to enter
+ * logs, pipeline moves, student milestones, OKRs) - there is nothing to enter
  * and nothing to game except doing the actual work.
  */
 export default async function ArenaPage() {
@@ -27,7 +27,7 @@ export default async function ArenaPage() {
       <PageHeader
         icon={<Trophy size={20} />}
         title="Arena"
-        subtitle="XP, levels, quests and badges — earned automatically from the work you already log. No extra data entry, no way to farm points except doing the job."
+        subtitle="XP, levels, quests and badges - earned automatically from the work you already log. No extra data entry, no way to farm points except doing the job."
       />
       <ArenaClient
         players={players}

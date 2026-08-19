@@ -7,8 +7,8 @@ import type { ActivityRow } from "@/server/activity-metrics";
 /**
  * The two ways to read the log.
  *
- * FEED answers "what's been happening" — chronological, grouped by IST day, easy to skim.
- * TABLE answers "what exactly did Asma do at 3pm" — one dense row per action, timestamp to
+ * FEED answers "what's been happening" - chronological, grouped by IST day, easy to skim.
+ * TABLE answers "what exactly did Asma do at 3pm" - one dense row per action, timestamp to
  * the second, nothing wrapped or summarised away.
  *
  * Both are server components: the log can be tens of thousands of rows and none of it needs
@@ -39,7 +39,7 @@ function roleLabel(role: string): string {
 
 /**
  * Who acted. An engine gets a cog, not initials: `Avatar` would render "Reminder engine" as
- * "RE" in the same circle a person gets, which reads as somebody's initials at a glance —
+ * "RE" in the same circle a person gets, which reads as somebody's initials at a glance -
  * the one thing this row must never imply.
  */
 function ActorMark({ name, role }: { name: string; role: string }) {
@@ -107,7 +107,7 @@ export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
                         <p className="truncate text-caption text-muted">
                           {r.actorName} · {roleLabel(r.actorRole)} ·{" "}
                           {/* Exact time is the point of the page; the relative form is the
-                              convenience. Both, always — never relative alone. */}
+                              convenience. Both, always - never relative alone. */}
                           <time dateTime={r.at.toISOString()} title={activityStamp(r.at)}>
                             {activityTime(r.at)} IST
                           </time>{" "}
@@ -163,7 +163,7 @@ export function ActivityTable({ rows }: { rows: ActivityRow[] }) {
       {rows.map((r) => (
         <Tr key={r.id}>
           <Td>
-            {/* To the second, and never relative here — this column is the evidence. */}
+            {/* To the second, and never relative here - this column is the evidence. */}
             <time dateTime={r.at.toISOString()} className="tnum whitespace-nowrap text-ink">
               {activityDate(r.at)}
             </time>

@@ -1,5 +1,5 @@
 /**
- * Guided Mode coaching agreement — the renderer, pinned as template version "guided-v3".
+ * Guided Mode coaching agreement - the renderer, pinned as template version "guided-v3".
  *
  * This file IS the document. Preview and sealed artifact are the same component rendered by the
  * same engine (server: renderToBuffer), so there is no second rendering path to drift.
@@ -7,7 +7,7 @@
  * THREE THINGS THAT WILL BITE YOU IF YOU EDIT THIS:
  *
  * 1. GLYPHS. The built-in Helvetica/Times use WinAnsi encoding. The characters the master
- *    document uses — ☒ ☐ ⚠ ✓ ₹ ◦ — are NOT in it and render as blank boxes. So checkboxes and
+ *    document uses - ☒ ☐ ⚠ ✓ ₹ ◦ - are NOT in it and render as blank boxes. So checkboxes and
  *    warning icons are drawn as <Svg>, sub-bullets use "–", and money is written "69,999 INR"
  *    (see formatInrPlainForDocument). "•" and "§" and "–" ARE in WinAnsi and are safe as literal text.
  *    Don't paste a glyph in here without checking it, and don't "fix" it by registering a
@@ -17,7 +17,7 @@
  *
  * 3. OUTPUT IS NOT DETERMINISTIC. PDFKit stamps a creation date and document id, so rendering
  *    the same data twice yields different bytes. Hash the sealed bytes once, at signing, and
- *    never re-render to verify — that is what `dataSha256` is for.
+ *    never re-render to verify - that is what `dataSha256` is for.
  *
  * Bumping the clauses means bumping AGREEMENT_TEMPLATE_VERSION and adding a new file, not
  * editing this one: already-signed agreements must keep rendering the terms they were signed on.
@@ -156,7 +156,7 @@ const s = StyleSheet.create({
 
 // ───────────────────────────── Glyph-free primitives ─────────────────────────────
 
-/** ☒ / ☐ without the glyph — a bordered box plus a drawn tick. */
+/** ☒ / ☐ without the glyph - a bordered box plus a drawn tick. */
 function CheckBox({ checked }: { checked: boolean }) {
   return (
     <View
@@ -251,7 +251,7 @@ export type AgreementDocProps = {
   signedAt?: Date | null;
   /**
    * Appended as a final page on the sealed copy only. Note it cannot contain the PDF's own
-   * SHA-256 — that hash is taken *of these bytes* after rendering. `pdfSha256` lives in the
+   * SHA-256 - that hash is taken *of these bytes* after rendering. `pdfSha256` lives in the
    * database and on the download page, exactly as a DocuSign certificate works.
    */
   certificate?: {
@@ -265,7 +265,7 @@ export type AgreementDocProps = {
   } | null;
 };
 
-/** "Tue 07 Jul 2026, 03:30 PM IST" — the trail must be unambiguous about zone. */
+/** "Tue 07 Jul 2026, 03:30 PM IST" - the trail must be unambiguous about zone. */
 function stamp(d: Date): string {
   return `${new Intl.DateTimeFormat("en-GB", {
     weekday: "short",
@@ -282,7 +282,7 @@ function stamp(d: Date): string {
 
 function Brand() {
   // The logo mark, in the brand periwinkle (matches the app's --brand-indigo and the
-  // invoice mark). "²" is WinAnsi-safe — see the glyph note at the top of this file.
+  // invoice mark). "²" is WinAnsi-safe - see the glyph note at the top of this file.
   const INDIGO = "#5B60C9";
   return (
     <View style={{ alignItems: "center", marginBottom: 10 }}>
@@ -338,7 +338,7 @@ export function AgreementGuidedV3({
 
   return (
     <Document
-      title={`Coaching & Consulting Agreement — ${student.fullName} — ${documentNo}`}
+      title={`Coaching & Consulting Agreement - ${student.fullName} - ${documentNo}`}
       author={AGREEMENT_PROVIDER.entity}
       subject="Guided Mode Programme"
       creator={AGREEMENT_PROVIDER.entity}
@@ -1079,7 +1079,7 @@ export function AgreementGuidedV3({
 
           <H2>Document</H2>
           <Party label="Reference" value={documentNo} />
-          <Party label="Title" value="Coaching & Consulting Agreement — Guided Mode" />
+          <Party label="Title" value="Coaching & Consulting Agreement - Guided Mode" />
           <Party label="Parties" value={`${AGREEMENT_PROVIDER.name} (B2 Consultants) and ${student.fullName}`} />
           <Party label="Executed" value={stamp(signedAt!)} />
 
@@ -1098,7 +1098,7 @@ export function AgreementGuidedV3({
           </View>
           <P>
             A separate SHA-256 is taken of the final bytes of this PDF at the moment of sealing and stored
-            alongside the record. It is not printed here — a file cannot contain its own hash. B2 Consultants
+            alongside the record. It is not printed here - a file cannot contain its own hash. B2 Consultants
             can produce it on request to demonstrate that the stored artifact has not been altered.
           </P>
 

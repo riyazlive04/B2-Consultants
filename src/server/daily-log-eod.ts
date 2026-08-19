@@ -10,13 +10,13 @@ import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 /**
  * The EOD job behind "every telecaller's log is saved by the end of the day".
  *
- * THE APP HAS NO CLOCK. Nothing in here wakes itself up — /api/cron/daily-log is the seam, and
+ * THE APP HAS NO CLOCK. Nothing in here wakes itself up - /api/cron/daily-log is the seam, and
  * Windows Task Scheduler (scripts/install-daily-log-task.ps1) is what actually ticks it. If that
  * task isn't running, auto-save never fires and the feature is inert. The cutoff itself is NOT
  * dependent on the cron: submitDailyLog reads the real clock, so the deadline holds regardless.
  *
  * Idempotent by construction: it only writes for a member with no row for today, and
- * (userId, date) is unique — so a re-tick, an overlapping tick, or a member submitting in the
+ * (userId, date) is unique - so a re-tick, an overlapping tick, or a member submitting in the
  * same second all converge on "exactly one row per person per day".
  */
 
@@ -34,7 +34,7 @@ export type EodRun = {
   date: string;
   /** Rows written by this tick. */
   autoSaved: number;
-  /** Members who had already logged — the healthy case. */
+  /** Members who had already logged - the healthy case. */
   alreadyLogged: number;
   autoSavedMembers: EodMemberResult[];
 };
@@ -49,7 +49,7 @@ const empty = (date: string, enabled: boolean, reason: string): EodRun => ({
 });
 
 /**
- * Everyone who owes a log today. Mirrors `logsDaily` in people-metrics.ts exactly — ACTIVE,
+ * Everyone who owes a log today. Mirrors `logsDaily` in people-metrics.ts exactly - ACTIVE,
  * non-Admin, and actually attached to a login. Admin (Ameen) has no daily-log duty, so
  * auto-saving a row for him would invent an obligation the PRD never gave him.
  */
@@ -80,7 +80,7 @@ export async function runDailyLogEod(): Promise<EodRun> {
 
   const nowMinutes = istMinutesOfDay(new Date());
   if (nowMinutes < cfg.cutoffMinutes) {
-    return empty(dateStr, true, `Before today's ${formatIstMinutes(cfg.cutoffMinutes)} cutoff — nothing to do yet`);
+    return empty(dateStr, true, `Before today's ${formatIstMinutes(cfg.cutoffMinutes)} cutoff - nothing to do yet`);
   }
 
   const [members, todayLogs] = await Promise.all([
@@ -106,7 +106,7 @@ export async function runDailyLogEod(): Promise<EodRun> {
           variant: m.logVariant,
           ...captured,
           source: "EOD_AUTO",
-          // Every number in this row came from activity, by definition — there was no human
+          // Every number in this row came from activity, by definition - there was no human
           // to type one. The timeline badges each of these as auto-captured.
           autoCapturedKeys: capturedKeys.length ? capturedKeys : undefined,
         },
@@ -120,11 +120,11 @@ export async function runDailyLogEod(): Promise<EodRun> {
         section: "daily-log",
         entityType: "DailyLog",
         entityId: created.id,
-        summary: `Auto-saved ${m.fullName}'s daily log for ${dateStr} — nothing submitted by the ${formatIstMinutes(cfg.cutoffMinutes)} cutoff`,
+        summary: `Auto-saved ${m.fullName}'s daily log for ${dateStr} - nothing submitted by the ${formatIstMinutes(cfg.cutoffMinutes)} cutoff`,
         meta: { date: dateStr, variant: m.logVariant, capturedCount: capturedKeys.length },
       });
     } catch (e) {
-      // They submitted between our read and our write — their row wins, always. A human
+      // They submitted between our read and our write - their row wins, always. A human
       // submission is the record; this job only ever fills a vacuum.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         run.alreadyLogged++;
@@ -140,13 +140,13 @@ export async function runDailyLogEod(): Promise<EodRun> {
 export type EodStatus = {
   /** Past the cutoff for today? */
   pastCutoff: boolean;
-  /** Past the nudge time but not yet the cutoff — the window where a reminder makes sense. */
+  /** Past the nudge time but not yet the cutoff - the window where a reminder makes sense. */
   inNudgeWindow: boolean;
   cutoffLabel: string;
   minutesToCutoff: number;
 };
 
-/** Where "now" sits against today's EOD timeline. Pure clock maths — no I/O beyond the config. */
+/** Where "now" sits against today's EOD timeline. Pure clock maths - no I/O beyond the config. */
 export async function getEodStatus(): Promise<EodStatus & { enabled: boolean }> {
   const cfg = await getDailyLogEod();
   const now = istMinutesOfDay(new Date());

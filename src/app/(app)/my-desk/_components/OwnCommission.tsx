@@ -5,16 +5,16 @@ import { formatInrMinor } from "@/lib/format";
 import type { OwnCommission as OwnCommissionData } from "@/server/commission-metrics";
 
 /**
- * "What have I earned this month?" — rebuild spec §6 and §7, which both list own commission as
+ * "What have I earned this month?" - rebuild spec §6 and §7, which both list own commission as
  * a working tool on the specialist's own desk.
  *
  * It was the one JD item with nowhere to live: the whole-team payout board (/telecaller) is
  * Admin/Head only and correctly closed to specialists, so neither Nilofer nor Asma could see
- * their own pay anywhere in the app — even though `lib/sections.ts` says in a comment that they
+ * their own pay anywhere in the app - even though `lib/sections.ts` says in a comment that they
  * get it "on My Desk".
  *
- * Shared by both desks deliberately. The commission rules do not differ by level — the same
- * split/both-calls/closer arithmetic decides everyone's line — so two copies of this component
+ * Shared by both desks deliberately. The commission rules do not differ by level - the same
+ * split/both-calls/closer arithmetic decides everyone's line - so two copies of this component
  * would be two places for the same number to be formatted differently.
  *
  * A server component: it renders figures the viewer is allowed to see and nothing else, and
@@ -33,12 +33,12 @@ export function OwnCommission({ data }: { data: OwnCommissionData }) {
       <SectionHeading
         icon={<Wallet size={18} />}
         title="Your commission"
-        description={`Earned on payments received in ${monthLabel} — your own share only`}
+        description={`Earned on payments received in ${monthLabel} - your own share only`}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <MetricCard
-          label={`Your commission — ${monthLabel}`}
+          label={`Your commission - ${monthLabel}`}
           value={formatInrMinor(data.totalInrMinor)}
           icon={<Wallet size={18} />}
           detail={{
@@ -48,7 +48,7 @@ export function OwnCommission({ data }: { data: OwnCommissionData }) {
             })),
             note:
               data.lines.length > 8
-                ? `Showing 8 of ${data.lines.length} — the full list is below.`
+                ? `Showing 8 of ${data.lines.length} - the full list is below.`
                 : data.lines.length === 0
                   ? "No payments have been credited to you this month."
                   : undefined,
@@ -62,7 +62,7 @@ export function OwnCommission({ data }: { data: OwnCommissionData }) {
           detail={{
             rows: [
               { label: "Payments crediting you", value: data.deals },
-              /* Their admin, not their performance — an unattributed payment credited nobody. */
+              /* Their admin, not their performance - an unattributed payment credited nobody. */
               { label: "Payments crediting nobody", value: data.unattributedDeals },
             ],
             note:

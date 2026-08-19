@@ -316,7 +316,7 @@ export function StudentDetailClient({
                   Day {e.dayNumber} of {e.totalDays} · {formatPct(((e.dayNumber ?? 0) / e.totalDays) * 100)}
                 </span>
               )}
-              {/* PRD2 §4.1: program end date (Solo has none — lifetime). */}
+              {/* PRD2 §4.1: program end date (Solo has none - lifetime). */}
               <span className="ml-2 text-sm font-normal text-muted">
                 · {e.programEndDate ? `ends ${formatDate(e.programEndDate)}` : "lifetime"}
               </span>
@@ -356,10 +356,10 @@ export function StudentDetailClient({
             </>
           }
         >
-          {/* Deal team + coach — the closer (L3) drives the commission split */}
+          {/* Deal team + coach - the closer (L3) drives the commission split */}
           <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             <span className="text-muted">
-              Coach: <span className="text-ink">{e.assignedCoach ?? "—"}</span>
+              Coach: <span className="text-ink">{e.assignedCoach ?? "-"}</span>
             </span>
             <span className="flex items-center gap-2">
               <span className="text-muted">Closer (L3):</span>
@@ -371,17 +371,17 @@ export function StudentDetailClient({
                     setError(null);
                     const res = await setEnrollmentCloser(e.id, ev.target.value);
                     if (!res.ok) setError(res.error);
-                    else toast("Closer updated — commission split recalculated");
+                    else toast("Closer updated - commission split recalculated");
                   }}
-                  options={[{ value: "", label: "— none —" }, ...student.teamMembers.map((m) => ({ value: m.id, label: m.name }))]}
+                  options={[{ value: "", label: "- none -" }, ...student.teamMembers.map((m) => ({ value: m.id, label: m.name }))]}
                 />
               ) : (
-                <span className="text-ink">{e.closerName ?? "—"}</span>
+                <span className="text-ink">{e.closerName ?? "-"}</span>
               )}
             </span>
           </div>
 
-          {/* Gamified journey card — stage title, XP, momentum, achievement badges.
+          {/* Gamified journey card - stage title, XP, momentum, achievement badges.
               Show it in sessions: the ring and badges are the student's scoreboard. */}
           <div className="flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface-2 p-4">
             <JourneyRing pct={e.journey.journeyPct} stageIndex={e.journey.stageIndex} size={64} />
@@ -421,7 +421,7 @@ export function StudentDetailClient({
                   nextMilestone !== e.currentMilestone &&
                   (nextMilestone === "OFFER_RECEIVED" || nextMilestone === "COMPLETED")
                 ) {
-                  celebrate(); // offer or graduation — that's the whole point of the program
+                  celebrate(); // offer or graduation - that's the whole point of the program
                   toast(nextMilestone === "OFFER_RECEIVED" ? "Offer received! 🏆 Badge unlocked" : "Journey complete! 🎓");
                 } else {
                   toast("Tracker saved - milestone & signal changes logged");
@@ -518,7 +518,7 @@ export function StudentDetailClient({
       {isAdmin && (
         <Card title="Student portal access">
           <p className="text-xs text-muted">
-            A portal login shows this student their own journey, XP, badges and next steps —
+            A portal login shows this student their own journey, XP, badges and next steps -
             plus the CV Diagnostic. It never sees money, signals or internal notes.
           </p>
           {student.portalEmail ? (
@@ -596,7 +596,7 @@ export function StudentDetailClient({
               <Field label="Closer (L3)" hint="For the commission split">
                 <Select
                   name="closerId"
-                  options={[{ value: "", label: "— none —" }, ...student.teamMembers.map((m) => ({ value: m.id, label: m.name }))]}
+                  options={[{ value: "", label: "- none -" }, ...student.teamMembers.map((m) => ({ value: m.id, label: m.name }))]}
                   defaultValue=""
                 />
               </Field>

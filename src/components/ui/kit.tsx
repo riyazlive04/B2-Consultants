@@ -48,7 +48,7 @@ export function PageHeader({
   back,
 }: {
   title: string;
-  /** Rendered inline after the title — a status badge, a month, an "Archived" pill. */
+  /** Rendered inline after the title - a status badge, a month, an "Archived" pill. */
   titleSuffix?: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
@@ -59,7 +59,7 @@ export function PageHeader({
    * A "back to the list" link above the title.
    *
    * Detail and sub-pages (an agreement, a workshop, German Note → Manage) all wanted this and so
-   * all hand-rolled their own header to get it — five of them, each with a slightly different
+   * all hand-rolled their own header to get it - five of them, each with a slightly different
    * arrow size, gap and type scale. Making it a prop is what lets a sub-page use the shared
    * header instead of inventing one, which is the whole point of `page-headers.test.ts`.
    */
@@ -99,7 +99,7 @@ export function PageHeader({
 /**
  * A section heading inside a page: a soft icon chip, the section title, an optional
  * one-line purpose, and an optional right-aligned action (usually a `ViewAll` link).
- * Where `PageHeader` opens a whole page, this opens a *band* within it — it is what
+ * Where `PageHeader` opens a whole page, this opens a *band* within it - it is what
  * turns a long dashboard into a handful of scannable, clearly-labelled groups.
  */
 export function SectionHeading({
@@ -131,7 +131,7 @@ export function SectionHeading({
   );
 }
 
-/** The section-header "View all →" affordance — one styled link, so every section
+/** The section-header "View all →" affordance - one styled link, so every section
  *  drills down the same way. Reads as a quiet text link that tints on hover. */
 /** Re-exported so existing `from "@/components/ui/kit"` imports keep working; the component
  *  itself is a client component (it checks section access). See ui/ViewAll.tsx. */
@@ -187,7 +187,7 @@ export function CardTitle({ icon, children }: { icon?: ReactNode; children: Reac
   );
 }
 
-/** A bare panel — the card's inset cousin, for grouping inside a Card. */
+/** A bare panel - the card's inset cousin, for grouping inside a Card. */
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`rounded-field border border-line bg-surface-2 p-3.5 ${className}`}>{children}</div>;
 }
@@ -238,7 +238,7 @@ export function Pill({
   );
 }
 
-/** A chip that names a thing rather than a state — outlined, not filled. */
+/** A chip that names a thing rather than a state - outlined, not filled. */
 export function Chip({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex whitespace-nowrap rounded-full border border-line px-2 py-0.5 text-caption text-ink-2">
@@ -259,7 +259,7 @@ export function Avatar({
   const initials = name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase() || "?";
   if (image) {
     // `image` can be an arbitrary user-supplied https URL or a data: URL (profile photo
-    // resizer) — neither is a domain we can whitelist in next.config's remotePatterns, so
+    // resizer) - neither is a domain we can whitelist in next.config's remotePatterns, so
     // this opts out of the optimizer instead of widening it to "any host".
     return (
       <Image
@@ -284,7 +284,7 @@ export function Avatar({
   );
 }
 
-/** Name over email — the table cell that identifies a person. */
+/** Name over email - the table cell that identifies a person. */
 export function PersonCell({
   name,
   secondary,
@@ -313,7 +313,7 @@ export function PersonCell({
 // ───────────────────────────── tables ─────────────────────────────
 
 /**
- * Table chrome only. Pages own their rows — a generic row renderer buys nothing
+ * Table chrome only. Pages own their rows - a generic row renderer buys nothing
  * once cells contain buttons, pills and links, which they always do here.
  */
 export function TableShell({
@@ -389,7 +389,7 @@ export function EmptyState({
   );
 }
 
-/** Label above a figure — the small stat used inside cards and headers. */
+/** Label above a figure - the small stat used inside cards and headers. */
 export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: Tone }) {
   return (
     <div className="min-w-0">

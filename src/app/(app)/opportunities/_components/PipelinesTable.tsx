@@ -19,7 +19,7 @@ import { DateText } from "@/components/ui/DateText";
  * ── Why the rows are reordered here and not by a drag library ────────────────────
  * The board already hand-rolls HTML5 drag-and-drop for its cards and stages, and this is the same
  * interaction over a much simpler list. Pulling in a drag dependency for one table would ship a
- * second way of doing something the codebase already does — and the two would drift.
+ * second way of doing something the codebase already does - and the two would drift.
  *
  * ── The default pipeline is pinned ──────────────────────────────────────────────
  * `listPipelines` (and the board's switcher) sort `isDefault` first no matter what `position`
@@ -74,7 +74,7 @@ export function PipelinesTable({ rows, canConfigure }: { rows: PipelineRow[]; ca
     void reorderPipelines(next).then((res) => {
       if (!res.ok) {
         toast(res.error);
-        setOrder(rows.map((r) => r.id)); // put it back — the server refused
+        setOrder(rows.map((r) => r.id)); // put it back - the server refused
       } else {
         router.refresh();
       }
@@ -253,7 +253,7 @@ export function PipelinesTable({ rows, canConfigure }: { rows: PipelineRow[]; ca
           <Field label="Pipeline name">
             <TextInput name="name" required autoFocus placeholder="e.g. Partnerships" />
           </Field>
-          <p className="text-caption text-muted">It starts with one stage — add the rest from the board.</p>
+          <p className="text-caption text-muted">It starts with one stage - add the rest from the board.</p>
           <FormError message={addError} />
           <SubmitButton>Create</SubmitButton>
         </form>

@@ -20,7 +20,7 @@ import { archiveData, restoreData } from "@/lib/soft-delete";
 /**
  * Every write here moves money, so every write posts to the ledger in the SAME transaction
  * as the row it records (SPEC §10.1: "the dashboards read the ledger"). If the posting
- * fails — an unbalanced draft, a locked period — the Income/Expense row rolls back with it.
+ * fails - an unbalanced draft, a locked period - the Income/Expense row rolls back with it.
  * A finance row that exists without its journal entry is the one state this app must never
  * reach, because from then on the numbers on screen stop tracing to anything.
  *
@@ -39,7 +39,7 @@ async function withLedgerErrors(run: () => Promise<void>): Promise<ActionResult>
   }
 }
 
-/** Shared with the browser via lib/field-rules — an empty box means "no amount in this currency",
+/** Shared with the browser via lib/field-rules - an empty box means "no amount in this currency",
  *  which requireSomeAmount() below turns into the real "enter at least one" error. */
 const moneyInput = optionalRule("money");
 
@@ -48,13 +48,13 @@ const incomeSchema = z.object({
   studentName: rule("name"),
   amountInr: moneyInput,
   amountEur: moneyInput,
-  // Any level code — validated against the live Level catalogue in the action (isKnownLevel).
+  // Any level code - validated against the live Level catalogue in the action (isKnownLevel).
   programLevel: z.string().trim().min(1, "Pick a program level"),
   paymentType: z.enum(["FULL_PAYMENT", "INSTALMENT"]),
   paymentMethod: z.enum([
     "BANK_TRANSFER_INR", "BANK_TRANSFER_EUR", "PAYPAL", "RAZORPAY", "CASH", "UPI", "CREDIT_CARD", "OTHER",
   ]),
-  // Instalment plan — the count is required the moment INSTALMENT is picked (enforced in
+  // Instalment plan - the count is required the moment INSTALMENT is picked (enforced in
   // instalmentFields below, where paymentType is known); the extra surcharge may be zero.
   instalmentCount: blankToUndefined(intInRange(2, 36, "Number of instalments must be")),
   instalmentExtraInr: moneyInput,
@@ -64,7 +64,7 @@ const incomeSchema = z.object({
 });
 
 /**
- * The instalment answers only mean something for an INSTALMENT entry — switching a row back to
+ * The instalment answers only mean something for an INSTALMENT entry - switching a row back to
  * full payment clears them rather than leaving a stale "3 instalments" on a full payment.
  * Returns the error string instead of throwing so the caller can hand it to the form.
  */
@@ -93,7 +93,7 @@ function requireSomeAmount(inr?: string, eur?: string): string | null {
   return null;
 }
 
-/** A row may carry INR, EUR, or both — the feed reads back exactly what was entered. */
+/** A row may carry INR, EUR, or both - the feed reads back exactly what was entered. */
 function amountDisplay(inrMinor: bigint, eurMinor: bigint): string {
   const parts: string[] = [];
   if (inrMinor > BigInt(0)) parts.push(formatInrMinor(inrMinor));
@@ -102,7 +102,7 @@ function amountDisplay(inrMinor: bigint, eurMinor: bigint): string {
 }
 
 /** Diff shape for money rows: amounts as strings, because diffFields JSON-compares and
- *  BigInt has no JSON representation — a raw minor amount would throw on the way in. */
+ *  BigInt has no JSON representation - a raw minor amount would throw on the way in. */
 function incomeDiffShape(row: Income) {
   return {
     date: row.date,
@@ -154,7 +154,7 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
   if (amountError) return { ok: false, error: amountError };
   const instalment = instalmentFields(d);
   if ("error" in instalment) return { ok: false, error: instalment.error };
-  if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
+  if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
   const fx = await getTodayInrPerEur();
   const incomeAccounts = await levelIncomeAccounts();
@@ -225,7 +225,7 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
   if (amountError) return { ok: false, error: amountError };
   const instalment = instalmentFields(d);
   if ("error" in instalment) return { ok: false, error: instalment.error };
-  if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
+  if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
   const existing = await prisma.income.findUnique({ where: { id } });
   if (!existing) return { ok: false, error: "Record not found" };
@@ -258,7 +258,7 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
         actorId: session.user.id,
         on: istToday(),
       });
-      // `restatedDate` keeps both halves of the correction in one period — normally the record's
+      // `restatedDate` keeps both halves of the correction in one period - normally the record's
       // own date, but today's if the original sat in a month that has since been locked.
       const draft = incomeEntryDraft(income, incomeAccounts);
       const entryId = await postEntry(tx, { ...draft, date: restatedDate(voided, draft.date) });
@@ -390,7 +390,7 @@ export async function restoreIncome(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Permanent delete — only from the Archived tab. The ledger entry was voided at archive. */
+/** Permanent delete - only from the Archived tab. The ledger entry was voided at archive. */
 export async function purgeIncome(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
@@ -421,8 +421,8 @@ const expenseSchema = z.object({
     "EVENTS_OFFLINE", "OPERATIONS", "COGS_DIRECT_DELIVERY", "OTHER",
   ]),
   isCogs: z.string().optional(), // checkbox: "on" | undefined
-  // Which business the cost belongs to (§1.4). Optional so an older form post — or any
-  // caller that predates the field — still validates and simply falls back to SHARED.
+  // Which business the cost belongs to (§1.4). Optional so an older form post - or any
+  // caller that predates the field - still validates and simply falls back to SHARED.
   businessLine: z.enum(["B2", "GERMAN_NOTE", "SHARED"]).optional(),
   // Free text, NOT rule("name"): a vendor is a company, and "3M"/"Zoho One" are real ones.
   vendor: rule("text").pipe(z.string().min(1, "Paid to (vendor) is required")),
@@ -645,7 +645,7 @@ export async function restoreExpense(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Permanent delete — only from the Archived tab. Ledger entry already voided at archive. */
+/** Permanent delete - only from the Archived tab. Ledger entry already voided at archive. */
 export async function purgeExpense(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
@@ -668,7 +668,7 @@ export async function purgeExpense(id: string): Promise<ActionResult> {
 
 const pendingSchema = z.object({
   studentName: rule("name"),
-  // Any level code — validated against the live Level catalogue in the action (isKnownLevel).
+  // Any level code - validated against the live Level catalogue in the action (isKnownLevel).
   programLevel: z.string().trim().min(1, "Pick a program level"),
   totalFeeInr: moneyInput,
   totalFeeEur: moneyInput,
@@ -685,7 +685,7 @@ export async function createPendingPayment(form: FormData): Promise<ActionResult
   const d = parsed.data;
   const amountError = requireSomeAmount(d.totalFeeInr, d.totalFeeEur);
   if (amountError) return { ok: false, error: "Enter the total fee in INR, EUR, or both" };
-  if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
+  if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
   const fx = await getTodayInrPerEur();
   const row = await prisma.pendingPayment.create({
@@ -727,7 +727,7 @@ export async function updatePendingPayment(id: string, form: FormData): Promise<
   const d = parsed.data;
   const amountError = requireSomeAmount(d.totalFeeInr, d.totalFeeEur);
   if (amountError) return { ok: false, error: "Enter the total fee in INR, EUR, or both" };
-  if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists — pick another." };
+  if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
   const existing = await prisma.pendingPayment.findUnique({ where: { id } });
   const row = await prisma.pendingPayment.update({
@@ -805,7 +805,7 @@ export async function restorePendingPayment(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Permanent delete — only from the Archived tab. Cascades the EMI instalment schedule. */
+/** Permanent delete - only from the Archived tab. Cascades the EMI instalment schedule. */
 export async function purgePendingPayment(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;

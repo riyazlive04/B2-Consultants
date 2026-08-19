@@ -2,7 +2,7 @@
  * Rebuild b2consultants.de inside this app.
  *
  * Creates (or refreshes) the "b2consultants" site with its five pages, the shared header/footer,
- * the brand theme and the nav — reproducing the GHL-hosted site the app is replacing.
+ * the brand theme and the nav - reproducing the GHL-hosted site the app is replacing.
  *
  *   node --env-file=.env scripts/rebuild-b2-site.mjs             # dry run: prints what it would do
  *   node --env-file=.env scripts/rebuild-b2-site.mjs --apply     # write it
@@ -18,7 +18,7 @@
  *
  * ── Images ────────────────────────────────────────────────────────────────────────────────────
  * `--images` uploads the captured originals to Supabase Storage and rewrites the blocks to point
- * at them. Without it — or without SUPABASE_SERVICE_ROLE_KEY — the blocks keep the GHL CDN URLs so
+ * at them. Without it - or without SUPABASE_SERVICE_ROLE_KEY - the blocks keep the GHL CDN URLs so
  * the pages still render, and you can swap them from the media library later. That fallback is a
  * STOPGAP: it leaves the rebuilt site depending on the platform you are leaving.
  */
@@ -52,12 +52,12 @@ const THEME = {
 
 const NAV = [
   // "Training" points at the GHL opt-in funnel, which STAYS on GHL. forwardParams carries the
-  // visitor's utm/click ids across the hostname boundary — without it every opt-in it produces
+  // visitor's utm/click ids across the hostname boundary - without it every opt-in it produces
   // arrives unattributed.
   { label: "Training", href: "https://optin.b2consultants.de/lp", forwardParams: true },
   { label: "About Us", href: "/aboutus" },
   { label: "Career", href: "/career" },
-  // Contact is a section on the homepage, not a page — that is how the live nav works too.
+  // Contact is a section on the homepage, not a page - that is how the live nav works too.
   { label: "Contact", href: "/#contact" },
 ];
 
@@ -131,13 +131,13 @@ const HOME = [
         { id: "ab-1", type: "text",
           text: "I am an Indian descent entrepreneur living in Germany. I've been involved in career coaching for over 7 years now, and have helped several professionals get high paying jobs in Germany." },
         { id: "ab-2", type: "text",
-          text: "Back in 2015, I was exactly where you are now—applying to 100's of jobs with nothing but rejection, no guidance on navigating the German job market, overwhelmed with negativity, losing hope, and feeling stuck. Nothing worked, and I was trapped in a cycle I didn't know how to break free from." },
+          text: "Back in 2015, I was exactly where you are now-applying to 100's of jobs with nothing but rejection, no guidance on navigating the German job market, overwhelmed with negativity, losing hope, and feeling stuck. Nothing worked, and I was trapped in a cycle I didn't know how to break free from." },
       ],
       [
         { id: "ab-3", type: "text",
-          text: "Exactly 10 months later, I landed my dream job in Germany at 40x my salary in India. I finally cracked the strategies that convert—drawing in multiple interview calls and job offers. It was like watching my career take off like a shooting star." },
+          text: "Exactly 10 months later, I landed my dream job in Germany at 40x my salary in India. I finally cracked the strategies that convert-drawing in multiple interview calls and job offers. It was like watching my career take off like a shooting star." },
         { id: "ab-4", type: "text",
-          text: "Since then, I've been educating and empowering people facing career growth challenges or financial struggles, helping 100's of students and professionals achieve their dreams in Germany. Now, my mission is to guide even more individuals like you to achieve similar—or greater—success." },
+          text: "Since then, I've been educating and empowering people facing career growth challenges or financial struggles, helping 100's of students and professionals achieve their dreams in Germany. Now, my mission is to guide even more individuals like you to achieve similar-or greater-success." },
       ],
     ],
   }),
@@ -177,7 +177,7 @@ const ABOUTUS = [
     bg: VIOLET,
     pad: [48, 48],
     columns: [[{ id: "au-p", type: "text",
-      text: "Paste the About Us copy here — the live page's wording is in the capture, and this section is laid out to receive it." }]],
+      text: "Paste the About Us copy here - the live page's wording is in the capture, and this section is laid out to receive it." }]],
   }),
   sec("au-c", "CTA", { pad: [32, 48], columns: [[CTA("au-cta")]] }),
 ];
@@ -190,7 +190,7 @@ const CAREER = [
   sec("cr-b", "Body", {
     pad: [24, 48],
     columns: [[{ id: "cr-p", type: "text",
-      text: "Paste the Career copy here. NOTE: the live page is the longest of the five (16 rows) and may carry an application form — if it does, build it in Forms so submissions land in the CRM." }]],
+      text: "Paste the Career copy here. NOTE: the live page is the longest of the five (16 rows) and may carry an application form - if it does, build it in Forms so submissions land in the CRM." }]],
   }),
 ];
 
@@ -201,7 +201,7 @@ const legal = (title, note) => [
 
 const PAGES = [
   { path: "/", title: "Home", sections: HOME,
-    seoTitle: "B2 Consultants — high paying jobs in Germany for IT & Mechanical professionals" },
+    seoTitle: "B2 Consultants - high paying jobs in Germany for IT & Mechanical professionals" },
   { path: "/aboutus", title: "About Us", sections: ABOUTUS },
   { path: "/career", title: "Career", sections: CAREER },
   // Legal pages carry no marketing value in search and their wording is a legal matter, so they
@@ -218,12 +218,12 @@ async function uploadAssets() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const bucket = process.env.SUPABASE_STORAGE_BUCKET || "site-media";
   if (!url || !key) {
-    console.warn("!  SUPABASE_SERVICE_ROLE_KEY not set — keeping the GHL CDN URLs.");
+    console.warn("!  SUPABASE_SERVICE_ROLE_KEY not set - keeping the GHL CDN URLs.");
     console.warn("   The rebuilt site will still render, but it depends on the platform you are leaving.");
     return null;
   }
   if (!ASSET_DIR || !existsSync(ASSET_DIR)) {
-    console.warn(`!  --assets <dir> missing or not found (${ASSET_DIR || "unset"}) — keeping CDN URLs.`);
+    console.warn(`!  --assets <dir> missing or not found (${ASSET_DIR || "unset"}) - keeping CDN URLs.`);
     return null;
   }
 
@@ -272,7 +272,7 @@ function rewrite(sections, map) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-console.log(APPLY ? "Applying…" : "DRY RUN — pass --apply to write. Nothing is changed.\n");
+console.log(APPLY ? "Applying…" : "DRY RUN - pass --apply to write. Nothing is changed.\n");
 console.log(`Site  : b2consultants  (/s/b2consultants)`);
 console.log(`Theme : ${THEME.primary}, ${THEME.headingFont.split(",")[0]} / ${THEME.bodyFont.split(",")[0]}, ${THEME.contentWidth}px`);
 console.log(`Nav   : ${NAV.map((n) => n.label).join(" · ")}`);
@@ -326,6 +326,6 @@ for (const p of PAGES) {
   console.log(`   ${found ? "updated" : "created"} ${p.path}`);
 }
 
-console.log(`\nDone. The site and its pages are DRAFTS — review at /sites/${site.id}, then publish.`);
+console.log(`\nDone. The site and its pages are DRAFTS - review at /sites/${site.id}, then publish.`);
 console.log("Publishing is deliberately not automated: this is the public face of the business.");
 await prisma.$disconnect();

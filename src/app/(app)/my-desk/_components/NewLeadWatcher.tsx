@@ -15,14 +15,14 @@ type PolledLead = {
 };
 
 /**
- * "A new lead just came in" — polls /api/leads/poll every 30s and pops the leads newly
+ * "A new lead just came in" - polls /api/leads/poll every 30s and pops the leads newly
  * assigned to this person.
  *
  * Follows the house pattern (Inbox.tsx / NotificationBell): poll a small scoped endpoint
  * rather than router.refresh() on a timer, and pause while the tab is hidden so a
  * backgrounded phone isn't querying all night.
  *
- * The cursor is the SERVER's clock, echoed back as `now` — never Date.now() here. A phone
+ * The cursor is the SERVER's clock, echoed back as `now` - never Date.now() here. A phone
  * that slept for an hour, or whose clock is minutes off, would otherwise either miss leads
  * or re-announce old ones. The cursor only advances on a successful poll, so a failed
  * request retries the same window instead of skipping it.
@@ -51,7 +51,7 @@ export function NewLeadWatcher({ onSeen }: { onSeen?: () => void }) {
           onSeen?.(); // refresh the desk behind the popup so the list/counters include it
         }
       } catch {
-        /* transient network error — the cursor didn't move, so next tick retries this window */
+        /* transient network error - the cursor didn't move, so next tick retries this window */
       }
     };
     const t = setInterval(poll, 30_000);
@@ -84,7 +84,7 @@ export function NewLeadWatcher({ onSeen }: { onSeen?: () => void }) {
           </div>
         </div>
         <p className="text-sm text-muted">
-          This lead has just been assigned to you. Speed matters most in the first few minutes — call now if you can.
+          This lead has just been assigned to you. Speed matters most in the first few minutes - call now if you can.
         </p>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Btn variant="ghost" size="sm" onClick={dismiss}>

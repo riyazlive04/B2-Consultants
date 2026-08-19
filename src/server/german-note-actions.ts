@@ -18,14 +18,14 @@ import { isKnownLevel } from "./levels";
 import type { ActionResult } from "./finance-actions";
 import { allocateStudentCode } from "./student-code";
 
-/** Post images are stored inline as resized data URLs (same as avatars — no object store). */
+/** Post images are stored inline as resized data URLs (same as avatars - no object store). */
 const MAX_POST_IMAGE_CHARS = 900_000;
 function validPostImage(raw: string | undefined): { ok: true; value: string | null } | { ok: false; error: string } {
   if (!raw) return { ok: true, value: null };
   if (!raw.startsWith("data:image/") || raw.startsWith("data:image/svg")) {
     return { ok: false, error: "Unsupported image" };
   }
-  if (raw.length > MAX_POST_IMAGE_CHARS) return { ok: false, error: "Image is too large — try a smaller one" };
+  if (raw.length > MAX_POST_IMAGE_CHARS) return { ok: false, error: "Image is too large - try a smaller one" };
   return { ok: true, value: raw };
 }
 
@@ -33,7 +33,7 @@ function validPostImage(raw: string | undefined): { ok: true; value: string | nu
  * German Note (Phase 4): batches, class-recording links, Skool-style community.
  * Batch/member/tutor management = Admin. Recordings = Admin or the batch's
  * tutor. Community writes = any GN participant, scoped to what they can see.
- * Every guard is re-checked here — the UI hiding a button is never the fence.
+ * Every guard is re-checked here - the UI hiding a button is never the fence.
  */
 
 function firstError(e: z.ZodError): string {
@@ -185,7 +185,7 @@ export async function updateBatch(batchId: string, form: FormData): Promise<Acti
   return { ok: true };
 }
 
-/** Hard delete — cascades members, recordings and the batch discussion. Archive is the normal path. */
+/** Hard delete - cascades members, recordings and the batch discussion. Archive is the normal path. */
 export async function deleteBatch(batchId: string): Promise<ActionResult> {
   const session = await requireAdmin();
   const batch = await prisma.batch.delete({ where: { id: batchId } });
@@ -206,14 +206,14 @@ export async function deleteBatch(batchId: string): Promise<ActionResult> {
 
 /**
  * The class-strength cap (spec Part 2 §2.1: "If a batch is already full, no more people
- * are assigned to it"). `targetStrength` — despite the name — is that cap; it defaults to
+ * are assigned to it"). `targetStrength` - despite the name - is that cap; it defaults to
  * the spec's 8 and stays per-batch editable.
  *
  * WHY THE ROW LOCK: two admins filling the last seat at the same moment would both read
  * `filled = 7` under Postgres' default READ COMMITTED and both insert, landing 9 in an
  * 8-seat batch. Locking the gn_batch row serialises seat checks for that batch, so the cap
  * is a real constraint rather than a suggestion. The caller MUST already be in a
- * transaction — otherwise the lock is released before the insert and the race is back.
+ * transaction - otherwise the lock is released before the insert and the race is back.
  *
  * When a batch is full the error names the next batch of the same level with room, because
  * "blocked" without "go here instead" just moves the puzzle to the admin (spec §2.2: the
@@ -244,7 +244,7 @@ async function claimSeat(
     ok: false,
     error: next
       ? `${full} Next with room: "${next.name}" (${next._count.members}/${next.targetStrength}).`
-      : `${full} Every active ${batch.level} batch is full — open a new one for this student.`,
+      : `${full} Every active ${batch.level} batch is full - open a new one for this student.`,
   };
 }
 
@@ -356,7 +356,7 @@ export async function removeBatchMember(memberId: string): Promise<ActionResult>
 // ── Tutor accounts (Admin) ─────────────────────────────────────
 // Same provisioning trick as users/students actions: a local better-auth
 // instance with sign-up enabled, called only inside admin-guarded actions.
-// NOT routed through users-actions.createUser — its section-access checkbox
+// NOT routed through users-actions.createUser - its section-access checkbox
 // parsing would write an all-false override map; tutors run on role defaults.
 
 const tutorAuth = betterAuth({
@@ -585,7 +585,7 @@ export async function renameGnModule(moduleId: string, form: FormData): Promise<
   return { ok: true };
 }
 
-/** Delete a module — its recordings drop to the default "Class recordings" section (SetNull). */
+/** Delete a module - its recordings drop to the default "Class recordings" section (SetNull). */
 export async function deleteGnModule(moduleId: string): Promise<ActionResult> {
   const session = await requireGn();
   const mod = await prisma.gnModule.findUnique({ where: { id: moduleId }, select: { batchId: true, title: true } });
@@ -644,7 +644,7 @@ const eventSchema = z.object({
   startsAt: z.string().min(10, "Start time is required"),
   // A live class is minutes-to-hours; 1440 (24h) is the outer bound that is still a "class".
   durationMins: blankToUndefined(intInRange(1, 1440, "Duration")),
-  // optionalRule("url") adds a missing scheme — a bare "zoom.us/j/…" would otherwise
+  // optionalRule("url") adds a missing scheme - a bare "zoom.us/j/…" would otherwise
   // render as a RELATIVE href on the Join button and 404 inside the app.
   joinUrl: optionalRule("url"),
   notes: z.string().trim().max(1000).optional(),
@@ -900,7 +900,7 @@ export async function toggleGnLike(postId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Like/unlike a comment — feeds the author's community points like post likes do. */
+/** Like/unlike a comment - feeds the author's community points like post likes do. */
 export async function toggleGnCommentLike(commentId: string): Promise<ActionResult> {
   const session = await requireGn();
   const comment = await prisma.gnComment.findUnique({
@@ -923,11 +923,11 @@ export async function toggleGnCommentLike(commentId: string): Promise<ActionResu
 }
 
 /**
- * Mark/unmark a class recording as watched (per viewer) — drives the batch progress bar.
+ * Mark/unmark a class recording as watched (per viewer) - drives the batch progress bar.
  *
  * This is the SELF-REPORT. It no longer decides completion on its own: spec §10.3 makes the
  * tracked percentage the source of truth, so un-ticking now clears the claim while KEEPING
- * any tracked progress. Deleting the row on un-tick would throw away the evidence — exactly
+ * any tracked progress. Deleting the row on un-tick would throw away the evidence - exactly
  * the thing the founders asked us to start keeping.
  */
 export async function toggleRecordingWatched(recordingId: string): Promise<ActionResult> {
@@ -966,7 +966,7 @@ export async function toggleRecordingWatched(recordingId: string): Promise<Actio
  * Player heartbeat: record how far this viewer actually got (spec §10.3).
  *
  * Called from the player as it plays, so it must be cheap and idempotent. Progress is folded
- * as a high-water mark (see lib/video-progress.ts) — rewatching from the start must not undo
+ * as a high-water mark (see lib/video-progress.ts) - rewatching from the start must not undo
  * a completed video.
  */
 export async function recordWatchProgress(
@@ -999,7 +999,7 @@ export async function recordWatchProgress(
       data: { watchedPct: pct, positionSecs: pos, durationSecs: dur, lastHeartbeatAt: new Date() },
     });
   } else {
-    // Tracking alone creates the row — a student who just watches, without ticking anything,
+    // Tracking alone creates the row - a student who just watches, without ticking anything,
     // still gets credited. selfReported stays false: they never claimed anything.
     await prisma.gnRecordingWatch.create({
       data: {

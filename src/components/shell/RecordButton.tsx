@@ -8,7 +8,7 @@ import { QuickRecordModal } from "./QuickRecordModal";
  * Top-bar CTA (§5.4 primary) for the two things the founder records most: an income entry and an
  * expense. Clicking it opens a modal with Income / Expense tabs and the entry form right there, so
  * a payment or cost can be logged from anywhere without navigating to Finance and losing the
- * current screen. Admin-only — Finance is an Admin section — so it's only rendered when the shell
+ * current screen. Admin-only - Finance is an Admin section - so it's only rendered when the shell
  * knows the viewer can reach it.
  */
 export function RecordButton() {

@@ -1,5 +1,5 @@
 /**
- * Next runs register() once per server boot — the only hook that fires before the
+ * Next runs register() once per server boot - the only hook that fires before the
  * first request is served. Two jobs:
  *
  *  1. Fail a misconfigured deploy at startup instead of letting it serve broken auth
@@ -9,7 +9,7 @@
  */
 export async function register() {
   // Guard 1: `next build` also imports this module. Validating there would demand
-  // production secrets at image-build time — precisely the coupling we just removed
+  // production secrets at image-build time - precisely the coupling we just removed
   // by taking migrations out of the build.
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   if (process.env.NEXT_PHASE === "phase-production-build") return;
@@ -27,7 +27,7 @@ export async function register() {
     validateEnv();
   } catch (err) {
     // Next 14 CATCHES a throw from register() ("Failed to prepare server"), logs it,
-    // then keeps the process alive serving 500s. That is not "refused to start" — it is
+    // then keeps the process alive serving 500s. That is not "refused to start" - it is
     // an unhealthy container that still shows "Up". So we log the reason ourselves and
     // hard-exit: the restart policy then crash-loops it, which is obvious in
     // `docker compose ps` and guarantees it never serves a single request.
@@ -41,7 +41,7 @@ export async function register() {
  *
  * `unhandledRejection` is the one that matters here: this codebase is full of
  * deliberately un-awaited fire-and-forget sends (notification emails, WhatsApp
- * dispatches, activity logs), and any of those rejecting produced exactly nothing —
+ * dispatches, activity logs), and any of those rejecting produced exactly nothing -
  * no log line, no alert, no trace.
  *
  * `uncaughtException` does NOT exit the process. Node's default would, and Next's

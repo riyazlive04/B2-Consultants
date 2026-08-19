@@ -5,7 +5,7 @@ import { isContainer } from "./sites-types";
  * Pure tree operations over a page's node list.
  *
  * Kept apart from both the renderer and the editor because the visual canvas mutates the tree on
- * every interaction — select, drag, duplicate, delete, nudge — and doing that with ad-hoc
+ * every interaction - select, drag, duplicate, delete, nudge - and doing that with ad-hoc
  * spread-and-splice inside a component is how a builder starts losing people's work. These are
  * total functions over an immutable tree: every one returns a NEW list, so undo is a stack of
  * previous roots rather than a diff to replay.
@@ -70,7 +70,7 @@ export function removeNode(list: Block[], id: string): Block[] {
     });
 }
 
-/** Fresh ids throughout — a duplicate that reused ids would break selection and mobile CSS rules. */
+/** Fresh ids throughout - a duplicate that reused ids would break selection and mobile CSS rules. */
 export function cloneNode(b: Block): Block {
   const kids = childrenOf(b);
   const copy: Block = { ...b, id: newNodeId() };
@@ -78,7 +78,7 @@ export function cloneNode(b: Block): Block {
 }
 
 /**
- * Re-key a whole list of nodes — what every insert from the section library and every page
+ * Re-key a whole list of nodes - what every insert from the section library and every page
  * template goes through.
  *
  * Without it, dropping the same saved section onto a page twice produces two subtrees with
@@ -133,7 +133,7 @@ export function nudge(list: Block[], id: string, dir: -1 | 1): Block[] {
 }
 
 /**
- * Move `dragId` next to `targetId` — the drag-and-drop primitive.
+ * Move `dragId` next to `targetId` - the drag-and-drop primitive.
  *
  * Refuses to drop a node inside itself. Without that check, dragging a section onto its own child
  * detaches the whole subtree from the root and the page silently loses everything in it.

@@ -1,5 +1,5 @@
 /**
- * Reading an EXTERNAL form's answers — the landing page → Pabbly → CRM path.
+ * Reading an EXTERNAL form's answers - the landing page → Pabbly → CRM path.
  *
  * This is the layer where the band score is either captured or silently lost, and "silently" is
  * the operative word: an answer we fail to recognise does not raise anything, it just makes the
@@ -8,8 +8,8 @@
  *
  * So the tests below are mostly about the failure modes, not the happy path:
  *   · the sender's wording differs from ours (the normal case, not the exception)
- *   · an answer matches no option — must be REPORTED, never scored as zero
- *   · a field matches no question — must be reported so the mapping can be fixed
+ *   · an answer matches no option - must be REPORTED, never scored as zero
+ *   · a field matches no question - must be reported so the mapping can be fixed
  *
  * Run: npm test
  */
@@ -39,7 +39,7 @@ function withMapping(
   );
 }
 
-describe("fold — the comparison form", () => {
+describe("fold - the comparison form", () => {
   test("collapses case, spaces, dashes and underscores", () => {
     const same = ["when_start_germany", "When Start Germany", "WHEN-START-GERMANY", "whenStartGermany"];
     const folded = same.map(fold);
@@ -55,7 +55,7 @@ describe("fold — the comparison form", () => {
   });
 });
 
-describe("mapInboundAnswers — matching without configuration", () => {
+describe("mapInboundAnswers - matching without configuration", () => {
   test("reads our own slugs straight through", () => {
     const r = mapInboundAnswers(
       { whenStartGermany: "6_months", readyToInvest: "ready_now" },
@@ -70,7 +70,7 @@ describe("mapInboundAnswers — matching without configuration", () => {
   test("reads the human LABEL, which is what a landing page actually posts", () => {
     const r = mapInboundAnswers(
       {
-        // Exactly the strings in INTAKE_OPTIONS' labels — a form built from our own wording.
+        // Exactly the strings in INTAKE_OPTIONS' labels - a form built from our own wording.
         whenStartGermany: "in 6-12 months.",
         commitment: "Fully committed to moving to Germany",
       },
@@ -99,7 +99,7 @@ describe("mapInboundAnswers — matching without configuration", () => {
   });
 });
 
-describe("mapInboundAnswers — founder-configured mapping", () => {
+describe("mapInboundAnswers - founder-configured mapping", () => {
   test("an alias resolves wording that matches neither value nor label", () => {
     const questions = withMapping("whenStartGermany", { aliases: { "6_months": ["Right away", "ASAP"] } });
     for (const said of ["Right away", "asap", "A.S.A.P."]) {
@@ -121,7 +121,7 @@ describe("mapInboundAnswers — founder-configured mapping", () => {
   });
 });
 
-describe("mapInboundAnswers — the failure modes that matter", () => {
+describe("mapInboundAnswers - the failure modes that matter", () => {
   test("an unrecognised ANSWER is reported, never scored as zero", () => {
     const r = mapInboundAnswers({ whenStartGermany: "Sometime next year maybe" }, CATALOGUE);
 
@@ -130,7 +130,7 @@ describe("mapInboundAnswers — the failure modes that matter", () => {
     assert.equal(r.unresolved[0].key, "whenStartGermany");
     assert.equal(r.unresolved[0].rawValue, "Sometime next year maybe");
     assert.equal(r.unresolved[0].score, null, "null is 'unknown'; 0 would be a real, wrong, score");
-    // It IS in `mapped` — the question matched, only the answer did not. That distinction is
+    // It IS in `mapped` - the question matched, only the answer did not. That distinction is
     // what the Console report leans on to say "these prospects are scoring too low".
     assert.equal(r.mapped.length, 1);
   });
@@ -139,7 +139,7 @@ describe("mapInboundAnswers — the failure modes that matter", () => {
     const scoredZero = mapInboundAnswers({ readyToInvest: "Not ready at the moment" }, CATALOGUE);
     assert.equal(scoredZero.answers.readyToInvest, "not_ready");
     assert.equal(scoredZero.unresolved.length, 0);
-    assert.equal(scoredZero.mapped[0].score, 0, "'Not ready at the moment' genuinely scores 0 — that is evidence");
+    assert.equal(scoredZero.mapped[0].score, 0, "'Not ready at the moment' genuinely scores 0 - that is evidence");
 
     const unknown = mapInboundAnswers({ readyToInvest: "Prefer not to say" }, CATALOGUE);
     assert.equal(unknown.unresolved.length, 1);
@@ -166,7 +166,7 @@ describe("mapInboundAnswers — the failure modes that matter", () => {
   });
 
   test("`scorable` is false when only CONTEXT questions were answered", () => {
-    // germanVisa and howKnowUs are dimension NONE — kept for the closer, worth nothing.
+    // germanVisa and howKnowUs are dimension NONE - kept for the closer, worth nothing.
     const r = mapInboundAnswers({ germanVisa: "No German visa", howKnowUs: "Instagram" }, CATALOGUE);
     assert.equal(r.mapped.length, 2, "both were read");
     assert.equal(r.scorable, false, "…but there is no band score to compute");
@@ -180,7 +180,7 @@ describe("mapInboundAnswers — the failure modes that matter", () => {
   });
 });
 
-describe("mapInboundAnswers — value coercion", () => {
+describe("mapInboundAnswers - value coercion", () => {
   test("numbers and booleans are read, not discarded", () => {
     const questions = withMapping("willingnessLearnGerman", { aliases: { yes: ["true"] } });
     const r = mapInboundAnswers({ willingnessLearnGerman: true }, questions);
@@ -194,7 +194,7 @@ describe("mapInboundAnswers — value coercion", () => {
   });
 });
 
-describe("end to end — a landing-page submission becomes a band score", () => {
+describe("end to end - a landing-page submission becomes a band score", () => {
   test("a strong prospect scores CONFIRM from labels alone", () => {
     const payload = {
       name: "Priya", phone: "+919000000000", email: "priya@example.com",
@@ -204,7 +204,7 @@ describe("end to end — a landing-page submission becomes a band score", () => 
       "Have you already applied for jobs in Germany?": "I got some interviews, but no offer",
       "When are you looking to start your move to Germany?": "in next 6 months.",
     };
-    // The founder has mapped each question text to its key — one Console edit per question.
+    // The founder has mapped each question text to its key - one Console edit per question.
     let questions = CATALOGUE;
     for (const [key, text] of [
       ["readyToInvest", "Are you ready to invest in the right program?"],

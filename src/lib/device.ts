@@ -1,19 +1,19 @@
 /**
- * Signing-device capture — isomorphic. NO prisma, NO server-only, NO secrets.
+ * Signing-device capture - isomorphic. NO prisma, NO server-only, NO secrets.
  *
  * THE DISTINCTION THAT MATTERS, and the reason this file separates `reported` from `observed`:
  *
  *   `reported`  comes from the signer's browser. It is a claim. Every field can be spoofed by
  *               anyone willing to open devtools, so it is stored, displayed and printed as
  *               "reported by the device" and NEVER presented as fact.
- *   `capture`   is how the signature was physically drawn — stroke count, duration, whether a
+ *   `capture`   is how the signature was physically drawn - stroke count, duration, whether a
  *               stylus reported pressure. Also a claim, but a laborious one to fake convincingly,
  *               and it is what distinguishes a real hand from a pasted PNG.
  *   `observed`  is set by our server from the request itself: the IP and the User-Agent header.
  *               This is the only part a disputing counterparty cannot rewrite.
  *
  * `userAgentMismatch` compares the two user agents. A signer whose browser reports one UA while
- * the request header carries another is not necessarily fraudulent — but a certificate that
+ * the request header carries another is not necessarily fraudulent - but a certificate that
  * silently hides the discrepancy is worth less than one that prints it.
  */
 
@@ -55,7 +55,7 @@ export const captureMetaSchema = z.object({
   fullScreen: z.boolean().default(false),
 });
 
-/** What the client sends. The server appends `observed` — clients never supply it. */
+/** What the client sends. The server appends `observed` - clients never supply it. */
 export const signingDeviceSchema = z.object({
   reported: reportedDeviceSchema,
   capture: captureMetaSchema,
@@ -73,7 +73,7 @@ export type SigningDevice = z.infer<typeof signingDeviceSchema>;
 export type Observed = z.infer<typeof observedSchema>;
 export type StoredDevice = SigningDevice & { observed: Observed };
 
-/** The full stored record, re-validated on read — a Json column is not a type. */
+/** The full stored record, re-validated on read - a Json column is not a type. */
 export const storedDeviceSchema = signingDeviceSchema.extend({ observed: observedSchema });
 
 // ───────────────────────────── Client collection ─────────────────────────────
@@ -116,7 +116,7 @@ export function collectReportedDevice(): ReportedDevice | null {
  * Phone / Tablet / Laptop or desktop.
  *
  * Touch capability is the primary signal, screen size the tie-break. iPadOS reports a Mac user
- * agent, so `platform === "MacIntel"` with touch points is the documented iPad tell — a
+ * agent, so `platform === "MacIntel"` with touch points is the documented iPad tell - a
  * desktop Mac has none.
  */
 export function deviceKind(d: ReportedDevice): "Phone" | "Tablet" | "Laptop or desktop" {
@@ -163,7 +163,7 @@ export function describeDevice(d: SigningDevice): string {
   return `${kind} · ${browser} on ${os} · signed with ${INPUT_LABEL[d.capture.pointerType]}`;
 }
 
-/** "3", "2.75" — never "3.00000011920929". */
+/** "3", "2.75" - never "3.00000011920929". */
 export function formatDpr(dpr: number): string {
   if (!Number.isFinite(dpr) || dpr <= 0) return "1";
   return String(Math.round(dpr * 100) / 100);

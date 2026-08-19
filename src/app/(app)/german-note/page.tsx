@@ -25,13 +25,13 @@ export default async function GermanNotePage({
 }) {
   const session = await requireSection("german-note");
 
-  // Who sees the money is the founder's call, per person, from /people → Access —
+  // Who sees the money is the founder's call, per person, from /people → Access -
   // NOT a property of the role. Admin always holds it; everyone else is off until
   // granted. Without the key there are no tabs at all, so the page is exactly what
   // it was. (`isViewer` still governs read-only COMMUNITY access for HEAD.)
   const seesBusiness = hasCapability(session.role, session.capabilities, "germanNote.finance");
   // `getGnAccess` sets `isTutor` iff the role is TUTOR, so we can gate the tutor desk on the role
-  // directly — which means all four reads depend only on values known here and batch into ONE
+  // directly - which means all four reads depend only on values known here and batch into ONE
   // round of queries, instead of the founder stats/workshops waiting on the overview to return.
   const isTutor = session.role === "TUTOR";
   const [overview, founderStats, workshops, tutorDesk] = await Promise.all([
@@ -55,7 +55,7 @@ export default async function GermanNotePage({
     </div>
   ) : (
     <div className="space-y-8">
-      {/* Tutor's own summary first (spec §9) — their batches, students with IDs, sessions
+      {/* Tutor's own summary first (spec §9) - their batches, students with IDs, sessions
           delivered and book-order status, before the shared community view below. */}
       {tutorDesk && <TutorSummary desk={tutorDesk} />}
 
@@ -105,9 +105,9 @@ export default async function GermanNotePage({
       {batches.length === 0 && (access.isAdmin || access.isTutor) && (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-6 text-center text-sm text-muted">
           {access.isAdmin ? (
-            <>No batches yet — create one under <Link href="/german-note/manage" className="font-medium text-accent hover:underline">Manage</Link>.</>
+            <>No batches yet - create one under <Link href="/german-note/manage" className="font-medium text-accent hover:underline">Manage</Link>.</>
           ) : (
-            "No batches assigned to you yet — your admin assigns batches to tutors."
+            "No batches assigned to you yet - your admin assigns batches to tutors."
           )}
         </p>
       )}
@@ -195,8 +195,8 @@ export default async function GermanNotePage({
         title="German Note"
         subtitle={
           seesBusiness
-            ? "The German Note business — every workshop intake and its money — and the course community."
-            : "Your German course home — class recordings from your batch (yours for lifetime) and the community."
+            ? "The German Note business - every workshop intake and its money - and the course community."
+            : "Your German course home - class recordings from your batch (yours for lifetime) and the community."
         }
         actions={
           <>

@@ -36,7 +36,7 @@ export default function CompaniesTable({
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const ownerOpts = [{ value: "", label: "— unassigned —" }, ...owners.map((o) => ({ value: o.id, label: o.name }))];
+  const ownerOpts = [{ value: "", label: "- unassigned -" }, ...owners.map((o) => ({ value: o.id, label: o.name }))];
 
   function openNew() {
     setEditing(null);
@@ -76,9 +76,9 @@ export default function CompaniesTable({
       value: (r) => r.name,
     },
     { key: "contacts", header: "Contacts", align: "right", cell: (r) => r.contactCount, value: (r) => r.contactCount },
-    { key: "phone", header: "Phone", cell: (r) => r.phone ?? "—", value: (r) => r.phone },
-    { key: "location", header: "Location", cell: (r) => [r.city, r.country].filter(Boolean).join(", ") || "—", value: (r) => [r.city, r.country].filter(Boolean).join(", ") },
-    { key: "owner", header: "Owner", cell: (r) => r.ownerName ?? "—", value: (r) => r.ownerName },
+    { key: "phone", header: "Phone", cell: (r) => r.phone ?? "-", value: (r) => r.phone },
+    { key: "location", header: "Location", cell: (r) => [r.city, r.country].filter(Boolean).join(", ") || "-", value: (r) => [r.city, r.country].filter(Boolean).join(", ") },
+    { key: "owner", header: "Owner", cell: (r) => r.ownerName ?? "-", value: (r) => r.ownerName },
     {
       key: "actions", header: "Actions", align: "right", sortable: false,
       cell: (r) => (

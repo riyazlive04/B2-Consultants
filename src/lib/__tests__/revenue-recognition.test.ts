@@ -11,7 +11,7 @@ import {
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
-/** ₹1,20,000 in paise — divides evenly by 120 days, so the arithmetic stays readable. */
+/** ₹1,20,000 in paise - divides evenly by 120 days, so the arithmetic stays readable. */
 const FEE = 12_000_000;
 
 /** A 120-day Elite program starting 1 Jan, paid in full on day one. */
@@ -43,7 +43,7 @@ describe("day arithmetic", () => {
 describe("the bug this fixes", () => {
   /**
    * THE HEADLINE CASE. Cash accounting books the whole ₹1,20,000 in January. Straight-line books
-   * one month of it and defers the rest — which is what makes the January margin figure
+   * one month of it and defers the rest - which is what makes the January margin figure
    * survivable in April.
    */
   test("a 120-day program does not book all its revenue in month one", () => {

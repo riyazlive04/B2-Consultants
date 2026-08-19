@@ -19,13 +19,13 @@ import {
 } from "@/lib/gn-workshop-pricing";
 
 /**
- * German Note — Workshops read layer (Admin-only; guarded in the page + actions).
+ * German Note - Workshops read layer (Admin-only; guarded in the page + actions).
  *
  * A workshop is a paid-ad taster intake; a share of attendees convert into a
  * level course (A1 / A2 / B1 or a discounted bundle). This module turns the
  * stored INPUTS (who bought what, what they actually paid, ad-driven vs organic)
- * into the founders' workbook view — by-level headline, batch capacity grid,
- * ad-performance funnel and P&L — computing every derived figure by rule:
+ * into the founders' workbook view - by-level headline, batch capacity grid,
+ * ad-performance funnel and P&L - computing every derived figure by rule:
  *
  *   COGS         = books + tutor     (DERIVED from the product cost model;
  *                                      lib/gn-workshop-pricing, overridable per row)
@@ -36,7 +36,7 @@ import {
  *   ROAS         = final ÷ adSpend
  *   Balance      = paid − final   (negative = owed)
  *
- * Verified against the March rollup — COGS ₹404,708.41 → GP 48.83%, NP 45.76%.
+ * Verified against the March rollup - COGS ₹404,708.41 → GP 48.83%, NP 45.76%.
  * Money crosses to client components as INR paise `number`s (BigInt isn't
  * JSON-serialisable; these figures stay well under Number.MAX_SAFE_INTEGER).
  */
@@ -301,7 +301,7 @@ function capacityGrid(rows: GnConversionRow[]): GnCapacityRow[] {
   const map = new Map<string, GnCapacityRow>();
   for (const r of rows) {
     for (const b of r.batches) {
-      if (!b.batch && !b.time) continue; // unassigned — nothing to bucket
+      if (!b.batch && !b.time) continue; // unassigned - nothing to bucket
       const key = `${b.level}|${r.dayType}|${b.batch ?? ""}|${b.time ?? ""}`;
       const existing = map.get(key);
       if (existing) existing.seats += 1;
@@ -449,13 +449,13 @@ export type GnFounderStats = {
   /**
    * Net profit on the CASH basis: collected − total expense.
    * `totals.netProfit` is the QUOTED basis (revenue − expense) and overstates
-   * profit on money that has not arrived — docs F1, §6.7. Both are shown.
+   * profit on money that has not arrived - docs F1, §6.7. Both are shown.
    */
   netProfitCash: number;
   /** POSITIVE paise outstanding across all workshops */
   outstanding: number;
   dues: GnDuesRow[];
-  /** newest intake first — the order the charts and the list read in */
+  /** newest intake first - the order the charts and the list read in */
   perWorkshop: GnWorkshopBar[];
   /** seats across every workshop (a bundle counts once per level it enrols into) */
   seats: GnBySeatLevel[];
@@ -466,7 +466,7 @@ export type GnFounderStats = {
 /**
  * The founder's German Note money, across all workshops at once.
  *
- * Nothing else aggregates this — `getGnWorkshops` is per-workshop, so "who owes me
+ * Nothing else aggregates this - `getGnWorkshops` is per-workshop, so "who owes me
  * money right now" had no home. Rows are concatenated BEFORE `rollup` so each
  * workshop keeps its own ad-spend allocation (ads are split per workshop in `buildRows`).
  */
@@ -483,7 +483,7 @@ export const getGnFounderStats = cache(async (): Promise<GnFounderStats> => {
     all.push(...rows);
     let owedHere = 0;
     for (const r of rows) {
-      if (r.pnl.balance >= 0) continue; // settled, or overpaid — not a debt
+      if (r.pnl.balance >= 0) continue; // settled, or overpaid - not a debt
       owedHere += -r.pnl.balance;
       dues.push({
         conversionId: r.id,
@@ -507,7 +507,7 @@ export const getGnFounderStats = cache(async (): Promise<GnFounderStats> => {
       outstanding: owedHere,
     });
   }
-  // Newest intake first — charts read left-to-right as most-recent-first.
+  // Newest intake first - charts read left-to-right as most-recent-first.
   perWorkshop.sort((a, b) => b.month.localeCompare(a.month));
 
   // Soonest due first; undated last. Ties broken by size, so the biggest debt leads.

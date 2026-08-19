@@ -14,7 +14,7 @@ import { saveCallDistribution } from "@/server/console-actions";
  * ── Why this screen exists ───────────────────────────────────────────────────────
  * Both dials existed but neither was usable. Shares were editable one person at a time, buried
  * in a twelve-field profile form on another page, with no way to see the roster together and no
- * check that they added up — and because the engine normalises them, a founder who typed 5 and 2
+ * check that they added up - and because the engine normalises them, a founder who typed 5 and 2
  * got 71/29 while the Pipeline card cheerfully printed "5% target". The ranking weights were not
  * editable at all; they were two divergent hardcoded formulas.
  *
@@ -53,7 +53,7 @@ export function CallDistributionPanel({
 
   const inRotation = roster.filter((r) => (shares[r.profileId] ?? 0) > 0);
   const shareTotal = inRotation.reduce((s, r) => s + (shares[r.profileId] ?? 0), 0);
-  // The same call `assignLeadBatch` makes — so this cannot drift from what runs.
+  // The same call `assignLeadBatch` makes - so this cannot drift from what runs.
   const preview = previewSplit(
     inRotation.map((r) => ({ userId: r.profileId, name: r.name, sharePct: shares[r.profileId] ?? 0 })),
   );
@@ -83,7 +83,7 @@ export function CallDistributionPanel({
     <div className="space-y-5">
       <Hint>
         Who receives the calls, and which lead rises to the top of their queue. Shares are
-        <strong> relative weights</strong> — they need not total 100, and the engine normalises
+        <strong> relative weights</strong> - they need not total 100, and the engine normalises
         them. The preview below is computed exactly the way the hand-out computes it.
       </Hint>
 
@@ -146,15 +146,15 @@ export function CallDistributionPanel({
                 needs to know the numbers they typed are not the numbers that will run. */}
             {shareTotal !== 100 && inRotation.length > 0 && (
               <p className="mt-3 rounded-field bg-surface-2 px-3 py-2 text-caption text-ink-3">
-                Your shares add up to <strong>{shareTotal}</strong>, not 100. That is allowed —
-                they are relative weights — but it means the split that actually runs is the one
+                Your shares add up to <strong>{shareTotal}</strong>, not 100. That is allowed -
+                they are relative weights - but it means the split that actually runs is the one
                 shown on the right, not the numbers you typed.
               </p>
             )}
             {inRotation.length === 0 && roster.length > 0 && (
               <p className="mt-3 rounded-field border border-warn bg-warn-soft px-3 py-2 text-caption text-warn-ink">
                 Nobody has a share above 0, so <strong>no new lead will be auto-assigned to
-                anyone</strong> — they will arrive unowned and sit in the unassigned pile.
+                anyone</strong> - they will arrive unowned and sit in the unassigned pile.
               </p>
             )}
           </>
@@ -206,7 +206,7 @@ export function CallDistributionPanel({
             label="Hand out leads by share, not to one person"
           />
           <p className="mt-1 text-caption text-ink-3">
-            The backlog is where the volume is — far more than daily intake — so with this off your
+            The backlog is where the volume is - far more than daily intake - so with this off your
             shares govern only a trickle. On, &ldquo;Hand out leads&rdquo; splits each batch across
             the rotation in the proportions above.
           </p>
@@ -218,7 +218,7 @@ export function CallDistributionPanel({
         <p className="text-caption font-semibold uppercase text-ink-3">Which lead comes first</p>
         <p className="mt-1 text-caption text-ink-3">
           Applied to both the caller&apos;s own queue and the pipeline&apos;s &ldquo;call these
-          first&rdquo; list — one ranking, not two. The shipped values reproduce the behaviour the
+          first&rdquo; list - one ranking, not two. The shipped values reproduce the behaviour the
           app had before these were adjustable.
         </p>
 
@@ -267,7 +267,7 @@ export function CallDistributionPanel({
           />
           <Weight
             label="Most a lead can be penalised"
-            hint="Caps the idle penalty. Without a ceiling an old lead sinks so far it can never resurface — which is abandoning it, not deprioritising it."
+            hint="Caps the idle penalty. Without a ceiling an old lead sinks so far it can never resurface - which is abandoning it, not deprioritising it."
             value={draft.priority.idlePenaltyMax}
             max={200}
             onChange={(v) => setWeight("idlePenaltyMax", v)}

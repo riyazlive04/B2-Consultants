@@ -18,7 +18,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
   const current = data.months[data.months.length - 1];
   const maxStage = Math.max(1, ...data.funnel.map((s) => s.value));
 
-  // 3-month norm for the carry-through INTO stage i — shown beside this month's
+  // 3-month norm for the carry-through INTO stage i - shown beside this month's
   // rate so every step reads as "actual vs usual", not a bare percentage.
   const stagesOf = (m: (typeof data.months)[number]) => [m.awareness, m.leads, m.calls, m.proposals, m.enrollTotal];
   const priorStages = data.months.slice(0, -1).map(stagesOf);
@@ -37,7 +37,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
         subtitle="Free content → paid programs: where people stop, and what it costs. Weekly snapshots, not real-time."
       />
 
-      {/* Weakest-stage alert (PRD3 §3.3) — judged against the stage's own 3-month
+      {/* Weakest-stage alert (PRD3 §3.3) - judged against the stage's own 3-month
           norm, not the raw drop (awareness → lead is ALWAYS the biggest raw drop). */}
       {data.biggestDrop ? (
         <div
@@ -47,11 +47,11 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
         >
           <p className={`text-sm font-semibold ${data.biggestDrop.severity === "risk" ? "text-risk" : "text-watch"}`}>
             Weakest stage this month vs your 3-month norm
-            {data.biggestDrop.severity === "watch" ? " (small miss — watch, don't panic)" : ""}
+            {data.biggestDrop.severity === "watch" ? " (small miss - watch, don't panic)" : ""}
           </p>
           <p className="mt-1 font-display text-h2">
             {data.biggestDrop.fromStage} → {data.biggestDrop.toStage} is carrying{" "}
-            {formatPct(data.biggestDrop.currentPct)} — your norm is {formatPct(data.biggestDrop.avgPct)}.
+            {formatPct(data.biggestDrop.currentPct)} - your norm is {formatPct(data.biggestDrop.avgPct)}.
           </p>
           <p className="tnum mt-1 text-sm text-muted">
             Getting this stage back to norm is the highest-leverage fix in the funnel right now.
@@ -67,7 +67,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
             ✓ Every stage is at or above its 3-month norm
           </p>
           <p className="mt-1 text-sm text-muted">
-            No stage is underperforming its own history this month — growth now comes from more volume at the top, not from fixing a leak.
+            No stage is underperforming its own history this month - growth now comes from more volume at the top, not from fixing a leak.
           </p>
         </div>
       )}
@@ -94,7 +94,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
                 >
                   ↓ {formatPct(carryPct)} carry through
                   {normInto(i) !== null ? ` · norm ${formatPct(normInto(i)!)}` : ""}
-                  {isBiggestDrop ? " — furthest below norm" : ""}
+                  {isBiggestDrop ? " - furthest below norm" : ""}
                 </span>
               )}
               <div

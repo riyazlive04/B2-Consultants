@@ -51,7 +51,7 @@ export async function sendEmailMessage(opts: {
         error: rt.configured ? "Email paused" : "Email not configured", sentById: opts.sentById || null,
       },
     });
-    return { ok: true, status: "SKIPPED", message: "Logged (email is off — add a Resend key to send for real)" };
+    return { ok: true, status: "SKIPPED", message: "Logged (email is off - add a Resend key to send for real)" };
   }
 
   const from = rt.fromName ? `${rt.fromName} <${rt.fromEmail}>` : rt.fromEmail;
@@ -89,7 +89,7 @@ export async function sendSmsMessage(opts: {
         error: rt.configured ? "SMS paused" : "SMS not configured", sentById: opts.sentById || null,
       },
     });
-    return { ok: true, status: "SKIPPED", message: "Logged (SMS is off — add Twilio keys to send for real)" };
+    return { ok: true, status: "SKIPPED", message: "Logged (SMS is off - add Twilio keys to send for real)" };
   }
 
   const res = await sendTwilioSms({ accountSid: rt.accountSid!, authToken: rt.authToken!, from: rt.fromNumber, to, body });

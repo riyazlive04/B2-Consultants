@@ -12,18 +12,18 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { toast } from "@/components/ui/feedback";
 
 /**
- * The weekly tracker round — every student a coach is updating, on one screen.
+ * The weekly tracker round - every student a coach is updating, on one screen.
  *
  * ── Why this exists ─────────────────────────────────────────────────────────────
  * The 90/120-day tracker has always been editable per student, and that per-student form is
- * fine — for one student. Updating twelve of them meant opening twelve pages, which is exactly
+ * fine - for one student. Updating twelve of them meant opening twelve pages, which is exactly
  * why a Google Form was being used instead. This replaces that form: same fields, same audited
  * write path (`updateTracker`, looped), no external dependency and no sheet to reconcile.
  *
  * ── Only what you touch is saved ────────────────────────────────────────────────
  * A row joins the submit only once something in it changes. Posting every visible row would bump
  * `updatedAt` on students nobody looked at, which destroys "last updated" as a signal of
- * attention — and that signal is the point of a weekly round.
+ * attention - and that signal is the point of a weekly round.
  *
  * ── Partial failure is shown ────────────────────────────────────────────────────
  * Rows are independent. If two fail, ten still save and the two are named. A batch save that
@@ -34,13 +34,13 @@ const MILESTONES = Object.keys(MILESTONE_LABELS);
 
 const SIGNALS = [
   { value: "", label: "Not set" },
-  { value: "GREEN", label: "Green — on track" },
-  { value: "AMBER", label: "Amber — slipping" },
-  { value: "RED", label: "Red — at risk" },
+  { value: "GREEN", label: "Green - on track" },
+  { value: "AMBER", label: "Amber - slipping" },
+  { value: "RED", label: "Red - at risk" },
 ];
 
 const TASK_STATES = [
-  { value: "", label: "—" },
+  { value: "", label: "-" },
   { value: "YES", label: "Done" },
   { value: "NO", label: "Not done" },
   { value: "PENDING", label: "Pending" },
@@ -98,7 +98,7 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
 
   return (
     <form action={submit}>
-      {/* Only the touched rows travel — see the note above on why. */}
+      {/* Only the touched rows travel - see the note above on why. */}
       {[...touched].map((id) => (
         <input key={id} type="hidden" name="touched" value={id} />
       ))}
@@ -159,9 +159,9 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
                     </td>
                     <td className="w-24 px-3 py-2.5 align-top">
                       {/* Blank = leave as it is. `updateTracker` treats an empty counter that
-                          way on purpose — these feed journey XP and the at-risk radar, and a
+                          way on purpose - these feed journey XP and the at-risk radar, and a
                           blank box must never silently reset audited progress to zero. */}
-                      <TextInput kind="int" name={`${p}totalSessionsCompleted`} placeholder="—" maxLength={4} aria-label={`Sessions completed for ${r.studentName}`} />
+                      <TextInput kind="int" name={`${p}totalSessionsCompleted`} placeholder="-" maxLength={4} aria-label={`Sessions completed for ${r.studentName}`} />
                     </td>
                     <td className="px-3 py-2.5 align-top">
                       <TextInput kind="text" name={`${p}lastTaskAssigned`} placeholder="Task set" maxLength={200} aria-label={`Task set for ${r.studentName}`} />
@@ -170,13 +170,13 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
                       <Select size="sm" name={`${p}lastTaskCompleted`} defaultValue="" options={TASK_STATES} aria-label={`Task done for ${r.studentName}`} />
                     </td>
                     <td className="w-24 px-3 py-2.5 align-top">
-                      <TextInput kind="int" name={`${p}applicationsSubmitted`} placeholder="—" maxLength={5} aria-label={`Applications for ${r.studentName}`} />
+                      <TextInput kind="int" name={`${p}applicationsSubmitted`} placeholder="-" maxLength={5} aria-label={`Applications for ${r.studentName}`} />
                     </td>
                     <td className="w-24 px-3 py-2.5 align-top">
-                      <TextInput kind="int" name={`${p}interviewsReceived`} placeholder="—" maxLength={5} aria-label={`Interviews for ${r.studentName}`} />
+                      <TextInput kind="int" name={`${p}interviewsReceived`} placeholder="-" maxLength={5} aria-label={`Interviews for ${r.studentName}`} />
                     </td>
                     <td className="px-3 py-2.5 align-top">
-                      {/* Required by the schema, so it defaults to where they already are —
+                      {/* Required by the schema, so it defaults to where they already are -
                           a batch save must never move someone's milestone by omission. */}
                       <Select
                         size="sm"

@@ -22,14 +22,14 @@ import type { ActionResult } from "./finance-actions";
 import { archiveData, restoreData } from "@/lib/soft-delete";
 
 /** Payments (Synamate "Payments"): products, invoices/estimates, manual payments, subscriptions.
- *  No processor is wired — statuses advance manually. Gated to the `payments` section; deletes
+ *  No processor is wired - statuses advance manually. Gated to the `payments` section; deletes
  *  need the `finance.write` capability. */
 
 function firstError(e: z.ZodError): string {
   return e.issues[0]?.message ?? "Invalid input";
 }
 
-/** Same shape as finance-actions.ts's private helper — duplicated rather than imported
+/** Same shape as finance-actions.ts's private helper - duplicated rather than imported
  *  because that file is "use server" and every export there becomes a public RPC; a
  *  helper taking a function argument can't be one. */
 async function withLedgerErrors(run: () => Promise<void>): Promise<ActionResult> {
@@ -46,7 +46,7 @@ const INTERVALS = ["ONE_TIME", "MONTHLY", "QUARTERLY", "YEARLY"] as const;
 
 type TxClient = Prisma.TransactionClient;
 
-/** A price may be set in INR, EUR, or both — the feed reads back exactly what was entered. */
+/** A price may be set in INR, EUR, or both - the feed reads back exactly what was entered. */
 function priceDisplay(inrMinor: bigint, eurMinor: bigint): string {
   const parts: string[] = [];
   if (inrMinor > 0n) parts.push(formatInrMinor(inrMinor));
@@ -158,7 +158,7 @@ export async function updateProduct(id: string, form: FormData): Promise<ActionR
         section: "payments",
         entityType: "Product",
         entityId: row.id,
-        summary: `Edited the product "${row.name}" — now ${priceDisplay(row.priceInrMinor, row.priceEurMinor)}`,
+        summary: `Edited the product "${row.name}" - now ${priceDisplay(row.priceInrMinor, row.priceEurMinor)}`,
         meta: diff,
       });
     }
@@ -206,7 +206,7 @@ export async function restoreProduct(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Permanent delete — only from the Archived tab. Subscription.productId → null (SetNull). */
+/** Permanent delete - only from the Archived tab. Subscription.productId → null (SetNull). */
 export async function purgeProduct(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
@@ -269,10 +269,10 @@ async function nextNumber(tx: TxClient, kind: InvoiceKind): Promise<string> {
 
 /**
  * createInvoice/updateInvoice take a JSON payload rather than FormData, so NOTHING here has been
- * near the browser's field filters by the time it lands — a crafted call could set taxPercent to
+ * near the browser's field filters by the time it lands - a crafted call could set taxPercent to
  * 10_000 or paste a novel into a line item. Re-check the whole shape against the same rules the
  * client filters on (lib/field-rules). Replaces the old hand-rolled validatePayload, which checked
- * only the customer name, the item count and the issue date — taxPercent reached Prisma unchecked.
+ * only the customer name, the item count and the issue date - taxPercent reached Prisma unchecked.
  */
 const invoicePayloadSchema = z.object({
   kind: z.enum(["INVOICE", "ESTIMATE"]),
@@ -288,7 +288,7 @@ const invoicePayloadSchema = z.object({
         // Free text, not rule("name"): "Level 2 Bundle" is a legitimate line item.
         description: rule("text").pipe(z.string().min(1, "Every line item needs a description")),
         quantity: z.coerce.number().int().min(1, "Quantity must be at least 1").max(9999),
-        // `?? ""` so the type stays a plain string — computeTotals/majorStringToMinor take one.
+        // `?? ""` so the type stays a plain string - computeTotals/majorStringToMinor take one.
         unitPriceInr: optionalRule("money").transform((v) => v ?? ""),
       }),
     )
@@ -353,7 +353,7 @@ export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> 
       section: "payments",
       entityType: "Invoice",
       entityId: row.id,
-      summary: `Created ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} — ${formatInrMinor(row.totalInrMinor)}`,
+      summary: `Created ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} - ${formatInrMinor(row.totalInrMinor)}`,
       meta: {
         kind: row.kind,
         number: row.number,
@@ -412,7 +412,7 @@ export async function updateInvoice(id: string, raw: InvoicePayload): Promise<Ac
   if (existing && updated) {
     const row: Invoice = updated;
     const diff = diffFields(invoiceDiffShape(existing), invoiceDiffShape(row));
-    // Line items are replaced wholesale on every save, so they never show up in the diff —
+    // Line items are replaced wholesale on every save, so they never show up in the diff -
     // an amount change surfaces through the totals instead.
     if (diff.changed.length) {
       await logActivity(session, {
@@ -420,7 +420,7 @@ export async function updateInvoice(id: string, raw: InvoicePayload): Promise<Ac
         section: "payments",
         entityType: "Invoice",
         entityId: row.id,
-        summary: `Edited ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} — now ${formatInrMinor(row.totalInrMinor)}`,
+        summary: `Edited ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} - now ${formatInrMinor(row.totalInrMinor)}`,
         meta: diff,
       });
     }
@@ -460,7 +460,7 @@ export async function setInvoiceStatus(id: string, status: string): Promise<Acti
     }
   }
 
-  // Keep the ledger's issuance entry (Dr AR / Cr Income) in step with the new status — post it on
+  // Keep the ledger's issuance entry (Dr AR / Cr Income) in step with the new status - post it on
   // the way into an issued state, reverse it if the invoice fell back to DRAFT or VOID. No-op unless
   // financePosting.invoiceIssuancePosting is on (audit §C #22).
   await syncInvoiceIssuance(id, session.user.id);
@@ -484,7 +484,7 @@ export async function deleteInvoice(id: string): Promise<ActionResult> {
     section: "payments",
     entityType: "Invoice",
     entityId: row.id,
-    summary: `Archived ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} — ${formatInrMinor(row.totalInrMinor)}`,
+    summary: `Archived ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} - ${formatInrMinor(row.totalInrMinor)}`,
     meta: { kind: row.kind, number: row.number, totalInrMinor: row.totalInrMinor.toString(), status: row.status },
   });
   revalidatePath("/payments");
@@ -517,7 +517,7 @@ export async function restoreInvoice(id: string): Promise<ActionResult> {
 }
 
 /**
- * Permanent delete — only from the Archived tab. Cascades line items + payments and removes each
+ * Permanent delete - only from the Archived tab. Cascades line items + payments and removes each
  * payment's auto-posted Income mirror so no phantom revenue is left behind (the original delete
  * behaviour, now the true end-of-life step).
  */
@@ -563,14 +563,14 @@ export type SendInvoiceResult = { ok: true; message: string } | { ok: false; err
 
 /**
  * "Send" used to only flip status → SENT (BUILD_CHECKLIST §7). This now actually delivers
- * the invoice — PDF attached, plus a link to the public page — to `Invoice.customerEmail`,
+ * the invoice - PDF attached, plus a link to the public page - to `Invoice.customerEmail`,
  * over the exact same Resend path every other system email in this app uses (lib/email.ts's
  * getEmailRuntime + sendResendEmail, the same pair auth.ts's password-reset email calls
  * directly rather than going through messaging.ts, because an Invoice isn't always tied to
  * a Lead the way messaging.ts's sendEmailMessage expects).
  *
  * Delivery failure (no email on file, email unconfigured/paused, provider error) never
- * blocks the status flip — the invoice still moves to SENT so the founder can hand it over
+ * blocks the status flip - the invoice still moves to SENT so the founder can hand it over
  * manually via the existing "Link"/"PDF" buttons. The caller gets a human-readable message
  * either way instead of a bare boolean, so the founder knows whether delivery actually
  * happened.
@@ -589,14 +589,14 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
   const noun = inv.kind === "ESTIMATE" ? "Estimate" : "Invoice";
   const url = publicInvoiceUrl(inv.publicToken);
   const to = inv.customerEmail?.trim();
-  let message = "Marked sent — no email on file, share the link or PDF manually";
+  let message = "Marked sent - no email on file, share the link or PDF manually";
 
   if (to) {
     const rt = await getEmailRuntime();
     if (rt.enabled) {
       // PDF attachment: chosen over a link-only email because InvoicePdfData is already
       // built for the public page and renderInvoicePdf is a pure, synchronous-cost buffer
-      // render — attaching cost nothing extra to plumb. The public link is still included
+      // render - attaching cost nothing extra to plumb. The public link is still included
       // in the body as a fallback for mail clients that block attachments.
       const pdfData = await getInvoicePdfData(id);
       const attachments = pdfData
@@ -614,8 +614,8 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
       message = res.ok ? `Emailed to ${to}` : `Marked sent, but the email failed (${res.error})`;
     } else {
       message = rt.configured
-        ? "Marked sent — email is paused, nothing was delivered"
-        : "Marked sent — email isn't configured, nothing was delivered";
+        ? "Marked sent - email is paused, nothing was delivered"
+        : "Marked sent - email isn't configured, nothing was delivered";
     }
   }
 
@@ -625,14 +625,14 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
   // flag is on; best-effort, so a posting hiccup never blocks the send.
   await syncInvoiceIssuance(inv.id, session.user.id);
 
-  // The summary carries `message` because the status flip and actual delivery can disagree —
+  // The summary carries `message` because the status flip and actual delivery can disagree -
   // the founder needs to see which one happened.
   await logActivity(session, {
     action: "payments.invoice.send",
     section: "payments",
     entityType: "Invoice",
     entityId: inv.id,
-    summary: `Sent ${noun.toLowerCase()} ${inv.number} (${formatInrMinor(inv.totalInrMinor)}) to ${inv.customerName} — ${message}`,
+    summary: `Sent ${noun.toLowerCase()} ${inv.number} (${formatInrMinor(inv.totalInrMinor)}) to ${inv.customerName} - ${message}`,
     meta: { number: inv.number, to: to ?? null, totalInrMinor: inv.totalInrMinor.toString(), message },
   });
 
@@ -643,7 +643,7 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
 
 /**
  * Post every payment to the real ledger in the SAME transaction as the InvoicePayment row
- * (BUILD_CHECKLIST §7 — copies finance-actions.ts's createIncome/createExpense pattern
+ * (BUILD_CHECKLIST §7 - copies finance-actions.ts's createIncome/createExpense pattern
  * exactly). Before this, Payments and Finance were two disconnected books for the same
  * kind of event: money could be marked "paid" here without ever appearing on the P&L,
  * cash position, or trial balance.
@@ -712,7 +712,7 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
       section: "payments",
       entityType: "InvoicePayment",
       entityId: r.paymentId,
-      summary: `Recorded a ${formatInrMinor(amountInrMinor)} payment from ${r.customerName} against invoice ${r.number} — now ${r.status.toLowerCase()}`,
+      summary: `Recorded a ${formatInrMinor(amountInrMinor)} payment from ${r.customerName} against invoice ${r.number} - now ${r.status.toLowerCase()}`,
       meta: {
         invoiceId,
         number: r.number,
@@ -730,7 +730,7 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
       r.paymentId,
     );
 
-    // Ensure the invoice's issuance entry exists before its payment credits AR — a payment recorded
+    // Ensure the invoice's issuance entry exists before its payment credits AR - a payment recorded
     // against an invoice that was never explicitly "sent" would otherwise leave AR one-sided again
     // (audit §C #22). No-op unless the flag is on; idempotent.
     await syncInvoiceIssuance(invoiceId, session.user.id);
@@ -787,7 +787,7 @@ export async function convertEstimate(id: string): Promise<ActionResult> {
       section: "payments",
       entityType: "Invoice",
       entityId: row.id,
-      summary: `Converted estimate ${est.number} into invoice ${row.number} for ${row.customerName} — ${formatInrMinor(row.totalInrMinor)}`,
+      summary: `Converted estimate ${est.number} into invoice ${row.number} for ${row.customerName} - ${formatInrMinor(row.totalInrMinor)}`,
       meta: {
         number: row.number,
         fromEstimate: est.number,

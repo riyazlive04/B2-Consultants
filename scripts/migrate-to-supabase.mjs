@@ -2,7 +2,7 @@
 //
 // WHY NOT A PLAIN pg_dump | psql:
 //   Local dev runs Postgres 18; Supabase runs 17 (or 15 on older projects). A full dump
-//   restored into an older server is a DOWNGRADE — pg_dump emits DDL the target cannot
+//   restored into an older server is a DOWNGRADE - pg_dump emits DDL the target cannot
 //   parse. So we split the job:
 //
 //     schema  ->  `prisma migrate deploy` runs the 40 migrations natively on the target.
@@ -12,7 +12,7 @@
 //     data    ->  `pg_dump --data-only` emits COPY blocks, which are version-portable.
 //
 // WHY session_replication_role = replica:
-//   A data-only load inserts rows in table order, not FK order — and this schema has
+//   A data-only load inserts rows in table order, not FK order - and this schema has
 //   append-only + immutability triggers (journal_entry, agreement_seal, lead_stage_history)
 //   that exist precisely to reject writes like these. `replica` suspends BOTH user triggers
 //   and FK checks for the session. Supabase grants the `postgres` role this setting; a
@@ -60,7 +60,7 @@ const FORCE = flag("force");
 const LOCKDOWN_ONLY = flag("lockdown-only");
 
 // A bare node script gets no .env (Next.js loads it, node does not), and `$DIRECT_URL`
-// in an npm script does not expand on Windows. So read .env ourselves — this is what
+// in an npm script does not expand on Windows. So read .env ourselves - this is what
 // makes `npm run db:lockdown` work with no arguments, cross-platform.
 function envFromDotEnv(key) {
   const f = path.join(ROOT, ".env");
@@ -117,7 +117,7 @@ const tool = (n) => (BIN ? path.join(BIN, n) : n);
 
 const redact = (url) => url.replace(/:\/\/([^:]+):[^@]+@/, "://$1:****@");
 
-// Prisma accepts connection params libpq does not — `?schema=public` makes psql exit with
+// Prisma accepts connection params libpq does not - `?schema=public` makes psql exit with
 // `invalid URI query parameter`, and the Supabase pooler URL carries `?pgbouncer=true`.
 // Strip the Prisma-only ones so the same string works for both Prisma and psql/pg_dump.
 // Dropping `schema=public` is safe: public is already first in the default search_path.
@@ -152,7 +152,7 @@ function psql(url, sql) {
 
 const step = (msg) => console.log(`\n[${new Date().toISOString().slice(11, 19)}] ${msg}`);
 
-// Row counts per table via query_to_xml — pg_stat_user_tables.n_live_tup is an
+// Row counts per table via query_to_xml - pg_stat_user_tables.n_live_tup is an
 // estimate that reads 0 on a freshly loaded table and would fake a passing verify.
 const COUNTS_SQL = `
   SELECT table_name || '=' || (xpath('/row/c/text()',
@@ -188,7 +188,7 @@ function runLockdown() {
   );
   if (res.status !== 0) {
     console.error(
-      "\nERROR: lockdown failed — the Data API may be OPEN.\n" +
+      "\nERROR: lockdown failed - the Data API may be OPEN.\n" +
         "Do not expose this project until `npm run db:lockdown` succeeds."
     );
     process.exit(1);
@@ -198,7 +198,7 @@ function runLockdown() {
 if (LOCKDOWN_ONLY) {
   console.log(`  target : ${redact(TARGET_URL)}`);
   runLockdown();
-  console.log("\nDONE — lockdown applied and verified.");
+  console.log("\nDONE - lockdown applied and verified.");
   process.exit(0);
 }
 
@@ -223,7 +223,7 @@ const sourceTotal = Object.values(sourceCounts).reduce((a, b) => a + b, 0);
 const populated = Object.entries(sourceCounts).filter(([, c]) => c > 0);
 console.log(`  source holds ${sourceTotal} rows across ${populated.length} populated tables`);
 
-// The whole point of the exercise — call it out by name so a silent miss is visible.
+// The whole point of the exercise - call it out by name so a silent miss is visible.
 const LMS = ["student", "enrollment", "gn_batch", "gn_module", "gn_recording", "gn_post", "gn_workshop"];
 console.log(`  LMS    : ${LMS.map((t) => `${t}=${sourceCounts[t] ?? 0}`).join("  ")}`);
 
@@ -274,7 +274,7 @@ if (preTotal > 0 && !FORCE) {
   );
   process.exit(1);
 }
-console.log(`  target is empty (${preTotal} rows) — safe to load`);
+console.log(`  target is empty (${preTotal} rows) - safe to load`);
 
 // ─────────────────── 4. dump data only ───────────────────
 
@@ -320,7 +320,7 @@ const load = spawnSync(
   { encoding: "utf8", stdio: ["ignore", "inherit", "pipe"] }
 );
 if (load.status !== 0) {
-  console.error(`\nERROR: load failed, transaction rolled back — target still has no data.\n${load.stderr}`);
+  console.error(`\nERROR: load failed, transaction rolled back - target still has no data.\n${load.stderr}`);
   process.exit(1);
 }
 
@@ -374,11 +374,11 @@ console.log(`  ${seqFixed.split("\n").pop().trim()} sequence(s) resynced`);
 runLockdown();
 
 console.log(
-  `\nDONE — ${sourceTotal} rows in Supabase, verified table by table.\n\n` +
+  `\nDONE - ${sourceTotal} rows in Supabase, verified table by table.\n\n` +
     "Next:\n" +
-    "  1. Point .env at Supabase (see .env.supabase.example) — app DATABASE_URL uses the\n" +
+    "  1. Point .env at Supabase (see .env.supabase.example) - app DATABASE_URL uses the\n" +
     "     POOLER (:6543) with ?pgbouncer=true; DIRECT_URL keeps :5432 for migrations.\n" +
     "  2. Confirm the lockdown took: Data API should see nothing.\n" +
     "       psql <target> -c \"SET ROLE anon; SELECT count(*) FROM lead;\"   -- expect: permission denied\n" +
-    "  3. Rotate every secret in .env — they have lived in a local file.\n"
+    "  3. Rotate every secret in .env - they have lived in a local file.\n"
 );

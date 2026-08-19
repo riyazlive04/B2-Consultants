@@ -86,7 +86,7 @@ describe("breach detection", () => {
 describe("the standing backlog is excluded", () => {
   /**
    * THE DESIGN CONSTRAINT. Production holds ~23,435 leads that have never been contacted. If the
-   * lookback did not exclude them, this alert would fire on all of them on every tick — and be
+   * lookback did not exclude them, this alert would fire on all of them on every tick - and be
    * muted within two days, at which point it is worse than no alert because it also carries the
    * false assurance of having been set up.
    */
@@ -119,9 +119,9 @@ describe("five-minute hit rate", () => {
   test("counts only connections inside the five-minute clock", () => {
     const r = speedToLeadReport(
       [
-        // Connected 3 minutes after opting in — met.
+        // Connected 3 minutes after opting in - met.
         lead({ id: "fast", optInAt: minutesAgo(30), connectedAt: minutesAgo(27) }),
-        // Connected 20 minutes after opting in — connected, but not within five.
+        // Connected 20 minutes after opting in - connected, but not within five.
         lead({ id: "slow", optInAt: minutesAgo(60), connectedAt: minutesAgo(40) }),
       ],
       NOW,
@@ -143,10 +143,10 @@ describe("five-minute hit rate", () => {
     assert.equal(r.hitRate, 0.5);
   });
 
-  test("no leads means no rate — not a perfect score", () => {
+  test("no leads means no rate - not a perfect score", () => {
     // 0/0 rendered as 100% would report a flawless week during a week with no leads at all.
     assert.equal(speedToLeadReport([], NOW, OPTS).hitRate, null);
-    assert.equal(formatHitRate(null), "—");
+    assert.equal(formatHitRate(null), "-");
   });
 });
 
@@ -232,11 +232,11 @@ describe("formatting", () => {
       NOW,
       OPTS,
     );
-    assert.equal(alertSubject(r), "2 leads waiting — oldest 1 h 35 min");
+    assert.equal(alertSubject(r), "2 leads waiting - oldest 1 h 35 min");
   });
 
   test("the subject line is singular for one lead", () => {
     const r = speedToLeadReport([lead({ id: "a", optInAt: minutesAgo(20) })], NOW, OPTS);
-    assert.equal(alertSubject(r), "1 lead waiting — oldest 20 min");
+    assert.equal(alertSubject(r), "1 lead waiting - oldest 20 min");
   });
 });

@@ -58,7 +58,7 @@ export function useControlProps() {
  *
  * Runs on the `input` event (React's onChange) rather than `beforeinput`: the value is already
  * committed, so ONE code path covers typing, paste, drag-drop and IME commit, and it works for
- * controlled and uncontrolled inputs alike. Rewriting `el.value` here is not a fight with React —
+ * controlled and uncontrolled inputs alike. Rewriting `el.value` here is not a fight with React -
  * the parent's onChange fires *after* this, so a controlled parent receives the cleaned string
  * and its state never diverges from the DOM.
  */
@@ -66,7 +66,7 @@ function scrub(el: HTMLInputElement | HTMLTextAreaElement, filter: (s: string) =
   const before = el.value;
   const clean = filter(before);
   if (clean === before) return;
-  // `type="email"`/`"number"` don't support the selection API and throw on access — the caret
+  // `type="email"`/`"number"` don't support the selection API and throw on access - the caret
   // simply lands at the end there, which is where it already is for a rejected keystroke.
   let pos: number | null = null;
   try {
@@ -80,7 +80,7 @@ function scrub(el: HTMLInputElement | HTMLTextAreaElement, filter: (s: string) =
   try {
     el.setSelectionRange(next, next);
   } catch {
-    /* selection unsupported for this input type — ignore */
+    /* selection unsupported for this input type - ignore */
   }
 }
 
@@ -89,9 +89,9 @@ function scrub(el: HTMLInputElement | HTMLTextAreaElement, filter: (s: string) =
  * so a call site can still override e.g. `maxLength` or `placeholder`; `onChange` is merged, not
  * replaced, so controlled fields keep working.
  *
- * This is a UX affordance only — every kind's rule is re-checked server-side (see lib/field-rules).
+ * This is a UX affordance only - every kind's rule is re-checked server-side (see lib/field-rules).
  *
- * NOT a hook despite taking props-shaped args — it calls none, so it is safe inside a `.map()`
+ * NOT a hook despite taking props-shaped args - it calls none, so it is safe inside a `.map()`
  * (which is exactly how the builder screens render their repeated rows). Hence no `use` prefix.
  */
 export function fieldKindProps<T extends HTMLInputElement | HTMLTextAreaElement>(
@@ -110,7 +110,7 @@ export function fieldKindProps<T extends HTMLInputElement | HTMLTextAreaElement>
 }
 
 /**
- * A button styled to look exactly like a text field — the closed state of both the
+ * A button styled to look exactly like a text field - the closed state of both the
  * date picker and the select. `open` mirrors the focus ring so an open popover reads
  * as an active field.
  */
@@ -220,8 +220,8 @@ export function Popover({
         minWidth: pos?.minWidth,
         // invisible until measured, so it never flashes at (0,0) before placement
         visibility: pos ? "visible" : "hidden",
-        // Above every container a picker can open INSIDE — Modal z-[90] (Record, Add student…)
-        // and the palette z-[95] — but below toasts/confirms (z-[99]+), which must outrank
+        // Above every container a picker can open INSIDE - Modal z-[90] (Record, Add student…)
+        // and the palette z-[95] - but below toasts/confirms (z-[99]+), which must outrank
         // everything. At the old 60 a select inside any modal opened BEHIND the dialog.
         zIndex: 96,
       }}

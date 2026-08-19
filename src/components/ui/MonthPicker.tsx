@@ -6,13 +6,13 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
 
 /**
- * App-styled month picker — the missing sibling of {@link DatePicker}.
+ * App-styled month picker - the missing sibling of {@link DatePicker}.
  *
  * `<input type="month">` was left native on the grounds that it was "3 call sites, not worth a
  * bespoke month grid". That reasoning missed what the native popup actually looks like: Chrome
  * draws its own panel in the platform's serif-ish UI font with its own blue selection chip and
  * its own "Clear / This month" links. Sitting under this app's fields it read as a different
- * product — and it is unthemeable, so no amount of `color-scheme` correction fixed it.
+ * product - and it is unthemeable, so no amount of `color-scheme` correction fixed it.
  *
  * Same construction as DatePicker, for the same reasons:
  *   - a REAL hidden `<input type="month">` carries `name` / `value` / `required`, so every form
@@ -121,7 +121,7 @@ export function MonthPicker({
 
   function onGridKey(e: React.KeyboardEvent) {
     // Step through months as one continuous run, rolling into the next/previous year at the
-    // edges — arrowing right from December should land on January, not stop dead.
+    // edges - arrowing right from December should land on January, not stop dead.
     const move = (delta: number) => {
       e.preventDefault();
       const next = ord(year, focusM) + delta;

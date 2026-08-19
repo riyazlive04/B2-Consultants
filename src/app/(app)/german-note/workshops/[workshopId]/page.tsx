@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 export default async function WorkshopDetailPage({ params }: { params: { workshopId: string } }) {
   await requireSection("german-note");
-  // Same key as the Financials tab that links here — otherwise a granted viewer
+  // Same key as the Financials tab that links here - otherwise a granted viewer
   // would click a workshop and get bounced. Admin passes implicitly.
   await requireCapability("germanNote.finance");
   const w = await getGnWorkshopDetail(params.workshopId);
@@ -40,7 +40,7 @@ export default async function WorkshopDetailPage({ params }: { params: { worksho
             )}
           </>
         }
-        subtitle="Workshop taster intake — who converted, into which German level, and the money it made."
+        subtitle="Workshop taster intake - who converted, into which German level, and the money it made."
       />
       <div>
         {w.notes && <p className="mt-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2">{w.notes}</p>}

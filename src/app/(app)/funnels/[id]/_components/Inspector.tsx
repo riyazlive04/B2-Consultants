@@ -10,13 +10,13 @@ import { Select } from "@/components/ui/form";
 /**
  * The right-hand panel: everything about the selected node.
  *
- * Two tabs, matching how people actually work — WHAT it says, then HOW it looks. Mixing them
+ * Two tabs, matching how people actually work - WHAT it says, then HOW it looks. Mixing them
  * (the old builder's single flat form) meant hunting for a font size among paragraph textareas.
  *
  * ── Desktop vs phone ───────────────────────────────────────────────────────────
  * The Styles tab writes to `style` or to `styleMobile` depending on the device toggle, so the
  * same controls serve both and there is no second panel to keep in sync. A field that has no
- * phone override shows the desktop value as its placeholder rather than as its value — otherwise
+ * phone override shows the desktop value as its placeholder rather than as its value - otherwise
  * merely opening the phone view would bake a copy of every desktop value into the override and
  * the two could never diverge again.
  */
@@ -57,7 +57,7 @@ export default function Inspector({
   const s: Partial<NodeStyle> = (device === "mobile" ? node.styleMobile : node.style) ?? {};
   const base: NodeStyle = node.style ?? {};
 
-  /** Empty string clears the override rather than writing 0 — "unset" and "zero" differ. */
+  /** Empty string clears the override rather than writing 0 - "unset" and "zero" differ. */
   const num = (key: keyof NodeStyle) => ({
     value: (s[key] as number | undefined) ?? "",
     placeholder: device === "mobile" && base[key] != null ? `${base[key]} (desktop)` : "auto",
@@ -95,7 +95,7 @@ export default function Inspector({
           <IconButton label="Move down" onClick={() => onNudge(1)}><ArrowDown size={14} /></IconButton>
           <IconButton label="Duplicate" onClick={onDuplicate}><Copy size={14} /></IconButton>
           {/* Saving a node to the shared library sits beside duplicate on purpose: they are the
-              same intent at two scopes — "I want this again", here or on another page. */}
+              same intent at two scopes - "I want this again", here or on another page. */}
           {onSaveAsSection && (
             <IconButton label="Save to section library" onClick={onSaveAsSection}><Library size={14} /></IconButton>
           )}
@@ -141,7 +141,7 @@ export default function Inspector({
                   size="sm"
                   value={s.align ?? ""}
                   onChange={(e) => onPatchStyle({ align: (e.target.value || undefined) as NodeStyle["align"] })}
-                  options={[{ value: "", label: "— inherit —" }, { value: "left", label: "Left" }, { value: "center", label: "Centre" }, { value: "right", label: "Right" }]}
+                  options={[{ value: "", label: "- inherit -" }, { value: "left", label: "Left" }, { value: "center", label: "Centre" }, { value: "right", label: "Right" }]}
                 />
               </Field>
               <label className="flex items-center gap-2 text-sm text-ink-2">
@@ -152,7 +152,7 @@ export default function Inspector({
             </Group>
 
             <Group title="Spacing">
-              <Field label="Padding — top / right / bottom / left">
+              <Field label="Padding - top / right / bottom / left">
                 <div className="grid grid-cols-4 gap-1.5">
                   {pad.map((v, i) => (
                     <input key={i} type="number" className={inputCls} value={v} onChange={(e) => setPad(i, e.target.value)} />
@@ -190,7 +190,7 @@ export default function Inspector({
                   size="sm"
                   value={s.shadow ?? ""}
                   onChange={(e) => onPatchStyle({ shadow: (e.target.value || undefined) as NodeStyle["shadow"] })}
-                  options={[{ value: "", label: "— none —" }, { value: "card", label: "Card" }, { value: "soft", label: "Soft" }]}
+                  options={[{ value: "", label: "- none -" }, { value: "card", label: "Card" }, { value: "soft", label: "Soft" }]}
                 />
               </Field>
             </Group>
@@ -222,7 +222,7 @@ export default function Inspector({
  * What clicking this node does: follow a link, or raise a form in a popup.
  *
  * One control rather than a "popup form" field sitting quietly beside the link field. With two
- * independent inputs, filling in both is not an error state anyone would notice — the page just
+ * independent inputs, filling in both is not an error state anyone would notice - the page just
  * silently does one of them, and the author's mental model of their own CTA is wrong until a
  * visitor complains. A single choice makes the two mutually exclusive on screen, which is what
  * they are at render time.
@@ -240,7 +240,7 @@ function OnClickFields({ node, onPatch, forms }: { node: Block; onPatch: (p: Par
           size="sm"
           value={mode}
           onChange={(e) =>
-            // Clearing to `undefined` rather than "" — an empty string is a form id that matches
+            // Clearing to `undefined` rather than "" - an empty string is a form id that matches
             // nothing, which renders as a dead button instead of a link.
             onPatch(e.target.value === "popup" ? { opensFormId: forms[0]?.id ?? "" } : { opensFormId: undefined })
           }
@@ -260,7 +260,7 @@ function OnClickFields({ node, onPatch, forms }: { node: Block; onPatch: (p: Par
           <Field label="Form to open">
             <Select
               size="sm"
-              placeholder="— pick a published form —"
+              placeholder="- pick a published form -"
               value={node.opensFormId ?? ""}
               onChange={(e) => onPatch({ opensFormId: e.target.value })}
               options={forms.map((f) => ({ value: f.id, label: f.name }))}
@@ -284,7 +284,7 @@ function OnClickFields({ node, onPatch, forms }: { node: Block; onPatch: (p: Par
             />
           </Field>
           {forms.length === 0 && (
-            <p className="text-caption text-risk">No published forms yet — publish one under Forms first.</p>
+            <p className="text-caption text-risk">No published forms yet - publish one under Forms first.</p>
           )}
         </>
       )}
@@ -306,11 +306,11 @@ function GeneralFields({ node, onPatch, forms }: { node: Block; onPatch: (p: Par
     case "bullets":
       return (
         <>
-          <Field label="Items — one per line">
+          <Field label="Items - one per line">
             <textarea className={areaCls} rows={6} value={(node.items ?? []).join("\n")} onChange={(e) => onPatch({ items: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) })} />
           </Field>
           <Field label="Style">
-            <Select size="sm" value={node.variant ?? "dot"} onChange={(e) => onPatch({ variant: (e.target.value === "dot" ? undefined : e.target.value) as Block["variant"] })} options={[{ value: "dot", label: "• Bullets" }, { value: "check", label: "✔ Checklist" }, { value: "dash", label: "— Dashes" }]} />
+            <Select size="sm" value={node.variant ?? "dot"} onChange={(e) => onPatch({ variant: (e.target.value === "dot" ? undefined : e.target.value) as Block["variant"] })} options={[{ value: "dot", label: "• Bullets" }, { value: "check", label: "✔ Checklist" }, { value: "dash", label: "- Dashes" }]} />
           </Field>
         </>
       );
@@ -371,7 +371,7 @@ function GeneralFields({ node, onPatch, forms }: { node: Block; onPatch: (p: Par
     case "form":
       return (
         <Field label="Form">
-          <Select placeholder="— pick a published form —" value={node.formId ?? ""} onChange={(e) => onPatch({ formId: e.target.value })} options={forms.map((f) => ({ value: f.id, label: f.name }))} />
+          <Select placeholder="- pick a published form -" value={node.formId ?? ""} onChange={(e) => onPatch({ formId: e.target.value })} options={forms.map((f) => ({ value: f.id, label: f.name }))} />
         </Field>
       );
     case "html":
@@ -419,7 +419,7 @@ function ColourInput({ value, onChange }: { value?: string; onChange: (v: string
         size="sm"
         value={isToken ? value : value ? "__custom" : ""}
         onChange={(e) => onChange(e.target.value === "__custom" ? "#000000" : e.target.value || undefined)}
-        options={[{ value: "", label: "— inherit —" }, ...TOKENS.map((t) => ({ value: t, label: t })), { value: "__custom", label: "Custom…" }]}
+        options={[{ value: "", label: "- inherit -" }, ...TOKENS.map((t) => ({ value: t, label: t })), { value: "__custom", label: "Custom…" }]}
       />
       {!!value && !isToken && (
         <input type="color" className="h-9 w-10 flex-none rounded-field border border-line bg-surface" value={value} onChange={(e) => onChange(e.target.value)} />

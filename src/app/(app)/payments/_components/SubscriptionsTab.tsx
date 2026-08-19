@@ -67,7 +67,7 @@ export default function SubscriptionsTab({
       cell: (r) => r.contactId ? <Link href={`/contacts/${r.contactId}`} className="text-sm font-semibold text-ink hover:text-primary">{r.customerName}</Link> : <span className="text-sm font-semibold text-ink">{r.customerName}</span>,
       value: (r) => r.customerName,
     },
-    { key: "plan", header: "Plan", cell: (r) => r.productName ?? "—", value: (r) => r.productName },
+    { key: "plan", header: "Plan", cell: (r) => r.productName ?? "-", value: (r) => r.productName },
     {
       key: "amount", header: "Amount", align: "right",
       cell: (r) => (
@@ -79,7 +79,7 @@ export default function SubscriptionsTab({
       value: (r) => amountValue(r.amountDisplay),
     },
     { key: "billing", header: "Billing", cell: (r) => r.interval.replace("_", "-").toLowerCase(), value: (r) => r.interval },
-    { key: "next", header: "Next", cell: (r) => (r.nextBillingDate ? <DateText date={r.nextBillingDate} /> : "—"), value: (r) => (r.nextBillingDate ? r.nextBillingDate.getTime() : null) },
+    { key: "next", header: "Next", cell: (r) => (r.nextBillingDate ? <DateText date={r.nextBillingDate} /> : "-"), value: (r) => (r.nextBillingDate ? r.nextBillingDate.getTime() : null) },
     { key: "status", header: "Status", cell: (r) => <Pill tone={r.status === "ACTIVE" ? "good" : r.status === "CANCELLED" ? "bad" : "warn"}>{r.status}</Pill>, value: (r) => r.status },
     {
       key: "actions", header: "Actions", align: "right", sortable: false,
@@ -114,11 +114,11 @@ export default function SubscriptionsTab({
       <Modal open={open} onClose={() => setOpen(false)} title="New subscription" size="sm">
         <form action={create} className="space-y-4">
           <Field label="Contact (optional)">
-            <Select name="leadId" options={[{ value: "", label: "— none / manual —" }, ...pickers.contacts.slice(0, 500).map((c) => ({ value: c.id, label: c.name }))]} defaultValue="" />
+            <Select name="leadId" options={[{ value: "", label: "- none / manual -" }, ...pickers.contacts.slice(0, 500).map((c) => ({ value: c.id, label: c.name }))]} defaultValue="" />
           </Field>
           <Field label="Customer name"><TextInput kind="name" name="customerName" required /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Product (optional)"><Select name="productId" options={[{ value: "", label: "— none —" }, ...pickers.products.map((p) => ({ value: p.id, label: p.name }))]} defaultValue="" /></Field>
+            <Field label="Product (optional)"><Select name="productId" options={[{ value: "", label: "- none -" }, ...pickers.products.map((p) => ({ value: p.id, label: p.name }))]} defaultValue="" /></Field>
             <Field label="Billing"><Select name="interval" options={INTERVAL_OPTS} defaultValue="MONTHLY" /></Field>
             <AmountPair
               fxRate={fxRate}

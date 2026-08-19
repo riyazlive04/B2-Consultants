@@ -13,14 +13,14 @@ import { Card, Hint, NumInput, SaveBar } from "./kit";
  *
  * Every rate the deal-team split uses lives here and nowhere else. They were hardcoded
  * (5/3/4); they are now founder-editable and read live by getCommissionReport, which is the
- * whole point — the founders change these without a deploy, so the spec's example numbers are
+ * whole point - the founders change these without a deploy, so the spec's example numbers are
  * a starting position, never something the code should assert.
  *
- * Each is a percentage of the payment ACTUALLY received — a cut of real cash in, per payment.
+ * Each is a percentage of the payment ACTUALLY received - a cut of real cash in, per payment.
  *
  * If you add a rate to commissionRulesConfigSchema, it MUST get a field here. The panel posts
  * its whole draft, so a rate with no input is a value the founder can see the effect of but
- * never change — the exact "code change = blocker" problem this panel exists to remove.
+ * never change - the exact "code change = blocker" problem this panel exists to remove.
  */
 
 const EXAMPLE_PAYMENT = 10_000; // ₹, the worked example the founder sees under the fields
@@ -68,7 +68,7 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
     <div className="space-y-5">
       <Hint>
         How Finance → Commission splits every student payment across the deal team. Each rate is a
-        percentage of the money <strong>actually received</strong> — worked out on each payment as it
+        percentage of the money <strong>actually received</strong> - worked out on each payment as it
         comes in, so a part payment earns a part cut. Changing a rate re-values the current month&apos;s
         report the moment you save; past payouts are re-derived, never double-counted.
       </Hint>
@@ -77,7 +77,7 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
         <div className="space-y-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field
-              label="Both calls — one person (%)"
+              label="Both calls - one person (%)"
               hint="Same person did the first (lead) call AND the discovery call."
             >
               <NumInput
@@ -89,8 +89,8 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
               />
             </Field>
             <Field
-              label="Split — two people (% each)"
-              hint="First call and discovery done by different people — each earns this. Also a lone first-call or lone discovery leg."
+              label="Split - two people (% each)"
+              hint="First call and discovery done by different people - each earns this. Also a lone first-call or lone discovery leg."
             >
               <NumInput
                 ariaLabel="Split percentage"
@@ -102,7 +102,7 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
             </Field>
             <Field
               label="Closer bonus (%)"
-              hint="The person who ran the SSS / sales call and closed — added on top of any earlier leg they had."
+              hint="The person who ran the SSS / sales call and closed - added on top of any earlier leg they had."
             >
               <NumInput
                 ariaLabel="Closer percentage"
@@ -114,7 +114,7 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
             </Field>
             <Field
               label="Substitute's share when covering (%)"
-              hint="Someone ran a discovery call in another person's slot. The stand-in keeps this share of that leg; the slot's owner keeps the rest. It splits the leg — it does not cost extra."
+              hint="Someone ran a discovery call in another person's slot. The stand-in keeps this share of that leg; the slot's owner keeps the rest. It splits the leg - it does not cost extra."
             >
               <NumInput
                 ariaLabel="Substitute share percentage"

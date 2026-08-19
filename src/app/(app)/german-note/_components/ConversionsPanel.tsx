@@ -95,7 +95,7 @@ function ConversionFields({ c }: { c?: GnConversionRow }) {
         <CheckboxField
           name="isFreeSeat"
           label="Free seat (B2 client / free repeat)"
-          hint="No revenue counted — enrolled but not billed (delivery cost still applies)."
+          hint="No revenue counted - enrolled but not billed (delivery cost still applies)."
           defaultChecked={c?.isFreeSeat}
         />
       </fieldset>
@@ -151,7 +151,7 @@ function batchSummary(c: GnConversionRow): string {
   const parts = c.batches
     .filter((b) => b.batch || b.time)
     .map((b) => `${b.level}: ${[b.batch, b.time].filter(Boolean).join(" ")}`);
-  return parts.length ? parts.join(" · ") : "—";
+  return parts.length ? parts.join(" · ") : "-";
 }
 
 export function ConversionsPanel({ workshopId, conversions }: { workshopId: string; conversions: GnConversionRow[] }) {
@@ -177,7 +177,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
 
       {conversions.length === 0 ? (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          No conversions yet — add the first client above.
+          No conversions yet - add the first client above.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-card border border-line bg-surface shadow-card">

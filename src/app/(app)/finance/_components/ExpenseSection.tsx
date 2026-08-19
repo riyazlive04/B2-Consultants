@@ -53,7 +53,7 @@ export function ExpenseSection({
   const remove = async (row: ExpenseRow) => {
     const ok = await askConfirm({
       title: `Archive expense to ${row.vendor}?`,
-      body: "It moves to the Archived tab — you can restore it there.",
+      body: "It moves to the Archived tab - you can restore it there.",
       confirmLabel: "Archive",
       danger: true,
     });
@@ -73,7 +73,7 @@ export function ExpenseSection({
 
   const columns: Column<ExpenseRow>[] = [
     { key: "date", header: "Date", cell: (r) => formatDate(r.date), value: (r) => r.date.slice(0, 10) },
-    // "Paid ₹" / "Paid €" are as-entered columns — the currency the money actually left in,
+    // "Paid ₹" / "Paid €" are as-entered columns - the currency the money actually left in,
     // dash where none did. Only the aggregate follows the ₹/€ toggle (see IncomeSection).
     {
       key: "inr", header: "Paid ₹", align: "right",
@@ -147,7 +147,7 @@ export function ExpenseSection({
           </Field>
           <Field
             label="Business line"
-            hint="Tag a cost that belongs to ONE business. Leave Shared for rent, ads and tools — those get split across both by revenue share."
+            hint="Tag a cost that belongs to ONE business. Leave Shared for rent, ads and tools - those get split across both by revenue share."
           >
             <Select
               name="businessLine"
@@ -167,12 +167,12 @@ export function ExpenseSection({
               name="isCogs"
               label="Is this COGS?"
               defaultChecked={editing?.isCogs ?? false}
-              // The COGS test is "would this cost exist if nobody enrolled?" — tutor
+              // The COGS test is "would this cost exist if nobody enrolled?" - tutor
               // salary, books and delivery tools scale with students, so they are COGS.
               // A platform subscription (Skool, WATI) is paid whether or not anyone
               // enrols, so it belongs in Tools & Software. The old hint listed Skool as
               // a COGS example, which is exactly how it got misfiled.
-              hint="Direct cost of delivering the programme — a cost you'd avoid if nobody enrolled (e.g. tutor salary, books, delivery tools). Platform subscriptions like Skool are Tools & Software, not COGS."
+              hint="Direct cost of delivering the programme - a cost you'd avoid if nobody enrolled (e.g. tutor salary, books, delivery tools). Platform subscriptions like Skool are Tools & Software, not COGS."
             />
           </div>
         </div>

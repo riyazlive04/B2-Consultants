@@ -32,7 +32,7 @@ function NumField({ name, label, defaultValue, hint }: { name: string; label: st
 
 /**
  * One touchpoint of the reminder schedule: a title, its on/off switch, and its cadence fields.
- * The fields DIM when off but stay enabled — a disabled input drops out of the FormData and the
+ * The fields DIM when off but stay enabled - a disabled input drops out of the FormData and the
  * save action would silently reset the number to its default, so the values must keep submitting.
  */
 function ScheduleGroup({
@@ -141,7 +141,7 @@ export function WhatsAppSettingsForm({
         </h3>
         {settings.testRecipient ? (
           <p className="mt-1 text-sm text-ink">
-            Every outbound message — templates, automatic reminders and free-text replies alike — is
+            Every outbound message - templates, automatic reminders and free-text replies alike - is
             being redirected to <strong>{settings.testRecipient}</strong>. No prospect, student or
             vendor is receiving anything. Clear this field to go live.
           </p>
@@ -181,7 +181,7 @@ export function WhatsAppSettingsForm({
             />
             <span className="mt-0.5 block text-caption text-muted">
               Only used for numbers saved <em>without</em> a country code. Contacts abroad (German students)
-              must be saved as <code className="rounded bg-surface-2 px-1">+49…</code> — an ambiguous number is
+              must be saved as <code className="rounded bg-surface-2 px-1">+49…</code> - an ambiguous number is
               skipped, never guessed.
             </span>
           </label>
@@ -197,7 +197,7 @@ export function WhatsAppSettingsForm({
         <h3 className="font-display text-base font-semibold">Automatic reminder schedule</h3>
         <p className="mt-1 text-xs text-muted">
           Controls the scheduled reminder run (hit by the cron endpoint / “Run reminders now”). Each reminder has its
-          own switch — turning one off silences only that reminder; manual sends from the section rows still work.
+          own switch - turning one off silences only that reminder; manual sends from the section rows still work.
         </p>
 
         <div className="mt-4 space-y-4">
@@ -256,7 +256,7 @@ export function WhatsAppSettingsForm({
 
           <ScheduleGroup
             title="Student nudges"
-            hint="Check-in nudges and sprint-miss nudges for active students — one switch covers both."
+            hint="Check-in nudges and sprint-miss nudges for active students - one switch covers both."
             name="studentNudgesEnabled"
             on={enabled.studentNudgesEnabled}
             onToggle={setOn("studentNudgesEnabled")}
@@ -266,7 +266,7 @@ export function WhatsAppSettingsForm({
             </div>
           </ScheduleGroup>
 
-          {/* EMI pre-due — kept visually distinct because this is the one touchpoint that fans out
+          {/* EMI pre-due - kept visually distinct because this is the one touchpoint that fans out
               to every paying student at once, and the one with a live/rehearse switch. */}
           <ScheduleGroup
             title="EMI reminder (before the due date)"
@@ -298,14 +298,14 @@ export function WhatsAppSettingsForm({
                 <span className="text-xs text-muted">
                   Unticked (default) = <strong>rehearsal</strong>: every reminder is logged to WhatsApp history as
                   “DRY RUN”, naming the recipient and template, but nothing is sent. Tick this only once the dry-run
-                  list looks right — it sends to real students.
+                  list looks right - it sends to real students.
                 </span>
               </label>
             </div>
           </ScheduleGroup>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <NumField name="maxPerRun" label="Max messages per run" defaultValue={c.maxPerRun} hint="Safety cap for a single reminder run — applies across all reminders above." />
+            <NumField name="maxPerRun" label="Max messages per run" defaultValue={c.maxPerRun} hint="Safety cap for a single reminder run - applies across all reminders above." />
           </div>
         </div>
       </section>
@@ -327,7 +327,7 @@ export function WhatsAppSettingsForm({
         <p className="mt-1 text-xs text-muted">
           A WhatsApp template only accepts the variables it was approved with, so picking a template fills its variable
           list automatically. A touchpoint with no template is never sent.
-          {catalog.length === 0 && " No templates loaded yet — hit Refresh, or type the name manually."}
+          {catalog.length === 0 && " No templates loaded yet - hit Refresh, or type the name manually."}
         </p>
 
         <div className="mt-4 space-y-4">
@@ -344,7 +344,7 @@ export function WhatsAppSettingsForm({
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <p className="text-sm font-semibold">{WHATSAPP_KIND_LABELS[kind]}</p>
                   <p className="text-caption text-muted">
-                    can supply: {available.map((v) => `{{${v}}}`).join(" ") || "—"}
+                    can supply: {available.map((v) => `{{${v}}}`).join(" ") || "-"}
                   </p>
                 </div>
                 <p className="mt-0.5 text-caption text-muted">{WHATSAPP_KIND_HINTS[kind]}</p>
@@ -356,7 +356,7 @@ export function WhatsAppSettingsForm({
                       defaultValue={t?.name ?? ""}
                       onChange={(e) => onPick(kind, e.target.value)}
                       options={[
-                        { value: "", label: "— not mapped (never sends) —" },
+                        { value: "", label: "- not mapped (never sends) -" },
                         ...sorted.map((tpl) => ({
                           value: tpl.name,
                           label: `${tpl.name}${tpl.status !== "APPROVED" ? ` (${tpl.status})` : ""} · ${tpl.category}${tpl.params.length ? ` · {{${tpl.params.join("}} {{")}}}` : " · no vars"}`,
@@ -378,7 +378,7 @@ export function WhatsAppSettingsForm({
 
                 {picked && picked.status !== "APPROVED" && (
                   <p className="mt-2 text-caption" style={{ color: "var(--bad)" }}>
-                    {picked.name} is {picked.status} in WATI — WhatsApp will reject sends until it is approved.
+                    {picked.name} is {picked.status} in WATI - WhatsApp will reject sends until it is approved.
                   </p>
                 )}
                 {picked && picked.category === "MARKETING" && (
@@ -390,7 +390,7 @@ export function WhatsAppSettingsForm({
                 {unsupported.length > 0 && (
                   <p className="mt-2 text-caption" style={{ color: "var(--bad)" }}>
                     This template asks for {unsupported.map((p) => `{{${p}}}`).join(", ")}, which this touchpoint
-                    cannot supply — sends will be skipped.
+                    cannot supply - sends will be skipped.
                   </p>
                 )}
               </div>
@@ -399,7 +399,7 @@ export function WhatsAppSettingsForm({
         </div>
       </section>
 
-      {/* Sticky so the save is always in reach — this form is long enough that scrolling to
+      {/* Sticky so the save is always in reach - this form is long enough that scrolling to
           the bottom is the step people forget, and nothing above it takes effect until saved. */}
       <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end gap-3 border-t border-line bg-surface px-1 py-3">
         {dirty && <span className="text-caption font-medium text-warn">Unsaved changes</span>}

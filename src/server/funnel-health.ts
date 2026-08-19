@@ -6,7 +6,7 @@ import { ACTIVE } from "@/lib/soft-delete";
 import { buildFunnelHealth, emptyCounts, type FunnelHealth, type StageCounts } from "@/lib/funnel-health";
 
 /**
- * Row 5 of the executive dashboard (rebuild spec §4) — the nine-stage outreach funnel measured
+ * Row 5 of the executive dashboard (rebuild spec §4) - the nine-stage outreach funnel measured
  * from what actually happened, current month against the six-month average.
  *
  * ONE PASS PER SOURCE, NOT ONE PER MONTH. Seven months × nine stages is 63 round trips, and on
@@ -15,7 +15,7 @@ import { buildFunnelHealth, emptyCounts, type FunnelHealth, type StageCounts } f
  *
  * Stage → data mapping, stated plainly because it is the part most worth arguing with:
  *
- *   Leads                   Lead.dateIn                         (@db.Date — day boundaries)
+ *   Leads                   Lead.dateIn                         (@db.Date - day boundaries)
  *   Booked discovery calls  LeadStageHistory → DISCO_BOOKED
  *   BANT qualified          BookingRequest.bantVerdict = CONFIRM (Ameen's >3 threshold)
  *   Confirmed               BookingRequest.confirmedAt           (WhatsApp "yes" or manual)
@@ -104,7 +104,7 @@ export const getFunnelHealth = cache(async (): Promise<FunnelHealth> => {
   }
 
   for (const b of bookings) {
-    // Booked and confirmed are counted on their OWN dates — a call booked on the 31st and
+    // Booked and confirmed are counted on their OWN dates - a call booked on the 31st and
     // confirmed on the 1st belongs to two different months, and pretending otherwise would
     // inflate whichever month the query happened to anchor on.
     if (b.bantVerdict === "CONFIRM" && b.createdAt >= windowStart && b.createdAt < windowEnd) {
@@ -120,7 +120,7 @@ export const getFunnelHealth = cache(async (): Promise<FunnelHealth> => {
   }
 
   const current = buckets.get(currentKey) ?? emptyCounts();
-  // Only months that actually carry traffic count as history — a run of empty months would drag
+  // Only months that actually carry traffic count as history - a run of empty months would drag
   // the benchmark toward zero and make a normal month look like a triumph.
   const history = keys
     .slice(0, -1)

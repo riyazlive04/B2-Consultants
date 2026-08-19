@@ -4,7 +4,7 @@
  *   npm run db:verify-ledger
  *
  * Every case here TRIES TO CORRUPT the ledger and asserts the database refuses. The
- * application-level checks in ledger-core.ts are bypassed on purpose — we are testing the
+ * application-level checks in ledger-core.ts are bypassed on purpose - we are testing the
  * triggers and CHECK constraints, because those are what hold when someone opens psql.
  *
  * Each attempt runs inside a transaction that ends in a throw, so nothing is left behind.
@@ -40,7 +40,7 @@ async function mustReject(label: string, attempt: () => Promise<unknown>) {
   try {
     await attempt();
     failures += 1;
-    console.error(`  ✗ ${label}\n      NOT REJECTED — the ledger accepted corrupt data`);
+    console.error(`  ✗ ${label}\n      NOT REJECTED - the ledger accepted corrupt data`);
   } catch (err) {
     console.log(`  ✓ ${label}\n      rejected: ${rejectionReason(err)}`);
   }
@@ -175,7 +175,7 @@ async function main() {
       ),
     );
   } else {
-    console.log("  · skipped (ledger is empty — run `npm run db:ledger` first)");
+    console.log("  · skipped (ledger is empty - run `npm run db:ledger` first)");
   }
 
   console.log("\nOne live entry per source row");

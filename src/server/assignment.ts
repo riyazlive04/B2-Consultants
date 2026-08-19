@@ -33,7 +33,7 @@ export type RotationMember = {
   /**
    * Leads assigned inside the configured lookback window.
    *
-   * Was `assigned30d`, which stopped being true the moment the window became founder-editable —
+   * Was `assigned30d`, which stopped being true the moment the window became founder-editable -
    * a field name that quietly lies is worse than a vague one.
    */
   assignedInWindow: number;
@@ -41,7 +41,7 @@ export type RotationMember = {
   actualPct: number;
   /** Excluded right now by the Saturday rule. */
   offToday: boolean;
-  /** Auto-assigned so far in the current IST day — measured against the daily cap. */
+  /** Auto-assigned so far in the current IST day - measured against the daily cap. */
   assignedToday: number;
   /** At or past the configured daily ceiling, so the rotation will skip them. */
   atDailyCap: boolean;
@@ -66,7 +66,7 @@ async function loadRotation(now: Date): Promise<RotationMember[]> {
       where: { ...ACTIVE, assignedToId: { in: userIds }, createdAt: { gte: since } },
       _count: { _all: true },
     }),
-    // Only queried when a cap is actually set — otherwise it is a round trip on the lead-capture
+    // Only queried when a cap is actually set - otherwise it is a round trip on the lead-capture
     // path that can never change the answer.
     cfg.dailyCapPerPerson > 0
       ? prisma.lead.groupBy({
@@ -110,7 +110,7 @@ export async function pickFirstCaller(now = new Date()): Promise<string | null> 
     // saying so: the leads still arrive, they just arrive unassigned, and silence would make that
     // look like a rotation misconfiguration.
     if (all.some((m) => m.atDailyCap)) {
-      console.warn("[assignment] every eligible caller is at their daily cap — leads will arrive unassigned");
+      console.warn("[assignment] every eligible caller is at their daily cap - leads will arrive unassigned");
     }
     return null;
   }
@@ -133,7 +133,7 @@ export async function pickFirstCaller(now = new Date()): Promise<string | null> 
 /**
  * Target-vs-actual split, for the Pipeline card and the Console panel's live preview.
  *
- * `share` is the NORMALISED figure — what the engine will actually do — not the raw
+ * `share` is the NORMALISED figure - what the engine will actually do - not the raw
  * `firstCallSharePct`. The two differ whenever the shares don't total 100, and the Pipeline card
  * used to print the raw number: with 5 and 2 configured it read "5% target / 2% target" while the
  * engine ran 71/29. Showing the founder a number the engine does not use is how a setting gets
@@ -147,7 +147,7 @@ export async function getFirstCallSplit(now = new Date()) {
     lookbackDays: cfg.lookbackDays,
     dailyCapPerPerson: cfg.dailyCapPerPerson,
     isSaturday: istWeekday(now) === "Sat",
-    /** True when the raw shares don't total 100 — the card explains rather than blocks. */
+    /** True when the raw shares don't total 100 - the card explains rather than blocks. */
     sharesNormalised: shareTotal > 0 && shareTotal !== 100,
     members: rotation
       .map((m) => ({ ...m, effectivePct: shareTotal > 0 ? (m.sharePct / shareTotal) * 100 : 0 }))

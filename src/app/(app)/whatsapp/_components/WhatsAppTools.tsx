@@ -29,7 +29,7 @@ export function WhatsAppTools({
 
   const [freeSending, setFreeSending] = useState(false);
 
-  // The three number boxes. Shape only — lib/phone.ts still does the authoritative per-country
+  // The three number boxes. Shape only - lib/phone.ts still does the authoritative per-country
   // normalization server-side (its metadata must not reach this bundle).
   const testPhone = fieldKindProps<HTMLInputElement>("phone", undefined);
   const freePhone = fieldKindProps<HTMLInputElement>("phone", undefined);
@@ -90,7 +90,7 @@ export function WhatsAppTools({
                 return {
                   value: k,
                   label: `${WHATSAPP_KIND_LABELS[k]}${t?.name ? ` → ${t.name}` : " → not mapped"}`,
-                  disabled: !t?.name, // unmapped touchpoints can't be sent — keep them unselectable
+                  disabled: !t?.name, // unmapped touchpoints can't be sent - keep them unselectable
                 };
               })}
             />
@@ -111,7 +111,7 @@ export function WhatsAppTools({
           </div>
           {mapped.length === 0 && (
             <p className="text-caption" style={{ color: "var(--bad)" }}>
-              No touchpoint has a template mapped yet — set one in the Settings tab first.
+              No touchpoint has a template mapped yet - set one in the Settings tab first.
             </p>
           )}
         </form>
@@ -119,7 +119,7 @@ export function WhatsAppTools({
         <div className="mt-6 border-t border-line pt-4">
           <h4 className="text-sm font-semibold">Free-form message (24-hour window)</h4>
           <p className="mt-1 text-xs text-muted">
-            Plain text, no template. Only delivers if the contact messaged your WhatsApp number in the last 24 hours —
+            Plain text, no template. Only delivers if the contact messaged your WhatsApp number in the last 24 hours -
             but unlike a marketing template it is <strong>not</strong> subject to Meta&apos;s per-user frequency caps,
             so it&apos;s the reliable way to prove delivery.
           </p>

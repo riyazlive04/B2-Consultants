@@ -69,7 +69,7 @@ export default function InvoiceEditor({
   const [payError, setPayError] = useState<string | null>(null);
 
   // This screen hand-rolls its <input>s (they're denser than the form kit's), so each one picks up
-  // its character rule through fieldKindProps rather than a `kind` prop. Not hooks — safe to call
+  // its character rule through fieldKindProps rather than a `kind` prop. Not hooks - safe to call
   // here and, below, inside the line-item .map().
   const nameField = fieldKindProps<HTMLInputElement>("name", (e) => setCustomerName(e.target.value));
   const emailField = fieldKindProps<HTMLInputElement>("email", (e) => setCustomerEmail(e.target.value));
@@ -190,7 +190,7 @@ export default function InvoiceEditor({
                     value={leadId}
                     onChange={(e) => pickContact(e.target.value)}
                     options={[
-                      { value: "", label: "— pick or enter manually —" },
+                      { value: "", label: "- pick or enter manually -" },
                       ...pickers.contacts.slice(0, 500).map((c) => ({ value: c.id, label: `${c.name} · ${c.phone ?? "no phone"}` })),
                     ]}
                   />
@@ -229,7 +229,7 @@ export default function InvoiceEditor({
                 const price = fieldKindProps<HTMLInputElement>("money", (e) => setItem(i, { unitPriceInr: e.target.value }));
                 return (
                 <div key={i} className="flex items-center gap-2">
-                  {/* Description stays free text — "Level 2 Bundle" is a legitimate line item. */}
+                  {/* Description stays free text - "Level 2 Bundle" is a legitimate line item. */}
                   <input className={`${inputCls} flex-1`} placeholder="Item description" value={it.description} onChange={(e) => setItem(i, { description: e.target.value })} />
                   <input className={`${inputCls} w-14 text-right`} type="number" min={1} value={it.quantity} onChange={(e) => setItem(i, { quantity: Number(e.target.value) || 1 })} />
                   <input {...price.attrs} className={`${inputCls} w-28 text-right`} value={it.unitPriceInr} onChange={price.onChange} />

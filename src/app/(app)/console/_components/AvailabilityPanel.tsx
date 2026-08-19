@@ -14,7 +14,7 @@ import { Card, Hint, NumInput, Picker, SaveBar, TextIn, TimeIn, Toggle } from ".
  * Founder Console → Availability. The standing weekly patterns the cron replays forward so
  * no calendar can run dry.
  *
- * WHY THIS SCREEN EXISTS. Both top-up jobs were already written, correct and running hourly —
+ * WHY THIS SCREEN EXISTS. Both top-up jobs were already written, correct and running hourly -
  * and both were unreachable. `slotPatternConfig` was read in two places and written in none, so
  * it sat on its `enabled: false` default and `ensureBookingSlots()` bailed on every tick; the
  * SSS diary had no pattern concept at all and held zero rows from the day it shipped. The result
@@ -23,7 +23,7 @@ import { Card, Hint, NumInput, Picker, SaveBar, TextIn, TimeIn, Toggle } from ".
  * WHY DISCOVERY CALLS ARE NOW A LIST. There used to be exactly one booking pattern with one
  * owner, which cannot describe what the funnel actually does: the VSL hands off to "Book a call
  * with Asma" and "Book a call with Ameen", and each of those pages renders a calendar scoped to
- * that person. One pattern meant one of the two pages always showed an empty calendar — in
+ * that person. One pattern meant one of the two pages always showed an empty calendar - in
  * production, Asma had 73 open slots and Ameen had none.
  *
  * So the panel leads with the count of slots each pattern would actually produce. A pattern that
@@ -67,13 +67,13 @@ export function AvailabilityPanel({
       />
 
       <PatternSection
-        title="Sales calls — the SSS diary"
+        title="Sales calls - the SSS diary"
         hint={
           <>
             The same idea for your own SSS calendar, which has never held a single slot. Owner{" "}
             {sssOwnerName ? <strong>{sssOwnerName}</strong> : <em>not set</em>} and the{" "}
             {sssDurationMins}-minute call length both come from <strong>Bookings → SSS</strong>,
-            not from here — an SSS slot stores each, and two places to set one fact is how they
+            not from here - an SSS slot stores each, and two places to set one fact is how they
             end up disagreeing.
           </>
         }
@@ -137,7 +137,7 @@ function CalendarsSection({
 
   /**
    * Named here rather than left to the server action alone. The action refuses the save, but by
-   * then the founder has already filled the form in — telling them while they are still choosing
+   * then the founder has already filled the form in - telling them while they are still choosing
    * the owner is the difference between a hint and an error message.
    */
   const clash = (() => {
@@ -153,11 +153,11 @@ function CalendarsSection({
   return (
     <section className="space-y-4">
       <div>
-        <h4 className="text-h3 text-ink">Discovery calls — one calendar per person</h4>
+        <h4 className="text-h3 text-ink">Discovery calls - one calendar per person</h4>
         <div className="mt-0.5 max-w-3xl">
           <Hint>
             The weekly shape of each person&apos;s availability. An hourly job replays every live
-            calendar forward and creates any missing <strong>OPEN</strong> slot inside the horizon —
+            calendar forward and creates any missing <strong>OPEN</strong> slot inside the horizon -
             it never touches a booked or blocked one, so it is safe to leave running. A funnel page
             with a booking block shows only <em>its own</em> owner&apos;s times, so the person named
             on the page is the person the prospect gets. Generating a range by hand from Bookings →
@@ -169,7 +169,7 @@ function CalendarsSection({
       {draft.length === 0 && (
         <Card>
           <p className="text-sm text-ink-2">
-            No calendars yet — so no slots are generated and every booking page shows an empty
+            No calendars yet - so no slots are generated and every booking page shows an empty
             calendar. Add one below.
           </p>
         </Card>
@@ -301,7 +301,7 @@ function PatternFields({
 }) {
   const durationMins = fixedDurationMins ?? value.durationMins;
 
-  // Straight from `slot-plan.ts` — the same module the manual generator and the cron use, so the
+  // Straight from `slot-plan.ts` - the same module the manual generator and the cron use, so the
   // preview cannot drift from what actually gets created.
   const perDay = useMemo(
     () =>
@@ -391,7 +391,7 @@ function PatternFields({
         label="Days to keep stocked ahead"
         hint={
           horizonCap
-            ? `Capped at your ${horizonCap}-day "how far ahead may someone book" rule — slots beyond it would never be shown.`
+            ? `Capped at your ${horizonCap}-day "how far ahead may someone book" rule - slots beyond it would never be shown.`
             : "How far ahead the rolling window reaches."
         }
       >
@@ -411,11 +411,11 @@ function PatternFields({
         <p className="text-caption font-semibold uppercase text-ink-3">What this produces</p>
         {perDay === 0 ? (
           <p className="mt-1 text-sm text-risk">
-            Nothing — a {durationMins}-minute call doesn&apos;t fit between {value.startTime} and {value.endTime}. Widen
+            Nothing - a {durationMins}-minute call doesn&apos;t fit between {value.startTime} and {value.endTime}. Widen
             the window or shorten the call.
           </p>
         ) : daysPerWeek === 0 ? (
-          <p className="mt-1 text-sm text-risk">Nothing — no weekday is selected.</p>
+          <p className="mt-1 text-sm text-risk">Nothing - no weekday is selected.</p>
         ) : (
           <p className="mt-1 text-sm text-ink-2">
             <strong className="text-ink tnum">{perDay}</strong> slot{perDay === 1 ? "" : "s"} on each running day ·{" "}

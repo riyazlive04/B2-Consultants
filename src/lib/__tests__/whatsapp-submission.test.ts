@@ -1,5 +1,5 @@
 /**
- * WhatsApp submission pack — guards on the templates B2 sends to Meta for approval.
+ * WhatsApp submission pack - guards on the templates B2 sends to Meta for approval.
  *
  * The point of these: a rejection costs days of review queue, and the failure modes are all
  * mechanical (adjacent variables, undeclared parameters, a body over the limit). Catch them here,
@@ -19,7 +19,7 @@ import {
 import { OUTREACH_STEPS, STEP_BY_KEY } from "../outreach-sop";
 import { WHATSAPP_AVAILABLE_VARS, WHATSAPP_KINDS } from "../whatsapp";
 
-describe("Submission pack — coverage", () => {
+describe("Submission pack - coverage", () => {
   test("every WhatsApp step in the SOP has exactly one template", () => {
     const messageSteps = OUTREACH_STEPS.filter((s) => s.channel === "WHATSAPP").map((s) => s.step);
     const covered = SUBMISSION_TEMPLATES.map((t) => t.step);
@@ -28,7 +28,7 @@ describe("Submission pack — coverage", () => {
 
   test("every template binds to a DISTINCT touchpoint", () => {
     // The app binds ONE WATI template per kind. Two SOP steps sharing a kind would send the
-    // intro's text where the follow-up's belonged — silently, and with no type error.
+    // intro's text where the follow-up's belonged - silently, and with no type error.
     const kinds = SUBMISSION_TEMPLATES.map((t) => t.kind);
     assert.equal(new Set(kinds).size, kinds.length, `duplicate kind: ${kinds.join(", ")}`);
   });
@@ -46,10 +46,10 @@ describe("Submission pack — coverage", () => {
   });
 });
 
-describe("Submission pack — the app can actually supply what the templates declare", () => {
+describe("Submission pack - the app can actually supply what the templates declare", () => {
   test("every declared variable is offered by its touchpoint", () => {
     // THE contract. If a template declares a variable the touchpoint can't fill, the app blocks
-    // the send at runtime — correct, but a wasted approval cycle. Catch it now.
+    // the send at runtime - correct, but a wasted approval cycle. Catch it now.
     for (const t of SUBMISSION_TEMPLATES) {
       const offered = WHATSAPP_AVAILABLE_VARS[t.kind];
       for (const v of t.vars) {
@@ -70,7 +70,7 @@ describe("Submission pack — the app can actually supply what the templates dec
   });
 });
 
-describe("Submission pack — bodies are derived from the SOP, not retyped", () => {
+describe("Submission pack - bodies are derived from the SOP, not retyped", () => {
   test("each submitted body is the SOP body with variables translated", () => {
     for (const t of SUBMISSION_TEMPLATES) {
       const sop = STEP_BY_KEY[t.step]!.body!;
@@ -95,7 +95,7 @@ describe("Submission pack — bodies are derived from the SOP, not retyped", () 
     }
   });
 
-  test("the video placeholder never reaches the body — it is a media header", () => {
+  test("the video placeholder never reaches the body - it is a media header", () => {
     const sss = SUBMISSION_TEMPLATES.find((t) => t.step === "SSS_CONFIRM_1")!;
     assert.ok(!submissionBody(sss).includes("ATTACH VIDEO"));
     assert.ok(sss.header, "SSS confirm 1 must declare a video header");
@@ -123,7 +123,7 @@ describe("Submission pack — bodies are derived from the SOP, not retyped", () 
   });
 });
 
-describe("Submission pack — Meta's mechanical rules", () => {
+describe("Submission pack - Meta's mechanical rules", () => {
   test("every body is within Meta's character limit", () => {
     for (const t of SUBMISSION_TEMPLATES) {
       const len = submissionBody(t).length;
@@ -189,7 +189,7 @@ describe("Submission pack — Meta's mechanical rules", () => {
   });
 
   /**
-   * The change is only defensible if what it replaced is still readable — that is the condition
+   * The change is only defensible if what it replaced is still readable - that is the condition
    * the SOP file's verbatim rule was relaxed under.
    */
   test("an accepted fix keeps the superseded wording", () => {
@@ -211,17 +211,17 @@ describe("Submission pack — Meta's mechanical rules", () => {
     assert.doesNotMatch(
       body,
       /quick call now/,
-      "auto-sending at opt-in makes an immediate-call promise false — a caller only rings if they do NOT book",
+      "auto-sending at opt-in makes an immediate-call promise false - a caller only rings if they do NOT book",
     );
     assert.match(body, /reply here and one of our team will call you/);
   });
 });
 
-describe("Submission pack — categories", () => {
+describe("Submission pack - categories", () => {
   test("all nine are MARKETING", () => {
     // Meta allows UTILITY only for a template that is non-promotional and carries no persuasive
     // intent; mixed content defaults to MARKETING. Every body here sells while it informs, so
-    // none of them clears that bar — see the rationale on SUBMISSION_TEMPLATES.
+    // none of them clears that bar - see the rationale on SUBMISSION_TEMPLATES.
     //
     // This is not a rubber stamp on the current values: to make any of these UTILITY the
     // promotional copy has to come OUT of the body, which is a proposedFix and a business
@@ -253,7 +253,7 @@ describe("Submission pack — categories", () => {
     }
   });
 
-  test("every variable carries a sample — Meta requires one", () => {
+  test("every variable carries a sample - Meta requires one", () => {
     for (const t of SUBMISSION_TEMPLATES) {
       for (const v of t.vars) {
         assert.ok(v.sample && v.sample.trim().length > 0, `${t.name} {{${v.name}}} has no sample value`);

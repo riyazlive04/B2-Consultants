@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 
 /**
- * Last-7-days pipeline motion (Admin only) — the four stages a deal moves through,
+ * Last-7-days pipeline motion (Admin only) - the four stages a deal moves through,
  * each carrying its week-over-week delta so a number is never just a number, plus the
  * 2026 sheet benchmark as the honest yardstick. A concise widget, not a feed: the
  * detail lives one click away on /pipeline.

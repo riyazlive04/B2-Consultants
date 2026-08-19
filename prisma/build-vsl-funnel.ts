@@ -6,7 +6,7 @@
  *   Landing Page · VSL · Apply Team Page · Disco with Asma · Disco with Ameen ·
  *   Congrats · Success Strategy Session · Disco with Loshini · Workshop Follow Up
  *
- * VSL and Apply Team Page are designed here — the two we have a reference for. Disco with
+ * VSL and Apply Team Page are designed here - the two we have a reference for. Disco with
  * Asma / Ameen are authored separately by `scripts/build-disco-pages.ts`, which owns them
  * because their bodies need a booking calendar bound to a real user id. The rest are created
  * as SCAFFOLDS (logo, title, footer) so the funnel's shape is right and each has a real URL to
@@ -24,13 +24,13 @@ const prisma = new PrismaClient();
 const FUNNEL_SLUG = "vsl-funnel";
 
 /**
- * The step the VSL's CTA hands off to. Named once because it is used twice — to build the
- * button's href and to declare the step itself in STEPS — and a link that disagrees with the
+ * The step the VSL's CTA hands off to. Named once because it is used twice - to build the
+ * button's href and to declare the step itself in STEPS - and a link that disagrees with the
  * step it points at is a 404 nobody notices until the ad is already running.
  */
 const APPLY_SLUG = "apply-team-page";
 
-/** The two discovery steps the apply page hands off to — same reason as APPLY_SLUG. */
+/** The two discovery steps the apply page hands off to - same reason as APPLY_SLUG. */
 const DISCO_ASMA_SLUG = "disco-with-asma";
 const DISCO_AMEEN_SLUG = "disco-with-ameen";
 
@@ -39,9 +39,9 @@ const DISCO_AMEEN_SLUG = "disco-with-ameen";
  *
  * Their page carries this as a Custom HTML block wrapping Vimeo's full <iframe> plus a
  * `player.js` tag. It is a plain URL here instead, because the `video` block renders the same
- * iframe — same `allow` list, same `referrerPolicy`, same 56.25% aspect wrapper (see the note
+ * iframe - same `allow` list, same `referrerPolicy`, same 56.25% aspect wrapper (see the note
  * in `SiteBlocks`). The dropped `player.js` is only Vimeo's JS control API; nothing on this
- * page drives the player from script, and it would not have run anyway — a Custom HTML block
+ * page drives the player from script, and it would not have run anyway - a Custom HTML block
  * is injected with `dangerouslySetInnerHTML`, which the HTML spec does not execute <script>
  * from. Every query param is preserved verbatim, so Vimeo's own analytics still line up.
  */
@@ -127,7 +127,7 @@ function vslBlocks(videoUrl: string): Block[] {
       style: { padding: [24, 0, 24, 0], maxWidth: 1080 },
       styleMobile: { padding: [16, 0, 16, 0] },
       children: [
-        // An empty `url` renders NOTHING rather than a broken frame — deliberate, so a
+        // An empty `url` renders NOTHING rather than a broken frame - deliberate, so a
         // published page never shows a dead embed while the real URL is still missing.
         { id: "vsl-video", type: "video", url: videoUrl, style: { radius: 10 } },
       ],
@@ -150,7 +150,7 @@ function vslBlocks(videoUrl: string): Block[] {
           type: "button",
           label: "Apply Now",
           // On to the funnel's next step, NOT the opt-in popup: whoever is on this page has
-          // already submitted that form — showing it again would ask for details they just gave.
+          // already submitted that form - showing it again would ask for details they just gave.
           //
           // Kept inside /p/<funnel>/ rather than sent to the standalone /book route so the step
           // records a view and the VSL → Apply drop-off is measurable.
@@ -168,7 +168,7 @@ function vslBlocks(videoUrl: string): Block[] {
 /**
  * One team member's pick: the button, then their portrait under it.
  *
- * Button ABOVE the photo, which reads as backwards until you see the source page — the photo is
+ * Button ABOVE the photo, which reads as backwards until you see the source page - the photo is
  * what makes the choice ("who do I want to talk to?"), and it sits directly above the NEXT
  * person's button in the single mobile column. Keeping the source's order avoids a tap landing
  * on the wrong person.
@@ -224,7 +224,7 @@ function applyBlocks(): Block[] {
         {
           /**
            * Set in one colour. The source page renders this sentence with its words in a mix of
-           * violet and near-black — the signature of copy pasted into a rich-text field with its
+           * violet and near-black - the signature of copy pasted into a rich-text field with its
            * spans intact, not a design decision, and it reads as a rendering fault. A `text`
            * block is single-colour anyway; violet matches the dominant tone there.
            */
@@ -282,18 +282,18 @@ function scaffoldBlocks(id: string, title: string): Block[] {
 }
 
 /**
- * name, slug, and — for a page we have actually designed — the builder for its body.
+ * name, slug, and - for a page we have actually designed - the builder for its body.
  *
  * `body` replaced a `designed: boolean`, which could only ever mean "use vslBlocks" and so had
  * no way to express a second designed page.
  */
 const STEPS: Array<{ name: string; slug: string; seoTitle?: string; body?: (video: string) => Block[] }> = [
-  { name: "Landing Page", slug: "landing" }, // exists — renamed only, body untouched
-  { name: "VSL", slug: "vsl", seoTitle: "Why Indian professionals get ignored in Germany — B2 Consultants", body: vslBlocks },
+  { name: "Landing Page", slug: "landing" }, // exists - renamed only, body untouched
+  { name: "VSL", slug: "vsl", seoTitle: "Why Indian professionals get ignored in Germany - B2 Consultants", body: vslBlocks },
   {
     name: "Apply Team Page",
     slug: APPLY_SLUG,
-    seoTitle: "Book a free discovery call with Team B2 — B2 Consultants",
+    seoTitle: "Book a free discovery call with Team B2 - B2 Consultants",
     body: applyBlocks,
   },
   { name: "Disco with Asma", slug: "disco-with-asma" },

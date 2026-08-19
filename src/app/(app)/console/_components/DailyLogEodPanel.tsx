@@ -18,7 +18,7 @@ import { Card, Hint, NumInput, SaveBar, TimeIn, Toggle } from "./kit";
  * End-of-day rules editor (Founder Console → Daily Targets → EOD).
  *
  * The honest framing, kept in the copy below: the day ALREADY hard-locked at IST midnight
- * before this existed — a log is stamped with today's date, so a missed day could never be
+ * before this existed - a log is stamped with today's date, so a missed day could never be
  * filled in late. What these rules add is an explicit deadline and, crucially, something that
  * makes the rule actually happen instead of silently not happening.
  */
@@ -49,7 +49,7 @@ export function DailyLogEodPanel({ config, cronArmed }: { config: DailyLogEodCon
     <div className="space-y-5">
       <Hint>
         &ldquo;Every log is saved by the end of the day.&rdquo; A log is always stamped with{" "}
-        <strong>today&apos;s</strong> date, so the day already locks itself at IST midnight — nobody can
+        <strong>today&apos;s</strong> date, so the day already locks itself at IST midnight - nobody can
         fill in a day they missed. These rules make the deadline <strong>explicit</strong>, and make
         someone actually notice: a reminder before the cutoff, a hard close at it, and a row saved from
         real activity for anyone who still didn&apos;t log.
@@ -122,7 +122,7 @@ export function DailyLogEodPanel({ config, cronArmed }: { config: DailyLogEodCon
 
         {nudgeAfterCutoff && (
           <p className="mt-4 rounded-field bg-bad-soft px-3 py-2 text-xs font-medium text-bad">
-            The reminder must be before the cutoff — a nudge at {formatIstMinutes(draft.nudgeMinutes)} could
+            The reminder must be before the cutoff - a nudge at {formatIstMinutes(draft.nudgeMinutes)} could
             never fire when the day closes at {formatIstMinutes(draft.cutoffMinutes)}.
           </p>
         )}
@@ -133,7 +133,7 @@ export function DailyLogEodPanel({ config, cronArmed }: { config: DailyLogEodCon
           <p className="mt-4 rounded-field bg-warn-soft px-3 py-2 text-xs font-medium text-warn">
             Auto-save needs a scheduler and <code>CRON_SECRET</code> isn&apos;t set, so{" "}
             <code>/api/cron/daily-log</code> returns 503 and nothing will ever fire. The cutoff and the
-            reminder still work — they read the real clock.
+            reminder still work - they read the real clock.
           </p>
         )}
 

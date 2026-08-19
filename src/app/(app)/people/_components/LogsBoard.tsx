@@ -110,7 +110,7 @@ export function LogsBoard({
         />
       </div>
 
-      {/* Weekly + monthly rollups — reference totals, tucked away to keep the feed the focus */}
+      {/* Weekly + monthly rollups - reference totals, tucked away to keep the feed the focus */}
       <details className="group rounded-card border border-line bg-surface shadow-card">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4">
           <span className="font-display text-h3 font-semibold text-ink">Weekly &amp; monthly totals</span>

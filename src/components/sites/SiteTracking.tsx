@@ -5,7 +5,7 @@ import Script from "next/script";
  *
  * You are replacing a system whose entire job is ad conversion. The pixel is not optional: without
  * it Meta cannot attribute a lead back to the ad that produced it, cannot build lookalikes, and
- * cannot optimise delivery — so the rebuilt site would spend the same budget worse.
+ * cannot optimise delivery - so the rebuilt site would spend the same budget worse.
  *
  * ── Two deliberate choices ────────────────────────────────────────────────────────────────────
  * 1. Renders NOTHING when unset. An empty pixel id would emit a script that calls fbq('init', '')
@@ -14,7 +14,7 @@ import Script from "next/script";
  *    visitor wait on a third-party script before the page is usable would trade the very speed
  *    this route was designed for. Analytics that loads a moment later still counts the visit.
  *
- * The ids are non-secret by nature — they ship in the HTML of every site that uses them — so
+ * The ids are non-secret by nature - they ship in the HTML of every site that uses them - so
  * holding them on the Site row rather than in env is correct: different sites, different pixels,
  * edited by the team without a deploy.
  */

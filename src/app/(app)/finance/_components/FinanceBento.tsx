@@ -25,7 +25,7 @@ import { RevenueChart, type RevenuePoint } from "./RevenueChart";
 import { useFinanceCcy } from "./FinanceCurrency";
 
 /**
- * The Finance bento grid — revenue hero, level mix, top payments, expense donut, money in/out.
+ * The Finance bento grid - revenue hero, level mix, top payments, expense donut, money in/out.
  *
  * These five cards used to be rendered inline by the (server) Finance page, formatting every
  * figure as INR. That is why the ₹/€ toggle only ever flipped the KPI row: a server component
@@ -33,13 +33,13 @@ import { useFinanceCcy } from "./FinanceCurrency";
  * makes the whole grid answer to the toggle, and keeps a single place where the page's money
  * formatting rule ("chosen currency leads, other beneath") is applied.
  *
- * Everything arrives as PLAIN DATA holding BOTH aggregates — no pre-formatted strings, or the
+ * Everything arrives as PLAIN DATA holding BOTH aggregates - no pre-formatted strings, or the
  * currency would be baked in on the server again. Nothing here converts: each figure already
  * carries its INR and EUR aggregate (lib/money.ts), and the toggle only picks which one leads.
  */
 
 /**
- * "Revenue is exact for this line; shared costs add a further X" — the sentence that says which
+ * "Revenue is exact for this line; shared costs add a further X" - the sentence that says which
  * half of a per-line P&L is measured and which half is apportioned. A client component purely so
  * its two money figures flip with the toggle instead of being baked to INR on the server.
  */
@@ -85,7 +85,7 @@ export type TopPayment = {
   agg: MoneyAgg;
 };
 
-/** A receivable worth chasing first — sorted most-overdue and largest-balance to the top. */
+/** A receivable worth chasing first - sorted most-overdue and largest-balance to the top. */
 export type PriorityReceivable = {
   id: string;
   studentName: string;
@@ -170,7 +170,7 @@ export function FinanceBento({
 
       <Card
         title={<CardTitle icon={<BarChart3 size={16} />}>Revenue by programme level</CardTitle>}
-        subtitle="This month, ranked — with where each level stood by this day last month."
+        subtitle="This month, ranked - with where each level stood by this day last month."
       >
         <RankedBars
           rows={rank(levelRows)}
@@ -234,7 +234,7 @@ export function FinanceBento({
 
       <Card
         title={<CardTitle icon={<ArrowLeftRight size={16} />}>Money in vs money out</CardTitle>}
-        subtitle="This month, on one scale — the gap is the profit."
+        subtitle="This month, on one scale - the gap is the profit."
       >
         <p
           className="font-display text-3xl font-bold tracking-tight"
@@ -282,7 +282,7 @@ export function FinanceBento({
       <Card
         className="lg:col-span-3"
         title={<CardTitle icon={<AlertCircle size={16} />}>Priority collections</CardTitle>}
-        subtitle="Students who still owe fees — most overdue and largest balances first. Collect with them first."
+        subtitle="Students who still owe fees - most overdue and largest balances first. Collect with them first."
       >
         {priorityReceivables.length === 0 ? (
           <EmptyState

@@ -1,4 +1,4 @@
-// B2 Consultants Founder Dashboard — FULL 3-PHASE SCHEMA (scoped upfront in Phase 0).
+// B2 Consultants Founder Dashboard - FULL 3-PHASE SCHEMA (scoped upfront in Phase 0).
 // Phase 1: Finance + Pipeline · Phase 2: People + Students · Phase 3: Funnel + Cash Health.
 // Rules baked in (CONTEXT §6):
 //  - Money is stored as integer minor units (paise / cents) in BigInt, INR and EUR side by side,
@@ -15,8 +15,8 @@ generator client {
 datasource db {
   provider  = "postgresql"
   // Runtime queries use DATABASE_URL (on Neon: the pooled -pooler endpoint).
-  // Migrations (`prisma migrate deploy`) use DIRECT_URL — Neon's direct, non-pooled
-  // endpoint — because migrate needs session-level advisory locks PgBouncer can't hold.
+  // Migrations (`prisma migrate deploy`) use DIRECT_URL - Neon's direct, non-pooled
+  // endpoint - because migrate needs session-level advisory locks PgBouncer can't hold.
   // Locally both point at the same Docker Postgres (see .env).
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
@@ -25,15 +25,15 @@ datasource db {
 // ───────────────────────────── Auth (Better Auth) ─────────────────────────────
 
 enum Role {
-  ADMIN // Ameen — everything
-  HEAD // Karthick — own daily log, view-only Students
-  USER // Asma / Nilofer — own daily log + own pipeline entry
-  STUDENT // portal login linked to ONE Student record — sees only their own journey
-  TUTOR // German Note tutor — GN section only (batches they teach + community)
+  ADMIN // Ameen - everything
+  HEAD // Karthick - own daily log, view-only Students
+  USER // Asma / Nilofer - own daily log + own pipeline entry
+  STUDENT // portal login linked to ONE Student record - sees only their own journey
+  TUTOR // German Note tutor - GN section only (batches they teach + community)
 }
 
 // A suspended account cannot sign in, and its live sessions are deleted the moment
-// it is suspended — the badge in Users & access is not decorative.
+// it is suspended - the badge in Users & access is not decorative.
 enum UserStatus {
   ACTIVE
   SUSPENDED
@@ -47,12 +47,12 @@ model User {
   image         String?
   role          Role       @default(USER)
   status        UserStatus @default(ACTIVE)
-  // O4 — forced password change. Set true when an ADMIN sets someone's password (they picked it,
+  // O4 - forced password change. Set true when an ADMIN sets someone's password (they picked it,
   // so the owner must replace it); cleared the moment the user changes it. Invited users choose
   // their own password on acceptance, so they are never flagged. `requireSession` bounces any
   // flagged user to /change-password before an app route renders.
   mustChangePassword Boolean @default(false)
-  /// Part 2 §13: "dark and light per user" — the founder prefers dark, others may not.
+  /// Part 2 §13: "dark and light per user" - the founder prefers dark, others may not.
   /// SYSTEM defers to the OS setting, which is why it is the default rather than LIGHT:
   /// a fresh account should follow the machine, not impose one person's taste.
   themePreference ThemePreference @default(SYSTEM)
@@ -71,7 +71,7 @@ model User {
   accounts                 Account[]
   workDays                 WorkDay[]          @relation("WorkDayUser")
   teamProfile              TeamProfile?
-  /// Terminations this person carried out. SetNull like every other actor link — an admin
+  /// Terminations this person carried out. SetNull like every other actor link - an admin
   /// leaving must not erase the record of who offboarded whom.
   terminationsPerformed    TeamProfile[]      @relation("TeamProfileTerminatedBy")
   studentProfile           Student?           @relation("StudentAccount")
@@ -117,7 +117,7 @@ model User {
   formsCreated             Form[]             @relation("FormCreatedBy")
   funnelsCreated           Funnel[]           @relation("FunnelCreatedBy")
   snippetsCreated  SectionSnippet[] @relation("SnippetCreatedBy")
-  // Sites — the marketing website
+  // Sites - the marketing website
   sitesCreated             Site[]             @relation("SiteCreatedBy")
   sitePageRevisions        SitePageRevision[] @relation("SitePageRevisionBy")
   mediaUploaded            MediaAsset[]       @relation("MediaUploadedBy")
@@ -151,7 +151,7 @@ model User {
 }
 
 /// Per-user work time, one row per IST calendar day (`day` is UTC-midnight, the
-/// project-wide @db.Date encoding — see src/lib/dates.ts).
+/// project-wide @db.Date encoding - see src/lib/dates.ts).
 ///
 /// Deliberately NOT append-only: the client heartbeats elapsed seconds every
 /// ~30s and the server ADDS them to today's row, so this table is updated in
@@ -227,7 +227,7 @@ model Verification {
 // META_LEAD_AD / FLEXIFUNNELS = the two external lead-capture webhooks that replace
 // Synamate's lead inbox. SYNAMATE stays only so historical imported rows keep their tag.
 //
-// Source answers "which pipe carried this row to us", NOT "where did the human come from" —
+// Source answers "which pipe carried this row to us", NOT "where did the human come from" -
 // that is LeadSource. PABBLY is a relay: it fans the same opt-in out to Synamate and to us,
 // so a PABBLY row's LeadSource is whatever origin the payload declares (Meta ad, IG, …).
 enum Source {
@@ -250,13 +250,13 @@ enum Source {
 //
 // The level columns below (Income.programLevel, Enrollment.programLevel, Lead.wonLevel,
 // GnBatch.level, GnPendingJoiner.level, BookOrder.level, PendingPayment.programLevel) store the
-// `Level.code` as text — the SAME values the old enum held ("GN_A1", "SOLO"), so the migration is a
+// `Level.code` as text - the SAME values the old enum held ("GN_A1", "SOLO"), so the migration is a
 // verbatim enum→text cast with no data change. `code` is treated as an immutable natural key;
 // server actions validate a submitted code against the active Level rows.
 enum LevelKind {
-  COACHING_TIER // SOLO / GUIDED / ELITE — B2 coaching tiers; seeded + locked, not user-editable
-  GERMAN_LEVEL // GN_A1 … GN_C2 — the German course levels the founders add
-  GERMAN_BUNDLE // GN_BUNDLE / A1_A2 … — composed of GERMAN_LEVELs
+  COACHING_TIER // SOLO / GUIDED / ELITE - B2 coaching tiers; seeded + locked, not user-editable
+  GERMAN_LEVEL // GN_A1 … GN_C2 - the German course levels the founders add
+  GERMAN_BUNDLE // GN_BUNDLE / A1_A2 … - composed of GERMAN_LEVELs
   OTHER
 }
 
@@ -271,14 +271,14 @@ model Level {
   locked Boolean   @default(false) // coaching tiers: code/kind immutable, not deletable
 
   /// Which GL income account this level's revenue posts to (chart-of-accounts code). German levels
-  /// default to "4030" (Income — German Note); overridable per level. Never null → posting is safe.
+  /// default to "4030" (Income - German Note); overridable per level. Never null → posting is safe.
   incomeAccountCode String @default("4030")
 
   /// German-Note economics, integer paise. Null for coaching tiers / OTHER.
   booksCostInrMinor BigInt?
   tutorCostInrMinor BigInt?
 
-  /// Bundle composition — ordered member `code`s, only for kind = GERMAN_BUNDLE.
+  /// Bundle composition - ordered member `code`s, only for kind = GERMAN_BUNDLE.
   bundleMembers String[] @default([])
 
   createdAt DateTime @default(now())
@@ -294,7 +294,7 @@ enum Signal {
   RED
 }
 
-// ───────────────────────────── Phase 1 — Finance ─────────────────────────────
+// ───────────────────────────── Phase 1 - Finance ─────────────────────────────
 
 enum PaymentType {
   FULL_PAYMENT
@@ -333,7 +333,7 @@ enum PendingPaymentStatus {
 /// Which business a cost belongs to (§1.4). Income derives its line from the programme
 /// level, but a Meta Ads invoice or the office rent names no programme, so an expense has
 /// to be told. SHARED is the default and is apportioned across both lines by revenue share
-/// — only costs that genuinely belong to ONE business should be tagged B2 or GERMAN_NOTE.
+/// - only costs that genuinely belong to ONE business should be tagged B2 or GERMAN_NOTE.
 enum ExpenseBusinessLine {
   B2
   GERMAN_NOTE
@@ -345,7 +345,7 @@ model Income {
   id             String        @id @default(cuid())
   date           DateTime      @db.Date
   studentName    String
-  // Optional links — how Finance feeds Student LTV (CONTEXT §7). Never required in Phase 1.
+  // Optional links - how Finance feeds Student LTV (CONTEXT §7). Never required in Phase 1.
   studentId      String?
   student        Student?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
   enrollmentId   String?
@@ -356,16 +356,16 @@ model Income {
   programLevel   String // Level.code (was ProgramLevel enum)
   paymentType    PaymentType
   paymentMethod  PaymentMethod
-  // Instalment plan details — asked only when paymentType = INSTALMENT. The count is how many
+  // Instalment plan details - asked only when paymentType = INSTALMENT. The count is how many
   // instalments the fee is split into; the extras are the surcharge added for choosing the plan
-  // (informational — the received amounts above stay the money that actually arrived).
+  // (informational - the received amounts above stay the money that actually arrived).
   instalmentCount         Int?
   instalmentExtraInrMinor BigInt @default(0) // paise
   instalmentExtraEurMinor BigInt @default(0) // cents
   notes          String?
   source         Source        @default(MANUAL)
   manualOverride Boolean       @default(false)
-  externalRef    String? // e.g. Razorpay payment id — de-dupe key for ingest
+  externalRef    String? // e.g. Razorpay payment id - de-dupe key for ingest
   enteredById    String?
   enteredBy      User?         @relation("IncomeEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
@@ -392,7 +392,7 @@ model Expense {
   category       ExpenseCategory
   isCogs         Boolean         @default(false)
   /// Defaults to SHARED so every pre-existing row keeps behaving exactly as it did before
-  /// this column existed (apportioned by revenue share) — the split only sharpens as costs
+  /// this column existed (apportioned by revenue share) - the split only sharpens as costs
   /// are actually tagged, and never silently reattributes history.
   businessLine   ExpenseBusinessLine @default(SHARED)
   vendor         String
@@ -416,7 +416,7 @@ model Expense {
 }
 
 // Pending payments tracker (PRD1 §4.4). "Amount paid so far" is COMPUTED at read time
-// by summing Income rows linked to the same student — never stored, never double-entered.
+// by summing Income rows linked to the same student - never stored, never double-entered.
 model PendingPayment {
   id               String               @id @default(cuid())
   studentName      String
@@ -428,7 +428,7 @@ model PendingPayment {
   enrollment       Enrollment?          @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   programLevel     String // Level.code (was ProgramLevel enum)
   /// ER v2 EMI_PLAN.num_emis / levels_taken. INPUTS the founder sets when building the plan
-  /// (the spec's "2 EMIs per level" rule), not outputs — which is why they are stored rather
+  /// (the spec's "2 EMIs per level" rule), not outputs - which is why they are stored rather
   /// than counted off Instalment rows that may not all exist yet.
   numEmis          Int?
   levelsTaken      Int?
@@ -436,12 +436,12 @@ model PendingPayment {
   totalFeeEurMinor BigInt               @default(0)
   /// The surcharge for paying in instalments, priced per plan length in the Founder Console
   /// (AppSetting "instalmentPlans"). Kept SEPARATE from totalFee so the agreed fee keeps its
-  /// original meaning — "total to collect" is fee + this, computed, never a restated fee.
+  /// original meaning - "total to collect" is fee + this, computed, never a restated fee.
   /// Snapshotted when the plan is generated: re-pricing the table must not silently move the
   /// balance on a plan the student already signed up to.
   planExtraInrMinor BigInt              @default(0)
   planExtraEurMinor BigInt              @default(0)
-  /// Days between instalments used to build this plan's schedule — stored so the plan can be
+  /// Days between instalments used to build this plan's schedule - stored so the plan can be
   /// explained ("every 30 days") after the config default has since changed.
   intervalDays     Int?
   fxRateUsed       Decimal              @db.Decimal(14, 6)
@@ -499,7 +499,7 @@ model Instalment {
 ///
 /// UPCOMING is a nudge before the due date, MISSED is the first chase after it, FINAL is the
 /// last automated word before a human takes over. Named for what they mean to the student, not
-/// "stage 1/2/3" — the offsets are founder-configurable, so a numeric name would stop matching
+/// "stage 1/2/3" - the offsets are founder-configurable, so a numeric name would stop matching
 /// the day someone moves one.
 enum DunningStage {
   UPCOMING
@@ -529,7 +529,7 @@ model DunningEvent {
   channel      String
   sentAt       DateTime     @default(now())
   /// Whether anything actually left the building. A stage recorded with `delivered: false` still
-  /// blocks a re-send — the ladder moved on, and re-chasing on a Resend outage would flood a
+  /// blocks a re-send - the ladder moved on, and re-chasing on a Resend outage would flood a
   /// student the moment service came back.
   delivered    Boolean      @default(false)
   /// The Message row, when there was one. Null when the channel was off and the send was skipped.
@@ -552,7 +552,7 @@ model MonthlyTarget {
   @@map("monthly_target")
 }
 
-// ───────────────────────────── Phase 1 — Pipeline ─────────────────────────────
+// ───────────────────────────── Phase 1 - Pipeline ─────────────────────────────
 
 enum LeadSource {
   INSTAGRAM
@@ -564,7 +564,7 @@ enum LeadSource {
   WORKSHOP
   META_ADS // Meta Lead Ads webhook (Wave-1 capture)
   LANDING_PAGE // FlexiFunnels / website opt-in webhook (Wave-1 capture)
-  GHOSTED_BLUEPRINT // Phase 3 attribution tag (PRD3 §3.4) — scoped now, used later
+  GHOSTED_BLUEPRINT // Phase 3 attribution tag (PRD3 §3.4) - scoped now, used later
   OTHER
 }
 
@@ -585,8 +585,8 @@ enum LeadStage {
   // post-offer money trail between "proposal" and "won".
   SENT_TO_WORKSHOP
   WORKSHOP_FOLLOWUP
-  OFFER_FOLLOWUP // offer made, didn't buy — follow-up running
-  DEPOSIT_FOLLOWUP // agreed, no deposit yet — follow-up running
+  OFFER_FOLLOWUP // offer made, didn't buy - follow-up running
+  DEPOSIT_FOLLOWUP // agreed, no deposit yet - follow-up running
   DEPOSIT_PAID // confirmed signup with deposit
   WON
   LOST
@@ -603,7 +603,7 @@ model Lead {
   id             String        @id @default(cuid())
   name           String
   // Nullable since the Synamate import (16 Jul): 5,886 of 23,432 imported contacts have
-  // no phone at all — 5,086 of those have no email either. Every code path that sends
+  // no phone at all - 5,086 of those have no email either. Every code path that sends
   // (WATI/WhatsApp, the Outreach SOP ladder) MUST null-check before dialling.
   phone          String?
   email          String? // captured from booking form / ad lead (Wave-1)
@@ -613,17 +613,17 @@ model Lead {
   dateIn         DateTime      @db.Date
   stage          LeadStage     @default(NEW_LEAD)
   wonLevel       String? // Level.code; set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
-  paymentPlan    PaymentPlan? // set from DEPOSIT_PAID onward — split pay vs full pay
+  paymentPlan    PaymentPlan? // set from DEPOSIT_PAID onward - split pay vs full pay
   notes          String?
   source         Source        @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
   manualOverride Boolean       @default(false)
   externalRef    String?
   utm            Json? // captured UTM params from the ad / landing source (Wave-1)
-  /// The hostname this contact came in through — "optin.b2consultants.de", lower-cased, no port.
+  /// The hostname this contact came in through - "optin.b2consultants.de", lower-cased, no port.
   ///
   /// Observed, never inferred: it is the Host header of the request that actually created them,
   /// recorded by the public funnel form and the booking form. Anything we could not observe stays
-  /// NULL, and NULL means "we do not know", not "none" — the WhatsApp domain gate reads it that
+  /// NULL, and NULL means "we do not know", not "none" - the WhatsApp domain gate reads it that
   /// way and lets an unknown origin through, because the 23,429 leads imported from Synamate can
   /// never have one and blocking them would silence every reminder in the system.
   originDomain   String?
@@ -633,7 +633,7 @@ model Lead {
   assignedTo     User?         @relation("LeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
   contactedAt    DateTime?
   /// ER v2 `MARKETING_SOURCE ||--o{ LEAD` (Track F). `leadSource` above stays as the coarse
-  /// CHANNEL; this is the campaign beneath it. SetNull — retiring a campaign must not orphan
+  /// CHANNEL; this is the campaign beneath it. SetNull - retiring a campaign must not orphan
   /// or delete the leads it produced.
   marketingSourceId String?
   marketingSource   MarketingSource? @relation(fields: [marketingSourceId], references: [id], onDelete: SetNull)
@@ -643,18 +643,18 @@ model Lead {
   /// ── BANT AT OPT-IN ────────────────────────────────────────────────────────────────
   /// The band score as of the LANDING PAGE, not the booking.
   ///
-  /// Application Logic §4.3 specifies two scoring stages — "at opt-in, the moment answers are
+  /// Application Logic §4.3 specifies two scoring stages - "at opt-in, the moment answers are
   /// captured, so unqualified leads never enter outreach" and again at booking. Only the second
   /// was ever built: BANT lived solely on `BookingRequest`, which only the in-app /book form
   /// creates. A landing-page lead relayed by Pabbly therefore arrived with its qualification
-  /// answers in the payload and nowhere to put them, so every downstream consumer — the SOP's
-  /// Qualified verdict, Key Metrics, the pipeline ranking, the discovery specialist's screen —
+  /// answers in the payload and nowhere to put them, so every downstream consumer - the SOP's
+  /// Qualified verdict, Key Metrics, the pipeline ranking, the discovery specialist's screen -
   /// saw an unscored lead. These columns are that missing home.
   ///
   /// ALL NULLABLE, including the four dimension booleans, on purpose. `BookingRequest` defaults
   /// them to `false`, which is safe there because a row only exists once a form was submitted.
   /// Here, most leads will never be scored at all, and "we have no evidence for Budget" must not
-  /// read as "they have no budget" — that distinction decides who gets called.
+  /// read as "they have no budget" - that distinction decides who gets called.
   bantBudget    Boolean?
   bantAuthority Boolean?
   bantNeed      Boolean?
@@ -709,7 +709,7 @@ model Lead {
   @@index([leadSource])
   @@index([assignedToId])
   // The L1 desk's working set is "my open leads, newest first" and its month targets are "my
-  // leads created this month" — both filter on assignedToId AND range/order on createdAt. The
+  // leads created this month" - both filter on assignedToId AND range/order on createdAt. The
   // single-column assignedToId index above could only narrow to the owner and then had to sort
   // the remainder, which after the 23,430-lead hand-out is most of the table per caller.
   @@index([assignedToId, createdAt])
@@ -719,7 +719,7 @@ model Lead {
   @@map("lead")
 }
 
-// APPEND-ONLY. Written automatically on every stage change — gives Phase 1 its
+// APPEND-ONLY. Written automatically on every stage change - gives Phase 1 its
 // "calls booked this month" counts and Phase 3 its "proposals sent this week" pulls.
 model LeadStageHistory {
   id          String     @id @default(cuid())
@@ -752,7 +752,7 @@ model DiscoveryOutcome {
   callDate        DateTime    @db.Date
   outcome         CallOutcome
   highlyQualified Boolean     @default(false) // feeds "Highly qualified rate %" (PRD1 §5.4)
-  // BANT qualification (report §3.A) — Asma marks these after the call; drives priority score
+  // BANT qualification (report §3.A) - Asma marks these after the call; drives priority score
   bantBudget      Boolean     @default(false)
   bantAuthority   Boolean     @default(false)
   bantNeed        Boolean     @default(false)
@@ -778,9 +778,9 @@ model DiscoveryOutcome {
 }
 
 // What actually happened on ONE dial. Distinct from CallOutcome, which grades a completed
-// discovery CONVERSATION — this grades the attempt, including the attempts that never connected.
+// discovery CONVERSATION - this grades the attempt, including the attempts that never connected.
 enum CallLogOutcome {
-  SPOKE // connected and talked — the only outcome that counts as "client spoken to"
+  SPOKE // connected and talked - the only outcome that counts as "client spoken to"
   NO_ANSWER
   BUSY
   CALLBACK // asked to be called back later
@@ -790,7 +790,7 @@ enum CallLogOutcome {
 
 /// One row per dial attempt: (who × which lead × when × what happened).
 ///
-/// Why this exists: before it, "calls made" came only from DailyLog — a self-reported
+/// Why this exists: before it, "calls made" came only from DailyLog - a self-reported
 /// aggregate the telecaller typed in themselves, with no link to a lead. Nothing recorded
 /// that a specific person rang a specific number, so "which of my leads still need a call
 /// today?" was unanswerable. This is the append-only fact behind the telecaller desk.
@@ -813,7 +813,7 @@ model CallLog {
   // ── Offline capture ────────────────────────────────────────────────────────
   // A telecaller on a phone loses signal mid-shift and keeps working; the outcome is
   // queued on the device and posted when the connection returns. `calledAt` then holds
-  // the DEVICE's clock — the only record of when the call actually happened — which is
+  // the DEVICE's clock - the only record of when the call actually happened - which is
   // the one place in this app a client-supplied timestamp is trusted at all.
   //
   // That trust is bounded, and deliberately visible:
@@ -823,7 +823,7 @@ model CallLog {
   //   • `clientKey` is generated on the device and unique, so a retry, a double-tap or two
   //     tabs flushing the same queue collapse to ONE row instead of inflating the counts.
   //
-  // Why it matters: `calledAt` drives the 5-minute connection rate on the L1 desk — a JD
+  // Why it matters: `calledAt` drives the 5-minute connection rate on the L1 desk - a JD
   // target people are reviewed against. Without `syncedAt` a device clock set back an hour
   // would silently manufacture a "connected in 4 minutes" that nobody could later disprove.
   // With it, every late row carries its own evidence.
@@ -831,14 +831,14 @@ model CallLog {
   syncedAt  DateTime?
 
   // [userId, calledAt] serves "my calls today"; [leadId, calledAt] serves "when was this
-  // lead last called" — the two questions the desk asks on every load.
+  // lead last called" - the two questions the desk asks on every load.
   @@index([userId, calledAt])
   @@index([leadId, calledAt])
   @@index([calledAt])
   @@map("call_log")
 }
 
-// ═══════════════ Synamate CRM parity — Phase 1 (SYNAMATE_CLONE_SPEC §5) ═══════════════
+// ═══════════════ Synamate CRM parity - Phase 1 (SYNAMATE_CLONE_SPEC §5) ═══════════════
 // Brings GoHighLevel/Synamate's Contacts + Opportunities into B2. The Lead IS the Contact;
 // these models add tags, user-defined custom fields, notes, tasks, company grouping, and a
 // proper Opportunity/Pipeline board. The seeded "Sales" pipeline mirrors the LeadStage enum
@@ -1006,7 +1006,7 @@ model PipelineStage {
   // default pipeline today. A second pipeline's stage moves have no write-through to Lead.stage,
   // so anything reading Lead.stage can silently miss non-default-pipeline activity. Fixing that
   // is a Pipeline Unification Agent decision (extend the bridge everywhere, or make Lead.stage a
-  // read-only projection computed from Opportunity) — deliberately not done here: it's a
+  // read-only projection computed from Opportunity) - deliberately not done here: it's a
   // cross-cutting behavior change, not an additive schema column, and touches every place that
   // reads or writes Lead.stage (funnel-metrics, WhatsApp reminders, pipeline dashboard, etc.).
   legacyStage LeadStage?
@@ -1014,7 +1014,7 @@ model PipelineStage {
   // can be shown as a weighted forecast rather than a flat sum. Nullable: existing/unset stages
   // fall back to flat-sum behavior until an admin sets one.
   probability Int?
-  // Synamate's board ends in TWO won columns — "Split Pay" and "Full pay" — which in this schema
+  // Synamate's board ends in TWO won columns - "Split Pay" and "Full pay" - which in this schema
   // are one lifecycle stage (WON) plus a field (Lead.paymentPlan). This is the tiebreak: both
   // columns carry legacyStage WON, and this says which plan each one means. Set on the two
   // terminal columns of the seeded default pipeline, null everywhere else.
@@ -1065,7 +1065,7 @@ model Opportunity {
   @@map("opportunity")
 }
 
-// ═══════════════ Synamate Sites parity — Phase 2 (SYNAMATE_CLONE_SPEC §Forms/Funnels) ═══════════════
+// ═══════════════ Synamate Sites parity - Phase 2 (SYNAMATE_CLONE_SPEC §Forms/Funnels) ═══════════════
 // Native, self-hosted Forms + Funnels/landing pages. A public form/funnel submission funnels through
 // the same idempotent lead-intake as the webhooks (source = NATIVE_FORM), so captures land straight
 // in the CRM and (optionally) create an Opportunity. Retires the external FlexiFunnels dependency.
@@ -1110,7 +1110,7 @@ model Funnel {
   name        String
   slug        String       @unique
   published   Boolean      @default(false)
-  /// Block[] rendered above and below EVERY step of this funnel — the logo bar and the
+  /// Block[] rendered above and below EVERY step of this funnel - the logo bar and the
   /// legal/footer strip. Held on the funnel rather than copied into each step because a funnel
   /// with four steps otherwise means changing the phone number in four places and missing one.
   /// Null (not `[]`) means "this funnel has none", so an empty header is a deliberate state.
@@ -1140,7 +1140,7 @@ model FunnelStep {
 
   /// ── A/B split ──────────────────────────────────────────────────────────────────────────────
   /// A variant points at the step it is testing against; that step (the control) has this null.
-  /// Modelled as ordinary steps rather than a separate table so a variant IS a page — it gets the
+  /// Modelled as ordinary steps rather than a separate table so a variant IS a page - it gets the
   /// same builder, the same renderer and the same `views` counter, and nothing has to learn a
   /// second shape. A variant is hidden from the funnel's own navigation: it is reachable only by
   /// being chosen for a visitor.
@@ -1157,7 +1157,7 @@ model FunnelStep {
   @@map("funnel_step")
 }
 
-/// A saved chunk of page — one section, a testimonial card, a whole CTA band — kept for reuse.
+/// A saved chunk of page - one section, a testimonial card, a whole CTA band - kept for reuse.
 ///
 /// Both halves of "templates" and "section library" are this one model: a TEMPLATE is a snippet
 /// holding an entire page (`scope: PAGE`), a library SECTION is one holding a fragment. Two
@@ -1165,11 +1165,11 @@ model FunnelStep {
 model SectionSnippet {
   id          String   @id @default(cuid())
   name        String
-  /// Grouping for the picker ("Hero", "Social proof", "Closing") — free text, not an enum, so
+  /// Grouping for the picker ("Hero", "Social proof", "Closing") - free text, not an enum, so
   /// the team can organise their own library without a migration.
   category    String?
   scope       SnippetScope @default(SECTION)
-  /// Block[] — the nodes to insert. Ids are regenerated on insert, so one snippet used twice on
+  /// Block[] - the nodes to insert. Ids are regenerated on insert, so one snippet used twice on
   /// a page cannot produce duplicate node ids.
   blocks      Json
   /// Seeded starter content is BUILT-IN and cannot be deleted from the UI; anything the team
@@ -1185,19 +1185,19 @@ model SectionSnippet {
 }
 
 enum SnippetScope {
-  /// A fragment — inserted into the page you are editing.
+  /// A fragment - inserted into the page you are editing.
   SECTION
-  /// A whole page — offered when creating a new step.
+  /// A whole page - offered when creating a new step.
   PAGE
 }
 
-// ═══════════════ Sites — the marketing website (replaces the GHL-hosted b2consultants.de) ═══════
+// ═══════════════ Sites - the marketing website (replaces the GHL-hosted b2consultants.de) ═══════
 // A WEBSITE is not a funnel, and this is deliberately not built on Funnel/FunnelStep.
 //
 // A funnel is an ORDERED sequence: step 1 → 2 → 3, and `position` is the whole navigation model.
 // A website is a SET of pages reached from a shared nav in any order. Modelling b2consultants.de
 // as funnel steps would mean hand-maintaining the nav on every page and renumbering to insert one
-// — so `Funnel`/`FunnelStep` above stays exactly as it is, for the thing it is actually good at:
+// - so `Funnel`/`FunnelStep` above stays exactly as it is, for the thing it is actually good at:
 // the opt-in flow. optin.b2consultants.de remains on GHL and is NOT modelled here at all; the new
 // pages link OUT to it, forwarding their query string so attribution survives the hostname hop.
 
@@ -1209,14 +1209,14 @@ model Site {
   /// URL path prefix while the real domain is still pointed at GHL: /s/<slug>/…
   slug String @unique
   /// Primary hostname, once DNS is cut over. NULL means "not serving a domain yet", which is the
-  /// state this ships in — the rebuild is verified on b2app.sirahagents.com first.
+  /// state this ships in - the rebuild is verified on b2app.sirahagents.com first.
   domain String? @unique
 
   /// Design tokens (colours, fonts, radii) as SiteTheme JSON. Held per-site rather than read from
-  /// the dashboard's own Tailwind tokens because this site must NOT inherit the app's look — it
+  /// the dashboard's own Tailwind tokens because this site must NOT inherit the app's look - it
   /// has its own brand, and the two must be free to diverge.
   theme Json
-  /// NavItem[] — the shared header menu. External targets (the GHL opt-in) are just absolute hrefs.
+  /// NavItem[] - the shared header menu. External targets (the GHL opt-in) are just absolute hrefs.
   navMenu Json
 
   faviconUrl String?
@@ -1236,7 +1236,7 @@ model Site {
   @@map("site")
 }
 
-/// A shared, reusable band — the header and footer that appear on every page.
+/// A shared, reusable band - the header and footer that appear on every page.
 /// Stored once and referenced, so editing the footer does not mean editing five pages.
 enum SiteSectionKind {
   HEADER
@@ -1250,7 +1250,7 @@ model SiteSection {
   site   Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
   kind   SiteSectionKind
   name   String
-  /// Section[] JSON — same shape as SitePage.sections.
+  /// Section[] JSON - same shape as SitePage.sections.
   blocks Json
 
   createdAt DateTime @default(now())
@@ -1260,7 +1260,7 @@ model SiteSection {
   @@map("site_section")
 }
 
-/// One page. `path` is the public path within the site ("/", "/aboutus"), NOT a slug fragment —
+/// One page. `path` is the public path within the site ("/", "/aboutus"), NOT a slug fragment -
 /// the live URLs are being reproduced exactly, and "/aboutus" is not what slugify() would produce.
 model SitePage {
   id     String @id @default(cuid())
@@ -1269,7 +1269,7 @@ model SitePage {
   path   String
   title  String
 
-  /// Section[] — the page body. A JSON blob rather than section rows, matching FunnelStep.blocks:
+  /// Section[] - the page body. A JSON blob rather than section rows, matching FunnelStep.blocks:
   /// the editor saves a whole page at once and revisions snapshot it, so rows would buy nothing
   /// and cost a join on every public render.
   sections Json
@@ -1281,7 +1281,7 @@ model SitePage {
   noIndex Boolean @default(false)
 
   published Boolean   @default(false)
-  /// Denormalised view counter. Incremented in batches, NOT per request — see the public route.
+  /// Denormalised view counter. Incremented in batches, NOT per request - see the public route.
   views     Int       @default(0)
   deletedAt DateTime?
 
@@ -1315,7 +1315,7 @@ model SitePageRevision {
 }
 
 /// An uploaded image in the media library, stored in Supabase Storage (same project as the DB).
-/// The row is the INDEX — `storageKey` is the object path, `url` the public URL. Bytes never live
+/// The row is the INDEX - `storageKey` is the object path, `url` the public URL. Bytes never live
 /// in Postgres: the existing data-URL-in-a-column trick is fine for a 64px avatar and wrong for a
 /// hero image, which must be CDN-cacheable and resizable by next/image.
 model MediaAsset {
@@ -1329,7 +1329,7 @@ model MediaAsset {
   /// layout shift without measuring the image at request time.
   width  Int?
   height Int?
-  /// Editable alt text — the media library is the right place to fix accessibility once, rather
+  /// Editable alt text - the media library is the right place to fix accessibility once, rather
   /// than re-typing alt on every page that uses the image.
   alt String?
 
@@ -1342,10 +1342,10 @@ model MediaAsset {
   @@map("media_asset")
 }
 
-// ═══════════════ Synamate Payments parity — Phase 3 (invoicing, no processor yet) ═══════════════
+// ═══════════════ Synamate Payments parity - Phase 3 (invoicing, no processor yet) ═══════════════
 // Invoices + estimates (kind), reusable Products, manual Payments (Transactions), and Subscriptions.
 // Money is dual INR (paise, primary) + EUR (cents) with a stamped fxRate, like Income/Expense. No
-// payment processor is wired yet — status is advanced manually; `publicToken` powers /i/<token>.
+// payment processor is wired yet - status is advanced manually; `publicToken` powers /i/<token>.
 // A `provider` + `externalId` seam is left on payments so Razorpay/Stripe can drop in later.
 
 enum ProductInterval {
@@ -1490,10 +1490,10 @@ model Subscription {
   @@map("subscription")
 }
 
-// ═══════════════ Synamate Conversations parity — Phase 4 (Email + SMS + templates) ═══════════════
+// ═══════════════ Synamate Conversations parity - Phase 4 (Email + SMS + templates) ═══════════════
 // Adds Email + SMS channels beside the existing WhatsApp/WATI log, reusable message templates, and
 // a unified inbox (read-time merge of Message + WhatsAppMessage per contact). Providers (Resend for
-// email, Twilio for SMS) are fetch-based and OFF by default — with keys unset a send writes a
+// email, Twilio for SMS) are fetch-based and OFF by default - with keys unset a send writes a
 // SKIPPED row and nothing leaves the app, exactly like the WATI seam.
 
 enum MessageChannel {
@@ -1507,7 +1507,7 @@ enum MessageDirection {
 }
 
 enum MessageStatus {
-  SKIPPED // provider off / opted out — logged, not sent
+  SKIPPED // provider off / opted out - logged, not sent
   QUEUED
   SENT
   DELIVERED
@@ -1556,11 +1556,11 @@ model MessageTemplate {
   @@map("message_template")
 }
 
-// ═══════════════ Synamate Automation parity — Phase 5 (workflow engine) ═══════════════
+// ═══════════════ Synamate Automation parity - Phase 5 (workflow engine) ═══════════════
 // A trigger (form submit / tag added / stage change / contact created / invoice paid / booking)
 // enrolls a contact, then runs a linear list of actions (send email/SMS, add/remove tag, move stage,
 // create task, wait). WAIT actions pause the enrollment; a cron (/api/cron/workflows, CRON_SECRET)
-// resumes due ones — the SAME external-cron seam the WhatsApp reminders use. Loop-guarded: an active
+// resumes due ones - the SAME external-cron seam the WhatsApp reminders use. Loop-guarded: an active
 // enrollment is never re-created for the same (workflow, contact), and actions never re-emit triggers.
 
 enum WorkflowStatus {
@@ -1584,7 +1584,7 @@ enum EnrollmentStatus {
 }
 
 /// Synamate parity: workflows are grouped into folders ("Calendar Booking Automations",
-/// "Pipeline Automations", …). Flat (no nesting) — the reference only ever shows one level.
+/// "Pipeline Automations", …). Flat (no nesting) - the reference only ever shows one level.
 model WorkflowFolder {
   id        String     @id @default(cuid())
   name      String     @unique
@@ -1604,7 +1604,7 @@ model Workflow {
   actions       Json // WorkflowAction[]
   totalEnrolled Int                  @default(0)
   /// null = the root ("Home") folder in the UI. SetNull so deleting a folder never
-  /// takes its workflows with it — they fall back to root.
+  /// takes its workflows with it - they fall back to root.
   folderId      String?
   folder        WorkflowFolder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
   /// Soft delete: set = in the "Deleted" tab, excluded from every live read and from
@@ -1616,7 +1616,7 @@ model Workflow {
   updatedAt     DateTime             @updatedAt
   enrollments   WorkflowEnrollment[]
 
-  // emitTrigger filters on (status, triggerType, deletedAt) — keep all three together.
+  // emitTrigger filters on (status, triggerType, deletedAt) - keep all three together.
   @@index([status, triggerType, deletedAt])
   @@index([folderId])
   @@index([deletedAt])
@@ -1642,10 +1642,10 @@ model WorkflowEnrollment {
   @@map("workflow_enrollment")
 }
 
-// ─────────────────── Wave-1 — Booking + Lead capture (Synamate in-sourcing) ───────────────────
+// ─────────────────── Wave-1 - Booking + Lead capture (Synamate in-sourcing) ───────────────────
 // Replaces Synamate's two functions in-house: (1) a public qualification booking page that
 // scores BANT and books a slot, (2) a lead inbox fed by our own webhooks (Meta / FlexiFunnels)
-// plus manual entry. No automated messaging here — that is Wave-2, gated on Ameen's sign-off.
+// plus manual entry. No automated messaging here - that is Wave-2, gated on Ameen's sign-off.
 
 enum SlotStatus {
   OPEN
@@ -1656,7 +1656,7 @@ enum SlotStatus {
 /// WHICH stage produced a lead's band score (Application Logic §4.3's two-stage scoring).
 ///
 /// Recorded rather than inferred because the three carry different authority. OPT_IN is the
-/// landing page's own answers — the earliest and least verified. BOOKING is the fuller intake
+/// landing page's own answers - the earliest and least verified. BOOKING is the fuller intake
 /// form and supersedes it. MANUAL is a human's judgement and supersedes BOTH: a redelivered
 /// webhook must never overwrite what a specialist typed after speaking to the person.
 enum BantSource {
@@ -1667,9 +1667,9 @@ enum BantSource {
 
 // Weighted-BANT recommendation (avg of the four 0–5 dimension scores).
 enum BantVerdict {
-  CONFIRM // avg > 3 — confirm the call
-  DOUBT // avg 2–3 — go ahead, but doubt they'll convert
-  CANCEL // avg < 2 — cancel / don't book the call
+  CONFIRM // avg > 3 - confirm the call
+  DOUBT // avg 2–3 - go ahead, but doubt they'll convert
+  CANCEL // avg < 2 - cancel / don't book the call
 }
 
 enum BookingStatus {
@@ -1697,7 +1697,7 @@ model AppointmentSlot {
   @@map("appointment_slot")
 }
 
-/// SSS (Success Strategy Session) slot — the founder-run sales/closing call calendar. Distinct
+/// SSS (Success Strategy Session) slot - the founder-run sales/closing call calendar. Distinct
 /// from AppointmentSlot (the public discovery booking): an SSS slot is booked by linking an
 /// existing OutreachJourney, not a fresh BANT intake. Reuses SlotStatus (OPEN/BOOKED/BLOCKED).
 ///
@@ -1762,10 +1762,10 @@ model BookingRequest {
   commitment             String?
   howKnowUs              String?
 
-  // BANT — derived on submit; bantScore is 0–4 (count of the four dimensions met).
+  // BANT - derived on submit; bantScore is 0–4 (count of the four dimensions met).
   // Weighted layer (client notes): every answer carries a 0–5 score; bantAvg is the
   // mean of the four dimension scores and bantVerdict applies Ameen's thresholds
-  // (>3 confirm · 2–3 doubt · <2 cancel). Recommendation only — no automated action.
+  // (>3 confirm · 2–3 doubt · <2 cancel). Recommendation only - no automated action.
   bantBudget    Boolean      @default(false)
   bantAuthority Boolean      @default(false)
   bantNeed      Boolean      @default(false)
@@ -1774,7 +1774,7 @@ model BookingRequest {
   bantAvg       Float?
   bantVerdict   BantVerdict?
   /// Track D cutover instrumentation. `bantShadowAvg` is what the CONFIGURABLE question
-  /// catalogue would have scored this submission — written alongside the column-based score
+  /// catalogue would have scored this submission - written alongside the column-based score
   /// during the shadow phase and compared, never read by any decision. A disagreement is a
   /// seeding bug, and the flip to the catalogue is gated on there being none.
   /// `bantConfigVersion` records which catalogue produced a verdict once the flip happens,
@@ -1809,7 +1809,7 @@ model BookingRequest {
   @@map("booking_request")
 }
 
-// ───────────────────────────── Phase 2 — People ─────────────────────────────
+// ───────────────────────────── Phase 2 - People ─────────────────────────────
 
 enum TeamStatus {
   ACTIVE
@@ -1817,7 +1817,7 @@ enum TeamStatus {
   INACTIVE
 }
 
-// Which daily-log form a person gets (PRD2 §3.3) — by function, not hardcoded name.
+// Which daily-log form a person gets (PRD2 §3.3) - by function, not hardcoded name.
 enum DailyLogVariant {
   DISCOVERY_SPECIALIST // Asma: calls completed, HQ calls, follow-ups, proposals, no-shows
   APPOINTMENT_SETTER // Nilofer: leads contacted, appointments set, follow-ups, pipeline adds
@@ -1828,12 +1828,12 @@ enum DailyLogVariant {
 // bonus/commission is judged on, so "a person said this" and "the EOD job derived this from
 // activity" must never look the same.
 //
-// HUMAN    — submitted by the member. One-shot and immutable (PRD2 §3.3).
-// EOD_AUTO — the member never logged, so the EOD job wrote what activity it could derive.
+// HUMAN    - submitted by the member. One-shot and immutable (PRD2 §3.3).
+// EOD_AUTO - the member never logged, so the EOD job wrote what activity it could derive.
 //            Auto-capture cannot see every field (followUpMessagesSent has no event source),
 //            so these rows are INCOMPLETE by construction and read low on the pay board.
 //            That is why, unlike a HUMAN row, they stay amendable by their owner for a
-//            short window — the member fills in the rest and the row flips to HUMAN.
+//            short window - the member fills in the rest and the row flips to HUMAN.
 enum DailyLogSource {
   HUMAN
   EOD_AUTO
@@ -1866,12 +1866,12 @@ model TeamProfile {
 
   /// ── TERMINATION ───────────────────────────────────────────────────────────────────
   /// Set when someone leaves. `status` goes INACTIVE and the linked `User` is SUSPENDED in the
-  /// same transaction — the two statuses were previously never kept in sync by any code path,
+  /// same transaction - the two statuses were previously never kept in sync by any code path,
   /// and different modules filter on different ones.
   ///
   /// DELIBERATELY NOT the `deletedAt` soft-delete pattern used by the nine core record types.
   /// Archived records are purged by the 90-day retention cron (`server/retention.ts`), and a
-  /// person's employment record must never be purged — their name has to keep resolving on every
+  /// person's employment record must never be purged - their name has to keep resolving on every
   /// call, commission and audit row they ever produced. "Former team member" is a permanent,
   /// restorable state, not a staging area for deletion.
   terminatedAt       DateTime?
@@ -1879,7 +1879,7 @@ model TeamProfile {
   terminatedBy       User?     @relation("TeamProfileTerminatedBy", fields: [terminatedById], references: [id], onDelete: SetNull)
   terminationReason  String?
   /// Who picked up their open work. Recorded so "why does Asma own this lead" stays answerable
-  /// years later — the reassignment itself leaves no trace on the row it moved.
+  /// years later - the reassignment itself leaves no trace on the row it moved.
   successorProfileId String?
 
   createdAt           DateTime        @default(now())
@@ -1892,20 +1892,20 @@ model TeamProfile {
 
   // Declared here to match what 20260803090000_team_profile_termination actually created. The
   // migration made this index; the model never mentioned it, so Prisma believed it was unwanted
-  // and every `migrate diff` since has wanted to DROP it — which would have silently removed a
+  // and every `migrate diff` since has wanted to DROP it - which would have silently removed a
   // live index the moment anyone generated the next migration.
   @@index([terminatedAt])
   @@map("team_profile")
 }
 
-// Max 3 per person per month — enforced at the service layer (PRD2 §3.2).
+// Max 3 per person per month - enforced at the service layer (PRD2 §3.2).
 model OKR {
   id                  String      @id @default(cuid())
   teamProfileId       String
   teamProfile         TeamProfile @relation(fields: [teamProfileId], references: [id], onDelete: Cascade)
   month               DateTime    @db.Date // first day of month
   title               String
-  targetValue         String // "80%", "50 calls" — free text per PRD
+  targetValue         String // "80%", "50 calls" - free text per PRD
   targetNumeric       Decimal?    @db.Decimal(14, 2) // parsed when numeric → auto completion %
   currentProgress     String?
   currentNumeric      Decimal?    @db.Decimal(14, 2)
@@ -1946,13 +1946,13 @@ model DailyLog {
   studentsFlaggedAtRisk Int?
 
   // HUMAN unless the EOD job wrote it. Defaulted, so every pre-existing row is correctly
-  // HUMAN — before this field existed, a row could only come from the submit form.
+  // HUMAN - before this field existed, a row could only come from the submit form.
   source DailyLogSource @default(HUMAN)
 
   notes          String? // notes / blockers
-  correctionNote String? // Admin may append a correction — original stays intact
+  correctionNote String? // Admin may append a correction - original stays intact
   // Which numeric fields were auto-filled from real activity at submit time (report §3.A).
-  // A JSON array of field keys — lets the timeline badge historical entries as auto-captured,
+  // A JSON array of field keys - lets the timeline badge historical entries as auto-captured,
   // not just today's (today's is recomputed live; history needs this record).
   autoCapturedKeys Json?
   createdAt        DateTime @default(now())
@@ -1969,7 +1969,7 @@ enum PayoutStatus {
 }
 
 // Telecaller rewards: Admin (Ameen) assigns a BONUS and/or COMMISSION to a
-// telecaller (a USER-role TeamProfile — appointment setters / discovery specialists)
+// telecaller (a USER-role TeamProfile - appointment setters / discovery specialists)
 // for a given month, with a free-text reason ("based on the calls or any other
 // criteria"). Amounts are entered manually. Dual-currency like all money in the
 // app: INR + EUR minor units, FX stamped at entry so history never re-prices.
@@ -1995,7 +1995,7 @@ model TelecallerPayout {
   @@map("telecaller_payout")
 }
 
-// ───────────────────────────── Phase 2 — Students ─────────────────────────────
+// ───────────────────────────── Phase 2 - Students ─────────────────────────────
 
 enum StudentStatus {
   ACTIVE
@@ -2007,7 +2007,7 @@ enum StudentStatus {
 enum ProgramDuration {
   DAYS_90 // Guided
   DAYS_120 // Elite
-  LIFETIME // Solo — no end date, no tracker
+  LIFETIME // Solo - no end date, no tracker
 }
 
 enum Milestone {
@@ -2027,11 +2027,11 @@ enum TaskCompletion {
 }
 
 // ONE person = ONE Student record; upgrades create additional Enrollments (CONTEXT §7).
-// LTV = sum of linked Income across all enrollments — computed, never stored.
+// LTV = sum of linked Income across all enrollments - computed, never stored.
 model Student {
   id            String      @id @default(cuid())
   /// Human-readable student number shown beside the name EVERYWHERE (§6.1). Two students
-  /// called "Anna Smith" are indistinguishable on screen without it — that ambiguity has
+  /// called "Anna Smith" are indistinguishable on screen without it - that ambiguity has
   /// already caused a real payment mix-up. The cuid `id` can't do this job: nobody can read
   /// one aloud on a call. Nullable because it is backfilled, and unique so the generator can
   /// rely on the database to reject a collision rather than a read-then-write race.
@@ -2076,29 +2076,29 @@ model Enrollment {
   id              String          @id @default(cuid())
   studentId       String
   student         Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  /// ER v2 `LEAD ||--o| ENROLLMENT`. Direct, rather than only via Student.leadId — a student
+  /// ER v2 `LEAD ||--o| ENROLLMENT`. Direct, rather than only via Student.leadId - a student
   /// who came back through a second campaign has two acquisition stories, and attribution
   /// needs the one for THIS sale.
   leadId          String?
   lead            Lead?           @relation("EnrollmentLead", fields: [leadId], references: [id], onDelete: SetNull)
   /// ER v2 `ENROLLMENT }o--|| BATCH` (Track A). Nullable and expected to stay that way for
-  /// coaching if D2 comes back "1:1" — the column costs nothing in that case, and German
+  /// coaching if D2 comes back "1:1" - the column costs nothing in that case, and German
   /// Note seats populate it immediately.
   batchId         String?
   batch           Batch?          @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  programLevel    String // Level.code — SOLO / GUIDED / ELITE only for B2 (service-validated)
+  programLevel    String // Level.code - SOLO / GUIDED / ELITE only for B2 (service-validated)
   enrollmentDate  DateTime        @db.Date
   duration        ProgramDuration
   programEndDate  DateTime?       @db.Date // enrollment + 90/120 days; null for LIFETIME
   assignedCoach   String? // currently Karthick
-  // L3 closer who ran the sales/SSS call — the third leg of the commission split
+  // L3 closer who ran the sales/SSS call - the third leg of the commission split
   // (setter + discovery are inferred from the Lead; the closer had no home before).
   closerId        String?
   closer          User?           @relation("EnrollmentCloser", fields: [closerId], references: [id], onDelete: SetNull)
   status          StudentStatus   @default(ACTIVE)
   statusChangedAt DateTime        @default(now()) // powers "completed/dropped this month"
 
-  // 90/120-day tracker (PRD2 §4.3) — Guided/Elite only
+  // 90/120-day tracker (PRD2 §4.3) - Guided/Elite only
   lastSessionDate        DateTime?       @db.Date
   totalSessionsCompleted Int             @default(0)
   totalSessionsPlanned   Int?
@@ -2174,12 +2174,12 @@ model JobApplication {
 // ── Sprint tracker (client notes): week-wise targets after course completion ──
 // Guided = 90 days (13 weeks) · Elite = 120 days (17 weeks). Coach sets the target,
 // the weekend check-in records the actual; ACHIEVED = "no disturbance", MISSED feeds
-// the at-risk radar. The WhatsApp nudge on a miss is Wave-2 (gated) — here it's data.
+// the at-risk radar. The WhatsApp nudge on a miss is Wave-2 (gated) - here it's data.
 
 enum SprintStatus {
   PENDING // week not reviewed yet
-  ACHIEVED // target met — no disturbance
-  MISSED // target missed — ask why / take action
+  ACHIEVED // target met - no disturbance
+  MISSED // target missed - ask why / take action
 }
 
 model SprintWeek {
@@ -2205,7 +2205,7 @@ model SprintWeek {
   @@map("sprint_week")
 }
 
-// APPEND-ONLY milestone history (PRD2 §4.4) — cannot be deleted by anyone, incl. Admin.
+// APPEND-ONLY milestone history (PRD2 §4.4) - cannot be deleted by anyone, incl. Admin.
 model MilestoneLog {
   id                String     @id @default(cuid())
   enrollmentId      String
@@ -2260,7 +2260,7 @@ model SatisfactionScore {
   @@map("satisfaction_score")
 }
 
-// ───────────────────────────── Phase 3 — Conversion Funnel ─────────────────────────────
+// ───────────────────────────── Phase 3 - Conversion Funnel ─────────────────────────────
 
 // Weekly snapshot (PRD3 §3.2). Awareness/GB downloads are always manual; leads/calls/
 // proposals/enrollments are pre-filled from Phase 1+2 native queries, Admin can override.
@@ -2283,14 +2283,14 @@ model WeeklyFunnelSnapshot {
   @@map("weekly_funnel_snapshot")
 }
 
-// ───────────────────────────── Phase 3 — Cash Health ─────────────────────────────
+// ───────────────────────────── Phase 3 - Cash Health ─────────────────────────────
 
 // Weekly bank-balance log (PRD3 §4.1). Kept as history for the 12-week line chart.
 model CashPosition {
   id                      String   @id @default(cuid())
   date                    DateTime @unique @db.Date // should be a Monday
   bankBalanceInrMinor     BigInt   @default(0)
-  personalSavingsInrMinor BigInt? // optional, planning only — excluded from runway
+  personalSavingsInrMinor BigInt? // optional, planning only - excluded from runway
   notes                   String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
@@ -2327,11 +2327,11 @@ model Payable {
   @@map("payable")
 }
 
-// ───────────────────────────── Phase 4 — German Note ─────────────────────────────
+// ───────────────────────────── Phase 4 - German Note ─────────────────────────────
 // LMS-lite for the German language program: Admin creates batches (A1..B2 cohorts)
 // and assigns a TUTOR + Students. Classes are recorded by fathom.ai; the tutor
 // pastes the Fathom share link (YouTube/Vimeo/Drive also accepted) into their
-// batch. Students keep LIFETIME access to their batch's recordings — batch
+// batch. Students keep LIFETIME access to their batch's recordings - batch
 // membership never expires; archiving a batch only closes its discussion.
 // Community = Skool-style feed: GnPost.batchId null → global, set → batch.
 
@@ -2342,12 +2342,12 @@ enum GnBatchStatus {
 
 /// Which business line a batch belongs to (ER v2 Track A, decision D1).
 ///
-/// D1 was "one Batch table or two". Unify: German Note already ran TWO batch worlds — real
+/// D1 was "one Batch table or two". Unify: German Note already ran TWO batch worlds - real
 /// `gn_batch` rows for the LMS, and free-text labels ("B26") typed onto
 /// GnWorkshopConversion.batchA1/A2/B1. A separate B2 coaching batch would have made three.
 /// One table, discriminated here, keeps "which batch is this person in" a single question.
 enum BatchLine {
-  B2 // coaching tiers — SOLO / GUIDED / ELITE
+  B2 // coaching tiers - SOLO / GUIDED / ELITE
   GERMAN_NOTE // GN_A1 … GN_C2
 }
 
@@ -2360,7 +2360,7 @@ enum GnVideoProvider {
 
 /// A cohort, for EITHER business line (ER v2 `BATCH`; was `GnBatch`/`gn_batch`).
 ///
-/// Renamed rather than recreated — the migration is an `ALTER TABLE ... RENAME`, so every
+/// Renamed rather than recreated - the migration is an `ALTER TABLE ... RENAME`, so every
 /// existing German Note batch, its roster, its recordings and its community posts survive
 /// untouched. `line` defaults to GERMAN_NOTE precisely because every pre-existing row is one.
 ///
@@ -2373,11 +2373,11 @@ model Batch {
   /// Which business this cohort belongs to. Guards level-kind compatibility at the service
   /// layer (COACHING_TIER → B2, GERMAN_LEVEL/GERMAN_BUNDLE → GERMAN_NOTE).
   line      BatchLine     @default(GERMAN_NOTE)
-  /// The founders' own label — "A1", "B10", "B26". Nullable because pre-existing rows have
+  /// The founders' own label - "A1", "B10", "B26". Nullable because pre-existing rows have
   /// none, unique because it is the human key they use on calls and in the workbooks.
   code      String?       @unique
-  name      String // "A1 Evening — July 2026"
-  level     String // Level.code — service-validated against `line`
+  name      String // "A1 Evening - July 2026"
+  level     String // Level.code - service-validated against `line`
   tutorId   String?
   tutor     User?         @relation("BatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
   status         GnBatchStatus @default(ACTIVE)
@@ -2442,7 +2442,7 @@ enum GnEventType {
 ///
 /// NAMED `ClassSession`, NOT `Session`: `model Session` is Better Auth's login-session table
 /// (`@@map("session")`). Same collision, same resolution as `LedgerAccount` vs Better Auth's
-/// `Account` — see the note on that model. The table is `class_session`.
+/// `Account` - see the note on that model. The table is `class_session`.
 ///
 /// `GnEventType` already carried the diagram's exact session vocabulary
 /// (KICKOFF / COACHING / LINKEDIN / QA / OPEN_MARKET), so the enum is reused verbatim.
@@ -2551,7 +2551,7 @@ enum AttendanceStatus {
 /// Who actually showed up to a class.
 ///
 /// THE GAP THIS CLOSES: tutor fees are computed against `Batch._count.members +
-/// _count.enrollments` — the ROSTER. So the business pays per head enrolled while having no
+/// _count.enrollments` - the ROSTER. So the business pays per head enrolled while having no
 /// record at all of heads present, and two other things sit blocked behind that absence: a
 /// drop-risk signal derived from behaviour rather than hand-set by a coach, and a no-show rate.
 ///
@@ -2571,7 +2571,7 @@ model SessionAttendance {
   student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   /// PENDING has no representation here on purpose. A sheet that has never been opened has no
-  /// rows at all, which is a different (and honest) state from "we looked and they were absent" —
+  /// rows at all, which is a different (and honest) state from "we looked and they were absent" -
   /// and it keeps an unmarked session from silently counting against every student's rate.
   status AttendanceStatus
 
@@ -2589,7 +2589,7 @@ model SessionAttendance {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  /// One verdict per student per session — the register, not a log of edits. A correction
+  /// One verdict per student per session - the register, not a log of edits. A correction
   /// updates the row; the activity log carries the history.
   @@unique([sessionId, studentId])
   @@index([studentId, status])
@@ -2650,17 +2650,17 @@ model GnRecordingWatch {
   user        User        @relation("GnRecordingWatchUser", fields: [userId], references: [id], onDelete: Cascade)
   /// When the student SAID they watched it (the tick). Kept, but no longer the truth.
   watchedAt   DateTime    @default(now())
-  /// Whether the student actually ticked "watched". Previously implied by the row existing —
+  /// Whether the student actually ticked "watched". Previously implied by the row existing -
   /// but tracking now creates rows too, so the claim needs saying out loud. Defaults true so
   /// every pre-existing row (which could only have come from a tick) keeps its meaning.
   selfReported Boolean    @default(true)
 
   /// Spec §10.3: "the tracked percentage is the source of truth" over a self-reported
-  /// 'watched'. 0–100, high-water mark — scrubbing backwards must not erase progress.
+  /// 'watched'. 0–100, high-water mark - scrubbing backwards must not erase progress.
   /// Null = never tracked (a legacy tick, or a host that reports no progress), which is
   /// why this is nullable rather than 0: "unknown" and "watched none" are different claims.
   watchedPct      Int?
-  /// Furthest position reached and the clip length, both in whole seconds — kept so a
+  /// Furthest position reached and the clip length, both in whole seconds - kept so a
   /// percentage can be re-derived and audited rather than taken on faith.
   positionSecs    Int?
   durationSecs    Int?
@@ -2671,7 +2671,7 @@ model GnRecordingWatch {
   @@map("gn_recording_watch")
 }
 
-// Skool-style post categories — power the filter chips on the feed.
+// Skool-style post categories - power the filter chips on the feed.
 enum GnPostCategory {
   GENERAL
   ANNOUNCEMENT
@@ -2679,7 +2679,7 @@ enum GnPostCategory {
   WIN
 }
 
-// Authors are SetNull so revoking a login never destroys community content —
+// Authors are SetNull so revoking a login never destroys community content -
 // UI renders "Former member" when author is null. Feed order is Skool-like:
 // pinned first, then by latest activity (a new comment bumps the post).
 model GnPost {
@@ -2732,7 +2732,7 @@ model GnLike {
   @@map("gn_like")
 }
 
-// Comment likes — separate table from post likes; both feed community points/levels.
+// Comment likes - separate table from post likes; both feed community points/levels.
 model GnCommentLike {
   id        String    @id @default(cuid())
   commentId String
@@ -2745,10 +2745,10 @@ model GnCommentLike {
   @@map("gn_comment_like")
 }
 
-// ── German Note — Workshops → conversions by level ─────────────
+// ── German Note - Workshops → conversions by level ─────────────
 // A workshop is a paid-ad intake (e.g. "May 2026"): people attend a free
 // German taster, and a share convert into a level course (A1 / A2 / B1 or a
-// bundle). Reverse-engineered from the founders' monthly workshop workbooks —
+// bundle). Reverse-engineered from the founders' monthly workshop workbooks -
 // the conversions table, the ad-performance block and the P&L rollup.
 // Admin-only, like the rest of German Note management. Money = INR paise.
 
@@ -2778,7 +2778,7 @@ enum GnConversionStatus {
   ON_HOLD
 }
 
-// How the conversion reached us — drives ad-spend attribution. AD conversions
+// How the conversion reached us - drives ad-spend attribution. AD conversions
 // split the workshop's ad spend between them; ORGANIC ones carry no ad cost.
 enum GnWorkshopSource {
   AD
@@ -2793,7 +2793,7 @@ model Workshop {
   id        String           @id @default(cuid())
   line      BatchLine        @default(GERMAN_NOTE)
   name      String // "May 2026"
-  month     DateTime         @db.Date // first of the intake month — drives ordering
+  month     DateTime         @db.Date // first of the intake month - drives ordering
   status    GnWorkshopStatus @default(ACTIVE)
   landingPageUrl    String?
   whatsappGroupLink String?
@@ -2812,11 +2812,11 @@ model Workshop {
   @@map("workshop")
 }
 
-/// ER v2 `WORKSHOP_REGISTRATION` — one row per PERSON who registered, linked to their Lead.
+/// ER v2 `WORKSHOP_REGISTRATION` - one row per PERSON who registered, linked to their Lead.
 ///
 /// Why this had to exist: attendance was an integer typed onto the ad set, and only people
 /// who *converted* got a row. "Who attended and didn't buy, and can we re-target them" was
-/// therefore unanswerable — despite the pipeline carrying SENT_TO_WORKSHOP and
+/// therefore unanswerable - despite the pipeline carrying SENT_TO_WORKSHOP and
 /// WORKSHOP_FOLLOWUP stages built for exactly that motion.
 ///
 /// `leadId` is SetNull, not Cascade: a registration is evidence that someone turned up, and
@@ -2827,7 +2827,7 @@ model WorkshopRegistration {
   workshop   Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
   leadId     String?
   lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  /// Snapshotted at registration — the lead row may later be corrected or merged.
+  /// Snapshotted at registration - the lead row may later be corrected or merged.
   name       String
   email      String?
   phone      String?
@@ -2842,7 +2842,7 @@ model WorkshopRegistration {
 
   conversion GnWorkshopConversion?
 
-  /// One registration per lead per workshop — makes a replayed webhook idempotent.
+  /// One registration per lead per workshop - makes a replayed webhook idempotent.
   @@unique([workshopId, leadId])
   @@index([workshopId, attended])
   @@index([leadId])
@@ -2902,7 +2902,7 @@ model GnWorkshopConversion {
   // per-level batch assignment (label + time), free-text like the sheet ("B26", "7:00 AM").
   // Kept as the historical SNAPSHOT of what the workbook said; the *Id columns beside them
   // are the resolved links the Track A backfill writes. A label the backfill could not
-  // resolve stays here with a null Id and is surfaced in the UI as "unlinked" — never guessed.
+  // resolve stays here with a null Id and is surfaced in the UI as "unlinked" - never guessed.
   batchA1                   String?
   batchA1Id                 String?
   batchA1Ref                Batch?             @relation("ConversionBatchA1", fields: [batchA1Id], references: [id], onDelete: SetNull)
@@ -2918,7 +2918,7 @@ model GnWorkshopConversion {
   source                    GnWorkshopSource   @default(AD) // AD = from the workshop ad campaign; ORGANIC = referral / carry-over / free
   status                    GnConversionStatus @default(CONFIRMED)
   isFreeSeat                Boolean            @default(false) // B2-client / free-repeat seat (₹0 revenue; cost still applies)
-  finalPriceInrMinor        BigInt             @default(0) // billed price (paise) — an INPUT: varies per deal (EMI / negotiation)
+  finalPriceInrMinor        BigInt             @default(0) // billed price (paise) - an INPUT: varies per deal (EMI / negotiation)
   paidAmountInrMinor        BigInt             @default(0) // cash collected (paise); balance = paid − final
   paymentMethod             String? // "UPI", "Credit Card", "German Bank", "UPI · 6 EMI"…
   nextDueDate               DateTime?          @db.Date
@@ -2952,7 +2952,7 @@ model FxRate {
 
 // ───────────────────────────── Invites ─────────────────────────────
 // Public sign-up is off: an Admin provisions the account, and the person sets their own
-// password through a single-use link. Nobody — not even the Admin who invited them —
+// password through a single-use link. Nobody - not even the Admin who invited them -
 // ever knows their password.
 //
 // Only the SHA-256 of the token is stored, so a leaked database row cannot be redeemed.
@@ -2964,7 +2964,7 @@ model UserInvite {
   user        User      @relation("UserInviteFor", fields: [userId], references: [id], onDelete: Cascade)
   tokenHash   String    @unique
   expiresAt   DateTime
-  acceptedAt  DateTime? // set once redeemed — a link is good for exactly one use
+  acceptedAt  DateTime? // set once redeemed - a link is good for exactly one use
   createdById String?
   createdBy   User?     @relation("UserInviteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
@@ -2973,7 +2973,7 @@ model UserInvite {
   @@map("user_invite")
 }
 
-// ───────────────────────────── Founder console — goals & rewards ─────────────────────────────
+// ───────────────────────────── Founder console - goals & rewards ─────────────────────────────
 // The founder steers the team with GOALS ("₹12L revenue this quarter", "Asma: 40 discovery
 // calls in July") and pays for outcomes with REWARD RULES ("30-day streak → ₹2,000").
 //
@@ -3017,13 +3017,13 @@ model Goal {
 enum RewardKind {
   BONUS
   COMMISSION
-  PERK // a thing, not a payout — amounts stay zero
+  PERK // a thing, not a payout - amounts stay zero
 }
 
 enum RewardGrantStatus {
   PENDING // auto-detected, waiting on the founder
   APPROVED // founder said yes; not yet paid out
-  DECLINED // founder said no — never re-offered
+  DECLINED // founder said no - never re-offered
   PAID
 }
 
@@ -3049,7 +3049,7 @@ model RewardRule {
 }
 
 // One person, one rule, one period. `periodKey` is derived from the trigger (a badge key, a
-// level, a month…) — see src/lib/rewards.ts. The unique constraint below is what makes a
+// level, a month…) - see src/lib/rewards.ts. The unique constraint below is what makes a
 // re-scan idempotent: re-deriving every qualification in history inserts nothing new, so a
 // rule can be edited and rescanned without ever double-paying, and a DECLINED grant stays
 // declined instead of reappearing as PENDING.
@@ -3093,10 +3093,10 @@ model AppSetting {
 
 // A recorded commission payout run (audit §C #23). getCommissionReport computes the deal-team
 // split per payment at read time; this snapshots a month's per-person totals so a run is a durable
-// artefact, not a screen the founder eyeballs. Admin-triggered (finance.write) — never a cron.
+// artefact, not a screen the founder eyeballs. Admin-triggered (finance.write) - never a cron.
 // `postedEntryId` links the optional Dr Team-salaries / Cr Accounts-payable accrual (an accrual,
 // not a cash payment) when financePosting.commissionAccrual is on. `createdById` is a bare scalar,
-// not an FK — the activity log is the durable record of who ran it. Unique per month = idempotent.
+// not an FK - the activity log is the durable record of who ran it. Unique per month = idempotent.
 model CommissionPayoutRun {
   id            String   @id @default(cuid())
   month         DateTime @unique @db.Date // first-of-month this run snapshots
@@ -3109,7 +3109,7 @@ model CommissionPayoutRun {
   @@map("commission_payout_run")
 }
 
-// ───────────────────────────── Wave-2 — WhatsApp (WATI) ─────────────────────────────
+// ───────────────────────────── Wave-2 - WhatsApp (WATI) ─────────────────────────────
 // Outbound WhatsApp via the WATI Business API BSP (the "Wave-2, gated on Ameen's sign-off"
 // messaging the Wave-1 comments anticipated). Everything here is INERT unless WATI_ENABLED
 // is set AND credentials + template names are configured: with the flag off every send is a
@@ -3128,37 +3128,37 @@ enum WhatsAppKind {
   DISCO_REMINDER // funnel: nudge an un-booked lead to book the discovery call
   BOOKING_CONFIRMATION // a slot was just booked
   BOOKING_REMINDER // pre-call reminder (~24h / ~1h before the slot)
-  NO_SHOW_FOLLOWUP // missed the call — rebook
+  NO_SHOW_FOLLOWUP // missed the call - rebook
   PAYMENT_REMINDER // overdue pending payment / receivable
-  EMI_PRE_DUE // instalment falls due in N days — the reminder that lands BEFORE the due date
+  EMI_PRE_DUE // instalment falls due in N days - the reminder that lands BEFORE the due date
   CHECKIN_NUDGE // student coaching check-in due
   SPRINT_MISS_NUDGE // student missed a sprint-week target
-  AGREEMENT_SEND // coaching agreement is ready — carries the tokenized signing link
+  AGREEMENT_SEND // coaching agreement is ready - carries the tokenized signing link
   AGREEMENT_OTP // 6-digit code binding the signature to control of this number
   AGREEMENT_REMINDER // an issued agreement is still unsigned
   // The countersigned copy, sent back the moment the student signs. Its OWN kind, not a reuse of
   // AGREEMENT_SEND: one WATI template is bound per kind, and that template carries the *signing*
-  // link — the student would receive the wrong text and the section badges would misattribute the
+  // link - the student would receive the wrong text and the section badges would misattribute the
   // send. This is also the row COMPLETED is derived from (see lib/agreement-state.ts).
-  AGREEMENT_COPY // executed agreement — carries the link to the sealed, countersigned PDF
+  AGREEMENT_COPY // executed agreement - carries the link to the sealed, countersigned PDF
   MANUAL // free-form / manual send from a section
   // ── Outreach Specialist SOP (Steps 3–21). One kind per SOP message, deliberately.
   // The app binds exactly ONE WATI template per kind, so collapsing two SOP steps onto one kind
   // would send the wrong text for one of them. Nine SOP messages → nine kinds → nine templates.
-  SOP_INTRO // Step 3  — WhatsApp introduction, immediately after opt-in
-  SOP_FOLLOWUP // Step 6  — call not booked at the 2-hour check
-  SOP_DISCO_WELCOME // Step 13 — qualified YES/MAYBE, disco call booked
-  SOP_DISCO_CONFIRM_1 // Step 14 — ≥36h before the disco call
-  SOP_DISCO_CONFIRM_2 // Step 15 — ≥24h before, no reply to Step 14
-  SOP_DISCO_CANCEL // Step 16 — ≥12h before, unconfirmed after two calls
-  SOP_SSS_CONFIRM_1 // Step 19 — ≥24h before the SSS, carries the personalized video
-  SOP_SSS_CONFIRM_2 // Step 20 — ≥12h before the SSS, no reply to Step 19
-  SOP_SSS_CANCEL // Step 21 — ≥10h before the SSS, still unconfirmed
+  SOP_INTRO // Step 3  - WhatsApp introduction, immediately after opt-in
+  SOP_FOLLOWUP // Step 6  - call not booked at the 2-hour check
+  SOP_DISCO_WELCOME // Step 13 - qualified YES/MAYBE, disco call booked
+  SOP_DISCO_CONFIRM_1 // Step 14 - ≥36h before the disco call
+  SOP_DISCO_CONFIRM_2 // Step 15 - ≥24h before, no reply to Step 14
+  SOP_DISCO_CANCEL // Step 16 - ≥12h before, unconfirmed after two calls
+  SOP_SSS_CONFIRM_1 // Step 19 - ≥24h before the SSS, carries the personalized video
+  SOP_SSS_CONFIRM_2 // Step 20 - ≥12h before the SSS, no reply to Step 19
+  SOP_SSS_CANCEL // Step 21 - ≥10h before the SSS, still unconfirmed
   // ── Bookings confirmation loop (Module E). The in-house Bookings section's own confirm-or-cancel
   // cadence, independent of the Outreach SOP ladder above (which runs off a separate OutreachJourney).
   BOOKING_CONFIRM_REQUEST // asks the prospect to reply YES to hold their upcoming slot
   BOOKING_RESCHEDULED // their call was moved to a new time (manual postpone OR promoted-up)
-  BOOKING_AUTO_CANCELLED // no confirmation in time — slot released, invite to rebook
+  BOOKING_AUTO_CANCELLED // no confirmation in time - slot released, invite to rebook
   // ── SSS (sales) call calendar. The founder-run session; server/sss-slots.ts.
   SSS_RESCHEDULED // their SSS was moved to a new time (founder blocked the slot/day, or a manual/drag move)
   // ── Book publisher orders. The ONLY touchpoint whose recipient is not a prospect or student:
@@ -3168,12 +3168,12 @@ enum WhatsAppKind {
 }
 
 enum WhatsAppStatus {
-  SKIPPED // flag off / unconfigured / opted-out / deduped — nothing left the app
+  SKIPPED // flag off / unconfigured / opted-out / deduped - nothing left the app
   QUEUED
   SENT // accepted by WATI
   DELIVERED // WATI delivery callback
   READ // WATI read callback
-  REPLIED // prospect replied (inbound) — "WhatsApp confirmed" (SALES-LOGIC §2)
+  REPLIED // prospect replied (inbound) - "WhatsApp confirmed" (SALES-LOGIC §2)
   FAILED
 }
 
@@ -3188,10 +3188,10 @@ model WhatsAppMessage {
   templateName  String? // WATI approved template used (null for inbound / free text)
   body          String? // rendered summary (outbound) or message text (inbound)
   params        Json? // template variables sent, for audit/debug
-  watiMessageId String? // WATI id — matched by the status-callback webhook
+  watiMessageId String? // WATI id - matched by the status-callback webhook
   error         String? // failure reason when status = FAILED
 
-  // Optional links to whatever this message was about (all SetNull — a message row must
+  // Optional links to whatever this message was about (all SetNull - a message row must
   // survive deletion of the lead/student it referenced, like the rest of the audit tables).
   leadId           String?
   lead             Lead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
@@ -3241,9 +3241,9 @@ model WhatsAppOptOut {
 // sealed into `pdfBytes`.
 //
 // Two independent integrity claims, because they answer different questions:
-//   dataSha256 — SHA-256 of the canonical JSON of `data` + `templateVersion`. Deterministic and
+//   dataSha256 - SHA-256 of the canonical JSON of `data` + `templateVersion`. Deterministic and
 //                reproducible forever: it proves WHAT WAS AGREED. Printed on every page.
-//   pdfSha256  — SHA-256 of the sealed bytes. It proves THE STORED ARTIFACT IS UNTOUCHED.
+//   pdfSha256  - SHA-256 of the sealed bytes. It proves THE STORED ARTIFACT IS UNTOUCHED.
 //                It is NOT reproducible: PDFKit stamps a creation date and document id, so
 //                re-rendering identical data yields different bytes. Never re-render to verify.
 //
@@ -3255,7 +3255,7 @@ enum AgreementStatus {
   DRAFT // founder is still editing; no token exists
   SENT // countersigned + link delivered; awaiting the student
   VIEWED // the student opened the link at least once
-  SIGNED // sealed — pdfBytes + pdfSha256 are set and never change
+  SIGNED // sealed - pdfBytes + pdfSha256 are set and never change
   DECLINED // the student explicitly refused
   VOIDED // superseded or cancelled by the founder
   EXPIRED // the token's TTL elapsed unsigned
@@ -3266,7 +3266,7 @@ enum AgreementEventType {
   CREATED
   ISSUED // founder countersigned and sent
   DELIVERY_SENT // handed to WATI
-  DELIVERY_SKIPPED // WATI off / opted-out / no valid number — the founder must be told
+  DELIVERY_SKIPPED // WATI off / opted-out / no valid number - the founder must be told
   VIEWED
   OTP_SENT
   OTP_VERIFIED
@@ -3293,7 +3293,7 @@ model Agreement {
   enrollmentId String?
   enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
 
-  data       Json // frozen AgreementData — validated by agreementDataSchema, never re-joined
+  data       Json // frozen AgreementData - validated by agreementDataSchema, never re-joined
   dataSha256 String // canonical-JSON hash of (data + templateVersion)
 
   // Signing link. Same shape as UserInvite: only the SHA-256 lands in the database, so a leaked
@@ -3308,11 +3308,11 @@ model Agreement {
   founderSignaturePng Bytes?
   founderDevice       Json? // same shape as signerDevice, captured when the founder countersigns
 
-  signedAt            DateTime? // also the burn marker — never set twice
+  signedAt            DateTime? // also the burn marker - never set twice
   studentSignaturePng Bytes?
   // How the signature was physically made. Three parts, and the distinction is the whole point:
-  // what the browser CLAIMS about itself, how the strokes were actually drawn, and — the only
-  // half a disputing counterparty cannot rewrite — the IP and User-Agent our server OBSERVED.
+  // what the browser CLAIMS about itself, how the strokes were actually drawn, and - the only
+  // half a disputing counterparty cannot rewrite - the IP and User-Agent our server OBSERVED.
   // See src/lib/device.ts. Frozen by the seal trigger; printed on the certificate.
   signerDevice        Json?
   declinedAt          DateTime?
@@ -3346,7 +3346,7 @@ model Agreement {
   @@map("agreement")
 }
 
-// Append-only (DB trigger, see the agreements migration). No updatedAt — matches milestone_log,
+// Append-only (DB trigger, see the agreements migration). No updatedAt - matches milestone_log,
 // signal_change_log and the rest of the immutable-history tables.
 model AgreementEvent {
   id          String             @id @default(cuid())
@@ -3366,7 +3366,7 @@ model AgreementEvent {
 //
 // The double-entry general ledger. Finance and Cash Health are the *face*; this is
 // the *engine*. Every money figure on every screen must trace to a balanced entry
-// here — the UI never writes a balance directly (SPEC §10.1, principle 3).
+// here - the UI never writes a balance directly (SPEC §10.1, principle 3).
 //
 // WHY THE NAME `LedgerAccount` AND NOT `Account`: `Account` is Better Auth's OAuth /
 // credentials table (see `model Account`, @@map("account")). The chart of accounts is
@@ -3376,7 +3376,7 @@ model AgreementEvent {
 // transaction time; the entry balances in the BASE currency (INR paise). We never
 // re-derive history from today's rate. `baseDebitMinor`/`baseCreditMinor` are the
 // INR-equivalent at `fxRate`, and Σbase-debits = Σbase-credits is enforced by a
-// deferred constraint trigger at COMMIT — not just in application code.
+// deferred constraint trigger at COMMIT - not just in application code.
 
 enum LedgerAccountType {
   ASSET
@@ -3397,14 +3397,14 @@ enum JournalEntryStatus {
 }
 
 // Where an entry came from. `(sourceType, sourceId)` is unique, so a given Income row
-// can never be posted to the ledger twice — the guard against double-counting revenue.
+// can never be posted to the ledger twice - the guard against double-counting revenue.
 enum LedgerSourceType {
   INCOME
   EXPENSE
   MANUAL
   OPENING_BALANCE
   FX_REVALUATION
-  // Added so Payments-module money (currently disconnected from the ledger — see
+  // Added so Payments-module money (currently disconnected from the ledger - see
   // docs/BUILD_CHECKLIST.md §7) has somewhere to post to. Adding these values is additive
   // and safe: forbid_duplicate_live_source() keys off sourceType/sourceId generically and
   // needs no change (see migrations/20260710143908_ledger_source_guard).
@@ -3417,7 +3417,7 @@ enum LedgerSourceType {
 }
 
 // Chart of accounts, seeded for B2 in `prisma/chart-of-accounts.ts` (SPEC §10.1).
-// `code` is the stable key the posting engine resolves against — never the name,
+// `code` is the stable key the posting engine resolves against - never the name,
 // which the founder may reword.
 model LedgerAccount {
   id       String            @id @default(cuid())
@@ -3461,13 +3461,13 @@ model JournalEntry {
 
   lines JournalLine[]
 
-  // At most one *live* (POSTED) entry per source row — enforced by the
+  // At most one *live* (POSTED) entry per source row - enforced by the
   // `forbid_duplicate_live_source` trigger, not by a unique index.
   //
   // A plain UNIQUE(sourceType, sourceId) would be wrong: editing an Income voids its
   // entry and posts a restated one, and the voided original keeps its sourceId so the
   // trail stays traceable. The correct constraint is "unique among POSTED rows", i.e. a
-  // partial index — which Prisma cannot express and would try to DROP on the next
+  // partial index - which Prisma cannot express and would try to DROP on the next
   // `migrate dev`. Prisma does not manage triggers, so the guard lives there instead.
   @@index([sourceType, sourceId])
   @@index([date])
@@ -3505,7 +3505,7 @@ model JournalLine {
 // so a backdated edit can never silently restate a period Ameen has already read.
 model PeriodLock {
   id         String   @id @default(cuid())
-  // "YYYY-MM" in IST — the same key the Finance month picker uses.
+  // "YYYY-MM" in IST - the same key the Finance month picker uses.
   month      String   @unique
   lockedAt   DateTime @default(now())
   lockedById String?
@@ -3519,7 +3519,7 @@ model PeriodLock {
 //
 // `hash = sha256(prevHash || canonicalJson(payload))`, so altering or deleting any
 // historical row breaks every hash after it. `seq` gives the chain its order.
-// Append-only at the DB level too — see the migration's forbid_mutation() trigger.
+// Append-only at the DB level too - see the migration's forbid_mutation() trigger.
 model AuditEntry {
   seq        BigInt   @id @default(autoincrement())
   at         DateTime @default(now())
@@ -3537,20 +3537,20 @@ model AuditEntry {
   @@map("audit_entry")
 }
 
-// Who did what, when — every write in the app, in one place.
+// Who did what, when - every write in the app, in one place.
 //
 // Deliberately NOT AuditEntry: that chain exists to prove the finance history hasn't been
 // tampered with, and it pays for that with a global advisory lock per append plus an O(n)
 // verify the Ledger page runs on load. Feeding it a row per dial would serialise every
 // writer on one lock and make that verify walk grow forever. This table is the plain
-// counterpart — a row per action, written outside the caller's transaction, indexed for
+// counterpart - a row per action, written outside the caller's transaction, indexed for
 // the founder's filters. Finance keeps writing to BOTH: the chain for proof, this for the feed.
 //
 // Append-only by the same forbid_mutation() trigger the other history tables use: the record
 // of what Asma did at 3pm is worth nothing if it can be edited at 4pm.
 //
 // actorName/actorRole are denormalised on purpose. `actor` is SetNull on delete, so without
-// the copy, removing a user would silently blank their entire history — the one moment the
+// the copy, removing a user would silently blank their entire history - the one moment the
 // log matters most. The copy is what was true AT THE TIME, which is also the honest answer
 // when someone's role changes later.
 model ActivityLog {
@@ -3563,12 +3563,12 @@ model ActivityLog {
   actorRole  String
   // Dotted verb: "call.log", "lead.update", "finance.income.create".
   action     String
-  // Section key (sections.ts) — the founder's filter is "show me Pipeline", not "show me lead.*".
+  // Section key (sections.ts) - the founder's filter is "show me Pipeline", not "show me lead.*".
   section    String
   entityType String
   entityId   String
   // One human sentence, composed at the call site where the names are already loaded:
-  // "Logged a call with Priya Sharma — SPOKE". The feed reads it verbatim, so the founder
+  // "Logged a call with Priya Sharma - SPOKE". The feed reads it verbatim, so the founder
   // never has to decode an id.
   summary    String
   // Optional structured detail: { before, after, changed: [...] } for edits, free shape otherwise.
@@ -3583,8 +3583,8 @@ model ActivityLog {
 
 // ───────────────────────────── Resume Studio ─────────────────────────────
 // Founder-configurable CV builder. A Resume stores its structured content as JSON
-// (shape = ResumeData in src/lib/resume-types.ts); the founder's template — which
-// sections show, in what order, styling and the ATS rubric — lives in
+// (shape = ResumeData in src/lib/resume-types.ts); the founder's template - which
+// sections show, in what order, styling and the ATS rubric - lives in
 // AppSetting("resumeTemplateConfig"). Each Resume renders to DOCX and PDF, and can
 // be reviewed against a target JD by the Claude API (keys-off seam in lib/anthropic.ts);
 // each review is kept so the coach can re-run it as often as they like and compare.
@@ -3599,7 +3599,7 @@ model Resume {
   ownerName   String? // denormalised creator name for the list
   leadId      String? // optional soft link to a CRM lead/contact
   /// ER v2 `STUDENT ||--o{ CV` (Track H). A real FK, unlike ownerUserId/leadId which stay
-  /// soft references — a coach building a CV for a student needs it on the student's record,
+  /// soft references - a coach building a CV for a student needs it on the student's record,
   /// and "how many of our students have a CV" was previously unanswerable.
   studentId   String?
   student     Student?       @relation(fields: [studentId], references: [id], onDelete: SetNull)
@@ -3641,39 +3641,39 @@ model ResumeReview {
 // Disco confirmation → handoff to the Discovery Specialist → SSS confirmation.
 //
 // Design: the SOP is a HUMAN-EXECUTED process, so the engine's job is to say WHAT to send, to
-// WHOM, WHEN — not to send behind the specialist's back. Every step materialises as an
+// WHOM, WHEN - not to send behind the specialist's back. Every step materialises as an
 // OutreachStepLog row with a rendered body the specialist can read, copy and mark sent. Admin can
 // flip individual steps to auto-send (AppSetting "outreachConfig"); every step is manual by
 // default. See src/lib/outreach-sop.ts (templates) and src/lib/outreach-engine.ts (the ladder).
 
 /// One actionable SOP step. Each value is exactly one row per journey (see the @@unique on
-/// OutreachStepLog), which is what makes the ladder idempotent — re-running the engine can never
+/// OutreachStepLog), which is what makes the ladder idempotent - re-running the engine can never
 /// double-send. Step 16's two required call attempts are separate values for the same reason.
 enum OutreachStep {
-  INTRO_WHATSAPP // Step 3  — immediately after opt-in (target <5 min)
-  FIRST_CALL // Step 4  — call right after the intro message
-  CHECK_1 // Step 5  — wait 2h, then run the Step 10 booking check
-  FOLLOWUP_WHATSAPP // Step 6  — not booked at check 1
-  CHECK_2 // Step 7  — wait 1h, then re-run the booking check
-  FOLLOWUP_CALL // Step 8  — not booked at check 2
-  FINAL_CHECK // Step 9  — wait 2h; not booked → IGNORE
-  BANT_QUALIFICATION // Step 11 — score the booking against the New BANT model
-  KEY_METRICS_TRANSFER // Step 12 — transfer 6 fields + assign Touchpoint/Disco owners
-  DISCO_WELCOME // Step 13 — immediately on Qualified = YES/MAYBE
-  DISCO_CONFIRM_1 // Step 14 — at least 36h before the disco call
-  DISCO_CONFIRM_2 // Step 15 — at least 24h before, only if Step 14 got no reply
-  DISCO_CONFIRM_CALL_1 // Step 16 — first of two required call attempts
-  DISCO_CONFIRM_CALL_2 // Step 16 — second required call attempt
-  DISCO_CANCEL_MSG // Step 16 — at least 12h before, only after both calls failed
-  DISCO_CANCEL // Step 17/18 — cancel the calendar appointment, mark the row RED
-  SSS_CONFIRM_1 // Step 19 — at least 24h before the SSS call (carries the personalized video)
-  SSS_CONFIRM_2 // Step 20 — at least 12h before, only if Step 19 got no reply
-  SSS_CANCEL_MSG // Step 21 — at least 10h before, still unconfirmed
-  SSS_CANCEL // Step 22/23 — cancel the SSS appointment, mark the row RED
+  INTRO_WHATSAPP // Step 3  - immediately after opt-in (target <5 min)
+  FIRST_CALL // Step 4  - call right after the intro message
+  CHECK_1 // Step 5  - wait 2h, then run the Step 10 booking check
+  FOLLOWUP_WHATSAPP // Step 6  - not booked at check 1
+  CHECK_2 // Step 7  - wait 1h, then re-run the booking check
+  FOLLOWUP_CALL // Step 8  - not booked at check 2
+  FINAL_CHECK // Step 9  - wait 2h; not booked → IGNORE
+  BANT_QUALIFICATION // Step 11 - score the booking against the New BANT model
+  KEY_METRICS_TRANSFER // Step 12 - transfer 6 fields + assign Touchpoint/Disco owners
+  DISCO_WELCOME // Step 13 - immediately on Qualified = YES/MAYBE
+  DISCO_CONFIRM_1 // Step 14 - at least 36h before the disco call
+  DISCO_CONFIRM_2 // Step 15 - at least 24h before, only if Step 14 got no reply
+  DISCO_CONFIRM_CALL_1 // Step 16 - first of two required call attempts
+  DISCO_CONFIRM_CALL_2 // Step 16 - second required call attempt
+  DISCO_CANCEL_MSG // Step 16 - at least 12h before, only after both calls failed
+  DISCO_CANCEL // Step 17/18 - cancel the calendar appointment, mark the row RED
+  SSS_CONFIRM_1 // Step 19 - at least 24h before the SSS call (carries the personalized video)
+  SSS_CONFIRM_2 // Step 20 - at least 12h before, only if Step 19 got no reply
+  SSS_CANCEL_MSG // Step 21 - at least 10h before, still unconfirmed
+  SSS_CANCEL // Step 22/23 - cancel the SSS appointment, mark the row RED
 }
 
 /// Where a prospect sits in the SOP. Every branch in the SOP terminates in one of
-/// IGNORED / CANCELLED / CLOSED_NOT_HQ / COMPLETED — there are no dead ends (checklist §S).
+/// IGNORED / CANCELLED / CLOSED_NOT_HQ / COMPLETED - there are no dead ends (checklist §S).
 enum OutreachPhase {
   OPT_IN // Step 1–2: captured, not yet contacted
   BOOKING_CHASE // Steps 3–9: chasing the booking
@@ -3682,14 +3682,14 @@ enum OutreachPhase {
   AWAITING_DISCO // confirmed; the Discovery Specialist runs the call
   HANDOFF // Step 18: disco done, awaiting the Highly Qualified verdict
   SSS_CONFIRMATION // Steps 19–22: HQ = YES, chasing SSS confirmation
-  COMPLETED // SSS confirmed — the outreach process succeeded
-  IGNORED // Step 9: never booked. Dormant, NOT deleted — stays in records
+  COMPLETED // SSS confirmed - the outreach process succeeded
+  IGNORED // Step 9: never booked. Dormant, NOT deleted - stays in records
   CANCELLED // Step 17/22: appointment cancelled
-  CLOSED_NOT_HQ // Step 18: Highly Qualified = NO — the outreach process ends here
+  CLOSED_NOT_HQ // Step 18: Highly Qualified = NO - the outreach process ends here
 }
 
 /// The SOP's "Qualified" column. Derived from the BANT score by qualifiedFromBant(), which is the
-/// single source of truth (src/lib/outreach-sop.ts) — YES → Step 13, MAYBE → Step 13, NO → Step 17.
+/// single source of truth (src/lib/outreach-sop.ts) - YES → Step 13, MAYBE → Step 13, NO → Step 17.
 enum QualifiedVerdict {
   YES // Qualified
   MAYBE // Cannot judge
@@ -3698,7 +3698,7 @@ enum QualifiedVerdict {
 
 enum OutreachStepStatus {
   DUE // materialised and waiting on the specialist (or the auto-sender)
-  SENT // executed — renderedBody holds the exact text that went out
+  SENT // executed - renderedBody holds the exact text that went out
   SKIPPED // deliberately passed over (specialist chose to, or the branch closed)
   FAILED // auto-send attempted and the provider rejected it
   SUPERSEDED // overtaken by events (e.g. prospect confirmed before this reminder was due)
@@ -3710,7 +3710,7 @@ enum OutreachChannel {
   SYSTEM // internal checks (Step 5/7/9/10) and calendar actions (Step 17/22)
 }
 
-/// One prospect's walk through the SOP. Exactly one per Lead. Holds the SOP's own columns — the
+/// One prospect's walk through the SOP. Exactly one per Lead. Holds the SOP's own columns - the
 /// ones "Key Metrics Sales B2_2026.xlsx" carries and the CRM has no home for.
 model OutreachJourney {
   id        String          @id @default(cuid())
@@ -3728,41 +3728,41 @@ model OutreachJourney {
   // Step 2's "Time Contacted" column. Stored as a UTC instant, entered and displayed in IST.
   contactedAt DateTime?
 
-  // Step 11/12 — qualification. Auditable: who decided, when, and off which score (checklist §K).
+  // Step 11/12 - qualification. Auditable: who decided, when, and off which score (checklist §K).
   qualified       QualifiedVerdict?
   qualifiedAt     DateTime?
   qualifiedById   String?
   qualifiedBy     User?             @relation("OutreachQualifiedBy", fields: [qualifiedById], references: [id], onDelete: SetNull)
-  bantScoreAtQual Float? // the bantAvg the verdict was taken on — survives a later re-tune
+  bantScoreAtQual Float? // the bantAvg the verdict was taken on - survives a later re-tune
 
-  // Step 12 — the two Key Metrics assignment dropdowns.
+  // Step 12 - the two Key Metrics assignment dropdowns.
   respTouchpointId String?
   respTouchpoint   User?   @relation("OutreachRespTouchpoint", fields: [respTouchpointId], references: [id], onDelete: SetNull)
   respDiscoId      String?
   respDisco        User?   @relation("OutreachRespDisco", fields: [respDiscoId], references: [id], onDelete: SetNull)
 
-  // Step 14/15 — the Key Metrics "WhatsApp Sent" / "WhatsApp Confirmed" columns.
+  // Step 14/15 - the Key Metrics "WhatsApp Sent" / "WhatsApp Confirmed" columns.
   // sent flips on actual delivery, never on scheduling (checklist §N).
   whatsappSent        Boolean   @default(false)
   whatsappSentAt      DateTime?
   whatsappConfirmed   Boolean   @default(false)
   whatsappConfirmedAt DateTime?
 
-  // Step 19/20 — the Key Metrics "Sales Call Confirmed" column.
+  // Step 19/20 - the Key Metrics "Sales Call Confirmed" column.
   salesCallConfirmed   Boolean   @default(false)
   salesCallConfirmedAt DateTime?
 
-  // Step 18 — written by the Discovery Specialist only (enforced in outreach-actions.ts).
+  // Step 18 - written by the Discovery Specialist only (enforced in outreach-actions.ts).
   highlyQualified   Boolean?
   highlyQualifiedAt DateTime?
 
-  // Step 19 — the SSS appointment instant (UTC), set when the Discovery Specialist books it.
+  // Step 19 - the SSS appointment instant (UTC), set when the Discovery Specialist books it.
   sssAt DateTime?
 
-  // Cross-cutting — the Zoom link pulled from the Discovery Specialist's calendar (§R).
+  // Cross-cutting - the Zoom link pulled from the Discovery Specialist's calendar (§R).
   zoomLink String?
 
-  // Steps 16/18/21/23 — the "mark the row RED" flag. A presentation flag on its own field so it
+  // Steps 16/18/21/23 - the "mark the row RED" flag. A presentation flag on its own field so it
   // can never silently overwrite a status column (checklist §N).
   redFlag       Boolean @default(false)
   redFlagReason String?
@@ -3809,7 +3809,7 @@ model OutreachStepLog {
   actedById String?
   actedBy   User?   @relation("OutreachStepActedBy", fields: [actedById], references: [id], onDelete: SetNull)
 
-  /// The exact message text that went out, variables already resolved. This is the audit record —
+  /// The exact message text that went out, variables already resolved. This is the audit record -
   /// re-rendering later could differ if a template is edited, so we keep what was actually sent.
   renderedBody String?
 
@@ -3833,11 +3833,11 @@ model OutreachStepLog {
 ///
 /// The gate lives in the intake path, not here: `submitBooking` refuses to persist a Lead,
 /// a BookingRequest or anything else until the prospect ticks the box, so a person who
-/// declines leaves NO row behind — including no row in this table. A ConsentRecord therefore
+/// declines leaves NO row behind - including no row in this table. A ConsentRecord therefore
 /// only ever exists alongside the Lead it authorised, which is why `leadId` is required.
 ///
 /// Recorded per spec: region (best-effort, from the form), timestamp, and the storage flag
-/// (`granted`). `revokedAt` is the withdrawal half — GDPR consent is retractable, and a
+/// (`granted`). `revokedAt` is the withdrawal half - GDPR consent is retractable, and a
 /// withdrawal has to be provable after the fact, so it is stamped rather than deleted.
 ///
 /// Distinct from WhatsAppOptOut, which is a post-hoc "stop messaging me" on a lead we already
@@ -3850,7 +3850,7 @@ model ConsentRecord {
   /// The storage flag. A row is only written on a grant, so this is true in practice; it stays
   /// explicit so a future "declined but told us why" flow has somewhere honest to sit.
   granted       Boolean @default(true)
-  /// What they agreed to, in the words shown on the form — the wording is the evidence.
+  /// What they agreed to, in the words shown on the form - the wording is the evidence.
   purpose       String
   /// Version of the privacy wording in force when they agreed, so a later policy change can
   /// never be mistaken for what THIS person consented to.
@@ -3860,7 +3860,7 @@ model ConsentRecord {
   region        String?
   source        Source  @default(BOOKING_FORM)
 
-  /// Observed at grant time — the same pair the agreement e-sign trail captures.
+  /// Observed at grant time - the same pair the agreement e-sign trail captures.
   ipAddress String?
   userAgent String?
 
@@ -3880,7 +3880,7 @@ enum ThemePreference {
 }
 
 /// Which timetable a joiner can actually attend (spec Part 2 §2.1: batches are keyed to the
-/// student's chosen date/time). EITHER is the useful default — most people say "whatever
+/// student's chosen date/time). EITHER is the useful default - most people say "whatever
 /// opens first", and pretending otherwise would strand them in the pool.
 enum GnSlotPreference {
   WEEKDAY
@@ -3891,7 +3891,7 @@ enum GnSlotPreference {
 /// The pending pool (spec Part 2 §2.2: "Hold unassigned single joiners in a pending pool
 /// until a batch can be opened").
 ///
-/// THE POINT: a workshop that yields one joiner must NOT open a batch — the founders wait
+/// THE POINT: a workshop that yields one joiner must NOT open a batch - the founders wait
 /// for the next workshop to accumulate enough people. That is why some workshops show no
 /// batch assigned, and why batch numbers legitimately have gaps (§2.1). Without somewhere to
 /// park that person they are simply forgotten, which is the manual process's actual failure.
@@ -3963,18 +3963,18 @@ enum BookOrderStatus {
 }
 
 /// A physical book order for ONE level (spec §19.3: "BOOK_ORDER re-pointed to per-level
-/// quotations: A1 first, fresh quote for A2"). Per level, not per contract — the founders
+/// quotations: A1 first, fresh quote for A2"). Per level, not per contract - the founders
 /// deliberately re-quote before each level rather than ordering a 3-level set up front.
 ///
 /// Ordering trigger (Part 2 §4.4): a big up-front payment orders immediately; an EMI student
-/// defers until they've paid enough. The threshold is config, not a constant here — the
+/// defers until they've paid enough. The threshold is config, not a constant here - the
 /// spec's ₹30,000 is an example the founders gave, and §18.3 lists the precise figure as
 /// still open.
 model BookOrder {
   id        String       @id @default(cuid())
   studentId String
   student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  /// ER v2 `ENROLLMENT ||--o{ BOOK_ORDER` (Track E, decision D6). ADDITIVE — `studentId`
+  /// ER v2 `ENROLLMENT ||--o{ BOOK_ORDER` (Track E, decision D6). ADDITIVE - `studentId`
   /// stays and remains required. For a student on three German levels, "which level were
   /// these books for" was previously inferred from `level` alone; this makes it a link.
   /// Nullable because existing rows have no enrollment to point at, and the backfill leaves
@@ -3985,12 +3985,12 @@ model BookOrder {
   vendorId  String?
   vendor    Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
 
-  /// Human-quotable reference, e.g. `BO-2026-0087` — the `{{order_ref}}` the approved WATI
+  /// Human-quotable reference, e.g. `BO-2026-0087` - the `{{order_ref}}` the approved WATI
   /// template sends to the publisher, and what the publisher quotes back at us. Deliberately not
   /// the cuid: a vendor has to be able to read it down a phone line.
   ///
   /// Nullable because rows created before this existed have none. It is allocated lazily on the
-  /// first publisher message, so an order only takes a number once it is actually ordered —
+  /// first publisher message, so an order only takes a number once it is actually ordered -
   /// nothing burns a sequence number by being opened and cancelled.
   orderRef String? @unique
 
@@ -4006,7 +4006,7 @@ model BookOrder {
   shipToPhone   String?
   courierRef    String?
 
-  /// Why we're holding — surfaced to the team so DEFERRED never reads as "forgotten".
+  /// Why we're holding - surfaced to the team so DEFERRED never reads as "forgotten".
   deferReason String?
   notes       String?
 
@@ -4015,7 +4015,7 @@ model BookOrder {
   paidAt      DateTime?
   courieredAt DateTime?
 
-  /// Publisher messages sent about this order — what makes "have we actually told them?"
+  /// Publisher messages sent about this order - what makes "have we actually told them?"
   /// answerable on the row instead of by trawling the WhatsApp log by phone number.
   messages WhatsAppMessage[]
 
@@ -4030,7 +4030,7 @@ model BookOrder {
   @@map("book_order")
 }
 
-// ═══════════════════ ER v2 Track C — Tutor fees as a record ═══════════════════
+// ═══════════════════ ER v2 Track C - Tutor fees as a record ═══════════════════
 //
 // The RULE already existed and was tested (`lib/tutor-fee.ts`: rate = students >= 5 ? ₹7,000
 // : ₹8,000, per level, per head). What did not exist was the RECORD, so "what did this
@@ -4040,7 +4040,7 @@ model BookOrder {
 
 enum TutorFeeStatus {
   DRAFT // recomputed freely; a headcount change updates it in place
-  APPROVED // founder signed off — frozen, and optionally accrued to the ledger
+  APPROVED // founder signed off - frozen, and optionally accrued to the ledger
   PAID
   CANCELLED
 }
@@ -4056,14 +4056,14 @@ model TutorFee {
   level     String // Level.code, snapshotted off the batch at compute time
 
   /// SNAPSHOTS, not joins. A student joining next month must not silently re-price a fee the
-  /// founder has already approved — the same reason Agreement.data and BookOrder.shipToAddress
+  /// founder has already approved - the same reason Agreement.data and BookOrder.shipToAddress
   /// are frozen. `headcount` is also the evidence for WHY the ₹7,000 vs ₹8,000 band applied.
   headcount           Int
   ratePerHeadInrMinor BigInt
   amountInrMinor      BigInt
 
   /// Founder override for a genuine exception. Null = use `amountInrMinor`. A reason is
-  /// required by the action when this is set — an unexplained override is indistinguishable
+  /// required by the action when this is set - an unexplained override is indistinguishable
   /// from a typo six months later.
   overrideAmountInrMinor BigInt?
   overrideReason         String?
@@ -4087,10 +4087,10 @@ model TutorFee {
   @@map("tutor_fee")
 }
 
-// ═════════════ ER v2 Track D — Configurable qualification questions ═════════════
+// ═════════════ ER v2 Track D - Configurable qualification questions ═════════════
 //
 // Was: 18 hardcoded columns on BookingRequest with the weights buried in lib/bant.ts, so the
-// founders could not add, remove or reweight a question without shipping a migration — even
+// founders could not add, remove or reweight a question without shipping a migration - even
 // though the resulting BANT verdict decides who gets called.
 //
 // D5 was answered VERSIONED. A question's wording and scoring are the evidence for why a
@@ -4122,10 +4122,10 @@ model QualificationQuestion {
   key     String
   version Int    @default(1)
 
-  text     String // the wording shown on the form — this IS the evidence
+  text     String // the wording shown on the form - this IS the evidence
   helpText String?
   kind     QuestionKind  @default(SELECT)
-  /// [{ value, label, score }] — score is the 0–5 weighted layer the BANT average is taken
+  /// [{ value, label, score }] - score is the 0–5 weighted layer the BANT average is taken
   /// over. Null for free-text kinds, which score nothing.
   options  Json?
   /// ── INBOUND MAPPING ─────────────────────────────────────────────────────────────────
@@ -4134,8 +4134,8 @@ model QualificationQuestion {
   /// wording, and both change whenever marketing rewrites the page.
   ///
   /// DELIBERATELY NOT INSIDE `options`. The `qualification_question_version_guard` trigger
-  /// treats `options` as immutable once answered — it is the evidence for a verdict already
-  /// acted on — so an alias stored there could only be added by spawning a new question
+  /// treats `options` as immutable once answered - it is the evidence for a verdict already
+  /// acted on - so an alias stored there could only be added by spawning a new question
   /// version. But recognising that the page now says "Right away" for an option that already
   /// meant `immediately` changes nothing about what was asked or what it scored; it is a
   /// parsing rule, not evidence. Keeping the two apart is what lets a mapping be fixed in place
@@ -4152,7 +4152,7 @@ model QualificationQuestion {
   weight    Int           @default(1)
   required  Boolean       @default(false)
   orderIndex Int          @default(0)
-  /// Config tables retire, they do not delete — history points at them.
+  /// Config tables retire, they do not delete - history points at them.
   active    Boolean       @default(true)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
@@ -4172,7 +4172,7 @@ model LeadAnswer {
   /// booking form (a call, an import) still has a home.
   bookingRequestId String?
   bookingRequest   BookingRequest? @relation(fields: [bookingRequestId], references: [id], onDelete: Cascade)
-  /// Points at a specific (key, version) — pinning WHICH wording was answered.
+  /// Points at a specific (key, version) - pinning WHICH wording was answered.
   questionId String
   question   QualificationQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
 
@@ -4188,17 +4188,17 @@ model LeadAnswer {
   @@map("lead_answer")
 }
 
-// ═════════ ER v2 Track F — Marketing source (campaign-level attribution) ═════════
+// ═════════ ER v2 Track F - Marketing source (campaign-level attribution) ═════════
 //
 // `LeadSource` is the CHANNEL taxonomy and stays exactly as it is. This adds the campaign
 // beneath it, so "what did this campaign cost us per enrolled student" becomes answerable.
-// `INSIGHT` is deliberately NOT a model — see server/insights-metrics.ts; it is a division.
+// `INSIGHT` is deliberately NOT a model - see server/insights-metrics.ts; it is a division.
 
 model MarketingSource {
   id          String     @id @default(cuid())
   channel     LeadSource
   campaign    String
-  /// Meta campaign id / UTM campaign value — the join key for imported spend.
+  /// Meta campaign id / UTM campaign value - the join key for imported spend.
   externalRef String?
   /// Which business this campaign sells. Null = both / unknown.
   line        BatchLine?
@@ -4215,7 +4215,7 @@ model MarketingSource {
   @@map("marketing_source")
 }
 
-// ═════════════ ER v2 Track H — Job descriptions + CV linkage ═════════════
+// ═════════════ ER v2 Track H - Job descriptions + CV linkage ═════════════
 
 model JobDescription {
   id       String  @id @default(cuid())
@@ -4237,10 +4237,10 @@ model JobDescription {
   @@map("job_description")
 }
 
-// ═════════════ ER v2 Track I — Per-program milestones ═════════════
+// ═════════════ ER v2 Track I - Per-program milestones ═════════════
 //
 // The `Milestone` enum stays as the stable key and `MilestoneLog` stays as the append-only
-// audit trail — nothing here weakens either. What this adds is the diagram's `target_day`,
+// audit trail - nothing here weakens either. What this adds is the diagram's `target_day`,
 // per program level, so the at-risk radar has a real deadline instead of a vibe.
 
 enum MilestoneProgressStatus {
@@ -4251,7 +4251,7 @@ enum MilestoneProgressStatus {
 
 model ProgramMilestone {
   id        String    @id @default(cuid())
-  levelCode String // Level.code — per program, as the diagram asks
+  levelCode String // Level.code - per program, as the diagram asks
   key       Milestone // reuse the shipped 7-value enum rather than inventing a parallel one
   name      String
   targetDay Int // day-N of the 90/120-day tracker

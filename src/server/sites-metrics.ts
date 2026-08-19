@@ -13,7 +13,7 @@ import {
  * Reads for the website editor and the public renderer.
  *
  * Every path that touches stored JSON runs it through the normalisers on the way out, so a page
- * saved before a field existed renders identically to one saved after — and neither the editor nor
+ * saved before a field existed renders identically to one saved after - and neither the editor nor
  * the public route ever sees a raw column.
  */
 
@@ -194,7 +194,7 @@ export async function getPageDetail(pageId: string): Promise<PageDetail | null> 
   };
 }
 
-/** The sections stored on one revision — fetched only when the user previews or restores it. */
+/** The sections stored on one revision - fetched only when the user previews or restores it. */
 export async function getRevisionSections(revisionId: string): Promise<SiteSectionBlock[] | null> {
   const rev = await prisma.sitePageRevision.findUnique({
     where: { id: revisionId },
@@ -224,7 +224,7 @@ export type PublicPage = {
 /**
  * Resolve a public page by site slug and path.
  *
- * Both the site AND the page must be published — an unpublished page on a live site must not be
+ * Both the site AND the page must be published - an unpublished page on a live site must not be
  * reachable by guessing its path, and unpublishing a whole site must take every page with it.
  */
 export async function getPublicPage(siteSlug: string, path: string): Promise<PublicPage | null> {
@@ -266,7 +266,7 @@ export async function getPublicPage(siteSlug: string, path: string): Promise<Pub
   };
 }
 
-/** Every published path on a site — for the sitemap. */
+/** Every published path on a site - for the sitemap. */
 export async function getPublishedPaths(siteSlug: string): Promise<string[]> {
   const rows = await prisma.sitePage.findMany({
     where: { site: { slug: siteSlug, published: true }, published: true, deletedAt: null, noIndex: false },
@@ -279,7 +279,7 @@ export async function getPublishedPaths(siteSlug: string): Promise<string[]> {
  * Every published (site, path) pair, for `generateStaticParams`.
  *
  * Prerendering these at build time is what makes the route STATIC rather than server-rendered on
- * demand — and that is the difference between a page a CDN can cache and one that emits
+ * demand - and that is the difference between a page a CDN can cache and one that emits
  * `Cache-Control: no-store` and hits a database 680 ms away on every single ad click.
  *
  * Returns [] rather than throwing if the database is unreachable at build time. A marketing page
@@ -293,7 +293,7 @@ export async function getAllPublishedPageParams(): Promise<{ slug: string; path?
     });
     return rows.map((r) => ({
       slug: r.site.slug,
-      // "/" has no segments at all — the optional catch-all matches it with `path` absent, and
+      // "/" has no segments at all - the optional catch-all matches it with `path` absent, and
       // passing [""] would prerender "/s/<slug>/" instead, which is a different URL.
       path: r.path === "/" ? undefined : r.path.replace(/^\//, "").split("/"),
     }));

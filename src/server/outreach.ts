@@ -25,13 +25,13 @@ import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import { advanceLeadStage } from "./lead-stage-auto";
 
 /**
- * Outreach SOP — the DB shell around `lib/outreach-engine.ts`.
+ * Outreach SOP - the DB shell around `lib/outreach-engine.ts`.
  *
  * All the decisions live in the pure engine; this file only reads state, writes what the engine
  * decided, and (optionally) hands a rendered message to the WATI layer. Keeping the split strict
  * is what lets the SOP's timing rules be tested at their boundaries without a database.
  *
- * The engine has no autonomous clock — `runDueOutreach()` is the scheduler seam, same stance as
+ * The engine has no autonomous clock - `runDueOutreach()` is the scheduler seam, same stance as
  * the existing WhatsApp reminder engine (see /api/cron/outreach).
  */
 
@@ -59,7 +59,7 @@ export async function writeOutreachConfig(cfg: OutreachConfig): Promise<void> {
  * Step 1 → the journey exists. Called from every intake path.
  *
  * Idempotent by the leadId unique: a webhook redelivery or a second capture for the same human
- * links to the existing journey rather than restarting their SOP clock. That matters — restarting
+ * links to the existing journey rather than restarting their SOP clock. That matters - restarting
  * it would re-open a chase against someone already deep in the disco ladder.
  */
 export async function ensureJourney(leadId: string, optInAt?: Date) {
@@ -74,7 +74,7 @@ export async function ensureJourney(leadId: string, optInAt?: Date) {
       data: { leadId, optInAt: optInAt ?? lead.createdAt },
     });
   } catch {
-    // Lost a race with a concurrent capture — the other writer's row is just as good.
+    // Lost a race with a concurrent capture - the other writer's row is just as good.
     return prisma.outreachJourney.findUnique({ where: { leadId } });
   }
 }
@@ -82,7 +82,7 @@ export async function ensureJourney(leadId: string, optInAt?: Date) {
 const JOURNEY_INCLUDE = {
   steps: true,
   // `bantAvg`/`bantSource` ride along so Step 11 can score a prospect who answered the band-score
-  // questions on the LANDING PAGE rather than on our booking form — see `bantForQualification`.
+  // questions on the LANDING PAGE rather than on our booking form - see `bantForQualification`.
   lead: {
     select: { id: true, name: true, phone: true, email: true, bantAvg: true, bantSource: true },
   },
@@ -105,7 +105,7 @@ export async function getJourney(journeyId: string): Promise<JourneyRow | null> 
  *
  * Falling back to the lead is the whole point of scoring at opt-in. Before it, this verdict was
  * reachable ONLY through a `BookingRequest`, so a prospect who answered every qualification
- * question on the landing page still arrived at the discovery specialist unqualified — the
+ * question on the landing page still arrived at the discovery specialist unqualified - the
  * engine had a score sitting one join away and no way to read it.
  */
 export function bantForQualification(
@@ -140,7 +140,7 @@ export function projectJourney(row: JourneyRow): JourneyState {
 // ─────────────────────────────── Step 10: the booking cross-check ───────────────────────────────
 
 /**
- * Step 10 — "is the personalized discovery call booked?"
+ * Step 10 - "is the personalized discovery call booked?"
  *
  * The SOP does this by copying the email out of one sheet and Ctrl+F-ing the other. We do the same
  * comparison, but case- and whitespace-insensitively, which is strictly more reliable than the
@@ -148,7 +148,7 @@ export function projectJourney(row: JourneyRow): JourneyState {
  *
  * Phone is a fallback, not a peer: a prospect can book with a different email than they opted in
  * with, and phone is the identity the WhatsApp conversation actually runs on. It is normalized
- * through libphonenumber so `+91 98765 43210` and `919876543210` match — the exact-string compare
+ * through libphonenumber so `+91 98765 43210` and `919876543210` match - the exact-string compare
  * this app used before would call those two different people.
  *
  * Returns the booking, or null. Never guesses.
@@ -218,7 +218,7 @@ export async function runBookingCheck(journeyId: string): Promise<boolean> {
 /**
  * Render one step's message for one prospect, and report anything left unresolved.
  *
- * `[DATE]`/`[TIME]` render in IST because these messages go to the prospect, who is in India — the
+ * `[DATE]`/`[TIME]` render in IST because these messages go to the prospect, who is in India - the
  * SOP's Step 13 says so outright ("on *[DATE]* at *[TIME]* IST"). CET is the internal Key Metrics
  * view's concern, not the prospect's (see outreach-metrics.ts).
  */
@@ -247,7 +247,7 @@ export function renderStep(
   if (row.zoomLink) vars["<<INSERT ZOOM LINK HERE>>"] = row.zoomLink;
 
   const body = renderOutreachTemplate(def.body, vars);
-  // The video placeholder is an instruction to the human, not a variable — it is expected to
+  // The video placeholder is an instruction to the human, not a variable - it is expected to
   // survive rendering, so it never counts as "unresolved".
   const unresolved = unresolvedVars(body).filter((v) => v !== "<< ATTACH VIDEO TO THIS MESSAGE>>");
   return { body, unresolved };
@@ -274,7 +274,7 @@ export type OutreachRun = {
 };
 
 /**
- * One pass of the SOP engine. Idempotent — run it as often as the cron fires.
+ * One pass of the SOP engine. Idempotent - run it as often as the cron fires.
  *
  * Order matters: run the Step 10 booking checks BEFORE planning, so a prospect who booked since
  * the last tick has `booked = true` when the ladder is computed and their chase stops in the same
@@ -302,7 +302,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
 
   /**
    * The recency floor. Without it this matched every non-terminal journey ever created, and
-   * `updatedAt asc` below started at the oldest — so arming the engine replayed the SOP across
+   * `updatedAt asc` below started at the oldest - so arming the engine replayed the SOP across
    * the entire historical import. See `OutreachConfig.maxAgeDays`.
    */
   const oldestOptIn = new Date(Date.now() - cfg.maxAgeDays * 24 * 60 * 60 * 1000);
@@ -333,7 +333,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
         dueAt: { lte: now },
       },
     });
-    // runBookingCheck reports "is it booked", not "did I link it just now" — it returns true
+    // runBookingCheck reports "is it booked", not "did I link it just now" - it returns true
     // forever once the link exists. Tracking it here keeps CHECK_2 and FINAL_CHECK from each
     // re-announcing a booking CHECK_1 already found.
     let linked = bookingId !== null;
@@ -351,7 +351,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
           section: "outreach",
           entityType: "OutreachJourney",
           entityId: id,
-          summary: `Matched ${lead.name} to their booked discovery call — ${STEP_BY_KEY[check.step].label}`,
+          summary: `Matched ${lead.name} to their booked discovery call - ${STEP_BY_KEY[check.step].label}`,
           meta: { step: check.step },
         });
       }
@@ -363,14 +363,14 @@ export async function runDueOutreach(): Promise<OutreachRun> {
     // ── Auto-derive the Qualified verdict from BANT (Step 11). The verdict is a pure function of
     // the score, so the engine can take it; a human can still override it in the UI.
     //
-    // The score may now come from the LEAD as well as the booking — a prospect who answered the
+    // The score may now come from the LEAD as well as the booking - a prospect who answered the
     // band-score questions on the landing page carries one from opt-in. That closes a real hole:
     // a booking matched by Step 10's cross-check rather than created by our own /book form has no
     // `bantAvg` of its own, so Step 11 could never fire for it and the prospect reached the
     // discovery specialist unqualified despite having answered every question.
     //
     // Still gated on `bookingId`. Qualified is the SOP's Step 11 verdict and it drives the Step
-    // 13/17 messaging ladder, all of which is gated on `booked` in the pure engine — recording a
+    // 13/17 messaging ladder, all of which is gated on `booked` in the pure engine - recording a
     // verdict for someone still being chased for a booking would put the two out of step.
     const scored = row.qualified === null ? bantForQualification(row) : null;
     if (row.bookingId && scored) {
@@ -407,7 +407,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
         });
         run.materialised++;
       } catch {
-        // @@unique([journeyId, step]) — another run beat us to it. Exactly the intended outcome.
+        // @@unique([journeyId, step]) - another run beat us to it. Exactly the intended outcome.
       }
     }
 
@@ -432,14 +432,14 @@ export async function runDueOutreach(): Promise<OutreachRun> {
       run.phaseChanges++;
       // Only the give-up goes on the feed. The other transitions restate something the feed
       // already carries (a step sent, a booking matched), whereas this one is the engine
-      // deciding on its own that a prospect is dormant — and nobody else will say so.
+      // deciding on its own that a prospect is dormant - and nobody else will say so.
       if (plan.phase === "IGNORED") {
         await logSystemActivity(SYSTEM_ACTORS.outreach, {
           action: "outreach.journey.ignore",
           section: "outreach",
           entityType: "OutreachJourney",
           entityId: id,
-          summary: `Marked ${fresh.lead.name} dormant — no response through the follow-up ladder`,
+          summary: `Marked ${fresh.lead.name} dormant - no response through the follow-up ladder`,
           meta: { from: fresh.phase },
         });
       }
@@ -460,7 +460,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
  *
  * Every gate here fails closed and leaves the row DUE for a human rather than sending something
  * wrong: not opted in, not a WhatsApp step, not yet due, unresolved variables, no valid number, or
- * no WATI template mapped for the touchpoint. A DUE row is a safe resting state — the specialist
+ * no WATI template mapped for the touchpoint. A DUE row is a safe resting state - the specialist
  * sees it in the queue and sends it themselves.
  */
 async function autoSendDue(
@@ -488,11 +488,11 @@ async function autoSendDue(
 
     if (unresolved.length) {
       // Checklist: "no unresolved placeholders reaching the send step". Leave it for a human.
-      out.notes.push(`${row.lead.name} · ${s.step}: needs ${unresolved.join(", ")} — left for manual send.`);
+      out.notes.push(`${row.lead.name} · ${s.step}: needs ${unresolved.join(", ")} - left for manual send.`);
       continue;
     }
 
-    if (!mapToWhatsAppKind(s.step)) continue; // not a WhatsApp step — nothing to auto-send
+    if (!mapToWhatsAppKind(s.step)) continue; // not a WhatsApp step - nothing to auto-send
 
     // Shared with the instant-intro path. See `sopWhatsAppSend` for why this is one function.
     const res = await sopWhatsAppSend(row, s.step, specialist, body);
@@ -500,7 +500,7 @@ async function autoSendDue(
     if (res.sent) {
       await markSent(s.id, body, null, res.messageId);
       out.ok++;
-      // Only a real send lands here — every gate above leaves the row DUE for a human, and a
+      // Only a real send lands here - every gate above leaves the row DUE for a human, and a
       // feed claiming a message that never left the building is worse than no feed at all.
       const def = STEP_BY_KEY[s.step];
       await logSystemActivity(SYSTEM_ACTORS.outreach, {
@@ -508,13 +508,13 @@ async function autoSendDue(
         section: "outreach",
         entityType: "OutreachJourney",
         entityId: row.id,
-        summary: `Sent ${row.lead.name} ${def.sopStep} — ${def.label}`,
+        summary: `Sent ${row.lead.name} ${def.sopStep} - ${def.label}`,
         meta: { step: s.step, sopStep: def.sopStep, messageId: res.messageId },
       });
     } else {
-      // Not a failure of the SOP — usually the WATI layer being off or the touchpoint unmapped.
+      // Not a failure of the SOP - usually the WATI layer being off or the touchpoint unmapped.
       // Leave the row DUE so the specialist sends it by hand; that is the designed fallback.
-      out.notes.push(`${row.lead.name} · ${s.step}: ${res.error ?? "send skipped"} — left for manual send.`);
+      out.notes.push(`${row.lead.name} · ${s.step}: ${res.error ?? "send skipped"} - left for manual send.`);
       if (res.status === "FAILED") out.failed++;
     }
   }
@@ -528,11 +528,11 @@ async function autoSendDue(
  * Extracted from `autoSendDue` so the INSTANT intro path (`outreach-instant.ts`) sends through
  * exactly the same call rather than assembling its own. The variable pool, the audit body, the
  * null `sentById` convention and `logSkips: false` are all load-bearing details that would drift
- * the moment there were two copies of them — and drifting here means sending a prospect the wrong
+ * the moment there were two copies of them - and drifting here means sending a prospect the wrong
  * template, which no type would catch.
  *
  * Returns the raw send outcome; the caller decides what to do with a skip. It never marks the step
- * SENT — that stays the caller's job, because only the caller knows which step row it holds.
+ * SENT - that stays the caller's job, because only the caller knows which step row it holds.
  */
 export async function sopWhatsAppSend(
   row: JourneyRow,
@@ -558,7 +558,7 @@ export async function sopWhatsAppSend(
  * and delivery log rather than growing a second one.
  *
  * STRICTLY 1:1, and that matters. The app binds exactly ONE WATI template per kind, so pointing
- * two SOP steps at one kind would send the intro's text where the follow-up's belonged — a silent
+ * two SOP steps at one kind would send the intro's text where the follow-up's belonged - a silent
  * wrong-message bug that no type would catch. Nine SOP messages, nine kinds, nine templates.
  */
 const STEP_TO_KIND = {
@@ -622,8 +622,8 @@ export async function markSent(
   /**
    * The board's "WhatsApp Sent" column IS this step.
    *
-   * Advancing here rather than at the three call sites — the cron auto-sender, the instant intro
-   * at capture, and the specialist's manual "Mark sent" — means every route that can send the
+   * Advancing here rather than at the three call sites - the cron auto-sender, the instant intro
+   * at capture, and the specialist's manual "Mark sent" - means every route that can send the
    * intro moves the card, and no future fourth route can forget to. Only from NEW_LEAD: a lead
    * further along has overtaken this signal (see `advanceLeadStage`).
    *
@@ -637,7 +637,7 @@ export async function markSent(
 }
 
 /**
- * Re-plan a single journey right now — used after a human action so the next step appears
+ * Re-plan a single journey right now - used after a human action so the next step appears
  * immediately instead of waiting for the cron tick. Same engine, same idempotency.
  */
 export async function refreshJourney(journeyId: string): Promise<void> {
@@ -654,7 +654,7 @@ export async function refreshJourney(journeyId: string): Promise<void> {
         data: { journeyId, step: m.step, dueAt: m.dueAt, channel: STEP_BY_KEY[m.step].channel },
       });
     } catch {
-      /* unique — already there */
+      /* unique - already there */
     }
   }
   if (plan.supersede.length) {

@@ -1,7 +1,7 @@
 /**
  * The consent wording, in one place (spec §15: GDPR, Germany + India).
  *
- * The text shown to the prospect and the text stored as evidence MUST be the same string —
+ * The text shown to the prospect and the text stored as evidence MUST be the same string -
  * if they drift, the ConsentRecord stops being proof of anything. So the public form renders
  * CONSENT_LABEL and `submitBooking` stores it verbatim as ConsentRecord.purpose.
  *
@@ -16,5 +16,5 @@ export const CONSENT_POLICY_VERSION = "2026-07-17";
 export const CONSENT_LABEL =
   "I agree that B2 Consultants may store the details I've entered here and contact me about my discovery call.";
 
-/** The value the checkbox posts. Absence — an unticked box posts nothing — must read as refusal. */
+/** The value the checkbox posts. Absence - an unticked box posts nothing - must read as refusal. */
 export const CONSENT_VALUE = "yes";

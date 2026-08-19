@@ -6,14 +6,14 @@
  * A delete stamps `deletedAt`/`deletedById`; active list/count reads spread
  * `ACTIVE` into their `where`; the per-section "Archived" tab reads with
  * `ARCHIVED`. We filter explicitly per query (no Prisma middleware / `$extends`)
- * to match the house style — the same pattern the Automation/Workflow feature
+ * to match the house style - the same pattern the Automation/Workflow feature
  * already uses (`src/server/automation-metrics.ts`).
  */
 
 /** Spread into an active list/count/dropdown `where` to exclude archived rows. */
 export const ACTIVE = { deletedAt: null } as const;
 
-/** `where` for the Archived tab and the retention sweep — archived rows only. */
+/** `where` for the Archived tab and the retention sweep - archived rows only. */
 export const ARCHIVED = { deletedAt: { not: null } } as const;
 
 /** `data` payload that archives (soft-deletes) a row, recording who did it. */

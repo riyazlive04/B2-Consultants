@@ -4,7 +4,7 @@ import { SECTION_TEMPLATES, groupedTemplates, templateByKey } from "../site-temp
 import { normaliseSections } from "../site-types";
 
 describe("section templates", () => {
-  test("keys are unique — the picker addresses templates by key", () => {
+  test("keys are unique - the picker addresses templates by key", () => {
     const keys = SECTION_TEMPLATES.map((t) => t.key);
     assert.equal(new Set(keys).size, keys.length);
   });
@@ -31,7 +31,7 @@ describe("section templates", () => {
         assert.equal(round.columns[ci].length, col.length, `${t.key}: column ${ci} block count`);
         col.forEach((b, bi) => {
           const r = round.columns[ci][bi];
-          // Only the keys the template actually set — the rest are legitimately undefined.
+          // Only the keys the template actually set - the rest are legitimately undefined.
           for (const k of Object.keys(b) as (keyof typeof b)[]) {
             assert.deepEqual(r[k], b[k], `${t.key}: block ${b.id} lost "${String(k)}"`);
           }

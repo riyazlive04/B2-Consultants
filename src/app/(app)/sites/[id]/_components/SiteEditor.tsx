@@ -154,7 +154,7 @@ export default function SiteEditor({ site, canManage }: { site: SiteDetail; canM
                 Add page
               </Btn>
               <Hint>
-                The path is reproduced exactly — enter <span className="font-mono">/aboutus</span>, not
+                The path is reproduced exactly - enter <span className="font-mono">/aboutus</span>, not
                 “About Us”, if that is the live URL you are matching.
               </Hint>
             </div>
@@ -165,7 +165,7 @@ export default function SiteEditor({ site, canManage }: { site: SiteDetail; canM
       {tab === "nav" && (
         <Card
           title="Menu"
-          subtitle="Shown by any header section carrying a Menu block — edited once, applied to every page"
+          subtitle="Shown by any header section carrying a Menu block - edited once, applied to every page"
         >
           <div className="space-y-2">
             {nav.map((item, i) => (
@@ -201,7 +201,7 @@ export default function SiteEditor({ site, canManage }: { site: SiteDetail; canM
             ))}
           </div>
           <Hint>
-            Tick <b>Track</b> on any link leaving this site — it carries the visitor&apos;s utm and click
+            Tick <b>Track</b> on any link leaving this site - it carries the visitor&apos;s utm and click
             ids across. Without it, an opt-in on the funnel cannot be traced to the page that sent it.
           </Hint>
           {canManage && (
@@ -274,7 +274,7 @@ export default function SiteEditor({ site, canManage }: { site: SiteDetail; canM
               onChange={(e) => setDomain(e.target.value)}
             />
             <Hint>
-              Attaching a domain does not move it — DNS and the reverse proxy do that. Set this only
+              Attaching a domain does not move it - DNS and the reverse proxy do that. Set this only
               once the hostname actually resolves here, or the site will answer on an address nobody
               reaches.
             </Hint>

@@ -10,7 +10,7 @@ import type { AdminLevel, LevelSummary } from "@/lib/levels";
  * helpers/types live in `src/lib/levels.ts`.
  */
 
-/** Tag the level cache is stored under — busted by every level mutation (level-actions.ts). */
+/** Tag the level cache is stored under - busted by every level mutation (level-actions.ts). */
 export const LEVELS_CACHE_TAG = "levels";
 
 const readLevels = async (): Promise<LevelSummary[]> => {
@@ -35,7 +35,7 @@ const readLevels = async (): Promise<LevelSummary[]> => {
  * All levels, catalogue order (kind, then order, then label).
  *
  * Two cache layers: `unstable_cache` keeps the catalogue across requests (it changes only
- * when a founder edits levels — otherwise every page re-paid a 200ms round-trip for a list
+ * when a founder edits levels - otherwise every page re-paid a 200ms round-trip for a list
  * that's effectively static), busted immediately via `revalidateTag(LEVELS_CACHE_TAG)` on
  * any level mutation and re-validated after 5 min as a backstop; React `cache()` dedupes it
  * within a single request so a page and its helpers still share one lookup.
@@ -48,7 +48,7 @@ export async function getActiveLevels(): Promise<LevelSummary[]> {
   return (await getLevels()).filter((l) => l.active);
 }
 
-/** All levels WITH their row id — for the admin CRUD panel, which targets update/delete by id. */
+/** All levels WITH their row id - for the admin CRUD panel, which targets update/delete by id. */
 export async function getAdminLevels(): Promise<AdminLevel[]> {
   const rows = await prisma.level.findMany({
     orderBy: [{ kind: "asc" }, { order: "asc" }, { label: "asc" }],

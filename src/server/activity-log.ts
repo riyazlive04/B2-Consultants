@@ -7,12 +7,12 @@ import type { ActivityAction } from "@/lib/activity-actions";
 import { sanitiseMeta } from "@/lib/activity-diff";
 
 /**
- * The write half of the activity log — "who did what, when", for every action in the app.
+ * The write half of the activity log - "who did what, when", for every action in the app.
  *
  * WHY THIS EXISTS SEPARATELY FROM appendAudit()
  * `appendAudit` (ledger-core) writes the hash-chained `AuditEntry`: tamper-evident, but it
  * takes a global advisory lock per append and the Ledger page verifies the whole chain on
- * load. That's the right price for money, and the wrong price for a row per dial — every
+ * load. That's the right price for money, and the wrong price for a row per dial - every
  * writer in the app would serialise on one lock, and the verify would grow without bound.
  * So finance writes to BOTH: the chain for proof, this for the founder's feed.
  *
@@ -23,28 +23,28 @@ import { sanitiseMeta } from "@/lib/activity-diff";
  *    An action can't be logged in someone else's name because there's no way to say a name.
  *
  * 2. Logging NEVER breaks the action. A failure here is swallowed and reported to the
- *    server console. The alternative — a logging bug rolling back a telecaller's call log —
+ *    server console. The alternative - a logging bug rolling back a telecaller's call log -
  *    is strictly worse than a missing row. For the same reason this runs OUTSIDE the
  *    caller's transaction: an activity row is a record that the attempt happened, and
  *    joining the transaction would erase exactly the failed attempts worth reviewing.
  *
  * WHERE TO CALL IT
  * After the write has succeeded, before `return { ok: true }`. Compose `summary` where the
- * human names are already loaded — the founder reads the sentence, never the id:
+ * human names are already loaded - the founder reads the sentence, never the id:
  *
  *   await logActivity(session, {
  *     action: "call.log",
  *     section: "pipeline",
  *     entityType: "CallLog",
  *     entityId: row.id,
- *     summary: `Logged a call with ${lead.name} — ${outcomeLabel(d.outcome)}`,
+ *     summary: `Logged a call with ${lead.name} - ${outcomeLabel(d.outcome)}`,
  *     meta: { outcome: d.outcome, leadId },
  *   });
  */
 
 export type ActivityInput = {
   /**
-   * Dotted verb: `<subject>.<verb>` or `<area>.<subject>.<verb>` — `call.log`,
+   * Dotted verb: `<subject>.<verb>` or `<area>.<subject>.<verb>` - `call.log`,
    * `finance.income.create`. The trailing verb drives colour (activity-actions.ts), and the
    * founder's filter list is derived from the distinct values actually in the table, so a
    * new verb needs no registration anywhere. Match the existing vocabulary when one fits.
@@ -59,7 +59,7 @@ export type ActivityInput = {
   meta?: Record<string, unknown>;
 };
 
-/** The session fields we need — structurally typed so tests don't have to fake a whole session. */
+/** The session fields we need - structurally typed so tests don't have to fake a whole session. */
 type Actor = Pick<AppSession, "role"> & { user: { id: string; name?: string | null; email?: string | null } };
 
 export async function logActivity(session: Actor, input: ActivityInput): Promise<void> {
@@ -83,13 +83,13 @@ export async function logActivity(session: Actor, input: ActivityInput): Promise
       },
     });
   } catch (err) {
-    // Never surface to the caller — see rule 2 above.
+    // Never surface to the caller - see rule 2 above.
     console.error("[activity-log] failed to record", input.action, err);
   }
 }
 
 /**
- * The same log, for someone who acted WITHOUT a staff session — a student signing an
+ * The same log, for someone who acted WITHOUT a staff session - a student signing an
  * agreement through a token link, say.
  *
  * Why this exists rather than just skipping those actions: they are real actions by real,
@@ -99,7 +99,7 @@ export async function logActivity(session: Actor, input: ActivityInput): Promise
  * hole `logActivity` closes by taking the session and nothing else. Making the sessionless
  * path a different function keeps it deliberate and greppable.
  *
- * `actorId` is null here — the signer has no user row — so the founder can't filter by them
+ * `actorId` is null here - the signer has no user row - so the founder can't filter by them
  * in the "Who" dropdown; their name still shows on the row. Callers must have VERIFIED the
  * person first (a valid token, an accepted OTP). Never call this on the strength of an
  * unverified form field: an unauthenticated `name` input would let anyone write any name
@@ -131,7 +131,7 @@ export async function logPublicActivity(
 }
 
 /**
- * The engines' own writes — a reminder the cadence sent, a booking it auto-cancelled.
+ * The engines' own writes - a reminder the cadence sent, a booking it auto-cancelled.
  *
  * Nobody pressed a button for these, and that is exactly why they get their own function
  * rather than borrowing the session of whoever last pressed "Run now". The engine runs on a
@@ -140,7 +140,7 @@ export async function logPublicActivity(
  * would have no way to spot. Here the actor IS the engine, and the row says so.
  *
  * `actorId` is null (an engine has no user row); `actorRole` is SYSTEM, which the feed
- * renders as "Automation" and the Who filter offers as a real choice — see the `name:`
+ * renders as "Automation" and the Who filter offers as a real choice - see the `name:`
  * sentinel in activity-metrics.ts.
  */
 export const SYSTEM_ACTORS = {

@@ -14,8 +14,8 @@ import { assignLeadBatch } from "@/server/pipeline-actions";
  *
  * THE PROBLEM IT SOLVES: on 29 Jul 2026, 23,430 of the 23,435 leads in this database had no
  * owner, and My Desk scopes its queue to `assignedToId`. Nilofer's desk held 3 leads; Asma's
- * held 2. Every other part of the loop worked — the desk branches correctly by variant, the
- * queue is bounded and ordered, logging a call already stamps `contactedAt` — and none of it
+ * held 2. Every other part of the loop worked - the desk branches correctly by variant, the
+ * queue is bounded and ordered, logging a call already stamps `contactedAt` - and none of it
  * could matter, because assignment was a per-row dropdown and nobody was going to use it 23,000
  * times.
  *
@@ -93,7 +93,7 @@ export function HandOutLeads({
               <>
                 <strong className="tnum text-ink">{available.toLocaleString("en-IN")}</strong> unassigned
                 lead{available === 1 ? "" : "s"} with a phone number and an open stage. Give someone a
-                day&apos;s worth — not the whole pile.
+                day&apos;s worth - not the whole pile.
               </>
             )}
           </p>
@@ -101,7 +101,7 @@ export function HandOutLeads({
           {available > 0 && (
             <>
               {/* The mode picker comes FIRST because it decides whether the "To" box below means
-                  anything — showing a person selector that will be ignored is how a founder
+                  anything - showing a person selector that will be ignored is how a founder
                   concludes the feature is broken. */}
               <label className="mt-4 flex items-start gap-2.5 rounded-field border border-line p-3 text-sm">
                 <input
@@ -121,7 +121,7 @@ export function HandOutLeads({
               </label>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <Field label="To" hint={split ? "Ignored — the rotation decides." : undefined}>
+                <Field label="To" hint={split ? "Ignored - the rotation decides." : undefined}>
                   <SelectMenu
                     aria-label="Assign leads to"
                     value={userId}

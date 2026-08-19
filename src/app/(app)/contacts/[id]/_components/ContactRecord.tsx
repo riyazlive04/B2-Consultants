@@ -152,9 +152,9 @@ export default function ContactRecord({
                   options={ownerOpts}
                 />
               </Row>
-              <Row label="Company">{contact.companyName ?? <span className="text-ink-3">—</span>}</Row>
-              <Row label="City">{contact.city ?? <span className="text-ink-3">—</span>}</Row>
-              <Row label="Industry">{contact.industry ?? <span className="text-ink-3">—</span>}</Row>
+              <Row label="Company">{contact.companyName ?? <span className="text-ink-3">-</span>}</Row>
+              <Row label="City">{contact.city ?? <span className="text-ink-3">-</span>}</Row>
+              <Row label="Industry">{contact.industry ?? <span className="text-ink-3">-</span>}</Row>
               <Row label="Created"><DateText date={contact.createdAt} /></Row>
             </div>
 
@@ -167,10 +167,10 @@ export default function ContactRecord({
             )}
           </Card>
 
-          {/* Agreement — the next action on this contract, wherever it currently stands. */}
+          {/* Agreement - the next action on this contract, wherever it currently stands. */}
           <AgreementTaskCard summary={agreement} />
 
-          {/* How they qualified — the landing page's own answers. */}
+          {/* How they qualified - the landing page's own answers. */}
           <BantCard contact={contact} />
 
           {/* Tags */}
@@ -216,7 +216,7 @@ export default function ContactRecord({
                             aria-label={f.name}
                             value={cfValues[f.key] ?? ""}
                             onChange={(e) => setCfValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                            options={[{ value: "", label: "—" }, ...(f.options as string[]).map((o) => ({ value: o, label: o }))]}
+                            options={[{ value: "", label: "-" }, ...(f.options as string[]).map((o) => ({ value: o, label: o }))]}
                           />
                         </div>
                       ) : (
@@ -263,7 +263,7 @@ export default function ContactRecord({
             <Field label="City"><TextInput kind="city" name="city" defaultValue={contact.city ?? ""} /></Field>
             <Field label="Industry"><TextInput name="industry" defaultValue={contact.industry ?? ""} /></Field>
             <Field label="Company">
-              <Select name="companyId" options={[{ value: "", label: "— none —" }, ...companies.map((c) => ({ value: c.id, label: c.name }))]} defaultValue={contact.companyId ?? ""} />
+              <Select name="companyId" options={[{ value: "", label: "- none -" }, ...companies.map((c) => ({ value: c.id, label: c.name }))]} defaultValue={contact.companyId ?? ""} />
             </Field>
           </div>
           <FormError message={editError} />
@@ -321,7 +321,7 @@ function Notes({ contact }: { contact: ContactDetail }) {
     setError(null);
     const res = await createNote(contact.id, fd);
     if (!res.ok) return setError(res.error);
-    toast(res.mentionedCount ? `Note added — mentioned ${res.mentionedCount}` : "Note added");
+    toast(res.mentionedCount ? `Note added - mentioned ${res.mentionedCount}` : "Note added");
     ref.current?.reset();
   }
   return (
@@ -338,7 +338,7 @@ function Notes({ contact }: { contact: ContactDetail }) {
             <p className="whitespace-pre-wrap text-sm text-ink">{n.body}</p>
             <div className="mt-2 flex items-center justify-between">
               <span className="text-caption text-ink-3">
-                {n.authorName ?? "—"} · <DateText date={n.createdAt} />
+                {n.authorName ?? "-"} · <DateText date={n.createdAt} />
               </span>
               <div className="flex items-center gap-1">
                 {n.pinned && <Pill tone="warn">Pinned</Pill>}
@@ -360,7 +360,7 @@ function Notes({ contact }: { contact: ContactDetail }) {
 function ContactTasks({ contact, owners }: { contact: ContactDetail; owners: { id: string; name: string }[] }) {
   const ref = useRef<HTMLFormElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const ownerOpts = [{ value: "", label: "— unassigned —" }, ...owners.map((o) => ({ value: o.id, label: o.name }))];
+  const ownerOpts = [{ value: "", label: "- unassigned -" }, ...owners.map((o) => ({ value: o.id, label: o.name }))];
   async function add(fd: FormData) {
     setError(null);
     fd.set("leadId", contact.id);
@@ -425,7 +425,7 @@ function Opps({ contact }: { contact: ContactDetail }) {
 }
 
 /**
- * How this person qualified — the band score and the answers behind it.
+ * How this person qualified - the band score and the answers behind it.
  *
  * ── Why this card exists ────────────────────────────────────────────────────────
  * The contact record showed NO score at all. `resolveBant` was consumed by Bookings, My Desk and
@@ -446,7 +446,7 @@ function BantCard({ contact }: { contact: ContactDetail }) {
       <Card title="Qualification">
         <p className="text-sm text-ink-3">
           <span className="font-semibold text-ink-2">Not scored.</span> Nobody has asked this
-          prospect the qualification questions — or the landing page&apos;s answers did not reach
+          prospect the qualification questions - or the landing page&apos;s answers did not reach
           us. This is <em>not</em> a low score; it is no evidence either way.
         </p>
       </Card>
@@ -501,7 +501,7 @@ function BantCard({ contact }: { contact: ContactDetail }) {
         </dl>
       ) : (
         <p className="mt-3 border-t border-line pt-3 text-caption text-ink-3">
-          A score was recorded but the individual answers were not kept — this prospect was scored
+          A score was recorded but the individual answers were not kept - this prospect was scored
           before answers were being stored.
         </p>
       )}

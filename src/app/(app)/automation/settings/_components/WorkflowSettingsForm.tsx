@@ -62,7 +62,7 @@ export default function WorkflowSettingsForm({ settings }: { settings: WorkflowS
             <CardTitle icon={<Power size={16} className="text-primary" />}>Engine</CardTitle>
             <SwitchRow
               title="Automation engine enabled"
-              description="Off = no contact is enrolled and no workflow advances. In-flight runs freeze where they are and carry on from the same step when you switch this back on — nothing is lost or skipped."
+              description="Off = no contact is enrolled and no workflow advances. In-flight runs freeze where they are and carry on from the same step when you switch this back on - nothing is lost or skipped."
               checked={draft.engineEnabled}
               onChange={(v) => patch({ engineEnabled: v })}
             />

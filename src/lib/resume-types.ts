@@ -1,5 +1,5 @@
 /**
- * The structured content of a CV — the single source of truth the builder edits,
+ * The structured content of a CV - the single source of truth the builder edits,
  * the DOCX + PDF generators render, and the AI review reads. Isomorphic (client +
  * server): the editor is a client component, the generators run server-side.
  *
@@ -54,7 +54,7 @@ export type ResumeHeader = {
 
 export type ResumeData = {
   header: ResumeHeader;
-  highlights: string[]; // "What I have to offer" — 6-7 crisp bullets
+  highlights: string[]; // "What I have to offer" - 6-7 crisp bullets
   summary: string; // optional profile paragraph
   experience: ExperienceItem[];
   education: EducationItem[];
@@ -103,7 +103,7 @@ const strList = (v: unknown): string[] => asArr(v).map(asStr).filter((s) => s.le
 
 /**
  * Coerce arbitrary JSON (a DB row, an AI-parsed import, a hand edit) into a valid
- * ResumeData. Never throws — a malformed field falls back to its empty default so a
+ * ResumeData. Never throws - a malformed field falls back to its empty default so a
  * bad blob can be opened and fixed rather than taking a page down.
  */
 export function coerceResumeData(raw: unknown): ResumeData {
@@ -170,7 +170,7 @@ export function coerceResumeData(raw: unknown): ResumeData {
   };
 }
 
-/** Flatten a resume to plain text — what the AI review and the deterministic analyser read. */
+/** Flatten a resume to plain text - what the AI review and the deterministic analyser read. */
 export function resumeToPlainText(d: ResumeData): string {
   const lines: string[] = [];
   const { header: h } = d;
@@ -196,7 +196,7 @@ export function resumeToPlainText(d: ResumeData): string {
     lines.push("", "Education");
     for (const e of d.education) {
       lines.push(`${e.start} – ${e.end} · ${e.institution}, ${e.city}, ${e.country}`);
-      lines.push([e.program, e.note].filter(Boolean).join(" — "));
+      lines.push([e.program, e.note].filter(Boolean).join(" - "));
     }
   }
   if (d.certifications.length) {
@@ -209,7 +209,7 @@ export function resumeToPlainText(d: ResumeData): string {
   }
   if (d.computerSkills.length) {
     lines.push("", "Computer skills");
-    lines.push(d.computerSkills.map((s) => `${s.name} — ${s.level}`).join(", "));
+    lines.push(d.computerSkills.map((s) => `${s.name} - ${s.level}`).join(", "));
   }
   if (d.personalSkills.length) {
     lines.push("", "Personal skills");

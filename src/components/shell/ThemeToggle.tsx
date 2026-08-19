@@ -33,7 +33,7 @@ export function ThemeToggle({ frosted = false }: { frosted?: boolean }) {
     try {
       localStorage.setItem("b2_theme", next ? "dark" : "light");
     } catch {
-      /* private mode / storage disabled — the DB write below still carries the choice */
+      /* private mode / storage disabled - the DB write below still carries the choice */
     }
     // Explicit LIGHT rather than SYSTEM: the user just made a choice, and reverting them to
     // the OS setting would silently undo it the moment their OS disagreed.

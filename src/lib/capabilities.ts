@@ -1,5 +1,5 @@
 /**
- * Capabilities — what a person may DO, as distinct from what they may SEE.
+ * Capabilities - what a person may DO, as distinct from what they may SEE.
  *
  * Sections (sections.ts) answer "which screens open for you". Capabilities answer
  * "which privileged writes are you allowed to make once you're there". The two are
@@ -11,7 +11,7 @@
  * wiring the guard would hand out a permission that means nothing, so the two are
  * written together and the `actions` note below says where each one bites.
  *
- * ADMIN implicitly holds every capability and can never lose one — the founder is
+ * ADMIN implicitly holds every capability and can never lose one - the founder is
  * never locked out of their own business.
  *
  * Defaults are ADMIN-only across the board, which is exactly the behaviour the app
@@ -27,7 +27,7 @@ export type CapabilityDef = {
   readonly name: string;
   /** the one-line subtitle under it */
   readonly description: string;
-  /** which server actions this key guards — keep in step with the guards themselves */
+  /** which server actions this key guards - keep in step with the guards themselves */
   readonly actions: string;
   /** roles that hold it without a per-user override */
   readonly roles: readonly AppRole[];
@@ -73,7 +73,7 @@ export const CAPABILITIES = [
    * The Outreach SOP's role boundary, made real.
    *
    * The SOP is explicit that "Highly Qualified" is the Discovery Specialist's verdict, and that
-   * the Outreach Specialist merely reads it to decide whether to run Step 19 — they must never
+   * the Outreach Specialist merely reads it to decide whether to run Step 19 - they must never
    * write it. Before this key, the only gate was `requireSection("pipeline")`, which every USER
    * and HEAD passes, on any lead: the boundary existed in the printed SOP and in a hidden UI tab,
    * but not in the server.
@@ -91,7 +91,7 @@ export const CAPABILITIES = [
     roles: ["ADMIN"],
   },
   /**
-   * A READ key, unlike its neighbours — the exception the header's "privileged writes"
+   * A READ key, unlike its neighbours - the exception the header's "privileged writes"
    * rule earns here.
    *
    * German Note's money is a TAB, not a route, so `sections.ts` cannot gate it: a
@@ -100,7 +100,7 @@ export const CAPABILITIES = [
    * business call the founder should make per person, so it is a capability.
    *
    * Guards it: the Financials tab on /german-note, and /german-note/workshops/[id],
-   * which the tab links to (via `requireCapability` — a read gate, so it bounces
+   * which the tab links to (via `requireCapability` - a read gate, so it bounces
    * rather than returning an ActionResult). CREATING and editing workshops stays
    * `requireAdmin()` regardless: this key buys sight of the money, never control of it.
    */
@@ -108,16 +108,16 @@ export const CAPABILITIES = [
     key: "germanNote.finance",
     name: "See German Note financials",
     description: "Workshop revenue, outstanding payments and P&L",
-    actions: "german-note Financials tab · german-note/workshops/[id] — read-only; creating & editing workshops stays Admin-only",
+    actions: "german-note Financials tab · german-note/workshops/[id] - read-only; creating & editing workshops stays Admin-only",
     roles: ["ADMIN"],
   },
   /**
-   * The public marketing site, forms and funnels — everything a visitor can see before they are a
+   * The public marketing site, forms and funnels - everything a visitor can see before they are a
    * lead. A key of its own rather than `pipeline.configure`, which is what these actions borrowed
    * before it existed.
    *
    * The two powers have nothing to do with each other. `pipeline.configure` is an INTERNAL power:
-   * reassign leads, edit targets, delete outcomes. This one is OUTWARD-FACING — publishing a page
+   * reassign leads, edit targets, delete outcomes. This one is OUTWARD-FACING - publishing a page
    * changes what the public and every ad click sees, on a site that takes paid traffic. Someone
    * trusted to move a lead between telecallers has not thereby been trusted to edit the homepage,
    * and the reverse is just as true: whoever writes the copy should not need the power to delete
@@ -130,7 +130,7 @@ export const CAPABILITIES = [
     key: "sites.manage",
     name: "Edit the public website",
     description: "Pages, forms, funnels and published content",
-    actions: "sites-actions (pages, sections, media) · funnels-actions · forms-actions — publishing included",
+    actions: "sites-actions (pages, sections, media) · funnels-actions · forms-actions - publishing included",
     roles: ["ADMIN"],
   },
   /**
@@ -138,7 +138,7 @@ export const CAPABILITIES = [
    * plausibly decides which cohort a student joins, without being handed the Students board's
    * other write powers. Distinct from `pipeline.configure` for that reason.
    *
-   * Creating and archiving BATCHES stays `requireAdmin()` — this key buys the right to move
+   * Creating and archiving BATCHES stays `requireAdmin()` - this key buys the right to move
    * people between existing cohorts, never to invent one.
    */
   {
@@ -164,18 +164,18 @@ export const CAPABILITIES = [
   /**
    * ── WHO EARNS WHICH COMMISSION LEG ──────────────────────────────────────────────
    * The three keys below are the exception to this file's "privileged writes" framing: they
-   * gate no action at all. They are ELIGIBILITY — read by `getCommissionReport` when it splits
+   * gate no action at all. They are ELIGIBILITY - read by `getCommissionReport` when it splits
    * a payment across the deal team.
    *
    * Why a capability and not a new config shape: commission rates were global-only
    * (`bothCallsPct` / `splitPct` / `closerPct` / `substitutePct`), so "Nilofer is first-call
-   * only" existed as an arrangement between people and nowhere in the system — it held only
+   * only" existed as an arrangement between people and nowhere in the system - it held only
    * because she happened not to run discovery calls. The moment she covered one, the report paid
    * her for it. Per-user overrides already exist (`User.capabilities`, edited from People →
    * Users & access), so this expresses the rule in the mechanism the app already has rather than
    * inventing a parallel one.
    *
-   * DEFAULT: granted to ADMIN and USER, which reproduces today's behaviour exactly — everyone
+   * DEFAULT: granted to ADMIN and USER, which reproduces today's behaviour exactly - everyone
    * is eligible for everything until the founder says otherwise. Revoking is the deliberate act.
    *
    * An ineligible leg is SHOWN and marked "not eligible", never silently zeroed. An invisible
@@ -185,21 +185,21 @@ export const CAPABILITIES = [
     key: "commission.firstCall",
     name: "Earns first-call commission",
     description: "Eligible for the lead-call leg of a deal split",
-    actions: "commission-metrics (getCommissionReport) — eligibility only, gates no action",
+    actions: "commission-metrics (getCommissionReport) - eligibility only, gates no action",
     roles: ["ADMIN", "USER"],
   },
   {
     key: "commission.discovery",
     name: "Earns discovery-call commission",
     description: "Eligible for the discovery-call leg of a deal split",
-    actions: "commission-metrics (getCommissionReport) — eligibility only, gates no action",
+    actions: "commission-metrics (getCommissionReport) - eligibility only, gates no action",
     roles: ["ADMIN", "USER"],
   },
   {
     key: "commission.closer",
     name: "Earns closer commission",
     description: "Eligible for the closer's share when a deal is won",
-    actions: "commission-metrics (getCommissionReport) — eligibility only, gates no action",
+    actions: "commission-metrics (getCommissionReport) - eligibility only, gates no action",
     roles: ["ADMIN", "USER"],
   },
 ] as const satisfies readonly CapabilityDef[];

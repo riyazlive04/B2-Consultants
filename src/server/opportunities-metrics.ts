@@ -9,7 +9,7 @@ import { formatInrMinor } from "@/lib/format";
  */
 
 // A pipeline with more cards in one stage than this is rare (and previously this query had no
-// cap at all — fetched every open/won/lost deal, every load). Cap + signal overflow rather than
+// cap at all - fetched every open/won/lost deal, every load). Cap + signal overflow rather than
 // silently truncate: BUILD_CHECKLIST.md §4.
 const STAGE_CARD_LIMIT = 300;
 
@@ -40,7 +40,7 @@ export type BoardStage = {
   probability: number | null;
   count: number;
   totalInr: string;
-  // Only set when this stage has a probability configured — the flat totalInr stays the primary,
+  // Only set when this stage has a probability configured - the flat totalInr stays the primary,
   // always-correct figure; this is an additional weighted-forecast read, never a replacement.
   weightedTotalInr: string | null;
   cards: BoardCard[];
@@ -57,7 +57,7 @@ export type BoardData = {
   totalValueInr: string;
   // Only set when at least one stage in the active pipeline has a probability configured.
   weightedTotalValueInr: string | null;
-  /** True when any filter is narrowing the board — the UI says so, and offers to clear it. */
+  /** True when any filter is narrowing the board - the UI says so, and offers to clear it. */
   filtered: boolean;
 };
 
@@ -65,7 +65,7 @@ export type BoardData = {
  * What may narrow the board.
  *
  * The board had NO filter of any kind, while simultaneously telling the user at 300+ cards in a
- * stage to "filter or split this pipeline" — advice for a control that did not exist. That was
+ * stage to "filter or split this pipeline" - advice for a control that did not exist. That was
  * survivable only because production held ONE opportunity; wiring lead capture to the board
  * (`ensureDefaultOpportunity`) puts thousands of cards on it, so search stopped being optional.
  *
@@ -93,7 +93,7 @@ export type PipelineRow = {
 /**
  * The Pipelines management list.
  *
- * `stageCount` counts LIVE columns only — a soft-deleted stage is gone as far as anyone reading
+ * `stageCount` counts LIVE columns only - a soft-deleted stage is gone as far as anyone reading
  * this screen is concerned, and counting it would make the number disagree with the board.
  * Ordered the same way the board's switcher orders, so the two screens never contradict.
  */
@@ -183,7 +183,7 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
     include: {
       opps: {
         // Exclude archived opportunities and deals whose parent contact is archived, then apply
-        // the caller's filters — same predicate the totals below use.
+        // the caller's filters - same predicate the totals below use.
         where: cardWhere,
         orderBy: { position: "asc" },
         take: STAGE_CARD_LIMIT + 1, // fetch one extra to detect overflow without a second COUNT query
@@ -199,17 +199,17 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
   });
 
   // Stage/grand/forecast totals are computed over ALL opportunities in each stage (a groupBy), not
-  // just the display-capped `opps` slice above — otherwise a stage with more than STAGE_CARD_LIMIT
+  // just the display-capped `opps` slice above - otherwise a stage with more than STAGE_CARD_LIMIT
   // cards would under-report its value. They are also split by status so WON/LOST/ABANDONED deals
   // no longer inflate the live pipeline value or the weighted forecast: "pipeline value" means
   // money still IN PLAY (issue 1.6). Each column header still shows that column's own full sum
-  // (all statuses) — which is what someone reading a Won/Lost column expects.
+  // (all statuses) - which is what someone reading a Won/Lost column expects.
   const sums = await prisma.opportunity.groupBy({
     by: ["stageId", "status"],
     where: { stageId: { in: stages.map((s) => s.id) }, ...cardWhere },
     _sum: { valueInrMinor: true },
     // The TRUE card count, from the same set as the money. The header used to report
-    // `cards.length` — the display slice — so a column holding more than STAGE_CARD_LIMIT would
+    // `cards.length` - the display slice - so a column holding more than STAGE_CARD_LIMIT would
     // announce "300 opportunities" beside a total covering thousands. Harmless while production
     // had one card; wrong the moment lead capture fills the board.
     _count: { _all: true },
@@ -225,7 +225,7 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
   }
 
   let totalCount = 0;
-  let grandTotal = 0n; // OPEN only — the live pipeline value
+  let grandTotal = 0n; // OPEN only - the live pipeline value
   let weightedGrandTotal = 0n; // OPEN only, probability-weighted
   let anyWeighted = false;
 

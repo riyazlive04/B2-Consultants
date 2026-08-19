@@ -13,7 +13,7 @@
  * more accurate (closed cards are excluded from it anyway). Those leads keep their history and
  * are still fully readable on Contacts and Pipeline.
  *
- * Idempotent — `ensureDefaultOpportunity` no-ops on a lead that already has a card, so this is
+ * Idempotent - `ensureDefaultOpportunity` no-ops on a lead that already has a card, so this is
  * safe to re-run, and safe to run while the app is live.
  *
  * ── Usage ───────────────────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@
  * `--conditions=react-server` is REQUIRED (the npm script supplies it): this imports
  * `opportunity-sync`, which is marked `server-only`, and plain `tsx` refuses to load it.
  *
- * Reads DATABASE_URL from the environment — CHECK WHICH DATABASE THAT IS before running.
+ * Reads DATABASE_URL from the environment - CHECK WHICH DATABASE THAT IS before running.
  */
 
 import { PrismaClient, type LeadStage } from "@prisma/client";
@@ -35,7 +35,7 @@ const prisma = new PrismaClient();
 /**
  * The stages worth a card: a deal someone could still act on today.
  *
- * Mirrors the board's own idea of "in play". WON is excluded alongside LOST/NO_SHOW — a won deal
+ * Mirrors the board's own idea of "in play". WON is excluded alongside LOST/NO_SHOW - a won deal
  * belongs to Finance and Students, and a Won column filled retroactively from history would
  * misrepresent when those cards were actually won.
  */
@@ -67,7 +67,7 @@ async function main() {
     select: { id: true, name: true, stages: { where: { deletedAt: null }, select: { name: true, legacyStage: true } } },
   });
   if (!pipeline) {
-    console.error("No default pipeline exists — nothing to backfill into. Create one first.");
+    console.error("No default pipeline exists - nothing to backfill into. Create one first.");
     process.exit(1);
   }
 
@@ -78,14 +78,14 @@ async function main() {
   console.log(`Default pipeline: ${pipeline.name}`);
   if (unbridged.length) {
     console.warn(
-      `  ⚠ No column is bridged to: ${unbridged.join(", ")} — leads in those stages will be SKIPPED.\n` +
+      `  ⚠ No column is bridged to: ${unbridged.join(", ")} - leads in those stages will be SKIPPED.\n` +
         `    Map them at Opportunities → Manage pipeline, then re-run.`,
     );
   }
   const unmappedColumns = pipeline.stages.filter((s) => !s.legacyStage).map((s) => s.name);
   if (unmappedColumns.length) {
     console.warn(
-      `  ⚠ Columns with no lead stage mapped: ${unmappedColumns.join(", ")} — a card dropped in one` +
+      `  ⚠ Columns with no lead stage mapped: ${unmappedColumns.join(", ")} - a card dropped in one` +
         ` stops syncing to the lead's stage.`,
     );
   }

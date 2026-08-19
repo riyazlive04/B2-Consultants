@@ -46,7 +46,7 @@ export function IncomeSection({
   const [editing, setEditing] = useState<IncomeRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  // Which payment type the form currently shows — the instalment questions render only for
+  // Which payment type the form currently shows - the instalment questions render only for
   // INSTALMENT. null = "follow the row being edited (or the default)", so entering/leaving
   // edit mode resets the answer along with the rest of the re-keyed form.
   const [paymentTypeChoice, setPaymentTypeChoice] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export function IncomeSection({
     const res = editing ? await updateIncome(editing.id, form) : await createIncome(form);
     if (!res.ok) return setError(res.error);
     toast(editing ? "Income entry updated" : "Payment recorded");
-    if (!editing) celebrate(); // money in the door — worth confetti (edits stay quiet)
+    if (!editing) celebrate(); // money in the door - worth confetti (edits stay quiet)
     switchEditing(null);
     formRef.current?.reset();
   };
@@ -72,7 +72,7 @@ export function IncomeSection({
   const remove = async (row: IncomeRow) => {
     const ok = await askConfirm({
       title: `Archive income entry for ${row.studentName}?`,
-      body: "It moves to the Archived tab — you can restore it there.",
+      body: "It moves to the Archived tab - you can restore it there.",
       confirmLabel: "Archive",
       danger: true,
     });
@@ -114,7 +114,7 @@ export function IncomeSection({
       cell: (r) => (BigInt(r.amountEurRaw) === BigInt(0) ? "-" : formatEurMinor(BigInt(r.amountEurRaw))),
       value: (r) => Number(BigInt(r.amountEurRaw)) / 100,
     },
-    // The aggregate DOES follow the toggle — it is one amount quoted two ways, so which way
+    // The aggregate DOES follow the toggle - it is one amount quoted two ways, so which way
     // leads is exactly the reader's choice.
     {
       key: "agg", header: "Total", align: "right",
@@ -181,7 +181,7 @@ export function IncomeSection({
           </Field>
           <Field
             label="Student name"
-            hint={studentOptions.length > 0 ? "Search to link a student — feeds their total paid" : undefined}
+            hint={studentOptions.length > 0 ? "Search to link a student - feeds their total paid" : undefined}
           >
             {studentOptions.length > 0 ? (
               // Searchable auto-populate (issue 2.6): picking a student fills the name AND the
@@ -223,7 +223,7 @@ export function IncomeSection({
             />
           </Field>
           {/* Instalment plans carry two more answers: how many instalments the fee is split
-              into, and the surcharge added for choosing the plan. Asked only when it applies —
+              into, and the surcharge added for choosing the plan. Asked only when it applies -
               a full payment keeps the short form. */}
           {paymentType === "INSTALMENT" && (
             <>

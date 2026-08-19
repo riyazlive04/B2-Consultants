@@ -25,7 +25,7 @@ import type { FieldKind } from "@/lib/field-rules";
 import { submitPublicForm } from "@/server/forms-actions";
 
 /**
- * The public face of a form — Google Forms' respondent view.
+ * The public face of a form - Google Forms' respondent view.
  *
  * ── Why this is controlled rather than an uncontrolled <form> ────────────────────
  * It used to be a plain form read with `new FormData(e.currentTarget)`, which is the right shape
@@ -46,15 +46,15 @@ import { submitPublicForm } from "@/server/forms-actions";
  */
 
 /**
- * Character rules keyed off the field's DECLARED type (sites-types.ts), never off its key — the
+ * Character rules keyed off the field's DECLARED type (sites-types.ts), never off its key - the
  * founder names these fields, so guessing "this one is called `name`, so it takes no digits" would
  * eventually filter a field that legitimately holds digits.
  *
  * Two types are deliberately absent, because this is a PUBLIC lead-capture surface where a dropped
  * character costs a booking:
- *   - `number` — the builder offers one numeric type for both "how many staff" (2) and "budget"
+ *   - `number` - the builder offers one numeric type for both "how many staff" (2) and "budget"
  *     (2.5). `int` would silently rewrite 2.5 to 25, which is worse than not filtering at all.
- *   - `text`   — free text by definition; the type tells us nothing about what belongs in it.
+ *   - `text`   - free text by definition; the type tells us nothing about what belongs in it.
  * Choice, scale and date types aren't free-text inputs and are handled on their own below.
  */
 const KIND_BY_FIELD_TYPE: Partial<Record<FormFieldType, FieldKind>> = {
@@ -88,13 +88,13 @@ export default function PublicForm({
   utm?: Record<string, string>;
   /**
    * Drop the form's own card (border, background, shadow) because something else is already
-   * providing it — the popup, which IS a white card. Without this the dialog shows a card inside
+   * providing it - the popup, which IS a white card. Without this the dialog shows a card inside
    * a card, the visual tell of two components each assuming they own the surface.
    */
   bare?: boolean;
   /**
-   * Builder preview. Renders and BRANCHES exactly as the live page does — same component, same
-   * validation, same page walk — but stops at the submit. A preview built from a second, simpler
+   * Builder preview. Renders and BRANCHES exactly as the live page does - same component, same
+   * validation, same page walk - but stops at the submit. A preview built from a second, simpler
    * renderer is the kind that agrees with the real thing right up until the day it matters.
    */
   preview?: boolean;
@@ -115,7 +115,7 @@ export default function PublicForm({
    * Seed the hidden fields from the visitor's own URL.
    *
    * Read here rather than threaded down from the page, because `hiddenFrom` may name ANY query
-   * parameter — an ad id, a partner code — and the page only knows about the five `utm_*` keys.
+   * parameter - an ad id, a partner code - and the page only knows about the five `utm_*` keys.
    * Runs once: a hidden value is what the visitor arrived with, and re-reading it later would
    * mean a client-side navigation could quietly change what a half-filled form is about to say.
    */
@@ -145,7 +145,7 @@ export default function PublicForm({
   const page: FormPage | undefined = pages[pageIndex];
 
   /**
-   * Answers with "Other" folded in — what validation, branching and the eventual POST all reason
+   * Answers with "Other" folded in - what validation, branching and the eventual POST all reason
    * about. The raw state keeps the sentinel so the radio knows which row is selected.
    */
   const effective: FormAnswers = useMemo(() => {
@@ -212,7 +212,7 @@ export default function PublicForm({
     setBusy(true);
     setError(null);
     const fd = new FormData();
-    // Post the RAW answers plus the companion "Other" text and let the server fold them — the
+    // Post the RAW answers plus the companion "Other" text and let the server fold them - the
     // same fold, in one place, rather than a client copy the server has to trust.
     for (const item of form.fields) {
       if (isStaticItem(item.type)) continue;
@@ -223,7 +223,7 @@ export default function PublicForm({
       if (other) fd.set(otherFieldName(item.key), other);
     }
     for (const [k, v] of Object.entries(utm ?? {})) fd.set(k, v);
-    // The "Bot Protection" element's timing half — see submitPublicForm. Stamped when the form
+    // The "Bot Protection" element's timing half - see submitPublicForm. Stamped when the form
     // mounted, not when it was submitted, so it measures how long the page was actually open.
     fd.set("form_started_at", String(mountedAt.current));
 
@@ -375,7 +375,7 @@ function Question({
     return item.shuffle ? shuffled(list, seed) : list;
   }, [item.options, item.shuffle, seed]);
 
-  // Static items collect nothing — they lay the page out.
+  // Static items collect nothing - they lay the page out.
   if (item.type === "heading") {
     return (
       <div className="border-t border-line pt-5 first:border-0 first:pt-0">
@@ -394,7 +394,7 @@ function Question({
   }
   if (item.type === "html") {
     /**
-     * Raw markup on a PUBLIC form, rendered unescaped — that IS the feature, the same contract as
+     * Raw markup on a PUBLIC form, rendered unescaped - that IS the feature, the same contract as
      * the page builder's Custom HTML block. The boundary is at authoring time: only a signed-in
      * admin with the forms capability can put one here.
      */
@@ -403,7 +403,7 @@ function Question({
   /**
    * The three invisible elements.
    *
-   * They render as nothing on the live form — which is right there and useless in the BUILDER,
+   * They render as nothing on the live form - which is right there and useless in the BUILDER,
    * where an author cannot select what has no box. Each still emits `data-item-type` so the
    * canvas can style it into a labelled placeholder; see FormCanvas. Dropping the attribute here
    * would make a form's own machinery unselectable in the tool that is supposed to edit it.
@@ -497,7 +497,7 @@ function Question({
                   value={otherText}
                   onChange={(e) => {
                     onOther(e.target.value);
-                    onChange(OTHER_VALUE); // typing IS choosing it — Google does the same
+                    onChange(OTHER_VALUE); // typing IS choosing it - Google does the same
                   }}
                   className="h-8 min-w-0 flex-1 rounded-field border-0 border-b border-line bg-transparent px-1 text-sm outline-none focus:border-primary"
                 />
@@ -640,7 +640,7 @@ function Question({
               <button
                 key={n}
                 type="button"
-                // Clicking the current rating clears it — otherwise an optional rating is
+                // Clicking the current rating clears it - otherwise an optional rating is
                 // impossible to un-answer once touched.
                 onClick={() => onChange(current === n ? "" : String(n))}
                 aria-label={`${n} of ${max}`}
@@ -686,7 +686,7 @@ function Question({
             {...input.attrs}
             value={text}
             onChange={input.onChange}
-            // Still derived from the declared type — it is what gives `number` its numeric
+            // Still derived from the declared type - it is what gives `number` its numeric
             // keypad. `phone` no longer reaches here: it has its own country-code control above.
             type={item.type}
             placeholder={item.placeholder}
@@ -703,7 +703,7 @@ function Question({
      * `data-item` is what lets the BUILDER edit this form by pointing at it.
      *
      * Same trick, and the same reasoning, as `data-n` on the page builder's blocks: the canvas
-     * mounts this exact component — the production renderer — and derives selection from one
+     * mounts this exact component - the production renderer - and derives selection from one
      * delegated click that walks up to the nearest `[data-item]`. The alternative is a second
      * "preview" renderer, and the two always drift. It costs a handful of bytes on the public
      * page and it is what keeps what-you-click identical to what-ships.
@@ -725,14 +725,14 @@ function Question({
 }
 
 /**
- * Phone number with a country selector — the control the GHL opt-in uses, and the one people
+ * Phone number with a country selector - the control the GHL opt-in uses, and the one people
  * expect the moment a form asks for a number they might be dialling from anywhere.
  *
  * ── Why one stored string, not two fields ─────────────────────────────────────────────────────
  * The answer stays `+91 9876543210`: a single string that every downstream consumer already
  * understands. `upsertIntakeLead` dedupes on a NORMALISED phone, WATI sends to a full
  * international number, and the sheet exports one column. Splitting the model in two would mean
- * teaching every one of those about a country column for no gain — so the split lives in the
+ * teaching every one of those about a country column for no gain - so the split lives in the
  * control, and `splitPhone`/`joinPhone` are the only code that knows about it.
  *
  * ── Why a native <select> ─────────────────────────────────────────────────────────────────────
@@ -799,7 +799,7 @@ function PhoneField({
  * File upload.
  *
  * Uploads IMMEDIATELY on choose rather than carrying the bytes to submit, because the submit path
- * is a server action and an action argument is serialised whole — a 10 MB CV would ride inside
+ * is a server action and an action argument is serialised whole - a 10 MB CV would ride inside
  * the form post. So the answer this field holds is the resulting URL, and by the time anyone
  * presses submit the file is already stored.
  */

@@ -81,7 +81,7 @@ export async function addPendingJoiner(form: FormData): Promise<ActionResult> {
  *
  * Re-checks the cap here rather than trusting the suggestion the admin clicked: the batch may
  * have filled between the page rendering and the click. Same row-lock reasoning as
- * german-note-actions.claimSeat — a count without a lock is a race, not a cap.
+ * german-note-actions.claimSeat - a count without a lock is a race, not a cap.
  */
 export async function seatPendingJoiner(joinerId: string, batchId: string): Promise<ActionResult> {
   const session = await requireAdmin();
@@ -106,7 +106,7 @@ export async function seatPendingJoiner(joinerId: string, batchId: string): Prom
 
     const filled = await tx.batchMember.count({ where: { batchId } });
     if (filled >= batch.targetStrength) {
-      return { ok: false as const, error: `"${batch.name}" is full (${filled}/${batch.targetStrength}) — open another batch.` };
+      return { ok: false as const, error: `"${batch.name}" is full (${filled}/${batch.targetStrength}) - open another batch.` };
     }
 
     // Membership + pool exit commit together: a seated student must never still read as waiting.
@@ -155,7 +155,7 @@ export async function removePendingJoiner(joinerId: string): Promise<ActionResul
 
 /**
  * What should we open next? Reads the live pool and applies the pure rule.
- * Returns every group, openable or not — "3 waiting, still below the floor" is exactly the
+ * Returns every group, openable or not - "3 waiting, still below the floor" is exactly the
  * fact the founders currently hold in their heads.
  */
 export async function getPoolSuggestions(minToOpen: number = DEFAULT_MIN_TO_OPEN) {

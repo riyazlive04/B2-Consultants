@@ -12,7 +12,7 @@ import type {
  * Renders a marketing page.
  *
  * ── Why this is not `SiteBlocks.tsx` ──────────────────────────────────────────────────────────
- * The two now share a shape — `SiteBlocks` gained full-bleed section bands and per-node styling
+ * The two now share a shape - `SiteBlocks` gained full-bleed section bands and per-node styling
  * for the VSL/landing-page rebuild, so the original reason (it could only paint a fixed
  * `max-w-2xl` column) no longer holds.
  *
@@ -20,14 +20,14 @@ import type {
  * dashboard's own tokens; a marketing page belongs to a Site with its own brand, injected as CSS
  * custom properties on a wrapper because that theme is per-site data edited at runtime and
  * Tailwind cannot generate classes for values it has never seen. Merging the two is a genuine
- * option once the visual builder lands — the honest blocker is the theme boundary, not layout.
+ * option once the visual builder lands - the honest blocker is the theme boundary, not layout.
  */
 
 type Ctx = {
   theme: SiteTheme;
   /** Forwardable params from the visitor's own URL. See lib/site-links.ts. */
   incoming: Record<string, string>;
-  /** Path of the page being rendered — stamped onto forwarded links. */
+  /** Path of the page being rendered - stamped onto forwarded links. */
   fromPath: string;
   siteDomain?: string | null;
   nav: NavItem[];
@@ -44,7 +44,7 @@ const ALIGN: Record<string, string> = {
  * The Google Fonts stylesheet for whatever families the theme names.
  *
  * Driven by the theme rather than a static `next/font` import, because the family is per-site data
- * the team edits at runtime — a build-time import cannot know it. Returns null for system stacks so
+ * the team edits at runtime - a build-time import cannot know it. Returns null for system stacks so
  * a theme using only `sans-serif` does not fetch anything.
  *
  * `display=swap` on purpose: text renders immediately in a fallback rather than staying invisible
@@ -98,7 +98,7 @@ function backgroundStyle(bg: SectionBackground): React.CSSProperties {
  * Text colour for a block sitting on a section background.
  *
  * An explicit per-block `color` wins. Otherwise a block on a COLOURED band inherits, because the
- * band sets its own colour — this is what makes the white-on-violet "About Me" copy work without
+ * band sets its own colour - this is what makes the white-on-violet "About Me" copy work without
  * the author setting a colour on all eight paragraphs by hand.
  */
 function inkFor(b: SiteBlock, onBand: boolean, fallback: string): string | undefined {
@@ -121,7 +121,7 @@ function Anchor({
   children: React.ReactNode;
   forwardParams?: boolean;
 }) {
-  // Server-side forwarding only helps where a request actually exists — the editor preview, or a
+  // Server-side forwarding only helps where a request actually exists - the editor preview, or a
   // dynamically rendered page. The public pages are STATIC, so `incoming` is empty there and the
   // real work is done in the browser by <ForwardParams />, which keys off `data-forward`.
   const target = buildForwardedHref(href, {
@@ -136,7 +136,7 @@ function Anchor({
       className={className}
       style={style}
       {...(forwardParams ? { "data-forward": "1" } : {})}
-      // noopener is the one that matters — an external target with window.opener can navigate the
+      // noopener is the one that matters - an external target with window.opener can navigate the
       // page that opened it. noreferrer is kept alongside it as the conventional pair.
       {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
     >
@@ -303,7 +303,7 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
       return (
         <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 text-sm ${b.align === "center" ? "justify-center" : ""}`}>
           {(b.items ?? []).map((raw, i) => {
-            // "Label|/path" — one string per link keeps the footer editable as a plain list in the
+            // "Label|/path" - one string per link keeps the footer editable as a plain list in the
             // builder rather than needing a nested editor for three links.
             const [label, href] = raw.split("|").map((s) => s.trim());
             return (
@@ -328,7 +328,7 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
       return <div style={{ height: b.size ?? 24 }} />;
 
     case "form":
-      // Wired in Stage 3 alongside the editor — the funnel PublicForm needs its props threaded
+      // Wired in Stage 3 alongside the editor - the funnel PublicForm needs its props threaded
       // through, and a half-wired form on a live page captures nothing while looking like it does.
       return null;
 
@@ -370,7 +370,7 @@ function Section({ s, ctx }: { s: SiteSectionBlock; ctx: Ctx }) {
         ...backgroundStyle(s.background),
         paddingTop: s.padding[0],
         paddingBottom: s.padding[1],
-        // A coloured band carries light text by default — the live site's violet sections are
+        // A coloured band carries light text by default - the live site's violet sections are
         // white-on-violet, and making each block opt in would mean setting it on every paragraph.
         color: onBand ? "#ffffff" : undefined,
         ...(s.width === "contained"

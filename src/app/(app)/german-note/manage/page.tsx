@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 export default async function GnManagePage() {
   await requireSection("german-note");
-  await requireAdmin(); // belt and braces — management is Admin-only
+  await requireAdmin(); // belt and braces - management is Admin-only
   const [{ batches, tutors, students }, pool, batchCosts, activeLevels, adminLevels] = await Promise.all([
     getGnManageData(),
     getPendingPoolData(),

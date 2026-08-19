@@ -19,7 +19,7 @@ import {
 /**
  * The whole report, as four choices: object · group-by · measure · period.
  *
- * Every choice is a `router.push` to a new URL rather than local state — the URL *is* the current
+ * Every choice is a `router.push` to a new URL rather than local state - the URL *is* the current
  * report, which is what makes one shareable and bookmarkable without a saved-report table.
  *
  * Switching object deliberately drops `groupBy` and `measure`: neither is usually valid for the
@@ -65,7 +65,7 @@ export default function ReportControls({
       toast("Report link copied", "success");
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast("Could not copy the link — copy it from the address bar", "error");
+      toast("Could not copy the link - copy it from the address bar", "error");
     }
   };
 
@@ -101,7 +101,7 @@ export default function ReportControls({
         </Field>
 
         {/* A single-measure object (Contacts has only Count) gets a static caption instead of a
-            one-option control — a segmented control with nothing to switch to is a dead affordance. */}
+            one-option control - a segmented control with nothing to switch to is a dead affordance. */}
         <Field label="Measure" hint={measures.length === 1 ? "Contacts carry no money or outcome field" : undefined}>
           {measures.length === 1 ? (
             <p className="text-sm text-ink-2">{measures[0].label}</p>
@@ -118,7 +118,7 @@ export default function ReportControls({
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
         <p className="text-caption text-ink-3">
-          This report lives entirely in its URL — copy the link to save or share it.
+          This report lives entirely in its URL - copy the link to save or share it.
         </p>
         <Btn variant="soft" size="sm" onClick={copyLink} icon={copied ? <Check size={15} /> : <Copy size={15} />}>
           {copied ? "Copied" : "Copy report link"}

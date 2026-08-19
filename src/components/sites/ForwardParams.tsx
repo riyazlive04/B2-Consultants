@@ -8,15 +8,15 @@ import { useEffect } from "react";
  * ── Why this is client-side and not done during render ────────────────────────────────────────
  * These pages are STATIC. That is deliberate: the database sits ~680 ms away in another region, so
  * rendering per request would make every ad click wait on a cross-region round trip. But a static
- * page has no request, so the server cannot see `?utm_source=…` — Next hands a statically rendered
+ * page has no request, so the server cannot see `?utm_source=…` - Next hands a statically rendered
  * page an empty `searchParams`, and any forwarding done there would silently produce nothing.
  *
  * So the HTML ships with the plain href and a `data-forward` marker, and the query string is
  * folded in here, where it exists.
  *
  * Two passes, on purpose:
- *   · on mount — so a link is already correct if the visitor inspects or middle-clicks it;
- *   · on click — so a link rendered later, or a click that beats hydration, is still correct.
+ *   · on mount - so a link is already correct if the visitor inspects or middle-clicks it;
+ *   · on click - so a link rendered later, or a click that beats hydration, is still correct.
  * The click handler is the one that actually guarantees attribution; the mount pass is what makes
  * the href honest if anyone looks at it.
  */
@@ -39,7 +39,7 @@ function carry(): Record<string, string> {
   return out;
 }
 
-/** Fold the params into one href. Anything already on the link wins — the author meant it. */
+/** Fold the params into one href. Anything already on the link wins - the author meant it. */
 function decorate(href: string, params: Record<string, string>): string | null {
   let url: URL;
   try {

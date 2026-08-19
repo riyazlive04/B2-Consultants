@@ -17,14 +17,14 @@ const baseURL =
     : undefined) ||
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
 
-// Preview deployments get a unique *.vercel.app URL per deploy — trust it too.
+// Preview deployments get a unique *.vercel.app URL per deploy - trust it too.
 // EXTRA_TRUSTED_ORIGINS (comma-separated) lets a temporary tunnel (e.g. ngrok) sign in
-// WITHOUT repointing BETTER_AUTH_URL — so emailed/booking/agreement links keep using the
+// WITHOUT repointing BETTER_AUTH_URL - so emailed/booking/agreement links keep using the
 // real base URL. Leave it unset in production; it only widens the sign-in origin allow-list.
 /**
  * Local development is trusted on ANY port, automatically.
  *
- * `BETTER_AUTH_URL` names one origin, and better-auth rejects every other — so running the dev
+ * `BETTER_AUTH_URL` names one origin, and better-auth rejects every other - so running the dev
  * server on 3001 because 3000 was busy produced "Sign-in failed: Invalid origin", which reads
  * like a broken password rather than a config mismatch and sends you looking at the user table.
  * The ports below are what `next dev` actually walks through when one is taken.
@@ -41,7 +41,7 @@ const devOrigins =
  *
  * Belt and braces with `baseURL`: those two are set in one file and WILL drift, and when they do
  * the symptom is that nobody can sign in to production. Trusting APP_DOMAIN as well means a
- * stale BETTER_AUTH_URL breaks emailed links — annoying, visible, fixable — instead of the front
+ * stale BETTER_AUTH_URL breaks emailed links - annoying, visible, fixable - instead of the front
  * door.
  */
 const appDomainOrigin = process.env.APP_DOMAIN ? `https://${process.env.APP_DOMAIN.trim()}` : null;
@@ -56,7 +56,7 @@ const trustedOrigins = [
 
 /**
  * Reset-password email body. Kept in this file (not messaging.ts) because this is a
- * system/account email to a User, not a CRM message to a Lead — messaging.ts's
+ * system/account email to a User, not a CRM message to a Lead - messaging.ts's
  * sendEmailMessage() writes an append-only Message row keyed to a Lead, which doesn't
  * fit an auth event. It still goes through the exact same low-level send path
  * (getEmailRuntime + sendResendEmail from lib/email.ts) everything else uses.
@@ -66,9 +66,9 @@ function resetPasswordEmailHtml(name: string, url: string): string {
   return `<div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#16203A;line-height:1.6">
     ${brandEmailHeader()}
     <p>Hi ${first},</p>
-    <p>Someone asked to reset the password on your B2 Consultants account. If that was you, set a new one here — this link works once and expires in an hour:</p>
+    <p>Someone asked to reset the password on your B2 Consultants account. If that was you, set a new one here - this link works once and expires in an hour:</p>
     <p><a href="${url}" style="color:#3762F0">Reset your password</a></p>
-    <p>If you didn't request this, you can ignore this email — your password hasn't changed.</p>
+    <p>If you didn't request this, you can ignore this email - your password hasn't changed.</p>
   </div>`;
 }
 
@@ -85,7 +85,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
-    // Password RESET only — sign-up stays disabled above. Fails closed exactly like
+    // Password RESET only - sign-up stays disabled above. Fails closed exactly like
     // every other email path in this app: if EMAIL_ENABLED/RESEND_API_KEY aren't
     // set (or sending is paused), this silently no-ops instead of throwing into
     // better-auth's request handler. The request-password-reset endpoint always
@@ -123,7 +123,7 @@ export const auth = betterAuth({
     session: {
       create: {
         /**
-         * A suspended account gets no session — the credentials may be perfect, but
+         * A suspended account gets no session - the credentials may be perfect, but
          * sign-in stops here. This is the front door; `requireSession` is the back-stop
          * for sessions minted before the suspension landed.
          */

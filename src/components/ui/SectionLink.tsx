@@ -7,7 +7,7 @@ import { useCanNavigate } from "@/components/shell/SectionAccess";
 /**
  * A link into another SECTION, which renders nothing when the viewer cannot open it.
  *
- * Exists because some sections are reachable but not listed on the sidebar (`offRail`) — the
+ * Exists because some sections are reachable but not listed on the sidebar (`offRail`) - the
  * Opportunities board and the Outreach queue are surfaced from Pipeline, where they belong,
  * rather than as three separate rail entries for one job. Those cross-links are now the ONLY way
  * in, so they must be right about access: a dead link into a section someone lacks is worse than
@@ -22,7 +22,7 @@ export function SectionLink({
   children,
 }: {
   href: string;
-  /** Documentation for the reader — access is resolved from `href`'s first path segment. */
+  /** Documentation for the reader - access is resolved from `href`'s first path segment. */
   sectionKey: string;
   children: ReactNode;
 }) {

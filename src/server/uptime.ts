@@ -3,12 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { captureMessage } from "@/lib/observability";
 
 /**
- * Uptime monitoring — the half an external URL pinger cannot do.
+ * Uptime monitoring - the half an external URL pinger cannot do.
  *
  * A monitor that GETs /api/health proves the web process is answering. In THIS app that is the
  * less interesting half: every engine (outreach, dunning, digest, overdue sweep, slot top-up) runs
  * only when an external scheduler lands an HTTP request on a cron route. The container can be
- * perfectly healthy for a week while nothing has actually happened — which is close to the state
+ * perfectly healthy for a week while nothing has actually happened - which is close to the state
  * production was already in.
  *
  * So uptime here is TWO things:
@@ -19,11 +19,11 @@ import { captureMessage } from "@/lib/observability";
  *
  *  2. A dead-man's switch: after a SUCCESSFUL run we ping `UPTIME_HEARTBEAT_URL` (the shape
  *     Healthchecks.io / BetterStack / Cronitor all use). Silence is the alert. This is the only
- *     design that catches "the scheduled task on the host died" — the failure mode where the app
+ *     design that catches "the scheduled task on the host died" - the failure mode where the app
  *     itself has no way to know anything is wrong, because the code that would notice is the code
  *     that isn't running.
  *
- * Both are optional and keys-off. Never throws — an observability failure must not fail the job it
+ * Both are optional and keys-off. Never throws - an observability failure must not fail the job it
  * was observing.
  */
 
@@ -32,7 +32,7 @@ const HEARTBEAT_KEY = "cronHeartbeat";
 /** How long a job may go unheard-from before the health probe calls it stale. */
 export const STALE_AFTER_MINUTES: Record<string, number> = {
   daily: 180, // hourly tick, generous margin for a slow run
-  alerts: 30, // */5 tick — this one is meant to be prompt
+  alerts: 30, // */5 tick - this one is meant to be prompt
   outreach: 30,
   whatsapp: 180,
   workflows: 180,
@@ -77,7 +77,7 @@ export async function readHeartbeats(): Promise<HeartbeatMap> {
     return coerce(row?.value);
   } catch {
     // The heartbeat lives in the database, so a database outage takes it with it. Returning {}
-    // renders every job as "never run", which is the honest reading — we genuinely don't know.
+    // renders every job as "never run", which is the honest reading - we genuinely don't know.
     return {};
   }
 }
@@ -87,7 +87,7 @@ export async function readHeartbeats(): Promise<HeartbeatMap> {
  *
  * `ok: false` does NOT ping. That is the entire mechanism: a failing job stops feeding the switch,
  * the external monitor's grace period expires, and someone gets paged. Pinging on every run
- * regardless of outcome — a surprisingly common mistake — turns the switch into a liveness check
+ * regardless of outcome - a surprisingly common mistake - turns the switch into a liveness check
  * for the scheduler and nothing more.
  */
 export async function recordCronRun(
@@ -111,7 +111,7 @@ export async function recordCronRun(
       update: { value: map as object },
     });
 
-    // Escalate a job that has failed repeatedly. Once, at the threshold — not on every run after
+    // Escalate a job that has failed repeatedly. Once, at the threshold - not on every run after
     // it, or a permanently broken job becomes a permanent alert nobody reads.
     if (!outcome.ok && next.consecutiveFailures === 3) {
       await captureMessage(`Cron job "${job}" has failed 3 times in a row`, {
@@ -154,7 +154,7 @@ export type CronHealthRow = {
   consecutiveFailures: number;
   lastError: string | null;
   stale: boolean;
-  /** True when this job has NEVER been seen — i.e. nothing is calling it at all. */
+  /** True when this job has NEVER been seen - i.e. nothing is calling it at all. */
   neverRun: boolean;
 };
 

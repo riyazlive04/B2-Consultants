@@ -21,14 +21,14 @@ import {
 /**
  * The picture of the current report.
  *
- * The chart FORM is chosen by data shape, not by a picker (`chartShapeFor`) — see §5.8 and the
+ * The chart FORM is chosen by data shape, not by a picker (`chartShapeFor`) - see §5.8 and the
  * rationale on that function. Giving the user a chart-type dropdown sounds like flexibility and
  * in practice hands them the chance to plot a ranking as a line, which asserts continuity between
  * categories that have none. The tool should know which chart answers the question it was just
  * asked.
  *
  * Long tails roll up to a "Other" bar: a 40-bar chart is a texture, not a ranking. Nothing is
- * hidden — the table below always carries every row.
+ * hidden - the table below always carries every row.
  */
 
 const CHART_ROW_LIMIT = 12;
@@ -100,7 +100,7 @@ export default function ReportChart({
           height={280}
           formatValue={axisFormat}
           formatTooltip={fullFormat}
-          // A rate is not a quantity — baselining a win rate at zero wastes most of the plot on
+          // A rate is not a quantity - baselining a win rate at zero wastes most of the plot on
           // empty space below a line that lives between 20% and 60%.
           zeroBased={measure !== "winRate"}
           srCaption={`${mLabel} of ${objectLabel(object)} by ${groupLabel}, ${periodLabel}`}
@@ -131,7 +131,7 @@ export default function ReportChart({
         })()
       : undefined,
     href: r.href,
-    // Count is the volume behind a money or rate figure — without it "100% win rate" off one
+    // Count is the volume behind a money or rate figure - without it "100% win rate" off one
     // deal reads identically to 100% off forty, which is the single most common way a rate
     // misleads.
     meta: measure !== "count" ? `${r.count.toLocaleString("en-IN")} record${r.count === 1 ? "" : "s"}` : undefined,

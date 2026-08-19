@@ -66,9 +66,9 @@ export const INTAKE_OPTIONS = {
     { value: "yes", label: "Yes, I am ready to learn German." },
   ],
   /**
-   * ── Budget (BANT: B) — NOTE THE UNIT CHANGE ────────────────────────────────────
+   * ── Budget (BANT: B) - NOTE THE UNIT CHANGE ────────────────────────────────────
    * MONTHLY rupees. The previous catalogue asked for annual income, so the bands and their
-   * scores below are not a re-labelling of the old ones — ₹50,000/month and ₹50,000/year are
+   * scores below are not a re-labelling of the old ones - ₹50,000/month and ₹50,000/year are
    * opposite ends of the market. Old rows keep their annual values and their annual scores
    * (see BANT_ANSWER_SCORES); nothing is retro-fitted onto a question that was never asked.
    */
@@ -116,7 +116,7 @@ export const INTAKE_OPTIONS = {
   ],
 } as const satisfies Record<string, readonly IntakeOption[]>;
 
-/** Suggested industries. Free text on purpose — the form lets a prospect add their own. */
+/** Suggested industries. Free text on purpose - the form lets a prospect add their own. */
 export const INDUSTRY_SUGGESTIONS = ["IT Related", "Mechanical Related"] as const;
 
 /**
@@ -124,7 +124,7 @@ export const INDUSTRY_SUGGESTIONS = ["IT Related", "Mechanical Related"] as cons
  *
  * Every booking taken before 07/08/2026 holds a value from the old catalogue. Without this,
  * `intakeLabel` falls through to the raw slug and the Bookings table starts showing "lt_5l"
- * and "b2+" against real prospects — the history silently degrades the moment the question
+ * and "b2+" against real prospects - the history silently degrades the moment the question
  * changes. Keyed by field so an old `none` cannot be read as a different field's `none`.
  */
 export const LEGACY_INTAKE_LABELS: Record<string, Record<string, string>> = {

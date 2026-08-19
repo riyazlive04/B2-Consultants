@@ -1,20 +1,20 @@
 import { slaFor, windowFor, type SlaWindow } from "./outreach-sla";
 
 /**
- * Speed to lead — the alerting rule, as pure functions.
+ * Speed to lead - the alerting rule, as pure functions.
  *
  * `outreach-sla.ts` already grades ONE lead against the JD's four response clauses. What it
  * cannot say is "is the situation right now bad enough to interrupt a human", which is a
  * different question with a different answer: a single missed 5-minute clock is a Tuesday; forty
  * of them before lunch is an incident.
  *
- * This file answers that second question and nothing else. Pure and dependency-free — the
+ * This file answers that second question and nothing else. Pure and dependency-free - the
  * threshold is the number that will actually get argued about, so it must be adjustable and
  * checkable without a database, a session or a running server.
  *
  * THE BACKLOG PROBLEM, which shapes the whole design: production holds ~23,435 leads and
  * essentially none have ever been contacted. A naive "alert when any lead is past its deadline"
- * fires on all 23,000 of them, every tick, forever — and gets muted on day two, at which point
+ * fires on all 23,000 of them, every tick, forever - and gets muted on day two, at which point
  * the alerting is worse than none because it also carries the false assurance of having been set
  * up. So the standing backlog and newly-arrived leads are counted SEPARATELY, and only the
  * second is a default alerting trigger.
@@ -24,7 +24,7 @@ import { slaFor, windowFor, type SlaWindow } from "./outreach-sla";
 export type SpeedToLeadLead = {
   id: string;
   name: string;
-  /** When they opted in. The clock starts here — not at row creation. */
+  /** When they opted in. The clock starts here - not at row creation. */
   optInAt: Date;
   /** First SPOKE call, or null if nobody has ever connected. */
   connectedAt: Date | null;
@@ -60,7 +60,7 @@ export type SpeedToLeadOptions = {
   thresholdMinutes: number;
   /**
    * How far back to look for "newly arrived". Anything older is standing backlog and is
-   * deliberately not the subject of this alert — see the module note.
+   * deliberately not the subject of this alert - see the module note.
    */
   lookbackMinutes: number;
 };
@@ -70,7 +70,7 @@ const MINUTE_MS = 60_000;
 /**
  * Grades a batch of leads and produces the alert's payload.
  *
- * `leads` should already be restricted to the lookback window by the caller's query — passing
+ * `leads` should already be restricted to the lookback window by the caller's query - passing
  * 23,000 rows here would work, but pulling them out of the database every five minutes would
  * not. The function re-checks the window anyway, so correctness does not depend on the query
  * being right.
@@ -90,7 +90,7 @@ export function speedToLeadReport(
     const ageMinutes = Math.floor((now.getTime() - lead.optInAt.getTime()) / MINUTE_MS);
 
     if (lead.connectedAt) {
-      // Reuse the JD's own verdict rather than re-deriving "within five minutes" here — the
+      // Reuse the JD's own verdict rather than re-deriving "within five minutes" here - the
       // definition of a met SLA belongs in one place.
       if (slaFor(lead.optInAt, lead.connectedAt, now).metFiveMinute) metFiveMinute++;
       continue;
@@ -147,11 +147,11 @@ export function shouldAlert(report: SpeedToLeadReport, minBreaches: number): boo
 
 /**
  * The alert's one-line subject. Kept here rather than in the sender so it is covered by the
- * pure tests — a subject line that says the wrong number is the whole message being wrong.
+ * pure tests - a subject line that says the wrong number is the whole message being wrong.
  */
 export function alertSubject(report: SpeedToLeadReport): string {
   const n = report.breaches.length;
-  return `${n} lead${n === 1 ? "" : "s"} waiting — oldest ${formatAge(report.worstAgeMinutes)}`;
+  return `${n} lead${n === 1 ? "" : "s"} waiting - oldest ${formatAge(report.worstAgeMinutes)}`;
 }
 
 /** "3 min" / "2 h 15 min" / "1 d 4 h". Compact enough for a subject line. */
@@ -167,6 +167,6 @@ export function formatAge(minutes: number): string {
 
 /** Percentage string for the five-minute hit rate, or an em dash when there is no denominator. */
 export function formatHitRate(hitRate: number | null): string {
-  if (hitRate === null) return "—";
+  if (hitRate === null) return "-";
   return `${Math.round(hitRate * 100)}%`;
 }

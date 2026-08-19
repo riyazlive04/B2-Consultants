@@ -1,5 +1,5 @@
 /**
- * Reward rules — PURE. "When X happens, this person has earned Y."
+ * Reward rules - PURE. "When X happens, this person has earned Y."
  *
  * The founder writes rules (streak → ₹2,000; 5 deals in a month → ₹5,000). This
  * module decides WHO qualified and WHEN, from the same derived history the Arena
@@ -8,8 +8,8 @@
  *
  * IDEMPOTENCE is the whole design. Every qualification carries a `periodKey`, and
  * (ruleId, teamProfileId, periodKey) is unique in the database. Re-running the
- * evaluator over all of history — which is what happens on every scan, because
- * nothing is cached — re-derives the same keys and inserts nothing new. That is
+ * evaluator over all of history - which is what happens on every scan, because
+ * nothing is cached - re-derives the same keys and inserts nothing new. That is
  * what lets a founder edit a rule and rescan without double-paying anyone, and
  * what lets a grant they already declined stay declined.
  *
@@ -72,7 +72,7 @@ export const REWARD_TRIGGER_LABELS: Record<RewardTriggerKind, string> = {
   GOAL_MET: "A goal is met",
 };
 
-/** What the person gets. PERK carries no money — it's a thing, not a payout. */
+/** What the person gets. PERK carries no money - it's a thing, not a payout. */
 export type RewardKind = "BONUS" | "COMMISSION" | "PERK";
 export const REWARD_KINDS: readonly RewardKind[] = ["BONUS", "COMMISSION", "PERK"];
 
@@ -87,7 +87,7 @@ export type RewardRule = {
   roles: AppRole[];
 };
 
-/** One person, one rule, one period — the unit the founder approves. */
+/** One person, one rule, one period - the unit the founder approves. */
 export type Qualification = {
   ruleId: string;
   userId: string;
@@ -144,7 +144,7 @@ export type EvaluateInput = {
 /**
  * Every qualification that has EVER happened, for every active rule. The caller
  * inserts what's missing; the unique key makes re-inserts no-ops. Deliberately not
- * incremental — a full re-derivation is cheap at this team size and can't drift.
+ * incremental - a full re-derivation is cheap at this team size and can't drift.
  */
 export function evaluateRewards({ todayKey, players, rules, goals }: EvaluateInput): Qualification[] {
   const out: Qualification[] = [];
@@ -174,7 +174,7 @@ function qualificationsFor(
 
   switch (t.kind) {
     case "STREAK_DAYS": {
-      // One grant per run that got there — a second 30-day streak earns it again.
+      // One grant per run that got there - a second 30-day streak earns it again.
       if (t.days <= 0) return [];
       return streakRuns(p.logDays)
         .filter((run) => run.length >= t.days)

@@ -89,7 +89,7 @@ export default function WorkflowsList({
   async function runNow() {
     const res = await runWorkflowsNow();
     if (res.disabled) return toast("The engine is switched off in Global Workflow Settings", "error");
-    toast(`Ran automation — ${res.processed} enrollment${res.processed === 1 ? "" : "s"} processed`);
+    toast(`Ran automation - ${res.processed} enrollment${res.processed === 1 ? "" : "s"} processed`);
   }
   async function rename(f: FolderRow) {
     const next = window.prompt("Rename folder", f.name);
@@ -120,7 +120,7 @@ export default function WorkflowsList({
     setSelected(new Set());
     toast(
       res.skipped > 0
-        ? `${res.changed} ${publish ? "published" : "unpublished"} — ${res.skipped} skipped (no actions yet)`
+        ? `${res.changed} ${publish ? "published" : "unpublished"} - ${res.skipped} skipped (no actions yet)`
         : `${res.changed} workflow${res.changed === 1 ? "" : "s"} ${publish ? "published" : "unpublished"}`,
     );
   }
@@ -302,10 +302,10 @@ export default function WorkflowsList({
       {/* New workflow */}
       <Modal open={open} onClose={() => setOpen(false)} title={openFolder ? `New workflow in “${openFolder.name}”` : "New workflow"} size="sm">
         <form action={create} className="space-y-4">
-          {/* Creating inside a folder puts it in that folder — matches where the user is. */}
+          {/* Creating inside a folder puts it in that folder - matches where the user is. */}
           <input type="hidden" name="folderId" value={openFolder?.id ?? ""} />
           <Field label="Name"><TextInput name="name" required placeholder="e.g. New lead nurture" /></Field>
-          <Field label="Trigger — run this when…"><Select name="triggerType" options={TRIGGER_OPTS} defaultValue="FORM_SUBMITTED" /></Field>
+          <Field label="Trigger - run this when…"><Select name="triggerType" options={TRIGGER_OPTS} defaultValue="FORM_SUBMITTED" /></Field>
           <FormError message={error} />
           <div className="flex justify-end gap-2"><Btn variant="ghost" type="button" onClick={() => setOpen(false)}>Cancel</Btn><SubmitButton>Create</SubmitButton></div>
         </form>

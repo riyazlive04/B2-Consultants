@@ -16,7 +16,7 @@ import type { TerminationReport } from "@/server/termination-report";
  * Offboarding, in three steps: what they did, what they still hold, then confirm.
  *
  * ── Why it is a review before a button, not a button with a confirm ──────────────
- * The destructive part of terminating someone is not closing their login — it is that their open
+ * The destructive part of terminating someone is not closing their login - it is that their open
  * work silently stops being anybody's. So the dialog is built around answering "what happens to
  * their queue" BEFORE asking whether to proceed, and it refuses to continue while anything is
  * outstanding and no successor has been chosen.
@@ -125,7 +125,7 @@ export function TerminateDialog({
               <>
                 <p className="text-sm text-muted">
                   These move to whoever takes over. Their call history, recorded outcomes and past
-                  commission stay with them — those are a record of what happened, not work.
+                  commission stay with them - those are a record of what happened, not work.
                 </p>
                 <ul className="divide-y divide-line rounded-card border border-line">
                   {held.map((c) => (
@@ -143,7 +143,7 @@ export function TerminateDialog({
 
             <Field
               label="Who takes this over?"
-              hint={needsSuccessor ? "Required — open work cannot be left ownerless." : "Optional."}
+              hint={needsSuccessor ? "Required - open work cannot be left ownerless." : "Optional."}
             >
               <SelectMenu
                 aria-label="Successor"
@@ -152,7 +152,7 @@ export function TerminateDialog({
                 options={
                   needsSuccessor
                     ? successors
-                    : [{ value: "", label: "Nobody — nothing to hand over" }, ...successors]
+                    : [{ value: "", label: "Nobody - nothing to hand over" }, ...successors]
                 }
               />
             </Field>
@@ -173,7 +173,7 @@ export function TerminateDialog({
               <p className="text-sm text-muted">
                 {holds.total} open item{holds.total === 1 ? "" : "s"} will move to{" "}
                 <strong className="text-ink">
-                  {successors.find((s) => s.value === successorProfileId)?.label ?? "—"}
+                  {successors.find((s) => s.value === successorProfileId)?.label ?? "-"}
                 </strong>
                 .
               </p>

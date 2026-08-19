@@ -27,22 +27,22 @@ import { LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
 import { SYNAMATE_STAGES } from "@/lib/pipeline-stages";
 
 // Options for mapping a stage back to a lead-lifecycle stage (the bridge that syncs a card move to
-// Lead.stage). "" = no sync; the board stays a standalone process — offered on custom pipelines
+// Lead.stage). "" = no sync; the board stays a standalone process - offered on custom pipelines
 // only, since an unmapped column on the default board swallows deals (opportunities-actions).
 const LIFECYCLE_OPTS = [
-  { value: "", label: "— No lead-stage sync —" },
+  { value: "", label: "- No lead-stage sync -" },
   ...Object.entries(LEAD_STAGE_LABELS).map(([value, label]) => ({ value, label })),
 ];
 const LIFECYCLE_OPTS_REQUIRED = LIFECYCLE_OPTS.slice(1);
 
 // Which of Synamate's two won columns a WON-mapped column is. Shown only for WON.
 const PLAN_OPTS = [
-  { value: "", label: "— either —" },
+  { value: "", label: "- either -" },
   ...Object.entries(PAYMENT_PLAN_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 const SOURCE_OPTS = [
-  { value: "", label: "— source —" },
+  { value: "", label: "- source -" },
   { value: "INSTAGRAM", label: "Instagram" }, { value: "YOUTUBE", label: "YouTube" },
   { value: "LINKEDIN", label: "LinkedIn" }, { value: "WHATSAPP", label: "WhatsApp" },
   { value: "REFERRAL", label: "Referral" }, { value: "SUMMIT", label: "Summit" },
@@ -66,7 +66,7 @@ export default function Board({
   /**
    * The founder's `pipelineConfig.mode`, HONOURED HERE AT LAST.
    *
-   * The setting has existed since Part 2 §9 and was read by exactly one screen — `/pipeline`.
+   * The setting has existed since Part 2 §9 and was read by exactly one screen - `/pipeline`.
    * This board ignored it entirely and was always drag-and-drop, so the two boards over the same
    * data disagreed about who is allowed to move a card, and switching to "rules-driven" locked
    * one board while leaving the other wide open.
@@ -103,21 +103,21 @@ export default function Board({
   }, [stages, mobileStageId]);
 
   // Auto-scroll while dragging a card. Native HTML5 drag doesn't scroll the board's overflow
-  // container (or the page), so a card can't be dropped onto a stage that's scrolled off-screen —
+  // container (or the page), so a card can't be dropped onto a stage that's scrolled off-screen -
   // you'd drag to the edge and get stuck. While a card is in flight we watch the pointer: near the
   // board's left/right edge we scroll the board horizontally (to reach an off-screen stage); near
   // the viewport's top/bottom we scroll the window (to reach cards low in a tall column). A rAF
   // loop keeps scrolling using the last-seen speed, so it continues even while the cursor is held
   // still at an edge (dragover stops firing when stationary). Listeners are wired only while
   // dragId is set and torn down (with the loop) the moment the drag ends.
-  // The scrollable strip now belongs to HScroll, which hands it back through this handle — the
+  // The scrollable strip now belongs to HScroll, which hands it back through this handle - the
   // auto-scroll below drives exactly the same element it always did.
   /**
    * Columns the viewer has folded away, kept per pipeline in localStorage.
    *
    * Client-only on purpose: which columns you have out of the way is a preference about YOUR
    * screen, not a property of the board, so it must not follow you onto someone else's. Read in an
-   * effect rather than in the initialiser because this component server-renders — reading
+   * effect rather than in the initialiser because this component server-renders - reading
    * localStorage during render is a hydration mismatch.
    */
   const collapseKey = `b2.board.collapsed.${board.activePipelineId ?? "none"}`;
@@ -138,7 +138,7 @@ export default function Board({
       try {
         window.localStorage.setItem(collapseKey, JSON.stringify([...next]));
       } catch {
-        /* private mode / storage full — folding still works for this visit */
+        /* private mode / storage full - folding still works for this visit */
       }
       return next;
     });
@@ -228,7 +228,7 @@ export default function Board({
     // Dropping a card straight onto the Won column records it as a won deal (and, on the sales
     // pipeline, marks the underlying contact Won). That's easy to trigger with a stray drag, so a
     // direct-to-Won drop must be explicitly verified first. Only when the card is actually MOVING
-    // into Won — reordering a card already in Won doesn't nag.
+    // into Won - reordering a card already in Won doesn't nag.
     const target = stages.find((s) => s.id === toStageId);
     const card = stages.flatMap((s) => s.cards).find((c) => c.id === id);
     const movingIntoWon = target?.legacyStage === "WON" && card?.stageId !== toStageId;
@@ -238,7 +238,7 @@ export default function Board({
         body: "You dropped this card directly into Won. That records it as a won deal and moves the contact to the Won stage. Move the card back to undo.",
         confirmLabel: "Mark as Won",
       });
-      if (!ok) return; // declined — leave the board exactly as it was, no move
+      if (!ok) return; // declined - leave the board exactly as it was, no move
     }
 
     const prev = stages;
@@ -290,12 +290,12 @@ export default function Board({
 
   // Deleting the last card a lead has also archives the LEAD, so it leaves the callers' desks
   // and the Pipeline list too (`deleteOpportunity`). The confirm says so, because "delete" here
-  // now reaches further than the board — and both halves come back together from Archived.
+  // now reaches further than the board - and both halves come back together from Archived.
   async function removeOpp() {
     if (!editCard) return;
     const ok = await askConfirm({
       title: `Delete "${editCard.name}"?`,
-      body: "The card and the lead behind it are archived together — the lead leaves the Pipeline list and its owner's desk. Restore both from the Archived tab.",
+      body: "The card and the lead behind it are archived together - the lead leaves the Pipeline list and its owner's desk. Restore both from the Archived tab.",
       danger: true,
     });
     if (!ok) return;
@@ -341,7 +341,7 @@ export default function Board({
   }
 
   const stageOpts = stages.map((s) => ({ value: s.id, label: s.name }));
-  const ownerOpts = [{ value: "", label: "— unassigned —" }, ...board.owners.map((o) => ({ value: o.id, label: o.name }))];
+  const ownerOpts = [{ value: "", label: "- unassigned -" }, ...board.owners.map((o) => ({ value: o.id, label: o.name }))];
   const mobileStage = stages.find((s) => s.id === mobileStageId) ?? stages[0];
 
   return (
@@ -382,7 +382,7 @@ export default function Board({
       </div>
 
       {/* Mobile: single-column, stage picker instead of a horizontal-scrolling board. Also the
-          non-drag path for touch devices — cards move via the edit modal's Stage field. */}
+          non-drag path for touch devices - cards move via the edit modal's Stage field. */}
       <div className="md:hidden">
         <Select
           aria-label="Stage"
@@ -410,8 +410,8 @@ export default function Board({
       </div>
 
       {/* Desktop / tablet: full drag-and-drop board.
-          HScroll adds the affordance this was missing — edge fades, paging arrows and an
-          always-visible scrollbar — so stages off the right edge announce themselves instead of
+          HScroll adds the affordance this was missing - edge fades, paging arrows and an
+          always-visible scrollbar - so stages off the right edge announce themselves instead of
           looking like the end of the board. It exposes the same scroll element the drag
           auto-scroll below already drives. */}
       <HScroll ref={boardScroll} label="Pipeline stages" className="hidden pb-1 md:block">
@@ -424,7 +424,7 @@ export default function Board({
             className={`flex flex-none flex-col rounded-card border bg-surface-2 ${collapsed.has(stage.id) ? "w-12" : "w-72"} ${dropStage === stage.id ? "border-primary" : "border-line"}`}
           >
             {collapsed.has(stage.id) ? (
-              /* Collapsed rail. Still a drop target — the wrapper's handlers are unchanged — so a
+              /* Collapsed rail. Still a drop target - the wrapper's handlers are unchanged - so a
                  card can be parked in a column you have folded away. */
               <button
                 type="button"
@@ -448,7 +448,7 @@ export default function Board({
                         columns on the default board with nothing anywhere saying so. */}
                     {!stage.legacyStage && (
                       <span
-                        title="This column isn't mapped to a lead stage — a card moved here stops updating the lead's stage, and won't be moved back automatically."
+                        title="This column isn't mapped to a lead stage - a card moved here stops updating the lead's stage, and won't be moved back automatically."
                         className="flex-none rounded-full bg-warn-soft px-1.5 py-0.5 text-caption font-semibold text-warn"
                       >
                         Unmapped
@@ -464,7 +464,7 @@ export default function Board({
                       <ChevronLeft size={14} />
                     </button>
                   </div>
-                  {/* Count and money on one line under the name — the two figures anyone scanning
+                  {/* Count and money on one line under the name - the two figures anyone scanning
                       the board is actually comparing between columns. */}
                   <div className="mt-0.5 flex items-baseline gap-2 text-caption text-ink-3">
                     <span>{stage.count.toLocaleString("en-IN")} {stage.count === 1 ? "opportunity" : "opportunities"}</span>
@@ -496,7 +496,7 @@ export default function Board({
                   this message asks for. It previously pointed at a control that did not exist. */}
               {stage.hasMore && (
                 <p className="rounded-field border border-dashed border-line px-2 py-3 text-center text-caption text-ink-3">
-                  Only the first 300 cards in this column are shown — use the search and filters
+                  Only the first 300 cards in this column are shown - use the search and filters
                   above to narrow it down.
                 </p>
               )}
@@ -521,7 +521,7 @@ export default function Board({
           </div>
           {addMode === "existing" ? (
             <Field label="Contact">
-              <Select name="leadId" options={[{ value: "", label: "— pick a contact —" }, ...contacts.map((c) => ({ value: c.id, label: `${c.name} · ${c.phone ?? "no phone"}` }))]} defaultValue="" />
+              <Select name="leadId" options={[{ value: "", label: "- pick a contact -" }, ...contacts.map((c) => ({ value: c.id, label: `${c.name} · ${c.phone ?? "no phone"}` }))]} defaultValue="" />
             </Field>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -532,7 +532,7 @@ export default function Board({
           <div className="grid grid-cols-2 gap-3">
             <Field label="Stage"><Select name="stageId" options={stageOpts} defaultValue={stageOpts[0]?.value} /></Field>
             <Field label="Value (₹)"><TextInput kind="money" name="valueInr" placeholder="150000" /></Field>
-            {/* Deal name is free text, not kind="name": "Level 2 — Q3 renewal" is a real deal. */}
+            {/* Deal name is free text, not kind="name": "Level 2 - Q3 renewal" is a real deal. */}
             <Field label="Deal name"><TextInput kind="text" name="name" placeholder="Defaults to contact name" /></Field>
             <Field label="Source"><Select name="source" options={SOURCE_OPTS} defaultValue="" /></Field>
             <Field label="Owner"><Select name="assignedToId" options={ownerOpts} defaultValue="" /></Field>
@@ -545,10 +545,10 @@ export default function Board({
         </form>
       </Modal>
 
-      {/* Edit opportunity — Details (the existing form, untouched) + Notes (BUILD_CHECKLIST.md
+      {/* Edit opportunity - Details (the existing form, untouched) + Notes (BUILD_CHECKLIST.md
           §3: Opportunity gets its own notes via ContactNote.opportunityId, not just the parent
           Lead's). Two tabs rather than one long scroll, and the note form has to be a sibling of
-          the Details form (not nested inside it) since HTML forms can't nest — Tabs only ever
+          the Details form (not nested inside it) since HTML forms can't nest - Tabs only ever
           mounts one panel at a time, so that's naturally satisfied here. */}
       <Modal open={!!editCard} onClose={() => setEditCard(null)} title="Edit opportunity" size="md">
         {editCard && (
@@ -625,7 +625,7 @@ function OppCard({
   /**
    * A drag MUST put something on the dataTransfer to start.
    *
-   * Chrome tolerates an empty payload; Firefox does not — it cancels the drag outright, so the
+   * Chrome tolerates an empty payload; Firefox does not - it cancels the drag outright, so the
    * board looked permanently un-draggable there even with drag mode on. The id we write is not
    * read back (the dragged card is tracked in React state), but setting it is what makes the
    * gesture legal, and `effectAllowed` is what shows a move cursor instead of the "no entry" one.
@@ -635,7 +635,7 @@ function OppCard({
       e.dataTransfer.setData("text/plain", card.id);
       e.dataTransfer.effectAllowed = "move";
     } catch {
-      /* a browser that refuses the write can still drag — state carries the card */
+      /* a browser that refuses the write can still drag - state carries the card */
     }
     onDragStart?.();
   };
@@ -668,13 +668,13 @@ function OppCard({
         )}
       </div>
 
-      {/* Labelled rows. The label carries the meaning — a bare "Social media" above a bare
+      {/* Labelled rows. The label carries the meaning - a bare "Social media" above a bare
           "₹1,500" reads as two unrelated facts. */}
       <dl className="mt-2 space-y-0.5 text-caption">
         <div className="flex gap-2">
           <dt className="w-12 flex-none text-ink-3">Source</dt>
           <dd className="min-w-0 truncate text-ink-2">
-            {card.source ? card.source.replaceAll("_", " ").toLowerCase() : "—"}
+            {card.source ? card.source.replaceAll("_", " ").toLowerCase() : "-"}
           </dd>
         </div>
         <div className="flex gap-2">
@@ -683,7 +683,7 @@ function OppCard({
         </div>
       </dl>
 
-      {/* Quick actions. Every icon here does something real — a decorative icon row on a card
+      {/* Quick actions. Every icon here does something real - a decorative icon row on a card
           people click all day is worse than none. `stopPropagation` so acting on a card does not
           also open its edit modal. */}
       <div className="mt-2 flex items-center gap-1 border-t border-line pt-2">
@@ -717,7 +717,7 @@ function OppCard({
   );
 }
 
-/** One quick action on a card. A link, not a button — these all navigate or hand off to the OS. */
+/** One quick action on a card. A link, not a button - these all navigate or hand off to the OS. */
 function CardAction({
   href, label, external = false, children,
 }: {
@@ -809,7 +809,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
                       <Trash2 size={15} />
                     </IconButton>
                   </div>
-                  {/* Every column says which lifecycle stage it means — that bridge is what syncs a
+                  {/* Every column says which lifecycle stage it means - that bridge is what syncs a
                       card move to the contact's stage (funnel/reminders stay correct). Editable on
                       the default board too, so this pipeline can be shaped by hand; the one thing
                       refused there is clearing it, which is why the option list differs. */}
@@ -857,7 +857,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
                 size="sm"
                 value={newStageLegacy}
                 aria-label="Lead lifecycle stage for the new column"
-                options={activeIsDefault ? [{ value: "", label: "— pick a lead stage —" }, ...LIFECYCLE_OPTS_REQUIRED] : LIFECYCLE_OPTS}
+                options={activeIsDefault ? [{ value: "", label: "- pick a lead stage -" }, ...LIFECYCLE_OPTS_REQUIRED] : LIFECYCLE_OPTS}
                 onChange={(e) => setNewStageLegacy(e.target.value)}
               />
               <Btn
@@ -877,7 +877,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
 
           {/* The safety net that makes the editing above safe to offer: whatever has been renamed,
               re-mapped, added or removed, this puts the twelve live Synamate columns back and
-              re-files every card. Nothing is dropped — a column that still holds cards is refused
+              re-files every card. Nothing is dropped - a column that still holds cards is refused
               rather than emptied (server/pipeline-reshape.ts). */}
           {activeIsDefault && board.activePipelineId && (
             <div className="mt-4 rounded-field border border-dashed border-line p-3">
@@ -932,7 +932,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
 /**
  * Notes tab of the opportunity edit modal (BUILD_CHECKLIST.md §3). Mirrors ContactRecord.tsx's
  * `Notes()` component almost exactly, but fetches on demand via a server action instead of
- * reading server-supplied props — the board only ever loads BoardCard data (no notes) for every
+ * reading server-supplied props - the board only ever loads BoardCard data (no notes) for every
  * card up front, so pulling a deal's notes into this component would mean fetching notes for
  * every open/won/lost card on every board load. Fetching per-opportunity, only when its edit
  * modal actually opens, keeps the board query exactly as bounded as §4 already made it.
@@ -959,7 +959,7 @@ function OpportunityNotesPanel({ opportunityId }: { opportunityId: string }) {
     setAddError(null);
     const res = await createOpportunityNote(opportunityId, fd);
     if (!res.ok) return setAddError(res.error);
-    toast(res.mentionedCount ? `Note added — mentioned ${res.mentionedCount}` : "Note added");
+    toast(res.mentionedCount ? `Note added - mentioned ${res.mentionedCount}` : "Note added");
     formRef.current?.reset();
     setNotes(await getOpportunityNotes(opportunityId));
   }
@@ -995,7 +995,7 @@ function OpportunityNotesPanel({ opportunityId }: { opportunityId: string }) {
             <p className="whitespace-pre-wrap text-sm text-ink">{n.body}</p>
             <div className="mt-2 flex items-center justify-between">
               <span className="text-caption text-ink-3">
-                {n.authorName ?? "—"} · <DateText date={n.createdAt} />
+                {n.authorName ?? "-"} · <DateText date={n.createdAt} />
               </span>
               <div className="flex items-center gap-1">
                 {n.pinned && <Pill tone="warn">Pinned</Pill>}

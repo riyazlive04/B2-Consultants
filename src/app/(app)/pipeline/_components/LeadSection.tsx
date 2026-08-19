@@ -61,7 +61,7 @@ export function LeadSection({
   useEffect(() => setLocalRows(rows), [rows]);
 
   // Admin-only: a webhook lead has no enteredById, so a non-admin's table (scoped to leads
-  // THEY entered) would never gain a row from this feed — polling it would just be wasted
+  // THEY entered) would never gain a row from this feed - polling it would just be wasted
   // requests every tick.
   useNewLeadPoll(
     "table",
@@ -86,7 +86,7 @@ export function LeadSection({
   };
 
   // The edit form lives at the top of the section, above the table. Editing a row far
-  // down the list used to silently repopulate a form off-screen — the click read as a
+  // down the list used to silently repopulate a form off-screen - the click read as a
   // no-op. Bring the form into view and focus its first field when an edit begins.
   useEffect(() => {
     if (!editing) return;
@@ -107,7 +107,7 @@ export function LeadSection({
   };
 
   const remove = async (row: LeadRow) => {
-    // Delete IS a soft-delete (archive) — reversible — so it follows the Gmail undo-send
+    // Delete IS a soft-delete (archive) - reversible - so it follows the Gmail undo-send
     // model instead of a blocking confirm: archive now, offer Undo for a grace window.
     // askConfirm stays reserved for the truly irreversible (permanent purge).
     const res = await deleteLead(row.id);
@@ -151,8 +151,8 @@ export function LeadSection({
         </span>
       ),
       value: (r) => LEAD_STAGE_LABELS[r.stage],
-      // Without this the column sorts alphabetically — "Won" first, "New lead" near the
-      // end — which is the reversed funnel the client reported (Error Log L1).
+      // Without this the column sorts alphabetically - "Won" first, "New lead" near the
+      // end - which is the reversed funnel the client reported (Error Log L1).
       order: LEAD_STAGE_LABEL_ORDER,
     },
     {
@@ -226,9 +226,9 @@ export function LeadSection({
           <Field label="Phone / WhatsApp" hint="Pick country, then number">
             <PhoneField name="phone" required defaultValue={editing?.phone ?? ""} />
           </Field>
-          {/* Optional, but it is the second identity the duplicate check runs on — a person who
+          {/* Optional, but it is the second identity the duplicate check runs on - a person who
               comes back on a new number is only recognisable by this. */}
-          <Field label="Email" hint="Optional — used to spot duplicates">
+          <Field label="Email" hint="Optional - used to spot duplicates">
             <TextInput kind="email" name="email" placeholder="name@example.com" defaultValue={editing?.email ?? ""} />
           </Field>
           <Field label="Lead source">

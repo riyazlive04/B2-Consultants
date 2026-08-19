@@ -19,7 +19,7 @@ import { LOG_VARIANT_LABELS, PAYOUT_STATUS_LABELS, optionsFrom } from "@/lib/lab
 
 const ZERO = BigInt(0);
 
-/** "₹1,00,000.99 · 100.000,99 €" — INR shown Indian, EUR shown German (CONTEXT §6). */
+/** "₹1,00,000.99 · 100.000,99 €" - INR shown Indian, EUR shown German (CONTEXT §6). */
 const pair = (inrRaw: string, eurRaw: string) => {
   const inr = BigInt(inrRaw);
   const eur = BigInt(eurRaw);
@@ -49,7 +49,7 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
     const res = editing ? await updatePayout(editing.id, form) : await createPayout(form);
     if (!res.ok) return setError(res.error);
     toast(editing ? "Payout updated" : "Payout assigned");
-    if (!editing) celebrate(); // money going out the door to a telecaller — small win
+    if (!editing) celebrate(); // money going out the door to a telecaller - small win
     setEditing(null);
     setPrefill(null);
     formRef.current?.reset();
@@ -132,7 +132,7 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
 
   return (
     <section className="space-y-6">
-      {/* Telecaller call-context cards — the basis for the reward */}
+      {/* Telecaller call-context cards - the basis for the reward */}
       {hasTelecallers ? (
         <div>
           <h2 className="mb-3 font-display text-h2 font-semibold">
@@ -160,7 +160,7 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
                 <p className="mt-3 text-xs text-muted">
                   Assigned this month:{" "}
                   <span className="tnum font-semibold text-ink">
-                    {t.assignedInrMinor === 0 ? "—" : formatInrMinor(t.assignedInrMinor, { compact: true })}
+                    {t.assignedInrMinor === 0 ? "-" : formatInrMinor(t.assignedInrMinor, { compact: true })}
                   </span>
                   {t.payoutCount > 0 && ` · ${t.payoutCount} entr${t.payoutCount === 1 ? "y" : "ies"}`}
                 </p>
@@ -180,7 +180,7 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
         <Card
           title={
             <CardTitle icon={<Gift size={18} />}>
-              {editing ? `Edit payout — ${editing.name}` : "Assign bonus / commission"}
+              {editing ? `Edit payout - ${editing.name}` : "Assign bonus / commission"}
             </CardTitle>
           }
           actions={
@@ -211,7 +211,7 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
             <Field label="Commission (€)">
               <TextInput kind="money" name="commEur" placeholder="0.00" defaultValue={editing ? minorToInput(editing.commEurRaw) : ""} />
             </Field>
-            {/* Free text — the reason is prose with numbers in it ("hit 40 appointments"). */}
+            {/* Free text - the reason is prose with numbers in it ("hit 40 appointments"). */}
             <Field label="Reason / criteria" hint="e.g. hit 40 appointments · good call QA">
               <TextInput kind="text" name="reason" required placeholder="Why this reward" defaultValue={editing?.reason ?? ""} />
             </Field>

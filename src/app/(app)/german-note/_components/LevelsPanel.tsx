@@ -15,12 +15,12 @@ import { Modal } from "@/components/ui/Modal";
 /**
  * Level catalogue admin (Admin-only). Add German levels (C1, C2, …) and bundles here; they flow
  * straight into the batch, pending-pool, book-order, finance and pipeline dropdowns. Coaching tiers
- * (Solo/Guided/Elite) and Other are seeded + locked — label and GL account editable, nothing else.
+ * (Solo/Guided/Elite) and Other are seeded + locked - label and GL account editable, nothing else.
  */
 
 const INCOME_ACCOUNT_OPTIONS = CHART_OF_ACCOUNTS.filter((a) => a.type === "INCOME").map((a) => ({
   value: a.code,
-  label: `${a.code} — ${a.name}`,
+  label: `${a.code} - ${a.name}`,
 }));
 
 const KIND_OPTIONS = [
@@ -36,7 +36,7 @@ function LevelFields({ level }: { level?: LevelSummary }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Code" hint={isCreate ? "Stable key, e.g. GN_C1 — cannot change later." : "Fixed once created."}>
+        <Field label="Code" hint={isCreate ? "Stable key, e.g. GN_C1 - cannot change later." : "Fixed once created."}>
           <TextInput
             name="code"
             required={isCreate}
@@ -51,7 +51,7 @@ function LevelFields({ level }: { level?: LevelSummary }) {
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Kind" hint={locked ? "Locked — this is a system level." : "A bundle is composed of single levels."}>
+        <Field label="Kind" hint={locked ? "Locked - this is a system level." : "A bundle is composed of single levels."}>
           <Select name="kind" options={KIND_OPTIONS} defaultValue={level?.kind ?? "GERMAN_LEVEL"} disabled={locked} />
         </Field>
         <Field label="Income account" hint="Which GL account this level's revenue posts to.">
@@ -69,7 +69,7 @@ function LevelFields({ level }: { level?: LevelSummary }) {
           <TextInput kind="int" name="order" defaultValue={String(level?.order ?? 0)} />
         </Field>
       </div>
-      <Field label="Bundle members" hint="Bundles only — the single-level codes it contains, e.g. GN_A1, GN_A2.">
+      <Field label="Bundle members" hint="Bundles only - the single-level codes it contains, e.g. GN_A1, GN_A2.">
         <TextInput name="bundleMembers" placeholder="GN_A1, GN_A2" defaultValue={level?.bundleMembers.join(", ")} />
       </Field>
       {level && !locked && (
@@ -103,7 +103,7 @@ export function LevelsPanel({ levels }: { levels: AdminLevel[] }) {
         <div>
           <h3 className="font-display text-h2 font-semibold">Levels &amp; bundles</h3>
           <p className="text-xs text-muted">
-            Add German levels and bundles. They appear everywhere a level is chosen — batches, pending pool, book
+            Add German levels and bundles. They appear everywhere a level is chosen - batches, pending pool, book
             orders, income and pipeline. Coaching tiers are locked.
           </p>
         </div>

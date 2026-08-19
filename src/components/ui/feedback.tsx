@@ -119,7 +119,7 @@ export function FeedbackHost() {
   const bodyId = useId();
 
   // Flip the toast to its .toast-out state first so it slides out, then drop it from the
-  // DOM after the exit animation — a toast that just disappears reads as a glitch.
+  // DOM after the exit animation - a toast that just disappears reads as a glitch.
   const startLeave = useCallback((id: number) => {
     const timers = timersRef.current;
     clearTimeout(timers.get(id));
@@ -128,7 +128,7 @@ export function FeedbackHost() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 180);
   }, []);
 
-  // (Re)start a toast's auto-dismiss timer — used on arrival and to resume after hover.
+  // (Re)start a toast's auto-dismiss timer - used on arrival and to resume after hover.
   const arm = useCallback(
     (id: number, ms: number) => {
       const timers = timersRef.current;
@@ -191,7 +191,7 @@ export function FeedbackHost() {
   useEffect(() => {
     if (!confirm) return;
     const opener = document.activeElement as HTMLElement | null;
-    // Shared counter (lib/scroll-lock.ts) — a confirm routinely opens OVER a modal ("delete"
+    // Shared counter (lib/scroll-lock.ts) - a confirm routinely opens OVER a modal ("delete"
     // inside an edit dialog), which is exactly the interleaving a private save/restore loses.
     const releaseScroll = lockBodyScroll();
     return () => {
@@ -200,7 +200,7 @@ export function FeedbackHost() {
     };
   }, [confirm]);
 
-  // Esc always cancels. Enter only confirms NON-destructive dialogs — a stray
+  // Esc always cancels. Enter only confirms NON-destructive dialogs - a stray
   // double-Enter after a form submit must never delete a record (§5.9).
   // Tab is trapped inside the panel: a modal that leaks focus to the page behind
   // its own scrim is not modal (WCAG 2.1.2).
@@ -243,7 +243,7 @@ export function FeedbackHost() {
 
   return (
     <>
-      {/* Confetti — above everything, never intercepts the pointer */}
+      {/* Confetti - above everything, never intercepts the pointer */}
       {bursts.length > 0 && (
         <div aria-hidden className="pointer-events-none fixed inset-0 z-[110] overflow-hidden">
           {bursts.map((b) =>
@@ -277,7 +277,7 @@ export function FeedbackHost() {
         {[...toasts].reverse().find((t) => t.kind === "error" && !t.leaving)?.text ?? ""}
       </div>
 
-      {/* Toasts — white surface with a semantic tint. Hovering pauses the dismiss timer
+      {/* Toasts - white surface with a semantic tint. Hovering pauses the dismiss timer
           so a message (or an Undo action) can't slip away while it's being read. */}
       <div
         aria-hidden
@@ -319,7 +319,7 @@ export function FeedbackHost() {
         ))}
       </div>
 
-      {/* Confirm dialog — white panel over an ink scrim */}
+      {/* Confirm dialog - white panel over an ink scrim */}
       {confirm && (
         <div
           className="fixed inset-0 z-[99] flex items-center justify-center p-4"

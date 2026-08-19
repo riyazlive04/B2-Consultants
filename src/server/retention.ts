@@ -9,7 +9,7 @@ import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 /**
  * Data-lifecycle retention (dashboard issue 7.4): archived records are permanently purged once
  * they have sat in the Archive longer than the retention window (default 90 days, overridable via
- * the `retentionDays` AppSetting). This is the true end-of-life hard delete — cascades fire as
+ * the `retentionDays` AppSetting). This is the true end-of-life hard delete - cascades fire as
  * originally designed. Driven by the daily `/api/cron/retention` tick.
  */
 
@@ -72,11 +72,11 @@ export async function runRetentionPurge(): Promise<RetentionResult> {
 }
 
 /**
- * Growth-table pruning (audit §C #21) — a DIFFERENT concern from runRetentionPurge above, which
+ * Growth-table pruning (audit §C #21) - a DIFFERENT concern from runRetentionPurge above, which
  * hard-deletes soft-deleted/archived records past their window. This prunes two tables that only
  * ever grow and are never archived: the WhatsApp message log and expired-and-unaccepted user
  * invites. Append-only audit tables are deliberately excluded (they're trigger-protected and the
- * app derives from them). Gated on maintenanceConfig.retention.enabled — OFF by default because it
+ * app derives from them). Gated on maintenanceConfig.retention.enabled - OFF by default because it
  * deletes; 0 days on a line means "keep forever". Idempotent.
  */
 export type RetentionSweepRun = {

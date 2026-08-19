@@ -1,12 +1,12 @@
 /**
- * Attribution — campaign economics (ER v2 Track F).
+ * Attribution - campaign economics (ER v2 Track F).
  *
  * `INSIGHT` in the diagram is an entity with a `performance "high|low"` column. It is NOT a
  * table here, and deliberately so: every field of it is a division over rows that already
  * exist. Storing it would be a cached quotient that goes stale the moment a lead converts.
  * This module is that division, kept pure so the numbers are testable without a database.
  *
- * All money is INR paise (BigInt in, number out at the ratio boundary — a ratio is not money).
+ * All money is INR paise (BigInt in, number out at the ratio boundary - a ratio is not money).
  */
 
 export type SourceTotals = {
@@ -21,11 +21,11 @@ export type SourceTotals = {
 };
 
 export type SourceEconomics = SourceTotals & {
-  /** Cost per lead, paise. Null when nothing was spent — not 0, which would read as "free". */
+  /** Cost per lead, paise. Null when nothing was spent - not 0, which would read as "free". */
   cplInrMinor: number | null;
   /** Cost per acquisition, paise. Null when there is no spend OR no enrolment yet. */
   cacInrMinor: number | null;
-  /** Revenue ÷ spend. Null without spend — dividing by zero is not "infinite ROAS". */
+  /** Revenue ÷ spend. Null without spend - dividing by zero is not "infinite ROAS". */
   roas: number | null;
   /** Leads → enrolments, 0–100. */
   conversionPct: number;
@@ -38,7 +38,7 @@ const divide = (num: bigint, den: number): number | null =>
  * Per-source economics.
  *
  * Every ratio returns NULL rather than 0 or Infinity when its denominator is missing. A
- * campaign with no spend yet is not a campaign with a ₹0 cost per lead — rendering it as 0
+ * campaign with no spend yet is not a campaign with a ₹0 cost per lead - rendering it as 0
  * would sort it to the top of a "cheapest acquisition" table and get the budget moved onto a
  * campaign that has simply not been paid for yet.
  */
@@ -61,8 +61,8 @@ export type Performance = "high" | "low" | "mid" | "unrated";
  *
  * A fixed "ROAS > 3 is good" threshold is wrong the first month the market moves, and nobody
  * remembers to re-tune it. Comparing each campaign to the median of the campaigns actually
- * running answers the question the founders are really asking — "where should the next rupee
- * go" — and stays correct as the baseline shifts.
+ * running answers the question the founders are really asking - "where should the next rupee
+ * go" - and stays correct as the baseline shifts.
  *
  * Sources with no spend are `unrated`, not `low`: they have no evidence either way, and
  * calling them low would bury an organic channel that costs nothing and converts fine.

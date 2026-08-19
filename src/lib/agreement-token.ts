@@ -11,7 +11,7 @@ import { AGREEMENT_TTL_DAYS, OTP_TTL_MINUTES } from "./agreement";
  * signal to defend against beyond never comparing raw tokens.
  *
  * The OTP is different. Six digits is only ~20 bits, so it is defended by a short window, a
- * hard attempt cap, and a constant-time compare — the entropy is not doing the work.
+ * hard attempt cap, and a constant-time compare - the entropy is not doing the work.
  */
 
 export function mintAgreementToken(): { token: string; tokenHash: string; expiresAt: Date } {
@@ -27,7 +27,7 @@ export function hashAgreementToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-/** `randomInt` is the CSPRNG, not `Math.random()` — this code guards a contract signature. */
+/** `randomInt` is the CSPRNG, not `Math.random()` - this code guards a contract signature. */
 export function mintOtp(): { code: string; codeHash: string; expiresAt: Date } {
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   return {
@@ -43,7 +43,7 @@ export function hashOtp(code: string): string {
 
 /**
  * Constant-time OTP check. Both sides are fixed-length SHA-256 hex, so `timingSafeEqual` never
- * throws on a length mismatch — but a malformed stored hash would, hence the guard.
+ * throws on a length mismatch - but a malformed stored hash would, hence the guard.
  */
 export function otpMatches(code: string, storedHash: string | null): boolean {
   if (!storedHash) return false;
@@ -63,7 +63,7 @@ export function sha256Hex(input: string | Buffer | Uint8Array): string {
  *
  * Node's `Buffer` (and anything sliced from one) is a view over a shared, pooled slab, so its
  * `.buffer` is 8KB of unrelated memory. Prisma's `Bytes` input demands a `Uint8Array<ArrayBuffer>`
- * precisely to rule that out — `new Uint8Array(buf)` alone still infers `ArrayBufferLike`, so the
+ * precisely to rule that out - `new Uint8Array(buf)` alone still infers `ArrayBufferLike`, so the
  * ArrayBuffer has to be constructed explicitly.
  *
  * The return type is left to inference on purpose: annotating it `Uint8Array` would default the

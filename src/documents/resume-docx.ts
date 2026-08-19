@@ -8,7 +8,7 @@ import {
 } from "@/lib/resume-template";
 
 /**
- * Resume DOCX — the ATS-friendly export: single column, no images or tables (ATS
+ * Resume DOCX - the ATS-friendly export: single column, no images or tables (ATS
  * parsers choke on both), plain heading + bullet structure. Renders ResumeData through
  * the founder's template so section order, headings, accent colour and font match the
  * PDF. The photo is intentionally PDF-only; the DOCX is the machine-readable version.
@@ -135,7 +135,7 @@ export async function renderResumeDocx(
               ],
             }),
           );
-          const sub = [e.program, e.note].filter(Boolean).join(" — ");
+          const sub = [e.program, e.note].filter(Boolean).join(" - ");
           if (sub) children.push(new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: sub, size: 19, color: "3A465C", font })] }));
         }
         break;
@@ -150,7 +150,7 @@ export async function renderResumeDocx(
         break;
       case "computer":
         if (!data.computerSkills.some((c) => c.name)) return;
-        children.push(heading(label), inline(data.computerSkills.filter((c) => c.name).map((c) => `${c.name} — ${c.level}`).join("   ·   ")));
+        children.push(heading(label), inline(data.computerSkills.filter((c) => c.name).map((c) => `${c.name} - ${c.level}`).join("   ·   ")));
         break;
       case "personal":
         if (!data.personalSkills.some(Boolean)) return;
@@ -167,7 +167,7 @@ export async function renderResumeDocx(
 
   const doc = new Document({
     creator: "B2 Consultants",
-    title: h.fullName ? `${h.fullName} — CV` : "CV",
+    title: h.fullName ? `${h.fullName} - CV` : "CV",
     styles: { default: { document: { run: { font, size: 20 } } } },
     sections: [
       {

@@ -34,10 +34,10 @@ export default async function NewAgreementPage({
       <PageHeader
         back={{ href: "/agreements", label: "Agreements" }}
         title="New agreement"
-        subtitle="Guided Mode — template guided-v3"
+        subtitle="Guided Mode - template guided-v3"
       />
 
-      {/* The picker stays visible after a pick, so switching client is one click — not a back-button
+      {/* The picker stays visible after a pick, so switching client is one click - not a back-button
           hunt. It lists every live deal and every student, not just won leads: the founder decides
           when an agreement goes out, the state badge only advises. */}
       <div className="rounded-card border border-line bg-surface p-5 shadow-card">
@@ -53,7 +53,7 @@ export default async function NewAgreementPage({
       </div>
 
       {/* The key is load-bearing. AgreementForm seeds its inputs from `initial` with useState, and a
-          useState initializer never re-runs — so picking a client would re-render this page with a
+          useState initializer never re-runs - so picking a client would re-render this page with a
           fresh prefill while React kept the previous (empty) field state, silently showing a form
           that disagreed with its own "filled from the record" banner. Keying on the selected client
           remounts the form, which is the supported way to reset an uncontrolled component. */}

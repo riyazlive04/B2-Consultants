@@ -27,7 +27,7 @@ export default async function ProfilePage() {
         subtitle="Update your photo and display name. This is how you appear across the dashboard."
       />
 
-      {/* Player card — level, XP and badges from the Arena */}
+      {/* Player card - level, XP and badges from the Arena */}
       {game && (
         <Card>
           <div className="flex flex-wrap items-center gap-5">

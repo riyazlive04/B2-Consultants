@@ -3,7 +3,7 @@
  * focus (§2.4/§2.5: several dashboard figures were unreadable because nothing said
  * what they were a percentage *of*, or how they were derived).
  *
- * Deliberately CSS-only — no state, no client boundary — so server components can
+ * Deliberately CSS-only - no state, no client boundary - so server components can
  * explain their own numbers. `tabIndex` + `aria-label` carry the same text to screen
  * readers and to keyboard users, who never get a :hover.
  */
@@ -23,7 +23,7 @@ export function InfoHint({ text, className = "" }: { text: string; className?: s
 
            PHONES GET A PINNED BAR, not a centred bubble. A 240px panel centred on a 16px "i" chip
            needs 120px of room each side; on a 390px screen most chips don't have it, so the hint
-           rendered off the edge — unreadable, and (being absolute) it dragged the page's scroll
+           rendered off the edge - unreadable, and (being absolute) it dragged the page's scroll
            width with it even while invisible. Fixed to the bottom gutters it is always fully on
            screen, and `fixed` boxes never join an ancestor's scrollable area. From `sm` up there is
            room for the bubble, so the original placement returns. */

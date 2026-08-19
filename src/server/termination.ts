@@ -19,14 +19,14 @@ import {
  *
  * Commission is derived at READ time (`commission-metrics.ts`) from `Lead.assignedToId`, the
  * latest `DiscoveryOutcome.enteredById` and `Enrollment.closerId`. So reassigning leads wholesale
- * would retroactively re-attribute PAST commission — taking earnings off the person who left and
+ * would retroactively re-attribute PAST commission - taking earnings off the person who left and
  * crediting them to someone who never did the work. That is not a display bug; it is money.
  *
  * Restricting migration to OPEN leads is what makes this safe: nothing has been paid on them yet,
  * so moving them decides who earns from here, which is exactly right. A WON lead keeps its owner
  * forever.
  *
- * The same reasoning applies to every category below — the question is never "does this row point
+ * The same reasoning applies to every category below - the question is never "does this row point
  * at them" but "is this a claim about the past, or a job still to be done".
  *
  * ══ WHAT IS DELIBERATELY LEFT ALONE ═════════════════════════════════════════════
@@ -34,9 +34,9 @@ import {
  * `AuditEntry`, `Income/Expense.enteredById`, `TelecallerPayout`, `Enrollment.closerId` on closed
  * deals, `WhatsAppMessage.sentById`, `Agreement.issuedById`, `DailyLog`, `OKR`, `Goal` and
  * `RewardGrant`. Every one is a record of something that happened. Three of them additionally
- * carry unique constraints that make naive reassignment impossible anyway — `RewardGrant`'s
+ * carry unique constraints that make naive reassignment impossible anyway - `RewardGrant`'s
  * `@@unique([ruleId, teamProfileId, periodKey])`, `DailyLog`'s `@@unique([userId, date])`, and
- * OKR's three-per-person-per-month rule — which is a good sign the line is drawn in the right
+ * OKR's three-per-person-per-month rule - which is a good sign the line is drawn in the right
  * place: you cannot merge two people's history because two people's history is not one person's.
  */
 
@@ -45,14 +45,14 @@ export type OwnershipCategory = {
   key: string;
   /** Shown in the dialog. */
   label: string;
-  /** Why this moves — the founder is deciding, so they get the reason. */
+  /** Why this moves - the founder is deciding, so they get the reason. */
   detail: string;
   count: number;
 };
 
 export type OwnershipInventory = {
   categories: OwnershipCategory[];
-  /** Sum across categories — the headline "N things need a new owner". */
+  /** Sum across categories - the headline "N things need a new owner". */
   total: number;
 };
 
@@ -108,7 +108,7 @@ export async function migrateOwnership(
       tx.company.updateMany({ where: ownedCompanyWhere(fromUserId), data: { ownerId: toUserId } }),
     ]);
 
-    // The two journey roles are separate columns, so they need separate updates — a single
+    // The two journey roles are separate columns, so they need separate updates - a single
     // `OR` where-clause cannot say WHICH column to rewrite.
     const touchpoints = await tx.outreachJourney.updateMany({
       where: { ...activeJourneyWhere(fromUserId), respTouchpointId: fromUserId },

@@ -28,7 +28,7 @@ import { OUTREACH_PHASE_LABELS, QUALIFIED_LABELS } from "@/lib/outreach-sop";
 /**
  * The outreach specialist's working surface: one card per prospect, showing the single next SOP
  * step with its message already rendered. The point is that nobody has to hold the SOP in their
- * head — the queue says what to send, to whom, and by when.
+ * head - the queue says what to send, to whom, and by when.
  */
 
 /** Live countdown to the 5-minute SLA. Ticks client-side so it stays honest between renders. */
@@ -49,7 +49,7 @@ function SlaClock({ sla }: { sla: NonNullable<QueueRow["sla"]> }) {
         className="flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold"
         style={{ background: "var(--risk-soft)", color: "var(--risk)" }}
       >
-        <AlarmClock size={11} /> Response time missed — Step 10 path
+        <AlarmClock size={11} /> Response time missed - Step 10 path
       </span>
     );
   }
@@ -128,7 +128,7 @@ function StepBody({ step }: { step: QueueStep }) {
   }
 
   if (!step.body) {
-    return <p className="text-xs text-muted">Internal check — no message to send.</p>;
+    return <p className="text-xs text-muted">Internal check - no message to send.</p>;
   }
 
   return (
@@ -159,7 +159,7 @@ function StepActions({ step, journeyId }: { step: QueueStep; journeyId: string }
   if (step.unresolved.length > 0) {
     return (
       <p className="rounded-field px-3 py-2 text-xs font-medium" style={{ background: "var(--risk-soft)", color: "var(--risk)" }}>
-        Can&apos;t send yet — {step.unresolved.join(", ")} {step.unresolved.length === 1 ? "is" : "are"} unresolved.
+        Can&apos;t send yet - {step.unresolved.join(", ")} {step.unresolved.length === 1 ? "is" : "are"} unresolved.
         {step.unresolved.includes("<<INSERT ZOOM LINK HERE>>") && " Add the Zoom link above."}
       </p>
     );
@@ -178,7 +178,7 @@ function StepActions({ step, journeyId }: { step: QueueStep; journeyId: string }
               onClick={() => run(() => logCallOutcome(fd({ outcome: "YES" })))}
               className="rounded-field bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              Answered — YES
+              Answered - YES
             </button>
             <button
               type="button"
@@ -186,7 +186,7 @@ function StepActions({ step, journeyId }: { step: QueueStep; journeyId: string }
               onClick={() => run(() => logCallOutcome(fd({ outcome: "NO" })))}
               className="rounded-field border border-line px-3 py-1.5 text-xs font-medium transition-colors hover:bg-surface-2 disabled:opacity-50"
             >
-              Answered — NO
+              Answered - NO
             </button>
             <button
               type="button"
@@ -241,7 +241,7 @@ function ProspectCard({ row }: { row: QueueRow }) {
   const next = row.next ?? row.steps[0] ?? null;
 
   // The Zoom link is pasted out of a calendar invite, which is exactly where a trailing space or a
-  // wrapped newline comes from — and this value is interpolated straight into a WhatsApp template.
+  // wrapped newline comes from - and this value is interpolated straight into a WhatsApp template.
   // Uncontrolled (defaultValue), so the scrub is the only onChange it needs.
   const zoomProps = fieldKindProps<HTMLInputElement>("url", undefined);
 
@@ -311,7 +311,7 @@ function ProspectCard({ row }: { row: QueueRow }) {
 
         {open && (
           <div className="space-y-3 border-t border-line p-4">
-            {/* Step 2 — Time Contacted, entered in IST as the SOP prescribes. */}
+            {/* Step 2 - Time Contacted, entered in IST as the SOP prescribes. */}
             <form
               action={(f) => start(async () => void (await setContactedAt(f)))}
               className="flex flex-wrap items-end gap-2"
@@ -319,7 +319,7 @@ function ProspectCard({ row }: { row: QueueRow }) {
               <input type="hidden" name="journeyId" value={row.journeyId} />
               <label className="text-xs">
                 <span className="mb-1 block font-medium text-muted">Time contacted (IST)</span>
-                {/* The app's own date+time popover (§5.5) — was a raw native input, which opened
+                {/* The app's own date+time popover (§5.5) - was a raw native input, which opened
                     the browser's own panel in the platform font. `size="sm"` keeps this dense
                     inline row at its 32px height. */}
                 <DateTimePicker name="at" size="sm" />
@@ -338,7 +338,7 @@ function ProspectCard({ row }: { row: QueueRow }) {
               )}
             </form>
 
-            {/* Cross-cutting §R — the Zoom link the confirmation templates need. */}
+            {/* Cross-cutting §R - the Zoom link the confirmation templates need. */}
             <form
               action={(f) => start(async () => void (await setZoomLink(f)))}
               className="flex flex-wrap items-end gap-2"

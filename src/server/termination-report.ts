@@ -5,13 +5,13 @@ import { istMonthInstantRange } from "@/lib/dates";
 import { getOwnershipInventory, type OwnershipInventory } from "./termination";
 
 /**
- * What one person did, and what they still hold — the record the founder reviews before
+ * What one person did, and what they still hold - the record the founder reviews before
  * offboarding them, and files afterwards.
  *
  * ── Why the figures are computed here rather than pulled from the desks ──────────
  * The L1/L2 desk modules answer "how am I doing THIS MONTH" and are shaped for a live screen:
- * they cap rows, sort queues and build call lists. A leaving report wants the opposite — the
- * whole tenure, no caps, no queues — so reusing them would mean passing flags through several
+ * they cap rows, sort queues and build call lists. A leaving report wants the opposite - the
+ * whole tenure, no caps, no queues - so reusing them would mean passing flags through several
  * layers to suppress most of what they do.
  *
  * What IS reused is the ownership inventory (`termination.ts`), because "what do they still hold"
@@ -37,7 +37,7 @@ export type TerminationReport = {
     months: number | null;
     joined: string | null;
   };
-  /** Lifetime activity — the honest measure of what they actually did. */
+  /** Lifetime activity - the honest measure of what they actually did. */
   work: {
     callsLogged: number;
     conversationsHad: number;
@@ -51,7 +51,7 @@ export type TerminationReport = {
   thisMonth: { callsLogged: number; conversationsHad: number };
   /** Commission credited to them across their whole tenure, in INR minor units. */
   earnings: { commissionInrMinor: number; payouts: number };
-  /** What still needs a new owner — the same numbers the migration acts on. */
+  /** What still needs a new owner - the same numbers the migration acts on. */
   holds: OwnershipInventory;
   generatedAt: string;
 };
@@ -72,7 +72,7 @@ export async function getTerminationReport(profileId: string): Promise<Terminati
   const userId = profile.userId;
   const month = istMonthInstantRange();
 
-  // A profile with no linked login has no CallLog/Lead history to read — every one of those
+  // A profile with no linked login has no CallLog/Lead history to read - every one of those
   // relations keys off `User`, not `TeamProfile`. Return the shape with zeros rather than
   // pretending, so the dialog can still show their responsibilities and let them be offboarded.
   const [
@@ -94,7 +94,7 @@ export async function getTerminationReport(profileId: string): Promise<Terminati
     userId
       ? prisma.callLog.count({ where: { userId, outcome: "SPOKE", calledAt: { gte: month.start, lt: month.end } } })
       : 0,
-    // Recorded payouts, which is the durable statement of what they were actually paid — the
+    // Recorded payouts, which is the durable statement of what they were actually paid - the
     // derived commission report only covers a single month and would understate a tenure.
     prisma.telecallerPayout.findMany({
       where: { teamProfileId: profileId },

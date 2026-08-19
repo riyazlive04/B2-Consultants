@@ -8,7 +8,7 @@ import type { BatchCostRow } from "@/server/pending-pool-metrics";
  * A server component: the numbers are derived, there is nothing to interact with, and the
  * whole table is a read.
  *
- * The band column is doing real work. The founders' rule is a cliff — one student joining a
+ * The band column is doing real work. The founders' rule is a cliff - one student joining a
  * 4-person batch drops the rate for EVERYONE in it, from ₹8,000/head to ₹7,000/head, and the
  * batch total moves in a direction that surprises people. Showing which side of the threshold
  * a batch sits on makes that legible instead of mysterious.
@@ -36,7 +36,7 @@ export function BatchCostsPanel({ rows }: { rows: BatchCostRow[] }) {
     <div className="space-y-4">
       <p className="max-w-2xl text-sm text-muted">
         What we owe tutors for the batches running now. The per-head rate is set by{" "}
-        <strong>batch size</strong>, not level — a batch at or above the threshold earns the
+        <strong>batch size</strong>, not level - a batch at or above the threshold earns the
         volume rate. Edit the bands in{" "}
         <Link href="/console" className="font-semibold text-accent hover:underline">
           Founder Console → Tutor Fee
@@ -78,8 +78,8 @@ export function BatchCostsPanel({ rows }: { rows: BatchCostRow[] }) {
                     }`}
                     title={
                       r.band === "at-or-above"
-                        ? `${r.headcount} students is at or above the threshold of ${r.threshold} — volume rate.`
-                        : `${r.headcount} students is under the threshold of ${r.threshold} — thin-batch rate. One more student would drop the rate for everyone in it.`
+                        ? `${r.headcount} students is at or above the threshold of ${r.threshold} - volume rate.`
+                        : `${r.headcount} students is under the threshold of ${r.threshold} - thin-batch rate. One more student would drop the rate for everyone in it.`
                     }
                   >
                     {r.band === "at-or-above" ? `${r.threshold}+` : `under ${r.threshold}`}

@@ -58,7 +58,7 @@ export async function saveCashPosition(form: FormData): Promise<ActionResult> {
     section: "cash",
     entityType: "CashPosition",
     entityId: row.id,
-    summary: `Recorded the cash position for ${formatDate(row.date)} — bank ${formatInrMinor(row.bankBalanceInrMinor)}`,
+    summary: `Recorded the cash position for ${formatDate(row.date)} - bank ${formatInrMinor(row.bankBalanceInrMinor)}`,
     meta: {
       bankBalanceInrMinor: row.bankBalanceInrMinor.toString(),
       personalSavingsInrMinor: row.personalSavingsInrMinor?.toString() ?? null,
@@ -125,7 +125,7 @@ export async function savePayable(id: string | null, form: FormData): Promise<Ac
         section: "cash",
         entityType: "Payable",
         entityId: row.id,
-        summary: `Edited the payable "${row.name}" — ${formatInrMinor(row.amountInrMinor)} ${row.frequency.toLowerCase().replace(/_/g, " ")}`,
+        summary: `Edited the payable "${row.name}" - ${formatInrMinor(row.amountInrMinor)} ${row.frequency.toLowerCase().replace(/_/g, " ")}`,
         meta: diff,
       });
     }
@@ -135,7 +135,7 @@ export async function savePayable(id: string | null, form: FormData): Promise<Ac
       section: "cash",
       entityType: "Payable",
       entityId: row.id,
-      summary: `Added the payable "${row.name}" — ${formatInrMinor(row.amountInrMinor)} ${row.frequency.toLowerCase().replace(/_/g, " ")}`,
+      summary: `Added the payable "${row.name}" - ${formatInrMinor(row.amountInrMinor)} ${row.frequency.toLowerCase().replace(/_/g, " ")}`,
       meta: {
         amountInrMinor: row.amountInrMinor.toString(),
         category: row.category,
@@ -159,7 +159,7 @@ export async function deletePayable(id: string): Promise<ActionResult> {
     section: "cash",
     entityType: "Payable",
     entityId: row.id,
-    summary: `Deleted the payable "${row.name}" — ${formatInrMinor(row.amountInrMinor)} ${row.frequency.toLowerCase().replace(/_/g, " ")}`,
+    summary: `Deleted the payable "${row.name}" - ${formatInrMinor(row.amountInrMinor)} ${row.frequency.toLowerCase().replace(/_/g, " ")}`,
     meta: { amountInrMinor: row.amountInrMinor.toString(), category: row.category },
   });
 
@@ -174,9 +174,9 @@ export async function setGrowthOverride(form: FormData): Promise<ActionResult> {
   const raw = String(form.get("growthPct") ?? "").trim();
   let summary: string | null = null;
   if (raw === "") {
-    // deleteMany on an absent key succeeds silently — only log an override that was really there.
+    // deleteMany on an absent key succeeds silently - only log an override that was really there.
     const { count } = await prisma.appSetting.deleteMany({ where: { key: "runwayGrowthRatePct" } });
-    if (count) summary = "Cleared the revenue growth-rate override — runway is back on the measured rate";
+    if (count) summary = "Cleared the revenue growth-rate override - runway is back on the measured rate";
   } else {
     const v = parseFloat(raw);
     if (Number.isNaN(v) || v < -50 || v > 200) return { ok: false, error: "Growth % must be between -50 and 200" };

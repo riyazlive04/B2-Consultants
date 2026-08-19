@@ -1,11 +1,11 @@
 /**
- * WhatsApp (WATI) — isomorphic constants + helpers. NO prisma, NO server-only, NO secrets,
+ * WhatsApp (WATI) - isomorphic constants + helpers. NO prisma, NO server-only, NO secrets,
  * so both the client settings UI and the server engine import from here. The server-only
  * config reader + HTTP client live in `wati.ts`; the sending service in `server/whatsapp.ts`.
  *
  * This is the "Wave-2" outbound-messaging layer the Wave-1 code anticipated (schema §420/§756,
  * SALES-LOGIC §2/§7). Everything stays inert until WATI_ENABLED + credentials + template names
- * are configured — see wati.ts.
+ * are configured - see wati.ts.
  */
 
 import type { WhatsAppKind, WhatsAppStatus } from "@prisma/client";
@@ -71,45 +71,45 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   BOOK_ORDER: "Book order to publisher",
 };
 
-/** One-line description of when each touchpoint fires — shown in the settings UI. */
+/** One-line description of when each touchpoint fires - shown in the settings UI. */
 export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   DISCO_REMINDER: "Un-booked leads (New / Disco-not-booked) who haven't scheduled a call yet.",
   BOOKING_CONFIRMATION: "Sent once, right after a prospect books a discovery-call slot.",
   BOOKING_REMINDER: "Before an upcoming booked slot (per the lead-hours schedule).",
-  NO_SHOW_FOLLOWUP: "A lead marked No-show — nudge them to rebook.",
+  NO_SHOW_FOLLOWUP: "A lead marked No-show - nudge them to rebook.",
   PAYMENT_REMINDER: "A pending payment that is overdue.",
-  EMI_PRE_DUE: "An instalment falls due in the next few days — lands BEFORE the due date, unlike the overdue reminder.",
+  EMI_PRE_DUE: "An instalment falls due in the next few days - lands BEFORE the due date, unlike the overdue reminder.",
   CHECKIN_NUDGE: "A student whose coaching check-in date has arrived / passed.",
   SPRINT_MISS_NUDGE: "A student who missed a sprint-week target.",
-  AGREEMENT_SEND: "The founder countersigned an agreement — carries the tokenized signing link.",
+  AGREEMENT_SEND: "The founder countersigned an agreement - carries the tokenized signing link.",
   AGREEMENT_OTP: "The one-time code that binds the signature to control of this number.",
   AGREEMENT_REMINDER: "An issued agreement is still unsigned and the link has not expired.",
   AGREEMENT_COPY:
-    "The student just signed — carries the link to their sealed, countersigned copy. Delivering this is what marks an agreement Completed.",
+    "The student just signed - carries the link to their sealed, countersigned copy. Delivering this is what marks an agreement Completed.",
   MANUAL: "Free-form one-off send triggered by a human from a section row.",
-  SOP_INTRO: "Outreach SOP Step 3 — sent immediately after opt-in (target <5 min).",
-  SOP_FOLLOWUP: "Outreach SOP Step 6 — still not booked at the 2-hour check.",
-  SOP_DISCO_WELCOME: "Outreach SOP Step 13 — BANT verdict is YES or MAYBE and the call is booked.",
-  SOP_DISCO_CONFIRM_1: "Outreach SOP Step 14 — at least 36h before the discovery call.",
-  SOP_DISCO_CONFIRM_2: "Outreach SOP Step 15 — at least 24h before, if Step 14 drew no reply.",
-  SOP_DISCO_CANCEL: "Outreach SOP Step 16 — at least 12h before, unconfirmed after two calls.",
-  SOP_SSS_CONFIRM_1: "Outreach SOP Step 19 — at least 24h before the SSS. Carries the personalized video.",
-  SOP_SSS_CONFIRM_2: "Outreach SOP Step 20 — at least 12h before the SSS, if Step 19 drew no reply.",
-  SOP_SSS_CANCEL: "Outreach SOP Step 21 — at least 10h before the SSS, still unconfirmed.",
-  BOOKING_CONFIRM_REQUEST: "Bookings confirmation loop — asks the prospect to reply YES to hold an upcoming booked slot.",
-  BOOKING_RESCHEDULED: "Bookings confirmation loop — the call was moved to a new time (manual postpone or promoted into a freed earlier slot).",
-  BOOKING_AUTO_CANCELLED: "Bookings confirmation loop — no confirmation before the cut-off, so the slot was released; invites them to rebook.",
-  SSS_RESCHEDULED: "SSS calendar — the Success Strategy Session was moved to a new time (founder blocked the slot/day, or a manual/drag reschedule).",
-  BOOK_ORDER: "Sent to the book PUBLISHER, not the student — the order for a student's level books. Triggered by hand from Students → Book orders.",
+  SOP_INTRO: "Outreach SOP Step 3 - sent immediately after opt-in (target <5 min).",
+  SOP_FOLLOWUP: "Outreach SOP Step 6 - still not booked at the 2-hour check.",
+  SOP_DISCO_WELCOME: "Outreach SOP Step 13 - BANT verdict is YES or MAYBE and the call is booked.",
+  SOP_DISCO_CONFIRM_1: "Outreach SOP Step 14 - at least 36h before the discovery call.",
+  SOP_DISCO_CONFIRM_2: "Outreach SOP Step 15 - at least 24h before, if Step 14 drew no reply.",
+  SOP_DISCO_CANCEL: "Outreach SOP Step 16 - at least 12h before, unconfirmed after two calls.",
+  SOP_SSS_CONFIRM_1: "Outreach SOP Step 19 - at least 24h before the SSS. Carries the personalized video.",
+  SOP_SSS_CONFIRM_2: "Outreach SOP Step 20 - at least 12h before the SSS, if Step 19 drew no reply.",
+  SOP_SSS_CANCEL: "Outreach SOP Step 21 - at least 10h before the SSS, still unconfirmed.",
+  BOOKING_CONFIRM_REQUEST: "Bookings confirmation loop - asks the prospect to reply YES to hold an upcoming booked slot.",
+  BOOKING_RESCHEDULED: "Bookings confirmation loop - the call was moved to a new time (manual postpone or promoted into a freed earlier slot).",
+  BOOKING_AUTO_CANCELLED: "Bookings confirmation loop - no confirmation before the cut-off, so the slot was released; invites them to rebook.",
+  SSS_RESCHEDULED: "SSS calendar - the Success Strategy Session was moved to a new time (founder blocked the slot/day, or a manual/drag reschedule).",
+  BOOK_ORDER: "Sent to the book PUBLISHER, not the student - the order for a student's level books. Triggered by hand from Students → Book orders.",
 };
 
 /**
- * The variables this app CAN supply for each touchpoint — an offer, not a contract.
+ * The variables this app CAN supply for each touchpoint - an offer, not a contract.
  *
  * The actual parameters sent to WATI are driven by the mapped template's own variable list
  * (`WatiTemplateConfig.params`), because a WhatsApp template only accepts exactly the variables it
  * was approved with. B2's real WATI account, for example, has 76 templates taking just `{{name}}`
- * and 38 taking none — sending an extra `booking_url` would be rejected outright.
+ * and 38 taking none - sending an extra `booking_url` would be rejected outright.
  *
  * So: the Admin declares the template's variables in Settings; we fill each from this pool. If a
  * template asks for something we can't supply for that touchpoint, the send is skipped and says so.
@@ -121,17 +121,17 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   NO_SHOW_FOLLOWUP: ["name", "booking_url"],
   PAYMENT_REMINDER: ["name", "amount"],
   // `due_date` is what makes this reminder land as "due on the 3rd" rather than a vague nudge.
-  // `seq`/`total` let a template say "instalment 2 of 3" — both offered, neither required.
+  // `seq`/`total` let a template say "instalment 2 of 3" - both offered, neither required.
   EMI_PRE_DUE: ["name", "amount", "due_date", "seq", "total"],
   CHECKIN_NUDGE: ["name"],
   SPRINT_MISS_NUDGE: ["name"],
   // `sign_url` is the full tokenized link. If the approved template puts the token in a dynamic
-  // URL-button suffix instead of the body, map `sign_token` — the raw base64url token is 43
+  // URL-button suffix instead of the body, map `sign_token` - the raw base64url token is 43
   // URL-safe characters and slots straight into the suffix.
   AGREEMENT_SEND: ["name", "sign_url", "sign_token", "document_no"],
   AGREEMENT_OTP: ["name", "code"],
   AGREEMENT_REMINDER: ["name", "sign_url", "sign_token", "document_no"],
-  // `copy_url` is the tokenized link to the SEALED pdf — the same token the signing link carried
+  // `copy_url` is the tokenized link to the SEALED pdf - the same token the signing link carried
   // (signing never clears it), resolved by a loader that only serves signed rows.
   AGREEMENT_COPY: ["name", "copy_url", "document_no"],
   MANUAL: ["name"],
@@ -141,7 +141,7 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   // which is the submission pack these were written against.
   //
   // The SOP's links (optin.b2consultants.de/apply, /lang, casestudies…, /sss) are LITERAL text in
-  // the template body, not variables — they never change per prospect, and Meta reviews a static
+  // the template body, not variables - they never change per prospect, and Meta reviews a static
   // URL once instead of on every send.
   SOP_INTRO: ["name", "sender"],
   SOP_FOLLOWUP: ["name", "sender"],
@@ -161,7 +161,7 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   SSS_RESCHEDULED: ["name", "slot_time", "sss_url"],
   // Book orders. NOTE there is no `name` here, and that is not an omission: the recipient is the
   // vendor, so `publisher_name` addresses them and `student_name` is the subject of the order.
-  // Kept equal to BOOK_ORDER_VARS in lib/book-order-message.ts — a test asserts it.
+  // Kept equal to BOOK_ORDER_VARS in lib/book-order-message.ts - a test asserts it.
   BOOK_ORDER: ["publisher_name", "order_ref", "level", "student_name", "ship_to", "ship_phone"],
 };
 
@@ -196,7 +196,7 @@ export type WatiCadence = {
   /**
    * Per-touchpoint switches for the scheduled reminder run. Each one silences ONE touchpoint of
    * `runDueReminders` without touching its numbers, its template mapping, or the other
-   * touchpoints — so an admin can pause "chase unpaid fees" while "remind about tomorrow's call"
+   * touchpoints - so an admin can pause "chase unpaid fees" while "remind about tomorrow's call"
    * keeps going. They only affect the CRON engine: manual sends from the section rows and
    * event-driven sends (booking confirmation, agreement links) are deliberate human/flow acts
    * and stay available.
@@ -206,7 +206,7 @@ export type WatiCadence = {
   noShowEnabled: boolean;
   paymentEnabled: boolean;
   emiPreDueEnabled: boolean;
-  /** One switch for both student nudges (check-in + sprint-miss) — they share a cadence field. */
+  /** One switch for both student nudges (check-in + sprint-miss) - they share a cadence field. */
   studentNudgesEnabled: boolean;
   /** Wait this long after a lead first arrives before the first discovery reminder. */
   discoFirstDelayHours: number;
@@ -217,7 +217,7 @@ export type WatiCadence = {
   /**
    * Never chase a lead whose LAST OPT-IN is more than this many days ago.
    *
-   * Measured from `OutreachJourney.optInAt`, not from when the lead row was created — a returning
+   * Measured from `OutreachJourney.optInAt`, not from when the lead row was created - a returning
    * opt-in resets that timestamp, so submitting the form again is what brings a dormant prospect
    * back into scope. Age of the record is not consent to be messaged today.
    *
@@ -225,7 +225,7 @@ export type WatiCadence = {
    * The candidate query was `createdAt <= now - discoFirstDelayHours` with NO lower bound, and
    * ordered OLDEST FIRST. Every un-booked lead ever created therefore qualified, and the engine
    * started at the very oldest row in the table. Switching WhatsApp on for the first time on
-   * 06/08/2026 sent 98 discovery reminders walking forward from the start of the database —
+   * 06/08/2026 sent 98 discovery reminders walking forward from the start of the database -
    * people who opted in months ago and had long since gone cold.
    *
    * The test-recipient valve caught all of them, which is the only reason this reads as an
@@ -249,7 +249,7 @@ export type WatiCadence = {
    */
   emiPreDueLeadDays: number[];
   /**
-   * SAFETY: when true the EMI pre-due reminder is rehearsed, never sent — each candidate
+   * SAFETY: when true the EMI pre-due reminder is rehearsed, never sent - each candidate
    * writes a SKIPPED "DRY RUN" row naming the recipient and template, so the exact blast can
    * be reviewed before one real message leaves. Defaults ON deliberately: this touchpoint
    * fans out to every paying student at once, so the safe default is the one where a mistake
@@ -289,19 +289,19 @@ export const DEFAULT_CADENCE: WatiCadence = {
 /**
  * A touchpoint → WATI template binding. `params` is the template's OWN variable list, in the exact
  * order WhatsApp approved it (WATI's export calls this `TemplateParamMapping`). An empty array is
- * legitimate — many approved templates take no variables at all.
+ * legitimate - many approved templates take no variables at all.
  */
 export type WatiTemplateConfig = { name: string; broadcastName?: string; params: string[] };
 export type WatiTemplateMap = Partial<Record<WhatsAppKind, WatiTemplateConfig>>;
 
 /**
  * Editable, non-secret config persisted in AppSetting("watiConfig"). Secrets (endpoint URL,
- * access token, webhook secret) live in env — never here. `paused` lets Admin stop all sends
+ * access token, webhook secret) live in env - never here. `paused` lets Admin stop all sends
  * without touching env.
  *
  * `defaultCountry` is an ISO-3166 alpha-2 code (e.g. "IN"), NOT a dialing code: it's only used to
  * resolve numbers typed WITHOUT a country code. Contacts abroad (German students) must be stored
- * with "+49…" — see src/lib/phone.ts, which fails closed rather than guessing a country.
+ * with "+49…" - see src/lib/phone.ts, which fails closed rather than guessing a country.
  */
 export type WatiSettings = {
   paused: boolean;
@@ -310,7 +310,7 @@ export type WatiSettings = {
   cadence: WatiCadence;
   /**
    * SAFETY VALVE. When set, EVERY outbound WhatsApp message is redirected to this one number
-   * instead of its real recipient — normalized E.164, no '+'.
+   * instead of its real recipient - normalized E.164, no '+'.
    *
    * This exists because the app holds 23,000+ real phone numbers and the engines that message
    * them are armed by config. While templates are being wired up, one mis-set toggle is the
@@ -330,7 +330,7 @@ export type WatiSettings = {
    *
    * ── Why an unknown origin is ALLOWED, not blocked ─────────────────────────────
    * `Lead.originDomain` is only observed from 07/08/2026 onward, and the 23,429 contacts imported
-   * from Synamate have no host to record — they never will. Reading NULL as "not on the list"
+   * from Synamate have no host to record - they never will. Reading NULL as "not on the list"
    * would mean switching this on silences every booking confirmation, reminder and dunning
    * message for 99% of the database, instantly and silently. So the gate only ever blocks a
    * contact whose origin IS known and is NOT listed. It is a filter on new traffic, not a
@@ -341,7 +341,7 @@ export type WatiSettings = {
 
 export type WatiDomainGate = {
   enabled: boolean;
-  /** Bare hostnames, lower-cased, no scheme/port/path. Empty while `enabled` is a no-op — see below. */
+  /** Bare hostnames, lower-cased, no scheme/port/path. Empty while `enabled` is a no-op - see below. */
   domains: string[];
 };
 
@@ -350,7 +350,7 @@ export type WatiDomainGate = {
  *
  * People paste URLs. "https://optin.b2consultants.de/apply-team?x=1" and "optin.b2consultants.de"
  * are the same domain to everyone except a string compare, and a gate that silently fails to
- * match because of a trailing slash is worse than no gate — it blocks messages nobody can explain.
+ * match because of a trailing slash is worse than no gate - it blocks messages nobody can explain.
  */
 export function normalizeDomain(raw: string): string | null {
   let s = raw.trim().toLowerCase();
@@ -382,11 +382,11 @@ export function domainAllows(gate: WatiDomainGate, originDomain: string | null |
  *
  * We originally seeded `initiate_chatbot` / `confirmation_calendly_app` / `calendly_qualification` /
  * `get_calendly_app_confirmation` from a WATI dashboard export. Querying the live API later showed
- * all four are **DELETED** (the export carries no status field — every row said `NewStatus: 0`).
+ * all four are **DELETED** (the export carries no status field - every row said `NewStatus: 0`).
  * Shipping a default that points at deleted templates would send nothing but `FAILED` rows.
  *
  * As of the live check: 69 of 119 templates are APPROVED, none of them `UTILITY`, and none of them
- * is a discovery-call or booking template — they are webinar/workshop broadcasts. So the mapping
+ * is a discovery-call or booking template - they are webinar/workshop broadcasts. So the mapping
  * must be chosen by a human against the live catalogue (WhatsApp → Settings → Refresh templates),
  * and an unmapped touchpoint never sends.
  */
@@ -443,7 +443,7 @@ export type WatiTemplateSummary = {
 
 /**
  * Countries B2 actually deals with, for the settings dropdown (ISO-3166-1 alpha-2).
- * Static data only — kept here, not in phone.ts, so the client settings form can render it
+ * Static data only - kept here, not in phone.ts, so the client settings form can render it
  * without pulling libphonenumber-js into the browser bundle.
  */
 export const COUNTRY_OPTIONS: { value: string; label: string }[] = [

@@ -21,7 +21,7 @@ import { getCommissionRulesConfig } from "./founder-config";
  * The three rates are founder-editable (Founder Console → Commission), stored in
  * AppSetting("commissionRules") and read here per report via getCommissionRulesConfig.
  * DEFAULT_COMMISSION_RULES_CONFIG (config-schema) holds the shipped 5/3/4 defaults. Every
- * rate is a percentage of the payment actually received — a cut of real cash in, per payment.
+ * rate is a percentage of the payment actually received - a cut of real cash in, per payment.
  */
 
 type Payout = {
@@ -30,7 +30,7 @@ type Payout = {
   pct: number;
   amountInrMinor: number;
   /**
-   * Set when this person is NOT eligible for the leg they would otherwise have earned — the
+   * Set when this person is NOT eligible for the leg they would otherwise have earned - the
    * amount is then zero and this says which leg and why.
    *
    * The line is kept rather than dropped on purpose: a payout report that silently omits
@@ -78,11 +78,11 @@ export async function getCommissionReport() {
     },
   });
 
-  // §9.4 — leave awareness. The only leave pattern the data actually models per-DATE is the
+  // §9.4 - leave awareness. The only leave pattern the data actually models per-DATE is the
   // standing Saturday-off flag (`worksSaturdays`); the ON_LEAVE status is a CURRENT state and
   // says nothing about the day a past call happened, so it is deliberately not used to judge
   // history. A discovery call logged on a Saturday for a caller who doesn't work Saturdays is
-  // therefore surfaced for review — it usually means a stand-in covered the slot and the
+  // therefore surfaced for review - it usually means a stand-in covered the slot and the
   // `coveredFor` split was never recorded, which would pay the wrong person. We flag rather
   // than reassign: the engine cannot know who actually covered, only that a human should look.
   const teamProfiles = await prisma.teamProfile.findMany({
@@ -94,7 +94,7 @@ export async function getCommissionReport() {
   /**
    * ── PER-PERSON ELIGIBILITY ──────────────────────────────────────────────────────
    * Commission rates were global-only, so "Nilofer is first-call only" existed as an arrangement
-   * between people and nowhere in the system — it held purely because she happened not to run
+   * between people and nowhere in the system - it held purely because she happened not to run
    * discovery calls, and the report would have paid her the moment she covered one.
    *
    * `eligibleFor` reads the same per-user capability overrides People → Users & access already
@@ -117,7 +117,7 @@ export async function getCommissionReport() {
     if (!u) return true;
     return hasCapability(u.role as AppRole, u.capabilities as Record<string, boolean> | null, key);
   };
-  // @db.Date is stored as UTC midnight of the calendar day, so the weekday is the UTC weekday —
+  // @db.Date is stored as UTC midnight of the calendar day, so the weekday is the UTC weekday -
   // reading it in IST would shift a Saturday date back into Friday. 6 = Saturday.
   const isSaturday = (d: Date) => d.getUTCDay() === 6;
 
@@ -159,11 +159,11 @@ export async function getCommissionReport() {
     }
 
     // ── Substitute cover split (Part 2 §7.1) ────────────────────────────────────
-    // "When someone covers another's slot, the payout is split — the substitute keeps 20%,
+    // "When someone covers another's slot, the payout is split - the substitute keeps 20%,
     // the original owner keeps 80% of THAT PORTION."
     //
     // So this DIVIDES the discovery leg; it does not add a third one. The deal still costs
-    // the business exactly what it did before — the money just lands in two pockets. Applied
+    // the business exactly what it did before - the money just lands in two pockets. Applied
     // before the closer merge, because covering a discovery call says nothing about who
     // closed the sale.
     //
@@ -180,7 +180,7 @@ export async function getCommissionReport() {
         const ownerPct = leg.pct - subPct;
 
         payouts[legIdx] = { ...leg, pct: subPct, amountInrMinor: subAmt };
-        // The owner may already hold a line (e.g. they set the first call themselves) —
+        // The owner may already hold a line (e.g. they set the first call themselves) -
         // merge rather than pay them twice on two rows.
         const ownerExisting = payouts.find((p) => p.userId === coveredFor.userId);
         if (ownerExisting) {
@@ -189,7 +189,7 @@ export async function getCommissionReport() {
         } else {
           payouts.push({ ...coveredFor, pct: ownerPct, amountInrMinor: ownerAmt });
         }
-        rule = `${rule} · covered for ${coveredFor.name} — ${rules.substitutePct}/${100 - rules.substitutePct} split`;
+        rule = `${rule} · covered for ${coveredFor.name} - ${rules.substitutePct}/${100 - rules.substitutePct} split`;
       }
     }
 
@@ -229,14 +229,14 @@ export async function getCommissionReport() {
       const blocked = legs.filter(([, key]) => !eligibleFor(p.userId, key)).map(([label]) => label);
       // Only zero the line when EVERY leg it holds is blocked. Someone eligible for the
       // first call but not for discovery still earns their first-call share, and splitting a
-      // merged line back apart would need a per-leg ledger this report does not keep — so the
+      // merged line back apart would need a per-leg ledger this report does not keep - so the
       // partial case is reported rather than silently mis-split.
       if (blocked.length > 0 && blocked.length === legs.length) {
         p.notEligible = `Not eligible for the ${blocked.join(" or ")} share`;
         p.pct = 0;
         p.amountInrMinor = 0;
       } else if (blocked.length > 0) {
-        p.notEligible = `Includes a ${blocked.join(" and ")} share they are not eligible for — review`;
+        p.notEligible = `Includes a ${blocked.join(" and ")} share they are not eligible for - review`;
       }
     }
 
@@ -245,7 +245,7 @@ export async function getCommissionReport() {
     // already handled, so there is nothing to review.
     const offDayReview =
       disco && outcome?.callDate && !coveredFor && worksSaturdays.get(disco.userId) === false && isSaturday(outcome.callDate)
-        ? `${disco.name}'s discovery call is dated a Saturday (${outcome.callDate.toISOString().slice(0, 10)}), a day off — confirm who covered it, or record the cover so the split is right.`
+        ? `${disco.name}'s discovery call is dated a Saturday (${outcome.callDate.toISOString().slice(0, 10)}), a day off - confirm who covered it, or record the cover so the split is right.`
         : null;
 
     return {
@@ -302,25 +302,25 @@ export type CommissionRow = CommissionReport["rows"][number];
 // ───────────────────────── One person's own commission ─────────────────────────
 
 /**
- * What ONE specialist earned this month — rebuild spec §6/§7, "own commission only,
+ * What ONE specialist earned this month - rebuild spec §6/§7, "own commission only,
  * including split percentages where a lead was shared".
  *
  * ── Why this reuses `getCommissionReport` instead of querying its own ────────────
  * The attribution rules here are genuinely intricate: both-calls vs split, the substitute
  * cover that divides the discovery leg rather than adding one, the closer merge, and rounding
  * that must make the halves sum back to the leg. A second implementation would agree on the
- * day it was written and drift afterwards — and a desk that quietly disagrees with the payout
+ * day it was written and drift afterwards - and a desk that quietly disagrees with the payout
  * board about someone's own pay is worse than no desk figure at all. So there is exactly one
  * engine, and this filters its output.
  *
- * The cost is loading the month's income rows to keep a handful — acceptable: it is one
+ * The cost is loading the month's income rows to keep a handful - acceptable: it is one
  * month, it is already `include`-shaped for this, and the alternative risks paying on two
  * different sets of numbers.
  *
  * ── What is deliberately NOT returned ───────────────────────────────────────────
  * Other people's amounts. A shared deal names the colleague (the spec asks for the split to be
  * visible) and states the rule, but never their figure. Their own line is inherently derivable
- * from a percentage and an amount — that is unavoidable in any "show me my commission" view and
+ * from a percentage and an amount - that is unavoidable in any "show me my commission" view and
  * is exactly the exposure §3 permits ("financial figures are never exposed to L1/L2/L3 BEYOND
  * their own commission"). Listing a colleague's payout outright is not.
  */
@@ -335,7 +335,7 @@ export type OwnCommissionLine = {
   amountInrMinor: number;
   /** How the deal was attributed, e.g. "Split - 3% each". */
   rule: string;
-  /** Colleagues who share this deal — names only, never their amounts. */
+  /** Colleagues who share this deal - names only, never their amounts. */
   sharedWith: string[];
 };
 
@@ -343,7 +343,7 @@ export type OwnCommission = {
   month: string;
   lines: OwnCommissionLine[];
   totalInrMinor: number;
-  /** Deals contributing, i.e. `lines.length` — named so the card doesn't do arithmetic. */
+  /** Deals contributing, i.e. `lines.length` - named so the card doesn't do arithmetic. */
   deals: number;
   /**
    * Payments this month that NOBODY could be paid on, because the lead has no owner or the

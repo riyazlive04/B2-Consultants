@@ -28,7 +28,7 @@ export async function getFunnelsList(): Promise<FunnelListRow[]> {
     name: f.name,
     slug: f.slug,
     published: f.published,
-    // Steps the visitor walks through — a variant is a second version of one of them, not an
+    // Steps the visitor walks through - a variant is a second version of one of them, not an
     // extra stage, so "4 steps" stays 4 while a test is running.
     stepCount: f.steps.filter((s) => !s.abTestOf).length,
     // Views, on the other hand, count every arm: they are all traffic to this funnel.
@@ -49,8 +49,8 @@ export type EditorStep = {
   /** Relative traffic share against this step's own variants. Meaningless without them. */
   abWeight: number;
   /**
-   * The A/B variants of this step. A variant is a full step in its own right — same builder, same
-   * renderer, its own `views` — so it is typed as one. Nested here rather than left in the flat
+   * The A/B variants of this step. A variant is a full step in its own right - same builder, same
+   * renderer, its own `views` - so it is typed as one. Nested here rather than left in the flat
    * step list because a variant is NOT a stage of the funnel: showing it in the step rail would
    * imply visitors pass through it on the way to the next page, and they never do.
    */
@@ -63,7 +63,7 @@ export type FunnelDetail = {
   slug: string;
   published: boolean;
   /**
-   * The bands rendered around EVERY step. `null` means the funnel has none — distinct from `[]`,
+   * The bands rendered around EVERY step. `null` means the funnel has none - distinct from `[]`,
    * which is a header someone deliberately emptied and may be about to rebuild.
    */
   headerBlocks: Block[] | null;
@@ -126,8 +126,8 @@ export type PublicStep = {
   /**
    * The page to render.
    *
-   * `id` is the id of whichever page was ACTUALLY chosen — the control, or the variant this
-   * visitor was assigned — because that is what the view counter must be stamped on. `slug` stays
+   * `id` is the id of whichever page was ACTUALLY chosen - the control, or the variant this
+   * visitor was assigned - because that is what the view counter must be stamped on. `slug` stays
    * the control's, because the URL is the experiment's address and must not change underneath a
    * visitor who is being split-tested.
    */
@@ -137,9 +137,9 @@ export type PublicStep = {
   footer: Block[];
   steps: { name: string; slug: string; position: number }[];
   forms: Record<string, PublicForm>;
-  /** Open slots per `booking` block owner. Read fresh every request — see getStepCalendars. */
+  /** Open slots per `booking` block owner. Read fresh every request - see getStepCalendars. */
   calendars: StepCalendars;
-  /** True when a variant is being served. Not used to render anything — it is what makes the
+  /** True when a variant is being served. Not used to render anything - it is what makes the
    *  builder's preview honest about which page it is looking at. */
   isVariant: boolean;
 };
@@ -148,7 +148,7 @@ export type PublicStep = {
  * Walk the WHOLE tree, not just the top level.
  *
  * Blocks used to be a flat list, so a top-level filter found every form. With section → row →
- * column nesting, a form embedded anywhere inside a band is several levels down — and a form
+ * column nesting, a form embedded anywhere inside a band is several levels down - and a form
  * whose id was never collected renders as "[form not published]" on the live page, which is
  * the opt-in silently disappearing from a funnel that looks fine in the builder.
  */
@@ -156,7 +156,7 @@ function collectFormIds(list: Block[]): string[] {
   return list.flatMap((b) => [
     ...(b.type === "form" && b.formId ? [b.formId] : []),
     // A form opened from a CTA is not embedded anywhere in the tree, so it would be missed by a
-    // walk that only looked for `form` nodes — and a popup whose form was never loaded is a
+    // walk that only looked for `form` nodes - and a popup whose form was never loaded is a
     // button that opens an empty dialog, on the page the ad spend lands on.
     ...(b.opensFormId ? [b.opensFormId] : []),
     ...collectFormIds(b.children ?? []),
@@ -181,7 +181,7 @@ export async function getPublicFunnelFirstStep(funnelSlug: string): Promise<stri
  * Load the page a visitor should see.
  *
  * `visitorId` is the opaque cookie value written by middleware. It is the ONLY input to the split
- * beyond the step's own weights — see lib/ab.ts for why the assignment is a hash and not a roll
+ * beyond the step's own weights - see lib/ab.ts for why the assignment is a hash and not a roll
  * of the dice remembered in a cookie.
  *
  * Called twice per request (once by `generateMetadata`, once by the page). That is safe precisely
@@ -196,7 +196,7 @@ export async function getPublicStep(funnelSlug: string, stepSlug: string, visito
   if (!f || !f.published) return null;
 
   // Matched against the CONTROLS only. A variant carries a slug because the unique index needs
-  // one, not because it is an address — letting `/p/funnel/landing-b` resolve would hand anyone
+  // one, not because it is an address - letting `/p/funnel/landing-b` resolve would hand anyone
   // who guessed it a way to see both arms, and would pollute the variant's view count with
   // traffic that was never assigned to it.
   const step = f.steps.find((s) => s.slug === stepSlug && !s.abTestOf);

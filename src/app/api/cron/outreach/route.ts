@@ -6,7 +6,7 @@ import { RATE_RULES } from "@/lib/rate-limit";
  * Outreach SOP scheduler seam.
  *
  * CADENCE MATTERS HERE MORE THAN ELSEWHERE. The SOP's tightest rule is Step 2's 5-minute reaction
- * window, and this engine's timing resolution is exactly the cron's interval — a 15-minute cron
+ * window, and this engine's timing resolution is exactly the cron's interval - a 15-minute cron
  * cannot police a 5-minute SLA. Hit this every 1–2 minutes:
  *
  *   * * * * *  curl -fsS -H "x-cron-secret: $CRON_SECRET" https://<host>/api/cron/outreach

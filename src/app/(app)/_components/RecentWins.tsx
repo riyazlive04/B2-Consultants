@@ -7,7 +7,7 @@ import { formatDate } from "@/lib/format";
 import { SectionHeading, ViewAll } from "@/components/ui/kit";
 
 /**
- * Recent wins (Admin only) — a short, celebratory timeline of the last few good
+ * Recent wins (Admin only) - a short, celebratory timeline of the last few good
  * things: deals closed, offers landed, journeys finished. It is the "recent
  * activity" glance, deliberately capped at the latest handful; the full history
  * lives on /pipeline and /students. Renders nothing at all when there's no news,

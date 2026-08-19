@@ -1,9 +1,9 @@
 /**
- * Outreach SOP — end-to-end scenario verification.
+ * Outreach SOP - end-to-end scenario verification.
  *
  * Drives the five journeys the QA checklist's Step 6 names, against the REAL database and the
  * REAL engine (no mocks below the engine's `now` parameter). Complements the pure unit tests in
- * src/lib/__tests__: those prove the ladder's arithmetic, this proves the wiring — that a lead
+ * src/lib/__tests__: those prove the ladder's arithmetic, this proves the wiring - that a lead
  * landing in the DB actually produces the right rows, phases and terminal states.
  *
  * Safe to re-run: every fixture is namespaced by RUN_TAG and torn down at the end.
@@ -29,7 +29,7 @@ function check(name: string, cond: boolean, detail = "") {
     console.log(`  ✓ ${name}`);
   } else {
     failed++;
-    console.log(`  ✗ ${name}${detail ? ` — ${detail}` : ""}`);
+    console.log(`  ✗ ${name}${detail ? ` - ${detail}` : ""}`);
   }
 }
 
@@ -145,7 +145,7 @@ async function makeBooking(leadId: string, email: string, phone: string, startsA
 // ═══════════════════════════════════════════════════════════════════
 
 async function scenarioGoldenPath() {
-  console.log("\n1. Golden path — opt-in → contacted in 3 min → books → BANT YES → confirms → SSS confirmed");
+  console.log("\n1. Golden path - opt-in → contacted in 3 min → books → BANT YES → confirms → SSS confirmed");
   const t0 = new Date();
   const { lead, journey } = await makeLead("Golden Path", "+919000000001", "golden@example.com");
   const jid = journey.id;
@@ -219,7 +219,7 @@ async function scenarioGoldenPath() {
 }
 
 async function scenarioSlowReply() {
-  console.log("\n2. Slow reply — contacted at 8 min → never books → all 3 checks → IGNORE");
+  console.log("\n2. Slow reply - contacted at 8 min → never books → all 3 checks → IGNORE");
   const t0 = new Date();
   const { journey } = await makeLead("Slow Reply", "+919000000002", "slow@example.com");
   const jid = journey.id;
@@ -254,11 +254,11 @@ async function scenarioSlowReply() {
   check("phase → IGNORED", (await phaseOf(jid)) === "IGNORED");
 
   const lead = await prisma.lead.findFirst({ where: { phone: "+919000000002" } });
-  check("lead is NOT deleted — stays in records (§I)", lead !== null);
+  check("lead is NOT deleted - stays in records (§I)", lead !== null);
 }
 
 async function scenarioGhost() {
-  console.log("\n3. Ghost prospect — books → never confirms through 14/15/16 → cancelled + RED");
+  console.log("\n3. Ghost prospect - books → never confirms through 14/15/16 → cancelled + RED");
   const t0 = new Date();
   const { lead, journey } = await makeLead("Ghost Prospect", "+919000000003", "ghost@example.com");
   const jid = journey.id;
@@ -318,7 +318,7 @@ async function scenarioGhost() {
 }
 
 async function scenarioNotQualified() {
-  console.log("\n4. Not qualified — BANT NO → straight to Step 17, skips Disco welcome entirely");
+  console.log("\n4. Not qualified - BANT NO → straight to Step 17, skips Disco welcome entirely");
   const t0 = new Date();
   const { lead, journey } = await makeLead("Not Qualified", "+919000000004", "nq@example.com");
   const jid = journey.id;
@@ -345,7 +345,7 @@ async function scenarioNotQualified() {
 }
 
 async function scenarioDiscoverySaysNo() {
-  console.log("\n5. Discovery says no — HQ = NO → terminates, no SSS message ever fires");
+  console.log("\n5. Discovery says no - HQ = NO → terminates, no SSS message ever fires");
   const t0 = new Date();
   const { lead, journey } = await makeLead("Discovery No", "+919000000005", "dno@example.com");
   const jid = journey.id;
@@ -362,7 +362,7 @@ async function scenarioDiscoverySaysNo() {
   await act(jid, "KEY_METRICS_TRANSFER", t0);
   await tick(jid, t0);
 
-  // Discovery Specialist's verdict: not highly qualified. Note an SSS time is even present —
+  // Discovery Specialist's verdict: not highly qualified. Note an SSS time is even present -
   // the gate must be the verdict, not the absence of a date.
   await prisma.outreachJourney.update({
     where: { id: jid },
@@ -383,7 +383,7 @@ async function scenarioDiscoverySaysNo() {
 }
 
 async function scenarioIdempotency() {
-  console.log("\n6. Idempotency — the cron running twice must not double-anything");
+  console.log("\n6. Idempotency - the cron running twice must not double-anything");
   const t0 = new Date();
   const { journey } = await makeLead("Idempotent", "+919000000006", "idem@example.com");
   const jid = journey.id;
@@ -425,7 +425,7 @@ async function cleanup() {
 }
 
 async function main() {
-  console.log(`Outreach SOP — end-to-end verification (${RUN_TAG})`);
+  console.log(`Outreach SOP - end-to-end verification (${RUN_TAG})`);
   try {
     await scenarioGoldenPath();
     await scenarioSlowReply();

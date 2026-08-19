@@ -9,7 +9,7 @@ import type {
  * B2's chart of accounts (SPEC §10.1), and the maps that decide which account a
  * Finance entry posts to.
  *
- * `code` — not `name` — is the stable key. The founder may reword "Marketing" to
+ * `code` - not `name` - is the stable key. The founder may reword "Marketing" to
  * "Ads & marketing" without breaking a single posting rule.
  *
  * Isomorphic and dependency-free (types only), so the seed script, the posting
@@ -28,8 +28,8 @@ export type AccountSeed = {
 
 export const CHART_OF_ACCOUNTS = [
   // ── Assets ──
-  { code: "1000", name: "Bank — INR", type: "ASSET", currency: "INR" },
-  { code: "1010", name: "Bank — EUR", type: "ASSET", currency: "EUR" },
+  { code: "1000", name: "Bank - INR", type: "ASSET", currency: "INR" },
+  { code: "1010", name: "Bank - EUR", type: "ASSET", currency: "EUR" },
   // Cash and the gateway clearing account hold either currency, so neither is pinned.
   { code: "1020", name: "Cash", type: "ASSET", currency: null },
   { code: "1030", name: "Payment gateway clearing", type: "ASSET", currency: null },
@@ -43,14 +43,14 @@ export const CHART_OF_ACCOUNTS = [
   { code: "3900", name: "Retained earnings", type: "EQUITY", currency: null },
 
   // ── Income, by program level (SPEC §4.4 "revenue by level") ──
-  { code: "4000", name: "Income — Solo", type: "INCOME", currency: null },
-  { code: "4010", name: "Income — Guided", type: "INCOME", currency: null },
-  { code: "4020", name: "Income — Elite", type: "INCOME", currency: null },
-  { code: "4030", name: "Income — German Note", type: "INCOME", currency: null },
-  { code: "4090", name: "Income — Other", type: "INCOME", currency: null },
+  { code: "4000", name: "Income - Solo", type: "INCOME", currency: null },
+  { code: "4010", name: "Income - Guided", type: "INCOME", currency: null },
+  { code: "4020", name: "Income - Elite", type: "INCOME", currency: null },
+  { code: "4030", name: "Income - German Note", type: "INCOME", currency: null },
+  { code: "4090", name: "Income - Other", type: "INCOME", currency: null },
 
   // ── Expenses, by category (SPEC §4.2) ──
-  { code: "5000", name: "COGS — Direct delivery", type: "EXPENSE", currency: null, isCogs: true },
+  { code: "5000", name: "COGS - Direct delivery", type: "EXPENSE", currency: null, isCogs: true },
   { code: "6000", name: "Marketing", type: "EXPENSE", currency: null },
   { code: "6010", name: "Tools & software", type: "EXPENSE", currency: null },
   { code: "6020", name: "Team salaries & commissions", type: "EXPENSE", currency: null },
@@ -70,7 +70,7 @@ export const ACCOUNT = {
   GATEWAY_CLEARING: "1030",
   RECEIVABLE: "1100",
   PAYABLE: "2000",
-  /// Direct delivery cost of goods sold — where a tutor fee accrues (ER v2 Track C). Already
+  /// Direct delivery cost of goods sold - where a tutor fee accrues (ER v2 Track C). Already
   /// flagged isCogs, so gross profit stays a ledger slice rather than a second calculation.
   COGS_DELIVERY: "5000",
   FX_GAIN_LOSS: "7000",
@@ -84,7 +84,7 @@ const INCOME_CODES = new Set<string>(CHART_OF_ACCOUNTS.filter((a) => a.type === 
  *
  * Levels are configurable rows now (the `Level` table), so the authority is each level's own
  * `incomeAccountCode`: pass `accountByCode` (from server/levels.ts `levelIncomeAccounts()`) to honour
- * a per-level override. Without the map — e.g. the seed script — it falls back to a prefix rule that
+ * a per-level override. Without the map - e.g. the seed script - it falls back to a prefix rule that
  * reproduces the seeded defaults (every German level → the one German Note account, mirroring the
  * `byLevel` tile in finance-metrics.ts). NEVER returns undefined, so a journal line always balances,
  * even for a brand-new level that predates any mapping.
@@ -132,7 +132,7 @@ export function expenseAccountFor(category: ExpenseCategory): AccountCode {
  *
  * A Finance entry names ONE payment method but may carry an INR amount and a EUR
  * amount (SPEC §4.1). Each amount is therefore its own line, and each line asks this
- * function for its own account — that is why `currency` is a parameter and not read
+ * function for its own account - that is why `currency` is a parameter and not read
  * off the method. Gateways settle in a clearing account regardless of currency,
  * because the money is not in the bank yet.
  */

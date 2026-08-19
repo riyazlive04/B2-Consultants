@@ -8,11 +8,11 @@ import type { BusinessLineView } from "@/lib/business-line";
  * The B2 / German Note / Combined selection, made GLOBAL and PERSISTENT (Error Log E1/E4).
  *
  * It was a `?line=` search param on Finance alone, so it reset the moment you navigated
- * anywhere else — and the spec asks for one segment choice that follows you across the app.
+ * anywhere else - and the spec asks for one segment choice that follows you across the app.
  *
  * A COOKIE rather than client state or a param, for reasons that all matter here:
  *   • server components read it directly, so every segmented card renders correctly on the
- *     FIRST paint — no flash of combined numbers being corrected a moment later;
+ *     FIRST paint - no flash of combined numbers being corrected a moment later;
  *   • it survives navigation and a reload, which is the actual requirement;
  *   • it is per-browser, so one person's view never changes what a colleague sees.
  *
@@ -40,7 +40,7 @@ export async function getBusinessLineView(): Promise<BusinessLineView> {
  * What a page should actually render, given its own URL.
  *
  * Explicit beats sticky: a `?line=` in the address bar is someone asking for that view right
- * now — usually because a colleague sent them the link — and the cookie must not quietly
+ * now - usually because a colleague sent them the link - and the cookie must not quietly
  * override it.
  */
 export async function resolveBusinessLine(param?: string | string[]): Promise<BusinessLineView> {
@@ -56,11 +56,11 @@ export async function setBusinessLineView(next: BusinessLineView): Promise<void>
     maxAge: MAX_AGE,
     path: "/",
     sameSite: "lax",
-    // Readable by the server only — nothing in the browser needs it, and the toggle already
+    // Readable by the server only - nothing in the browser needs it, and the toggle already
     // knows its own state from the props the server rendered it with.
     httpOnly: true,
   });
   // The choice changes what several unrelated screens show, so revalidate the layout rather
-  // than one route — otherwise Finance updates and the home gauge keeps its old numbers.
+  // than one route - otherwise Finance updates and the home gauge keeps its old numbers.
   revalidatePath("/", "layout");
 }

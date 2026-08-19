@@ -61,7 +61,7 @@ function mapFields(fd: FieldDatum[]): { name: string; phone: string; email?: str
  * sender's payload.
  *
  * A Lead Ad form can carry the band-score questions too, and its field NAMES are whatever the
- * form author typed — which is exactly what the founder-editable inbound mapping is for. Multi
+ * form author typed - which is exactly what the founder-editable inbound mapping is for. Multi
  * answers join on ", " to match the mapper's own array handling.
  */
 function flattenFields(fd: FieldDatum[]): Record<string, unknown> {

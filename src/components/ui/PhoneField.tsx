@@ -14,7 +14,7 @@ import {
  * no longer submit "9876543210" with no country and have it guessed against +91.
  *
  * A single hidden <input name={name}> carries the combined E.164 value ("+919876543210"), so this
- * is a drop-in replacement for `<TextInput kind="phone" name="phone">` — every form + server action
+ * is a drop-in replacement for `<TextInput kind="phone" name="phone">` - every form + server action
  * still receives one `phone` string, and lib/phone.ts remains the authoritative validator.
  */
 export function PhoneField({
@@ -33,8 +33,8 @@ export function PhoneField({
   size?: ControlSize;
   id?: string;
   /**
-   * Overrides the country's example number. The example is the better default — it teaches the
-   * expected format — so this is only for a form whose wording is fixed by an external spec.
+   * Overrides the country's example number. The example is the better default - it teaches the
+   * expected format - so this is only for a form whose wording is fixed by an external spec.
    */
   placeholder?: string;
 }) {
@@ -45,7 +45,7 @@ export function PhoneField({
 
   const country = dialFor(iso);
   const combined = toE164(iso, national);
-  // Soft, non-blocking length hint — the server (lib/phone.ts, libphonenumber) is the real gate.
+  // Soft, non-blocking length hint - the server (lib/phone.ts, libphonenumber) is the real gate.
   const lengthBad = national.trim().length > 0 && !nationalLengthOk(iso, national);
   const inputCls = `${baseCls} ${invalid || lengthBad ? errCls : okCls} ${sizeCls[size]}`;
 

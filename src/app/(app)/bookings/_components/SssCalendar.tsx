@@ -93,7 +93,7 @@ export function SssCalendar({
                 aria-label="SSS owner"
                 value={config.ownerId ?? ""}
                 onChange={(e) => setOwner(e.target.value)}
-                options={[{ value: "", label: "— pick who runs the SSS —" }, ...teamMembers.map((m) => ({ value: m.id, label: m.name }))]}
+                options={[{ value: "", label: "- pick who runs the SSS -" }, ...teamMembers.map((m) => ({ value: m.id, label: m.name }))]}
               />
             ) : (
               <span className="font-semibold text-ink">{ownerName ? `SSS run by ${ownerName}` : "SSS owner not set"}</span>
@@ -121,7 +121,7 @@ export function SssCalendar({
 
       {pending && (
         <div className="flex items-center gap-2 rounded-field border border-primary bg-primary-soft px-4 py-2 text-sm text-primary-strong">
-          Placing <strong>{pending.name}</strong> — click an open slot, or drop them on one.
+          Placing <strong>{pending.name}</strong> - click an open slot, or drop them on one.
           <button onClick={() => setPending(null)} className="ml-auto inline-flex items-center gap-1 text-xs font-semibold hover:underline"><X size={13} /> Cancel</button>
         </div>
       )}
@@ -170,7 +170,7 @@ export function SssCalendar({
                       })}
                     />
                   ))}
-                  {!hasSlots && <p className="rounded-field border border-dashed border-line py-4 text-center text-caption text-ink-3">—</p>}
+                  {!hasSlots && <p className="rounded-field border border-dashed border-line py-4 text-center text-caption text-ink-3">-</p>}
                 </div>
               </div>
             );
@@ -181,7 +181,7 @@ export function SssCalendar({
       {/* Needs an SSS time */}
       <div className="rounded-card border border-line bg-surface p-4">
         <h4 className="text-sm font-semibold text-ink">Needs an SSS time ({needsScheduling.length})</h4>
-        <p className="mt-0.5 text-caption text-ink-3">Highly-qualified prospects with no SSS slot — including anyone bumped off a blocked slot. Drag one onto an open slot, or click “Book”.</p>
+        <p className="mt-0.5 text-caption text-ink-3">Highly-qualified prospects with no SSS slot - including anyone bumped off a blocked slot. Drag one onto an open slot, or click “Book”.</p>
         {needsScheduling.length === 0 ? (
           <p className="mt-3 text-sm text-ink-3">Everyone qualified is scheduled. 🎉</p>
         ) : (

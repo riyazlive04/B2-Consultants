@@ -1,8 +1,8 @@
 /**
- * Outreach SOP — timing, branch and data-integrity tests.
+ * Outreach SOP - timing, branch and data-integrity tests.
  *
  * Maps to the QA checklist's Steps 2–5. The engine is pure, so every SLA boundary is tested by
- * passing `now` explicitly — no fake timers, no DB, no flake. Each timing case is checked at
+ * passing `now` explicitly - no fake timers, no DB, no flake. Each timing case is checked at
  * boundary−1min / boundary / boundary+1min, which is what the checklist asks for ("test the
  * boundary condition, not just 'roughly'").
  *
@@ -74,10 +74,10 @@ function planned(state: JourneyState, now: Date, s: OutreachStep) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// STEP 2 — Reaction time SLA (checklist §B)
+// STEP 2 - Reaction time SLA (checklist §B)
 // ═══════════════════════════════════════════════════════════════════
 
-describe("Step 2 — 5-minute reaction SLA", () => {
+describe("Step 2 - 5-minute reaction SLA", () => {
   test("contacted at 4min → FAST branch (Step 3 path)", () => {
     const s = base({ contactedAt: at(4 * MIN) });
     assert.equal(reactionState(s, at(4 * MIN), DEFAULT_SLA).branch, "FAST");
@@ -110,7 +110,7 @@ describe("Step 2 — 5-minute reaction SLA", () => {
     assert.equal(reactionState(base(), at(4 * MIN), DEFAULT_SLA).approaching, true);
   });
 
-  test("'approaching' stops once contacted — the clock has stopped", () => {
+  test("'approaching' stops once contacted - the clock has stopped", () => {
     const s = base({ contactedAt: at(4 * MIN) });
     assert.equal(reactionState(s, at(4 * MIN), DEFAULT_SLA).approaching, false);
   });
@@ -123,7 +123,7 @@ describe("Step 2 — 5-minute reaction SLA", () => {
   });
 });
 
-describe("Step 2 — branch routing", () => {
+describe("Step 2 - branch routing", () => {
   test("FAST/PENDING branch materialises the Step 3 intro", () => {
     assert.ok(planned(base(), at(1 * MIN), "INTRO_WHATSAPP"));
   });
@@ -151,10 +151,10 @@ describe("Step 2 — branch routing", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// STEPS 5/7/9 — the booking-chase ladder (checklist §E, §G, §I)
+// STEPS 5/7/9 - the booking-chase ladder (checklist §E, §G, §I)
 // ═══════════════════════════════════════════════════════════════════
 
-describe("Step 5 — Check 1 fires exactly 2h after Step 3/4", () => {
+describe("Step 5 - Check 1 fires exactly 2h after Step 3/4", () => {
   const s = done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", at(1 * MIN));
   const due = planned(s, at(2 * MIN), "CHECK_1")!.dueAt;
 
@@ -180,7 +180,7 @@ describe("Step 5 — Check 1 fires exactly 2h after Step 3/4", () => {
   });
 });
 
-describe("Step 7 — Check 2 fires exactly 1h after Step 6", () => {
+describe("Step 7 - Check 2 fires exactly 1h after Step 6", () => {
   let s = done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", T0);
   s = done(s, "CHECK_1", at(2 * HR));
   s = done(s, "FOLLOWUP_WHATSAPP", at(2 * HR));
@@ -195,7 +195,7 @@ describe("Step 7 — Check 2 fires exactly 1h after Step 6", () => {
   });
 });
 
-describe("Step 9 — Final check fires exactly 2h after Step 8", () => {
+describe("Step 9 - Final check fires exactly 2h after Step 8", () => {
   let s = done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", T0);
   s = done(s, "CHECK_1", at(2 * HR));
   s = done(s, "FOLLOWUP_WHATSAPP", at(2 * HR));
@@ -206,7 +206,7 @@ describe("Step 9 — Final check fires exactly 2h after Step 8", () => {
     assert.equal(planned(s, at(3 * HR), "FINAL_CHECK")!.dueAt.getTime(), at(5 * HR).getTime());
   });
 
-  test("Step 8 'NO' ends the cycle — no final check is scheduled (checklist §H)", () => {
+  test("Step 8 'NO' ends the cycle - no final check is scheduled (checklist §H)", () => {
     let no = done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", T0);
     no = done(no, "CHECK_1", at(2 * HR));
     no = done(no, "FOLLOWUP_WHATSAPP", at(2 * HR));
@@ -222,7 +222,7 @@ describe("Step 9 — Final check fires exactly 2h after Step 8", () => {
   });
 });
 
-describe("Booking check — booked at any of the 3 checkpoints diverts to Step 11", () => {
+describe("Booking check - booked at any of the 3 checkpoints diverts to Step 11", () => {
   for (const [name, checks] of [
     ["check 1", ["CHECK_1"]],
     ["check 2", ["CHECK_1", "FOLLOWUP_WHATSAPP", "CHECK_2"]],
@@ -248,10 +248,10 @@ describe("Booking check — booked at any of the 3 checkpoints diverts to Step 1
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// STEP 11 — BANT → Qualified (checklist §K)
+// STEP 11 - BANT → Qualified (checklist §K)
 // ═══════════════════════════════════════════════════════════════════
 
-describe("Step 11 — Qualified derives from BANT", () => {
+describe("Step 11 - Qualified derives from BANT", () => {
   test("avg > 3 → YES", () => assert.equal(qualifiedFromBant(3.1), "YES"));
   test("avg exactly 3 → MAYBE (the boundary belongs to 'cannot judge')", () =>
     assert.equal(qualifiedFromBant(3), "MAYBE"));
@@ -274,7 +274,7 @@ describe("Step 11 — Qualified derives from BANT", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// STEPS 13–16 — the Disco ladder (checklist §M, §N)
+// STEPS 13–16 - the Disco ladder (checklist §M, §N)
 // ═══════════════════════════════════════════════════════════════════
 
 function qualifiedState(q: "YES" | "MAYBE" | "NO", discoAt: Date): JourneyState {
@@ -284,7 +284,7 @@ function qualifiedState(q: "YES" | "MAYBE" | "NO", discoAt: Date): JourneyState 
   return s;
 }
 
-describe("Step 13 — Disco welcome", () => {
+describe("Step 13 - Disco welcome", () => {
   const discoAt = at(100 * HR);
 
   test("sent immediately on YES, not delayed (checklist §M)", () => {
@@ -297,7 +297,7 @@ describe("Step 13 — Disco welcome", () => {
     assert.ok(planned(qualifiedState("MAYBE", discoAt), T0, "DISCO_WELCOME"));
   });
 
-  test("NOT sent on NO — routed straight to cancellation, skipping Disco welcome (checklist §O)", () => {
+  test("NOT sent on NO - routed straight to cancellation, skipping Disco welcome (checklist §O)", () => {
     const plan = planJourney(qualifiedState("NO", discoAt), T0, DEFAULT_SLA);
     assert.equal(plan.materialise.find((m) => m.step === "DISCO_WELCOME"), undefined);
     assert.ok(plan.materialise.find((m) => m.step === "DISCO_CANCEL"));
@@ -309,7 +309,7 @@ describe("Step 13 — Disco welcome", () => {
   });
 });
 
-describe("Steps 14/15/16 — confirmation ladder fires at discrete offsets", () => {
+describe("Steps 14/15/16 - confirmation ladder fires at discrete offsets", () => {
   const discoAt = at(100 * HR);
   const ladder = (steps: OutreachStep[]) => {
     let s = qualifiedState("YES", discoAt);
@@ -323,7 +323,7 @@ describe("Steps 14/15/16 — confirmation ladder fires at discrete offsets", () 
     ["Step 15", "DISCO_CONFIRM_2", 24, ["DISCO_CONFIRM_1"]],
     ["Step 16 cancel", "DISCO_CANCEL_MSG", 12, ["DISCO_CONFIRM_1", "DISCO_CONFIRM_2", "DISCO_CONFIRM_CALL_1", "DISCO_CONFIRM_CALL_2"]],
   ] as const) {
-    describe(`${label} — T−${hours}h`, () => {
+    describe(`${label} - T−${hours}h`, () => {
       const s = ladder(prereq as unknown as OutreachStep[]);
       const due = planned(s, T0, stepKey as OutreachStep)!.dueAt;
 
@@ -371,7 +371,7 @@ describe("Steps 14/15/16 — confirmation ladder fires at discrete offsets", () 
     assert.equal(
       planned(ladder(["DISCO_CONFIRM_1", "DISCO_CONFIRM_2", "DISCO_CONFIRM_CALL_1"]), T0, "DISCO_CANCEL_MSG"),
       undefined,
-      "one call is not enough — the SOP requires two",
+      "one call is not enough - the SOP requires two",
     );
     assert.ok(
       planned(
@@ -396,10 +396,10 @@ describe("Steps 14/15/16 — confirmation ladder fires at discrete offsets", () 
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// STEP 18 — handoff (checklist §P)
+// STEP 18 - handoff (checklist §P)
 // ═══════════════════════════════════════════════════════════════════
 
-describe("Step 18 — Highly Qualified gate", () => {
+describe("Step 18 - Highly Qualified gate", () => {
   const sssAt = at(100 * HR);
 
   test("HQ = NO → process terminates, no SSS messages ever fire", () => {
@@ -425,10 +425,10 @@ describe("Step 18 — Highly Qualified gate", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// STEPS 19–21 — the SSS ladder (checklist §Q)
+// STEPS 19–21 - the SSS ladder (checklist §Q)
 // ═══════════════════════════════════════════════════════════════════
 
-describe("Steps 19/20/21 — SSS ladder fires at 24h/12h/10h", () => {
+describe("Steps 19/20/21 - SSS ladder fires at 24h/12h/10h", () => {
   const sssAt = at(100 * HR);
   const ladder = (steps: OutreachStep[]) => {
     let s = base({ phase: "SSS_CONFIRMATION", booked: true, qualified: "YES", highlyQualified: true, sssAt });
@@ -441,7 +441,7 @@ describe("Steps 19/20/21 — SSS ladder fires at 24h/12h/10h", () => {
     ["Step 20", "SSS_CONFIRM_2", 12, ["SSS_CONFIRM_1"]],
     ["Step 21", "SSS_CANCEL_MSG", 10, ["SSS_CONFIRM_1", "SSS_CONFIRM_2"]],
   ] as const) {
-    describe(`${label} — T−${hours}h`, () => {
+    describe(`${label} - T−${hours}h`, () => {
       const due = planned(ladder(prereq as unknown as OutreachStep[]), T0, stepKey as OutreachStep)!.dueAt;
 
       test(`due exactly ${hours}h before the SSS`, () => {
@@ -465,7 +465,7 @@ describe("Steps 19/20/21 — SSS ladder fires at 24h/12h/10h", () => {
     assert.equal(nextPhase({ ...ladder(["SSS_CONFIRM_1"]), salesCallConfirmed: true }, T0, DEFAULT_SLA), "COMPLETED");
   });
 
-  test("SSS ladder mirrors Disco but uses its OWN offsets — no copy-paste bug (checklist §Q)", () => {
+  test("SSS ladder mirrors Disco but uses its OWN offsets - no copy-paste bug (checklist §Q)", () => {
     // Disco confirm 2 is T−24h; SSS confirm 2 is T−12h. If someone copy-pasted the Disco ladder,
     // this is the assertion that catches it.
     const sssDue = planned(ladder(["SSS_CONFIRM_1"]), T0, "SSS_CONFIRM_2")!.dueAt;
@@ -475,7 +475,7 @@ describe("Steps 19/20/21 — SSS ladder fires at 24h/12h/10h", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// Idempotency — no double-fire (checklist §C, §F)
+// Idempotency - no double-fire (checklist §C, §F)
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Idempotency", () => {
@@ -490,7 +490,7 @@ describe("Idempotency", () => {
     assert.deepEqual(planJourney(next, at(3 * HR), DEFAULT_SLA).materialise, [], "second run must be a no-op");
   });
 
-  test("planning is pure — same inputs, same output, repeatedly", () => {
+  test("planning is pure - same inputs, same output, repeatedly", () => {
     const s = done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", T0);
     const a = planJourney(s, at(3 * HR), DEFAULT_SLA);
     const b = planJourney(s, at(3 * HR), DEFAULT_SLA);
@@ -507,18 +507,18 @@ describe("Idempotency", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// STEP 10 — email cross-check (checklist §J)
+// STEP 10 - email cross-check (checklist §J)
 // ═══════════════════════════════════════════════════════════════════
 
-describe("Step 10 — email matching", () => {
+describe("Step 10 - email matching", () => {
   test("exact match", () => assert.ok(emailsMatch("a@b.com", "a@b.com")));
   test("case difference must still match (false-negative guard)", () =>
     assert.ok(emailsMatch("Ameen@B2.DE", "ameen@b2.de")));
   test("trailing/leading whitespace must still match", () => assert.ok(emailsMatch("  a@b.com ", "a@b.com")));
   test("near-duplicate must NOT match", () => assert.equal(emailsMatch("ab@b.com", "a.b@b.com"), false));
-  test("plus-addressing is NOT folded — different mailbox, false positive is worse", () =>
+  test("plus-addressing is NOT folded - different mailbox, false positive is worse", () =>
     assert.equal(emailsMatch("a+tag@b.com", "a@b.com"), false));
-  test("empty/null never matches — an absent email is not an identity", () => {
+  test("empty/null never matches - an absent email is not an identity", () => {
     assert.equal(emailsMatch(null, null), false);
     assert.equal(emailsMatch("", ""), false);
     assert.equal(emailsMatch("a@b.com", null), false);
@@ -530,7 +530,7 @@ describe("Step 10 — email matching", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// STEP 5 (test prompt) — templates (checklist §S)
+// STEP 5 (test prompt) - templates (checklist §S)
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Templates", () => {
@@ -563,7 +563,7 @@ describe("Templates", () => {
       "[Your Name]": "Nilofer",
     });
     // Both names on ONE line with static text between them. The SOP originally had them on
-    // consecutive lines, which becomes two adjacent {{…}} parameters at submission — a shape Meta
+    // consecutive lines, which becomes two adjacent {{…}} parameters at submission - a shape Meta
     // rejects outright. Changed with founder sign-off on 2026-08-03; see TPL_INTRO.
     assert.ok(out.startsWith("Hi Priya, this is Nilofer from B2 Consultants."));
     assert.deepEqual(unresolvedVars(out), []);
@@ -571,7 +571,7 @@ describe("Templates", () => {
 
   test("the intro offers a call rather than promising one", () => {
     // Once this message auto-sends at opt-in, "I'll give you a quick call now" is a promise the
-    // system does not keep — under firstCallMode "after_check" a caller only rings if the
+    // system does not keep - under firstCallMode "after_check" a caller only rings if the
     // prospect does NOT book. The offer stays; the assertion of an imminent call does not.
     const body = stepBody("INTRO_WHATSAPP")!;
     assert.ok(!body.includes("quick call now"), "must not promise an immediate call");
@@ -581,7 +581,7 @@ describe("Templates", () => {
     assert.ok(body.includes("https://optin.b2consultants.de/apply"));
   });
 
-  test("unresolved placeholders are detected — never reach the send step", () => {
+  test("unresolved placeholders are detected - never reach the send step", () => {
     const out = renderOutreachTemplate(stepBody("DISCO_CONFIRM_1")!, { "[Prospect’s First Name]": "Priya" });
     const left = unresolvedVars(out);
     assert.ok(left.includes("[DATE]"));
@@ -617,7 +617,7 @@ describe("Templates", () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Config", () => {
-  test("engine is OFF by default — nothing sends until an admin says so", () => {
+  test("engine is OFF by default - nothing sends until an admin says so", () => {
     assert.equal(coerceOutreachConfig({}).enabled, false);
   });
 
@@ -639,7 +639,7 @@ describe("Config", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// firstCallMode — when a human is actually spent
+// firstCallMode - when a human is actually spent
 // ═══════════════════════════════════════════════════════════════════
 
 /**
@@ -657,7 +657,7 @@ function plan(state: JourneyState, now: Date, opts?: { firstCallMode?: "immediat
 }
 const hasStep = (p: ReturnType<typeof plan>, s: OutreachStep) => p.materialise.some((m) => m.step === s);
 
-describe("firstCallMode — deferring the first call until a booking check comes back empty", () => {
+describe("firstCallMode - deferring the first call until a booking check comes back empty", () => {
   /** The intro has gone out but no check has run yet. */
   const introSent = () => done(base({ contactedAt: at(1 * MIN) }), "INTRO_WHATSAPP", at(1 * MIN));
 
@@ -688,7 +688,7 @@ describe("firstCallMode — deferring the first call until a booking check comes
     s = done(s, "CHECK_1", at(2 * HR), "NOT_BOOKED");
     const p = plan(s, at(2 * HR), AFTER);
 
-    assert.ok(hasStep(p, "FIRST_CALL"), "they ignored the message — now a human is worth spending");
+    assert.ok(hasStep(p, "FIRST_CALL"), "they ignored the message - now a human is worth spending");
     assert.equal(p.materialise.find((m) => m.step === "FIRST_CALL")!.dueAt.getTime(), at(2 * HR).getTime());
   });
 
@@ -704,14 +704,14 @@ describe("firstCallMode — deferring the first call until a booking check comes
 
   test("a prospect who books is never handed to a caller", () => {
     // The check found a booking, so `booked` flips and the whole chase block is skipped. This is
-    // the entire value of the mode — assert it rather than assume it.
+    // the entire value of the mode - assert it rather than assume it.
     const s = { ...done(introSent(), "CHECK_1", at(2 * HR), "BOOKED"), booked: true };
     const p = plan(s, at(2 * HR), AFTER);
-    assert.ok(!hasStep(p, "FIRST_CALL"), "they booked off the message — no call should ever be raised");
+    assert.ok(!hasStep(p, "FIRST_CALL"), "they booked off the message - no call should ever be raised");
     assert.ok(!hasStep(p, "FOLLOWUP_WHATSAPP"));
   });
 
-  test("the late-contact branch is unaffected — it never had an intro to wait on", () => {
+  test("the late-contact branch is unaffected - it never had an intro to wait on", () => {
     // Past the 5-minute window with no intro sent: the SOP skips Step 3 and checks immediately.
     // There is no message pending, so deferring the call to "after the message" is meaningless.
     const s = base({ contactedAt: null });
@@ -731,7 +731,7 @@ describe("firstCallMode — deferring the first call until a booking check comes
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// Instant intro — the gates that decide whether a real person is messaged
+// Instant intro - the gates that decide whether a real person is messaged
 // ═══════════════════════════════════════════════════════════════════
 
 /**
@@ -742,7 +742,7 @@ describe("firstCallMode — deferring the first call until a booking check comes
  * whitelist ever inverts, or the config ever fails open, the first symptom is thousands of real
  * WhatsApp messages and a burned business number. Every assertion below is one of those doors.
  */
-describe("instant intro — source whitelist", () => {
+describe("instant intro - source whitelist", () => {
   test("only the live capture webhooks are eligible", () => {
     for (const s of ["PABBLY", "FLEXIFUNNELS", "META_LEAD_AD"]) {
       assert.ok(isInstantIntroSource(s), `${s} arrives from a real opt-in and should send`);
@@ -753,7 +753,7 @@ describe("instant intro — source whitelist", () => {
     // SYNAMATE and SHEET are how the 23,500 existing leads got here; MANUAL is someone typing a
     // contact in. None of them represents a person who just asked to hear from B2.
     for (const s of ["MANUAL", "SYNAMATE", "SHEET", "RAZORPAY", "FATHOM", "NATIVE_FORM"]) {
-      assert.ok(!isInstantIntroSource(s), `${s} must never auto-message — it is not a live opt-in`);
+      assert.ok(!isInstantIntroSource(s), `${s} must never auto-message - it is not a live opt-in`);
     }
   });
 
@@ -770,7 +770,7 @@ describe("instant intro — source whitelist", () => {
   });
 });
 
-describe("instant intro — the config fails closed", () => {
+describe("instant intro - the config fails closed", () => {
   test("ships off", () => {
     assert.equal(DEFAULT_OUTREACH_CONFIG.instantIntro.enabled, false);
     assert.equal(coerceOutreachConfig({}).instantIntro.enabled, false);
@@ -778,7 +778,7 @@ describe("instant intro — the config fails closed", () => {
   });
 
   test("only a literal true arms it", () => {
-    // A half-written config row, a string "yes" from a hand-edited JSON blob, a 1 — none of these
+    // A half-written config row, a string "yes" from a hand-edited JSON blob, a 1 - none of these
     // should start messaging people.
     for (const v of ["yes", "true", 1, {}, []]) {
       assert.equal(

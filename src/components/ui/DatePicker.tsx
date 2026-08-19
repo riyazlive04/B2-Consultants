@@ -6,7 +6,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
 
 /**
- * App-styled date picker (§5.5, "fully custom popover" — the calendar grid is ours, not
+ * App-styled date picker (§5.5, "fully custom popover" - the calendar grid is ours, not
  * the OS one). It wraps a REAL hidden `<input type="date">`:
  *   - that input carries `name`/`value`/`required`, so the 60 server-action forms that
  *     submit dates keep working unchanged, and native constraint validation still fires;
@@ -15,7 +15,7 @@ import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-b
  * real change event whose `target.value` is the YYYY-MM-DD string, exactly as before.
  *
  * Only `type="date"` is fully custom. `time` / `month` / `datetime-local` fall back to a
- * theme-corrected native input (TextInput handles that branch) — those are 3 call sites,
+ * theme-corrected native input (TextInput handles that branch) - those are 3 call sites,
  * not worth a bespoke clock/month-grid, and color-scheme now themes their native popups.
  */
 
@@ -27,7 +27,7 @@ const MONTHS = [
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const toYmd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-// Parse YYYY-MM-DD as a LOCAL calendar date — never `new Date(str)`, which is UTC and
+// Parse YYYY-MM-DD as a LOCAL calendar date - never `new Date(str)`, which is UTC and
 // would shift the day across a timezone. A pure calendar date has no zone.
 function fromYmd(s: string | undefined | null): Date | null {
   if (!s) return null;

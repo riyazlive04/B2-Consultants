@@ -3,9 +3,9 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
 /**
- * Nested-route breadcrumb trail (BUILD_CHECKLIST §2 — `/contacts/[id]`,
+ * Nested-route breadcrumb trail (BUILD_CHECKLIST §2 - `/contacts/[id]`,
  * `/automation/[id]`, and future detail routes). Server-renderable: plain `<Link>`s,
- * no client state. The last item is never a link — it's "you are here".
+ * no client state. The last item is never a link - it's "you are here".
  */
 export type BreadcrumbItem = { label: string; href?: string };
 

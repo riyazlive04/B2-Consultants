@@ -30,7 +30,7 @@ function BatchFields({
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Batch name">
-          <TextInput name="name" required maxLength={120} placeholder="A1 Evening — July 2026" defaultValue={batch?.name} />
+          <TextInput name="name" required maxLength={120} placeholder="A1 Evening - July 2026" defaultValue={batch?.name} />
         </Field>
         <Field label="Level">
           <Select name="level" options={levelOptions} defaultValue={batch?.level ?? levelOptions[0]?.value} />
@@ -114,7 +114,7 @@ export function BatchesPanel({
 
       {batches.length === 0 && !creating && (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          No batches yet — create the first cohort above.
+          No batches yet - create the first cohort above.
         </p>
       )}
 

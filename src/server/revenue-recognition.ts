@@ -10,10 +10,10 @@ import {
 } from "@/lib/revenue-recognition";
 
 /**
- * Revenue recognition — the query half.
+ * Revenue recognition - the query half.
  *
  * All arithmetic lives in lib/revenue-recognition.ts (pure, unit-tested). This file's only job is
- * deciding, for each income row, WHAT SERVICE PERIOD it bought — which is the part that depends
+ * deciding, for each income row, WHAT SERVICE PERIOD it bought - which is the part that depends
  * on the database and on judgement calls worth writing down.
  */
 
@@ -22,7 +22,7 @@ export type RecognitionView = {
   cashInrMinor: number;
   /** Earned in the window, whenever it arrived. */
   recognisedInrMinor: number;
-  /** Unearned at the end of the window — the obligation still outstanding. */
+  /** Unearned at the end of the window - the obligation still outstanding. */
   deferredInrMinor: number;
   /** Recognised minus cash. Negative means we collected more than we earned. */
   varianceInrMinor: number;
@@ -41,12 +41,12 @@ export type RecognitionView = {
  *
  * THREE CASES, in priority order:
  *
- *  1. Linked enrollment with a `programEndDate` — use it. This is the real, founder-entered
+ *  1. Linked enrollment with a `programEndDate` - use it. This is the real, founder-entered
  *     answer and always wins.
- *  2. Linked enrollment without one — derive it from `duration` (90/120 days). LIFETIME derives
+ *  2. Linked enrollment without one - derive it from `duration` (90/120 days). LIFETIME derives
  *     null, which routes Solo to immediate recognition: there is no ongoing obligation to spread
  *     across, and inventing a notional period would be a fabrication.
- *  3. NO linked enrollment — immediate, on the income's own date.
+ *  3. NO linked enrollment - immediate, on the income's own date.
  *
  * Case 3 is the important admission. Most historical income rows predate `enrollmentId` and have
  * no link, so we genuinely do not know what was bought or over how long. Spreading them over an
@@ -75,7 +75,7 @@ function periodFor(row: {
  * Reads incomes whose SERVICE PERIOD could overlap the window, which is a wider net than the
  * window itself: a program sold last November is still earning revenue this February, and a
  * query filtered on `date` alone would miss exactly the rows that make recognition differ from
- * cash. The lookback is bounded at 400 days — comfortably past the longest program (120 days)
+ * cash. The lookback is bounded at 400 days - comfortably past the longest program (120 days)
  * plus a wide margin, so it cannot become an unbounded table scan as the ledger grows.
  */
 export const getRecognition = cache(
@@ -102,7 +102,7 @@ export const getRecognition = cache(
       return {
         // One currency for the whole calculation. The app's convention is that a mixed-currency
         // aggregate is expressed in INR at the rate stored on the row, so recognition uses the
-        // same figure every other total on the Finance page does — a second convention here
+        // same figure every other total on the Finance page does - a second convention here
         // would make two screens disagree about the same payment.
         amountMinor: Number(aggInrMinor(r.amountInrMinor, r.amountEurMinor, r.fxRateUsed as never)),
         ...period,
@@ -144,7 +144,7 @@ export function recognitionConfidence(view: RecognitionView): {
   if (linkedPct >= 40) {
     return {
       level: "PARTIAL",
-      note: `Only ${linkedPct}% of income is linked to an enrollment — the rest is recognised on its payment date.`,
+      note: `Only ${linkedPct}% of income is linked to an enrollment - the rest is recognised on its payment date.`,
     };
   }
   return {

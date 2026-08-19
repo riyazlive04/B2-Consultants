@@ -10,8 +10,8 @@ import { studentIdForUser } from "@/server/student-lookup";
  * A student's OWN payment plan and receipts (rebuild spec §10), for the signed-in student portal.
  *
  * WHY THIS EXISTS ALONGSIDE `student-portal.ts` RATHER THAN INSIDE IT. That module states a
- * deliberate privacy rule — "NO money (fees, payments, LTV), NO internal notes, NO manual signal"
- * — and that rule is still right for everything it covers. What changed is a founder ruling that
+ * deliberate privacy rule - "NO money (fees, payments, LTV), NO internal notes, NO manual signal"
+ * - and that rule is still right for everything it covers. What changed is a founder ruling that
  * §10's narrower case is different in kind: a student seeing THEIR OWN instalments, balance and
  * receipts is not the same as a student seeing what the business made from them.
  *
@@ -21,7 +21,7 @@ import { studentIdForUser } from "@/server/student-lookup";
  *   now shown      their own instalment schedule, what they have paid, what is outstanding,
  *                  their next due date, and the receipts behind those payments
  *
- * Every query is scoped through `Student.userId` — the session's own id — so there is no id for a
+ * Every query is scoped through `Student.userId` - the session's own id - so there is no id for a
  * caller to tamper with.
  *
  * Amounts are returned in INR minor units at each record's own stored rate (`aggInrMinor`), which
@@ -90,7 +90,7 @@ export const getMyPayments = cache(async (userId: string): Promise<StudentPaymen
       orderBy: { createdAt: "desc" },
     }),
     // Receipts: money actually received FROM this student. Nothing about margin or what the
-    // business kept — just "you paid this, on this date".
+    // business kept - just "you paid this, on this date".
     prisma.income.findMany({
       where: { ...ACTIVE, studentId },
       select: { id: true, date: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
@@ -99,7 +99,7 @@ export const getMyPayments = cache(async (userId: string): Promise<StudentPaymen
   ]);
 
   // Compared against `@db.Date` columns, so today must be the IST business day as a day boundary,
-  // not a raw UTC instant — else an instalment flips overdue during the 00:00–05:30 IST window.
+  // not a raw UTC instant - else an instalment flips overdue during the 00:00–05:30 IST window.
   const todayKey = istToday().toISOString().slice(0, 10);
 
   const mapped: StudentPaymentPlan[] = plans.map((p) => {
@@ -117,7 +117,7 @@ export const getMyPayments = cache(async (userId: string): Promise<StudentPaymen
 
     const total = Number(aggInrMinor(p.totalFeeInrMinor, p.totalFeeEurMinor, p.fxRateUsed));
     const paid = instalments.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amountInrMinor, 0);
-    // The next thing they owe — the earliest unpaid instalment, which is more use than the
+    // The next thing they owe - the earliest unpaid instalment, which is more use than the
     // plan-level `nextDueDate` because it carries the amount too.
     const nextUnpaid = instalments.find((i) => i.status !== "PAID");
 

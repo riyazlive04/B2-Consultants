@@ -11,7 +11,7 @@ import type { ActionResult } from "./finance-actions";
 /**
  * Milestone progress (ER v2 Track I).
  *
- * `Enrollment.currentMilestone` and the append-only `MilestoneLog` are UNTOUCHED — the log is
+ * `Enrollment.currentMilestone` and the append-only `MilestoneLog` are UNTOUCHED - the log is
  * the audit trail and nothing here weakens it. What this adds is a per-milestone row with a
  * `targetDay`, so "is Priya on track for day 45" is answerable without replaying the log.
  */
@@ -38,7 +38,7 @@ export async function seedMilestoneLadder(
 
   let created = 0;
   for (const m of ladder) {
-    // upsert keyed on (levelCode, key) — re-seeding is idempotent and never duplicates a rung.
+    // upsert keyed on (levelCode, key) - re-seeding is idempotent and never duplicates a rung.
     const before = await prisma.programMilestone.findUnique({
       where: { levelCode_key: { levelCode, key: m.key } },
       select: { id: true },
@@ -123,7 +123,7 @@ export async function setMilestoneProgress(
     data: {
       status,
       // Stamped only on the transition INTO achieved, and never cleared by a later edit of
-      // the note — when it was hit is a fact, not a field.
+      // the note - when it was hit is a fact, not a field.
       achievedAt: status === "ACHIEVED" ? new Date() : null,
       note: note?.trim() || null,
     },

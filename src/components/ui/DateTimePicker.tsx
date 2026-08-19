@@ -6,7 +6,7 @@ import { CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
 
 /**
- * App-styled date + time picker — the last native popup replaced (see {@link MonthPicker}).
+ * App-styled date + time picker - the last native popup replaced (see {@link MonthPicker}).
  *
  * One popover, calendar on the left and a time column on the right, because the two halves of a
  * `datetime-local` are one decision: "when is this task due". Splitting them into two fields (or
@@ -14,7 +14,7 @@ import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-b
  *
  * Same hidden-real-input construction as DatePicker: `<input type="datetime-local">` carries
  * `name` / `value` / `required` and stays the DOM source of truth, so callers keep receiving the
- * `YYYY-MM-DDTHH:MM` string they already parse — including `toLocalInput` on the schedule form,
+ * `YYYY-MM-DDTHH:MM` string they already parse - including `toLocalInput` on the schedule form,
  * whose whole point is that this value is LOCAL wall-clock, never UTC.
  */
 
@@ -57,7 +57,7 @@ function setNativeValue(el: HTMLInputElement, value: string) {
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-/** Half-hour slots — the granularity every datetime field in this app actually needs. */
+/** Half-hour slots - the granularity every datetime field in this app actually needs. */
 const SLOTS = Array.from({ length: 48 }, (_, i) => ({ h: Math.floor(i / 2), m: (i % 2) * 30 }));
 
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & { size?: ControlSize };
@@ -108,7 +108,7 @@ export function DateTimePicker({
 
   /**
    * Picking a DAY keeps the time already chosen (or defaults to 09:00) and picking a TIME keeps
-   * the day — so the two halves can be answered in either order without one resetting the other.
+   * the day - so the two halves can be answered in either order without one resetting the other.
    * The popover stays OPEN on a day click: the reader still owes an answer for the time.
    */
   function commit(d: Date, h: number, m: number, close: boolean) {
@@ -271,7 +271,7 @@ export function DateTimePicker({
             type="button"
             onClick={() => {
               const d = new Date();
-              // Round up to the next half hour — "now" for a due date means the next usable slot.
+              // Round up to the next half hour - "now" for a due date means the next usable slot.
               const m = d.getMinutes() <= 30 ? 30 : 0;
               const h = d.getMinutes() <= 30 ? d.getHours() : d.getHours() + 1;
               commit(d, h % 24, m, true);

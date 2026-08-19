@@ -4,16 +4,16 @@ import { z } from "zod";
  * One rule per field kind, shared by the browser and the server.
  *
  * Every kind carries three things that MUST agree:
- *   - `filter`  — drops characters that can never belong (runs on every keystroke/paste)
- *   - `attrs`   — the HTML surface (inputMode/autoComplete/maxLength) so keyboards + autofill fit
- *   - `schema`  — the zod check the server action re-runs
+ *   - `filter`  - drops characters that can never belong (runs on every keystroke/paste)
+ *   - `attrs`   - the HTML surface (inputMode/autoComplete/maxLength) so keyboards + autofill fit
+ *   - `schema`  - the zod check the server action re-runs
  *
  * The filter is UX ONLY. Server actions are public endpoints (submitBooking takes no session),
- * so anything the filter drops must also be rejected by `schema` — a crafted POST never touches
+ * so anything the filter drops must also be rejected by `schema` - a crafted POST never touches
  * the browser. Keep the pair in sync: loosening one without the other is the bug this module
  * exists to prevent.
  *
- * Isomorphic on purpose — no "server-only", no libphonenumber (that metadata is ~150kB and stays
+ * Isomorphic on purpose - no "server-only", no libphonenumber (that metadata is ~150kB and stays
  * out of the client bundle; rigorous phone validation happens server-side in lib/phone.ts).
  */
 
@@ -23,7 +23,7 @@ import { z } from "zod";
  * `\p{L}` (letters) + `\p{M}` (combining marks) rather than A-Z: B2's contacts are Indian and
  * German, so "Müller", "Nováková" and "अमीन" are all real names. An ASCII-only rule would reject
  * the customer, not the typo. `\p{M}` matters because "ü" can arrive as u + U+0308 (NFD) from a
- * Mac paste — stripping the mark silently mangles the name to "Muller".
+ * Mac paste - stripping the mark silently mangles the name to "Muller".
  */
 const NAME_OK = String.raw`\p{L}\p{M}`;
 /**
@@ -39,24 +39,24 @@ const NAME_PUNCT = String.raw` .,'’/\-`;
 /**
  * Digits are ALLOWED in a name, but can never make up the whole of one.
  *
- * They were refused outright, which rejected "Anna Smith 2" — and appending a number is exactly
+ * They were refused outright, which rejected "Anna Smith 2" - and appending a number is exactly
  * how someone hand-disambiguates the two real "Anna Smith"s on this roster (Error Log I1). The
  * form said "Name can only contain letters" and the entry simply did not save, so the person's
  * only workaround was blocked by the validator.
  *
  * The guard that matters is NOT the character set, it is the `refine` below requiring at least
- * one LETTER — which is why `NAME_OK` stays letters-only and digits live in their own class.
+ * one LETTER - which is why `NAME_OK` stays letters-only and digits live in their own class.
  * That is what still rejects a bare "9876543210" as a name, i.e. the phone-as-display-name
  * problem (Error Log I2) is prevented by the letter requirement, not by banning digits.
  */
 const NAME_DIGIT = String.raw`0-9`;
 
 const NOT_NAME = new RegExp(`[^${NAME_OK}${NAME_PUNCT}${NAME_DIGIT}]`, "gu");
-/** Phone "special variables" — the country-code plus and the grouping a person types by habit. */
+/** Phone "special variables" - the country-code plus and the grouping a person types by habit. */
 const NOT_PHONE = new RegExp(String.raw`[^\d+()\s\-]`, "g");
 const NOT_DIGIT = /\D/g;
 
-/** Collapse runs of whitespace and trim — names/emails paste in with stray spacing. */
+/** Collapse runs of whitespace and trim - names/emails paste in with stray spacing. */
 const squish = (s: string) => s.replace(/\s+/g, " ").trimStart();
 
 // ─────────────────── filters ───────────────────
@@ -88,7 +88,7 @@ const filterRate = makeDecimalFilter(2);
 /** Emails have no spaces; that is the only character worth blocking as you type. */
 const filterEmail = (raw: string) => raw.replace(/\s/g, "");
 const filterUrl = (raw: string) => raw.replace(/\s/g, "");
-/** Free text: block nothing (a note may contain anything) — the cap is enforced by maxLength. */
+/** Free text: block nothing (a note may contain anything) - the cap is enforced by maxLength. */
 const filterText = (raw: string) => raw;
 
 // ─────────────────── caps ───────────────────
@@ -134,7 +134,7 @@ export type FieldRule = {
 
 /**
  * Names are checked with `.regex()` rather than `.refine()` so the failure message names the
- * offending class — "can't contain numbers" is actionable, "Invalid" is not.
+ * offending class - "can't contain numbers" is actionable, "Invalid" is not.
  */
 const nameSchema = z
   .string()
@@ -157,7 +157,7 @@ const nameSchema = z
 
 /**
  * Shape-only: 7-15 digits is the E.164 range. The authoritative per-country check lives in
- * lib/phone.ts (libphonenumber `/max` metadata) and runs where the number is actually dialled —
+ * lib/phone.ts (libphonenumber `/max` metadata) and runs where the number is actually dialled -
  * duplicating it here would put 150kB of metadata in the browser to re-answer the same question.
  */
 const phoneSchema = z
@@ -209,12 +209,12 @@ export const FIELD_RULES: Record<FieldKind, FieldRule> = {
   },
   city: {
     /**
-     * City shares `filterName`, so it necessarily shares the digit rule — and this schema MUST
+     * City shares `filterName`, so it necessarily shares the digit rule - and this schema MUST
      * match the filter or we recreate exactly the asymmetry this module exists to prevent: the
      * browser would quietly accept a character the server then rejects.
      *
      * Digits belong here on their own merits anyway. This roster is Indian and German, and
-     * "Sector 62", "Phase 3" and "Rohini Sector 8" are ordinary localities — the old comment
+     * "Sector 62", "Phase 3" and "Rohini Sector 8" are ordinary localities - the old comment
      * ("never a digit") held for Baden-Württemberg and not for Noida.
      */
     filter: filterName,
@@ -231,7 +231,7 @@ export const FIELD_RULES: Record<FieldKind, FieldRule> = {
   url: {
     filter: filterUrl,
     // NOT `type="url"`: the native check demands a scheme, and this sits on the PUBLIC booking
-    // form. Rejecting a lead's "linkedin.com/in/x" over a missing "https://" costs a booking —
+    // form. Rejecting a lead's "linkedin.com/in/x" over a missing "https://" costs a booking -
     // so the schema below adds the scheme instead of refusing the value.
     attrs: { inputMode: "url", maxLength: MAX.url, spellCheck: false },
     schema: z
@@ -242,7 +242,7 @@ export const FIELD_RULES: Record<FieldKind, FieldRule> = {
       .transform((v) => (v && !/^[a-z][a-z\d+\-.]*:\/\//i.test(v) ? `https://${v}` : v))
       .pipe(z.string().url("Enter a valid link"))
       /**
-       * http(s) ONLY. `z.string().url()` is not a safety check — it happily accepts
+       * http(s) ONLY. `z.string().url()` is not a safety check - it happily accepts
        * `javascript://x%0Aalert(1)`, which is a live XSS payload the moment a stored link is
        * assigned to `window.location.href` (forms' `redirectUrl` does exactly that): `//x`
        * opens a JS comment, `%0A` closes it, and the tail executes. `data:` and `vbscript:`

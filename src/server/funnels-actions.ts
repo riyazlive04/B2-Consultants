@@ -195,8 +195,8 @@ export async function deleteStep(id: string): Promise<ActionResult> {
   });
   if (!step) return { ok: false, error: "Step not found" };
   // Controls only: deleting the last real step while two A/B variants of it exist would leave a
-  // published funnel with nothing a visitor can reach. (The variants go with it — the FK
-  // cascades — which is also why deleting a control says so before it happens, in the UI.)
+  // published funnel with nothing a visitor can reach. (The variants go with it - the FK
+  // cascades - which is also why deleting a control says so before it happens, in the UI.)
   if (!step.abTestOf) {
     const count = await prisma.funnelStep.count({ where: { funnelId: step.funnelId, abTestOf: null } });
     if (count <= 1) return { ok: false, error: "A funnel needs at least one step" };
@@ -261,7 +261,7 @@ export async function saveStepBlocks(
     },
   });
   // The page builder saves the whole block tree on every save, so `blocks` is compared but never
-  // logged — a page of copy in `meta` would bury the feed and tell the founder nothing.
+  // logged - a page of copy in `meta` would bury the feed and tell the founder nothing.
   const d = diffFields(
     { name: step.name, seoTitle: step.seoTitle, seoDescription: step.seoDescription },
     { name, seoTitle: payload.seoTitle?.trim() || null, seoDescription: payload.seoDescription?.trim() || null },
@@ -294,7 +294,7 @@ export async function saveStepBlocks(
  * is out of date. Saved through the same autosaving editor as a page, hence the same shape.
  *
  * `null` clears the slot back to "this funnel has no header", which is NOT what an empty array
- * means — an empty header is a deliberate state someone is part-way through building.
+ * means - an empty header is a deliberate state someone is part-way through building.
  */
 export async function saveFunnelChrome(
   funnelId: string,
@@ -334,7 +334,7 @@ export async function saveFunnelChrome(
  *
  * Seeded with a COPY of the control's blocks rather than an empty page. A split test is almost
  * always "the same page with one thing changed", and starting from blank means the first thing
- * anyone does is rebuild the control by hand — introducing differences they did not intend to
+ * anyone does is rebuild the control by hand - introducing differences they did not intend to
  * test. Fresh node ids throughout, so the two pages cannot share styling rules.
  */
 export async function createVariant(stepId: string): Promise<ActionResult> {
@@ -348,12 +348,12 @@ export async function createVariant(stepId: string): Promise<ActionResult> {
     },
   });
   if (!control) return { ok: false, error: "Step not found" };
-  // One level only. A variant of a variant has no coherent meaning — which weight would it be
-  // measured against? — and the picker in lib/ab.ts deliberately reads a flat list.
+  // One level only. A variant of a variant has no coherent meaning - which weight would it be
+  // measured against? - and the picker in lib/ab.ts deliberately reads a flat list.
   if (control.abTestOf) return { ok: false, error: "You can't split-test a variant. Add another variant of the original step instead." };
-  if (control._count.abVariants >= 5) return { ok: false, error: "Five variants is the limit — split traffic any thinner and neither arm reaches a usable sample" };
+  if (control._count.abVariants >= 5) return { ok: false, error: "Five variants is the limit - split traffic any thinner and neither arm reaches a usable sample" };
 
-  // B, C, D… — the control is A. Suffixed on the control's slug so the pair is legible in the
+  // B, C, D… - the control is A. Suffixed on the control's slug so the pair is legible in the
   // database and in the activity feed, even though the variant's slug is never an address.
   const letter = String.fromCharCode(66 + control._count.abVariants);
   const slug = await uniqueStepSlug(control.funnelId, `${control.slug}-${letter.toLowerCase()}`);
@@ -361,7 +361,7 @@ export async function createVariant(stepId: string): Promise<ActionResult> {
     data: {
       funnelId: control.funnelId,
       abTestOf: stepId,
-      name: `${control.name} — ${letter}`,
+      name: `${control.name} - ${letter}`,
       slug,
       // Shares the control's position: it occupies the same slot in the funnel, and any other
       // value would make it sort into a gap between two real steps.
@@ -409,7 +409,7 @@ export async function setStepWeight(stepId: string, weight: number): Promise<Act
   return { ok: true };
 }
 
-/** Reset an arm's view counter — how you restart a test after changing what it is testing. */
+/** Reset an arm's view counter - how you restart a test after changing what it is testing. */
 export async function resetVariantViews(stepId: string): Promise<ActionResult> {
   const session = await requireSection("funnels");
   const step = await prisma.funnelStep.findUnique({

@@ -8,7 +8,7 @@ import {
  * The trainer-fee rule from the founders' walkthrough (spec Part 2 §5, restated in the
  * Part 2 §17 quick reference):
  *
- *     rate = (students >= 5) ? ₹7,000 : ₹8,000    — per level, per head
+ *     rate = (students >= 5) ? ₹7,000 : ₹8,000    - per level, per head
  *
  * Pure on purpose: every input arrives as an argument, so the rule is unit-testable
  * without a database, a session or a running server. Read the config with
@@ -43,7 +43,7 @@ export function tutorRatePerHeadRupees(
 /**
  * Total owed to the tutor for running one level of one batch, in paise.
  *
- * An empty batch costs nothing — without this guard a 0-student batch would bill the
+ * An empty batch costs nothing - without this guard a 0-student batch would bill the
  * `below` rate against a headcount of 0 and still read as ₹0, but only by accident; the
  * explicit branch is what makes that intentional.
  */
@@ -58,7 +58,7 @@ export function tutorFeeForBatchInrMinor(
 
 /**
  * The rate bands as a display row, for the console and the batch P&L to explain *why* a
- * batch is charged what it is — the founders' sheet shows the tier, not just the total.
+ * batch is charged what it is - the founders' sheet shows the tier, not just the total.
  */
 export function tutorFeeBandLabel(
   level: TutorFeeLevel,

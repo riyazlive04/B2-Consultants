@@ -24,7 +24,7 @@ import {
  * ── WHY IN-MEMORY AGGREGATION ─────────────────────────────────────────────────────────────────
  * Still a `findMany` with a narrow `select` rather than Prisma `groupBy`. `groupBy` can't label a
  * nullable foreign key (assignedToId → user name), can't bucket a timestamp by IST month, and
- * can't compute a win rate — and this app's tables are one founder's CRM, not a warehouse.
+ * can't compute a win rate - and this app's tables are one founder's CRM, not a warehouse.
  *
  * ── WHY ONE QUERY FOR TWO WINDOWS ─────────────────────────────────────────────────────────────
  * The comparison period is fetched in the SAME query as the current one, spanning
@@ -123,7 +123,7 @@ const winRateOf = (b: Bucket | undefined): number | null =>
  * Turn the two bucket maps into display rows.
  *
  * Time group-bys get the full month sequence with zeros filled, ordered chronologically, and their
- * comparison aligned FROM THE END — the most recent month of this window against the most recent
+ * comparison aligned FROM THE END - the most recent month of this window against the most recent
  * month of the previous one. Aligning from the start would drift whenever the two windows span a
  * different number of calendar months (30 days can touch two months or three).
  */
@@ -158,12 +158,12 @@ function toResult(
       }),
     );
   } else if (chronological) {
-    // "All time" — no synthetic range to walk, so use the months that actually have rows.
+    // "All time" - no synthetic range to walk, so use the months that actually have rows.
     keys = Array.from(current.keys()).sort();
     prevAligned = new Map(keys.map((k) => [k, undefined]));
   } else {
     // Categorical: every group present in EITHER window, so a group that vanished this period
-    // still appears (at zero) with its previous figure — a disappearance is a finding.
+    // still appears (at zero) with its previous figure - a disappearance is a finding.
     keys = Array.from(new Set([...current.keys(), ...previous.keys()]));
     prevAligned = new Map(keys.map((k) => [k, previous.get(k)]));
   }
@@ -338,7 +338,7 @@ async function getOpportunitiesReport(
       createdAt: o.createdAt,
       key: bucket.key,
       label: bucket.label,
-      // BigInt → Number at the edge: values are paise, so ₹1Cr is 1e9 — three orders of
+      // BigInt → Number at the edge: values are paise, so ₹1Cr is 1e9 - three orders of
       // magnitude inside Number's exact-integer range, and BigInt is not JSON-serialisable.
       sumMinor: Number(o.valueInrMinor),
       won: o.status === "WON",
@@ -351,7 +351,7 @@ async function getOpportunitiesReport(
     range,
     includeSum: true,
     includeWinRate: true,
-    // The opportunities board filters by pipeline only — no stage/owner/source query params — so
+    // The opportunities board filters by pipeline only - no stage/owner/source query params - so
     // there is no honest drill-down target yet.
     hrefFor: undefined,
   });
@@ -405,11 +405,11 @@ async function getInvoicesReport(
  *
  * `groupByRaw` comes straight off the URL, so it is validated against the object's curated field
  * list and silently falls back to that object's default rather than erroring on a stale or
- * hand-edited link — the resolved `groupBy` rides back so the page and URL reflect what was
+ * hand-edited link - the resolved `groupBy` rides back so the page and URL reflect what was
  * actually rendered.
  *
  * `cache` is React's per-request dedupe, not a TTL: two components asking for the same report in
- * one render share one query. Nothing here is cached ACROSS requests on purpose — a report the
+ * one render share one query. Nothing here is cached ACROSS requests on purpose - a report the
  * founder just filtered must not answer with a stale aggregate.
  */
 export const getReport = cache(

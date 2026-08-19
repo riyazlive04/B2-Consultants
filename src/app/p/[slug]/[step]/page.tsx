@@ -14,11 +14,11 @@ function visitorId(): string | null {
 
 export async function generateMetadata({ params }: { params: { slug: string; step: string } }): Promise<Metadata> {
   // Assignment is pure, so this second call cannot disagree with the one in the body below about
-  // which variant is being shown — the title always describes the page that ships.
+  // which variant is being shown - the title always describes the page that ships.
   const data = await getPublicStep(params.slug, params.step, visitorId());
   if (!data) return { title: "Not found" };
   return {
-    title: data.step.seoTitle || `${data.funnelName} — ${data.step.name}`,
+    title: data.step.seoTitle || `${data.funnelName} - ${data.step.name}`,
     description: data.step.seoDescription ?? undefined,
   };
 }
@@ -55,7 +55,7 @@ export default async function FunnelStepPage({
     // into a horizontal scrollbar across the whole page.
     <main className="min-h-screen overflow-x-clip bg-app">
       {/* The funnel's global chrome. Rendered by the same component as the body, from the same
-          block model — a header is a page fragment, not a second kind of thing, so it gets full-
+          block model - a header is a page fragment, not a second kind of thing, so it gets full-
           bleed bands and embedded forms for free. Empty arrays render nothing at all. */}
       {data.header.length > 0 && (
         <header>

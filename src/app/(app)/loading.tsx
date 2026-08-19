@@ -1,7 +1,7 @@
 import { SkeletonMetricCards, SkeletonPageHeader, SkeletonBlock } from "@/components/ui/Skeleton";
 
 /**
- * Default route-transition skeleton for any section without its own loading.tsx —
+ * Default route-transition skeleton for any section without its own loading.tsx -
  * mirrors the standard section layout (header → hero → cards). Sections with a
  * distinct shape (finance, pipeline, students, …) ship a closer-fitting one.
  */

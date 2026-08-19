@@ -17,7 +17,7 @@ type Month = FunnelOverview["months"][number];
  * actually acts on: **is the leak getting worse, or did we just have a quiet month?**
  *
  * A table of ten metrics across four months makes that a mental diff of forty cells. A line makes
- * it a glance — and the weakest-stage alert at the top of the page becomes checkable rather than
+ * it a glance - and the weakest-stage alert at the top of the page becomes checkable rather than
  * merely assertable, because you can see whether the stage it names has been sliding for three
  * months or dipped once.
  *
@@ -25,7 +25,7 @@ type Month = FunnelOverview["months"][number];
  * Plotting the raw stage counts on one axis is unreadable: awareness runs in the thousands and
  * enrolments in single digits, so every stage but the first flattens onto the baseline. A log
  * axis would fix the geometry and lose the audience. Rates put all four stages on one honest
- * 0–100 scale, and rate IS the question — "carry-through" is what a funnel measures.
+ * 0–100 scale, and rate IS the question - "carry-through" is what a funnel measures.
  *
  * Volume still matters, and it is not hidden: the counts live in the funnel blocks above and the
  * metrics table below. This chart is deliberately the derivative, not the level.
@@ -49,7 +49,7 @@ export function FunnelTrend({ months }: { months: Month[] }) {
     key: s.key,
     label: s.label,
     values: months.map((m) => {
-      // A month with no entries at the denominator has NO RATE — it is not 0%. Zeroing it would
+      // A month with no entries at the denominator has NO RATE - it is not 0%. Zeroing it would
       // draw a collapse that never happened, in the one chart whose whole job is spotting one.
       const denominatorMissing =
         (s.key === "awareness-lead" && m.awareness === 0) ||
@@ -78,7 +78,7 @@ export function FunnelTrend({ months }: { months: Month[] }) {
         srCaption="Carry-through rate for each funnel stage, by month"
         emptyTitle="No weekly snapshots yet"
         emptyBody="Enter weekly funnel snapshots below and this fills in a month at a time."
-        footnote="A gap means that stage had nothing entering it that month — no rate exists, so none is drawn."
+        footnote="A gap means that stage had nothing entering it that month - no rate exists, so none is drawn."
       />
     </Card>
   );

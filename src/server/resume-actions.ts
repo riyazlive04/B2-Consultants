@@ -26,7 +26,7 @@ const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
 /**
  * Every action below that touches an EXISTING resume resolves it through here rather than by
  * bare id. `requireSection("cv-check")` only says the person may open the Studio, and the
- * section is granted to STUDENT by default — so an id-only lookup let one candidate edit,
+ * section is granted to STUDENT by default - so an id-only lookup let one candidate edit,
  * delete, duplicate or re-review another's CV. See `resumeScope` for the rule itself.
  *
  * Returns null for both "gone" and "not yours", deliberately: distinguishing them would confirm
@@ -93,7 +93,7 @@ export async function updateResume(input: {
     where: { id: input.id },
     data: { title, language, data: asJson(data) },
   });
-  // The editor autosaves the whole CV; `data` is compared but never logged — the founder's feed
+  // The editor autosaves the whole CV; `data` is compared but never logged - the founder's feed
   // is not the place for a candidate's employment history.
   const d = diffFields({ title: exists.title, language: exists.language }, { title, language });
   const changed = [
@@ -116,7 +116,7 @@ export async function updateResume(input: {
 
 export async function deleteResume(id: string): Promise<ActionResult> {
   const session = await requireSection("cv-check");
-  // Resolve under scope first — `delete({ where: { id } })` cannot carry a non-unique filter, so
+  // Resolve under scope first - `delete({ where: { id } })` cannot carry a non-unique filter, so
   // an unscoped delete would happily remove someone else's CV.
   const row = await findOwned(session, id, { title: true, language: true });
   if (row) {
@@ -178,7 +178,7 @@ export async function saveResumeTemplate(config: ResumeTemplateConfig): Promise<
     create: { key: TEMPLATE_KEY, value },
     update: { value },
   });
-  // Section lists, ATS rules and keyword libraries are all nested config — the changed key names
+  // Section lists, ATS rules and keyword libraries are all nested config - the changed key names
   // are the useful signal; the rulebook itself belongs on the settings screen, not in the feed.
   const d = diffFields(
     before as unknown as Record<string, unknown>,
@@ -230,7 +230,7 @@ export async function saveAiSettings(settings: AiSettings): Promise<ActionResult
       section: "cv-check",
       entityType: "AppSetting",
       entityId: "aiConfig",
-      summary: `Updated the CV review AI settings — ${after.paused ? "paused" : "live"}, model ${after.model}`,
+      summary: `Updated the CV review AI settings - ${after.paused ? "paused" : "live"}, model ${after.model}`,
       meta: { changed: d.changed, before: d.before, after: d.after },
     });
   }
@@ -249,7 +249,7 @@ export type RunReviewResult = ActionResult & {
 
 /**
  * Review a saved resume against a target JD. Uses Claude when the seam is armed
- * (key + AI_REVIEW_ENABLED + not paused); otherwise — or if the call fails — it falls
+ * (key + AI_REVIEW_ENABLED + not paused); otherwise - or if the call fails - it falls
  * back to the deterministic analyser so the coach always gets a scored result. Every
  * run is stored as a ResumeReview so it can be re-run "unlimited" times and compared.
  */
@@ -287,17 +287,17 @@ export async function runReview(input: { resumeId: string; jdText: string }): Pr
         provider = "ai";
         model = runtime.model;
       } else {
-        note = "Claude replied but the response wasn't valid JSON — showing the offline analysis instead.";
+        note = "Claude replied but the response wasn't valid JSON - showing the offline analysis instead.";
       }
     } else {
-      note = `AI review unavailable (${res.error}) — showing the offline analysis instead.`;
+      note = `AI review unavailable (${res.error}) - showing the offline analysis instead.`;
     }
   } else if (!runtime.configured) {
-    note = "AI review isn't configured — showing the offline deterministic analysis. Add an Anthropic key in Settings to enable Claude.";
+    note = "AI review isn't configured - showing the offline deterministic analysis. Add an Anthropic key in Settings to enable Claude.";
   } else if (runtime.paused) {
-    note = "AI review is paused — showing the offline deterministic analysis.";
+    note = "AI review is paused - showing the offline deterministic analysis.";
   } else if (!runtime.envEnabled) {
-    note = "AI review flag is off — showing the offline deterministic analysis.";
+    note = "AI review flag is off - showing the offline deterministic analysis.";
   }
 
   if (!result) result = deterministicReview(cvText, jd, template);
@@ -320,7 +320,7 @@ export async function runReview(input: { resumeId: string; jdText: string }): Pr
     section: "cv-check",
     entityType: "ResumeReview",
     entityId: saved.id,
-    summary: `Ran an ATS review of the CV "${row.title}" — scored ${result.atsScore}/100 (${provider === "ai" ? "Claude" : "offline analyser"})`,
+    summary: `Ran an ATS review of the CV "${row.title}" - scored ${result.atsScore}/100 (${provider === "ai" ? "Claude" : "offline analyser"})`,
     meta: { resumeId: input.resumeId, provider, model, scoreOverall: result.atsScore },
   });
   revalidatePath("/cv-check");
@@ -329,7 +329,7 @@ export async function runReview(input: { resumeId: string; jdText: string }): Pr
 
 export async function deleteReview(id: string): Promise<ActionResult> {
   const session = await requireSection("cv-check");
-  // Scoped through the review's PARENT resume — a review carries no owner of its own.
+  // Scoped through the review's PARENT resume - a review carries no owner of its own.
   const row = await prisma.resumeReview.findFirst({
     where: { id, resume: resumeScope(session) },
     select: { id: true, resumeId: true, provider: true, scoreOverall: true },
@@ -362,7 +362,7 @@ export type ImportResult = ActionResult & { data?: ResumeData; note?: string };
 export async function importResumeFromText(text: string): Promise<ImportResult> {
   await requireSection("cv-check");
   const clean = text.trim();
-  if (clean.length < 30) return { ok: false, error: "That doesn't look like a CV — too little text." };
+  if (clean.length < 30) return { ok: false, error: "That doesn't look like a CV - too little text." };
 
   const runtime = await getAiRuntime();
   if (runtime.enabled && runtime.apiKey) {
@@ -371,16 +371,16 @@ export async function importResumeFromText(text: string): Promise<ImportResult> 
       model: runtime.model,
       maxTokens: runtime.maxTokens,
       system: IMPORT_SYSTEM,
-      user: `Parse this CV into the JSON shape. Do not invent anything — leave a field empty if it is not in the text.\n\n---CV---\n${clean.slice(0, 24000)}`,
+      user: `Parse this CV into the JSON shape. Do not invent anything - leave a field empty if it is not in the text.\n\n---CV---\n${clean.slice(0, 24000)}`,
     });
     if (res.ok) {
       const parsed = extractJson<unknown>(res.text);
       if (parsed) return { ok: true, data: coerceResumeData(parsed) };
-      return { ok: true, data: fallbackImport(clean), note: "Couldn't structure it automatically — dropped the text into Profile for you to sort into fields." };
+      return { ok: true, data: fallbackImport(clean), note: "Couldn't structure it automatically - dropped the text into Profile for you to sort into fields." };
     }
-    return { ok: true, data: fallbackImport(clean), note: `AI parse failed (${res.error}) — dropped the text into Profile.` };
+    return { ok: true, data: fallbackImport(clean), note: `AI parse failed (${res.error}) - dropped the text into Profile.` };
   }
-  return { ok: true, data: fallbackImport(clean), note: "AI import is off — dropped the text into Profile. Turn on the AI seam in Settings for automatic field-by-field parsing." };
+  return { ok: true, data: fallbackImport(clean), note: "AI import is off - dropped the text into Profile. Turn on the AI seam in Settings for automatic field-by-field parsing." };
 }
 
 function fallbackImport(text: string): ResumeData {
@@ -404,7 +404,7 @@ const IMPORT_SYSTEM = `You are a precise CV parser. Output ONLY a JSON object ma
   "personalSkills": string[],
   "hobbies": string[]
 }
-Never fabricate — an absent field is "" or []. Dates as written in the CV.`;
+Never fabricate - an absent field is "" or []. Dates as written in the CV.`;
 
 function buildReviewPrompt(cvText: string, jd: string, template: ResumeTemplateConfig) {
   const w = template.ats;
@@ -418,11 +418,11 @@ function buildReviewPrompt(cvText: string, jd: string, template: ResumeTemplateC
   const kwBlock = w.targetKeywords.length
     ? `\nALWAYS check for these skills/keywords (on top of JD terms); list any the CV lacks in missingKeywords: ${w.targetKeywords.join(", ")}.\n`
     : "";
-  const system = `You are a senior technical recruiter and ATS specialist reviewing a candidate CV for a specific German-market job. Be exacting and honest — a weak CV should score low. You COACH: you name what is wrong and show a concrete rewrite, but you never claim skills the candidate doesn't have.
+  const system = `You are a senior technical recruiter and ATS specialist reviewing a candidate CV for a specific German-market job. Be exacting and honest - a weak CV should score low. You COACH: you name what is wrong and show a concrete rewrite, but you never claim skills the candidate doesn't have.
 
 Score three axes 0-100, then combine into atsScore using these weights: keyword coverage ${w.weightKeywords}%, B2-template conformance ${w.weightConformance}%, ATS formatting ${w.weightFormatting}%.
 - keywordScore: how well the CV mirrors the JD's required skills/tools/terms (that are genuinely true of the candidate).
-- conformanceScore: presence of the B2 CV spine — contact header, "what I have to offer" highlights, dated reverse-chronological experience, education, certifications, languages with levels, computer & personal skills; German signals (DOB, relocation/Reisebereitschaft, language level).
+- conformanceScore: presence of the B2 CV spine - contact header, "what I have to offer" highlights, dated reverse-chronological experience, education, certifications, languages with levels, computer & personal skills; German signals (DOB, relocation/Reisebereitschaft, language level).
 - formattingScore: parseable structure, quantified achievement bullets (verb + metric), consistent dates, ~1-2 pages, no leftover template placeholders.
 ${rulesBlock}${kwBlock}Verdict banding on atsScore: ≥ ${w.bands.strong} = strong match; ≥ ${w.bands.partial} = partial match; otherwise weak.
 ${house ? `\nAdditional house rules from the agency (enforce these):\n${house}\n` : ""}
@@ -433,7 +433,7 @@ Reply with ONLY this JSON (no markdown, no commentary):
 }
 
 /**
- * Offline scoring — reuses the deterministic CV↔JD analyser and reshapes it into the
+ * Offline scoring - reuses the deterministic CV↔JD analyser and reshapes it into the
  * same AiReviewResult contract, weighted by the founder's rubric. This is what runs
  * when the Claude seam is off, so the feature is fully usable with no API key.
  */
@@ -482,10 +482,10 @@ function deterministicReview(cvText: string, jd: string, template: ResumeTemplat
   const band = atsVerdict(atsScore, w.bands);
   const verdict =
     band === "strong"
-      ? "Strong match — polish and send."
+      ? "Strong match - polish and send."
       : band === "partial"
-        ? "Partial match — close the gaps below first."
-        : "Weak match — needs real work before applying.";
+        ? "Partial match - close the gaps below first."
+        : "Weak match - needs real work before applying.";
 
   return {
     atsScore,

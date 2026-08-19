@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Even authenticated senders get a generous flood brake (bad Zapier loop etc.). Endpoint-keyed
-  // and `Retry-After`-bearing for the same reasons as the Pabbly route — see the note there.
+  // and `Retry-After`-bearing for the same reasons as the Pabbly route - see the note there.
   const gate = takeToken("webhook:flexifunnels", RATE_RULES.leadWebhook);
   if (!gate.ok) return tooManyRequests(gate.retryAfterSec);
 
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
   // TEMPORARY (LEAD_WEBHOOK_DEBUG): echo the raw body to the server log so a new sender's
   // exact field names can be read off a real delivery instead of guessed at. This prints
-  // lead PII — turn the flag off once the mapping is confirmed. Logged after the secret
+  // lead PII - turn the flag off once the mapping is confirmed. Logged after the secret
   // check, so an unauthenticated caller can never write to the log.
   if (process.env.LEAD_WEBHOOK_DEBUG === "true") {
     console.log(

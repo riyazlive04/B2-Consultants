@@ -1,17 +1,17 @@
 /**
  * Rebuild the Synamate `training-page` as a native funnel step.
  *
- * Source of truth is the LIVE page (https://optin.b2consultants.de/training-page) — every string
+ * Source of truth is the LIVE page (https://optin.b2consultants.de/training-page) - every string
  * below was read off it, not rewritten, so the two read identically during the changeover. Four
  * of its sections were GHL "Custom HTML/Javascript" blocks; they are native nodes here.
  *
  * Idempotent: upserts the funnel by slug and the step by (funnel, slug), so re-running replaces
  * the page's blocks and nothing else. Editing the page in the builder afterwards and re-running
- * this WILL discard those edits — it is a rebuild, not a merge.
+ * this WILL discard those edits - it is a rebuild, not a merge.
  *
  *   npm run db:training-page
  *
- * NOTE: the hero slot holds an IMAGE, not a player — the Synamate page shows a play-button still
+ * NOTE: the hero slot holds an IMAGE, not a player - the Synamate page shows a play-button still
  * there and the actual video lives on the following step.
  */
 
@@ -21,7 +21,7 @@ import type { Block } from "../src/lib/sites-types";
 const prisma = new PrismaClient();
 
 /**
- * Served by us, from `public/media/` — NOT hotlinked from GHL's CDN.
+ * Served by us, from `public/media/` - NOT hotlinked from GHL's CDN.
  *
  * The page originally pointed at `images.leadconnectorhq.com`, which works right up until
  * Synamate is switched off and then silently takes both images with it. These are the brand's
@@ -37,7 +37,7 @@ const HERO_IMAGE_URL = "/media/ameen-hero.webp";
 const CTA_LABEL = "Apply for Guided Mode →";
 
 /**
- * The CTAs and the hero still open a FORM POPUP rather than navigating — this is what the live
+ * The CTAs and the hero still open a FORM POPUP rather than navigating - this is what the live
  * Synamate page does, and it is the difference between a visitor who is captured on the page they
  * landed on and one who is asked to make a second decision (following a link) before giving you
  * anything at all.
@@ -60,7 +60,7 @@ let seq = 0;
 const id = (p: string) => `${p}-${(++seq).toString(36)}`;
 
 // ── node helpers, so the page below reads as structure rather than as object soup ──
-/** `width` caps the CONTENT inside the band, not the band — the original's cards sit in 860px. */
+/** `width` caps the CONTENT inside the band, not the band - the original's cards sit in 860px. */
 const section = (background: Block["background"], children: Block[], pad = 72, width = 1080): Block => ({
   id: id("sec"), type: "section", background, children,
   style: { padding: [pad, 0, pad, 0], maxWidth: width },
@@ -107,14 +107,14 @@ const testimonial = (initials: string, tone: NonNullable<Block["tone"]>, name: s
       col([pill(days, "green", "right")], 0),
     ], 12),
     { id: id("tq"), type: "text", text: quote, style: { fontSize: 13.5, lineHeight: 1.65, color: "ink-2", italic: true } },
-    // A rule between the quote and the result, as on the original — it separates what the student
+    // A rule between the quote and the result, as on the original - it separates what the student
     // said from what actually happened, which are two different kinds of claim.
     { id: id("thr"), type: "divider" },
     { id: id("trl"), type: "text", text: "RESULT", style: { fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "ink-3" } },
     { id: id("tres"), type: "text", text: result, style: { fontWeight: 600, fontSize: 13.5, color: "ink" } },
   ]);
 
-/** One curriculum phase — a full-width card, as on the original, not a third of a row. */
+/** One curriculum phase - a full-width card, as on the original, not a third of a row. */
 const phase = (label: string, tone: NonNullable<Block["tone"]>, weeks: string, title: string, items: string[]): Block =>
   card([
     pill(label, tone, "left"),
@@ -179,7 +179,7 @@ const BLOCKS: Block[] = [
     ]),
     row([
       col([testimonial("KG", "green", "Kanakaraj Gurusamy", "IT Professional", "33 days", "\"I optimized my resume, cleared ATS, and received a reply asking for documents for the next interview stage. First positive response I have ever received.\"", "ATS cleared. Moved to next interview stage in 33 days.")]),
-      col([testimonial("RR", "violet", "Raja Ramaraj", "Senior Software Test Engineer · Berlin", "45 days", "\"Applied on the weekend. Interview invite on Monday. It was not just editing documents — it was a strategic conversation about positioning myself in a competitive market.\"", "Interview scheduled in 45 days. Now based in Berlin.")]),
+      col([testimonial("RR", "violet", "Raja Ramaraj", "Senior Software Test Engineer · Berlin", "45 days", "\"Applied on the weekend. Interview invite on Monday. It was not just editing documents - it was a strategic conversation about positioning myself in a competitive market.\"", "Interview scheduled in 45 days. Now based in Berlin.")]),
     ]),
     { id: id("skool"), type: "text", text: "These are real posts from our Skool community. Unedited.", style: { align: "center", fontSize: 12.5, color: "ink-3" } },
   ], 72, 900),
@@ -192,7 +192,7 @@ const BLOCKS: Block[] = [
     pill("Our Guarantee", "amber"),
     { id: id("g1"), type: "subheading", text: "The Interview or", style: { align: "center", fontSize: 30 } },
     { id: id("g2"), type: "subheading", text: "We Don't Give Up.", style: { align: "center", fontSize: 30, color: "primary-strong" } },
-    p("Complete every milestone. Do the work. If you still don't get a single German interview call in 90 days — we keep coaching you. Free. Until you do."),
+    p("Complete every milestone. Do the work. If you still don't get a single German interview call in 90 days - we keep coaching you. Free. Until you do."),
     {
       id: id("gbox"), type: "card",
       style: { background: "surface-2", borderWidth: 1, borderColor: "line", radius: 14, padding: [22, 24, 22, 24] },
@@ -201,7 +201,7 @@ const BLOCKS: Block[] = [
         checks([
           "No refund games. We don't give your money back and disappear. We stay until the job is done.",
           "We keep working. Free. Extended coaching at zero extra cost until you land your first German interview call.",
-          "One condition. You must complete all milestones — applications, weekly check-ins, and follow-ups. The guarantee is for doers, not watchers.",
+          "One condition. You must complete all milestones - applications, weekly check-ins, and follow-ups. The guarantee is for doers, not watchers.",
         ]),
       ],
     },
@@ -214,21 +214,21 @@ const BLOCKS: Block[] = [
     h2("1 month of coaching. 90 days of execution."),
     p("A step-by-step system built for the German job market. Not theory. Real work."),
     phase("Phase 1 · Week 1–2", "blue", "Weeks 1 & 2", "Building Your Foundation", [
-      "German format resume built live — English and German",
+      "German format resume built live - English and German",
       "LinkedIn and Xing profiles optimized for the German market",
       "Your master resume template ready to use",
     ]),
     phase("Phase 2 · Week 3", "orange", "Week 3", "Approaching the German Market", [
-      "Hidden job market strategy — make German employers come to you",
-      "OIC framework — optimize, implement, convert applications to calls",
+      "Hidden job market strategy - make German employers come to you",
+      "OIC framework - optimize, implement, convert applications to calls",
       "Live job application deep dive with a selected student",
       "Mid-week QnA to review your execution",
     ]),
     phase("Phase 3 · Week 4 + Sprint", "green", "Week 4 onwards", "Execution & 90-Day Sprint", [
       "3-day execution kickoff using all frameworks",
-      "Interview preparation — process, types, do's and don'ts",
+      "Interview preparation - process, types, do's and don'ts",
       "Weekly targets set by your mentor",
-      "Weekly progress tracking — green, yellow or red flags",
+      "Weekly progress tracking - green, yellow or red flags",
     ]),
     { id: id("inc"), type: "subheading", text: "Everything included for 1 full year", style: { align: "center", fontSize: 19 } },
     row([
@@ -249,7 +249,7 @@ const BLOCKS: Block[] = [
     pill("★ Next batch filling now", "navy"),
     { id: id("d1"), type: "subheading", text: "Your first German interview call.", style: { align: "center", fontSize: 30 } },
     { id: id("d2"), type: "subheading", text: "In 90 days.", style: { align: "center", fontSize: 30, color: "#fbbf24" } },
-    p("We take fewer than 9 students per batch. Every student gets real attention. Once the batch is full — it is full."),
+    p("We take fewer than 9 students per batch. Every student gets real attention. Once the batch is full - it is full."),
     row([
       col([statBox("< 9", "Students per batch")]),
       col([statBox("90", "Day sprint")]),
@@ -268,7 +268,7 @@ const BLOCKS: Block[] = [
 
 /**
  * Swap the popup marker for the real form id, or strip it so the CTA falls back to its link.
- * Returns how many nodes were wired — 0 with a warning is the honest outcome when the form has
+ * Returns how many nodes were wired - 0 with a warning is the honest outcome when the form has
  * not been published, and is much better than a page of buttons that open an empty dialog.
  */
 function resolvePopup(list: Block[], formId: string | null): number {
@@ -321,10 +321,10 @@ async function main() {
   const count = (list: Block[]): number => list.reduce((n, b) => n + 1 + count(b.children ?? []), 0);
   console.log(`Funnel "${funnel.name}" · step "${step.name}"`);
   console.log(`  ${BLOCKS.length} sections, ${count(BLOCKS)} nodes total`);
-  console.log(`  → /p/vsl-funnel/landing  (funnel is ${funnel.published ? "published" : "a DRAFT — publish it to serve publicly"})`);
+  console.log(`  → /p/vsl-funnel/landing  (funnel is ${funnel.published ? "published" : "a DRAFT - publish it to serve publicly"})`);
   if (wired) console.log(`  ${wired} CTAs open the "${popupForm?.name}" popup on click`);
-  else console.log(`  ⚠ no published form with slug "${POPUP_FORM_SLUG}" — CTAs link to ${CTA_HREF} instead of opening a popup.\n    Publish that form (or set TRAINING_PAGE_FORM_SLUG) and re-run.`);
-  if (!HERO_IMAGE_URL) console.log(`  ⚠ hero image is empty — set it in the builder: Landing → hero row → left column → Image.`);
+  else console.log(`  ⚠ no published form with slug "${POPUP_FORM_SLUG}" - CTAs link to ${CTA_HREF} instead of opening a popup.\n    Publish that form (or set TRAINING_PAGE_FORM_SLUG) and re-run.`);
+  if (!HERO_IMAGE_URL) console.log(`  ⚠ hero image is empty - set it in the builder: Landing → hero row → left column → Image.`);
 }
 
 main()

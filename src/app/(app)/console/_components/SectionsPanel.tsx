@@ -19,7 +19,7 @@ import { Card, ColHead, ColRow, ColScroll, Hint, Picker, SaveBar, TextIn, Toggle
 
 /**
  * Every nav section: rename it, re-icon it, move it, group it, switch it off, and
- * choose which roles get it by default. The `console` row is locked — the founder
+ * choose which roles get it by default. The `console` row is locked - the founder
  * can rename it, but hiding it would leave no way back in.
  *
  * Per-user overrides still win over these role defaults; they're edited in
@@ -37,7 +37,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   TUTOR: "Tutor",
 };
 
-/** Column-header form of the same roles — a checkbox track is 3.5rem, too narrow for "Head coach". */
+/** Column-header form of the same roles - a checkbox track is 3.5rem, too narrow for "Head coach". */
 const ROLE_COL_LABELS: Record<AppRole, string> = {
   ADMIN: "Admin",
   HEAD: "Head",
@@ -47,11 +47,11 @@ const ROLE_COL_LABELS: Record<AppRole, string> = {
 };
 
 /**
- * Shared by the header and every row — see the note in kit.tsx. The path column takes
+ * Shared by the header and every row - see the note in kit.tsx. The path column takes
  * the slack rather than the label: a section name is two words, and letting the label
  * absorb it left a 400px input holding "Finance".
  *
- * The five role checkboxes are columns here, not a second wrapped line under every row —
+ * The five role checkboxes are columns here, not a second wrapped line under every row -
  * this is the same "roles once across the top, one cell per row" shape the Access Matrix
  * tab next door already uses. Repeating "Admin / Head coach / Telecaller / Student / Tutor"
  * as text on all eighteen rows was most of what read as cluttered.
@@ -111,7 +111,7 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setDirty(false);
-    toast("Sections saved — the sidebar updates on the next page load");
+    toast("Sections saved - the sidebar updates on the next page load");
   };
 
   const reset = async () => {
@@ -126,7 +126,7 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
     const res = await resetSectionsConfig();
     setBusy(false);
     if (!res.ok) return setError(res.error);
-    toast("Sections reset to defaults — reload to see them");
+    toast("Sections reset to defaults - reload to see them");
   };
 
   return (
@@ -188,7 +188,7 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
                   checked={s.roles.includes(role)}
                   disabled={s.locked || !s.enabled}
                   onChange={() => toggleRole(s.key, role)}
-                  label={`${ROLE_LABELS[role]} — default access to ${s.label}`}
+                  label={`${ROLE_LABELS[role]} - default access to ${s.label}`}
                   hideLabel
                   className="justify-self-center"
                   title={
@@ -225,7 +225,7 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
       <div className="mt-4 space-y-1">
         <Hint>
           Admins always see every switched-on section. Switching a section off hides it from
-          everyone, including you — except the locked Founder Console.
+          everyone, including you - except the locked Founder Console.
         </Hint>
         <Hint>
           These are <b>defaults</b>. A per-user override, set in Users → Users &amp; access, still wins.

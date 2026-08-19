@@ -84,7 +84,7 @@ export function ProfileClient({
           <div className="relative">
             {image ? (
               // `image` is an arbitrary https URL or a data: URL from the client-side resizer
-              // above — not a fixed domain, so this opts out of the optimizer rather than
+              // above - not a fixed domain, so this opts out of the optimizer rather than
               // widening next.config's remotePatterns to any host.
               <NextImage
                 src={image}

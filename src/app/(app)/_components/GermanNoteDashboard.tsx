@@ -14,13 +14,13 @@ import { getGnFounderStats } from "@/server/german-note-workshops";
 import { PRODUCT_LABELS } from "@/app/(app)/german-note/_components/workshopFormat";
 
 /**
- * The German Note dashboard (Error Log E3) — the second business, which had no dashboard of
+ * The German Note dashboard (Error Log E3) - the second business, which had no dashboard of
  * its own and was visible only as a single tile on the founder's home page.
  *
  * Deliberately NOT a copy of the B2 dashboard's widgets. German Note does not have a sales
  * pipeline, discovery calls or a monthly collections target; it has workshop intakes, seats by
  * level, batches and tuition still owed. Mirroring B2's layout would have produced a page of
- * empty or meaningless cards — the spec's "same base dashboard UI" is about giving this
+ * empty or meaningless cards - the spec's "same base dashboard UI" is about giving this
  * business a screen of the same QUALITY, not the same widgets.
  *
  * Every figure here already existed inside the workshop P&L engine; it was three clicks deep
@@ -36,15 +36,15 @@ export async function GermanNoteDashboard() {
   const r = stats.totals;
 
   /**
-   * German Note's economics are recorded in rupees end to end — Indian workshop fees, books and
-   * tutor pay — so these figures have no stored EUR counterpart the way an Income row does. They
+   * German Note's economics are recorded in rupees end to end - Indian workshop fees, books and
+   * tutor pay - so these figures have no stored EUR counterpart the way an Income row does. They
    * are paired at today's ECB rate purely so the page follows the ₹/€ toggle; the rupee figure is
    * the record, the euro one is a view of it.
    */
   const rate = Number(fx.rate);
   const compact = (v: number) => <Money amount={{ inr: v, eur: rate > 0 ? v / rate : 0 }} />;
 
-  // Cash basis leads. Quoted revenue overstates profit on money that has not arrived — the
+  // Cash basis leads. Quoted revenue overstates profit on money that has not arrived - the
   // same rule the workshop screens already follow (docs F1 §6.7).
   const collectedPct = r.revenue > 0 ? (r.cashCollected / r.revenue) * 100 : null;
   const topDues = [...stats.dues].sort((a, b) => b.owed - a.owed).slice(0, 6);
@@ -52,11 +52,11 @@ export async function GermanNoteDashboard() {
 
   return (
     <div className="w-full space-y-8">
-      {/* 1 — Money, on the cash basis. */}
+      {/* 1 - Money, on the cash basis. */}
       <section className="space-y-4">
         <SectionHeading
           icon={<Wallet size={18} />}
-          title="German Note — the business"
+          title="German Note - the business"
           description={`${stats.workshops} workshop intake${stats.workshops === 1 ? "" : "s"} · cash basis, quoted shown beside it`}
           action={<ViewAll href="/german-note/manage">Manage</ViewAll>}
         />
@@ -69,14 +69,14 @@ export async function GermanNoteDashboard() {
                 ? `${compact(r.revenue)} quoted`
                 : `${formatPct(collectedPct)} of ${compact(r.revenue)} quoted`
             }
-            tooltip="Money actually received across every workshop. The quoted figure is what was agreed — the gap is what is still owed."
+            tooltip="Money actually received across every workshop. The quoted figure is what was agreed - the gap is what is still owed."
             icon={<Wallet size={18} />}
             href="/german-note/manage"
             detail={{
               rows: recentWorkshops.map((w) => ({ label: w.name, value: compact(w.rollup.cashCollected) })),
               note:
                 stats.perWorkshop.length > recentWorkshops.length
-                  ? `Newest ${recentWorkshops.length} of ${stats.perWorkshop.length} workshops — see Manage for all.`
+                  ? `Newest ${recentWorkshops.length} of ${stats.perWorkshop.length} workshops - see Manage for all.`
                   : undefined,
             }}
           />
@@ -84,7 +84,7 @@ export async function GermanNoteDashboard() {
             label="Net profit (cash)"
             value={compact(stats.netProfitCash)}
             secondary={`${compact(r.netProfit)} on quoted · NP ${pctOrDash(r.npMargin)}`}
-            tooltip="Collected minus every cost — ads, books, tutor fees, referrals. The quoted-basis figure counts money that has not arrived, so it reads higher."
+            tooltip="Collected minus every cost - ads, books, tutor fees, referrals. The quoted-basis figure counts money that has not arrived, so it reads higher."
             icon={<TrendingUp size={18} />}
             href="/german-note/manage"
             // Sign is a verdict here, so it colours the number itself (Error Log D1).
@@ -115,7 +115,7 @@ export async function GermanNoteDashboard() {
               rows: topDues.map((d) => ({ label: d.fullName, value: compact(d.owed) })),
               note:
                 stats.dues.length > topDues.length
-                  ? `Largest ${topDues.length} of ${stats.dues.length} — full list below.`
+                  ? `Largest ${topDues.length} of ${stats.dues.length} - full list below.`
                   : undefined,
             }}
           />
@@ -133,7 +133,7 @@ export async function GermanNoteDashboard() {
         </div>
       </section>
 
-      {/* 2 — Delivery: the live teaching operation, not the money. */}
+      {/* 2 - Delivery: the live teaching operation, not the money. */}
       <section className="space-y-4">
         <SectionHeading
           icon={<Languages size={18} />}
@@ -187,7 +187,7 @@ export async function GermanNoteDashboard() {
         </div>
       </section>
 
-      {/* 3 — Per-workshop P&L, newest intake first. */}
+      {/* 3 - Per-workshop P&L, newest intake first. */}
       <section className="space-y-4">
         <SectionHeading
           icon={<TrendingUp size={18} />}
@@ -198,7 +198,7 @@ export async function GermanNoteDashboard() {
         {recentWorkshops.length === 0 ? (
           <EmptyState
             title="No workshops yet"
-            body="Create the first intake under Manage — conversions, seats and the P&L all follow from it."
+            body="Create the first intake under Manage - conversions, seats and the P&L all follow from it."
           />
         ) : (
           <Card>
@@ -234,13 +234,13 @@ export async function GermanNoteDashboard() {
         )}
       </section>
 
-      {/* 4 — Who owes. The one list that turns this screen into an action. */}
+      {/* 4 - Who owes. The one list that turns this screen into an action. */}
       {topDues.length > 0 && (
         <section className="space-y-4">
           <SectionHeading
             icon={<AlertCircle size={18} />}
             title="Tuition still owed"
-            description="Largest balances first — chase these before chasing new intakes"
+            description="Largest balances first - chase these before chasing new intakes"
           />
           <Card>
             <ul className="-mx-4 -mb-2">
@@ -276,5 +276,5 @@ export async function GermanNoteDashboard() {
 
 /** A 0..1 margin → "36.9%", or an em dash when there is no revenue to divide by. */
 function pctOrDash(frac: number | null): string {
-  return frac === null ? "—" : formatPct(frac * 100);
+  return frac === null ? "-" : formatPct(frac * 100);
 }

@@ -69,7 +69,7 @@ export const requireSession = cache(async () => {
     redirect("/login?error=suspended");
   }
 
-  // O4 — an admin set this person's password, so they must replace it before anything else
+  // O4 - an admin set this person's password, so they must replace it before anything else
   // renders. /change-password fetches the session directly (not through this guard), so it is
   // the one authenticated page that does NOT loop here. Cleared the moment they change it.
   if (row?.mustChangePassword) {
@@ -130,7 +130,7 @@ export async function capabilityCheck(key: CapabilityKey): Promise<{
   return { allowed, denied: { ok: false, error: capabilityDeniedMessage(key) }, session };
 }
 
-/** The capability guard for PAGES — no page to stay on, so bounce home. */
+/** The capability guard for PAGES - no page to stay on, so bounce home. */
 export async function requireCapability(key: CapabilityKey) {
   const session = await requireSession();
   if (!hasCapability(session.role, session.capabilities, key)) {

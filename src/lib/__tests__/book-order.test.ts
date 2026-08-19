@@ -1,11 +1,11 @@
 /**
- * Book-order trigger — spec §9.2 / Part 2 §4.4.
+ * Book-order trigger - spec §9.2 / Part 2 §4.4.
  *
  * The rule the founders stated: pay a large sum up front → order now; on EMI → defer.
  *
  * The case that matters most is `emiStudentWhoHasPaidEnoughGetsBooks`. The spec phrases the
  * defer condition as "if the student is on EMI", but the REASON it gives is "they haven't
- * fully paid" — so the actual variable is cash collected. Keying off the payment plan would
+ * fully paid" - so the actual variable is cash collected. Keying off the payment plan would
  * hold books back from an EMI customer who has been paying reliably for months, which is the
  * opposite of what the rule is for.
  *
@@ -19,7 +19,7 @@ import { DEFAULT_BOOK_ORDER_CONFIG, coerceBookOrderConfig } from "../config-sche
 
 const rupees = (n: number) => n * 100; // → paise
 
-describe("book order — the ordering trigger", () => {
+describe("book order - the ordering trigger", () => {
   test("₹30,000 up front orders immediately (BO-007)", () => {
     const d = decideBookOrder(rupees(30_000), DEFAULT_BOOK_ORDER_CONFIG);
     assert.equal(d.order, true);
@@ -34,7 +34,7 @@ describe("book order — the ordering trigger", () => {
     assert.equal(d.shortfallInrMinor, rupees(25_000));
   });
 
-  test("the threshold is inclusive — exactly ₹30,000 orders", () => {
+  test("the threshold is inclusive - exactly ₹30,000 orders", () => {
     assert.equal(decideBookOrder(rupees(30_000), DEFAULT_BOOK_ORDER_CONFIG).order, true);
     assert.equal(decideBookOrder(rupees(29_999), DEFAULT_BOOK_ORDER_CONFIG).order, false);
   });
@@ -66,7 +66,7 @@ describe("book order — the ordering trigger", () => {
   });
 });
 
-describe("book order — config", () => {
+describe("book order - config", () => {
   test("a tuned threshold is honoured (§18.3 leaves the figure open)", () => {
     const tuned = coerceBookOrderConfig({ orderThresholdInrMinor: rupees(15_000), requireFreshQuotePerLevel: true });
     assert.equal(decideBookOrder(rupees(15_000), tuned).order, true);
@@ -84,9 +84,9 @@ describe("book order — config", () => {
   });
 });
 
-describe("book order — initial status", () => {
+describe("book order - initial status", () => {
   test("ordering starts by asking for a quote, never by jumping to ORDERED", () => {
-    // §9.2: "get a quotation first" — we don't know the amount until the publisher says.
+    // §9.2: "get a quotation first" - we don't know the amount until the publisher says.
     assert.equal(initialBookOrderStatus(decideBookOrder(rupees(30_000))), "QUOTE_REQUESTED");
   });
 

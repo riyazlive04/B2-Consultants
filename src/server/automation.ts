@@ -16,22 +16,22 @@ import { scheduleWaitJob, drainDueWaitJobs } from "./automation-queue";
 
 /**
  * Automation engine (Synamate "Workflows"). A trigger enrolls a contact; the enrollment then runs
- * a list of actions — normally linear, but `IF_TAG` can jump `currentStep` — until a WAIT (which
+ * a list of actions - normally linear, but `IF_TAG` can jump `currentStep` - until a WAIT (which
  * parks it for the cron / BullMQ, see automation-queue.ts) or the end.
  *
  * SAFE BY DESIGN: emitTrigger never throws into its caller's request path; an ACTIVE enrollment is
  * never duplicated for the same (workflow, contact); and action executors talk to Prisma directly
  * (they never call emitTrigger), so a workflow can't cascade-trigger itself into a loop. The step
  * loop below also caps total iterations per call, since `IF_TAG` makes a step→step cycle (e.g. a
- * branch that jumps back to itself) possible for the first time — see `maxSteps` below.
+ * branch that jumps back to itself) possible for the first time - see `maxSteps` below.
  *
  * Global Workflow Settings (lib/config-schema.ts → `WorkflowSettings`, edited at
  * /automation/settings) gate this engine at four points, all read via `getWorkflowSettings`:
- *   engineEnabled     — kill switch: no new enrollments (emitTrigger), no resumes
+ *   engineEnabled     - kill switch: no new enrollments (emitTrigger), no resumes
  *                       (runDueWorkflows), and in-flight runs freeze in place (advanceEnrollment).
- *   allowReEnrollment — whether a contact may re-enter a workflow they already completed.
- *   quietHours        — outbound sends park until the window closes (advanceEnrollment).
- *   batchSize         — enrollments resumed per tick (runDueWorkflows).
+ *   allowReEnrollment - whether a contact may re-enter a workflow they already completed.
+ *   quietHours        - outbound sends park until the window closes (advanceEnrollment).
+ *   batchSize         - enrollments resumed per tick (runDueWorkflows).
  */
 
 export type TriggerContext = { leadId?: string | null; formId?: string; tag?: string; stage?: string };
@@ -40,10 +40,10 @@ export async function emitTrigger(type: TriggerType, ctx: TriggerContext): Promi
   try {
     if (!ctx.leadId) return;
     const settings = await getWorkflowSettings();
-    if (!settings.engineEnabled) return; // global kill switch — no new enrollments
+    if (!settings.engineEnabled) return; // global kill switch - no new enrollments
 
     const workflows = await prisma.workflow.findMany({
-      // deletedAt: a soft-deleted workflow is inert — it must not enroll anyone while it
+      // deletedAt: a soft-deleted workflow is inert - it must not enroll anyone while it
       // sits in the Deleted tab, but restoring it brings it straight back to life.
       where: { status: "PUBLISHED", triggerType: type, deletedAt: null },
     });
@@ -53,7 +53,7 @@ export async function emitTrigger(type: TriggerType, ctx: TriggerContext): Promi
       if (type === "TAG_ADDED" && cfg.tag && cfg.tag.toLowerCase() !== (ctx.tag ?? "").toLowerCase()) continue;
       if (type === "STAGE_CHANGED" && cfg.stage && cfg.stage !== ctx.stage) continue;
 
-      // Default (allowReEnrollment) keeps the original rule — only a currently-running
+      // Default (allowReEnrollment) keeps the original rule - only a currently-running
       // enrollment blocks re-entry, so a contact can go through again after finishing.
       // Turning it off makes enrollment once-per-contact-ever.
       const blocking = await prisma.workflowEnrollment.findFirst({
@@ -83,10 +83,10 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
   // already filters these out; this also covers the BullMQ drain path, which resumes by id.
   if (enr.workflow.deletedAt) return;
   const settings = await getWorkflowSettings();
-  if (!settings.engineEnabled) return; // kill switch — freeze in place, resume when re-enabled
+  if (!settings.engineEnabled) return; // kill switch - freeze in place, resume when re-enabled
   const actions = (enr.workflow.actions as WorkflowAction[]) ?? [];
   let step = enr.currentStep;
-  // IF_TAG lets a workflow jump backwards/sideways, so — unlike the old strictly-linear engine —
+  // IF_TAG lets a workflow jump backwards/sideways, so - unlike the old strictly-linear engine -
   // this loop can now cycle. Cap iterations so a misconfigured branch (e.g. thenStep pointing at
   // itself) fails loudly instead of spinning forever inside one request.
   const maxSteps = Math.max(actions.length * 4, 100);
@@ -121,9 +121,9 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
       }
       // Quiet hours: never deliver a message inside the window. Park ON this step (note we do
       // NOT advance `step`) so the send actually happens once the window opens, rather than
-      // being skipped. Only outbound sends are gated — tags/stages/tasks are silent to the
+      // being skipped. Only outbound sends are gated - tags/stages/tasks are silent to the
       // contact, so holding those overnight would delay the workflow for no benefit.
-      // WhatsApp is held by quiet hours for the same reason as email and SMS — it is an outbound
+      // WhatsApp is held by quiet hours for the same reason as email and SMS - it is an outbound
       // message to a person's phone, and is if anything the most intrusive of the three.
       if (
         (a.type === "SEND_EMAIL" || a.type === "SEND_SMS" || a.type === "SEND_WHATSAPP") &&
@@ -162,14 +162,14 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
  *
  * Steps only: the run itself is not an event ("resumed 12 enrollments" is cron noise, and the
  * human's "Run now" click is already logged by its own action). `section` is "automation" for
- * every row — the founder's question here is "what did my workflows do".
+ * every row - the founder's question here is "what did my workflows do".
  */
 async function record(input: Omit<ActivityInput, "section">): Promise<void> {
   await logSystemActivity(SYSTEM_ACTORS.automation, { ...input, section: "automation" });
 }
 
-/** The founder reads names, never ids — and only a step that landed pays for the lookup. */
-/** Narrow a stored string to a real template slot — workflow JSON is not type-checked. */
+/** The founder reads names, never ids - and only a step that landed pays for the lookup. */
+/** Narrow a stored string to a real template slot - workflow JSON is not type-checked. */
 function isWhatsAppKind(v: string): v is WhatsAppKind {
   return (WHATSAPP_KINDS as readonly string[]).includes(v);
 }
@@ -241,7 +241,7 @@ async function executeAction(a: WorkflowAction, leadId: string): Promise<void> {
        * Deliberately NOT padded with placeholders to satisfy a template: a kind whose template
        * wants a per-booking value (`b2_booking_confirmation` needs slot_time) has no such value
        * at, say, form-submission time. `sendWhatsApp` then records a SKIPPED row naming the
-       * missing variable — which is the correct outcome. Inventing a slot_time would send a
+       * missing variable - which is the correct outcome. Inventing a slot_time would send a
        * contact a confirmation for a meeting that does not exist.
        */
       const vars: Record<string, string> = {
@@ -312,7 +312,7 @@ async function executeAction(a: WorkflowAction, leadId: string): Promise<void> {
           await prisma.lead.update({ where: { id: leadId }, data: { stage: to } });
           await prisma.leadStageHistory.create({ data: { leadId, fromStage: lead.stage, toStage: to } });
           // Was a hand-rolled `findFirst(legacyStage) → updateMany(stageId)`. It set the column and
-          // nothing else — no status, no wonAt — and it matched on `legacyStage` alone, which the
+          // nothing else - no status, no wonAt - and it matched on `legacyStage` alone, which the
           // board's twelve Synamate columns no longer permit: four lead stages have no column of
           // their own and WON has two. `syncDefaultOpportunity` is the one place that knows all of
           // that, so a workflow now moves a card exactly like a person does.
@@ -353,12 +353,12 @@ async function executeAction(a: WorkflowAction, leadId: string): Promise<void> {
  * the admin "Run now" action.
  *
  * Two sources are checked, in order:
- *  1. `drainDueWaitJobs` — any BullMQ delayed job whose precise fire time has passed (see
+ *  1. `drainDueWaitJobs` - any BullMQ delayed job whose precise fire time has passed (see
  *     automation-queue.ts for why this is a drain-on-request-hit, not a live worker).
- *  2. The Postgres poll below — every ACTIVE enrollment with `nextRunAt <= now`. This is the
+ *  2. The Postgres poll below - every ACTIVE enrollment with `nextRunAt <= now`. This is the
  *     authoritative source; it runs regardless of Redis being configured/reachable, so step 1
  *     failing or being unavailable never loses a scheduled resume. Enrollments already resumed by
- *     step 1 simply won't have a due `nextRunAt` anymore and are skipped here — no double-run.
+ *     step 1 simply won't have a due `nextRunAt` anymore and are skipped here - no double-run.
  */
 export async function runDueWorkflows(): Promise<{ processed: number; ranAt: string; skipped?: "engine-disabled" }> {
   const settings = await getWorkflowSettings();
@@ -371,7 +371,7 @@ export async function runDueWorkflows(): Promise<{ processed: number; ranAt: str
   const due = await prisma.workflowEnrollment.findMany({
     where: {
       status: "ACTIVE",
-      // Don't spend the batch on enrollments whose workflow is sitting in the Deleted tab —
+      // Don't spend the batch on enrollments whose workflow is sitting in the Deleted tab -
       // advanceEnrollment would no-op on them anyway, and they'd crowd out live work forever.
       workflow: { deletedAt: null },
       OR: [{ nextRunAt: null }, { nextRunAt: { lte: new Date() } }],

@@ -36,7 +36,7 @@ export function ArchivedGroups({ groups, canPurge }: { groups: ArchivedGroup[]; 
   }
   return (
     <div className="space-y-6">
-      {/* K5: the retention rule was real but invisible — a 90-day purge cron has been running
+      {/* K5: the retention rule was real but invisible - a 90-day purge cron has been running
           with nothing on screen saying so, which means "archived" read as "kept forever".
           Stated once, above the lists, so it is seen before something is relied upon. */}
       <p className="text-caption text-muted">

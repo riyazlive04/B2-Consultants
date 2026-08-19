@@ -16,13 +16,13 @@ import { AgreementStateBadge } from "./AgreementStateBadge";
 /**
  * "Start from an existing record", rebuilt.
  *
- * The old version printed every won lead and every student as a flat wall of chips — unscannable
+ * The old version printed every won lead and every student as a flat wall of chips - unscannable
  * past a dozen rows, and it told you nothing about WHY you'd pick one. This is a filtered combobox:
  * type to search across name / phone / email / stage, filter to a bucket, and every row wears the
  * state that decides whether it needs you at all. Ready-to-send sorts to the top because that is
  * the only group the founder is usually here for.
  *
- * Selecting navigates to `?leadId=` / `?studentId=`, exactly as the chips did — the server page
+ * Selecting navigates to `?leadId=` / `?studentId=`, exactly as the chips did - the server page
  * re-renders with the prefill, so the form stays the single owner of what gets frozen.
  */
 
@@ -44,7 +44,7 @@ export function AgreementClientPicker({
   const [groupFilter, setGroupFilter] = useState<AgreementGroup | null>(null);
   const [active, setActive] = useState(0);
 
-  // Which buckets actually exist, with counts — the filter chips never offer an empty group.
+  // Which buckets actually exist, with counts - the filter chips never offer an empty group.
   const groupCounts = useMemo(() => {
     const m = new Map<AgreementGroup, number>();
     for (const c of candidates) m.set(c.group, (m.get(c.group) ?? 0) + 1);
@@ -229,7 +229,7 @@ export function AgreementClientPicker({
           )}
           {shown.overflow > 0 && (
             <p className="px-3 py-2 text-center text-caption text-ink-3">
-              +{shown.overflow} more — keep typing to narrow it down.
+              +{shown.overflow} more - keep typing to narrow it down.
             </p>
           )}
         </div>

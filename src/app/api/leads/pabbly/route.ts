@@ -17,7 +17,7 @@ import {
  *
  * Pabbly already routes every inbound opt-in to Synamate; this endpoint is added as a SECOND
  * action on the same Pabbly workflow so the lead lands here too. The two destinations are
- * independent — Pabbly failing to reach us does not disturb the Synamate step, and vice versa.
+ * independent - Pabbly failing to reach us does not disturb the Synamate step, and vice versa.
  *
  * Because one Pabbly workflow can carry leads from several origins (Meta ad, IG DM, landing
  * page), the origin travels in the payload as a `lead_source` field and is mapped onto the
@@ -39,16 +39,16 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // Even an authenticated sender gets a flood brake — a misconfigured Pabbly workflow can
+  // Even an authenticated sender gets a flood brake - a misconfigured Pabbly workflow can
   // retry-loop, and lead capture is not a place to discover that via the DB.
   //
   // Keyed on the ENDPOINT, not the caller's IP. Every delivery arrives from Pabbly's egress
-  // address, so a per-IP bucket here was already a global bucket wearing a disguise — and one
+  // address, so a per-IP bucket here was already a global bucket wearing a disguise - and one
   // that silently resets to a fresh allowance the day Pabbly changes IP. Naming it what it is
   // makes the ceiling honest.
   //
   // The 429 now carries `Retry-After`. That is the substantive fix: Pabbly honours it and
-  // REDELIVERS. The previous bare 429 told it nothing, so a throttled lead was simply lost —
+  // REDELIVERS. The previous bare 429 told it nothing, so a throttled lead was simply lost -
   // a rate limiter that drops real leads is worse than no rate limiter.
   const gate = takeToken("webhook:pabbly", RATE_RULES.leadWebhook);
   if (!gate.ok) return tooManyRequests(gate.retryAfterSec);
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   }
 
   // TEMPORARY (LEAD_WEBHOOK_DEBUG): echo the raw body so Pabbly's exact field names can be read
-  // off a real delivery instead of guessed at. Prints lead PII — turn off once mapping is
+  // off a real delivery instead of guessed at. Prints lead PII - turn off once mapping is
   // confirmed. After the secret check, so an unauthenticated caller can never write to the log.
   if (process.env.LEAD_WEBHOOK_DEBUG === "true") {
     console.log(
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "name and phone are required" }, { status: 422 });
   }
 
-  // Origin attribution. An unmapped hint lands as OTHER rather than a plausible guess — but say
+  // Origin attribution. An unmapped hint lands as OTHER rather than a plausible guess - but say
   // so in the log, because "all our Pabbly leads are OTHER" is otherwise a silent reporting hole.
   const hint = pickLeadSourceHint(f);
   const leadSource = toLeadSource(hint);
@@ -98,12 +98,12 @@ export async function POST(req: NextRequest) {
     source: "PABBLY",
     externalRef,
     utm: Object.keys(utm).length ? utm : null,
-    notes: campaign ? `Captured via Pabbly — ${campaign}` : "Captured via Pabbly",
+    notes: campaign ? `Captured via Pabbly - ${campaign}` : "Captured via Pabbly",
     // The landing page asks the band-score questions and Pabbly relays them in this same body.
     // Handing over the WHOLE payload rather than a hand-picked subset is the point: which fields
     // are answers is a founder-editable mapping (Console → Qualification), so this route must not
     // decide it. Everything unrecognised is recorded as evidence and reported, never silently
-    // dropped — which is what happened to every landing-page score before this line existed.
+    // dropped - which is what happened to every landing-page score before this line existed.
     intakePayload: f,
   });
 

@@ -27,7 +27,7 @@ const COACH_OPTIONS = [
 ];
 
 // CSV formula-injection guard (mirrors DataTable): a cell starting with = + - @
-// or a tab/CR is executed by Excel/Sheets — neutralise with a leading apostrophe.
+// or a tab/CR is executed by Excel/Sheets - neutralise with a leading apostrophe.
 const csvSafe = (v: string | number | null | undefined): string | number => {
   if (typeof v !== "string") return v ?? "";
   return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;

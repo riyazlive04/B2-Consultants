@@ -1,12 +1,12 @@
 /**
- * The B2 Consultants logo mark — the rounded-square frame with the serif "B²",
+ * The B2 Consultants logo mark - the rounded-square frame with the serif "B²",
  * reproduced as inline SVG so it stays crisp at any size and re-themes with the
  * rest of the shell. The ink is `currentColor`, defaulted to `--brand-indigo`
  * (the logo's periwinkle), so a caller can override it by setting text colour.
  *
- *  - "mark" (default): the framed B² badge — used everywhere a small square
+ *  - "mark" (default): the framed B² badge - used everywhere a small square
  *    brand badge sits next to the "B2 Consultants" wordmark.
- *  - "full": the complete lockup with "CONSULTANTS" under the B² — used as a
+ *  - "full": the complete lockup with "CONSULTANTS" under the B² - used as a
  *    standalone brand where no wordmark follows it.
  */
 export function BrandLogo({

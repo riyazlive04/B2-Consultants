@@ -17,7 +17,7 @@ import {
 import type { TriggerConfig, TriggerType, WorkflowAction } from "@/lib/automation-types";
 
 /**
- * Dry run — the READ half. Finds the trigger occurrences that really happened inside a window,
+ * Dry run - the READ half. Finds the trigger occurrences that really happened inside a window,
  * loads just enough about each contact to project an outcome, and hands the whole lot to the
  * pure simulator in lib/automation-dryrun.ts. Nothing here writes.
  *
@@ -29,17 +29,17 @@ import type { TriggerConfig, TriggerType, WorkflowAction } from "@/lib/automatio
  *   FORM_SUBMITTED   FormSubmission.createdAt       exact (submissions that matched a contact)
  *   BOOKING_CREATED  BookingRequest.createdAt       exact (bookings that matched a contact)
  *   INVOICE_PAID     Invoice.paidAt                 exact
- *   STAGE_CHANGED    LeadStageHistory.changedAt     UPPER BOUND — history records every stage
+ *   STAGE_CHANGED    LeadStageHistory.changedAt     UPPER BOUND - history records every stage
  *                                                   move, but the live trigger only fires on a
  *                                                   pipeline card move (opportunities-actions).
- *   TAG_ADDED        ActivityLog "contact.tag.create"  LOWER BOUND — only tags a person added
+ *   TAG_ADDED        ActivityLog "contact.tag.create"  LOWER BOUND - only tags a person added
  *                                                   through the app since the activity feed
  *                                                   shipped. Imports and pre-feed tags are
  *                                                   invisible, and the engine's own ADD_TAG
  *                                                   deliberately doesn't re-trigger, so it is
  *                                                   excluded here too.
  *
- * Archived contacts are excluded everywhere — a soft-deleted lead is not going to be enrolled.
+ * Archived contacts are excluded everywhere - a soft-deleted lead is not going to be enrolled.
  */
 
 /** Hard ceiling on events pulled per preview. Past this the projection is a floor, and says so. */
@@ -50,7 +50,7 @@ export type DryRunSource = { label: string; coverage: string; exact: boolean };
 export type DryRunReport = {
   result: DryRunResult;
   source: DryRunSource;
-  /** the global kill switch — a preview is still useful when it's off, but the panel must say so */
+  /** the global kill switch - a preview is still useful when it's off, but the panel must say so */
   engineEnabled: boolean;
   allowReEnrollment: boolean;
   quietHours: { enabled: boolean; startHour: number; endHour: number };
@@ -64,7 +64,7 @@ export type DryRunWindow = (typeof DRY_RUN_WINDOWS)[number];
 const SOURCES: Record<TriggerType, DryRunSource> = {
   CONTACT_CREATED: {
     label: "contact records",
-    coverage: "Every contact created in the window — an exact replay.",
+    coverage: "Every contact created in the window - an exact replay.",
     exact: true,
   },
   FORM_SUBMITTED: {
@@ -74,12 +74,12 @@ const SOURCES: Record<TriggerType, DryRunSource> = {
   },
   BOOKING_CREATED: {
     label: "booking requests",
-    coverage: "Every booking linked to a contact — an exact replay.",
+    coverage: "Every booking linked to a contact - an exact replay.",
     exact: true,
   },
   INVOICE_PAID: {
     label: "invoices marked paid",
-    coverage: "Every invoice that reached Paid in the window — an exact replay.",
+    coverage: "Every invoice that reached Paid in the window - an exact replay.",
     exact: true,
   },
   STAGE_CHANGED: {
@@ -108,7 +108,7 @@ function channelState(rt: { enabled: boolean; configured: boolean; envEnabled: b
 /**
  * Trigger occurrences in [from, to], oldest first, capped at EVENT_CAP + 1 so the caller can
  * detect truncation. The trigger config is pushed into the query where the column exists (form,
- * stage) — the simulator re-applies it anyway, but filtering in Postgres keeps the cap meaningful
+ * stage) - the simulator re-applies it anyway, but filtering in Postgres keeps the cap meaningful
  * for a workflow that watches one specific form.
  */
 async function fetchEvents(
@@ -176,7 +176,7 @@ async function fetchEvents(
       return rows.map((r) => ({ leadId: r.leadId!, at: r.paidAt! }));
     }
     case "TAG_ADDED": {
-      // No tag_added table exists — the m:n join carries no timestamp — so the activity feed is
+      // No tag_added table exists - the m:n join carries no timestamp - so the activity feed is
       // the only record of WHEN a tag went on. `contact.tag.create` covers both the single-contact
       // and bulk paths (contacts-actions.ts), which are exactly the two that call emitTrigger.
       const rows = await prisma.activityLog.findMany({
@@ -224,7 +224,7 @@ async function fetchLeadFacts(ids: string[]): Promise<Record<string, DryRunLead>
   return out;
 }
 
-/** Only the templates this definition actually references — a deleted one stays absent, which is the signal. */
+/** Only the templates this definition actually references - a deleted one stays absent, which is the signal. */
 async function fetchTemplates(actions: WorkflowAction[]): Promise<Record<string, DryRunTemplate>> {
   const ids = [...new Set(actions.map((a) => a.templateId).filter((id): id is string => Boolean(id)))];
   if (ids.length === 0) return {};
@@ -243,7 +243,7 @@ async function fetchTemplates(actions: WorkflowAction[]): Promise<Record<string,
  * Replay `definition` over the last `windowDays` days and report what it would have done.
  *
  * The definition is passed in rather than read from the row on purpose: the builder previews what
- * is on screen, including unsaved edits. That's the whole point — you check the thing before you
+ * is on screen, including unsaved edits. That's the whole point - you check the thing before you
  * arm it, not after you've committed it.
  */
 export async function dryRunWorkflow(
@@ -266,7 +266,7 @@ export async function dryRunWorkflow(
   const truncated = rawEvents.length > EVENT_CAP;
   const events = truncated ? rawEvents.slice(0, EVENT_CAP) : rawEvents;
   const leads = await fetchLeadFacts([...new Set(events.map((e) => e.leadId))]);
-  // An event whose contact has since been archived isn't a candidate at all — drop it rather than
+  // An event whose contact has since been archived isn't a candidate at all - drop it rather than
   // counting it as "scanned but never enrolled", which would read as a filter that didn't fire.
   const live = events.filter((e) => leads[e.leadId]);
 

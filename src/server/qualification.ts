@@ -29,7 +29,7 @@ export const QUALIFICATION_CACHE_TAG = "qualification-questions";
  * Fold the separately-stored `answerAliases` back onto each option.
  *
  * They are stored apart because `options` is frozen once answered (the DB's version guard), and
- * an inbound alias is a parsing rule rather than evidence — see the schema comment. Every reader
+ * an inbound alias is a parsing rule rather than evidence - see the schema comment. Every reader
  * downstream wants them as one object, so the join happens here, once, rather than in the mapper
  * and again in the admin panel.
  */
@@ -73,7 +73,7 @@ const readActive = async (): Promise<QuestionSpec[]> => {
  *
  * Two cache layers, mirroring `server/levels.ts`: `unstable_cache` keeps it across requests
  * (it changes only when an admin edits a question, and the PUBLIC booking form reads it on
- * every render — a per-request round trip there is paid by prospects), busted on any
+ * every render - a per-request round trip there is paid by prospects), busted on any
  * mutation and revalidated after 5 minutes as a backstop.
  */
 export const getQualificationQuestions = cache(
@@ -83,7 +83,7 @@ export const getQualificationQuestions = cache(
   }),
 );
 
-/** Every version, active or not — the admin panel needs the history to show what was asked. */
+/** Every version, active or not - the admin panel needs the history to show what was asked. */
 export const getAllQualificationQuestions = cache(async () => {
   const rows = await prisma.qualificationQuestion.findMany({
     orderBy: [{ orderIndex: "asc" }, { key: "asc" }, { version: "desc" }],
@@ -103,7 +103,7 @@ export const getAllQualificationQuestions = cache(async () => {
     required: r.required,
     orderIndex: r.orderIndex,
     active: r.active,
-    /** Answered questions are frozen — an edit must create a new version (D5). */
+    /** Answered questions are frozen - an edit must create a new version (D5). */
     answerCount: r._count.answers,
   }));
 });
@@ -119,7 +119,7 @@ export type ShadowScore = {
 /**
  * Score a submission through the catalogue and compare with the shipped scorer.
  *
- * Returns nulls — and NEVER throws — when the catalogue is empty or unreadable. This runs
+ * Returns nulls - and NEVER throws - when the catalogue is empty or unreadable. This runs
  * inside the public booking submit: a shadow measurement that could break a prospect's
  * booking would be a strictly worse outcome than not measuring.
  */
@@ -141,7 +141,7 @@ export async function shadowScore(input: BantInput & AnswerMap): Promise<ShadowS
 }
 
 /**
- * How the shadow is doing — the number that decides whether Track D can flip.
+ * How the shadow is doing - the number that decides whether Track D can flip.
  *
  * `disagreements` must be ZERO before the public form is switched to the catalogue. A
  * non-zero count is a seeding bug, not a rounding artefact: `catalogueFromIntake()` derives

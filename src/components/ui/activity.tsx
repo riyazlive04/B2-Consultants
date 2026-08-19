@@ -4,8 +4,8 @@
  * The Daily Log activity feed.
  *
  * A `LogEntry` (derived server-side in people-metrics) is rendered as a card that answers
- * six questions at a glance — what happened, when, who, why it matters, its status, and the
- * next action — instead of a row of bare numbers. `ActivityTimeline` groups those cards into
+ * six questions at a glance - what happened, when, who, why it matters, its status, and the
+ * next action - instead of a row of bare numbers. `ActivityTimeline` groups those cards into
  * relative-date buckets and layers search, status filters, sort and lazy pagination on top.
  *
  * Presentational only: all grading/labelling is already baked into the entry. This file just
@@ -88,7 +88,7 @@ function accentClass(entry: LogEntry): string {
 
 /** A short, honest "what to do next" derived from the entry's state. */
 function nextAction(entry: LogEntry): string {
-  if (entry.correctionNote) return "Reviewed & reconciled — nothing needed";
+  if (entry.correctionNote) return "Reviewed & reconciled - nothing needed";
   if (entry.status.key === "quiet") return "Check what blocked the day and plan tomorrow";
   if (entry.hasBlockers) return "Follow up on the blocker you logged";
   if (entry.status.key === "belowpar") return "Line up more for tomorrow to get back on pace";
@@ -184,7 +184,7 @@ export function LogEntryCard({
         </div>
       )}
 
-      {/* admin correction — original stays intact */}
+      {/* admin correction - original stays intact */}
       {entry.correctionNote && (
         <div className="mt-3 rounded-r-field border-l-[3px] border-primary bg-primary-soft px-3 py-2">
           <p className="text-label font-semibold uppercase text-primary-strong">Admin correction</p>

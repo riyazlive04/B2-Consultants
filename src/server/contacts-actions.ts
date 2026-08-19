@@ -76,12 +76,12 @@ export async function createContact(form: FormData): Promise<ActionResult> {
     }
     return {
       ok: false,
-      error: `A contact with this ${dup.on === "phone" ? "phone number" : "email"} already exists — ${dup.lead.name}. Open that contact instead of adding a new one.`,
+      error: `A contact with this ${dup.on === "phone" ? "phone number" : "email"} already exists - ${dup.lead.name}. Open that contact instead of adding a new one.`,
     };
   }
   // Auto-assign an owner on creation (issue 1.1) via the same first-call rotation the webhooks use,
   // so a back-office lead no longer lands unassigned (which is why the owner column read
-  // "Unassigned" — issue 1.2). A rotation misconfig returns null and must never block entry.
+  // "Unassigned" - issue 1.2). A rotation misconfig returns null and must never block entry.
   const assignedToId = await pickFirstCaller().catch(() => null);
 
   const newLeadId = await prisma.$transaction(async (tx) => {
@@ -152,7 +152,7 @@ export async function updateContact(id: string, form: FormData): Promise<ActionR
       section: "contacts",
       entityType: "Lead",
       entityId: id,
-      summary: `Updated contact ${d.name} — changed ${diff.changed.join(", ")}`,
+      summary: `Updated contact ${d.name} - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -204,7 +204,7 @@ export async function restoreLead(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Permanent delete — only from the Archived tab. Cascades notes/tasks/opps/history. */
+/** Permanent delete - only from the Archived tab. Cascades notes/tasks/opps/history. */
 export async function purgeLead(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
@@ -389,13 +389,13 @@ const noteSchema = z.object({ body: z.string().trim().min(1, "Note can't be empt
  * (`src/lib/gn-mentions.ts`, used by `german-note-actions.ts`'s createGnPost/createGnComment).
  * ContactNote has no mentionedUserIds column and the schema is frozen this round (BUILD_CHECKLIST
  * §3), so unlike GnPost/GnComment there's nowhere to persist the parsed ids. Parsed here anyway,
- * at write time, against every active user's name — the codebase's GN mention→notification
+ * at write time, against every active user's name - the codebase's GN mention→notification
  * delivery turns out to have no separate "notification creation" function to call: it's a
  * read-time derived query (`gnEngagementNotifications` in notifications.ts counts recent rows
  * where `mentionedUserIds` has the viewer). `contactNoteMentionNotifications` in notifications.ts
  * mirrors that exact shape for ContactNote by re-parsing recent note bodies the same way, since
  * there's no column to filter on in SQL. Returning the count here just gives the note's author
- * immediate feedback ("mentioned 2 people") — the actual in-app delivery to the MENTIONED user
+ * immediate feedback ("mentioned 2 people") - the actual in-app delivery to the MENTIONED user
  * happens on their own next bell load/poll, same as German Note.
  */
 async function loadActiveUserCandidates() {
@@ -468,7 +468,7 @@ export async function toggleNotePin(id: string): Promise<ActionResult> {
 // ─────────────────────────── Tasks ───────────────────────────
 
 const taskSchema = z.object({
-  // A task title is a label, not a person — "Chase 2nd instalment" is valid.
+  // A task title is a label, not a person - "Chase 2nd instalment" is valid.
   title: z.string().trim().min(1, "Task title is required"),
   body: optionalRule("text"),
   dueAt: z.string().trim().optional(),
@@ -578,7 +578,7 @@ export async function restoreTask(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Permanent delete — only from the Archived tab. */
+/** Permanent delete - only from the Archived tab. */
 export async function purgeTask(id: string): Promise<ActionResult> {
   const session = await requireSection("contacts");
   const task = await prisma.contactTask.findUnique({
@@ -669,7 +669,7 @@ export async function updateCompany(id: string, form: FormData): Promise<ActionR
         section: "contacts",
         entityType: "Company",
         entityId: id,
-        summary: `Updated company ${d.name} — changed ${diff.changed.join(", ")}`,
+        summary: `Updated company ${d.name} - changed ${diff.changed.join(", ")}`,
         meta: { changed: diff.changed, before: diff.before, after: diff.after },
       });
     }
@@ -716,7 +716,7 @@ export async function restoreCompany(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Permanent delete — only from the Archived tab. Lead.companyId → null (SetNull). */
+/** Permanent delete - only from the Archived tab. Lead.companyId → null (SetNull). */
 export async function purgeCompany(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("pipeline.configure");
   if (!allowed) return denied;
@@ -744,7 +744,7 @@ const CUSTOM_FIELD_TYPES = [
 ] as const;
 
 const customFieldSchema = z.object({
-  // A custom-field name is a label ("Budget 2026"), never a person — leave it free text.
+  // A custom-field name is a label ("Budget 2026"), never a person - leave it free text.
   name: z.string().trim().min(1, "Field name is required"),
   fieldType: z.enum(CUSTOM_FIELD_TYPES),
   options: z.string().trim().optional(), // comma-separated for DROPDOWN/MULTI_SELECT

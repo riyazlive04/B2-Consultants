@@ -28,7 +28,7 @@ export default async function PeoplePage() {
   const duplicateCount = duplicates.leads.length + duplicates.students.length + duplicates.users.length;
   const anyMissing = members.some((m) => m.missingLogBadge);
 
-  // Who is doing the granting. The dialog greys out anything they can't hand out —
+  // Who is doing the granting. The dialog greys out anything they can't hand out -
   // and users-actions refuses it again server-side.
   const actor = { id: session.user.id, role: session.role, capabilities: session.capabilities };
 

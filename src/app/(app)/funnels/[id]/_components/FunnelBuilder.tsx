@@ -49,7 +49,7 @@ function toDraft(step: EditorStep | undefined): Draft {
   };
 }
 
-/** What the editor is pointed at. The header and footer are pages too — they just wrap the others. */
+/** What the editor is pointed at. The header and footer are pages too - they just wrap the others. */
 type Slot = "pages" | "header" | "footer";
 
 export default function FunnelBuilder({
@@ -80,7 +80,7 @@ export default function FunnelBuilder({
   /**
    * The global header and footer.
    *
-   * `null` is a real value here, not "not loaded" — it means the funnel has no such band, which
+   * `null` is a real value here, not "not loaded" - it means the funnel has no such band, which
    * is what the empty-state button offers to change. An empty array is a header someone has
    * started and not yet filled, and the two must stay tellable apart or clearing a header would
    * be indistinguishable from never having had one.
@@ -90,11 +90,11 @@ export default function FunnelBuilder({
     footer: funnel.footerBlocks,
   });
 
-  // Controls and their variants, flat — selection works the same for both, because a variant IS
+  // Controls and their variants, flat - selection works the same for both, because a variant IS
   // a page and editing it is the entire point of having one.
   const allSteps: EditorStep[] = funnel.steps.flatMap((s) => [s, ...s.variants]);
   const active = allSteps.find((s) => s.id === activeId);
-  /** The control a variant belongs to — the public URL is always the control's. */
+  /** The control a variant belongs to - the public URL is always the control's. */
   const controlOf = (id: string): EditorStep | undefined =>
     funnel.steps.find((s) => s.id === id || s.variants.some((v) => v.id === id));
   const activeControl = active ? controlOf(active.id) : undefined;
@@ -116,7 +116,7 @@ export default function FunnelBuilder({
    *
    * Keyed on the SERIALISED value, not on the arrays. `funnel.headerBlocks` is parsed fresh from
    * JSON on every server render, so its identity changes on every `router.refresh()` even when
-   * not one character differs — depending on the array itself would reset the editor's state,
+   * not one character differs - depending on the array itself would reset the editor's state,
    * which then looks like an edit to the autosave below and writes the header back on every
    * publish, rename or step add.
    */
@@ -144,7 +144,7 @@ export default function FunnelBuilder({
   /**
    * Autosave.
    *
-   * A canvas invites experimenting — drag a section, try a colour, undo it — and a builder that
+   * A canvas invites experimenting - drag a section, try a colour, undo it - and a builder that
    * loses that to a stray refresh is one people stop trusting. Undo/redo lives in memory, so
    * "unsaved" and "unrecoverable" are the same state.
    *
@@ -154,11 +154,11 @@ export default function FunnelBuilder({
    * moment someone has explicitly stopped.
    *
    * Skips the LOAD of each step: mounting the editor, or switching steps, replaces the draft
-   * wholesale and is not an edit — saving then would stamp `updatedAt` on every page anyone
+   * wholesale and is not an edit - saving then would stamp `updatedAt` on every page anyone
    * merely opened.
    *
-   * That skip is armed per step id, in one effect. It was briefly two effects — this one plus a
-   * separate `useEffect(..., [activeId])` that reset a boolean — and effects run in declaration
+   * That skip is armed per step id, in one effect. It was briefly two effects - this one plus a
+   * separate `useEffect(..., [activeId])` that reset a boolean - and effects run in declaration
    * order, so on mount the reset ran AFTER the guard had disarmed it and re-armed it. The result
    * was that the FIRST edit of a session was silently swallowed while the indicator still read
    * "All changes saved": the worst possible failure, since it looks exactly like success. Caught
@@ -186,7 +186,7 @@ export default function FunnelBuilder({
    * The same autosave for the header and footer, armed per slot.
    *
    * A separate effect rather than a branch inside the one above, because the two write different
-   * things and the arming guard has to reset when you SWITCH between them — folding them together
+   * things and the arming guard has to reset when you SWITCH between them - folding them together
    * meant one shared `armedFor` and the first edit after a tab change being swallowed, which is
    * the exact bug the comment above this file's step autosave was written about.
    */
@@ -196,7 +196,7 @@ export default function FunnelBuilder({
     if (armedChrome.current !== slot) { armedChrome.current = slot; return; }
     const blocks = chrome[slot];
     if (blocks === null) return;
-    // Already what the server holds — a refresh that re-seeded this state is not an edit.
+    // Already what the server holds - a refresh that re-seeded this state is not an edit.
     if (JSON.stringify(blocks) === JSON.stringify(slot === "header" ? funnel.headerBlocks : funnel.footerBlocks)) return;
     setSaveState("dirty");
     const t = setTimeout(async () => {
@@ -250,7 +250,7 @@ export default function FunnelBuilder({
   // ── A/B ──
   async function doAddVariant(stepId: string) {
     const res = await createVariant(stepId);
-    if (res.ok) { toast("Variant created — edit it, then set the split"); router.refresh(); } else toast(res.error, "error");
+    if (res.ok) { toast("Variant created - edit it, then set the split"); router.refresh(); } else toast(res.error, "error");
   }
   async function doSetWeight(stepId: string, weight: number) {
     const res = await setStepWeight(stepId, weight);
@@ -288,8 +288,8 @@ export default function FunnelBuilder({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <input value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} className="min-w-0 flex-1 border-0 bg-transparent font-display text-display-l font-bold text-ink outline-none" />
         <div className="flex items-center gap-2">
-          {/* Always the CONTROL's URL. A variant has a slug but no address — it is reached only by
-              being assigned — so linking to `active.slug` would open a 404 on the one page whose
+          {/* Always the CONTROL's URL. A variant has a slug but no address - it is reached only by
+              being assigned - so linking to `active.slug` would open a 404 on the one page whose
               author most wants to see it live. Which arm you get is the split's decision. */}
           {activeControl && (
             <a href={`/p/${funnel.slug}/${activeControl.slug}`} target="_blank" rel="noreferrer">
@@ -305,14 +305,14 @@ export default function FunnelBuilder({
         Public URL: <span className="font-mono">/p/{funnel.slug}</span> · {published ? "live" : "draft"}
         {" · "}
         <span className={saveState === "error" ? "font-semibold text-risk" : undefined}>
-          {saveState === "saved" ? "All changes saved" : saveState === "saving" ? "Saving…" : saveState === "dirty" ? "Unsaved changes" : "Could not save — use Save step"}
+          {saveState === "saved" ? "All changes saved" : saveState === "saving" ? "Saving…" : saveState === "dirty" ? "Unsaved changes" : "Could not save - use Save step"}
         </span>
       </p>
 
       {/*
         Pages / Header / Footer.
         The chrome gets its own tab rather than a panel under the steps because it is edited with
-        the SAME tool as a page — it is a block tree, it wants the canvas, the inspector and the
+        the SAME tool as a page - it is a block tree, it wants the canvas, the inspector and the
         library. Anything less than the full editor here would be a second, worse builder for the
         one part of the funnel that appears on every single screen a visitor sees.
       */}
@@ -424,7 +424,7 @@ export default function FunnelBuilder({
                 calendars={calendars}
                 snippets={snippets}
                 snippetCategories={snippetCategories}
-                // The page is composed against the chrome it will ship inside — see Canvas.
+                // The page is composed against the chrome it will ship inside - see Canvas.
                 chromeBefore={chrome.header ?? undefined}
                 chromeAfter={chrome.footer ?? undefined}
               />
@@ -432,14 +432,14 @@ export default function FunnelBuilder({
               {/*
                 The old list editor, kept and collapsed.
                 Not nostalgia: clicking a rendered page is a POINTING interaction, so it is not
-                reachable by keyboard alone. This tree is — every field is a real focusable
+                reachable by keyboard alone. This tree is - every field is a real focusable
                 control in document order. It is also the way out when a node ends up somewhere
                 the canvas cannot easily reach (a zero-height container, a block hidden on the
                 current device). Both views edit the same draft, so they can never disagree.
               */}
               <details className="rounded-card border border-line bg-surface">
                 <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-ink-2">
-                  Outline view — edit as a list (keyboard accessible)
+                  Outline view - edit as a list (keyboard accessible)
                 </summary>
                 <div className="border-t border-line p-4">
                   <BlockListEditor
@@ -526,7 +526,8 @@ function StepRow({
           {arms.map((arm, i) => (
             <div key={arm.id} className={`flex items-center gap-1 rounded-field px-1.5 py-1 ${arm.id === activeId ? "bg-primary-soft" : "hover:bg-surface"}`}>
               <button onClick={() => onSelect(arm.id)} className={`min-w-0 flex-1 truncate text-left text-[13px] ${arm.id === activeId ? "font-semibold text-primary-strong" : "text-ink-2"}`}>
-                {i === 0 ? "A · original" : arm.name.replace(`${step.name} — `, `${String.fromCharCode(65 + i)} · `)}
+                {/* Arms created before 19/08/2026 were named "<step> — <letter>"; newer ones use " - ". */}
+                {i === 0 ? "A · original" : arm.name.replace(`${step.name} - `, `${String.fromCharCode(65 + i)} · `).replace(`${step.name} — `, `${String.fromCharCode(65 + i)} · `)}
               </button>
               {/* Weight commits on blur, not per keystroke: typing "100" over "50" would
                   otherwise write 1, then 10, then 100, re-bucketing live traffic twice on the
@@ -550,7 +551,7 @@ function StepRow({
           ))}
           <p className="px-1.5 text-[11px] text-ink-3">
             {totalViews === 0
-              ? "No views yet — publish and send traffic."
+              ? "No views yet - publish and send traffic."
               : `${totalViews} views across ${arms.length} versions. Views only: what a visitor did next isn't attributed here.`}
           </p>
         </div>
@@ -572,7 +573,7 @@ function StepRow({
  * The global header/footer editor.
  *
  * Deliberately the same `PageEditor` the steps use, with the canvas showing only the band itself
- * — a header edited inside a preview of one arbitrary step would suggest it belongs to that step.
+ * - a header edited inside a preview of one arbitrary step would suggest it belongs to that step.
  */
 function ChromeEditor({
   which, blocks, onChange, onRemove, forms, calendars, snippets, snippetCategories,
@@ -591,7 +592,7 @@ function ChromeEditor({
       <Card title={`Global ${which}`}>
         <div className="py-8 text-center">
           <p className="mx-auto max-w-md text-sm text-ink-3">
-            This funnel has no {which}. Add one and it appears on <strong>every step</strong> — build the logo bar
+            This funnel has no {which}. Add one and it appears on <strong>every step</strong> - build the logo bar
             or the legal strip once instead of copying it onto each page and missing one.
           </p>
           <div className="mt-4">
@@ -614,7 +615,7 @@ function ChromeEditor({
       >
         {blocks.length === 0 && (
           <p className="text-sm text-ink-3">
-            Empty for now — nothing renders on the live pages until you add a block. Try
+            Empty for now - nothing renders on the live pages until you add a block. Try
             <strong> Library → Header &amp; footer</strong>.
           </p>
         )}
@@ -631,7 +632,7 @@ function ChromeEditor({
   );
 }
 
-/** Renders an editable block list — add/reorder/remove + per-type fields. Used for the
+/** Renders an editable block list - add/reorder/remove + per-type fields. Used for the
  * top-level step blocks and, recursively, for each column of a "row" block. */
 function BlockListEditor({
   blocks,
@@ -657,7 +658,7 @@ function BlockListEditor({
   }
   function addBlock(type: BlockType) {
     const base: Block = { id: newId(), type };
-    // A container is useless empty, and a row with no columns has nowhere to drop anything — so
+    // A container is useless empty, and a row with no columns has nowhere to drop anything - so
     // new containers arrive with the children the type implies.
     if (type === "row") base.children = [{ id: newId(), type: "column", children: [] }, { id: newId(), type: "column", children: [] }];
     else if (isContainer(type)) base.children = [];
@@ -761,7 +762,7 @@ function OnClickRow({
         <>
           <Select
             size="sm"
-            placeholder="— pick a published form —"
+            placeholder="- pick a published form -"
             value={b.opensFormId}
             onChange={(e) => update(i, { opensFormId: e.target.value })}
             options={forms.map((f) => ({ value: f.id, label: f.name }))}
@@ -783,7 +784,7 @@ function AlignSelect({ b, i, update }: { b: Block; i: number; update: (i: number
 function BlockFields({ b, i, update, forms }: { b: Block; i: number; update: (i: number, p: Partial<Block>) => void; forms: { id: string; name: string }[] }) {
   // `src` on the image/video blocks is an absolute external address, so whitespace can only be a
   // paste artefact. Not applied to the button block's `href`, which legitimately takes an internal
-  // path ("/p/thank-you") as well as a full URL — filtering both under one rule would be a lie.
+  // path ("/p/thank-you") as well as a full URL - filtering both under one rule would be a lie.
   const srcProps = fieldKindProps<HTMLInputElement>("url", (e) => update(i, { url: e.target.value }));
 
   switch (b.type) {
@@ -859,7 +860,7 @@ function BlockFields({ b, i, update, forms }: { b: Block; i: number; update: (i:
     case "card":
       return <p className="text-caption text-ink-3">Add the blocks that go inside.</p>;
     /**
-     * Raw markup on a PUBLIC page — an XSS sink by definition, which is why the boundary is here
+     * Raw markup on a PUBLIC page - an XSS sink by definition, which is why the boundary is here
      * at authoring time rather than at render. The warning is not decoration: someone pasting a
      * third-party widget needs to know this is not sandboxed.
      */
@@ -868,7 +869,7 @@ function BlockFields({ b, i, update, forms }: { b: Block; i: number; update: (i:
         <div className="space-y-2">
           <textarea className={areaCls} rows={6} placeholder="<div>…</div>" value={b.html ?? ""} onChange={(e) => update(i, { html: e.target.value })} />
           <p className="text-caption text-ink-3">
-            Rendered exactly as written, scripts included. Only paste markup you trust — it runs on the live page with no sandbox.
+            Rendered exactly as written, scripts included. Only paste markup you trust - it runs on the live page with no sandbox.
           </p>
         </div>
       );
@@ -876,7 +877,7 @@ function BlockFields({ b, i, update, forms }: { b: Block; i: number; update: (i:
       return <input type="number" className={inputCls} placeholder="Height (px)" value={b.size ?? 24} onChange={(e) => update(i, { size: Number(e.target.value) || 0 })} />;
     case "form":
       return (
-        <Select placeholder="— pick a published form —" value={b.formId ?? ""} onChange={(e) => update(i, { formId: e.target.value })} options={forms.map((f) => ({ value: f.id, label: f.name }))} />
+        <Select placeholder="- pick a published form -" value={b.formId ?? ""} onChange={(e) => update(i, { formId: e.target.value })} options={forms.map((f) => ({ value: f.id, label: f.name }))} />
       );
     case "divider":
       return <p className="text-caption text-ink-3">A horizontal divider.</p>;

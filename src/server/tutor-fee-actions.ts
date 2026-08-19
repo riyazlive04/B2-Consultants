@@ -18,7 +18,7 @@ import type { ActionResult } from "./finance-actions";
  *
  * ADMIN-triggered via `finance.write`, never a cron: money never moves on a schedule, and a
  * human clicking "approve" IS the sign-off. Recompute is idempotent and only ever touches
- * DRAFT rows — the database enforces that too (`tutor_fee_settled_guard`), so this is
+ * DRAFT rows - the database enforces that too (`tutor_fee_settled_guard`), so this is
  * defence in depth rather than the only guard.
  */
 
@@ -50,7 +50,7 @@ export async function recomputeTutorFees(): Promise<ActionResult & { summary?: s
 
   for (const b of batches) {
     const computed = computeTutorFee(b.level, b.headcount, config);
-    if (!computed) continue; // level carries no trainer fee — skip, never write a ₹0 row
+    if (!computed) continue; // level carries no trainer fee - skip, never write a ₹0 row
 
     const prior = byKey.get(`${b.id}:${b.level}`);
     if (prior && !isRecomputable(prior.status)) {
@@ -81,7 +81,7 @@ export async function recomputeTutorFees(): Promise<ActionResult & { summary?: s
     section: "german-note",
     entityType: "TutorFee",
     entityId: "batch",
-    summary: `Recomputed tutor fees — ${summary}`,
+    summary: `Recomputed tutor fees - ${summary}`,
     meta: { created, updated, frozen },
   });
 
@@ -142,7 +142,7 @@ export async function setTutorFeeOverride(feeId: string, form: FormData): Promis
 /**
  * Move a fee along the approval ladder, accruing to the ledger on APPROVED.
  *
- * The accrual is Dr COGS / Cr Accounts-payable — it asserts the cost is OWED, never that it
+ * The accrual is Dr COGS / Cr Accounts-payable - it asserts the cost is OWED, never that it
  * was paid, so approving a fee can't overstate what left the bank. Gated on
  * `financePosting.tutorFeeAccrual` (OFF by default); with it off the fee report is still
  * complete and only the posting is withheld.
@@ -195,8 +195,8 @@ export async function setTutorFeeStatus(feeId: string, to: TutorFeeStatus): Prom
           await prisma.tutorFee.update({ where: { id: feeId }, data: { postedEntryId: entryId } });
         }
       } catch (err) {
-        // The approval itself has already happened and is correct. A posting failure — a
-        // locked period, a missing account — must be TOLD, not silently swallowed, but it
+        // The approval itself has already happened and is correct. A posting failure - a
+        // locked period, a missing account - must be TOLD, not silently swallowed, but it
         // must not roll back the founder's decision either.
         const message = err instanceof Error ? err.message : "Unknown posting error";
         await logActivity(session, {

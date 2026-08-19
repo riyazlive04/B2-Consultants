@@ -35,7 +35,7 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
   };
 
   const exportCsv = async () => {
-    // Lazy-load papaparse so the People route's initial bundle stays lean —
+    // Lazy-load papaparse so the People route's initial bundle stays lean -
     // same pattern as DataTable's export.
     const Papa = (await import("papaparse")).default;
     const rows = withOkrs.flatMap((m) =>

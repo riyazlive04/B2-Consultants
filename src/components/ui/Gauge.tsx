@@ -1,5 +1,5 @@
 /**
- * Semicircular target gauge — the "speedometer" (§2.1).
+ * Semicircular target gauge - the "speedometer" (§2.1).
  *
  * WHY THIS EXISTS: the month card used to state collected / target / projected finish /
  * behind-pace as four separate numbers in four places, so reading "am I on track?" meant
@@ -8,7 +8,7 @@
  * gives the verdict in red / amber / green before a single digit is read.
  *
  * The numbers are still rendered as text (centre readout + end captions), never colour
- * alone — the bands are a second encoding of a value that is always also spoken.
+ * alone - the bands are a second encoding of a value that is always also spoken.
  *
  * Pure SVG, no client JS: it renders inside a server component.
  */
@@ -23,7 +23,7 @@ export type GaugeBand = {
  * Default verdict bands: behind → catching up → at target.
  *
  * Green has to occupy real arc (0.9→1.0), not just the endpoint. An earlier version put it
- * at 1→1.0001, which clamps to zero width and never rendered — the dial showed only red and
+ * at 1→1.0001, which clamps to zero width and never rendered - the dial showed only red and
  * amber, so "green above" was unreachable no matter how well the month went.
  */
 export const TARGET_BANDS: GaugeBand[] = [
@@ -62,7 +62,7 @@ export function Gauge({
 }: {
   /** Current value, same unit as `max` (e.g. paise). */
   value: number;
-  /** Full-scale value — the target. */
+  /** Full-scale value - the target. */
   max: number;
   /** Pre-formatted centre readout, e.g. "₹2.47L". */
   valueText: string;
@@ -71,7 +71,7 @@ export function Gauge({
   minText?: string;
   label: string;
   caption?: string;
-  /** Optional second tick, as a fraction of `max` — used for "expected by today". */
+  /** Optional second tick, as a fraction of `max` - used for "expected by today". */
   marker?: number;
   markerLabel?: string;
   bands?: GaugeBand[];
@@ -87,7 +87,7 @@ export function Gauge({
   const frac = max > 0 ? value / max : 0;
   const clamped = Math.max(0, Math.min(1, frac));
 
-  // The band the needle currently sits in — also the colour of the needle and readout.
+  // The band the needle currently sits in - also the colour of the needle and readout.
   const activeColor =
     bands.find((b) => frac <= b.upTo)?.color ?? bands[bands.length - 1]?.color ?? "var(--good)";
 
@@ -145,7 +145,7 @@ export function Gauge({
           strokeLinecap="round"
         />
 
-        {/* "expected by today" tick — the pace reference the needle is judged against */}
+        {/* "expected by today" tick - the pace reference the needle is judged against */}
         {markerPt && markerInner && (
           <line
             x1={markerInner.x}

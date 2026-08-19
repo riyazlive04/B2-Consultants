@@ -8,7 +8,7 @@ import { buildStorageKey, publicUrl, storageConfig, uploadObject } from "@/lib/s
 /**
  * Media-library upload.
  *
- * A route handler rather than a server action because server actions cannot stream a file body —
+ * A route handler rather than a server action because server actions cannot stream a file body -
  * the whole payload would be serialised into the action argument.
  *
  * Session-gated on `sites.manage`. That matters more than it looks: an unauthenticated upload
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const cfg = storageConfig();
   if (!cfg) {
     return NextResponse.json(
-      { ok: false, error: "Media storage is not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { ok: false, error: "Media storage is not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
       { status: 503 },
     );
   }
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
   const contentType = meta.format ? ALLOWED.get(meta.format) : undefined;
   if (!contentType) {
     return NextResponse.json(
-      { ok: false, error: `Unsupported image type${meta.format ? ` (${meta.format})` : ""} — use JPEG, PNG, WebP, GIF or AVIF` },
+      { ok: false, error: `Unsupported image type${meta.format ? ` (${meta.format})` : ""} - use JPEG, PNG, WebP, GIF or AVIF` },
       { status: 415 },
     );
   }

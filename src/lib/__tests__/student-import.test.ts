@@ -1,5 +1,5 @@
 /**
- * Student CSV import — spec Part 2 §9.
+ * Student CSV import - spec Part 2 §9.
  *
  * The tests that matter here are about NOT losing data:
  *  - `blankCellDoesNotWipe`: an import is usually a partial export. Treating an empty cell as
@@ -39,7 +39,7 @@ describe("csv line parsing", () => {
   });
 });
 
-describe("csv parsing — headers and validation", () => {
+describe("csv parsing - headers and validation", () => {
   test("a file with no name column is refused", () => {
     const r = parseStudentCsv("email,phone\na@b.com,123");
     assert.equal(r.ok, false);
@@ -54,7 +54,7 @@ describe("csv parsing — headers and validation", () => {
     assert.equal(r.ok, true);
     if (!r.ok) return;
     assert.equal(r.rows[0].row.fullName, "Ada");
-    assert.equal(r.rows[0].row.email, "ada@example.com", "email must fold to lowercase — it's the match key");
+    assert.equal(r.rows[0].row.email, "ada@example.com", "email must fold to lowercase - it's the match key");
     assert.equal(r.rows[0].row.phone, "+91999");
   });
 
@@ -104,7 +104,7 @@ describe("import planning", () => {
   });
 
   test("a blank cell does not wipe existing data", () => {
-    // Sheet has no phone column at all — Ada's number must survive.
+    // Sheet has no phone column at all - Ada's number must survive.
     const r = plan("name,email\nAda Lovelace,ada@example.com");
     assert.equal(r.unchanged, 1);
     assert.equal(r.updates, 0);

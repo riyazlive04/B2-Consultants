@@ -15,7 +15,7 @@ import {
 
 const sections = resolveSections(null); // shipped defaults, no founder config saved
 
-describe("permission matrix — the encoding itself", () => {
+describe("permission matrix - the encoding itself", () => {
   test("every row carries exactly one level per spec role", () => {
     for (const row of PERMISSION_MATRIX) {
       const levels = levelsOf(row);

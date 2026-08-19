@@ -25,12 +25,12 @@ import { Btn, IconButton, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/form";
 
 /**
- * One question card in the builder — Google Forms' expanding item.
+ * One question card in the builder - Google Forms' expanding item.
  *
  * The old builder showed every question as the same four boxes (label, key, type, placeholder)
  * whatever the type was, which is precisely why picking "Checkbox" did not feel like picking a
  * checkbox: nothing about the editor changed, so nothing about the question appeared to change
- * either. Here the body of the card IS the type — choosing "Multiple choice" produces an option
+ * either. Here the body of the card IS the type - choosing "Multiple choice" produces an option
  * list, choosing "Linear scale" produces bounds and end labels, and choosing "Section" produces a
  * page break with a destination.
  *
@@ -41,9 +41,9 @@ const inputCls =
   "h-9 w-full rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary";
 const labelCls = "block text-caption font-semibold uppercase tracking-wide text-ink-3";
 
-/** Grouped type list, flattened with disabled headers — SelectMenu has no optgroup. */
+/** Grouped type list, flattened with disabled headers - SelectMenu has no optgroup. */
 const TYPE_OPTIONS = FIELD_TYPE_GROUPS.flatMap((g) => [
-  { value: `__group_${g.group}`, label: `— ${g.group} —`, disabled: true },
+  { value: `__group_${g.group}`, label: `- ${g.group} -`, disabled: true },
   ...g.types.map((t) => ({ value: t.value, label: t.label })),
 ]);
 
@@ -68,7 +68,7 @@ export function ItemEditor({
   /**
    * `card` is the stacked outline view: a collapsed header you click to open.
    * `panel` is the builder's right-hand inspector, where the selection has already been made by
-   * clicking the field ON the form — so there is no header to click and nothing to collapse.
+   * clicking the field ON the form - so there is no header to click and nothing to collapse.
    *
    * A variant rather than a second component. These are ~240 lines of per-type editors, and the
    * one thing worse than a prop here would be two copies of them drifting apart, so that the
@@ -77,7 +77,7 @@ export function ItemEditor({
   variant?: "card" | "panel";
   /** True when the form has a Score element, which is what makes per-option points meaningful. */
   scoring?: boolean;
-  /** Sections after this item — the only legal branch targets. See sites-types. */
+  /** Sections after this item - the only legal branch targets. See sites-types. */
   laterSections: { id: string; label: string }[];
   onOpen: () => void;
   onChange: (patch: Partial<FormItem>) => void;
@@ -114,7 +114,7 @@ export function ItemEditor({
             } ${isSection ? "border-l-4 border-l-primary" : ""}`
       }
     >
-      {/* Collapsed header — click anywhere to open. Absent in the inspector, where selecting the
+      {/* Collapsed header - click anywhere to open. Absent in the inspector, where selecting the
           field on the canvas IS the act of opening it. */}
       {!panel && (
         <button
@@ -205,7 +205,7 @@ export function ItemEditor({
                       onChange={(e) => setOption(i, { label: e.target.value })}
                     />
                     {/* Branching lives per OPTION, and only where picking one answer can
-                        meaningfully route — a multi-select has no single destination. */}
+                        meaningfully route - a multi-select has no single destination. */}
                     {(item.type === "radio" || item.type === "select") && laterSections.length > 0 && (
                       <span className="flex flex-none items-center gap-1" title="Go to section based on this answer">
                         <CornerDownRight size={14} aria-hidden className="text-ink-3" />
@@ -222,7 +222,7 @@ export function ItemEditor({
                       </span>
                     )}
                     {/* Points this option contributes to the form's Score element. Only shown
-                        once such an element exists — a score box on every option of every form
+                        once such an element exists - a score box on every option of every form
                         would be noise on the 95% of forms that never score anything. */}
                     {scoring && (
                       <input
@@ -341,7 +341,7 @@ export function ItemEditor({
                 />
               </label>
               <p className="text-caption text-ink-3 sm:col-span-2">
-                Never shown to the respondent. Lands on the contact under the key <b>{item.key || "—"}</b>.
+                Never shown to the respondent. Lands on the contact under the key <b>{item.key || "-"}</b>.
               </p>
             </div>
           )}
@@ -349,14 +349,14 @@ export function ItemEditor({
           {item.type === "score" && (
             <p className="rounded-field bg-primary-soft px-3 py-2 text-caption text-primary-strong">
               Set points per option on the choice questions above. The total is worked out when the form is
-              submitted — it is never sent by the browser, so it can&apos;t be tampered with.
+              submitted - it is never sent by the browser, so it can&apos;t be tampered with.
             </p>
           )}
 
           {item.type === "captcha" && (
             <p className="rounded-field bg-primary-soft px-3 py-2 text-caption text-primary-strong">
               Adds a hidden trap field and a timing check. Nothing is shown to the respondent and there is
-              nothing to solve — no third-party captcha, no cookie banner.
+              nothing to solve - no third-party captcha, no cookie banner.
             </p>
           )}
 
@@ -434,7 +434,7 @@ export function ItemEditor({
                   placeholder="https://…/terms"
                 />
               </label>
-              <p className="text-caption text-ink-3">Always required — consent that can be skipped is not consent.</p>
+              <p className="text-caption text-ink-3">Always required - consent that can be skipped is not consent.</p>
             </div>
           )}
 
@@ -448,7 +448,7 @@ export function ItemEditor({
                 onChange={(e) => onChange({ html: e.target.value })}
               />
               <span className="mt-1 block text-caption font-normal normal-case text-ink-3">
-                Rendered exactly as written, scripts included. Only paste markup you trust — it runs on the live
+                Rendered exactly as written, scripts included. Only paste markup you trust - it runs on the live
                 form with no sandbox.
               </span>
             </label>

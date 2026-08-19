@@ -63,12 +63,12 @@ import { getNotArmedReport } from "@/server/not-armed";
 export const dynamic = "force-dynamic";
 
 /**
- * Founder Console — the one screen where the app's own rules live.
+ * Founder Console - the one screen where the app's own rules live.
  *
  * Everything here is config, not code: the sidebar, the XP engine, the goals the
  * team is chasing and the rewards that pay out when they hit them. The section is
  * `locked` in the catalogue, so it can never be switched off or handed to a
- * non-admin — there'd be no way back.
+ * non-admin - there'd be no way back.
  */
 export default async function ConsolePage() {
   await requireSection("console");
@@ -117,7 +117,7 @@ export default async function ConsolePage() {
       shadowAgreement(),
       getIntakeMappingReport(),
       getCallDistribution(),
-      // The rotation roster. ACTIVE only — a former team member must not be offered a share of
+      // The rotation roster. ACTIVE only - a former team member must not be offered a share of
       // future work, and `pickFirstCaller` excludes them anyway, so listing them would show a
       // control that does nothing.
       prisma.teamProfile.findMany({
@@ -132,13 +132,13 @@ export default async function ConsolePage() {
         orderBy: [{ role: "asc" }, { name: "asc" }],
         select: { id: true, name: true, role: true, capabilities: true },
       }),
-      // "What is built, switched off, and silently doing nothing" — the one screen that tells a
+      // "What is built, switched off, and silently doing nothing" - the one screen that tells a
       // disarmed feature apart from a broken one.
       getNotArmedReport(),
     ]);
 
   /**
-   * Resolve each person's EFFECTIVE capabilities — role defaults merged with their overrides —
+   * Resolve each person's EFFECTIVE capabilities - role defaults merged with their overrides -
    * so the matrix shows what is actually true today, not just what has been explicitly set. A
    * grid that rendered only stored overrides would show every unset cell as "off" when the role
    * in fact grants it.
@@ -183,7 +183,7 @@ export default async function ConsolePage() {
     getAttendanceConfig(),
   ]);
 
-  // The SSS diary's owner is a User (the founder), not a TeamProfile — resolve the name so the
+  // The SSS diary's owner is a User (the founder), not a TeamProfile - resolve the name so the
   // panel can say whose calendar it is rather than showing a raw id.
   const sssOwner = sssConfig.ownerId
     ? await prisma.user.findUnique({ where: { id: sssConfig.ownerId }, select: { name: true, email: true } })
@@ -210,13 +210,13 @@ export default async function ConsolePage() {
     environment: obs.environment,
   };
 
-  // Reward triggers point at badges and quests by key — offer today's, not the code defaults.
+  // Reward triggers point at badges and quests by key - offer today's, not the code defaults.
   const live = currentRuleset(config, istToday().toISOString().slice(0, 10));
   const badgeOptions = live.employeeBadges.filter((b) => b.enabled).map((b) => ({ key: b.key, name: b.name, icon: b.icon }));
   const questOptions = live.quests.filter((q) => q.enabled).map((q) => ({ key: q.key, title: q.title, icon: q.icon }));
   const goalOptions = goals.filter((g) => g.goal.active).map((g) => ({ id: g.goal.id, name: g.goal.name }));
 
-  // BigInt and Decimal don't cross the server/client boundary — send strings.
+  // BigInt and Decimal don't cross the server/client boundary - send strings.
   const ruleRows: RuleRow[] = rules.map((r) => ({
     id: r.id,
     name: r.name,
@@ -251,7 +251,7 @@ export default async function ConsolePage() {
         eyebrow="Admin only"
         icon={<SlidersHorizontal size={20} />}
         title="Founder Console"
-        subtitle="The rules of the app, in one place. Sections, the XP engine, the team's goals, and the rewards that pay out when they're hit — all editable, none of it hardcoded."
+        subtitle="The rules of the app, in one place. Sections, the XP engine, the team's goals, and the rewards that pay out when they're hit - all editable, none of it hardcoded."
       />
 
       {/* -- TWO LEVELS, NOT TWENTY-ONE TABS -------------------------------------------

@@ -12,7 +12,7 @@ import { renderResumeDocx } from "@/documents/resume-docx";
  *
  * Section access is necessary but not sufficient: `cv-check` is granted to STUDENT by default,
  * so a section-only gate let any student pull any other student's CV by id. `resumeScope` adds
- * the row-level rule — coaches see all, everyone else sees only what they own.
+ * the row-level rule - coaches see all, everyone else sees only what they own.
  */
 
 export const runtime = "nodejs"; // @react-pdf/renderer + docx are Node libraries

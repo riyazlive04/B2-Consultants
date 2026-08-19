@@ -95,7 +95,7 @@ export async function getPeopleOverview(monthStr?: string) {
     // than presenting them as current team.
     terminatedAt: p.terminatedAt?.toISOString() ?? null,
     terminationReason: p.terminationReason,
-    // A departed person never "owes" a daily log — leaving them in the missing-log count would
+    // A departed person never "owes" a daily log - leaving them in the missing-log count would
     // make the board permanently red for someone who no longer works here.
     logsDaily: p.dashboardRole !== "ADMIN" && p.status === "ACTIVE" && !p.terminatedAt,
     submittedToday: p.userId ? submittedUserIds.has(p.userId) : false,
@@ -233,7 +233,7 @@ export async function getMyDailyLogView(userId: string) {
     ? await prisma.oKR.findMany({ where: { teamProfileId: profile.id, month }, orderBy: { createdAt: "asc" } })
     : [];
 
-  // Pre-fill today's numbers from what this user ACTUALLY entered in the pipeline today —
+  // Pre-fill today's numbers from what this user ACTUALLY entered in the pipeline today -
   // kills re-keying, keeps data honest. The member can still adjust before submitting; the
   // log stays the human record. Shared with the EOD job (server/daily-log-eod.ts), which
   // writes rows from the SAME function so an auto-saved row can never disagree with what the
@@ -281,7 +281,7 @@ export async function getMyDailyLogView(userId: string) {
     variant: profile?.logVariant ?? null,
     fullName: profile?.fullName ?? "",
     submittedToday: !!todayLog,
-    /** A row exists for today, but the EOD job wrote it — nobody has stood behind it yet. */
+    /** A row exists for today, but the EOD job wrote it - nobody has stood behind it yet. */
     todayIsAuto: todayLog?.source === "EOD_AUTO",
     eod: {
       enabled: eodCfg.enabled,

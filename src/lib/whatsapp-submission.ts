@@ -1,17 +1,17 @@
 /**
- * WhatsApp template submission pack — the nine SOP messages, in the shape WATI/Meta want.
+ * WhatsApp template submission pack - the nine SOP messages, in the shape WATI/Meta want.
  *
  * WHY THIS EXISTS: the SOP writes its variables as `[Prospect’s First Name]`; WATI declares them
  * as `{{name}}`. Those are the same message in two dialects. This module is the translation, and
  * it is the SINGLE SOURCE for both the Word submission pack (scripts/whatsapp-templates-docx.ts)
- * and the in-app mapping guidance — so what B2 sends to Meta for approval and what the app expects
+ * and the in-app mapping guidance - so what B2 sends to Meta for approval and what the app expects
  * back can never drift apart.
  *
  * The SUBMITTED body is derived from the SOP body by substituting the bracket variables for WATI's
  * `{{…}}` names. It is not retyped: `submissionBody()` runs the real substitution over the real
  * template constant, so a change to the SOP text flows into the submission pack automatically.
  *
- * Isomorphic — no prisma, no server-only.
+ * Isomorphic - no prisma, no server-only.
  */
 
 import type { WhatsAppKind } from "@prisma/client";
@@ -44,11 +44,11 @@ export type SubmissionTemplate = {
   kind: WhatsAppKind;
   /** The engine step that fires it. */
   step: OutreachStep;
-  /** Proposed WATI template name. snake_case, ≤512 chars, lowercase — Meta's rule. */
+  /** Proposed WATI template name. snake_case, ≤512 chars, lowercase - Meta's rule. */
   name: string;
   category: TemplateCategory;
   language: string;
-  /** Why this category — reviewers reject on category mismatch more than anything else. */
+  /** Why this category - reviewers reject on category mismatch more than anything else. */
   categoryNote: string;
   vars: TemplateVarSpec[];
   /** Header media, where the SOP calls for it. */
@@ -65,7 +65,7 @@ export type SubmissionTemplate = {
    * A wording change that HAS been approved and is already live in the SOP constant.
    *
    * The counterpart to `proposedFix`, and the distinction matters at submission time: a
-   * `proposedFix` is a question still open — the pack prints the SOP body and asks B2 to decide.
+   * `proposedFix` is a question still open - the pack prints the SOP body and asks B2 to decide.
    * An `acceptedFix` is a decision already taken, so the pack prints the NEW body as the thing to
    * submit and carries the old one as an explanatory note.
    *
@@ -113,25 +113,25 @@ const V = {
  * The nine templates.
  *
  * ALL NINE ARE MARKETING. This was reviewed against Meta's categorisation rules on 17 Jul 2026 and
- * is a deliberate call, not an oversight — the earlier revision of this file had Steps 13–21 as
+ * is a deliberate call, not an oversight - the earlier revision of this file had Steps 13–21 as
  * UTILITY, and that was wrong.
  *
  * WHY. Meta's bar for UTILITY is that a template be "non-promotional, not containing any
  * promotional or persuasive intent"; anything with MIXED content defaults to MARKETING. Every one
  * of these bodies carries promotional or persuasive copy, so none of them clears that bar:
- *  · Step 3 / Step 6 — promote a free call to someone who filled in a form. Never were UTILITY.
- *  · Step 13 — links the case studies page (social proof).
- *  · Step 14 — "possibilities of your next job in Germany", "your next best steps".
- *  · Step 15 — "*FREE* Personalized Discovery Call" is offer language.
- *  · Step 16 / Step 21 — carry a re-booking CTA and link. Note these have NO confirmation request
+ *  · Step 3 / Step 6 - promote a free call to someone who filled in a form. Never were UTILITY.
+ *  · Step 13 - links the case studies page (social proof).
+ *  · Step 14 - "possibilities of your next job in Germany", "your next best steps".
+ *  · Step 15 - "*FREE* Personalized Discovery Call" is offer language.
+ *  · Step 16 / Step 21 - carry a re-booking CTA and link. Note these have NO confirmation request
  *    in them at all, and are still MARKETING: it is the promotional copy that decides this, not
  *    the ask.
- *  · Step 19 — "personalized game plan", "excited to help you take the next step in your career".
- *  · Step 20 — "prepared something very specific for your profile".
+ *  · Step 19 - "personalized game plan", "excited to help you take the next step in your career".
+ *  · Step 20 - "prepared something very specific for your profile".
  * Stacked on top: the appointment being confirmed is a free SALES call, which is a weaker claim to
  * "transaction" than a paid booking would be.
  *
- * A "reply YES to confirm" does NOT make a template MARKETING — a confirmation request for an
+ * A "reply YES to confirm" does NOT make a template MARKETING - a confirmation request for an
  * appointment the prospect booked is the textbook UTILITY case, and the reply is part of the
  * transactional flow. Recorded here because it is the intuitive wrong answer, and because if the
  * promotional copy below is ever stripped, the YES is not what stands in the way of UTILITY.
@@ -139,14 +139,14 @@ const V = {
  * CONSEQUENCES, both real:
  *  · Since April 2025 Meta approves as MARKETING anything it judges to be MARKETING regardless of
  *    what you declared, and flags accounts that game the categorisation. Declaring UTILITY here
- *    would not buy cheaper messages — it would buy a flag.
+ *    would not buy cheaper messages - it would buy a flag.
  *  · MARKETING templates are subject to per-user marketing limits and require opt-in (B2 has it,
- *    via the website form — keep that consent wording, it is the evidence). The cost is that a
+ *    via the website form - keep that consent wording, it is the evidence). The cost is that a
  *    time-critical confirm-your-call reminder CAN be throttled for a prospect near their cap.
  *    Accepted for now; revisit against real delivery rates.
  *
  * To move any of Steps 13–21 back to UTILITY, the promotional lines must come out of the body
- * first — and that is a `proposedFix`, because it changes what a prospect reads.
+ * first - and that is a `proposedFix`, because it changes what a prospect reads.
  */
 export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
   {
@@ -160,14 +160,14 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
       "Promotes a free discovery call to someone who just opted in. Not tied to an existing transaction → MARKETING.",
     vars: [V.name("Priya"), V.sender("Nilofer")],
     notes: [
-      "Both links are literal text, not variables — Meta reviews them once at approval.",
+      "Both links are literal text, not variables - Meta reviews them once at approval.",
       "Sent automatically within seconds of opt-in (SOP Step 2), so the opt-in is fresh and provable.",
       "The closing line no longer promises an immediate call. Under the instant-intro flow a caller only rings if the prospect does NOT book, so the message offers a call on request instead of asserting one.",
     ],
     acceptedFix: {
       decidedOn: "2026-08-03",
       reason:
-        "Two changes, both approved by B2. (1) The SOP's first two lines put {{name}} and {{sender}} back to back with only a line break between them; Meta rejects adjacent parameters with no static text between, and a newline does not count — as transcribed, this template could never have been approved. The replacement is exactly how the SOP itself opens Step 13, so the intro adopts B2's own house phrasing rather than new wording. (2) The closing line promised “I’ll give you a quick call now”, which became untrue once the message is auto-sent at opt-in and the call is conditional on NOT booking. Everything between those two lines is untouched.",
+        "Two changes, both approved by B2. (1) The SOP's first two lines put {{name}} and {{sender}} back to back with only a line break between them; Meta rejects adjacent parameters with no static text between, and a newline does not count - as transcribed, this template could never have been approved. The replacement is exactly how the SOP itself opens Step 13, so the intro adopts B2's own house phrasing rather than new wording. (2) The closing line promised “I’ll give you a quick call now”, which became untrue once the message is auto-sent at opt-in and the call is conditional on NOT booking. Everything between those two lines is untouched.",
       was: TPL_INTRO_SUPERSEDED,
     },
   },
@@ -189,7 +189,7 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     category: "MARKETING",
     language: "en",
     categoryNote:
-      "Confirms an appointment the prospect booked — but links the case studies page, which is social proof, i.e. promotional. Mixed content defaults to MARKETING.",
+      "Confirms an appointment the prospect booked - but links the case studies page, which is social proof, i.e. promotional. Mixed content defaults to MARKETING.",
     vars: [V.name("Priya"), V.sender("Nilofer"), V.date("Sat 18 Jul"), V.time("07:00 PM")],
     notes: ["The SOP renders this time in IST and says so in the body (“at *[TIME]* IST”)."],
   },
@@ -201,10 +201,10 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     category: "MARKETING",
     language: "en",
     categoryNote:
-      "Reminder for a booked appointment, but sells the call while reminding — “possibilities of your next job in Germany”, “figure out your next best steps”. Persuasive intent → MARKETING. The YES is not why.",
+      "Reminder for a booked appointment, but sells the call while reminding - “possibilities of your next job in Germany”, “figure out your next best steps”. Persuasive intent → MARKETING. The YES is not why.",
     vars: [V.name("Priya"), V.date("Sat 18 Jul"), V.time("07:00 PM"), V.zoom()],
     notes: [
-      "The app will NOT send this until a Zoom link is on the prospect’s card — an unresolved variable blocks the send rather than delivering a broken message.",
+      "The app will NOT send this until a Zoom link is on the prospect’s card - an unresolved variable blocks the send rather than delivering a broken message.",
     ],
   },
   {
@@ -226,7 +226,7 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     category: "MARKETING",
     language: "en",
     categoryNote:
-      "Notifies the prospect their slot was released, then asks them to re-book with a link. That CTA is re-engagement → MARKETING. Note this template contains no confirmation request at all and is still MARKETING — the copy decides it, not the ask.",
+      "Notifies the prospect their slot was released, then asks them to re-book with a link. That CTA is re-engagement → MARKETING. Note this template contains no confirmation request at all and is still MARKETING - the copy decides it, not the ask.",
     vars: [V.name("Priya")],
     notes: ["Fires only after BOTH required confirmation calls are logged (SOP Step 16)."],
   },
@@ -238,12 +238,12 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     category: "MARKETING",
     language: "en",
     categoryNote:
-      "Confirmation request for a booked SSS, but built around a “personalized game plan” and “excited to help you take the next step in your career” — and carries a promo video header. Persuasive throughout → MARKETING.",
+      "Confirmation request for a booked SSS, but built around a “personalized game plan” and “excited to help you take the next step in your career” - and carries a promo video header. Persuasive throughout → MARKETING.",
     vars: [V.name("Priya"), V.sender("Nilofer"), V.date("Mon 20 Jul"), V.time("06:30 PM")],
-    header: "VIDEO — the personalized video Ameen records per prospect",
+    header: "VIDEO - the personalized video Ameen records per prospect",
     notes: [
       "The SOP’s “<< ATTACH VIDEO TO THIS MESSAGE>>” is a per-prospect video, so it must be a VIDEO HEADER, not body text. Submit with a sample video; the real one is supplied per send.",
-      "DECISION NEEDED: a per-send video header requires uploading each prospect’s video to WATI and passing its media id. The app does not do that today — see the wiring doc. Until it does, keep this step MANUAL.",
+      "DECISION NEEDED: a per-send video header requires uploading each prospect’s video to WATI and passing its media id. The app does not do that today - see the wiring doc. Until it does, keep this step MANUAL.",
     ],
   },
   {
@@ -254,7 +254,7 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     category: "MARKETING",
     language: "en",
     categoryNote:
-      "Second reminder for the same booked SSS, but sells attendance — “prepared something very specific for your profile and would love to see you there” → MARKETING.",
+      "Second reminder for the same booked SSS, but sells attendance - “prepared something very specific for your profile and would love to see you there” → MARKETING.",
     vars: [V.name("Priya"), V.date("Mon 20 Jul"), V.time("06:30 PM"), V.zoom()],
     notes: [
       "REJECTION RISK: the SOP’s wording ends on the Zoom link, so the body would end with {{zoom_link}}. Meta commonly rejects a body that ends with a variable. The submitted body below therefore adds a short closing line after the link. Confirm this wording is acceptable to B2 before submitting.",
@@ -268,7 +268,7 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     category: "MARKETING",
     language: "en",
     categoryNote:
-      "Notifies the prospect their SSS slot was released, then asks them to re-book with a link. Re-engagement CTA → MARKETING. Like Step 16, no confirmation request in it — still MARKETING.",
+      "Notifies the prospect their SSS slot was released, then asks them to re-book with a link. Re-engagement CTA → MARKETING. Like Step 16, no confirmation request in it - still MARKETING.",
     vars: [V.name("Priya")],
   },
 ];
@@ -314,17 +314,17 @@ export function lintTemplate(t: SubmissionTemplate): TemplateLint {
   const body = submissionBody(t);
   const issues: string[] = [];
 
-  if (body.length > BODY_CHAR_LIMIT) issues.push(`Body is ${body.length} chars — over Meta's ${BODY_CHAR_LIMIT} limit.`);
-  if (/^\s*\{\{/.test(body)) issues.push("Body starts with a variable — Meta rejects this.");
-  if (/\}\}\s*$/.test(body)) issues.push("Body ends with a variable — Meta rejects this.");
-  // "Adjacent" means no STATIC TEXT between two parameters. Whitespace — including a line break —
+  if (body.length > BODY_CHAR_LIMIT) issues.push(`Body is ${body.length} chars - over Meta's ${BODY_CHAR_LIMIT} limit.`);
+  if (/^\s*\{\{/.test(body)) issues.push("Body starts with a variable - Meta rejects this.");
+  if (/\}\}\s*$/.test(body)) issues.push("Body ends with a variable - Meta rejects this.");
+  // "Adjacent" means no STATIC TEXT between two parameters. Whitespace - including a line break -
   // is not text, so `{{a}}\n{{b}}` is as adjacent as `{{a}}{{b}}` as far as Meta is concerned.
   // Naming which pair is at fault matters: the reader has to find them in a 600-character body.
   const adjacent = body.match(/\{\{\s*([\w.]+)\s*\}\}(\s*)\{\{\s*([\w.]+)\s*\}\}/);
   if (adjacent) {
     const sep = adjacent[2].includes("\n") ? "only a line break" : adjacent[2] ? "only whitespace" : "nothing";
     issues.push(
-      `{{${adjacent[1]}}} and {{${adjacent[3]}}} have ${sep} between them — Meta rejects adjacent parameters.`,
+      `{{${adjacent[1]}}} and {{${adjacent[3]}}} have ${sep} between them - Meta rejects adjacent parameters.`,
     );
   }
   if (!/^[a-z0-9_]+$/.test(t.name)) issues.push(`Template name "${t.name}" must be lowercase letters, digits and underscores only.`);

@@ -8,13 +8,13 @@ import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
  * Nightly OVERDUE sweep (audit §C #19).
  *
  * Nothing in the app ever flipped a DUE instalment or a SENT invoice to OVERDUE when its date
- * passed — the status just sat, so "overdue receivables" under-reported and the OVERDUE state
+ * passed - the status just sat, so "overdue receivables" under-reported and the OVERDUE state
  * (which EMI reminders and the red row-tint key off) was effectively unreachable without a human
  * editing each row. This is the missing clock. Set-based, idempotent, non-destructive: re-running
  * only ever touches rows that are still DUE/SENT and genuinely past due.
  *
  * `@db.Date` columns are UTC-midnight and istToday() is the UTC-midnight of the current IST day,
- * so `dueDate < today` means "due yesterday or earlier" — something due TODAY is not yet overdue.
+ * so `dueDate < today` means "due yesterday or earlier" - something due TODAY is not yet overdue.
  *
  * Deliberately does NOT sweep PARTIAL invoices: a single status column can't say "partly paid AND
  * late", and flipping it to OVERDUE would erase the more useful "someone has paid something"

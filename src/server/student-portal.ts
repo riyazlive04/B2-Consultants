@@ -11,7 +11,7 @@ import { getGamificationConfig } from "./founder-config";
 
 /**
  * Student portal (Role.STUDENT): everything the signed-in student may see about
- * THEMSELVES — journey XP, badges, milestones, next steps. Hard privacy line,
+ * THEMSELVES - journey XP, badges, milestones, next steps. Hard privacy line,
  * enforced here at the query layer, not in the UI:
  *  - NO money (fees, payments, LTV), NO satisfaction/NPS records,
  *  - NO internal notes, NO manual G/A/R signal or its history,
@@ -23,7 +23,7 @@ const dateKeyOf = (d: Date) => d.toISOString().slice(0, 10);
 const istDayKey = (d: Date) => new Date(d.getTime() + 5.5 * 3600000).toISOString().slice(0, 10);
 const dayDiff = (a: Date, b: Date) => Math.floor((a.getTime() - b.getTime()) / 86400000);
 
-/** Badges that reveal the internal signal system — hidden from the student's own view. */
+/** Badges that reveal the internal signal system - hidden from the student's own view. */
 const INTERNAL_BADGE_KEYS = new Set(["green-zone", "comeback"]);
 
 function portalJourney(journey: StudentJourney): StudentJourney {
@@ -42,9 +42,9 @@ export const getMyStudentPortal = cache(async (userId: string) => {
             orderBy: { date: "asc" },
             select: { id: true, date: true, previousMilestone: true, newMilestone: true },
           },
-          // loaded ONLY to feed journey momentum/badge math — never exposed below
+          // loaded ONLY to feed journey momentum/badge math - never exposed below
           signalChanges: { select: { date: true, previousSignal: true, newSignal: true } },
-          // sprint plan: targets/actuals/status only — who entered it stays internal
+          // sprint plan: targets/actuals/status only - who entered it stays internal
           sprintWeeks: {
             orderBy: { weekIndex: "asc" },
             select: {
@@ -105,7 +105,7 @@ export const getMyStudentPortal = cache(async (userId: string) => {
       lastSessionDate: e.lastSessionDate?.toISOString() ?? null,
       nextCheckInDate: e.nextCheckInDate?.toISOString() ?? null,
       journey: portalJourney(journey),
-      // dates + stages only — the coach's session notes stay internal
+      // dates + stages only - the coach's session notes stay internal
       milestoneTimeline: e.milestoneLogs.map((l) => ({
         id: l.id,
         date: l.date.toISOString(),

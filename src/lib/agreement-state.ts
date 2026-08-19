@@ -1,17 +1,17 @@
 /**
- * The agreement lifecycle as ONE derived state — isomorphic, no prisma, no server-only, so the
+ * The agreement lifecycle as ONE derived state - isomorphic, no prisma, no server-only, so the
  * founder's cards (client), the picker (client) and the server reads all import the same truth.
  *
  * WHY DERIVE INSTEAD OF STORE: the request asks for eight states, but they span two phases of one
  * timeline. Three of them (NOT_REQUIRED / AWAITING_PAYMENT / READY_TO_SEND) describe a client for
- * whom NO agreement row exists yet — there is nothing to store them on. The other five map to (or
+ * whom NO agreement row exists yet - there is nothing to store them on. The other five map to (or
  * are refinements of) the `AgreementStatus` enum. So the unified state is a pure function over
- * (the client's pipeline position, the latest agreement, the workflow config) — computed on read,
+ * (the client's pipeline position, the latest agreement, the workflow config) - computed on read,
  * exactly the way EXPIRED is already computed from `expiresAt` on the public token path. No column,
  * no migration, no cron: the state is always current because it is recomputed every render.
  *
  * The workflow config only decides WHEN the "Ready to send" prompt appears. It never gates
- * generation — the founder can draft an agreement for anyone, any time, from the picker.
+ * generation - the founder can draft an agreement for anyone, any time, from the picker.
  */
 
 export type AgreementState =
@@ -32,7 +32,7 @@ export type AgreementWorkflowConfig = { readiness: AgreementReadiness };
 export type LatestAgreement = {
   id: string;
   documentNo: string;
-  status: string; // AgreementStatus — string to keep this file prisma-free
+  status: string; // AgreementStatus - string to keep this file prisma-free
   expiresAt: string | Date | null;
   signedAt: string | Date | null;
 } | null;
@@ -59,7 +59,7 @@ const ACTIVE_DEAL_STAGES = new Set([
 ]);
 
 /**
- * Which stages the founder's chosen readiness treats as "prompt me — this one is ready".
+ * Which stages the founder's chosen readiness treats as "prompt me - this one is ready".
  * Exported so the dashboard count can push the same rule down into SQL instead of re-deriving it.
  */
 export function eligibleStages(readiness: AgreementReadiness): Set<string> {
@@ -69,7 +69,7 @@ export function eligibleStages(readiness: AgreementReadiness): Set<string> {
     case "DEPOSIT":
       return new Set(["DEPOSIT_PAID", "WON"]);
     case "EITHER":
-      // deposit paid, won, OR "agreed but no deposit yet" — the confirmed-intention signal
+      // deposit paid, won, OR "agreed but no deposit yet" - the confirmed-intention signal
       return new Set(["DEPOSIT_FOLLOWUP", "DEPOSIT_PAID", "WON"]);
   }
 }
@@ -85,7 +85,7 @@ function asMs(d: string | Date | null): number | null {
  *
  * Order matters: a live agreement always wins over the pipeline signal, because once a contract is
  * out the founder's next action is about THAT document, not the deal. VOIDED / DECLINED fall
- * through — they leave the client back in "ready to re-issue" territory.
+ * through - they leave the client back in "ready to re-issue" territory.
  */
 export function deriveAgreementState(
   input: DeriveAgreementInput,
@@ -104,12 +104,12 @@ export function deriveAgreementState(
         return ag.status === "VIEWED" ? "VIEWED" : "SENT";
       }
       case "DRAFT":
-        return "READY_TO_SEND"; // drafted but not countersigned — one tap from sending
+        return "READY_TO_SEND"; // drafted but not countersigned - one tap from sending
       // VOIDED / DECLINED / (stored) EXPIRED → fall through to the pipeline signal below
     }
   }
 
-  // No live agreement — read the client's pipeline position.
+  // No live agreement - read the client's pipeline position.
   const stage = input.leadStage;
   if (stage === null || stage === undefined) return "READY_TO_SEND"; // a Student is already a customer
   if (eligibleStages(config.readiness).has(stage)) return "READY_TO_SEND";
@@ -146,7 +146,7 @@ export function agreementStateTone(state: AgreementState): AgreementStateTone {
     case "SIGNED":
       return "good";
     case "READY_TO_SEND":
-      return "primary"; // the CTA state — make it pop
+      return "primary"; // the CTA state - make it pop
     case "SENT":
     case "VIEWED":
     case "AWAITING_PAYMENT":
@@ -158,7 +158,7 @@ export function agreementStateTone(state: AgreementState): AgreementStateTone {
   }
 }
 
-/** Whether this state wants the founder to do something now — drives card prominence + notifications. */
+/** Whether this state wants the founder to do something now - drives card prominence + notifications. */
 export function isAgreementActionable(state: AgreementState): boolean {
   return state === "READY_TO_SEND" || state === "EXPIRED" || state === "SIGNED";
 }
@@ -167,23 +167,23 @@ export function isAgreementActionable(state: AgreementState): boolean {
 export function agreementStateHint(state: AgreementState, config?: AgreementWorkflowConfig): string {
   switch (state) {
     case "NOT_REQUIRED":
-      return "No agreement needed yet — this deal isn't far enough along.";
+      return "No agreement needed yet - this deal isn't far enough along.";
     case "AWAITING_PAYMENT":
       return config?.readiness === "WON"
         ? "Close the deal to unlock the agreement."
         : "Waiting on the deposit before the agreement is prompted.";
     case "READY_TO_SEND":
-      return "Everything's in place — generate and send the agreement.";
+      return "Everything's in place - generate and send the agreement.";
     case "SENT":
-      return "Sent on WhatsApp — waiting for the student to open it.";
+      return "Sent on WhatsApp - waiting for the student to open it.";
     case "VIEWED":
-      return "The student has opened it but not signed yet — a nudge may help.";
+      return "The student has opened it but not signed yet - a nudge may help.";
     case "SIGNED":
-      return "Signed and sealed — deliver the countersigned copy to finish.";
+      return "Signed and sealed - deliver the countersigned copy to finish.";
     case "EXPIRED":
-      return "The signing link lapsed unsigned — re-issue a fresh one.";
+      return "The signing link lapsed unsigned - re-issue a fresh one.";
     case "COMPLETED":
-      return "Signed, sealed and the copy delivered — this one is done.";
+      return "Signed, sealed and the copy delivered - this one is done.";
   }
 }
 
@@ -194,19 +194,19 @@ export function agreementStateHint(state: AgreementState, config?: AgreementWork
 export type AgreementSummary = {
   state: AgreementState;
   config: AgreementWorkflowConfig;
-  /** The current agreement, when one exists — the id every "track / preview / send" action needs. */
+  /** The current agreement, when one exists - the id every "track / preview / send" action needs. */
   agreementId: string | null;
   documentNo: string | null;
   /** Which record a new agreement would be drafted against. */
   leadId: string | null;
   studentId: string | null;
-  /** Fields the CRM cannot answer — a non-empty list means one-click must route to the form. */
+  /** Fields the CRM cannot answer - a non-empty list means one-click must route to the form. */
   missing: string[];
 };
 
 // ───────────────────────────── Grouping (the picker) ─────────────────────────────
 
-/** The buckets the client picker groups candidates into — actionable ones first. */
+/** The buckets the client picker groups candidates into - actionable ones first. */
 export type AgreementGroup =
   | "READY"
   | "EXPIRED"
@@ -226,7 +226,7 @@ export const AGREEMENT_GROUP_ORDER: AgreementGroup[] = [
 
 export const AGREEMENT_GROUP_LABELS: Record<AgreementGroup, string> = {
   READY: "Ready to send",
-  EXPIRED: "Expired — re-issue",
+  EXPIRED: "Expired - re-issue",
   AWAITING_SIGNATURE: "Awaiting signature",
   AWAITING_PAYMENT: "Awaiting payment",
   SIGNED: "Signed & completed",
@@ -256,16 +256,16 @@ export function agreementGroup(state: AgreementState): AgreementGroup {
 export function agreementStateHeadline(state: AgreementState): string {
   switch (state) {
     case "READY_TO_SEND":
-      return "Agreement pending — ready to send";
+      return "Agreement pending - ready to send";
     case "AWAITING_PAYMENT":
-      return "Agreement — awaiting payment";
+      return "Agreement - awaiting payment";
     case "SENT":
     case "VIEWED":
-      return "Agreement — awaiting signature";
+      return "Agreement - awaiting signature";
     case "SIGNED":
-      return "Agreement signed — deliver copy";
+      return "Agreement signed - deliver copy";
     case "EXPIRED":
-      return "Agreement expired — re-issue";
+      return "Agreement expired - re-issue";
     case "COMPLETED":
       return "Agreement completed";
     default:

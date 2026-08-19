@@ -9,7 +9,7 @@ import {
 } from "@/lib/resume-template";
 
 /**
- * Resume PDF — renders ResumeData through the founder's template (section order,
+ * Resume PDF - renders ResumeData through the founder's template (section order,
  * headings, accent colour, font, page size, photo/DOB toggles). Pure: takes the data
  * + config and returns a Buffer. Mirrors the DOCX generator so both exports match.
  */
@@ -106,7 +106,7 @@ function SectionBody({ id, d, s }: { id: ResumeSectionId; d: ResumeData; s: S })
                 </Text>
                 <Text style={s.itemMeta}>{dateRange(e.start, e.end, false)}</Text>
               </View>
-              {e.program || e.note ? <Text style={s.role}>{[e.program, e.note].filter(Boolean).join(" — ")}</Text> : null}
+              {e.program || e.note ? <Text style={s.role}>{[e.program, e.note].filter(Boolean).join(" - ")}</Text> : null}
             </View>
           ))}
         </>
@@ -122,7 +122,7 @@ function SectionBody({ id, d, s }: { id: ResumeSectionId; d: ResumeData; s: S })
     case "computer":
       return (
         <Text style={s.inline}>
-          {d.computerSkills.filter((c) => c.name).map((c) => `${c.name} — ${c.level}`).join("   ·   ")}
+          {d.computerSkills.filter((c) => c.name).map((c) => `${c.name} - ${c.level}`).join("   ·   ")}
         </Text>
       );
     case "personal":

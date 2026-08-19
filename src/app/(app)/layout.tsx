@@ -18,7 +18,7 @@ import { computeNotifications } from "@/server/notifications";
 /**
  * The two top-bar widgets are the slowest things in the shell: runway walks 3
  * months of expenses, and the notification centre runs the pending-payments,
- * gamification and funnel joins. Awaiting them in the layout blocked EVERY page —
+ * gamification and funnel joins. Awaiting them in the layout blocked EVERY page -
  * the route's own loading.tsx could not even paint until they resolved. Each now
  * streams inside its own Suspense boundary, so the shell and the page skeleton
  * render immediately and the pills fill in when their data lands.
@@ -35,13 +35,13 @@ async function BellSlot({ role, userId }: { role: AppRole; userId: string }) {
 
 /**
  * The telecaller's once-a-day "N calls to make today" greeting. Renders nothing for everyone
- * else — it resolves the signed-in person's TeamProfile and bails unless they're an actual
+ * else - it resolves the signed-in person's TeamProfile and bails unless they're an actual
  * caller, because "telecaller" is a logVariant and no role check can stand in for it.
  * Suspended like the other slots so it never delays the shell.
  */
 async function CallsGreetingSlot({ userId }: { userId: string }) {
   // Identity FIRST, and alone. This slot renders on every page in the app, and for everyone who
-  // is not a caller — most of the org — it renders nothing at all. It used to reach that
+  // is not a caller - most of the org - it renders nothing at all. It used to reach that
   // conclusion by building the entire telecaller desk: 500 leads with nested call lookups, a
   // month of CallLog rows, all goals. One indexed row now answers "should this render", and the
   // count below runs only for the people it actually renders for.
@@ -65,19 +65,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await requireSession();
   const accessible = (await visibleSections(session.role, session.overrides))
     // Admin technically has access to everything, but the student portal is a
-    // student-only surface — Admin reviews students via /students instead.
+    // student-only surface - Admin reviews students via /students instead.
     .filter((s) => s.key !== "my-journey" || session.role === "STUDENT");
 
   /**
    * Two lists, because they answer two different questions.
    *
-   * `accessible` is what the viewer may OPEN — it feeds `SectionAccessProvider`, so a cross-link
+   * `accessible` is what the viewer may OPEN - it feeds `SectionAccessProvider`, so a cross-link
    * into a section they hold is never stripped. `items` is what the SIDEBAR LISTS, which drops
    * `offRail` sections: Opportunities and Outreach are surfaced on Pipeline, and listing them on
    * the rail as well showed a telecaller five doors into one job.
    *
    * Deriving the rail from the access list (rather than the other way round) is what keeps an
-   * off-rail section reachable — the previous shape fed the provider from the rail, so removing
+   * off-rail section reachable - the previous shape fed the provider from the rail, so removing
    * an item from the sidebar would also have broken every link to it.
    */
   const items = accessible
@@ -98,7 +98,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
      * It started per-page (Finance, then the dashboard), which broke the moment the notification
      * BELL needed the same currency: the bell lives in this shell, outside any page, so it fell
      * back to INR while the page beside it showed euros. Two providers would have been worse than
-     * one — they read the same localStorage key but hold separate state, so flipping the toggle on
+     * one - they read the same localStorage key but hold separate state, so flipping the toggle on
      * a page would leave the bell on its old currency until a reload.
      *
      * Emits no DOM node, so wrapping the shell changes no layout.

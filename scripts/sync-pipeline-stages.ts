@@ -1,7 +1,7 @@
 /**
  * Shape the default board's columns into the twelve live Synamate stages, and re-file the cards.
  *
- * The columns ONLY. Unlike `npm run db:crm`, this never creates opportunities — so it is the safe
+ * The columns ONLY. Unlike `npm run db:crm`, this never creates opportunities - so it is the safe
  * thing to run against production when the board has drifted from Synamate, without also filing
  * twenty thousand leads onto it as a side effect.
  *
@@ -11,10 +11,10 @@
  *   npm run db:pipeline-sync -- --dry-run    # print the current columns, change nothing
  *   npm run db:pipeline-sync                 # apply
  *
- * `--conditions=react-server` is REQUIRED (the npm script supplies it) — this imports a
+ * `--conditions=react-server` is REQUIRED (the npm script supplies it) - this imports a
  * `server-only` module, which plain tsx refuses to load.
  *
- * Reads DATABASE_URL from the environment — CHECK WHICH DATABASE THAT IS before running.
+ * Reads DATABASE_URL from the environment - CHECK WHICH DATABASE THAT IS before running.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -44,7 +44,7 @@ async function main() {
   console.log(`Default pipeline: ${pipeline.name}\n`);
   console.log(`Current columns (${before.length}):`);
   for (const s of before) {
-    console.log(`  ${s.name.padEnd(34)} ${String(s.legacyStage ?? "— unmapped —").padEnd(20)} ${s.paymentPlan ?? ""}  (${s._count.opps} cards)`);
+    console.log(`  ${s.name.padEnd(34)} ${String(s.legacyStage ?? "- unmapped -").padEnd(20)} ${s.paymentPlan ?? ""}  (${s._count.opps} cards)`);
   }
 
   if (dryRun) {

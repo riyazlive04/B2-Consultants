@@ -1,5 +1,5 @@
 /**
- * Workflow dry run — projection tests.
+ * Workflow dry run - projection tests.
  *
  * The dry run's only job is to tell the truth about what the live engine would do, so these
  * tests are written against `server/automation.ts`'s actual semantics, not against what a
@@ -65,7 +65,7 @@ function input(over: Partial<DryRunInput> & { actions: WorkflowAction[] }): DryR
 describe("matchesTriggerConfig", () => {
   const ev = (o: Partial<DryRunEvent>): DryRunEvent => ({ leadId: "l1", at: ist(9), ...o });
 
-  test("an empty config matches everything — 'any form', 'any tag'", () => {
+  test("an empty config matches everything - 'any form', 'any tag'", () => {
     assert.equal(matchesTriggerConfig("FORM_SUBMITTED", {}, ev({ formId: "f9" })), true);
     assert.equal(matchesTriggerConfig("TAG_ADDED", {}, ev({ tag: "vip" })), true);
     assert.equal(matchesTriggerConfig("STAGE_CHANGED", {}, ev({ stage: "WON" })), true);
@@ -159,7 +159,7 @@ describe("enrollment", () => {
 
   test("events are projected in time order regardless of input order", () => {
     // Fed newest-first (the order a `orderBy: desc` query returns) the gate must still see
-    // 09:00 as the first run — otherwise the blocked/enrolled split inverts.
+    // 09:00 as the first run - otherwise the blocked/enrolled split inverts.
     const r = simulateWorkflow(
       input({
         actions: [act({ type: "WAIT", waitMinutes: 1440 })],
@@ -198,7 +198,7 @@ describe("sends", () => {
     assert.match(r.sample[0].steps[0].detail, /not configured/);
   });
 
-  test("no email address means unreachable — and the run continues to the next step", () => {
+  test("no email address means unreachable - and the run continues to the next step", () => {
     const r = simulateWorkflow(
       input({
         actions: [...oneEmail, act({ type: "ADD_TAG", tag: "emailed" })],
@@ -215,7 +215,7 @@ describe("sends", () => {
     assert.equal(sms.messages.nothingToSend, 1);
     assert.equal(sms.messages.delivered.sms, 0);
 
-    // The engine defaults the subject and posts the (empty) body — faithful, if odd.
+    // The engine defaults the subject and posts the (empty) body - faithful, if odd.
     const email = simulateWorkflow(input({ actions: [act({ type: "SEND_EMAIL", body: "" })] }));
     assert.equal(email.messages.delivered.email, 1);
   });
@@ -368,7 +368,7 @@ describe("IF_TAG", () => {
     assert.equal(r.sample[0].cutShort, false);
   });
 
-  test("a cycle is capped, flagged, and warned about — never run forever", () => {
+  test("a cycle is capped, flagged, and warned about - never run forever", () => {
     const r = simulateWorkflow(
       input({
         // step 1 always jumps back to step 0: an infinite loop in the live engine, which fails

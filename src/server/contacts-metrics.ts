@@ -15,7 +15,7 @@ import { ACTIVE } from "@/lib/soft-delete";
 export type ContactRow = {
   id: string;
   name: string;
-  /** Null since the Synamate import — thousands of contacts arrived with an email but no number. */
+  /** Null since the Synamate import - thousands of contacts arrived with an email but no number. */
   phone: string | null;
   email: string | null;
   company: string | null;
@@ -35,7 +35,7 @@ export type ContactListFilters = {
 };
 
 // A real page size, not a silent-truncation cap: every row beyond this is still reachable via
-// nextCursor — nothing is ever dropped on the floor the way the old LIST_CAP=1000 dropped row
+// nextCursor - nothing is ever dropped on the floor the way the old LIST_CAP=1000 dropped row
 // 1001+ with no way to reach it. BUILD_CHECKLIST.md §3.
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 500;
@@ -44,7 +44,7 @@ export type ContactsListOpts = {
   search?: string;
   tagId?: string;
   ownerId?: string;
-  /** Raw strings from the URL — validated against the real enum before use, invalid/unknown
+  /** Raw strings from the URL - validated against the real enum before use, invalid/unknown
    *  values are just ignored rather than throwing (a stale bookmark shouldn't 500 the page). */
   stage?: string;
   source?: string;
@@ -62,7 +62,7 @@ export type ContactsListResult = {
   /** Id to pass as `cursor` for the next page, or null if this is the last page. */
   nextCursor: string | null;
   hasMore: boolean;
-  /** Count of rows matching the current filters (not the whole table) — powers the
+  /** Count of rows matching the current filters (not the whole table) - powers the
    *  "Showing X–Y of Z" pagination notice. */
   filteredTotal: number;
 };
@@ -94,7 +94,7 @@ function dateRangeFilter(from?: string, to?: string): Prisma.DateTimeFilter | un
  * This is the whole point of the export API: the previous export was a client-side dump of the
  * rows already on screen, so "download all leads for July" produced whatever subset of July had
  * fitted in the current page. Sharing the `where` builder is what makes the file and the screen
- * describe the same set — and keeps them describing the same set when a filter is added later.
+ * describe the same set - and keeps them describing the same set when a filter is added later.
  */
 export function contactsWhere(opts: ContactsListOpts): Prisma.LeadWhereInput {
   const search = opts.search?.trim();
@@ -155,7 +155,7 @@ function toContactRow(l: Prisma.LeadGetPayload<{ select: typeof CONTACT_ROW_SELE
 
 /**
  * Contacts list, newest first, filtered server-side (search text / tag / owner / stage / source /
- * city / date range) and paginated with a real keyset cursor — replaces the old LIST_CAP=1000
+ * city / date range) and paginated with a real keyset cursor - replaces the old LIST_CAP=1000
  * flat dump. Ordered by `createdAt desc, id desc` so the cursor (on the unique `id`) is stable
  * even when many leads share a `createdAt`.
  */
@@ -173,10 +173,10 @@ export async function getContactsList(opts: ContactsListOpts): Promise<ContactsL
     });
 
   const [leads, filteredTotal] = await Promise.all([
-    // A bookmarked/shared `?cursor=` can go stale (that contact was since deleted) — Prisma
+    // A bookmarked/shared `?cursor=` can go stale (that contact was since deleted) - Prisma
     // throws on a cursor row that no longer exists. Falling back to page 1 beats a 500 for
     // what's really just an expired link. Any other failure (e.g. a real DB error) still
-    // propagates — only a cursor lookup gets a retry.
+    // propagates - only a cursor lookup gets a retry.
     findPage(opts.cursor).catch((err) => {
       if (!opts.cursor) throw err;
       return findPage(undefined);
@@ -232,7 +232,7 @@ export type TimelineEvent = {
 export type ContactDetail = {
   id: string;
   name: string;
-  /** Null since the Synamate import — see ContactRow.phone. */
+  /** Null since the Synamate import - see ContactRow.phone. */
   phone: string | null;
   email: string | null;
   city: string | null;
@@ -309,7 +309,7 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
       outcomes: { orderBy: { callDate: "desc" }, take: 50 },
       bookings: { include: { slot: { select: { startsAt: true } } }, orderBy: { createdAt: "desc" }, take: 50 },
       /**
-       * The stored answers behind the band score — ER v2 Track D's `LeadAnswer` rows.
+       * The stored answers behind the band score - ER v2 Track D's `LeadAnswer` rows.
        *
        * Pinned to the QUESTION VERSION that was answered, so re-tuning a question later cannot
        * rewrite the reason this person was called. Ordered by the catalogue's own order so the
@@ -439,11 +439,11 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
       valueDisplay: `${formatInrMinor(o.valueInrMinor)} · ${formatEurMinor(o.valueEurMinor)}`,
     })),
     /**
-     * The band score, resolved by the app's single rule — the BOOKING's score where one exists,
+     * The band score, resolved by the app's single rule - the BOOKING's score where one exists,
      * otherwise the LEAD's own (the landing page's answers, taken at opt-in).
      *
      * This screen showed no score at all. It is the "client section" a specialist opens before a
-     * call, and the landing page had been collecting these answers the whole time — so the one
+     * call, and the landing page had been collecting these answers the whole time - so the one
      * place the score was most useful was the one place it never appeared.
      *
      * Null means NOT SCORED, and the UI must render it as that, never as zero.

@@ -18,7 +18,7 @@ import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
- * The marketing website — pages, shared header/footer, theme and nav.
+ * The marketing website - pages, shared header/footer, theme and nav.
  *
  * Every write here is gated on `sites.manage`, NOT on the section alone. Reaching /sites is a read
  * decision; publishing is an outward-facing one that changes what every ad click lands on, so it
@@ -140,7 +140,7 @@ export async function updateSiteSettings(
 }
 
 /**
- * Attach the real hostname. Separate from updateSiteSettings because this is the DNS cut-over —
+ * Attach the real hostname. Separate from updateSiteSettings because this is the DNS cut-over -
  * the single most consequential switch in the project, and it should read like one in the log.
  */
 export async function setSiteDomain(id: string, domain: string | null): Promise<ActionResult> {
@@ -214,13 +214,13 @@ export async function createPage(siteId: string, title: string, path: string): P
     where: { siteId_path: { siteId, path: p } },
     select: { id: true, deletedAt: true },
   });
-  // A soft-deleted page still owns its path — say so, rather than failing on a unique constraint
+  // A soft-deleted page still owns its path - say so, rather than failing on a unique constraint
   // with a message nobody can act on.
   if (clash) {
     return {
       ok: false,
       error: clash.deletedAt
-        ? `${p} belongs to a deleted page — restore it, or pick another path`
+        ? `${p} belongs to a deleted page - restore it, or pick another path`
         : `${p} is already in use`,
     };
   }
@@ -244,7 +244,7 @@ export async function createPage(siteId: string, title: string, path: string): P
  * Save a page body, snapshotting the previous content first.
  *
  * The revision is written in the SAME transaction as the update: a snapshot that can be missing
- * when the save succeeds is not a safety net, and this site takes paid traffic — a bad edit needs
+ * when the save succeeds is not a safety net, and this site takes paid traffic - a bad edit needs
  * a guaranteed way back, not a usually-there one.
  */
 export async function savePageSections(
@@ -387,7 +387,7 @@ export async function togglePublishPage(pageId: string): Promise<ActionResult> {
 /**
  * Soft delete. The row is kept because its revisions are the only record of what the page said,
  * and because an accidental delete of a live marketing page is exactly the mistake worth being
- * able to undo. The path stays claimed — see createPage.
+ * able to undo. The path stays claimed - see createPage.
  */
 export async function deletePage(pageId: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("sites.manage");
@@ -500,7 +500,7 @@ export async function saveSharedSection(
   const clean = normaliseSections(blocks);
   if (sectionsTooBig(clean)) return { ok: false, error: "This section is too large to save" };
 
-  // HEADER and FOOTER are singletons per site — there is one header, and "save the header" must
+  // HEADER and FOOTER are singletons per site - there is one header, and "save the header" must
   // mean replace it, not accumulate a second one nobody can see. REUSABLE blocks are many.
   const existing =
     kind === "REUSABLE"

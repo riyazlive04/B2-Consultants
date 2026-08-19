@@ -21,7 +21,7 @@ import {
 } from "./outreach";
 
 /**
- * Outreach SOP — server actions.
+ * Outreach SOP - server actions.
  *
  * Every action that changes a status records WHO and WHEN (checklist §S: "every status change is
  * timestamped + attributed to a user"). The step log is the audit trail; nothing here mutates a
@@ -41,7 +41,7 @@ function fail(error: string): ActionResult {
 const markSentSchema = z.object({ stepLogId: z.string().min(1) });
 
 /**
- * "I sent it." The default path — the SOP is human-executed and this is the specialist saying so.
+ * "I sent it." The default path - the SOP is human-executed and this is the specialist saying so.
  * Re-rendering at mark time (rather than trusting a body posted from the browser) keeps the audit
  * record honest: what we store is what the server would have sent.
  */
@@ -55,7 +55,7 @@ export async function markStepSent(form: FormData): Promise<ActionResult> {
     select: { id: true, journeyId: true, step: true, status: true },
   });
   if (!log) return fail("Step not found");
-  // Idempotency at the action layer too — a double-click must not double-log.
+  // Idempotency at the action layer too - a double-click must not double-log.
   if (log.status !== "DUE") return fail(`This step is already ${log.status.toLowerCase()}`);
 
   const row = await getJourney(log.journeyId);
@@ -66,7 +66,7 @@ export async function markStepSent(form: FormData): Promise<ActionResult> {
   const { body, unresolved } = renderStep(row, log.step, specialist);
 
   if (unresolved.length) {
-    return fail(`Can't log this yet — ${unresolved.join(", ")} is still unresolved.`);
+    return fail(`Can't log this yet - ${unresolved.join(", ")} is still unresolved.`);
   }
 
   await markSent(log.id, body, session.user.id, null);
@@ -139,7 +139,7 @@ const CALL_OUTCOME_TEXT: Record<string, string> = { YES: "yes", NO: "no", NO_ANS
 /**
  * Log a call attempt and its Yes/No outcome (Steps 4, 8, 16).
  *
- * Checklist §H: a "NO" at Step 8 must end this lead's active follow-up cycle — that is the engine's
+ * Checklist §H: a "NO" at Step 8 must end this lead's active follow-up cycle - that is the engine's
  * job (`nextPhase` reads the outcome), which `refreshJourney` applies below. Checklist §N: both
  * Step 16 attempts must be logged before the cancellation unlocks, which is why the two attempts
  * are separate steps rather than a counter.
@@ -171,7 +171,7 @@ export async function logCallOutcome(form: FormData): Promise<ActionResult> {
     },
   });
 
-  // A verbal YES at a Step 16 confirmation call is a confirmation — it stops the cancellation
+  // A verbal YES at a Step 16 confirmation call is a confirmation - it stops the cancellation
   // ladder exactly as a WhatsApp "YES" would.
   if (
     parsed.data.outcome === "YES" &&
@@ -190,7 +190,7 @@ export async function logCallOutcome(form: FormData): Promise<ActionResult> {
     section: "outreach",
     entityType: "OutreachStepLog",
     entityId: log.id,
-    summary: `Logged a call with ${log.journey.lead.name} for "${STEP_BY_KEY[log.step].label}" — ${CALL_OUTCOME_TEXT[parsed.data.outcome]}`,
+    summary: `Logged a call with ${log.journey.lead.name} for "${STEP_BY_KEY[log.step].label}" - ${CALL_OUTCOME_TEXT[parsed.data.outcome]}`,
     meta: { step: log.step, outcome: parsed.data.outcome, journeyId: log.journeyId },
   });
 
@@ -205,7 +205,7 @@ const contactedSchema = z.object({ journeyId: z.string().min(1), at: z.string().
 /**
  * Step 2's "Time Contacted". The SOP has the specialist type this in IST; the column is a UTC
  * instant, so the browser sends an IST wall-clock and we convert with the fixed +05:30 offset
- * (India has no DST, so this is exact — same approach as dates.ts:istWallToUtc).
+ * (India has no DST, so this is exact - same approach as dates.ts:istWallToUtc).
  */
 export async function setContactedAt(form: FormData): Promise<ActionResult> {
   const session = await requireSection("outreach");
@@ -217,7 +217,7 @@ export async function setContactedAt(form: FormData): Promise<ActionResult> {
 
   let when = new Date();
   if (parsed.data.at) {
-    // datetime-local gives "2026-07-15T14:30" with no zone — the specialist means IST.
+    // datetime-local gives "2026-07-15T14:30" with no zone - the specialist means IST.
     const d = new Date(`${parsed.data.at}:00+05:30`);
     if (Number.isNaN(d.getTime())) return fail("That isn't a valid date/time");
     when = d;
@@ -227,7 +227,7 @@ export async function setContactedAt(form: FormData): Promise<ActionResult> {
     where: { id: parsed.data.journeyId },
     data: { contactedAt: when },
   });
-  // Keep the CRM's own speed-to-lead column in step — it feeds the pipeline's speed pill.
+  // Keep the CRM's own speed-to-lead column in step - it feeds the pipeline's speed pill.
   const j = await prisma.outreachJourney.findUnique({
     where: { id: parsed.data.journeyId },
     select: { leadId: true, lead: { select: { name: true } } },
@@ -251,13 +251,13 @@ export async function setContactedAt(form: FormData): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Step 10, on demand — the "check now" button next to a prospect. */
+/** Step 10, on demand - the "check now" button next to a prospect. */
 export async function checkBookingNow(form: FormData): Promise<ActionResult> {
   const session = await requireSection("outreach");
   const journeyId = String(form.get("journeyId") ?? "");
   if (!journeyId) return fail("Missing journey");
 
-  // runBookingCheck answers "is it booked?", not "did this press link it" — it returns true for an
+  // runBookingCheck answers "is it booked?", not "did this press link it" - it returns true for an
   // already-linked journey without writing. The before-state is what tells a fresh link from a no-op.
   const before = await prisma.outreachJourney.findUnique({
     where: { id: journeyId },
@@ -287,7 +287,7 @@ const qualifySchema = z.object({
 });
 
 /**
- * Step 11/12 — record the Qualified verdict.
+ * Step 11/12 - record the Qualified verdict.
  *
  * The engine already derives this from BANT automatically; this action exists for the override the
  * SOP implies ("evaluate the data from the appointment booking sheet"). Either way it is
@@ -323,7 +323,7 @@ export async function setQualified(form: FormData): Promise<ActionResult> {
     section: "outreach",
     entityType: "OutreachJourney",
     entityId: parsed.data.journeyId,
-    summary: `Recorded the Qualified verdict for ${row.lead.name} — ${parsed.data.qualified}`,
+    summary: `Recorded the Qualified verdict for ${row.lead.name} - ${parsed.data.qualified}`,
     meta: { qualified: parsed.data.qualified, bantScoreAtQual: row.booking?.bantAvg ?? null },
   });
 
@@ -337,7 +337,7 @@ const assignSchema = z.object({
   respDiscoId: z.string().optional(),
 });
 
-/** Step 12 — the two Key Metrics assignment dropdowns. */
+/** Step 12 - the two Key Metrics assignment dropdowns. */
 export async function assignResponsibilities(form: FormData): Promise<ActionResult> {
   const session = await requireSection("outreach");
   const parsed = assignSchema.safeParse({
@@ -365,7 +365,7 @@ export async function assignResponsibilities(form: FormData): Promise<ActionResu
     section: "outreach",
     entityType: "OutreachJourney",
     entityId: j.id,
-    summary: `Assigned ${j.lead.name}'s outreach — touchpoint ${j.respTouchpoint?.name ?? "nobody"}, discovery ${j.respDisco?.name ?? "nobody"}`,
+    summary: `Assigned ${j.lead.name}'s outreach - touchpoint ${j.respTouchpoint?.name ?? "nobody"}, discovery ${j.respDisco?.name ?? "nobody"}`,
     meta: { respTouchpointId: j.respTouchpointId, respDiscoId: j.respDiscoId },
   });
 
@@ -376,10 +376,10 @@ export async function assignResponsibilities(form: FormData): Promise<ActionResu
 const confirmSchema = z.object({ journeyId: z.string().min(1), confirmed: z.enum(["YES", "NO"]) });
 
 /**
- * Steps 14/15 — "WhatsApp Confirmed".
+ * Steps 14/15 - "WhatsApp Confirmed".
  *
  * Only an explicit prospect confirmation sets this (checklist §N). Note the app's WATI webhook
- * treats ANY inbound reply as a confirmation; that is fixed separately (see wati/webhook) — but
+ * treats ANY inbound reply as a confirmation; that is fixed separately (see wati/webhook) - but
  * this manual path is the authoritative one, because the specialist has read the reply.
  */
 export async function setWhatsappConfirmed(form: FormData): Promise<ActionResult> {
@@ -411,7 +411,7 @@ export async function setWhatsappConfirmed(form: FormData): Promise<ActionResult
     entityId: j.id,
     summary: yes
       ? `${j.lead.name} confirmed their Discovery call`
-      : `${j.lead.name} did not confirm their Discovery call — flagged red`,
+      : `${j.lead.name} did not confirm their Discovery call - flagged red`,
     meta: { whatsappConfirmed: yes },
   });
 
@@ -419,7 +419,7 @@ export async function setWhatsappConfirmed(form: FormData): Promise<ActionResult
   return { ok: true };
 }
 
-/** Steps 19/20 — "Sales Call Confirmed". */
+/** Steps 19/20 - "Sales Call Confirmed". */
 export async function setSalesCallConfirmed(form: FormData): Promise<ActionResult> {
   const session = await requireSection("outreach");
   const parsed = confirmSchema.safeParse({
@@ -447,7 +447,7 @@ export async function setSalesCallConfirmed(form: FormData): Promise<ActionResul
     entityId: j.id,
     summary: yes
       ? `${j.lead.name} confirmed their SSS call`
-      : `${j.lead.name} did not confirm their SSS call — flagged red`,
+      : `${j.lead.name} did not confirm their SSS call - flagged red`,
     meta: { salesCallConfirmed: yes },
   });
 
@@ -462,10 +462,10 @@ const hqSchema = z.object({
 });
 
 /**
- * Step 18 — the Discovery Specialist's "Highly Qualified" verdict.
+ * Step 18 - the Discovery Specialist's "Highly Qualified" verdict.
  *
  * THE role boundary the checklist calls out (§P: "writable only by Discovery Specialist role
- * (permission check)"). Guarded by the `outreach.qualify` capability — Admin grants it to Asma,
+ * (permission check)"). Guarded by the `outreach.qualify` capability - Admin grants it to Asma,
  * and an Outreach Specialist holding only `requireSection("outreach")` is refused here.
  *
  * This is deliberately a hard error rather than a redirect: the outreach specialist can SEE the
@@ -506,7 +506,7 @@ export async function setHighlyQualified(form: FormData): Promise<ActionResult> 
     entityType: "OutreachJourney",
     entityId: j.id,
     summary: yes
-      ? `Marked ${j.lead.name} Highly Qualified${sssAt ? ` — SSS on ${formatDateTimeInZone(sssAt, "Asia/Kolkata")} IST` : ""}`
+      ? `Marked ${j.lead.name} Highly Qualified${sssAt ? ` - SSS on ${formatDateTimeInZone(sssAt, "Asia/Kolkata")} IST` : ""}`
       : `Marked ${j.lead.name} not Highly Qualified`,
     meta: { highlyQualified: yes, sssAt: sssAt?.toISOString() ?? null },
   });
@@ -522,7 +522,7 @@ export async function setHighlyQualified(form: FormData): Promise<ActionResult> 
  */
 const zoomSchema = z.object({ journeyId: z.string().min(1), zoomLink: optionalRule("url") });
 
-/** Cross-cutting §R — the Zoom link the confirmation templates need. */
+/** Cross-cutting §R - the Zoom link the confirmation templates need. */
 export async function setZoomLink(form: FormData): Promise<ActionResult> {
   const session = await requireSection("outreach");
   const parsed = zoomSchema.safeParse({
@@ -563,19 +563,19 @@ export async function setZoomLink(form: FormData): Promise<ActionResult> {
 
 // ─────────────────────────────── Admin ───────────────────────────────
 
-/** "Run the engine now" — the same entry point the cron hits. */
+/** "Run the engine now" - the same entry point the cron hits. */
 export async function runOutreachNow(): Promise<ActionResult> {
   const session = await requireAdmin();
   const run = await runDueOutreach();
 
-  // A disabled engine returns early having written nothing — that is a no-op, not an action taken.
+  // A disabled engine returns early having written nothing - that is a no-op, not an action taken.
   if (run.enabled) {
     await logActivity(session, {
       action: "outreach.engine.run",
       section: "outreach",
       entityType: "OutreachConfig",
       entityId: "outreachConfig",
-      summary: `Ran the outreach engine — ${run.scanned} scanned, ${run.autoSent} sent, ${run.materialised} steps raised`,
+      summary: `Ran the outreach engine - ${run.scanned} scanned, ${run.autoSent} sent, ${run.materialised} steps raised`,
       meta: {
         scanned: run.scanned, materialised: run.materialised, superseded: run.superseded,
         autoSent: run.autoSent, autoFailed: run.autoFailed, phaseChanges: run.phaseChanges,
@@ -608,14 +608,14 @@ const slaHours = (label: string) => blankToUndefined(intInRange(1, 720, label));
 /**
  * The settings form, re-checked server-side.
  *
- * A BLANK box still means "leave this as it is" — the inputs are prefilled, so clearing one is how
+ * A BLANK box still means "leave this as it is" - the inputs are prefilled, so clearing one is how
  * the founder says "don't touch it", and that behaviour predates this schema. What changed is the
  * other half: a value that IS present must now be a bounded whole number instead of being silently
  * swapped for the shipped default. A settings screen that saves a different number than the one on
  * screen is worse than one that refuses, and nothing bounded these from above at all before.
  *
  * `defaultSpecialistName` is deliberately NOT `rule("name")`: it fills `[Your Name]` when no
- * touchpoint owner is assigned, and it ships as the COMPANY name "B2 Consultants" — the person-name
+ * touchpoint owner is assigned, and it ships as the COMPANY name "B2 Consultants" - the person-name
  * rule forbids digits and would reject its own default. It is bounded free text.
  */
 const outreachConfigSchema = z.object({
@@ -658,14 +658,14 @@ export async function saveOutreachConfig(form: FormData): Promise<ActionResult> 
     autoSend,
     defaultSpecialistName: d.defaultSpecialistName ?? current.defaultSpecialistName,
     maxPerRun: num(d.maxPerRun, current.maxPerRun),
-    // Two checkboxes, so an absent key means unticked — not "leave as it was". That is the right
+    // Two checkboxes, so an absent key means unticked - not "leave as it was". That is the right
     // reading for a switch that arms unattended messaging: the only way to keep it on is to
     // deliberately leave it ticked when saving.
     firstCallMode: form.get("firstCallAfterCheck") === "on" ? "after_check" : "immediate",
     instantIntro: {
       enabled: form.get("instantIntro") === "on",
       // The cap input is hidden while instant sending is off, so a blank must keep the stored
-      // value rather than reset it — otherwise toggling the feature off and on would silently
+      // value rather than reset it - otherwise toggling the feature off and on would silently
       // discard a founder's chosen limit.
       maxPerHour: num(d.instantIntroMaxPerHour, current.instantIntro.maxPerHour),
     },
@@ -693,7 +693,7 @@ export async function saveOutreachConfig(form: FormData): Promise<ActionResult> 
       section: "outreach",
       entityType: "AppSetting",
       entityId: "outreachConfig",
-      summary: `Changed the outreach settings — ${changed}${cfg.enabled === current.enabled ? "" : cfg.enabled ? " (engine ON)" : " (engine OFF)"}`,
+      summary: `Changed the outreach settings - ${changed}${cfg.enabled === current.enabled ? "" : cfg.enabled ? " (engine ON)" : " (engine OFF)"}`,
       meta: diff,
     });
   }

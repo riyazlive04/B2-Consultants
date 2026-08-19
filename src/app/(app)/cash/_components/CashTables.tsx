@@ -2,7 +2,7 @@
 
 // Split out of cash/page.tsx (an async Server Component) for the same reason as
 // funnel/_components/FunnelTables.tsx: Column.cell/value are functions, and functions can't be
-// passed as props from a Server Component into DataTable ("use client") — Next.js throws at
+// passed as props from a Server Component into DataTable ("use client") - Next.js throws at
 // render time. Keeping the column definitions here, alongside DataTable, fixes it.
 
 import { DataTable, type Column } from "@/components/ui/DataTable";

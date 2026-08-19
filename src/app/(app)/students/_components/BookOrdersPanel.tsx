@@ -16,12 +16,12 @@ import { Modal } from "@/components/ui/Modal";
  *   token advance → confirm the level → vendor quotation → pay → courier.
  *
  * The "ready to release" flag is the reason this screen is worth opening. A DEFERRED order
- * whose student has since paid past the threshold is money sitting still — the release job
+ * whose student has since paid past the threshold is money sitting still - the release job
  * clears those on its own, but a human looking at this list should never be the last to know.
  */
 
 const STATUS_FLOW = [
-  { value: "DEFERRED", label: "Deferred — waiting on payment" },
+  { value: "DEFERRED", label: "Deferred - waiting on payment" },
   { value: "QUOTE_REQUESTED", label: "Quote requested" },
   { value: "QUOTED", label: "Quoted" },
   { value: "ORDERED", label: "Ordered" },
@@ -40,12 +40,12 @@ const STATUS_TONE: Record<string, string> = {
   CANCELLED: "border border-line bg-surface-2 text-ink-3",
 };
 
-const inr = (n: number | null) => (n === null ? "—" : `₹${n.toLocaleString("en-IN")}`);
+const inr = (n: number | null) => (n === null ? "-" : `₹${n.toLocaleString("en-IN")}`);
 
 /**
  * What is stopping this order going to the publisher, in the words of the thing to go and fix.
  *
- * Mirrors the server's own check (lib/book-order-message.ts), which stays authoritative — this
+ * Mirrors the server's own check (lib/book-order-message.ts), which stays authoritative - this
  * exists so the button explains itself instead of failing after a click. `order_ref` is never
  * listed: it is allocated on send, so it is not the user's to supply.
  */
@@ -117,7 +117,7 @@ export function BookOrdersPanel({
 
   /**
    * Message the publisher. A dry run rehearses every check and writes the row proving what WOULD
-   * have gone out, without calling WATI — the only safe way to try a real supplier message.
+   * have gone out, without calling WATI - the only safe way to try a real supplier message.
    */
   async function toPublisher(dryRun: boolean) {
     if (!editing) return;
@@ -138,7 +138,7 @@ export function BookOrdersPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-muted">
           Orders with the book publisher. An order releases once a student has paid{" "}
-          <strong>₹{thresholdRupees.toLocaleString("en-IN")}</strong> in total — the rule reads cash
+          <strong>₹{thresholdRupees.toLocaleString("en-IN")}</strong> in total - the rule reads cash
           actually collected, not the payment plan, so a reliable EMI payer gets their books.
         </p>
         <div className="flex gap-2">
@@ -157,7 +157,7 @@ export function BookOrdersPanel({
             {releasable.length} deferred order{releasable.length === 1 ? "" : "s"} now clear the threshold
           </p>
           <p className="mt-0.5 text-xs text-muted">
-            {releasable.map((r) => r.studentName).join(", ")} — these can go to the publisher.
+            {releasable.map((r) => r.studentName).join(", ")} - these can go to the publisher.
           </p>
         </div>
       )}
@@ -205,7 +205,7 @@ export function BookOrdersPanel({
                     )}
                   </td>
                   <td className="py-2 pr-4 text-ink-2">{inr(r.quotedRupees)}</td>
-                  <td className="py-2 pr-4 text-ink-2">{r.vendorName ?? "—"}</td>
+                  <td className="py-2 pr-4 text-ink-2">{r.vendorName ?? "-"}</td>
                   <td className="py-2 pr-4 text-ink-2">
                     {r.publisherMessageSent ? (
                       <>
@@ -218,11 +218,11 @@ export function BookOrdersPanel({
                         {r.orderRef && <span className="ml-1.5 text-xs text-muted">{r.orderRef}</span>}
                       </>
                     ) : r.publisherMessagedAt ? (
-                      // A row exists but nothing left the building — say so rather than showing
+                      // A row exists but nothing left the building - say so rather than showing
                       // a date that would read as "ordered".
                       <span className="text-xs text-warn">attempted</span>
                     ) : (
-                      <span className="text-xs text-ink-3">—</span>
+                      <span className="text-xs text-ink-3">-</span>
                     )}
                   </td>
                   <td className="py-2">
@@ -242,13 +242,13 @@ export function BookOrdersPanel({
           <Field label="Student">
             <Select name="studentId" options={students.map((s) => ({ value: s.id, label: s.fullName }))} />
           </Field>
-          <Field label="Level" hint="One order per level — take a fresh quote before each new level.">
+          <Field label="Level" hint="One order per level - take a fresh quote before each new level.">
             <Select name="level" options={levelOptions} />
           </Field>
           <Field label="Vendor" hint="Optional now; you can set it when the quote comes back.">
             <Select
               name="vendorId"
-              options={[{ value: "", label: "—" }, ...vendors.map((v) => ({ value: v.id, label: v.name }))]}
+              options={[{ value: "", label: "-" }, ...vendors.map((v) => ({ value: v.id, label: v.name }))]}
             />
           </Field>
           <Field label="Notes">
@@ -256,7 +256,7 @@ export function BookOrdersPanel({
           </Field>
           <p className="rounded-field border border-line bg-surface-2 px-3 py-2 text-xs text-muted">
             Whether this holds or goes straight to the publisher is decided by what the student
-            has already paid — you don&apos;t choose it here.
+            has already paid - you don&apos;t choose it here.
           </p>
           <FormError message={error} />
           <div className="flex justify-end gap-2">
@@ -296,7 +296,7 @@ export function BookOrdersPanel({
               <Select
                 name="vendorId"
                 defaultValue={editing.vendorId ?? ""}
-                options={[{ value: "", label: "—" }, ...vendors.map((v) => ({ value: v.id, label: v.name }))]}
+                options={[{ value: "", label: "-" }, ...vendors.map((v) => ({ value: v.id, label: v.name }))]}
               />
             </Field>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -320,7 +320,7 @@ export function BookOrdersPanel({
               <p className="mt-0.5 text-xs text-muted">
                 Sends the approved order template to{" "}
                 <strong>{editing.vendorName ?? "the vendor"}</strong>
-                {editing.vendorPhone ? ` on ${editing.vendorPhone}` : ""} — not to the student.
+                {editing.vendorPhone ? ` on ${editing.vendorPhone}` : ""} - not to the student.
               </p>
 
               <dl className="mt-2.5 space-y-1 text-xs">

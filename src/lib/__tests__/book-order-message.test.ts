@@ -29,7 +29,7 @@ const COMPLETE = {
 describe("the variable list is the contract with the approved template", () => {
   test("matches WHATSAPP_AVAILABLE_VARS.BOOK_ORDER exactly", () => {
     // These drifting apart is precisely what produces "template expects {{ship_to}}, which this
-    // touchpoint cannot supply" at send time — after the button has been pressed.
+    // touchpoint cannot supply" at send time - after the button has been pressed.
     assert.deepEqual([...BOOK_ORDER_VARS], [...WHATSAPP_AVAILABLE_VARS.BOOK_ORDER]);
   });
 
@@ -40,7 +40,7 @@ describe("the variable list is the contract with the approved template", () => {
     );
   });
 
-  test("carries NO `name` variable — the recipient is not the subject", () => {
+  test("carries NO `name` variable - the recipient is not the subject", () => {
     // Every other touchpoint addresses the reader as the person the record is about. Adding
     // `name` here would invite exactly that mistake.
     assert.ok(!(BOOK_ORDER_VARS as readonly string[]).includes("name"));
@@ -81,7 +81,7 @@ describe("order references", () => {
     assert.equal(nextBookOrderRef(["BO-2026-0003", "BO-2026-0001", "BO-2026-0002"], 2026), "BO-2026-0004");
   });
 
-  test("gaps are NOT reused — a cancelled order does not hand its number on", () => {
+  test("gaps are NOT reused - a cancelled order does not hand its number on", () => {
     assert.equal(nextBookOrderRef(["BO-2026-0001", "BO-2026-0009"], 2026), "BO-2026-0010");
   });
 
@@ -108,7 +108,7 @@ describe("building the message variables", () => {
     });
   });
 
-  test("every declared variable is filled — no blanks reach WATI", () => {
+  test("every declared variable is filled - no blanks reach WATI", () => {
     const res = buildBookOrderVars(COMPLETE);
     assert.ok(res.ok);
     for (const v of BOOK_ORDER_VARS) {
@@ -116,14 +116,14 @@ describe("building the message variables", () => {
     }
   });
 
-  test("A MISSING SHIP-TO BLOCKS THE SEND — this is the one that ships books nowhere", () => {
+  test("A MISSING SHIP-TO BLOCKS THE SEND - this is the one that ships books nowhere", () => {
     const res = buildBookOrderVars({ ...COMPLETE, shipTo: null });
     assert.ok(!res.ok);
     assert.deepEqual(res.missing, ["ship_to"]);
     assert.match(res.message, /ship-to address/);
   });
 
-  test("whitespace is missing — a blank address passes a null check and still ships nowhere", () => {
+  test("whitespace is missing - a blank address passes a null check and still ships nowhere", () => {
     const res = buildBookOrderVars({ ...COMPLETE, shipTo: "   ", shipPhone: "\t" });
     assert.ok(!res.ok);
     assert.deepEqual(res.missing, ["ship_to", "ship_phone"]);
@@ -141,7 +141,7 @@ describe("building the message variables", () => {
     assert.match(res.message, /and/, "reads as a sentence, not a list of keys");
   });
 
-  test("values are trimmed — a trailing newline from a textarea is not sent to a supplier", () => {
+  test("values are trimmed - a trailing newline from a textarea is not sent to a supplier", () => {
     const res = buildBookOrderVars({ ...COMPLETE, shipTo: "  12 MG Road  \n" });
     assert.ok(res.ok);
     assert.equal(res.vars.ship_to, "12 MG Road");
@@ -155,7 +155,7 @@ describe("building the message variables", () => {
 });
 
 describe("the log summary", () => {
-  test("reads without a join — ref, level, student and publisher", () => {
+  test("reads without a join - ref, level, student and publisher", () => {
     const res = buildBookOrderVars(COMPLETE);
     assert.ok(res.ok);
     const summary = bookOrderBodySummary(res.vars);

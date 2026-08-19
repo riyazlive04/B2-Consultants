@@ -3,7 +3,7 @@
  * chart forms this product ships stays a deliberate, reviewable list rather than whatever each
  * page invented (docs/DESIGN_SYSTEM.md §5.8).
  *
- * Choosing between them is a data-shape question, not a taste one — see the header comment on
+ * Choosing between them is a data-shape question, not a taste one - see the header comment on
  * each component:
  *   TimeSeriesChart  ordered periods       line (direction) · area (magnitude) · column (compare)
  *   RankedBars       named categories      "which is biggest, and is it growing?"

@@ -1,9 +1,9 @@
 /**
- * Daily Log — the layer that turns a row of raw numbers into a readable activity entry.
+ * Daily Log - the layer that turns a row of raw numbers into a readable activity entry.
  *
  * A stored log is just per-variant integers (6 calls, 2 highly qualified, …). The timeline
  * needs each entry to *say* something: what happened, whether it was a good day, and why.
- * These helpers do exactly that, and NOTHING else — no I/O, no zod, no React — so both the
+ * These helpers do exactly that, and NOTHING else - no I/O, no zod, no React - so both the
  * server (deriving entries for a page) and the client (re-deriving nothing, just typing
  * against the shape) can import them without dragging server-only code into the browser.
  *
@@ -26,7 +26,7 @@ export type LogStatus = {
   key: LogStatusKey;
   label: string;
   tone: StatusTone;
-  /** One line of "why it matters" — the comparison that produced this status. */
+  /** One line of "why it matters" - the comparison that produced this status. */
   context: string;
 };
 
@@ -39,7 +39,7 @@ export type LogMetric = {
   short: string;
   /** Auto-captured from real activity rather than hand-typed. */
   auto: boolean;
-  /** The headline metric for the variant — the one the status is graded on. */
+  /** The headline metric for the variant - the one the status is graded on. */
   primary: boolean;
   /** Directional emphasis for the primary metric only. */
   emphasis?: "up" | "down";
@@ -72,7 +72,7 @@ export type LogEntry = {
   searchText: string;
 };
 
-/** The one metric each variant is graded on — its headline output. */
+/** The one metric each variant is graded on - its headline output. */
 export const PRIMARY_METRIC: Record<LogVariant, string> = {
   DISCOVERY_SPECIALIST: "discoveryCallsCompleted",
   APPOINTMENT_SETTER: "appointmentsSet",
@@ -107,7 +107,7 @@ export function metricsFor(
     list.push({
       key,
       value,
-      // "1 no-show", not "1 no-shows" — the chip reads as a sentence fragment
+      // "1 no-show", not "1 no-shows" - the chip reads as a sentence fragment
       unit: singular(LOG_FIELD_UNIT[key] ?? key, value),
       short: LOG_FIELD_SHORT[key] ?? key,
       auto: autoKeys.includes(key),
@@ -156,7 +156,7 @@ export function describeLog(variant: LogVariant, values: Record<string, number>)
     kept.push(`${n} ${n === 1 ? phrase[0] : phrase[1]}`);
   }
 
-  if (kept.length === 0) return "Logged the day — no numbers recorded.";
+  if (kept.length === 0) return "Logged the day - no numbers recorded.";
   if (kept.length === 1) return capitalize(kept[0]) + ".";
   return capitalize(kept.slice(0, -1).join(", ")) + ", and " + kept[kept.length - 1] + ".";
 }
@@ -193,7 +193,7 @@ export function deriveStatus(args: {
       key: "logged",
       label: "Logged",
       tone: "primary",
-      context: "First entries in — a baseline is building.",
+      context: "First entries in - a baseline is building.",
     };
   }
 
@@ -202,7 +202,7 @@ export function deriveStatus(args: {
       key: "quiet",
       label: "Quiet day",
       tone: "warn",
-      context: `No ${unit} against a ${refLabel} of ${round(ref)} — a blocker day?`,
+      context: `No ${unit} against a ${refLabel} of ${round(ref)} - a blocker day?`,
     };
   }
 
@@ -237,7 +237,7 @@ export function deriveStatus(args: {
     key: "belowpar",
     label: "Below par",
     tone: "bad",
-    context: `Well below your ${refText} — worth a look.`,
+    context: `Well below your ${refText} - worth a look.`,
   };
 }
 
@@ -287,7 +287,7 @@ const fmtMonth = new Intl.DateTimeFormat("en-GB", {
   month: "long", year: "numeric", timeZone: "Asia/Kolkata",
 });
 
-/** A stored log row, normalised — the only shape the derivation knows about. */
+/** A stored log row, normalised - the only shape the derivation knows about. */
 export type RawLog = {
   id: string;
   userId: string;

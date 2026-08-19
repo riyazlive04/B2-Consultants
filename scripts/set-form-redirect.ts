@@ -2,7 +2,7 @@
  * Point the landing-page opt-in form's "Watch now →" button at the next funnel step.
  *
  * The form had no `redirectUrl`, so `submitPublicForm` returned none and `PublicForm` fell through
- * to its inline success message — the prospect opted in and stayed on the landing page, never
+ * to its inline success message - the prospect opted in and stayed on the landing page, never
  * reaching the VSL they had just asked to watch.
  *
  * A ROOT-RELATIVE path on purpose: `window.location.href = "/p/..."` resolves against the current
@@ -30,7 +30,7 @@ async function main() {
     select: { id: true },
   });
   if (!step) {
-    console.error("No vsl step under vsl-funnel — refusing to redirect at a page that isn't there.");
+    console.error("No vsl step under vsl-funnel - refusing to redirect at a page that isn't there.");
     process.exit(1);
   }
 
@@ -47,7 +47,7 @@ async function main() {
    * …and file its opportunity into Fresh Optins.
    *
    * The earlier repair resolved this form's dead column through `boardColumnFor`, which at the
-   * time still mapped NEW_LEAD onto the DISCO_BOOKED column — so it landed on "Pre-Qualified &
+   * time still mapped NEW_LEAD onto the DISCO_BOOKED column - so it landed on "Pre-Qualified &
    * Confirmed". That is precisely the routing the founder asked to remove: an opt-in has not been
    * qualified and has no call confirmed. Matched on `legacyStage`, not on the name, so renaming
    * the column cannot break it.

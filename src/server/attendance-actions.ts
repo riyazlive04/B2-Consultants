@@ -12,7 +12,7 @@ import type { ActionResult } from "./finance-actions";
  * Marking the register.
  *
  * Guarded exactly like every other German Note write: Admin, or the TUTOR assigned to this
- * batch. The check is re-run here rather than trusted from the UI — a hidden button is never
+ * batch. The check is re-run here rather than trusted from the UI - a hidden button is never
  * the fence.
  */
 
@@ -55,7 +55,7 @@ export async function markAttendance(input: unknown): Promise<ActionResult> {
   if (!classSession) return { ok: false, error: "Session not found" };
   if (!(await canMark(session, classSession.batchId))) return { ok: false, error: "Not allowed" };
 
-  // Marking a class that hasn't happened yet is almost certainly a misclick on the wrong row —
+  // Marking a class that hasn't happened yet is almost certainly a misclick on the wrong row -
   // and a register full of absences for a future date would quietly turn every student red.
   // A small grace window lets a tutor mark during the session rather than only after it.
   if (classSession.startsAt.getTime() > Date.now() + 60 * 60 * 1000) {

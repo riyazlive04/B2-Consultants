@@ -100,7 +100,7 @@ export function SignCeremony({
         <h2 className="mt-3 font-display text-h1 text-ink">Agreement signed</h2>
         <p className="mx-auto mt-2 max-w-sm text-body text-ink-2">
           Thank you, {studentName.split(" ")[0]}. {documentNo} is now executed. Your countersigned copy is on
-          its way to you on WhatsApp — and you can take it now from here.
+          its way to you on WhatsApp - and you can take it now from here.
         </p>
         {/* The moment they most want the document is the moment they finish signing. The bytes are
             already sealed by the time this screen renders (the server seals inside the same write
@@ -258,7 +258,7 @@ export function SignCeremony({
                 value={declineReason}
                 onChange={(e) => setDeclineReason(e.target.value)}
                 rows={2}
-                // Free text — nothing is filtered. 500 matches declineAgreement, which silently
+                // Free text - nothing is filtered. 500 matches declineAgreement, which silently
                 // truncates there; without the cap the signer never learns half their reason went
                 // nowhere. The OTP boxes below get no kind: they already filter to digits.
                 maxLength={500}
@@ -362,8 +362,8 @@ function OtpInput({
   /**
    * The boxes are POSITIONAL and own their own state. Deriving them from the parent's compact
    * string would silently shuffle: clearing box 3 of "123456" joins to "12456", and box 4 would
-   * inherit box 5's digit. The parent only ever sees the join, which is short — and therefore
-   * correctly rejected — while any box is empty.
+   * inherit box 5's digit. The parent only ever sees the join, which is short - and therefore
+   * correctly rejected - while any box is empty.
    */
   const [digits, setDigits] = useState<string[]>(() =>
     Array.from({ length: 6 }, (_, i) => value[i] ?? ""),
@@ -410,7 +410,7 @@ function OtpInput({
             if (e.key === "Backspace") {
               e.preventDefault();
               const next = [...digits];
-              // Clear this box, or — when it is already empty — step back and clear that one.
+              // Clear this box, or - when it is already empty - step back and clear that one.
               const target = d ? i : Math.max(0, i - 1);
               next[target] = "";
               write(next);

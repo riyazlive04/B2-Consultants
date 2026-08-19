@@ -8,14 +8,14 @@ import { normalizeDomain } from "@/lib/whatsapp";
  * ── Why `x-forwarded-host` comes first ────────────────────────────────────────────
  * In production the app never sees the public hostname on `host`. Traefik terminates TLS and
  * forwards to Caddy, which forwards to the Next container, so `host` is whatever the last hop
- * addressed — a container name or `localhost:3000`. Reading it would record every prospect as
+ * addressed - a container name or `localhost:3000`. Reading it would record every prospect as
  * arriving from the internal network, and the WhatsApp domain gate would then be comparing
  * Ameen's real domains against a string no visitor has ever seen.
  *
  * ── This is trusted input, and that is acceptable HERE ────────────────────────────
  * A client can send any `x-forwarded-host` it likes. That matters for auth or for anything that
  * grants access; it does not matter for this, because the only thing the value can do is make
- * the domain gate MORE permissive for the sender's own record — and the gate already lets
+ * the domain gate MORE permissive for the sender's own record - and the gate already lets
  * unknown origins through. There is nothing to gain by forging it. Do not reuse this helper for
  * a decision where the host confers privilege.
  *

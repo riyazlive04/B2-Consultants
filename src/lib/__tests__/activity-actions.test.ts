@@ -1,12 +1,12 @@
 /**
- * Activity log — presentation rules and the IST clock.
+ * Activity log - presentation rules and the IST clock.
  *
- * Everything here is pure and takes its instant explicitly, so no fake timers and no DB —
+ * Everything here is pure and takes its instant explicitly, so no fake timers and no DB -
  * same approach as automation-quiet-hours.test.ts.
  *
  * The timestamp cases carry the weight. The founder's question is literally "what did Asma
  * do at 3pm", so a rendering that silently drifts by 5.5 hours answers it wrongly while
- * looking perfectly plausible — the failure mode this feature most needs to not have.
+ * looking perfectly plausible - the failure mode this feature most needs to not have.
  *
  * Run: npm test
  */
@@ -40,7 +40,7 @@ describe("activityVerb / activityKind", () => {
     assert.equal(activityKind("user.suspend"), "auth");
   });
 
-  test("an unknown verb is 'other', never a crash — a new action must ship without touching this file", () => {
+  test("an unknown verb is 'other', never a crash - a new action must ship without touching this file", () => {
     assert.equal(activityKind("widget.frobnicate"), "other");
     assert.equal(activityKind(""), "other");
   });
@@ -76,12 +76,12 @@ describe("IST rendering", () => {
     assert.equal(activityDate(at), "Fri, 17 Jul 2026");
   });
 
-  test("stamp is unambiguous — date, time to the second, and the zone", () => {
+  test("stamp is unambiguous - date, time to the second, and the zone", () => {
     assert.equal(activityStamp(at), "Fri, 17 Jul 2026 · 3:04:09 PM IST");
   });
 
   test("an instant late on an IST day still buckets to that IST day", () => {
-    // 18:29Z is 23:59 IST on the 17th — the same IST day, despite being 'today' in UTC too.
+    // 18:29Z is 23:59 IST on the 17th - the same IST day, despite being 'today' in UTC too.
     assert.equal(activityDayKey(new Date("2026-07-17T18:29:00Z")), "2026-07-17");
   });
 

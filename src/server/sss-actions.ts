@@ -22,7 +22,7 @@ import {
 /**
  * SSS calendar server actions. Slot management is gated on the `bookings` section (the same
  * operational area as discovery availability); changing the SSS owner/config is Admin-only. Every
- * action re-checks — a page guard doesn't protect a server action — and revalidates /bookings.
+ * action re-checks - a page guard doesn't protect a server action - and revalidates /bookings.
  */
 
 export type Result = { ok: true; message?: string } | { ok: false; error: string };
@@ -34,7 +34,7 @@ function firstError(e: z.ZodError): string {
 const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Bad date");
 const TIME = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Bad time");
 
-/** Whose calendar, when, and who is in it — the three things a slot summary needs to read. */
+/** Whose calendar, when, and who is in it - the three things a slot summary needs to read. */
 function slotContext(slotId: string) {
   return prisma.sssSlot.findUnique({
     where: { id: slotId },
@@ -104,7 +104,7 @@ export async function setSssOwnerAction(input: unknown): Promise<Result> {
       section: "bookings",
       entityType: "AppSetting",
       entityId: SSS_CONFIG_KEY,
-      summary: `Changed the SSS calendar settings — owner ${owner?.name ?? "unset"}, ${parsed.data.slotDurationMins} min slots, reschedule within ${parsed.data.rescheduleWithinDays} days`,
+      summary: `Changed the SSS calendar settings - owner ${owner?.name ?? "unset"}, ${parsed.data.slotDurationMins} min slots, reschedule within ${parsed.data.rescheduleWithinDays} days`,
       meta: diff,
     });
   }
@@ -117,16 +117,16 @@ export async function setSssOwnerAction(input: unknown): Promise<Result> {
 export async function blockSssSlotAction(slotId: string): Promise<Result> {
   const session = await requireSection("bookings");
   // Read first: blocking detaches or relocates whoever was in the slot, so afterwards there is no
-  // way back to the prospect's name — and an already-blocked slot is a no-op worth not logging.
+  // way back to the prospect's name - and an already-blocked slot is a no-op worth not logging.
   const ctx = await slotContext(slotId);
   const res = await blockSssSlot(slotId, session.user.id);
 
   if (res.ok && ctx && ctx.status !== "BLOCKED") {
     const who = ctx.journey?.lead.name ?? "the prospect";
     const detail = res.moved
-      ? ` — ${who} moved to the next open slot`
+      ? ` - ${who} moved to the next open slot`
       : res.orphaned
-        ? ` — ${who} needs manual rebooking`
+        ? ` - ${who} needs manual rebooking`
         : "";
     await logActivity(session, {
       action: "sss.slot.block",
@@ -141,9 +141,9 @@ export async function blockSssSlotAction(slotId: string): Promise<Result> {
   revalidatePath("/bookings");
   if (!res.ok) return res;
   const msg = res.moved
-    ? "Slot blocked — the prospect was moved to the next open slot"
+    ? "Slot blocked - the prospect was moved to the next open slot"
     : res.orphaned
-      ? "Slot blocked — no open slot in range, prospect flagged for manual rebooking"
+      ? "Slot blocked - no open slot in range, prospect flagged for manual rebooking"
       : "Slot blocked";
   return { ok: true, message: msg };
 }
@@ -183,7 +183,7 @@ export async function blockSssDayAction(ownerId: string, dayKey: string): Promis
       section: "bookings",
       entityType: "User",
       entityId: ownerId,
-      summary: `Blocked ${owner?.name ?? "the SSS owner"}'s SSS day on ${formatDate(parseDateInput(dayKey))} — ${res.blocked} slot${res.blocked === 1 ? "" : "s"}${moved}${orphaned}`,
+      summary: `Blocked ${owner?.name ?? "the SSS owner"}'s SSS day on ${formatDate(parseDateInput(dayKey))} - ${res.blocked} slot${res.blocked === 1 ? "" : "s"}${moved}${orphaned}`,
       meta: { dayKey, blocked: res.blocked, moved: res.moved, orphaned: res.orphaned },
     });
   }
@@ -208,14 +208,14 @@ export async function moveJourneyToSlotAction(journeyId: string, toSlotId: strin
       section: "bookings",
       entityType: "SssSlot",
       entityId: toSlotId,
-      summary: `Moved ${ctx?.journey?.lead.name ?? "a prospect"} to the ${ctx ? slotWhen(ctx.startsAt) : "new"} SSS slot — new time sent`,
+      summary: `Moved ${ctx?.journey?.lead.name ?? "a prospect"} to the ${ctx ? slotWhen(ctx.startsAt) : "new"} SSS slot - new time sent`,
       meta: { journeyId, toSlotId },
     });
   }
 
   revalidatePath("/bookings");
   if (!res.ok) return res;
-  return { ok: true, message: "Prospect moved — new time sent" };
+  return { ok: true, message: "Prospect moved - new time sent" };
 }
 
 export async function bookJourneyIntoSlotAction(journeyId: string, slotId: string): Promise<Result> {

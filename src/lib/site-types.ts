@@ -1,5 +1,5 @@
 /**
- * Shapes behind the marketing website — the JSON stored on Site.theme, Site.navMenu,
+ * Shapes behind the marketing website - the JSON stored on Site.theme, Site.navMenu,
  * SitePage.sections and SiteSection.blocks.
  *
  * Isomorphic: the builder, the public renderer and the server actions all import the same
@@ -8,7 +8,7 @@
  * ── Why a Section wraps Blocks, when funnels have bare blocks ──────────────────────────────
  * `sites-types.ts` (funnels) has a flat `Block[]` that renders into a fixed centred column. That
  * is why the funnel builder cannot reproduce b2consultants.de: the violet header band, the
- * full-bleed "About Me" band and the footer are all SECTIONS — full-width strips with their own
+ * full-bleed "About Me" band and the footer are all SECTIONS - full-width strips with their own
  * background, that contain a contained row of blocks.
  *
  * So the model here is Section → Block[], and the section owns the background and the width.
@@ -20,11 +20,11 @@
 
 /**
  * Per-site design tokens. Held on the Site row rather than read from the dashboard's Tailwind
- * theme ON PURPOSE — this website must not inherit the app's look, and the two must be free to
+ * theme ON PURPOSE - this website must not inherit the app's look, and the two must be free to
  * diverge without either dragging the other.
  */
 export type SiteTheme = {
-  /** Brand colour — buttons, links, filled bands. */
+  /** Brand colour - buttons, links, filled bands. */
   primary: string;
   /** Text on top of `primary`. Stored, not computed: the contrast call is a design decision. */
   onPrimary: string;
@@ -73,7 +73,7 @@ export function defaultTheme(): SiteTheme {
  * One item in the shared header menu.
  *
  * `href` is a raw string, not a page reference, because the live nav's first item points at
- * optin.b2consultants.de — a different hostname on a different platform. A model that could only
+ * optin.b2consultants.de - a different hostname on a different platform. A model that could only
  * express "one of our pages" could not describe the menu we are reproducing.
  */
 export type NavItem = {
@@ -83,7 +83,7 @@ export type NavItem = {
    * Forward the visitor's query string (utm_*, fbclid, gclid) onto the target.
    *
    * This is how attribution survives the hop to the GHL opt-in funnel. Without it every opt-in
-   * arrives context-free and "did the rebuilt page convert better?" becomes unanswerable — the one
+   * arrives context-free and "did the rebuilt page convert better?" becomes unanswerable - the one
    * question the rebuild exists to answer. Off for internal links, which keep params anyway.
    */
   forwardParams?: boolean;
@@ -94,7 +94,7 @@ export type NavItem = {
 export type SectionWidth =
   /** Background spans the viewport; content is capped at theme.contentWidth. */
   | "full"
-  /** Both background and content are capped — a card-like band. */
+  /** Both background and content are capped - a card-like band. */
   | "contained";
 
 export type SectionBackground =
@@ -127,7 +127,7 @@ export type SiteBlock = {
   alt?: string;
   label?: string;
   href?: string;
-  /** See NavItem.forwardParams — same job, for a CTA button. */
+  /** See NavItem.forwardParams - same job, for a CTA button. */
   forwardParams?: boolean;
   variant?: "primary" | "soft" | "outline";
   items?: string[];
@@ -136,7 +136,7 @@ export type SiteBlock = {
   formId?: string;
   /** Per-block colour override, for text sitting on a coloured band. */
   color?: string;
-  /** Render the image as a circle — the hero portrait on the live homepage. */
+  /** Render the image as a circle - the hero portrait on the live homepage. */
   rounded?: boolean;
   /** Explicit intrinsic size, so next/image can reserve space and avoid layout shift. */
   width?: number;
@@ -218,7 +218,7 @@ function normaliseBlock(raw: unknown, i: number): SiteBlock | null {
 /**
  * Turn whatever is in the `sections` column into today's shape.
  *
- * Every read path goes through this — the editor, the public renderer, the revision restore — so a
+ * Every read path goes through this - the editor, the public renderer, the revision restore - so a
  * page saved before a field existed renders identically to one saved after. Ids fall back to the
  * INDEX rather than being generated, so re-reading the same stored page twice yields the same ids
  * and React does not remount every row.
@@ -236,7 +236,7 @@ export function normaliseSections(raw: unknown): SiteSectionBlock[] {
       width: o.width === "contained" ? "contained" : "full",
       background: normaliseBackground(o.background),
       padding: [num(padRaw[0]) ?? 64, num(padRaw[1]) ?? 64],
-      // A section with no columns at all is still a section — an empty band the editor can fill,
+      // A section with no columns at all is still a section - an empty band the editor can fill,
       // not a reason to drop the row and silently lose it from the page.
       columns: (cols.length ? cols : [[]]).map((col) =>
         (Array.isArray(col) ? col : []).map(normaliseBlock).filter((b): b is SiteBlock => b !== null),
@@ -279,7 +279,7 @@ export function normaliseNav(raw: unknown): NavItem[] {
  * Normalise a public page path.
  *
  * NOT `slugify`. The live URLs are being reproduced exactly and "/aboutus" is not what slugify
- * would produce from "About Us" — it would give "about-us" and quietly break every inbound link
+ * would produce from "About Us" - it would give "about-us" and quietly break every inbound link
  * and every ad already pointing at the real one.
  */
 export function normalisePath(input: string): string {

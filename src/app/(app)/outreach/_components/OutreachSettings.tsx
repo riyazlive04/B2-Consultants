@@ -10,8 +10,8 @@ import { saveOutreachConfig, runOutreachNow, backfillJourneys } from "@/server/o
  * Admin controls for the SOP engine.
  *
  * Two independent switches, deliberately:
- *   1. `enabled` — does the engine run at all (materialise steps, advance phases)?
- *   2. `auto:<STEP>` — may THIS step send without a human?
+ *   1. `enabled` - does the engine run at all (materialise steps, advance phases)?
+ *   2. `auto:<STEP>` - may THIS step send without a human?
  *
  * The engine can run with every step manual; that is the default and the SOP's own shape. Turning
  * a step to auto means real WhatsApp messages leave the building unattended, so each one is an
@@ -20,29 +20,29 @@ import { saveOutreachConfig, runOutreachNow, backfillJourneys } from "@/server/o
 
 /**
  * `max` mirrors the bound `saveOutreachConfig` enforces (1..720h, and 1..1440min for the reaction
- * window). The server is the real gate — this is here so the two never disagree, which is the point
+ * window). The server is the real gate - this is here so the two never disagree, which is the point
  * of stating a rule once (see lib/field-rules).
  */
 const SLA_HOURS_MAX = 720;
 
 const SLA_FIELDS: { key: keyof OutreachConfig["sla"]; label: string; hint: string; unit: string; max: number }[] = [
-  { key: "reactionMinutes", label: "Reaction time", hint: "Step 2 — contact within this, or the SOP skips to Step 10", unit: "min", max: 1440 },
-  { key: "check1Hours", label: "Check 1 wait", hint: "Step 5 — after the intro / first call", unit: "h", max: SLA_HOURS_MAX },
-  { key: "check2Hours", label: "Check 2 wait", hint: "Step 7 — after the follow-up message", unit: "h", max: SLA_HOURS_MAX },
-  { key: "finalCheckHours", label: "Final check wait", hint: "Step 9 — after the follow-up call", unit: "h", max: SLA_HOURS_MAX },
-  { key: "discoConfirm1LeadHours", label: "Disco confirm 1", hint: "Step 14 — hours before the call", unit: "h", max: SLA_HOURS_MAX },
-  { key: "discoConfirm2LeadHours", label: "Disco confirm 2", hint: "Step 15 — hours before the call", unit: "h", max: SLA_HOURS_MAX },
-  { key: "discoCancelLeadHours", label: "Disco cancellation", hint: "Step 16 — hours before the call", unit: "h", max: SLA_HOURS_MAX },
-  { key: "sssConfirm1LeadHours", label: "SSS confirm 1", hint: "Step 19 — hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
-  { key: "sssConfirm2LeadHours", label: "SSS confirm 2", hint: "Step 20 — hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
-  { key: "sssCancelLeadHours", label: "SSS cancellation", hint: "Step 21 — hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
+  { key: "reactionMinutes", label: "Reaction time", hint: "Step 2 - contact within this, or the SOP skips to Step 10", unit: "min", max: 1440 },
+  { key: "check1Hours", label: "Check 1 wait", hint: "Step 5 - after the intro / first call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "check2Hours", label: "Check 2 wait", hint: "Step 7 - after the follow-up message", unit: "h", max: SLA_HOURS_MAX },
+  { key: "finalCheckHours", label: "Final check wait", hint: "Step 9 - after the follow-up call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "discoConfirm1LeadHours", label: "Disco confirm 1", hint: "Step 14 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "discoConfirm2LeadHours", label: "Disco confirm 2", hint: "Step 15 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "discoCancelLeadHours", label: "Disco cancellation", hint: "Step 16 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
+  { key: "sssConfirm1LeadHours", label: "SSS confirm 1", hint: "Step 19 - hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
+  { key: "sssConfirm2LeadHours", label: "SSS confirm 2", hint: "Step 20 - hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
+  { key: "sssCancelLeadHours", label: "SSS cancellation", hint: "Step 21 - hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
 ];
 
 export function OutreachSettings({ config, watiLive }: { config: OutreachConfig; watiLive: boolean }) {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(config.enabled);
-  // Drives the cap field and the "nothing will send yet" warning — both are noise until the
+  // Drives the cap field and the "nothing will send yet" warning - both are noise until the
   // founder has actually ticked instant sending.
   const [instantIntro, setInstantIntro] = useState(config.instantIntro.enabled);
 
@@ -81,7 +81,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
 
         {!enabled && (
           <p className="rounded-field bg-surface-2 px-3 py-2 text-xs text-muted">
-            The engine is off. Existing journeys are preserved — turning it back on picks up where
+            The engine is off. Existing journeys are preserved - turning it back on picks up where
             it left off.
           </p>
         )}
@@ -136,7 +136,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
         <div className="border-t border-line pt-4">
           <h4 className="font-display text-sm font-semibold">Hands-off first contact</h4>
           <p className="mt-0.5 text-xs text-muted">
-            How the first message and the first call happen. Both are off by default — the SOP as
+            How the first message and the first call happen. Both are off by default - the SOP as
             written has a specialist send the invite and ring straight away.
           </p>
 
@@ -153,7 +153,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
                 Send the invite the moment a lead arrives
               </span>
               <span className="mt-0.5 block text-muted">
-                Fires inline at capture — seconds, not the next engine tick — so the SOP&apos;s
+                Fires inline at capture - seconds, not the next engine tick - so the SOP&apos;s
                 5-minute window isn&apos;t spent waiting. Only for leads arriving from the live
                 capture webhooks; imports and manually-added contacts are never messaged.
               </span>
@@ -172,7 +172,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
                 className="w-32 rounded-field border border-line bg-surface px-2 py-1"
               />
               <span className="mt-1 block text-muted">
-                A circuit breaker, not a throttle — normal intake is nowhere near it. If a webhook
+                A circuit breaker, not a throttle - normal intake is nowhere near it. If a webhook
                 ever loops or an import is routed through a capture endpoint, this stops it and
                 leaves the rest for a human instead of messaging thousands of people.
               </span>
@@ -192,7 +192,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
               </span>
               <span className="mt-0.5 block text-muted">
                 Holds Step 4 back until a booking check has run and come back empty. Anyone who
-                books off the message alone never reaches a caller — which is the point. Off, the
+                books off the message alone never reaches a caller - which is the point. Off, the
                 SOP&apos;s own order applies: message, then ring regardless.
               </span>
             </span>
@@ -205,7 +205,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
             >
               <AlertTriangle size={13} className="mt-px flex-none" />
               <span>
-                Nothing will actually send yet — WhatsApp is not live, or no template is mapped to
+                Nothing will actually send yet - WhatsApp is not live, or no template is mapped to
                 the SOP intro touchpoint. Each lead&apos;s invite will sit in the queue for manual
                 sending until that is done (WhatsApp → Settings).
               </span>
@@ -217,7 +217,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
         <div className="border-t border-line pt-4">
           <h4 className="font-display text-sm font-semibold">Timing</h4>
           <p className="mt-0.5 text-xs text-muted">
-            The SOP&apos;s windows. Editable so the response times can be tuned without a code change — the
+            The SOP&apos;s windows. Editable so the response times can be tuned without a code change - the
             defaults are exactly what the document specifies.
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -247,7 +247,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
           <label className="text-xs">
             <span className="mb-1 block font-medium">Default sender name</span>
             {/* NOT kind="name": this is a sender-name fallback that ships as the company name
-                "B2 Consultants" — the person-name rule forbids digits and would eat its own
+                "B2 Consultants" - the person-name rule forbids digits and would eat its own
                 default. Bounded free text, capped to match the server. */}
             <input
               name="defaultSpecialistName"
@@ -289,7 +289,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
       <div className="rounded-card border border-line bg-surface p-5 shadow-card">
         <h4 className="font-display text-sm font-semibold">Run &amp; backfill</h4>
         <p className="mt-0.5 text-xs text-muted">
-          The engine has no clock of its own — an external cron must hit{" "}
+          The engine has no clock of its own - an external cron must hit{" "}
           <code className="rounded bg-surface-2 px-1">/api/cron/outreach</code> with{" "}
           <code className="rounded bg-surface-2 px-1">CRON_SECRET</code>. Point it at every minute:
           the 5-minute response time can only be reported as accurately as the cron ticks.
@@ -314,7 +314,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
             onClick={() =>
               start(async () => {
                 await backfillJourneys();
-                setMsg("Backfill complete — existing leads now have journeys.");
+                setMsg("Backfill complete - existing leads now have journeys.");
               })
             }
             className="flex items-center gap-1.5 rounded-field border border-line px-3 py-1.5 text-xs font-medium transition-colors hover:bg-surface-2 disabled:opacity-50"

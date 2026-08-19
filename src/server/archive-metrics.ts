@@ -8,7 +8,7 @@ import { ARCHIVED } from "@/lib/soft-delete";
 /**
  * Read layer for the per-section "Archived" tabs. Every getter returns the SAME serializable
  * `ArchivedRow` shape so one <ArchivedPanel> renders them all, and reads with `ARCHIVED`
- * (deletedAt != null) — the mirror of the `ACTIVE` filter the live views use.
+ * (deletedAt != null) - the mirror of the `ACTIVE` filter the live views use.
  */
 
 export type ArchivedRow = {

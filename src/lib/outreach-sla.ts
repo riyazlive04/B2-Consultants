@@ -1,20 +1,20 @@
 /**
- * Level 1 Outreach Specialist — the JD's service-level rules, as pure functions.
+ * Level 1 Outreach Specialist - the JD's service-level rules, as pure functions.
  *
  * Source: Level 1 Outreach Specialist JD, via the rebuild spec §6. The JD does not set one
  * response target; it sets FOUR, by the clock time the lead arrived:
  *
- *   • any lead      — connect within 5 minutes of arrival        (90% hit rate)
- *   • 09:00–19:59   — connect the SAME day                        (100%)
- *   • 20:00–23:59   — connect the FOLLOWING day                   (100%)
- *   • 00:00–08:59   — connect the SAME day                        (100%)
+ *   • any lead      - connect within 5 minutes of arrival        (90% hit rate)
+ *   • 09:00–19:59   - connect the SAME day                        (100%)
+ *   • 20:00–23:59   - connect the FOLLOWING day                   (100%)
+ *   • 00:00–08:59   - connect the SAME day                        (100%)
  *
- * The 5-minute rule is not a fifth window — it runs across all four, which is why
+ * The 5-minute rule is not a fifth window - it runs across all four, which is why
  * `slaFor` returns a window AND a separate five-minute deadline. A lead that arrives at
  * 21:00 is inside its 5-minute clock until 21:05, then waits until tomorrow's window;
  * both facts are true at once and the queue needs to show each in a different place.
  *
- * "Connected" is a conversation ending in a decision — CallLogOutcome.SPOKE. An attempted
+ * "Connected" is a conversation ending in a decision - CallLogOutcome.SPOKE. An attempted
  * call is not a connection, so `NO_ANSWER`/`BUSY` must never satisfy an SLA. That
  * distinction is the JD's, stated explicitly, and it is why the desk reads CallLog rather
  * than the self-reported DailyLog totals.
@@ -46,7 +46,7 @@ export const SLA_WINDOW_LABELS: Record<SlaWindow, string> = {
  * which is the reconciliation the specialist currently does by eye.
  */
 export type SlaState =
-  | "FRESH" // inside the 5-minute clock, not yet connected — ring this now
+  | "FRESH" // inside the 5-minute clock, not yet connected - ring this now
   | "DUE" // 5 minutes gone, still inside the window's deadline
   | "OVERDUE" // the window's deadline has passed, never connected
   | "MET" // connected, within the 5-minute clock
@@ -62,7 +62,7 @@ export type SlaVerdict = {
   dueBy: Date;
   /** ms until `fiveMinuteBy`; negative once elapsed. Drives the countdown in the queue. */
   msToFiveMinute: number;
-  /** True when this lead counted towards the 90% five-minute target — i.e. it was connected in time. */
+  /** True when this lead counted towards the 90% five-minute target - i.e. it was connected in time. */
   metFiveMinute: boolean;
   /** True when the lead was connected by `dueBy`, the 100% obligation. */
   metWindow: boolean;
@@ -139,7 +139,7 @@ export function slaFor(optInAt: Date, connectedAt: Date | null, now: Date): SlaV
 /**
  * The seven buckets of spec §6, in the order the specialist works them top-down.
  *
- * Order is the whole point — it encodes what to do next when everything is on fire, so it
+ * Order is the whole point - it encodes what to do next when everything is on fire, so it
  * is data here rather than a hardcoded render order that drifts from the JD.
  */
 export const QUEUE_BUCKETS = [
@@ -163,12 +163,12 @@ export const QUEUE_BUCKET_META: Record<
   { title: string; why: string; target: string }
 > = {
   FIVE_MINUTE: {
-    title: "New — under 5 minutes",
+    title: "New - under 5 minutes",
     why: "Ring these before anything else. The clock is running.",
     target: "90% connected within 5 minutes",
   },
   NOT_BOOKED_AFTER_MESSAGE: {
-    title: "Messaged, didn't book — call now",
+    title: "Messaged, didn't book - call now",
     why: "They got the booking link and haven't used it. The SOP has raised a call for you.",
     target: "30–40% of leads booked",
   },
@@ -179,12 +179,12 @@ export const QUEUE_BUCKET_META: Record<
   },
   NIGHT_DUE: {
     title: "Night leads",
-    why: "Arrived after 20:00 — owed a connection today.",
+    why: "Arrived after 20:00 - owed a connection today.",
     target: "100% the following day",
   },
   EARLY_DUE: {
     title: "Early-hours leads",
-    why: "Arrived before 09:00 — owed a connection today.",
+    why: "Arrived before 09:00 - owed a connection today.",
     target: "100% same day",
   },
   OPTED_NOT_BOOKED: {
@@ -212,7 +212,7 @@ export const OLD_LEAD_AFTER_DAYS = 30;
 
 /**
  * Which bucket an unconnected lead belongs to. Returns null when the lead is not owed
- * anything right now — connected already, or a night lead whose day has not come round yet.
+ * anything right now - connected already, or a night lead whose day has not come round yet.
  *
  * A lead lands in exactly ONE bucket: FRESH outranks its window, so a 21:00 lead at 21:03
  * shows under "under 5 minutes" and not also under "night leads". Showing it twice would
@@ -231,7 +231,7 @@ export function bucketForLead(verdict: SlaVerdict): QueueBucket | null {
  *
  * `amber` is the band between "missing it" and "hitting it". Where the JD gives a range
  * (lead→booked 30–40%, BANT accuracy 65–75%) the LOWER bound is the pass mark and the
- * range's top is not a ceiling to be punished for exceeding — so `green` is the lower
+ * range's top is not a ceiling to be punished for exceeding - so `green` is the lower
  * bound, and there is no upper limit.
  */
 export type TargetKey =
@@ -261,7 +261,7 @@ export const L1_TARGETS: Record<TargetKey, TargetSpec> = {
     tooltip: "Leads connected within 5 minutes of arriving, as a share of all leads that arrived. JD target: 90%.",
   },
   dayConnect: {
-    // The window lives in the tooltip, not the label — the card truncates to one line.
+    // The window lives in the tooltip, not the label - the card truncates to one line.
     label: "Same-day connection",
     green: 100, amber: 90, unit: "pct",
     tooltip:
@@ -301,7 +301,7 @@ export const L1_TARGETS: Record<TargetKey, TargetSpec> = {
 
 /** Green / amber / red for any target spec, in the app's shared signal vocabulary. */
 export function signalForSpec(spec: TargetSpec, value: number | null): "ok" | "watch" | "risk" | null {
-  if (value === null) return null; // nothing to measure yet — a 0% would be a lie, not a verdict
+  if (value === null) return null; // nothing to measure yet - a 0% would be a lie, not a verdict
   if (value >= spec.green) return "ok";
   if (value >= spec.amber) return "watch";
   return "risk";
@@ -312,7 +312,7 @@ export function signalForTarget(key: TargetKey, value: number | null): "ok" | "w
   return signalForSpec(L1_TARGETS[key], value);
 }
 
-// ───────────────────── Level 2 — Discovery Specialist ─────────────────────
+// ───────────────────── Level 2 - Discovery Specialist ─────────────────────
 
 /**
  * Spec §7's target cards, from the Level 2 JD.
@@ -320,7 +320,7 @@ export function signalForTarget(key: TargetKey, value: number | null): "ok" | "w
  * The show rate is the one that matters: the JD sets 80% and the six-month actual is 62%,
  * which the rebuild doc calls the largest single leak in the funnel. It is deliberately
  * given the widest amber band so the card stops reading as a flat failure and starts
- * showing movement — a specialist climbing from 62% to 74% is doing the right thing and
+ * showing movement - a specialist climbing from 62% to 74% is doing the right thing and
  * should be able to see it.
  */
 export type L2TargetKey =
@@ -340,7 +340,7 @@ export const L2_TARGETS: Record<L2TargetKey, TargetSpec> = {
     label: "Show rate",
     green: 80, amber: 65, unit: "pct",
     tooltip:
-      "Booked calls where the prospect turned up. JD target: 80%. The six-month actual is 62% — the largest single leak in the funnel.",
+      "Booked calls where the prospect turned up. JD target: 80%. The six-month actual is 62% - the largest single leak in the funnel.",
   },
   discoveryToSss: {
     label: "Discovery → Solution Strategy Call",
@@ -364,25 +364,25 @@ export const L2_TARGETS: Record<L2TargetKey, TargetSpec> = {
  * Where a discovery call sends the prospect next (§7's routing panel).
  *
  * Three destinations, each with its own follow-up, mapped onto the existing `CallOutcome`
- * enum rather than a new one — the column already exists and already feeds the funnel
+ * enum rather than a new one - the column already exists and already feeds the funnel
  * metrics, so a parallel vocabulary would split the same fact across two fields.
  */
 export const DISCOVERY_ROUTES = [
   {
     outcome: "QUALIFIED_FOR_SSS",
-    label: "Ready — route to Level 3",
+    label: "Ready - route to Level 3",
     detail: "A confirmation goes out automatically, which is what protects Level 3's show rate.",
     tone: "good",
   },
   {
     outcome: "SENT_TO_WORKSHOP",
-    label: "Needs more understanding — workshop",
+    label: "Needs more understanding - workshop",
     detail: "Enrolled in the next workshop, then handed back to Level 1 for re-engagement.",
     tone: "warn",
   },
   {
     outcome: "NOT_QUALIFIED_FOR_SSS",
-    label: "Not qualified — close",
+    label: "Not qualified - close",
     detail: "Closed with a reason, so the funnel shows why rather than just losing the lead.",
     tone: "neutral",
   },

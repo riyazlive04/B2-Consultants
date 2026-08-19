@@ -21,7 +21,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
 
   return (
     <div className="w-full space-y-4">
-      <ListHeader title="Conversations" subtitle="unified inbox — Email, SMS & WhatsApp in one thread" />
+      <ListHeader title="Conversations" subtitle="unified inbox - Email, SMS & WhatsApp in one thread" />
       <Tabs
         tabs={[
           { label: "Inbox", content: <Inbox threads={threads} activeThread={activeThread} templates={templates} settings={settings} users={users} /> },

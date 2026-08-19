@@ -54,7 +54,7 @@ export default async function PipelinePage({
   // ── Wave 1: every independent read in one round-trip. On Supabase (~204ms RTT,
   // connection_limit) these used to run as ~7 sequential awaits (~1.4s of pure latency);
   // none of them depends on another, so they fan out in a single Promise.all.
-  //   · aging (1.7) is founder-facing — a non-admin only sees their own board, so a global
+  //   · aging (1.7) is founder-facing - a non-admin only sees their own board, so a global
   //     aging table would surface leads that aren't theirs. Admin-only, like the split card.
   //   · the viewer's log variant is only needed for a non-admin (admins see both tabs).
   const [
@@ -92,7 +92,7 @@ export default async function PipelinePage({
   // sees both, so nobody is ever locked out of entry.
   const viewerVariant = isAdmin ? null : viewerProfile?.logVariant ?? null;
 
-  // ── Wave 2: the only two reads that genuinely depend on Wave 1's results —
+  // ── Wave 2: the only two reads that genuinely depend on Wave 1's results -
   // WhatsApp status needs the lead IDs, and the Kanban read is opt-in (Founder Console →
   // Operations), gated on the config mode so we don't pay for it unless it's chosen.
   const [waByLead, kanbanLeads, assignableCount] = await Promise.all([
@@ -109,7 +109,7 @@ export default async function PipelinePage({
   const conv = metrics.conversionsByLevel;
   const wonCount = conv.SOLO + conv.GUIDED + conv.ELITE;
 
-  // % of target the calendar expects by today — the TargetBar judges pace with it
+  // % of target the calendar expects by today - the TargetBar judges pace with it
   const now = istToday();
   const monthRange = istMonthRange(now);
   const daysInMonth = Math.round((monthRange.end.getTime() - monthRange.start.getTime()) / 86400000);
@@ -124,7 +124,7 @@ export default async function PipelinePage({
     const d = new Date(t);
     d.setUTCDate(t.getUTCDate() - (6 - idx));
     const count = countOn(dayKey(d));
-    // The SAME weekday one week earlier. Lead flow is strongly day-of-week shaped — a quiet
+    // The SAME weekday one week earlier. Lead flow is strongly day-of-week shaped - a quiet
     // Sunday against a busy Saturday reads as a collapse, against last Sunday it reads as normal.
     // This is the honest comparator, and it is why the compare series is offset by exactly 7 days
     // rather than being the previous 7-day block slid along.
@@ -154,13 +154,13 @@ export default async function PipelinePage({
         title="Pipeline"
         subtitle={
           isAdmin
-            ? "Every lead from first contact to paid student — auto-calculated for the window you pick."
+            ? "Every lead from first contact to paid student - auto-calculated for the window you pick."
             : "Enter leads and discovery call outcomes. You see only your own entries."
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/* Opportunities and Outreach came OFF the sidebar (the Sales group was five entries
-                for what is one job). They are reachable from here — the screen they belong to —
+                for what is one job). They are reachable from here - the screen they belong to -
                 so nothing became unreachable, and `requireSection` still gates each one. */}
             <SectionLink href="/opportunities" sectionKey="opportunities">
               <Kanban size={14} /> Board view
@@ -173,7 +173,7 @@ export default async function PipelinePage({
         }
       />
 
-      {/* The target bar follows the CAPABILITY, not the role — that's what makes
+      {/* The target bar follows the CAPABILITY, not the role - that's what makes
           "Configure telecaller board" worth granting to a non-Admin. */}
       {canConfigure && (
         <TargetBar
@@ -264,7 +264,7 @@ export default async function PipelinePage({
                   Close rate {formatPct(metrics.closePct)}
                   <InfoHint
                     className="ml-1"
-                    text="Deals won ÷ discovery calls conducted in the selected window — the share of completed calls that turned into paying students."
+                    text="Deals won ÷ discovery calls conducted in the selected window - the share of completed calls that turned into paying students."
                   />
                   {" · "}Solo {conv.SOLO} · Guided {conv.GUIDED} · Elite {conv.ELITE}
                 </p>
@@ -363,7 +363,7 @@ export default async function PipelinePage({
                 ],
               }}
             />
-            {/* Rate tiles carry the 2026 sheet benchmarks (SALES-LOGIC §4) — a rate
+            {/* Rate tiles carry the 2026 sheet benchmarks (SALES-LOGIC §4) - a rate
                 without its normal range is just a number. Signals band vs the range,
                 not vs generic 50/80 cutoffs. */}
             <MetricCard
@@ -404,7 +404,7 @@ export default async function PipelinePage({
               value={formatPct(metrics.hqPct)}
               secondary="HQ calls ÷ completed"
               target="typ. 27–47%"
-              tooltip="Highly-qualified outcomes ÷ discovery calls conducted. 2026 sheet average is 37%, ranging 27–47% — below 27% means lead quality or triage is slipping."
+              tooltip="Highly-qualified outcomes ÷ discovery calls conducted. 2026 sheet average is 37%, ranging 27–47% - below 27% means lead quality or triage is slipping."
               progress={metrics.hqPct / 100}
               icon={<Award size={18} />}
               signal={metrics.monthOutcomes === 0 ? undefined : metrics.hqPct >= 27 ? "ok" : metrics.hqPct >= 15 ? "watch" : "risk"}
@@ -460,7 +460,7 @@ export default async function PipelinePage({
               ) : (
                 <div className="space-y-3">
                   {/* The engine normalises the shares, so a set that doesn't total 100 still works
-                      — it just doesn't mean what the raw numbers say. This card used to print the
+                      - it just doesn't mean what the raw numbers say. This card used to print the
                       raw figure, so 5 and 2 read as "5% target / 2% target" while the engine ran
                       71/29. Say so rather than quietly showing a number nothing uses. */}
                   {callSplit.sharesNormalised && (
@@ -500,7 +500,7 @@ export default async function PipelinePage({
 
       <Tabs
         tabs={[
-          // Board first when the founder has chosen drag-and-drop — the mode they picked
+          // Board first when the founder has chosen drag-and-drop - the mode they picked
           // should be the one they land on, not a tab they have to go find.
           ...(pipelineMode === "drag_drop"
             ? [{

@@ -18,7 +18,7 @@ import SiteTracking from "@/components/sites/SiteTracking";
  * live immediately rather than after the window expires.
  *
  * ── And why searchParams is NOT read here ─────────────────────────────────────────────────────
- * Reading `searchParams` opts a page out of static rendering entirely — which would hand back the
+ * Reading `searchParams` opts a page out of static rendering entirely - which would hand back the
  * per-request latency this route exists to avoid. A statically rendered page has no request to
  * read a query string from, so attribution forwarding cannot happen on the server at all; doing it
  * here would silently produce nothing. <ForwardParams /> does it in the browser instead, where the
@@ -30,12 +30,12 @@ export const revalidate = 300;
  * Prerender every published page at build time.
  *
  * Without this the route is "server-rendered on demand": Next cannot prerender a catch-all it has
- * no params for, so it renders dynamically and emits `Cache-Control: private, no-store` — which no
+ * no params for, so it renders dynamically and emits `Cache-Control: private, no-store` - which no
  * CDN or browser will ever cache, and every ad click pays the full cross-region database round
  * trip. Measured before adding this: `no-store` on both a cold and a warm request.
  *
  * `dynamicParams` stays at its default of true, so a page published after the last build still
- * resolves — it is just rendered on demand until the next deploy, rather than 404ing.
+ * resolves - it is just rendered on demand until the next deploy, rather than 404ing.
  */
 export async function generateStaticParams() {
   return getAllPublishedPageParams();
@@ -79,7 +79,7 @@ export default async function PublicSitePage({
         footer={page.footer}
         theme={page.theme}
         nav={page.nav}
-        // Empty by design — see the note above. The browser fills this in.
+        // Empty by design - see the note above. The browser fills this in.
         incoming={{}}
         fromPath={path}
         siteDomain={page.siteDomain}

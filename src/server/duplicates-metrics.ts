@@ -2,12 +2,12 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 
 /**
- * "Who is in here twice?" — the report that did not exist.
+ * "Who is in here twice?" - the report that did not exist.
  *
  * ── The gap ─────────────────────────────────────────────────────────────────────
  * Duplicate detection was WRITE-TIME ONLY: `findDuplicateLead` blocks a new manual entry, and
  * `upsertIntakeLead` links a returning opt-in to the existing row. Neither could tell you about
- * the duplicates ALREADY in the table — and there was no reason to think the table was clean,
+ * the duplicates ALREADY in the table - and there was no reason to think the table was clean,
  * since 23,429 of 23,545 leads arrived through a one-shot Synamate import that ran outside both
  * paths entirely.
  *
@@ -15,12 +15,12 @@ import { prisma } from "@/lib/prisma";
  * Pairwise comparison in JS over 23.5k rows is 276 million comparisons. Postgres can group by a
  * normalised expression in one pass, so each rule below is a single indexed-ish scan. The phone
  * rule strips non-digits and compares the last 10 significant digits, which is the same identity
- * `normalizeWhatsappNumber` resolves to for Indian numbers — close enough to SURFACE a candidate
+ * `normalizeWhatsappNumber` resolves to for Indian numbers - close enough to SURFACE a candidate
  * pair, and a human confirms before anything is merged.
  *
  * ── The rule that matters ───────────────────────────────────────────────────────
  * A BLANK key is never a match. 5,889 leads carry no phone at all; grouping them on "" would
- * report one 5,889-row "duplicate" — absence of a number is not evidence of sameness. Every rule
+ * report one 5,889-row "duplicate" - absence of a number is not evidence of sameness. Every rule
  * below excludes empty values explicitly.
  */
 
@@ -31,7 +31,7 @@ export type DuplicateMember = {
   name: string;
   phone: string | null;
   email: string | null;
-  /** Lead only — where they sit now, so a human can tell which row is the live one. */
+  /** Lead only - where they sit now, so a human can tell which row is the live one. */
   stage: string | null;
   ownerName: string | null;
   createdAt: Date;
@@ -42,7 +42,7 @@ export type DuplicateMember = {
 };
 
 export type DuplicateGroup = {
-  /** The normalised value they collided on — shown so the match is auditable, never guessed at. */
+  /** The normalised value they collided on - shown so the match is auditable, never guessed at. */
   key: string;
   on: "phone" | "email" | "name";
   members: DuplicateMember[];
@@ -52,7 +52,7 @@ export type DuplicatesReport = {
   leads: DuplicateGroup[];
   students: DuplicateGroup[];
   users: DuplicateGroup[];
-  /** Leads with no phone AND no email — undedupable by construction; worth knowing the size of. */
+  /** Leads with no phone AND no email - undedupable by construction; worth knowing the size of. */
   unidentifiableLeads: number;
   /** True when a rule hit its cap, so the UI never implies the list is exhaustive. */
   truncated: boolean;
@@ -97,7 +97,7 @@ async function leadGroupsByEmail(): Promise<KeyRow[]> {
  *
  * Weaker evidence than the other two and deliberately last: two real people can share a name.
  * It exists because the phoneless population is 5,889 rows, which the phone and email rules
- * cannot see at all — reporting nothing about a quarter of the table would be its own kind of
+ * cannot see at all - reporting nothing about a quarter of the table would be its own kind of
  * lie. The UI labels these as "possible", not "duplicate".
  */
 async function leadGroupsByName(): Promise<KeyRow[]> {
@@ -192,7 +192,7 @@ export async function getDuplicatesReport(): Promise<DuplicatesReport> {
       ORDER BY count(*) DESC LIMIT ${MAX_GROUPS}
     `,
     /**
-     * Logins. `User.email` is `@unique`, so an exact collision is impossible — this catches the
+     * Logins. `User.email` is `@unique`, so an exact collision is impossible - this catches the
      * CASE-VARIANT one the unique index does not, which is exactly the kind that produces "my
      * password stopped working" (see lib/credentials.ts).
      */
@@ -210,7 +210,7 @@ export async function getDuplicatesReport(): Promise<DuplicatesReport> {
     hydrateLeadGroups(nameRows, "name"),
   ]);
 
-  // Phone first — it is the strongest evidence, and it is the identity every other part of the
+  // Phone first - it is the strongest evidence, and it is the identity every other part of the
   // app (WhatsApp, dedupe, the SOP) actually keys on.
   const seen = new Set<string>();
   const leads: DuplicateGroup[] = [];
@@ -250,7 +250,7 @@ export async function getDuplicatesReport(): Promise<DuplicatesReport> {
           stage: null,
           ownerName: null,
           createdAt: f.createdAt,
-          // Students and users have no lead-side activity to weigh — the counts stay zero and
+          // Students and users have no lead-side activity to weigh - the counts stay zero and
           // the UI hides the column for these tabs rather than showing three misleading noughts.
           calls: 0,
           bookings: 0,

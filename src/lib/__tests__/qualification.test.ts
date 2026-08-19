@@ -1,5 +1,5 @@
 /**
- * Qualification catalogue — the Track D safety gate.
+ * Qualification catalogue - the Track D safety gate.
  *
  * The BANT verdict routes real humans to real calls. Moving scoring from 18 hardcoded
  * columns to a configurable catalogue is only safe if the new path produces IDENTICAL
@@ -42,7 +42,7 @@ const SCORED_KEYS = [
   "whenStartGermany",
 ] as const;
 
-describe("qualification — the catalogue reproduces today's form", () => {
+describe("qualification - the catalogue reproduces today's form", () => {
   test("every intake question appears exactly once", () => {
     const keys = CATALOGUE.map((q) => q.key);
     assert.equal(keys.length, Object.keys(INTAKE_OPTIONS).length);
@@ -71,7 +71,7 @@ describe("qualification — the catalogue reproduces today's form", () => {
   });
 });
 
-describe("qualification — EXHAUSTIVE agreement with the shipped scorer", () => {
+describe("qualification - EXHAUSTIVE agreement with the shipped scorer", () => {
   test("every possible submission scores identically", () => {
     const lists = SCORED_KEYS.map(
       (k) => (INTAKE_OPTIONS[k] as readonly { value: string }[]).map((o) => o.value),
@@ -115,7 +115,7 @@ describe("qualification — EXHAUSTIVE agreement with the shipped scorer", () =>
   });
 });
 
-describe("qualification — the rules that are easy to get wrong", () => {
+describe("qualification - the rules that are easy to get wrong", () => {
   test("a dimension takes the MAX of its questions, never the sum", () => {
     // Budget has two questions. Lukewarm invest (need_clarity = 2.5) + top salary (gt_1l = 5)
     // must score 5, not 7.5 and not 2.5.
@@ -136,7 +136,7 @@ describe("qualification — the rules that are easy to get wrong", () => {
     assert.equal(SCORED_DIMENSIONS.length, 4);
   });
 
-  test("weight 1 is the identity — which is what makes the derived catalogue exact", () => {
+  test("weight 1 is the identity - which is what makes the derived catalogue exact", () => {
     const q = CATALOGUE.find((x) => x.key === "readyToInvest")!;
     assert.equal(q.weight, 1);
     assert.equal(optionScore(q, "ready_now"), 5);

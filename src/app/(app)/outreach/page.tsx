@@ -19,9 +19,9 @@ const CHANNEL_LABELS: Record<string, string> = { WHATSAPP: "WhatsApp", CALL: "Ca
  * The Outreach Specialist SOP (Script_for_Outreach_Specialist.docx, Steps 1–23), as a screen.
  *
  * Three surfaces:
- *   · Queue       — what to do next, with the message already written (Steps 2–21)
- *   · Key Metrics — "Key Metrics Sales B2_2026.xlsx" (Step 12 onward)
- *   · Closed      — Step 9's IGNORE bucket and the cancellations. Dormant, never deleted.
+ *   · Queue       - what to do next, with the message already written (Steps 2–21)
+ *   · Key Metrics - "Key Metrics Sales B2_2026.xlsx" (Step 12 onward)
+ *   · Closed      - Step 9's IGNORE bucket and the cancellations. Dormant, never deleted.
  */
 export default async function OutreachPage() {
   const session = await requireSection("outreach");
@@ -62,7 +62,7 @@ export default async function OutreachPage() {
               className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
               style={{ background: "var(--surface-2)", color: "var(--muted)" }}
             >
-              <PauseCircle size={13} /> Engine off{isAdmin ? " — turn it on in Settings" : ""}
+              <PauseCircle size={13} /> Engine off{isAdmin ? " - turn it on in Settings" : ""}
             </span>
           ) : undefined
         }
@@ -157,7 +157,7 @@ export default async function OutreachPage() {
               <div className="rounded-card border border-line bg-surface p-5 shadow-card">
                 <p className="mb-3 text-xs text-muted">
                   Ignored, cancelled and completed journeys. Step 9&apos;s &ldquo;IGNORE&rdquo; keeps the
-                  prospect in the records — nothing here is deleted.
+                  prospect in the records - nothing here is deleted.
                 </p>
                 {closed.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted">Nothing closed yet.</p>

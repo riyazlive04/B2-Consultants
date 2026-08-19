@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 /* ════════════════════════════════════════════════════════════════════════
-   B2 Founder Dashboard — "Daylight" design language (docs/DESIGN_SYSTEM.md)
+   B2 Founder Dashboard - "Daylight" design language (docs/DESIGN_SYSTEM.md)
    Light blue on half-white. Calm, confident, money-grade.
-   Every colour, radius and shadow in the app resolves through these tokens —
+   Every colour, radius and shadow in the app resolves through these tokens -
    never hardcode a hex in a component.
    ════════════════════════════════════════════════════════════════════════ */
 :root {
@@ -14,13 +14,13 @@
      fully custom, but this is the floor for anything native. */
   color-scheme: light;
   /* surface */
-  --bg-app: #f1f5fb;       /* app canvas — the "half-white" */
+  --bg-app: #f1f5fb;       /* app canvas - the "half-white" */
   --bg-surface: #ffffff;   /* cards, panels, modals */
   --bg-surface-2: #f4f8fe; /* insets: table headers, input wells, secondary panels */
   --bg-sky: #e4effe;       /* soft blue tint panels (highlight boxes, empty states) */
   --bg-sky-grad: linear-gradient(135deg, #e8f1fe 0%, #d9e9ff 100%); /* the ONE allowed gradient: hero strips */
 
-  /* brand — one accent, used with restraint.
+  /* brand - one accent, used with restraint.
      --primary carries WHITE TEXT (primary button) and is itself used as text on
      --primary-soft (active nav), so it is tuned to clear 4.5:1 in both directions. */
   --primary: #0a64e2;
@@ -29,15 +29,15 @@
   --primary-tint: #bbd6ff;
   --primary-rgb: 10, 100, 226; /* raw channels for rgba() tints */
 
-  /* brand-indigo — the periwinkle of the B2 Consultants logo mark. Kept OUT of the
+  /* brand-indigo - the periwinkle of the B2 Consultants logo mark. Kept OUT of the
      --primary family on purpose: --primary is the interactive blue, this is only ever
      the logo's ink. Lightened in dark mode so the mark stays legible on a navy rail. */
   --brand-indigo: #5b60c9;
 
   /* ink */
-  --ink: #16203a;   /* primary text, headings, key figures — never pure black */
+  --ink: #16203a;   /* primary text, headings, key figures - never pure black */
   --ink-2: #4a566e; /* secondary text, labels, table body */
-  --ink-3: #636f85; /* muted text, placeholders, captions — passes 4.5:1 on every surface except --bg-sky */
+  --ink-3: #636f85; /* muted text, placeholders, captions - passes 4.5:1 on every surface except --bg-sky */
 
   /* the ONLY legitimate use of the old, low-contrast grey: inactive controls.
      WCAG 1.4.3 exempts disabled elements from the contrast minimum. Never use for text. */
@@ -45,14 +45,14 @@
 
   /* text/icon colour that sits ON a saturated fill (--primary, --good, --bad).
      Light theme fills are dark, so white wins; the dark theme inverts this. Never
-     hardcode `text-white` on a fill — it cannot re-theme and fails AA in dark mode. */
+     hardcode `text-white` on a fill - it cannot re-theme and fails AA in dark mode. */
   --on-accent: #ffffff;
 
   /* lines */
   --border: #e2e9f3;
   --border-strong: #cbd6e6;
 
-  /* signal — colour spent on MEANING only (runway, OKRs, overdue, profit sign).
+  /* signal - colour spent on MEANING only (runway, OKRs, overdue, profit sign).
      The *text* tones clear 4.5:1 against their own soft fill (badges are 12px);
      the soft fills are unchanged, so the app's colour temperature is untouched. */
   --good: #197e50;
@@ -63,16 +63,16 @@
   --bad-bg: #fce7e8;
 
   /* Status text on a chart tooltip. The tooltip surface is `var(--ink)`, and `--ink` INVERTS
-     with the theme (near-black in light, near-white in dark) — so these must invert too, in
+     with the theme (near-black in light, near-white in dark) - so these must invert too, in
      the opposite direction to the rest of the palette. Light mode: pale tones on a near-black
      tooltip, because `--good`/`--bad` are tuned against the page and would vanish there.
      Dark mode (see the dark block): the tooltip is near-white, so these fall back to the
-     page-tuned dark tones. Added for Error Log D2 — the chart tooltips were carrying these
+     page-tuned dark tones. Added for Error Log D2 - the chart tooltips were carrying these
      as raw hex, which is exactly the "no consistent palette" the item is about. */
   --good-on-ink: #7ee2b0;
   --bad-on-ink: #ff9ea2;
 
-  /* data-viz — calm, blue-led; use in slot order */
+  /* data-viz - calm, blue-led; use in slot order */
   --viz-1: #4b93f7;
   --viz-2: #3fc0b7;
   --viz-3: #9b8cff;
@@ -81,14 +81,14 @@
   --viz-grid: #eaf0f8;
   --viz-ink: #8a95a8;
 
-  /* medal materials (gamification tiers). Physical metals, not brand hues — they
+  /* medal materials (gamification tiers). Physical metals, not brand hues - they
      sit outside the signal palette on purpose and must not be re-used elsewhere. */
   --medal-bronze: linear-gradient(135deg, #d2a679, #a05a2c);
   --medal-silver: linear-gradient(135deg, #e9edf2, #9aa7b5);
   --medal-gold: linear-gradient(135deg, #ffe08a, #d99a06);
   --medal-legend: linear-gradient(135deg, var(--primary-tint), var(--primary-strong));
 
-  /* program-level colours — FIXED across the whole app so the eye learns them */
+  /* program-level colours - FIXED across the whole app so the eye learns them */
   --lvl-solo: #f4799e;
   --lvl-guided: #9b8cff;
   --lvl-elite: #f2a93b;
@@ -101,7 +101,7 @@
   --r-xl: 24px;  /* hero strip, big highlight boxes */
   --r-full: 999px;
 
-  /* elevation — soft, blue-tinted, never harsh black */
+  /* elevation - soft, blue-tinted, never harsh black */
   --e-1: 0 1px 2px rgba(22, 32, 58, 0.04), 0 1px 3px rgba(22, 32, 58, 0.06);
   --e-2: 0 4px 12px rgba(22, 32, 58, 0.08);
   --e-3: 0 12px 32px rgba(22, 32, 58, 0.12);
@@ -112,7 +112,7 @@
   /* ── motion (§6) ──
      One scale, so "how fast should this be?" is never re-litigated per component.
      --ease-spring overshoots slightly: it is for things the user PUSHED (a tab, a
-     press) where the overshoot reads as responsiveness. Never put it on data — a
+     press) where the overshoot reads as responsiveness. Never put it on data - a
      number that bounces reads as unreliable (§9). */
   --dur-fast: 120ms;  /* hover, colour, focus ring */
   --dur-base: 200ms;  /* the default: entrances, cross-fades */
@@ -150,7 +150,7 @@
   --muted: var(--ink-2);
 }
 
-/* ── Dark theme — same token contract, night values (design: B2 Founder Dashboard.dc)
+/* ── Dark theme - same token contract, night values (design: B2 Founder Dashboard.dc)
    Set data-theme="dark" on <html>; every component re-themes through the vars.
    Legacy aliases resolve via var() so they follow automatically. */
 [data-theme="dark"] {
@@ -180,7 +180,7 @@
   --warn-bg: #352915;
   --bad: #f26d72;
   --bad-bg: #3a1e22;
-  /* The tooltip surface is `var(--ink)`, which is near-WHITE here — so status text on it needs
+  /* The tooltip surface is `var(--ink)`, which is near-WHITE here - so status text on it needs
      the dark, page-tuned tones (the light theme's `--good`/`--bad`), not the pale ones. Without
      this override the light-block values render mint-on-white at roughly 1.6:1. */
   --good-on-ink: #197e50;
@@ -229,7 +229,7 @@ body {
    position. With no positioned ancestor that position is in page coordinates: the box is clipped by
    nothing and its offset counts towards the document's scroll width. A hidden "up"/"down" label
    inside a horizontally scrolled table, or a visually-hidden chart data table, therefore made the
-   whole page scroll sideways into blank space — invisible content, real scrollbar.
+   whole page scroll sideways into blank space - invisible content, real scrollbar.
 
    Pinning the NON-FOCUSABLE ones to their containing block's origin costs nothing (they are 1px and
    clipped) and can no longer widen anything. Focusable sr-only controls are deliberately excluded:
@@ -258,7 +258,7 @@ body {
   letter-spacing: -0.012em;
 }
 
-/* ledger figures, IDs, hashes — "this is a real record" surfaces */
+/* ledger figures, IDs, hashes - "this is a real record" surfaces */
 .mono-data {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -289,7 +289,7 @@ body {
   box-shadow: var(--e-1);
 }
 
-/* hero strip — the ONE place a gradient is allowed (sky gradient, ink text) */
+/* hero strip - the ONE place a gradient is allowed (sky gradient, ink text) */
 .hero-sky,
 .hero-violet,
 .hero-pink {
@@ -298,7 +298,7 @@ body {
   border: 1px solid var(--primary-tint);
 }
 
-/* sticky chrome (top bar) sits flat on white — no frosted glass in Daylight */
+/* sticky chrome (top bar) sits flat on white - no frosted glass in Daylight */
 .glass {
   background: var(--bg-surface);
 }
@@ -320,7 +320,7 @@ body {
 
 /* ── Micro-interactions: minimal and functional (§6) ── */
 
-/* accessible focus — one consistent ring everywhere */
+/* accessible focus - one consistent ring everywhere */
 :focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
@@ -350,7 +350,7 @@ button:disabled,
   cursor: not-allowed;
 }
 
-/* Native date-ish fields that TextInput still leaves native (`week` only — date, month, time
+/* Native date-ish fields that TextInput still leaves native (`week` only - date, month, time
    and datetime-local all have their own popovers now): make the OS picker indicator themeable
    and clickable. color-scheme already flips the glyph light/dark; this tidies the affordance. */
 .dateish-native {
@@ -365,7 +365,7 @@ button:disabled,
   opacity: 1;
 }
 
-/* Horizontally scrolling strips (components/ui/HScroll — the opportunity + pipeline boards).
+/* Horizontally scrolling strips (components/ui/HScroll - the opportunity + pipeline boards).
    The platform's OVERLAY scrollbar only appears mid-gesture, which is precisely why a board
    with stages off the right edge looked like a board that ended there. This one is always
    present, in the app's own tokens, and thin enough not to read as chrome. */
@@ -402,7 +402,7 @@ a.card-hover:active:not(:disabled),
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-/* `backwards`, NOT `both` — see the note on page-enter below. `forwards` would hold
+/* `backwards`, NOT `both` - see the note on page-enter below. `forwards` would hold
    the final keyframe's transform, and a held transform (even an identity matrix) makes
    the element a containing block for any `position:fixed` descendant. */
 .rise-in {
@@ -416,7 +416,7 @@ a.card-hover:active:not(:disabled),
 .rise-in:nth-child(7) { animation-delay: 180ms; }
 .rise-in:nth-child(8) { animation-delay: 210ms; }
 /* Pages now run fluid, so a wide window fits more cards per row than the original
-   8-deep stagger covered — beyond it the tail popped in with no delay at all. */
+   8-deep stagger covered - beyond it the tail popped in with no delay at all. */
 .rise-in:nth-child(9)  { animation-delay: 240ms; }
 .rise-in:nth-child(10) { animation-delay: 270ms; }
 .rise-in:nth-child(11) { animation-delay: 300ms; }
@@ -429,21 +429,21 @@ a.card-hover:active:not(:disabled),
    App Router swaps <main>'s subtree on navigation, so the page root mounts fresh and
    this replays without needing a key. Deliberately quieter and shorter than a landing
    page would use (§0 "trust through calm", §9 "don't animate the dashboard like a
-   landing page") — it exists to soften the swap, not to perform. */
+   landing page") - it exists to soften the swap, not to perform. */
 @keyframes page-enter {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
 /* ⚠ `backwards`, never `both`.
    `both` = backwards + FORWARDS, and forwards holds the last keyframe's *animated*
-   value. The animated form of `transform: none` is not none — it is the identity
+   value. The animated form of `transform: none` is not none - it is the identity
    matrix `matrix(1,0,0,1,0,0)`. A held transform of ANY kind, identity included,
    makes the element the containing block for `position:fixed` descendants (CSS
    Position §4). So `both` here quietly re-anchored every fixed overlay in the app to
    this element's box instead of the viewport: modals centred inside the page root and
    hung off the bottom of short windows, with the submit button unreachable.
    `backwards` still hides the pre-start frame, then hands styling back to the
-   element — computed transform returns to a real `none`, and fixed means fixed. */
+   element - computed transform returns to a real `none`, and fixed means fixed. */
 main > * {
   animation: page-enter 260ms cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
 }
@@ -451,7 +451,7 @@ main > * {
 /* ── Scrollbars ──
    The sidebar nav's scrollbar is now shown (it hides ~400px of sections), so it has to
    look deliberate rather than like a stock OS bar. Thin, quiet, and it only gains
-   contrast on hover — chrome stays out of the way (§0 "the data is the hero"). */
+   contrast on hover - chrome stays out of the way (§0 "the data is the hero"). */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
@@ -495,7 +495,7 @@ tbody tr:hover {
 }
 .toast-in { animation: toast-in 200ms ease-out both; }
 
-/* toast exit — a toast that just vanishes from the DOM reads as a glitch; this slides
+/* toast exit - a toast that just vanishes from the DOM reads as a glitch; this slides
    it back down and fades it so the eye can follow the dismissal (or an Undo landing). */
 @keyframes toast-out {
   from { opacity: 1; transform: translateY(0) scale(1); }
@@ -525,7 +525,7 @@ tbody tr:hover {
   animation: check-draw 420ms cubic-bezier(0.65, 0, 0.35, 1) 120ms forwards;
 }
 
-/* confetti burst — reserved for real wins (payment, enrollment, streak milestone) */
+/* confetti burst - reserved for real wins (payment, enrollment, streak milestone) */
 @keyframes confetti-fall {
   0% { opacity: 1; transform: translate3d(0, -12vh, 0) rotateZ(0deg) rotateX(0deg); }
   85% { opacity: 1; }
@@ -554,7 +554,7 @@ tbody tr:hover {
 /* ── Arena / gamification ─────────────────────────────────────────────
    Kept event- or hover-driven only: no looping ambient animation (§6). */
 
-/* XP bar fill — solid primary with a soft tint edge */
+/* XP bar fill - solid primary with a soft tint edge */
 .xp-fill {
   background: linear-gradient(90deg, var(--primary), var(--primary-strong));
   transition: width 500ms ease;
@@ -585,7 +585,7 @@ tbody tr:hover {
 *::-webkit-scrollbar-track { background: transparent; }
 
 /* ════════════════════════════════════════════════════════════════════════
-   §6 motion — the interaction layer
+   §6 motion - the interaction layer
    Everything here answers a gesture: a tab you clicked, a row you pointed at, a
    button you pressed. None of it runs on its own, and none of it touches a figure.
    ════════════════════════════════════════════════════════════════════════ */
@@ -593,7 +593,7 @@ tbody tr:hover {
 /* ── Tabs ──
    The indicator is one element that TRAVELS between tabs rather than a border
    that blinks on and off. The moving object is what tells you the two tabs are
-   the same control — the blink says nothing. JS measures the active tab and sets
+   the same control - the blink says nothing. JS measures the active tab and sets
    --tab-x/--tab-w; the transition does the rest. */
 .tab-indicator {
   position: absolute;
@@ -607,7 +607,7 @@ tbody tr:hover {
     width var(--dur-slow) var(--ease-spring),
     height var(--dur-fast) var(--ease-out);
 }
-/* First paint must not fly in from x=0 — it should already be under the active tab. */
+/* First paint must not fly in from x=0 - it should already be under the active tab. */
 .tab-indicator[data-ready="false"] {
   transition: none;
 }
@@ -617,7 +617,7 @@ tbody tr:hover {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: none; }
 }
-/* `backwards` for the same containing-block reason as page-enter — a tab panel is an
+/* `backwards` for the same containing-block reason as page-enter - a tab panel is an
    ancestor of any modal opened from inside it. */
 .panel-in {
   animation: panel-in var(--dur-base) var(--ease-out) backwards;
@@ -648,8 +648,8 @@ tbody tr:hover {
 }
 
 /* Rows arrive in sequence. Cheap stagger via an index the caller sets.
-   `backwards` (not `both`) holds the pre-start frame through the delay — which is the
-   whole point of a stagger — without leaving a transform behind afterwards. */
+   `backwards` (not `both`) holds the pre-start frame through the delay - which is the
+   whole point of a stagger - without leaving a transform behind afterwards. */
 .row-in {
   animation: rise-in var(--dur-base) var(--ease-out) backwards;
   animation-delay: calc(var(--i, 0) * 22ms);
@@ -659,7 +659,7 @@ tbody tr:hover {
    A CONTAINER query, not a viewport one. The same chart is dropped into a full-width
    Reports card AND a 367px bento cell on Finance; a `sm:` viewport breakpoint is true in both,
    because the viewport is 1440 either way. That kept the share / delta / chevron columns on
-   inside the narrow cell, and their fixed widths crushed the bar track to zero — the card
+   inside the narrow cell, and their fixed widths crushed the bar track to zero - the card
    rendered as a list of numbers with no bars at all.
 
    `container-type: inline-size` makes the list measure ITSELF, so the columns drop out when
@@ -690,7 +690,7 @@ tbody tr:hover {
 /* The label column GROWS with the container, because some callers carry full sentences as
    labels: the L1 desk's rows are job-description metric names ("BANT qualification accuracy",
    "Lead → booked discovery call") plus an inline target and an info chip. Held at 10rem they
-   truncated to "BANT qualification acc…" — which is the same defect the eight-card grid this
+   truncated to "BANT qualification acc…" - which is the same defect the eight-card grid this
    replaced was already working around. A fixed (not flexible) width at each step is deliberate:
    every bar must start at the same x, or the rows stop being comparable, which is the whole
    point of ranking them. */
@@ -725,7 +725,7 @@ tbody tr:hover {
 
 @media (prefers-reduced-motion: reduce) {
   .rise-in, .toast-in, .toast-out, .dialog-in, .overlay-in, .card-hover { animation: none; transition: none; }
-  /* The new §6 layer holds still too — the END STATE must survive, so hover/focus
+  /* The new §6 layer holds still too - the END STATE must survive, so hover/focus
      still recolour and lift; only the travel and the entrances are removed. */
   .tab-indicator { transition: none; }
   .panel-in, .row-in { animation: none; animation-delay: 0ms; }

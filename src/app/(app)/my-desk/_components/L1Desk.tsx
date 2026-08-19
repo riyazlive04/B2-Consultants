@@ -24,11 +24,11 @@ import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS } from "@/lib/labels";
 import { NewLeadWatcher } from "./NewLeadWatcher";
 import { TargetAttainment } from "./TargetAttainment";
 import { useOfflineCalls } from "./useOfflineCalls";
-// Shared with L2Desk — see LogOutcomeModal.tsx for why it moved out of this file.
+// Shared with L2Desk - see LogOutcomeModal.tsx for why it moved out of this file.
 import { LogOutcomeModal } from "./LogOutcomeModal";
 
 /**
- * Level 1 — Outreach Specialist desk (rebuild spec §6).
+ * Level 1 - Outreach Specialist desk (rebuild spec §6).
  *
  * Opens to one question: *who do I need to call right now?* The queue is the page; the
  * target cards sit below it, because the JD's numbers are how the day is judged but not
@@ -48,13 +48,13 @@ const OUTCOME_OPTIONS = [
  * Live countdown on the 5-minute clock.
  *
  * Counts down from a server-stamped instant rather than a duration, so a laptop with a
- * wrong clock cannot invent time — and re-anchors whenever the server sends a fresh
+ * wrong clock cannot invent time - and re-anchors whenever the server sends a fresh
  * `deadline`. Once elapsed it shows how far past, in red: a breached lead is more urgent
  * than a running one, so the display must not simply stop at zero.
  *
  * FIRST PAINT MUST NOT READ THE CLOCK. This is a client component, so Next.js still renders
  * it on the server; seeding state with `Date.now()` meant the server produced "3:47" and the
- * browser hydrated a second later with "3:46". React treats that as corrupt markup — it logs
+ * browser hydrated a second later with "3:46". React treats that as corrupt markup - it logs
  * a text-content mismatch and throws away the whole Suspense boundary to re-render on the
  * client. Seeding from `initialMsLeft`, which the SERVER computed and serialised, makes both
  * passes render the same string; the effect below then takes over with the live clock.
@@ -128,7 +128,7 @@ function QueueRow({
             <FiveMinuteCountdown deadline={lead.fiveMinuteBy} initialMsLeft={lead.msToFiveMinute} />
           )}
           {/* Only when there IS a score. A "Not scored" chip on every row of a 25-row queue is
-              noise — most leads have never been asked, and that is the normal case, not a
+              noise - most leads have never been asked, and that is the normal case, not a
               finding. The chip earns its place by being rare. */}
           {lead.bant && <BantChip bant={lead.bant} />}
           {lead.state === "OVERDUE" && (
@@ -169,7 +169,7 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
     <div className="space-y-8">
       <NewLeadWatcher onSeen={() => router.refresh()} />
 
-      {/* Connection state. Rendered only when there is something to say — a permanent
+      {/* Connection state. Rendered only when there is something to say - a permanent
           "you are online" badge is noise, and noise is what stops people reading banners. */}
       {(!offline.online || offline.pending > 0) && (
         <div
@@ -187,13 +187,13 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
           <span>
             {offline.pending > 0
               ? `${offline.pending} call${offline.pending === 1 ? "" : "s"} saved on this device${
-                  offline.online ? "" : " — they will sync when the connection returns"
+                  offline.online ? "" : " - they will sync when the connection returns"
                 }.`
               : "Calls you log will be saved on this device and sent when the connection returns."}
           </span>
           {offline.stuck > 0 && (
             <span className="font-semibold">
-              {offline.stuck} could not be sent — tell Ameen rather than re-logging them.
+              {offline.stuck} could not be sent - tell Ameen rather than re-logging them.
             </span>
           )}
         </div>
@@ -217,13 +217,13 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
           /**
            * Two very different empty queues, and saying the wrong one is worse than saying
            * nothing. "Your queue is clear" to someone who owns nothing reads as "this screen is
-           * broken" — or worse, as permission to stop. Only claim the work is done when there
+           * broken" - or worse, as permission to stop. Only claim the work is done when there
            * was work.
            */
           desk.ownedCallable === 0 ? (
             <EmptyState
               title="No leads have been assigned to you"
-              body="This desk shows the leads you own, and you don't own any yet. Ask Ameen to hand you a batch from Pipeline → Leads → Hand out leads. Nothing is broken — there's just nothing here to call."
+              body="This desk shows the leads you own, and you don't own any yet. Ask Ameen to hand you a batch from Pipeline → Leads → Hand out leads. Nothing is broken - there's just nothing here to call."
             />
           ) : (
             <EmptyState
@@ -258,7 +258,7 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
                   </ul>
                   {count > leads.length && (
                     <p className="mt-3 text-caption text-muted">
-                      Showing the {leads.length} most urgent of {count}. Work these first — the rest move up as you clear them.
+                      Showing the {leads.length} most urgent of {count}. Work these first - the rest move up as you clear them.
                     </p>
                   )}
                 </Card>
@@ -273,7 +273,7 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
         <SectionHeading
           icon={<CalendarClock size={18} />}
           title="Tomorrow's discovery calls"
-          description="Confirm these today — bookings inside 8 hours are blocked, so an unconfirmed call must be cancelled early to free the slot."
+          description="Confirm these today - bookings inside 8 hours are blocked, so an unconfirmed call must be cancelled early to free the slot."
         />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <MetricCard
@@ -326,14 +326,14 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
               })),
               note:
                 desk.tomorrow.unconfirmed.length > 6
-                  ? `Showing 6 of ${desk.tomorrow.unconfirmed.length} — full chase list below.`
+                  ? `Showing 6 of ${desk.tomorrow.unconfirmed.length} - full chase list below.`
                   : undefined,
             }}
           />
         </div>
 
         {desk.tomorrow.unconfirmed.length > 0 && (
-          <Card title={<CardTitle icon={<PhoneCall size={18} />}>Unconfirmed — chase list</CardTitle>}>
+          <Card title={<CardTitle icon={<PhoneCall size={18} />}>Unconfirmed - chase list</CardTitle>}>
             <ul className="-mx-4 -mb-2">
               {desk.tomorrow.unconfirmed.map((b) => (
                 <li key={b.id} className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
@@ -355,7 +355,7 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
       </section>
 
       {/* ── JD targets. Every row maps to a target in the Level 1 JD (principle §4). ──
-          Was an 8-card grid, each card's progress bar scaled to its own target — so 83%-of-target
+          Was an 8-card grid, each card's progress bar scaled to its own target - so 83%-of-target
           and 25%-of-target drew identical bars and the screen could not say which to fix first.
           See TargetAttainment for the full rationale; the cards' figures, targets, signal colours
           and definitions all survive the move. */}
@@ -363,7 +363,7 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
         <SectionHeading
           icon={<Target size={18} />}
           title="Your targets"
-          description="This month against the Level 1 job description — furthest behind first"
+          description="This month against the Level 1 job description - furthest behind first"
         />
         <Card>
           <TargetAttainment

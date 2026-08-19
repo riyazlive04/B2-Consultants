@@ -37,7 +37,7 @@ export function Leaderboard({ data }: { data: GnLeaderboard }) {
 
       <ol className="mt-3 space-y-1">
         {active.rows.length === 0 && (
-          <li className="px-1 py-3 text-center text-xs text-muted">No points earned yet — likes score points.</li>
+          <li className="px-1 py-3 text-center text-xs text-muted">No points earned yet - likes score points.</li>
         )}
         {active.rows.map((r) => (
           <Row key={r.userId} r={r} />

@@ -3,7 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Block } from "@/lib/sites-types";
 
-/** Read layer for the section library and the page templates — both are `SectionSnippet` rows. */
+/** Read layer for the section library and the page templates - both are `SectionSnippet` rows. */
 
 export type SnippetRow = {
   id: string;
@@ -12,7 +12,7 @@ export type SnippetRow = {
   scope: "SECTION" | "PAGE";
   blocks: Block[];
   builtIn: boolean;
-  /** How many top-level nodes come in — shown in the picker so a "section" that is really a
+  /** How many top-level nodes come in - shown in the picker so a "section" that is really a
    *  whole page is not a surprise after it lands. */
   nodeCount: number;
 };

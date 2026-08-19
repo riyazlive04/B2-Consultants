@@ -17,7 +17,7 @@ export default async function FunnelBuilderPage({ params }: { params: { id: stri
    * Real open slots for every `booking` block in the funnel.
    *
    * The canvas renders the production `SiteBlocks`, but was never handed any availability, so a
-   * booking block previewed as "No times are open right now — please check back shortly" on a
+   * booking block previewed as "No times are open right now - please check back shortly" on a
    * page whose PUBLISHED version was offering sixteen days of slots. That reads as a broken
    * calendar rather than as missing preview data, and it is the one block whose emptiness is
    * indistinguishable from a real outage.
@@ -40,7 +40,7 @@ export default async function FunnelBuilderPage({ params }: { params: { id: stri
         forms={pickers.forms}
         calendars={calendars}
         // Loaded whole rather than on demand: the library is a few dozen rows of page JSON, and
-        // the picker previews each one with the real renderer — fetching it when the modal opens
+        // the picker previews each one with the real renderer - fetching it when the modal opens
         // would mean a spinner in front of the thing people are browsing.
         snippets={snippets}
         snippetCategories={snippetCategories(snippets)}

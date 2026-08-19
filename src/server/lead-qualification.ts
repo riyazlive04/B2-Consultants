@@ -7,7 +7,7 @@ import { mapInboundAnswers, type InboundMapping } from "@/lib/qualification-inbo
 import { getQualificationQuestions } from "./qualification";
 
 /**
- * Scoring a lead AT OPT-IN — Application Logic §4.3 stage 1.
+ * Scoring a lead AT OPT-IN - Application Logic §4.3 stage 1.
  *
  * The landing page asks the band-score questions; Pabbly relays the submission. This turns that
  * payload into a stored score on the Lead, so the answers reach the person running the discovery
@@ -17,7 +17,7 @@ import { getQualificationQuestions } from "./qualification";
  * The catalogue (`scoreFromAnswers`), not the column-based `computeBant`. That is a deliberate
  * departure from the booking form, which is still in Track D's shadow phase: there, the
  * hardcoded columns are the shipped behaviour and the catalogue is only measured alongside them.
- * Here there is no shipped behaviour to preserve — this path has never scored anything — and an
+ * Here there is no shipped behaviour to preserve - this path has never scored anything - and an
  * inbound answer can only be READ through the catalogue in the first place, because that is
  * where the founder-editable field names and answer aliases live. Scoring the mapped result any
  * other way would mean honouring a founder's mapping and then ignoring their weights.
@@ -50,7 +50,7 @@ const EMPTY: OptInScoreResult = { scored: false, skipped: "no-answers", bant: nu
  * converges rather than accumulating duplicate `LeadAnswer` rows.
  *
  * NEVER THROWS. Every caller is a lead-capture webhook, and a lead that arrives unscored is a
- * far better outcome than a lead that does not arrive — the scoring is an enrichment, not the
+ * far better outcome than a lead that does not arrive - the scoring is an enrichment, not the
  * point of the request. Failures are logged and swallowed.
  */
 export async function scoreLeadAtOptIn(
@@ -69,7 +69,7 @@ export async function scoreLeadAtOptIn(
      * right about the common case and catastrophic about the other one: it is ALSO what happens
      * when the landing page renames its fields, and the two are indistinguishable from the
      * outside. On 4 Aug 2026 production had 23,545 leads, 111 of them from Pabbly with the
-     * qualification form live and 13 questions configured, and NOT ONE scored row — with no
+     * qualification form live and 13 questions configured, and NOT ONE scored row - with no
      * evidence anywhere of what the sender had actually posted.
      *
      * The evidence is now always recorded. `intakeAnswers.unrecognisedKeys` is what Console →
@@ -84,24 +84,24 @@ export async function scoreLeadAtOptIn(
       if (mapping.unrecognisedKeys.length === 0) return EMPTY;
       await persistEvidence(leadId, payload, mapping);
       console.warn(
-        `[lead-qualification] lead ${leadId}: NOTHING matched the question catalogue — ` +
+        `[lead-qualification] lead ${leadId}: NOTHING matched the question catalogue - ` +
           `${mapping.unrecognisedKeys.length} unrecognised field(s): ` +
           mapping.unrecognisedKeys.slice(0, 12).map((k) => JSON.stringify(k)).join(", ") +
-          " — map these at Console → Qualification (Inbound field names).",
+          " - map these at Console → Qualification (Inbound field names).",
       );
       return { scored: false, skipped: "no-answers", bant: null, mapping };
     }
 
     if (!mapping.scorable) {
-      // Fields matched but no SCORED dimension resolved. Worth recording the evidence — the
-      // Console report reads `intakeAnswers` to show which answers arrived unrecognised — but
+      // Fields matched but no SCORED dimension resolved. Worth recording the evidence - the
+      // Console report reads `intakeAnswers` to show which answers arrived unrecognised - but
       // there is no score to compute, and writing 0 would assert something we do not know.
       await persistEvidence(leadId, payload, mapping);
       return { scored: false, skipped: "no-answers", bant: null, mapping };
     }
 
     // A specialist's own judgement outranks a form. Checked here rather than in the update's
-    // WHERE so the evidence above is still recorded — the answers are worth keeping even when
+    // WHERE so the evidence above is still recorded - the answers are worth keeping even when
     // they do not move the score.
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
@@ -119,7 +119,7 @@ export async function scoreLeadAtOptIn(
     await writeScore(leadId, payload, mapping, bant, questions.length > 0);
     return { scored: true, skipped: null, bant, mapping };
   } catch (err) {
-    // Deliberately not rethrown — see the contract above.
+    // Deliberately not rethrown - see the contract above.
     console.error(`[lead-qualification] scoring lead ${leadId} failed:`, err);
     return { scored: false, skipped: null, bant: null, mapping: null };
   }
@@ -141,7 +141,7 @@ async function persistEvidence(
  * The Json blob stored on `Lead.intakeAnswers`.
  *
  * Holds the raw payload AND what we made of it. Storing only the raw payload would leave Console
- * re-deriving the mapping to show what failed — and re-deriving it against TODAY's catalogue,
+ * re-deriving the mapping to show what failed - and re-deriving it against TODAY's catalogue,
  * which is not the one the lead was scored under. Storing the outcome alongside makes the report
  * a read.
  */
@@ -149,7 +149,7 @@ function evidenceFor(payload: Record<string, unknown>, mapping: InboundMapping):
   return {
     receivedAt: new Date().toISOString(),
     // Capped and flattened: this is an unbounded field from an EXTERNAL sender, stored on a row
-    // we keep forever. Values are reduced to readable scalars rather than passed through — the
+    // we keep forever. Values are reduced to readable scalars rather than passed through - the
     // report that reads this only ever displays them, and a nested object of unknown depth is
     // both a storage risk and, in Prisma's Json input type, not expressible as `unknown`.
     raw: Object.fromEntries(
@@ -177,7 +177,7 @@ function scalar(v: unknown): string | number | boolean | null {
   try {
     return JSON.stringify(v).slice(0, 500);
   } catch {
-    return null; // circular or otherwise unserialisable — the field is not worth failing over
+    return null; // circular or otherwise unserialisable - the field is not worth failing over
   }
 }
 
@@ -195,7 +195,7 @@ async function writeScore(
   bant: BantResult,
   fromCatalogue: boolean,
 ): Promise<void> {
-  // Resolve the answered questions to their row ids up front — outside the transaction, since
+  // Resolve the answered questions to their row ids up front - outside the transaction, since
   // it is a read and holding a transaction open across it buys nothing.
   const answered = mapping.mapped.filter((m) => m.value !== null);
   const rows = answered.length
@@ -224,7 +224,7 @@ async function writeScore(
     });
 
     // Replace, don't append. `LeadAnswer`'s @@unique is ([bookingRequestId, questionId]), and
-    // Postgres treats NULLs as distinct — so for a lead-level answer (no booking) that unique
+    // Postgres treats NULLs as distinct - so for a lead-level answer (no booking) that unique
     // enforces nothing, and a redelivered webhook would stack a second copy of every answer.
     // Scoped to bookingRequestId: null so a booking form's answers are never disturbed.
     await tx.leadAnswer.deleteMany({ where: { leadId, bookingRequestId: null } });
@@ -243,15 +243,15 @@ async function writeScore(
 
   if (mapping.unresolved.length > 0) {
     // Loud on purpose. This is the "a label was reworded and scores quietly dropped" case, and
-    // it is invisible in the data — the lead simply scores lower on that dimension.
+    // it is invisible in the data - the lead simply scores lower on that dimension.
     console.warn(
-      `[lead-qualification] lead ${leadId}: ${mapping.unresolved.length} answer(s) matched no option — ` +
+      `[lead-qualification] lead ${leadId}: ${mapping.unresolved.length} answer(s) matched no option - ` +
         mapping.unresolved.map((u) => `${u.key}="${u.rawValue.slice(0, 40)}"`).join(", ") +
-        " — add these as aliases at Console → Qualification.",
+        " - add these as aliases at Console → Qualification.",
     );
   }
   if (!fromCatalogue) {
-    console.warn(`[lead-qualification] lead ${leadId} scored by the fallback scorer — the question catalogue is empty.`);
+    console.warn(`[lead-qualification] lead ${leadId} scored by the fallback scorer - the question catalogue is empty.`);
   }
 }
 
@@ -264,7 +264,7 @@ function roundScore(score: number | null): number | null {
 }
 
 /**
- * Mirror a BOOKING's score onto its lead — Application Logic §4.3 stage 2.
+ * Mirror a BOOKING's score onto its lead - Application Logic §4.3 stage 2.
  *
  * The booking form asks more, and asks it later, so its verdict supersedes whatever the landing
  * page produced. A MANUAL score still wins over both: a specialist who has spoken to the person

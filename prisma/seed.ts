@@ -1,6 +1,6 @@
 /**
  * One-time provisioning: the four real users (CONTEXT §2) + team profiles.
- * Passwords come from env — change them after first login.
+ * Passwords come from env - change them after first login.
  * Run: npm run db:seed
  */
 import { PrismaClient } from "@prisma/client";

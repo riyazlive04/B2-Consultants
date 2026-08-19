@@ -77,7 +77,7 @@ import { resolveSections, type ResolvedSection, type SectionsConfig } from "@/li
  * Both are LAZY: no row means "the shipped defaults", so a fresh install behaves
  * exactly as it did before the console existed and nothing needs seeding. A row
  * that fails validation also falls back to defaults rather than taking the app
- * down — writes are validated, so that should only ever happen after a hand-edit.
+ * down - writes are validated, so that should only ever happen after a hand-edit.
  *
  * Wrapped in React.cache: the layout, the page and any server action in one
  * request share a single read.
@@ -126,7 +126,7 @@ export const ATTENDANCE_KEY = "attendance";
  *
  * NOTE for a future scale-out: this cache lives in the app process, so `revalidateTag`
  * only clears the instance that served the write. The deploy runs a single `app`
- * container (docker-compose.prod.yml), which is why that is correct today — add a
+ * container (docker-compose.prod.yml), which is why that is correct today - add a
  * replica and a Console save would go stale on every container but one.
  */
 export const FOUNDER_CONFIG_TAG = "founder-config";
@@ -154,7 +154,7 @@ export function revalidateFounderConfig(): void {
   try {
     revalidateTag(FOUNDER_CONFIG_TAG);
   } catch {
-    /* no request scope (script/cron context) — nothing cached to invalidate */
+    /* no request scope (script/cron context) - nothing cached to invalidate */
   }
 }
 
@@ -179,7 +179,7 @@ export const getBookingRulesConfig = cache(async (): Promise<BookingRulesConfig>
 });
 
 /**
- * The named booking calendars — one weekly pattern per person.
+ * The named booking calendars - one weekly pattern per person.
  *
  * Shares `SLOT_PATTERN_KEY` with the legacy single-pattern document rather than taking a key of
  * its own: there is one answer to "what availability do we keep stocked?", and two rows would be
@@ -223,25 +223,25 @@ export async function writeSssPatternConfig(config: SlotPatternConfig): Promise<
   revalidateFounderConfig();
 }
 
-/** Global Workflow Settings — read by the automation engine on every trigger/resume. */
+/** Global Workflow Settings - read by the automation engine on every trigger/resume. */
 export const getWorkflowSettings = cache(async (): Promise<WorkflowSettings> => {
   const row = await readSetting(WORKFLOW_SETTINGS_KEY);
   return row ? coerceWorkflowSettings(row.value) : DEFAULT_WORKFLOW_SETTINGS;
 });
 
-/** Deal-team commission rates — read by the Finance commission report. */
+/** Deal-team commission rates - read by the Finance commission report. */
 export const getCommissionRulesConfig = cache(async (): Promise<CommissionRulesConfig> => {
   const row = await readSetting(COMMISSION_RULES_KEY);
   return row ? coerceCommissionRulesConfig(row.value) : DEFAULT_COMMISSION_RULES_CONFIG;
 });
 
-/** Trainer-fee bands — read by the batch P&L via lib/tutor-fee.ts. */
+/** Trainer-fee bands - read by the batch P&L via lib/tutor-fee.ts. */
 export const getTutorFeeConfig = cache(async (): Promise<TutorFeeConfig> => {
   const row = await readSetting(TUTOR_FEE_KEY);
   return row ? coerceTutorFeeConfig(row.value) : DEFAULT_TUTOR_FEE_CONFIG;
 });
 
-/** Instalment-plan pricing + default gap — read by the EMI generator on Finance → Pending. */
+/** Instalment-plan pricing + default gap - read by the EMI generator on Finance → Pending. */
 export const getInstalmentPlanConfig = cache(async (): Promise<InstalmentPlanConfig> => {
   const row = await readSetting(INSTALMENT_PLAN_KEY);
   return row ? coerceInstalmentPlanConfig(row.value) : DEFAULT_INSTALMENT_PLAN_CONFIG;
@@ -257,19 +257,19 @@ export async function writeInstalmentPlanConfig(config: InstalmentPlanConfig): P
   revalidateFounderConfig();
 }
 
-/** Book-order trigger — read when a payment lands and by the Book Orders panel. */
+/** Book-order trigger - read when a payment lands and by the Book Orders panel. */
 export const getBookOrderConfig = cache(async (): Promise<BookOrderConfig> => {
   const row = await readSetting(BOOK_ORDER_KEY);
   return row ? coerceBookOrderConfig(row.value) : DEFAULT_BOOK_ORDER_CONFIG;
 });
 
-/** Pipeline mode — rules-driven vs drag-and-drop (Part 2 §9). */
+/** Pipeline mode - rules-driven vs drag-and-drop (Part 2 §9). */
 export const getPipelineConfig = cache(async (): Promise<PipelineConfig> => {
   const row = await readSetting(PIPELINE_KEY);
   return row ? coercePipelineConfig(row.value) : DEFAULT_PIPELINE_CONFIG;
 });
 
-/** Daily-maintenance housekeeping — read by server/daily-maintenance.ts on the /api/cron/daily tick. */
+/** Daily-maintenance housekeeping - read by server/daily-maintenance.ts on the /api/cron/daily tick. */
 export const getMaintenanceConfig = cache(async (): Promise<MaintenanceConfig> => {
   const row = await readSetting(MAINTENANCE_KEY);
   return row ? coerceMaintenanceConfig(row.value) : DEFAULT_MAINTENANCE_CONFIG;
@@ -285,7 +285,7 @@ export async function writeMaintenanceConfig(config: MaintenanceConfig): Promise
   revalidateFounderConfig();
 }
 
-/** Scheduled founder-digest config — read + sent by server/scheduled-report.ts. */
+/** Scheduled founder-digest config - read + sent by server/scheduled-report.ts. */
 export const getScheduledReportConfig = cache(async (): Promise<ScheduledReportConfig> => {
   const row = await readSetting(SCHEDULED_REPORT_KEY);
   return row ? coerceScheduledReportConfig(row.value) : DEFAULT_SCHEDULED_REPORT_CONFIG;
@@ -301,7 +301,7 @@ export async function writeScheduledReportConfig(config: ScheduledReportConfig):
   revalidateFounderConfig();
 }
 
-/** Speed-to-lead alerting — read + sent by server/speed-to-lead-alert.ts on the alerts tick. */
+/** Speed-to-lead alerting - read + sent by server/speed-to-lead-alert.ts on the alerts tick. */
 export const getSpeedToLeadAlertConfig = cache(async (): Promise<SpeedToLeadAlertConfig> => {
   const row = await readSetting(SPEED_TO_LEAD_ALERT_KEY);
   return row ? coerceSpeedToLeadAlert(row.value) : DEFAULT_SPEED_TO_LEAD_ALERT;
@@ -317,7 +317,7 @@ export async function writeSpeedToLeadAlertConfig(config: SpeedToLeadAlertConfig
   revalidateFounderConfig();
 }
 
-/** The three-stage payment-chase ladder — read by server/dunning.ts on the daily tick. */
+/** The three-stage payment-chase ladder - read by server/dunning.ts on the daily tick. */
 export const getDunningConfig = cache(async (): Promise<DunningConfig> => {
   const row = await readSetting(DUNNING_KEY);
   return row ? coerceDunningConfig(row.value) : DEFAULT_DUNNING_CONFIG;
@@ -333,7 +333,7 @@ export async function writeDunningConfig(config: DunningConfig): Promise<void> {
   revalidateFounderConfig();
 }
 
-/** Attendance risk thresholds — read by server/attendance.ts. */
+/** Attendance risk thresholds - read by server/attendance.ts. */
 export const getAttendanceConfig = cache(async (): Promise<AttendanceConfig> => {
   const row = await readSetting(ATTENDANCE_KEY);
   return row ? coerceAttendanceConfig(row.value) : DEFAULT_ATTENDANCE_CONFIG;
@@ -349,7 +349,7 @@ export async function writeAttendanceConfig(config: AttendanceConfig): Promise<v
   revalidateFounderConfig();
 }
 
-/** Ledger auto-posting switches — read by invoice-posting.ts and commission-actions.ts. */
+/** Ledger auto-posting switches - read by invoice-posting.ts and commission-actions.ts. */
 export const getFinancePostingConfig = cache(async (): Promise<FinancePostingConfig> => {
   const row = await readSetting(FINANCE_POSTING_KEY);
   return row ? coerceFinancePostingConfig(row.value) : DEFAULT_FINANCE_POSTING_CONFIG;
@@ -365,13 +365,13 @@ export async function writeFinancePostingConfig(config: FinancePostingConfig): P
   revalidateFounderConfig();
 }
 
-/** SSS (sales) call config — read by the SSS slot engine and calendar. */
+/** SSS (sales) call config - read by the SSS slot engine and calendar. */
 export const getSssConfig = cache(async (): Promise<SssConfig> => {
   const row = await readSetting(SSS_CONFIG_KEY);
   return row ? coerceSssConfig(row.value) : DEFAULT_SSS_CONFIG;
 });
 
-/** Daily-log per-variant targets — read by the Daily Log timeline to grade each entry. */
+/** Daily-log per-variant targets - read by the Daily Log timeline to grade each entry. */
 export const getDailyLogTargets = cache(async (): Promise<DailyLogTargets> => {
   const row = await readSetting(DAILY_LOG_TARGETS_KEY);
   return row ? coerceDailyLogTargets(row.value) : DEFAULT_DAILY_LOG_TARGETS;
@@ -399,7 +399,7 @@ export async function clearSavedSignature(userId: string): Promise<void> {
 }
 
 /**
- * Daily-log EOD rules — read by the submit action (cutoff + amend window), the EOD job and
+ * Daily-log EOD rules - read by the submit action (cutoff + amend window), the EOD job and
  * the notification centre. Ships disabled, so an install with no row behaves exactly as it
  * did before this engine existed.
  */
@@ -408,7 +408,7 @@ export const getDailyLogEod = cache(async (): Promise<DailyLogEodConfig> => {
   return row ? coerceDailyLogEod(row.value) : DEFAULT_DAILY_LOG_EOD;
 });
 
-/** Agreement readiness prompt threshold — read by the agreement-state derivation. */
+/** Agreement readiness prompt threshold - read by the agreement-state derivation. */
 export const getAgreementWorkflow = cache(async (): Promise<AgreementWorkflowConfig> => {
   const row = await readSetting(AGREEMENT_WORKFLOW_KEY);
   return row ? coerceAgreementWorkflow(row.value) : DEFAULT_AGREEMENT_WORKFLOW;
@@ -428,7 +428,7 @@ export async function writeAgreementWorkflow(config: AgreementWorkflowConfig): P
  * Call distribution + lead-ranking weights.
  *
  * Read on every lead capture (the rotation) and on every desk/pipeline render (the ranking), so
- * the cross-request `unstable_cache` behind `readSetting` matters more here than for most config —
+ * the cross-request `unstable_cache` behind `readSetting` matters more here than for most config -
  * without it this would be an extra round trip on the hottest paths in the app.
  */
 export const getCallDistribution = cache(async (): Promise<CallDistributionConfig> => {

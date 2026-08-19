@@ -8,7 +8,7 @@ import { MOMENTUM_META } from "@/lib/gamification";
 import { formatDate } from "@/lib/format";
 
 /**
- * Gamification UI kit — level rings, XP bars, badge chips, quest cards, podium.
+ * Gamification UI kit - level rings, XP bars, badge chips, quest cards, podium.
  * Pure presentation over lib/gamification.ts data; matches the app's card
  * language (rounded-card / border-line / shadow-card) and the primary blue.
  */
@@ -83,7 +83,7 @@ export function BadgeChip({ badge, size = "md" }: { badge: UnlockedBadge; size?:
   return (
     <div
       className="flex w-16 flex-col items-center gap-1 text-center"
-      title={`${badge.name} (${TIER_LABELS[badge.tier]}) — ${badge.description}${
+      title={`${badge.name} (${TIER_LABELS[badge.tier]}) - ${badge.description}${
         unlocked ? ` Unlocked ${formatDate(badge.unlockedAt!)}.` : " Locked."
       }`}
     >
@@ -107,13 +107,13 @@ export function BadgeChip({ badge, size = "md" }: { badge: UnlockedBadge; size?:
 /** Horizontal strip of the earned badges only (compact contexts). */
 export function BadgeStrip({ badges, max = 8 }: { badges: UnlockedBadge[]; max?: number }) {
   const earned = badges.filter((b) => b.unlockedAt);
-  if (!earned.length) return <p className="text-xs text-muted">No badges yet — they unlock as the work lands.</p>;
+  if (!earned.length) return <p className="text-xs text-muted">No badges yet - they unlock as the work lands.</p>;
   return (
     <div className="flex flex-wrap gap-2">
       {earned.slice(0, max).map((b) => (
         <span
           key={b.key}
-          title={`${b.name} — ${b.description}`}
+          title={`${b.name} - ${b.description}`}
           className="badge-shine grid h-8 w-8 place-items-center rounded-full text-sm"
           style={{ background: TIER_RING[b.tier] }}
         >
@@ -134,7 +134,7 @@ export function QuestCard({ quest, compact = false }: { quest: QuestProgress; co
   /**
    * `compact` is the ADMIN board's row: same component, tighter.
    *
-   * The Arena's admin branch used to hand-roll its own progress bars — a second, slightly
+   * The Arena's admin branch used to hand-roll its own progress bars - a second, slightly
    * different rendering of the identical data, which is how two views of one quest start
    * disagreeing about what "done" looks like. One component, one truth, one variant flag.
    */

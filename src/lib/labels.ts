@@ -20,7 +20,7 @@ export const PAYMENT_TYPE_LABELS: Record<string, string> = {
 /** German Note book-order status (Prisma `BookOrderStatus`). Every enum value has a label, so a
  *  new status can never fall through to a raw string on any screen that reads this. */
 export const BOOK_ORDER_STATUS_LABELS: Record<string, string> = {
-  DEFERRED: "Held — payment",
+  DEFERRED: "Held - payment",
   QUOTE_REQUESTED: "Quote requested",
   QUOTED: "Quoted",
   ORDERED: "Ordered",
@@ -133,12 +133,12 @@ export const SOURCE_LABELS: Record<string, string> = {
 /**
  * Lead lifecycle stages, in funnel order.
  *
- * Worded as the live Synamate board words them — we are replacing that tool, and the team reads
+ * Worded as the live Synamate board words them - we are replacing that tool, and the team reads
  * both during the changeover, so "Offer and didn't buy" must not appear here as "Offer made -
  * didn't buy". The board's twelve columns use the same strings (`lib/pipeline-stages.ts`).
  *
  * NEW_LEAD, WHATSAPP_SENT and STRATEGY_CALL_BOOKED now DO have columns of their own (06/08/2026),
- * so they take the board's exact wording — "Fresh Optins", not "New lead".
+ * so they take the board's exact wording - "Fresh Optins", not "New lead".
  *
  * The remaining DISCO_ and PROPOSAL_SENT labels are still deliberately NOT the board's: those
  * stages have no column (they fold into "Pre-Qualified & Confirmed" and "Offer and didn't buy"),
@@ -165,7 +165,7 @@ export const LEAD_STAGE_LABELS: Record<string, string> = {
 };
 
 /**
- * Funnel order for a DataTable `order` prop — the LABELS, because a stage column's sort
+ * Funnel order for a DataTable `order` prop - the LABELS, because a stage column's sort
  * value is its label (it also feeds CSV export and the text filter, both of which want
  * "New lead", not "NEW_LEAD").
  *
@@ -308,7 +308,7 @@ export const LOG_FIELD_UNIT: Record<string, string> = {
   studentsFlaggedAtRisk: "at-risk flags",
 };
 
-/** Readable role name per log variant — used to label the person in the team feed. */
+/** Readable role name per log variant - used to label the person in the team feed. */
 export const LOG_VARIANT_LABEL: Record<string, string> = {
   DISCOVERY_SPECIALIST: "Discovery Specialist",
   APPOINTMENT_SETTER: "Appointment Setter",

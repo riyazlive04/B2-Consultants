@@ -15,7 +15,7 @@ import type { ActionResult } from "./finance-actions";
  * Batch writes (ER v2 Track A).
  *
  * CREATING and ARCHIVING a batch is `requireAdmin()`. SEATING is `batches.manage`, because
- * deciding which cohort a student joins is a delivery call the Head coach plausibly makes —
+ * deciding which cohort a student joins is a delivery call the Head coach plausibly makes -
  * without thereby handing them every other write on the Students board.
  */
 
@@ -98,7 +98,7 @@ export async function upsertBatch(batchId: string | null, form: FormData): Promi
  * Seat an enrollment in a batch.
  *
  * Over-capacity is a WARNING, not a refusal (`confirmed` re-submits past it). The founders
- * overfill on purpose when a ninth person turns up and the next cohort is a month away — a
+ * overfill on purpose when a ninth person turns up and the next cohort is a month away - a
  * hard block would send them back to a spreadsheet, which is the failure this whole track
  * exists to end.
  */
@@ -143,7 +143,7 @@ export async function seatEnrollment(
   await prisma.enrollment.update({ where: { id: enrollmentId }, data: { batchId } });
 
   // Backfill the coursework this batch has already set. Without it someone who joins in week
-  // three sees an empty task list and reads as fully up to date — the opposite of the truth.
+  // three sees an empty task list and reads as fully up to date - the opposite of the truth.
   const backfilled = await seatStudentTasks(batchId, enrollment.studentId);
 
   await logActivity(session, {

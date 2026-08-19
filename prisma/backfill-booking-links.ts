@@ -4,7 +4,7 @@
  *
  * WHY: a prospect who booked directly on the public form used to stay unlinked from their lead.
  * The ONLY thing that joined the two was the outreach engine's Step 10 cross-check, and that
- * engine ships off — so a booked prospect's BANT score never reached the Qualified verdict
+ * engine ships off - so a booked prospect's BANT score never reached the Qualified verdict
  * (Step 11) or Key Metrics (Step 12). `submitBooking` now links synchronously, but rows created
  * before that fix are still orphaned, and this is how they get repaired.
  *
@@ -18,7 +18,7 @@
  *     path: link only where `leadId`/`bookingId` is null, and set Qualified only where a human
  *     has not already recorded one.
  *
- * Matching uses `normalizeWhatsappNumber` — the same rule `upsertIntakeLead` dedupes on — so a
+ * Matching uses `normalizeWhatsappNumber` - the same rule `upsertIntakeLead` dedupes on - so a
  * booking and a lead written as "+91 98765 43210" and "919876543210" are recognised as one
  * person. Email is a fallback, never a primary: two family members share an inbox more often
  * than they share a mobile.
@@ -37,7 +37,7 @@ const prisma = new PrismaClient();
 const APPLY = process.argv.includes("--apply");
 
 /**
- * Rows seeded by `prisma/demo-data.ts` — recognisable by their @example.com addresses.
+ * Rows seeded by `prisma/demo-data.ts` - recognisable by their @example.com addresses.
  *
  * They matter because as of 29 Jul 2026 they are the ONLY orphaned bookings in production: all
  * three carry a null `bantAvg`, no matching lead exists for any of them, and two share a
@@ -67,7 +67,7 @@ async function main() {
 
   for (const b of orphans) {
     if (isDemoRow(b.email)) {
-      demo.push({ id: b.id, name: b.name, what: `demo fixture (${b.email}) — not a real prospect` });
+      demo.push({ id: b.id, name: b.name, what: `demo fixture (${b.email}) - not a real prospect` });
       continue;
     }
 
@@ -76,7 +76,7 @@ async function main() {
       unmatched.push({
         id: b.id,
         name: b.name,
-        what: `no lead matches ${b.phone ?? "—"} / ${b.email ?? "—"} — needs a human`,
+        what: `no lead matches ${b.phone ?? "-"} / ${b.email ?? "-"} - needs a human`,
       });
       continue;
     }
@@ -115,20 +115,20 @@ async function main() {
   const show = (title: string, rows: Report[]) => {
     if (!rows.length) return;
     console.log(`${title} (${rows.length})`);
-    for (const r of rows) console.log(`  · ${r.name} — ${r.what}`);
+    for (const r of rows) console.log(`  · ${r.name} - ${r.what}`);
     console.log("");
   };
 
   show(APPLY ? "LINKED" : "WOULD LINK", linked);
-  show("SKIPPED — demo data", demo);
-  show("SKIPPED — no matching lead", unmatched);
+  show("SKIPPED - demo data", demo);
+  show("SKIPPED - no matching lead", unmatched);
 
   if (!APPLY && linked.length) console.log("Dry run. Re-run with --apply to write.\n");
   if (demo.length) {
     console.log(
       `${demo.length} of these are seeded demo rows sitting in this database. They are not\n` +
         `prospects, and they are counted by every booking metric on the dashboard. Deleting them\n` +
-        `is a separate, destructive call — this script will not do it.\n`,
+        `is a separate, destructive call - this script will not do it.\n`,
     );
   }
 }
@@ -141,7 +141,7 @@ async function findLead(phone: string | null, whatsapp: string | null, email: st
     if (!raw) continue;
     const normalized = normalizeWhatsappNumber(raw);
     if (normalized) {
-      // The stored `phone` is free-form, so compare on the last 10 digits — the same trick
+      // The stored `phone` is free-form, so compare on the last 10 digits - the same trick
       // `findLeadByNormalizedPhone` uses to survive "+91 " prefixes and leading zeros.
       const tail = normalized.slice(-10);
       const hit = await prisma.lead.findFirst({ where: { phone: { contains: tail } }, select });

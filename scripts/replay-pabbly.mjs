@@ -27,7 +27,7 @@ const secret = process.env.PABBLY_WEBHOOK_SECRET;
 
 // The guard is on the DATABASE, not the URL.
 //
-// A localhost:3000 app server is NOT evidence of a safe target — .env can (and now does) point a
+// A localhost:3000 app server is NOT evidence of a safe target - .env can (and now does) point a
 // local dev server straight at production Supabase, in which case posting here writes a real lead
 // into the real CRM. The URL check alone was security theatre the moment that became true.
 const isLocalUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(base);
@@ -37,27 +37,27 @@ const isLocalDb = /@(localhost|127\.0\.0\.1)[:/]/.test(db);
 if (!force && (!isLocalUrl || !isLocalDb)) {
   console.error(`Refusing to replay without --force.`);
   console.error(`  target : ${base} ${isLocalUrl ? "(local)" : "(NOT local)"}`);
-  console.error(`  database: ${isLocalDb ? "local" : "NOT local — this would create a REAL lead"}`);
+  console.error(`  database: ${isLocalDb ? "local" : "NOT local - this would create a REAL lead"}`);
   if (isLocalUrl && !isLocalDb) {
     console.error("\nThe app is local but its DATABASE_URL is remote, so 'localhost' means nothing here.");
   }
   process.exit(1);
 }
 if (!secret) {
-  console.error("PABBLY_WEBHOOK_SECRET is not set — run with `node --env-file=.env`.");
+  console.error("PABBLY_WEBHOOK_SECRET is not set - run with `node --env-file=.env`.");
   console.error("Without it the route fails closed with 503, which is the correct behaviour.");
   process.exit(1);
 }
 
 // A plausible delivery. `unwrap` accepts the fields at the top level or nested under
-// data/contact/fields/payload, so this exercises the nested path — the one Pabbly actually uses.
+// data/contact/fields/payload, so this exercises the nested path - the one Pabbly actually uses.
 //
 // The identity defaults to a per-second timestamp so repeated runs make DISTINCT leads. Pass
 // `--id` to pin it: the same id twice is what a Pabbly redelivery looks like, and it is the only
 // way to actually exercise the (source, externalRef) de-dupe rather than just assume it works.
 const stamp = flag("id", new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14));
 
-// The contact fields are DERIVED from the identity, not generated independently — so a pinned
+// The contact fields are DERIVED from the identity, not generated independently - so a pinned
 // `--id` reproduces the same person, phone included. `--id` accepts letters, hence the digit
 // fold: the phone dedup normalises punctuation but a non-numeric phone is simply not a phone.
 const digits = [...stamp].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 100000000, 7)
@@ -73,7 +73,7 @@ const payload = {
     phone: `+9199${digits}`,
     city: "Chennai",
     lead_source: "landing_page",
-    campaign_name: "LFMVP — Free Training",
+    campaign_name: "LFMVP - Free Training",
     utm_source: "facebook",
     utm_medium: "paid",
     utm_campaign: "lfmvp_de_2026",
@@ -98,5 +98,5 @@ const text = await res.text();
 console.log(`HTTP ${res.status}`);
 console.log(text);
 
-// A 200 that deduped is still a pass — it proves the idempotency path, not a failure to capture.
+// A 200 that deduped is still a pass - it proves the idempotency path, not a failure to capture.
 if (!res.ok) process.exit(1);

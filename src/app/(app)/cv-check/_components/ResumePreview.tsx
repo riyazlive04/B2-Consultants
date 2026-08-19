@@ -10,7 +10,7 @@ import {
 } from "@/lib/resume-template";
 
 /**
- * Live HTML preview of the CV — a faithful-enough mirror of the PDF so the coach sees
+ * Live HTML preview of the CV - a faithful-enough mirror of the PDF so the coach sees
  * the founder's template (section order, headings, accent, photo/DOB toggles) update as
  * they type. The PDF/DOCX exporters are the source of truth for print; this is the glance.
  */
@@ -135,7 +135,7 @@ function renderBody(id: ResumeSectionId, d: ResumeData, accent: string): ReactNo
                 <span className="font-semibold">{e.institution}{place(e.city, e.country)}</span>
                 <span className="whitespace-nowrap text-[10.5px] text-[#636F85]">{range(e.start, e.end, false)}</span>
               </div>
-              {e.program || e.note ? <p className="text-[11px] text-[#3A465C]">{[e.program, e.note].filter(Boolean).join(" — ")}</p> : null}
+              {e.program || e.note ? <p className="text-[11px] text-[#3A465C]">{[e.program, e.note].filter(Boolean).join(" - ")}</p> : null}
             </div>
           ))}
         </div>
@@ -148,7 +148,7 @@ function renderBody(id: ResumeSectionId, d: ResumeData, accent: string): ReactNo
       ) : null;
     case "computer":
       return d.computerSkills.some((c) => c.name) ? (
-        <p>{d.computerSkills.filter((c) => c.name).map((c) => `${c.name} — ${c.level}`).join("   ·   ")}</p>
+        <p>{d.computerSkills.filter((c) => c.name).map((c) => `${c.name} - ${c.level}`).join("   ·   ")}</p>
       ) : null;
     case "personal":
       return d.personalSkills.some(Boolean) ? <p>{d.personalSkills.filter(Boolean).join("   ·   ")}</p> : null;

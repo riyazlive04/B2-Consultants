@@ -12,7 +12,7 @@ import { RATE_RULES } from "@/lib/rate-limit";
  *   every 5 min  curl -fsS -H "x-cron-secret: $CRON_SECRET" https://<host>/api/cron/alerts
  *
  * The engine carries its own cooldown, so a tighter tick makes the alert more timely without
- * making it noisier — the cadence and the send frequency are independent.
+ * making it noisier - the cadence and the send frequency are independent.
  *
  * Auth, rate limiting, error capture and the run heartbeat live in `cronRoute`. The alert itself
  * ships OFF and no-ops until the founders configure recipients and arm it.

@@ -32,7 +32,7 @@ export default async function DailyLogPage() {
         subtitle={`${view.fullName ? `${view.fullName} - ` : ""}log your key numbers for today. One entry per day.`}
       />
 
-      {/* Player strip: level, XP and badges — the log below is where the XP comes from */}
+      {/* Player strip: level, XP and badges - the log below is where the XP comes from */}
       {game && (
         <div className="rise-in flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface p-4 shadow-card">
           <LevelRing level={game.me.level} size={64} />

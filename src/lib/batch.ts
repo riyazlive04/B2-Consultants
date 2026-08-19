@@ -1,11 +1,11 @@
 /**
- * Batch — pure rules for the unified cohort model (ER v2 Track A).
+ * Batch - pure rules for the unified cohort model (ER v2 Track A).
  *
  * NO prisma, NO server-only: the German Note panel, the Students batches tab and the seat
  * dialog all import from here. DB reads live in `src/server/batches.ts`, writes in
  * `src/server/batch-actions.ts`.
  *
- * Background: `Batch` was `GnBatch`. Decision D1 was "unify" — German Note already ran two
+ * Background: `Batch` was `GnBatch`. Decision D1 was "unify" - German Note already ran two
  * batch worlds (real rows for the LMS, free-text labels on workshop conversions), and a
  * separate B2 coaching batch would have made three. `line` is what keeps the one table honest.
  */
@@ -20,7 +20,7 @@ export const BATCH_LINE_LABELS: Record<BatchLine, string> = {
 /**
  * Which business line a level belongs to.
  *
- * Returns null for OTHER, which is genuinely ambiguous — the founders use it for one-off
+ * Returns null for OTHER, which is genuinely ambiguous - the founders use it for one-off
  * products that belong to neither line. A null here means "don't enforce", not "reject":
  * refusing to seat an OTHER-level student anywhere would be a worse failure than allowing it.
  */
@@ -53,7 +53,7 @@ export type CapacityBand = "empty" | "filling" | "full" | "over";
  * How full a batch is, as a band rather than a boolean.
  *
  * `over` is deliberately NOT an error state. The founders overfill batches on purpose when a
- * ninth person turns up and the next cohort is a month away — a hard block would send them
+ * ninth person turns up and the next cohort is a month away - a hard block would send them
  * back to a spreadsheet. The seat action warns and asks for confirmation; it does not refuse.
  */
 export function capacityBand(filled: number, target: number): CapacityBand {
@@ -68,7 +68,7 @@ export function capacityLabel(filled: number, target: number): string {
   const band = capacityBand(filled, target);
   if (target <= 0) return `${filled} seated`;
   return band === "over"
-    ? `${filled} / ${target} — over capacity`
+    ? `${filled} / ${target} - over capacity`
     : `${filled} / ${target}`;
 }
 
@@ -76,7 +76,7 @@ export function capacityLabel(filled: number, target: number): string {
  * Normalise the founders' batch label ("b26", " B 26 ") to the stored shape ("B26").
  *
  * `Batch.code` is UNIQUE, and these labels arrive typed by hand into workshop workbooks. Two
- * spellings of the same cohort would produce two batches and split its roster — which is the
+ * spellings of the same cohort would produce two batches and split its roster - which is the
  * exact failure the free-text `batchA1`/`batchA2`/`batchB1` columns already caused.
  * Returns "" when nothing usable is left, so callers can reject rather than store junk.
  */

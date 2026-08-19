@@ -7,8 +7,8 @@ import { prisma } from "@/lib/prisma";
  * Scoped "is there anything new" signal for the Conversations inbox's live polling.
  * Mirrors /api/notifications' fix for the same problem: a naive router.refresh() timer re-runs the
  * WHOLE force-dynamic page (getInboxThreads' two 400-row fetches + joins) every poll, per open tab.
- * This returns a cheap fingerprint instead — two indexed MAX(createdAt) aggregates + an unread
- * count — so the client only pays for a real getInboxThreads refetch when something actually
+ * This returns a cheap fingerprint instead - two indexed MAX(createdAt) aggregates + an unread
+ * count - so the client only pays for a real getInboxThreads refetch when something actually
  * changed since its last poll.
  */
 export async function GET() {

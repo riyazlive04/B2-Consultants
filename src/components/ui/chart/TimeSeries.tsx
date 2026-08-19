@@ -20,23 +20,23 @@ import {
 import { ChartFrame, ChartTooltip, useChartCursor, type ChartState, type LegendItem } from "./ChartFrame";
 
 /**
- * Trend chart — line, area or column, over an ordered axis (§5.8 "Line", "Bar").
+ * Trend chart - line, area or column, over an ordered axis (§5.8 "Line", "Bar").
  *
  * WHEN TO REACH FOR THIS (the analyst rule, so the choice isn't taste):
- *   - **line**   — a continuous quantity read for DIRECTION over many periods (cash balance,
+ *   - **line**   - a continuous quantity read for DIRECTION over many periods (cash balance,
  *                  win rate). Connecting the points asserts continuity between them, so it is
  *                  wrong for discrete buckets that don't flow into each other.
- *   - **area**   — a line whose distance from zero is also the point (revenue, volume). Only
+ *   - **area**   - a line whose distance from zero is also the point (revenue, volume). Only
  *                  ever for a single series: two overlapping translucent fills are unreadable.
- *   - **column** — few, discrete periods being COMPARED rather than tracked (6 months of
+ *   - **column** - few, discrete periods being COMPARED rather than tracked (6 months of
  *                  enrolments). Columns invite comparing heights; lines invite reading slope.
  *
  * The comparison series (`compare: true`) is the previous period drawn behind the current one:
- * dashed for a line, hollow for a column, so it survives greyscale (§7 — never colour alone).
+ * dashed for a line, hollow for a column, so it survives greyscale (§7 - never colour alone).
  */
 
 export type TimeSeriesDatum = {
-  /** x-axis label — a month, a week ending, a stage name. */
+  /** x-axis label - a month, a week ending, a stage name. */
   label: string;
   /** Long form for the tooltip, where there is room ("July 2026" vs "Jul"). */
   fullLabel?: string;
@@ -45,26 +45,26 @@ export type TimeSeriesDatum = {
 export type TimeSeries = {
   key: string;
   label: string;
-  /** Aligned 1:1 with `points`. `null` is a real gap — no data, drawn as a break, not a zero. */
+  /** Aligned 1:1 with `points`. `null` is a real gap - no data, drawn as a break, not a zero. */
   values: readonly (number | null)[];
   color?: string;
   /** Renders as the "previous period" ghost. */
   compare?: boolean;
   /**
-   * Colour each column by the SIGN of its value (column mode only) — gained green above the
+   * Colour each column by the SIGN of its value (column mode only) - gained green above the
    * axis, lost red below it.
    *
    * A diverging chart, without a separate mode: `barPath` already measures from the value to the
    * zero line in whichever direction that runs, so the only thing a gain/loss chart needed was
    * for the two directions to be told apart. One series carrying signed values also keeps the
-   * NET readable, which is the point of the chart — two opposed series would hide the month
+   * NET readable, which is the point of the chart - two opposed series would hide the month
    * where four joined and four left.
    */
   signedColors?: { positive: string; negative: string };
 };
 
 /**
- * Shade the gap between two series — green where the first is ahead, red where it is behind.
+ * Shade the gap between two series - green where the first is ahead, red where it is behind.
  *
  * For target-vs-actual, where the *gap* is the answer and making the reader measure it against a
  * y-axis is the work the chart exists to remove. Crossings are interpolated (`splitAtCrossings`),
@@ -106,7 +106,7 @@ export function TimeSeriesChart({
   height?: number;
   state?: ChartState;
   /**
-   * Axis labels. Keep it COMPACT — an axis is read peripherally and "₹3.5L" scans where
+   * Axis labels. Keep it COMPACT - an axis is read peripherally and "₹3.5L" scans where
    * "₹3,50,000.00" becomes a wall of digits that widens the gutter and crowds the plot.
    */
   formatValue: (v: number) => string;
@@ -131,16 +131,16 @@ export function TimeSeriesChart({
   /** Shade the variance between two of the series above. See `TimeSeriesBand`. */
   band?: TimeSeriesBand;
   /**
-   * Horizontal rules at fixed values — a plan total, a run-rate projection, a break-even line.
+   * Horizontal rules at fixed values - a plan total, a run-rate projection, a break-even line.
    * Each is labelled twice over, deliberately redundant: inline beside its own line (with the
    * OTHER lines' labels pushed clear of it, so a plan total and an annualised figure sitting
    * close together on the scale never print on top of one another) AND in the legend row above
-   * the chart, which wraps and never collides regardless of card width — the inline label is the
+   * the chart, which wraps and never collides regardless of card width - the inline label is the
    * "which line is this" read, the legend is the one guaranteed legible on a phone.
    */
   referenceLines?: Array<{ value: number; label: string; color?: string }>;
   /**
-   * Rows appended to the tooltip for the hovered index — a running total, a share, a delta.
+   * Rows appended to the tooltip for the hovered index - a running total, a share, a delta.
    *
    * A DERIVED figure often belongs in the readout without belonging on the plot: Finance's daily
    * revenue chart wants "and the month stands at ₹X", which is the number actually being chased
@@ -165,7 +165,7 @@ export function TimeSeriesChart({
       color: s.color ?? seriesColor(i),
       dashed: s.compare,
     })),
-    // Reference lines carry their figure right in the legend — the one place guaranteed to
+    // Reference lines carry their figure right in the legend - the one place guaranteed to
     // wrap and stay legible regardless of card width, which the inline plot label is not.
     ...(referenceLines ?? []).map((rl) => ({
       label: rl.label,
@@ -179,7 +179,7 @@ export function TimeSeriesChart({
     () => [
       ...series.flatMap((s) => s.values.filter((v): v is number => v != null)),
       // A reference line can sit well above every plotted value (a full-year plan against five
-      // months of actuals) — it has to widen the domain itself, or it draws off the top of the
+      // months of actuals) - it has to widen the domain itself, or it draws off the top of the
       // plot and simply never appears.
       ...(referenceLines ?? []).map((rl) => rl.value),
     ],
@@ -191,7 +191,7 @@ export function TimeSeriesChart({
       height={height}
       state={isEmpty && state === "ready" ? "empty" : state}
       legend={legend.length > 1 ? legend : undefined}
-      // Reference-line legend rows live past `series.length` in the merged array — dimming is
+      // Reference-line legend rows live past `series.length` in the merged array - dimming is
       // only meaningful for an actual plotted series, so a reference-line hover is a no-op
       // rather than fading every series out from under it.
       onLegendHover={(i) => setActiveSeries(i != null && i < series.length ? i : null)}
@@ -234,7 +234,7 @@ export function TimeSeriesChart({
          *
          * 0.3 is the house value, and it is the right one for a dozen months across a full-width
          * card. It is the wrong one for a DENSE series in a narrow one: a month of daily takings in
-         * a bento cell is ~10px per day, and taking 30% of that leaves a 6px bar — thinner than its
+         * a bento cell is ~10px per day, and taking 30% of that leaves a 6px bar - thinner than its
          * own 4px corner radius, so it reads as a tick mark rather than a quantity. Below a 14px
          * slot the gutter tightens to the minimum that still separates neighbours.
          */
@@ -258,7 +258,7 @@ export function TimeSeriesChart({
               width={width}
               height={height}
               className="block touch-none rounded-field"
-              /* Focusable (arrow keys walk the series), so it must NOT be aria-hidden — a
+              /* Focusable (arrow keys walk the series), so it must NOT be aria-hidden - a
                  focusable node missing from the accessibility tree strands a screen-reader
                  user on an element their software cannot describe. It announces itself as an
                  image and hands the actual numbers to the sr-only table below. */
@@ -299,7 +299,7 @@ export function TimeSeriesChart({
                     y={y(t)}
                     textAnchor="end"
                     dominantBaseline="middle"
-                    /* 12px, in real pixels — §7's floor, which a viewBox-scaled chart cannot honour */
+                    /* 12px, in real pixels - §7's floor, which a viewBox-scaled chart cannot honour */
                     fontSize={12}
                     fill="var(--viz-ink)"
                   >
@@ -370,7 +370,7 @@ export function TimeSeriesChart({
                   const a = series.find((s) => s.key === band.aheadKey);
                   const b = series.find((s) => s.key === band.behindKey);
                   if (!a || !b) return null;
-                  // Only spans where BOTH series have a value can be shaded — a gap has no gap.
+                  // Only spans where BOTH series have a value can be shaded - a gap has no gap.
                   const runs: BandPoint[][] = [];
                   let run: BandPoint[] = [];
                   points.forEach((_, i) => {
@@ -405,7 +405,7 @@ export function TimeSeriesChart({
                   Labels are stacked top-to-bottom with a minimum gap rather than pinned each to
                   its own line: a plan total and a run-rate projection routinely land within a
                   few pixels of each other on the same scale, and two 12px labels that close
-                  print on top of one another — which is the exact bug this replaces. Sorting by
+                  print on top of one another - which is the exact bug this replaces. Sorting by
                   pixel position and pushing later labels down (never up) keeps every label
                   readable while leaving the dashed lines themselves at their true value. */}
               {(() => {
@@ -479,7 +479,7 @@ export function TimeSeriesChart({
                 }
 
                 // Line / area. Null values break the path into segments rather than being
-                // interpolated over — drawing straight through a gap invents data.
+                // interpolated over - drawing straight through a gap invents data.
                 const segments: Pt[][] = [];
                 let run: Pt[] = [];
                 s.values.forEach((v, i) => {
@@ -547,7 +547,7 @@ export function TimeSeriesChart({
               <ChartTooltip
                 x={x(active)}
                 /* Sit above the HIGHEST live mark at this index. `live` can be empty (a chart
-                   showing only a comparison series), and Math.min() of nothing is Infinity —
+                   showing only a comparison series), and Math.min() of nothing is Infinity -
                    which would place the box off-screen, so fall back to the plot floor. */
                 y={(() => {
                   const tops = live
@@ -564,7 +564,7 @@ export function TimeSeriesChart({
                     color: s.color ?? seriesColor(si),
                     value:
                       s.values[active] == null
-                        ? "—"
+                        ? "-"
                         : (formatTooltip ?? formatValue)(s.values[active] as number),
                   })),
                   // Derived rows carry no swatch: nothing on the plot corresponds to them, and a

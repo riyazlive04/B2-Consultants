@@ -6,7 +6,7 @@ import SiteBlocks from "@/components/sites/SiteBlocks";
 import type { StepCalendars } from "@/server/booking-calendars";
 
 /**
- * The editable page surface — the real page, clickable.
+ * The editable page surface - the real page, clickable.
  *
  * ── Why this renders `SiteBlocks` rather than a preview of its own ──────────────
  * The whole complaint about the old builder was that you edited a form and hoped. A separate
@@ -21,8 +21,8 @@ import type { StepCalendars } from "@/server/booking-calendars";
  *
  * ── Overlays are CSS, not wrapper elements ─────────────────────────────────────
  * Outlines are painted by a generated stylesheet keyed on `[data-n="…"]`, never by wrapping nodes
- * in extra divs. Wrapping would change the layout being edited — a flex row's children would gain
- * an intermediate box — so the page you style would not be the page you ship.
+ * in extra divs. Wrapping would change the layout being edited - a flex row's children would gain
+ * an intermediate box - so the page you style would not be the page you ship.
  */
 /**
  * Node types whose whole content IS their `text`, and which therefore can be typed into directly.
@@ -62,11 +62,11 @@ export default function Canvas({
   /**
    * The funnel's global header and footer, drawn around the page but NOT part of it.
    *
-   * Shown because a page is composed against its chrome — a hero with 88px of top padding looks
+   * Shown because a page is composed against its chrome - a hero with 88px of top padding looks
    * wrong under a logo bar and right without one, and editing it in isolation means discovering
    * that only after publishing. They are inert: `pointer-events-none` means a click lands on the
    * sheet behind them, `idAt` returns null, and the selection clears. That is the correct
-   * behaviour rather than a limitation — these nodes are not in `blocks`, so selecting one would
+   * behaviour rather than a limitation - these nodes are not in `blocks`, so selecting one would
    * open an inspector onto a node no edit here could ever save.
    */
   chromeBefore?: Block[];
@@ -83,7 +83,7 @@ export default function Canvas({
     return el?.dataset?.n ?? null;
   }, []);
 
-  // Escape clears the selection — the standard way out of a canvas, and it costs one listener.
+  // Escape clears the selection - the standard way out of a canvas, and it costs one listener.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onSelect(null); };
     window.addEventListener("keydown", onKey);
@@ -91,7 +91,7 @@ export default function Canvas({
   }, [onSelect]);
 
   /**
-   * Inline text editing — type on the page, as in Synamate.
+   * Inline text editing - type on the page, as in Synamate.
    *
    * ── Why this reaches into the DOM instead of rendering `contentEditable` ───────
    * `SiteBlocks` is the production renderer and must stay free of editor concerns; threading an
@@ -101,7 +101,7 @@ export default function Canvas({
    *
    * ── Why it commits on BLUR, not on every keystroke ────────────────────────────
    * Committing per keypress re-renders the very element being typed into, and React replacing a
-   * contentEditable's children drops the caret to position zero — you would type the first
+   * contentEditable's children drops the caret to position zero - you would type the first
    * letter, then watch every subsequent one land backwards. Committing on blur means no re-render
    * happens mid-edit, so the caret is React's business exactly never.
    *
@@ -135,7 +135,7 @@ export default function Canvas({
    * Drop position from the pointer's place within the target.
    *
    * Top/bottom fifths mean "beside this node"; the middle means "inside it" but only for a
-   * container — offering "inside" for a heading would promise a nesting the model cannot express.
+   * container - offering "inside" for a heading would promise a nesting the model cannot express.
    */
   function dropModeFor(el: HTMLElement, clientY: number, isContainerTarget: boolean): "before" | "after" | "inside" {
     const r = el.getBoundingClientRect();
@@ -147,7 +147,7 @@ export default function Canvas({
 
   const overlayCss = [
     // Every node gets a hairline on hover of the canvas, so the structure is discoverable without
-    // clicking blindly — this is what the form-based builder could never show.
+    // clicking blindly - this is what the form-based builder could never show.
     `[data-n]{outline-offset:-1px}`,
     hoverId && hoverId !== selectedId ? `[data-n="${cssId(hoverId)}"]{outline:1px dashed var(--primary)!important}` : "",
     selectedId ? `[data-n="${cssId(selectedId)}"]{outline:2px solid var(--primary)!important}` : "",
@@ -204,9 +204,9 @@ export default function Canvas({
           }}
           onDragEnd={() => { setDragId(null); setDropHint(null); }}
         >
-          <Chrome blocks={chromeBefore} calendars={calendars} label="Global header — edit it on the Header tab" />
+          <Chrome blocks={chromeBefore} calendars={calendars} label="Global header - edit it on the Header tab" />
           <SiteBlocks blocks={blocks} forms={forms} calendars={calendars} />
-          <Chrome blocks={chromeAfter} calendars={calendars} label="Global footer — edit it on the Footer tab" />
+          <Chrome blocks={chromeAfter} calendars={calendars} label="Global footer - edit it on the Footer tab" />
         </div>
       </div>
     </div>
@@ -217,7 +217,7 @@ export default function Canvas({
  * A band of the funnel's global chrome, drawn around the page being edited.
  *
  * Dimmed and captioned so it is unmistakably context rather than content. It renders the real
- * blocks through the real renderer — a sketched placeholder would be one more thing to drift out
+ * blocks through the real renderer - a sketched placeholder would be one more thing to drift out
  * of step with what actually ships.
  */
 function Chrome({ blocks, calendars, label }: { blocks?: Block[]; calendars?: StepCalendars; label: string }) {

@@ -13,23 +13,23 @@ import { DateText } from "@/components/ui/DateText";
 import { askConfirm, toast } from "@/components/ui/feedback";
 
 /**
- * "Who is in here twice?" — People → Duplicates.
+ * "Who is in here twice?" - People → Duplicates.
  *
  * Duplicate detection was write-time only: it stopped a rep typing the same person again and
  * linked a returning opt-in, but nothing could tell you about the duplicates already in the
- * table — and 23,429 of the 23,545 leads arrived through a bulk import that ran outside both
+ * table - and 23,429 of the 23,545 leads arrived through a bulk import that ran outside both
  * those paths.
  *
  * ── Why merging is manual ───────────────────────────────────────────────────────
  * The screen shows each candidate's call, booking and deal counts, because the row carrying the
- * history is almost always the one to keep — and merging in the wrong direction is not undoable
+ * history is almost always the one to keep - and merging in the wrong direction is not undoable
  * by re-running anything. So there is no "merge all": a human picks the survivor, every time.
  */
 
 const ON_LABEL: Record<DuplicateGroup["on"], { text: string; tone: "warn" | "info" | "neutral" }> = {
   phone: { text: "Same phone number", tone: "warn" },
   email: { text: "Same email", tone: "warn" },
-  // Weaker evidence, and labelled as such — two real people can share a name.
+  // Weaker evidence, and labelled as such - two real people can share a name.
   name: { text: "Same name & city, no phone or email", tone: "neutral" },
 };
 
@@ -42,7 +42,7 @@ function GroupCard({ group, mergeable }: { group: DuplicateGroup; mergeable: boo
       title: `Merge ${loseName} into ${keepName}?`,
       body:
         `Every call, booking, deal, message and note on ${loseName} moves onto ${keepName}, and ` +
-        `blank fields are filled in from it. ${loseName} is then archived — nothing is deleted, ` +
+        `blank fields are filled in from it. ${loseName} is then archived - nothing is deleted, ` +
         `and you can restore it from Contacts → Archived.`,
       confirmLabel: "Merge records",
     });
@@ -66,7 +66,7 @@ function GroupCard({ group, mergeable }: { group: DuplicateGroup; mergeable: boo
 
       <ul className="mt-3 divide-y divide-line">
         {group.members.map((m) => {
-          // The row with history is the sensible survivor — say so rather than making the
+          // The row with history is the sensible survivor - say so rather than making the
           // reader add up three numbers.
           const activity = m.calls + m.bookings + m.opportunities;
           const richest = Math.max(...group.members.map((x) => x.calls + x.bookings + x.opportunities));
@@ -110,7 +110,7 @@ function GroupCard({ group, mergeable }: { group: DuplicateGroup; mergeable: boo
 
       {mergeable && group.members.length > 2 && (
         <p className="mt-2 text-caption text-ink-3">
-          Three or more records matched. Open each and merge them in pairs — a bulk merge across
+          Three or more records matched. Open each and merge them in pairs - a bulk merge across
           more than two rows is too easy to get the wrong way round.
         </p>
       )}
@@ -144,7 +144,7 @@ export function DuplicatesPanel({ report, canMerge }: { report: DuplicatesReport
     <div className="space-y-4">
       {report.truncated && (
         <p className="rounded-card border border-warn bg-warn-soft px-4 py-3 text-caption text-warn-ink">
-          More duplicate groups exist than are shown — this list is capped. Merge these, then
+          More duplicate groups exist than are shown - this list is capped. Merge these, then
           reload to see the next batch.
         </p>
       )}
@@ -152,7 +152,7 @@ export function DuplicatesPanel({ report, canMerge }: { report: DuplicatesReport
         <p className="rounded-card border border-line bg-surface-2 px-4 py-3 text-caption text-ink-2">
           <strong>{report.unidentifiableLeads.toLocaleString("en-IN")}</strong> contacts have
           neither a phone number nor an email. They cannot be matched against anything, so they
-          are invisible to the phone and email checks — the &ldquo;Same name&rdquo; tab is the
+          are invisible to the phone and email checks - the &ldquo;Same name&rdquo; tab is the
           only view of them, and it is a weaker signal.
         </p>
       )}
@@ -175,7 +175,7 @@ export function DuplicatesPanel({ report, canMerge }: { report: DuplicatesReport
               <GroupList
                 groups={report.students}
                 // Merging students would move payments, agreements and tracker history between
-                // records — a bigger decision than a contact merge, and not built yet. The
+                // records - a bigger decision than a contact merge, and not built yet. The
                 // report still surfaces them, because a split student record misreports revenue.
                 mergeable={false}
                 emptyBody="No two students share an email address."

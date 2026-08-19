@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /**
  * Compact page header for the Synamate-parity list pages: a tight title band with an optional
- * soft count pill and right-aligned actions — denser than the icon-chip PageHeader, matching
+ * soft count pill and right-aligned actions - denser than the icon-chip PageHeader, matching
  * GoHighLevel/Synamate's module layout. Uses B2 tokens (no new colours).
  */
 export function ListHeader({

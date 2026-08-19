@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { capacityBand, capacityLabel } from "@/lib/batch";
 
 /**
- * Batch reads — the unified cohort model (ER v2 Track A).
+ * Batch reads - the unified cohort model (ER v2 Track A).
  *
  * Writes live in `batch-actions.ts`. German Note's existing panels keep calling
  * `german-note-metrics.ts`; this module is the line-agnostic view the Students board needs,
@@ -24,7 +24,7 @@ export type BatchRow = {
   startDate: Date | null;
   endDate: Date | null;
   targetStrength: number;
-  /** German Note roster (BatchMember) + B2 seats (Enrollment) — the two ways in. */
+  /** German Note roster (BatchMember) + B2 seats (Enrollment) - the two ways in. */
   filled: number;
   capacity: ReturnType<typeof capacityBand>;
   capacityLabel: string;
@@ -36,7 +36,7 @@ export type BatchRow = {
  * `filled` counts BOTH membership routes and adds them. That is correct rather than lazy: a
  * batch is only ever one line, and a line only ever uses one route (German Note seats through
  * BatchMember, B2 through Enrollment), so exactly one of the two counts is non-zero in
- * practice. Summing means a mixed batch — which the level/line guard is supposed to prevent —
+ * practice. Summing means a mixed batch - which the level/line guard is supposed to prevent -
  * still reports its true headcount rather than silently under-counting half the room.
  */
 export const listBatches = cache(

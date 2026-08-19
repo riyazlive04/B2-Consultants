@@ -11,7 +11,7 @@ import { BrandLogo } from "@/components/shell/BrandLogo";
 
 /**
  * Same two-pane shell as LoginForm (src/app/login/LoginForm.tsx). `token` comes from
- * the page's `searchParams` (see page.tsx) — the query-string convention Better
+ * the page's `searchParams` (see page.tsx) - the query-string convention Better
  * Auth's own /reset-password/:token → callbackURL redirect uses.
  */
 
@@ -34,7 +34,7 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
      * Trim BEFORE comparing and before storing.
      *
      * Setting a password is where a stray space does the most damage: it is baked into the
-     * account, and the person can then never reproduce it — they type the visible characters
+     * account, and the person can then never reproduce it - they type the visible characters
      * forever and are told they are wrong. Trimming here and at sign-in means the two agree.
      *
      * Comparing the TRIMMED values also stops the confirm field failing on an invisible
@@ -62,13 +62,13 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
       );
       return;
     }
-    // resetPassword doesn't mint a session — send them to sign in with the new one.
+    // resetPassword doesn't mint a session - send them to sign in with the new one.
     router.push("/login?reset=success");
   };
 
   return (
     <div className="flex min-h-screen items-stretch bg-surface">
-      {/* brand panel — the one allowed gradient (hero-sky) */}
+      {/* brand panel - the one allowed gradient (hero-sky) */}
       <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">

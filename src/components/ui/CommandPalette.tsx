@@ -8,7 +8,7 @@ import { lockBodyScroll } from "@/lib/scroll-lock";
 
 /**
  * Global ⌘K / Ctrl+K command palette (BUILD_CHECKLIST.md §3) across Contacts, Opportunities and
- * Invoices. A lighter custom overlay rather than the shared `Modal` — Modal's focus-trap and
+ * Invoices. A lighter custom overlay rather than the shared `Modal` - Modal's focus-trap and
  * fixed title/subtitle header are built for entry forms, not a searchable list where arrow keys
  * need to move a selection and Enter needs to navigate rather than submit.
  *
@@ -59,7 +59,7 @@ export function CommandPalette({ sections = [] }: { sections?: PaletteSection[] 
   const router = useRouter();
   const { modLabel } = useModKey();
   const [open, setOpen] = useState(false);
-  // Navigable destinations — the sections this user can actually see. Local, so ⌘K can
+  // Navigable destinations - the sections this user can actually see. Local, so ⌘K can
   // jump anywhere the instant it opens, even before the record index has loaded.
   const sectionItems = useMemo<PaletteItem[]>(
     () =>
@@ -179,7 +179,7 @@ export function CommandPalette({ sections = [] }: { sections?: PaletteSection[] 
 
   if (!open) return null;
 
-  // Group by type, in a fixed, stable order — only render groups that have matches.
+  // Group by type, in a fixed, stable order - only render groups that have matches.
   const groups = TYPE_ORDER
     .map((type) => ({ type, rows: results.filter((r) => r.type === type) }))
     .filter((g) => g.rows.length > 0);

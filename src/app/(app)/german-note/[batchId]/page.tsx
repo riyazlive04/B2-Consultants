@@ -63,7 +63,7 @@ export default async function GnBatchPage({ params }: { params: { batchId: strin
                 <div className="space-y-3">
                   {isArchived && (
                     <p className="rounded-field bg-surface-2 px-3 py-2 text-xs text-muted">
-                      This batch is archived — the discussion is read-only, but your class recordings stay available for lifetime.
+                      This batch is archived - the discussion is read-only, but your class recordings stay available for lifetime.
                     </p>
                   )}
                   <CommunityFeed

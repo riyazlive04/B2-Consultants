@@ -59,7 +59,7 @@ export default async function FinancePage({
   // Deep-link from the top-bar "+ Record" CTA lands on Income (0) or Expenses (1).
   const initialTab = searchParams?.record === "expense" ? 1 : 0;
   /**
-   * WHICH window this page reports on. Previously there was none — every figure was the current
+   * WHICH window this page reports on. Previously there was none - every figure was the current
    * calendar month, hardcoded, with no way to ask for last month or a custom range and therefore
    * no way to export one either. `parsePeriod` is total: a malformed URL falls back to this month
    * rather than erroring.
@@ -84,10 +84,10 @@ export default async function FinancePage({
   const waByPending = await getWhatsAppStatusMap("pendingPaymentId", pendings.map((p) => p.id));
   const today = toDateInputValue(istToday());
   const monthKey = today.slice(0, 7);
-  // Follows the SELECTED window, not today — a page showing June that says "July" is worse
+  // Follows the SELECTED window, not today - a page showing June that says "July" is worse
   // than one with no label at all.
   const monthLabel = period.label;
-  // §6.1: the code rides as a `hint` — visible in the dropdown and searchable, but never
+  // §6.1: the code rides as a `hint` - visible in the dropdown and searchable, but never
   // written into the name field (see ComboBox). `studentCodeById` lets the tables below
   // show the same code beside a denormalised studentName.
   const studentRows = await prisma.student.findMany({
@@ -99,7 +99,7 @@ export default async function FinancePage({
     label: s.fullName,
     hint: s.code ?? undefined,
   }));
-  // Shared with Cash Health's age analysis — see getStudentCodeMap for why it isn't inline.
+  // Shared with Cash Health's age analysis - see getStudentCodeMap for why it isn't inline.
   const studentCodeById = await getStudentCodeMap();
   const activeLevels = await getActiveLevels();
   const levelOpts = levelOptions(activeLevels); // income/pending accept any level (incl. bundles)
@@ -108,7 +108,7 @@ export default async function FinancePage({
   //    anyone who never touches the switch. An unknown ?line= falls back to ALL.
   const kindByLevel = new Map(activeLevels.map((l) => [l.code, l.kind as string]));
   const lineOfLevel = (code: string) => lineForKind(kindByLevel.get(code));
-  // Sticky across navigation via cookie, but an explicit `?line=` in the URL still wins —
+  // Sticky across navigation via cookie, but an explicit `?line=` in the URL still wins -
   // linking a colleague a specific view was a deliberate property of the old design
   // (Error Log E1/E4). See server/business-line-view.ts.
   const line: BusinessLineView = await resolveBusinessLine(searchParams?.line);
@@ -120,7 +120,7 @@ export default async function FinancePage({
     getClientMovement(),
     // Deliberately NOT segmented by business line. Recognition is about time, not about which
     // business a level belongs to, and a per-line split would need the same enrollment link the
-    // confidence note already says is mostly missing — a finer cut of a coarse number.
+    // confidence note already says is mostly missing - a finer cut of a coarse number.
     //
     // `istMonthRange` is HALF-OPEN ([1st, 1st of next month)) while a recognition window's `to`
     // is INCLUSIVE, so the end is pulled back a day. Passing it straight through would earn one
@@ -128,7 +128,7 @@ export default async function FinancePage({
     getRecognition(monthStart, monthEndInclusive),
   ]);
 
-  // The figures every card below reads — combined, or the selected line's slice.
+  // The figures every card below reads - combined, or the selected line's slice.
   const view = {
     revenue: seg ? seg.revenue : metrics.revenue,
     expenses: seg ? seg.expenses : metrics.expenses,
@@ -153,7 +153,7 @@ export default async function FinancePage({
   // Which part of this P&L is measured and which part is an estimate. Rendered by
   // <AllocationNote> (a client component) so its figures follow the ₹/€ toggle.
 
-  // Revenue by programme level — ranked bars, each carrying where that level stood by this same
+  // Revenue by programme level - ranked bars, each carrying where that level stood by this same
   // day last month. Programme colours are FIXED app-wide (§1.3) so the eye learns them: the bar
   // for Guided is the same violet as the Guided chip everywhere else.
   // Raw dual-currency rows: the ₹/€ formatting happens in FinanceBento, which can read the
@@ -164,7 +164,7 @@ export default async function FinancePage({
       ["Guided", metrics.byLevel.GUIDED, metrics.prevByLevel.GUIDED, "var(--lvl-guided)"],
       ["Elite", metrics.byLevel.ELITE, metrics.prevByLevel.ELITE, "var(--lvl-elite)"],
       ["German Note", metrics.byLevel.GERMAN_NOTE, metrics.prevByLevel.GERMAN_NOTE, "var(--lvl-gn)"],
-      // "Other" is a residue bucket, not a programme — it gets the neutral, so it can never be
+      // "Other" is a residue bucket, not a programme - it gets the neutral, so it can never be
       // mistaken for a fifth product line.
       ["Other", metrics.byLevel.OTHER, metrics.prevByLevel.OTHER, "var(--ink-3)"],
     ] as const
@@ -211,7 +211,7 @@ export default async function FinancePage({
       : []),
   ];
 
-  // COGS by category (this month) — same shape as catSlices, restricted to isCogs expenses,
+  // COGS by category (this month) - same shape as catSlices, restricted to isCogs expenses,
   // so the "COGS this month" card's popup breaks the figure down instead of repeating it.
   const cogsCatTotals = new Map<string, { inr: number; eur: number }>();
   for (const e of expenses.filter((e) => e.isCogs && e.date.slice(0, 7) === monthKey)) {
@@ -224,7 +224,7 @@ export default async function FinancePage({
     .map(([c, v]) => ({ label: shortCat(c), amount: v }));
 
   // Honest MoM deltas: this month-to-date vs the SAME days of last month
-  // Only meaningful on the combined view — prevSameDay is not split by line.
+  // Only meaningful on the combined view - prevSameDay is not split by line.
   const momRevenuePct =
     line === "ALL" && metrics.prevSameDay.revenueInr > 0
       ? ((metrics.revenue.inr - metrics.prevSameDay.revenueInr) / metrics.prevSameDay.revenueInr) * 100
@@ -258,7 +258,7 @@ export default async function FinancePage({
       signal: view.net.inr < 0 ? "risk" : "ok",
       signedValue: view.net.inr,
       tooltip: "Net Profit = Revenue minus all costs including marketing and tools.",
-      detailTitle: "Net profit — this month",
+      detailTitle: "Net profit - this month",
       detailNote: "Net = revenue − all costs (COGS, marketing, tools, ops).",
       detailRows: [
         { label: "Revenue (money in)", inrMinor: view.revenue.inr, eurMinor: view.revenue.eur },
@@ -286,7 +286,7 @@ export default async function FinancePage({
       signal: view.gross.inr < 0 ? "risk" : "ok",
       signedValue: view.gross.inr,
       tooltip: "Gross Profit = Revenue minus only delivery costs (COGS).",
-      detailTitle: "Gross profit — this month",
+      detailTitle: "Gross profit - this month",
       detailNote: "Gross = revenue − COGS (direct delivery).",
       detailRows: [
         { label: "Revenue", inrMinor: metrics.revenue.inr, eurMinor: metrics.revenue.eur },
@@ -296,20 +296,20 @@ export default async function FinancePage({
     {
       key: "cogs", label: "COGS this month", iconName: "package",
       inrMinor: view.cogs.inr, eurMinor: view.cogs.eur,
-      detailTitle: "Cost of delivery — this month",
+      detailTitle: "Cost of delivery - this month",
       detailNote: "By category, largest first.",
       detailRows: cogsCatSlices.length
         ? cogsCatSlices.map((c) => ({ label: c.label, inrMinor: c.amount.inr, eurMinor: c.amount.eur }))
-        : [{ label: "No COGS-tagged expenses yet this month", text: "—" }],
+        : [{ label: "No COGS-tagged expenses yet this month", text: "-" }],
     },
     {
       key: "expenses", label: "Expenses this month", iconName: "card",
       inrMinor: view.expenses.inr, eurMinor: view.expenses.eur,
-      detailTitle: "Expenses — this month",
+      detailTitle: "Expenses - this month",
       detailNote: "By category, largest first.",
       detailRows: catSlices.length
         ? catSlices.map((c) => ({ label: c.label, inrMinor: c.amount.inr, eurMinor: c.amount.eur }))
-        : [{ label: "No expenses yet this month", text: "—" }],
+        : [{ label: "No expenses yet this month", text: "-" }],
     },
     {
       key: "receivables", label: "Pending receivables", iconName: "clock",
@@ -329,7 +329,7 @@ export default async function FinancePage({
       detailNote: "Programme-level revenue mix (this month).",
       detailRows: levelItems.length
         ? levelItems.map((l) => ({ label: l.label, inrMinor: l.amount.inr, eurMinor: l.amount.eur }))
-        : [{ label: "No revenue yet", text: "—" }],
+        : [{ label: "No revenue yet", text: "-" }],
     },
   ];
 
@@ -338,12 +338,12 @@ export default async function FinancePage({
       <PageHeader
         icon={<Wallet size={20} />}
         title="Finance"
-        subtitle="Every figure carries both currencies — the ₹/€ toggle picks which one leads; the other sits beneath."
+        subtitle="Every figure carries both currencies - the ₹/€ toggle picks which one leads; the other sits beneath."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {line !== "ALL" && <Pill>{BUSINESS_LINE_LABELS[line]}</Pill>}
             {/* A real control, not a label. The old `<Pill>This month</Pill>` looked like one
-                and did nothing — the page could only ever show the current calendar month. */}
+                and did nothing - the page could only ever show the current calendar month. */}
             <PeriodBar spec={periodSpec} />
             <ExportButton entity="income" label="Income CSV" />
             <ExportButton entity="expenses" label="Expenses CSV" />
@@ -351,7 +351,7 @@ export default async function FinancePage({
         }
       />
 
-      {/* The ₹/€ toggle heads the page and now wraps EVERYTHING below it — the business-line
+      {/* The ₹/€ toggle heads the page and now wraps EVERYTHING below it - the business-line
           totals, the KPI cards, the bento grid AND the Income / Expenses / Pending / Commission
           tables. It began life inside the KPI header (only the KPIs flipped), then covered the
           top block; a figure that stayed in rupees while the toggle said EUR was the complaint.
@@ -359,7 +359,7 @@ export default async function FinancePage({
           The two ANNUAL cards are the deliberate exception and stay in ₹: they plot a target, and
           `MonthlyTarget` stores `targetInrMinor` only, so converting it at today's rate would make
           a fixed target drift every time the ECB moves. Their cards say so. Making them flip
-          honestly needs a EUR target column — a decision, not a formatting change.
+          honestly needs a EUR target column - a decision, not a formatting change.
 
           The provider emits no DOM node, so widening it changes no layout. */}
       <FinanceCurrencyProvider>
@@ -390,7 +390,7 @@ export default async function FinancePage({
           confidence={recognitionConfidence(recognition)}
         />
 
-        {/* Bento grid — hero + breakdowns left, top payments right. A client component, so every
+        {/* Bento grid - hero + breakdowns left, top payments right. A client component, so every
             figure in it answers to the ₹/€ toggle (it used to be inline here and therefore INR). */}
         <FinanceBento
           revenue={view.revenue}
@@ -423,31 +423,31 @@ export default async function FinancePage({
           }))}
         />
 
-      {/* §3.2/§3.3 — the year view the dashboard never had: cumulative target vs
+      {/* §3.2/§3.3 - the year view the dashboard never had: cumulative target vs
           achieved across Jan–Dec, with a run-rate projection to year-end. */}
       <Card
-        title={<CardTitle icon={<CalendarRange size={16} />}>Month on month — {annual.year}</CardTitle>}
-        subtitle="Plan pace, actual and what it now takes to still make the year. Hover any month. Shown in ₹ — the monthly target is set in rupees."
+        title={<CardTitle icon={<CalendarRange size={16} />}>Month on month - {annual.year}</CardTitle>}
+        subtitle="Plan pace, actual and what it now takes to still make the year. Hover any month. Shown in ₹ - the monthly target is set in rupees."
       >
         <AnnualChart data={annual} />
       </Card>
 
-      {/* F1 — the founder's own tracking sheet, rebuilt. Bars against plan, with the three
+      {/* F1 - the founder's own tracking sheet, rebuilt. Bars against plan, with the three
           reference horizontals (plan total, actual total, annualised run rate). Sits beside
           the line chart above on purpose: lines answer "where is this heading", bars answer
-          "where are we against plan" — the sheet this replaces is a bar chart. */}
+          "where are we against plan" - the sheet this replaces is a bar chart. */}
       <Card
-        title={<CardTitle icon={<BarChart3 size={16} />}>Cumulative tracking — {annual.year}</CardTitle>}
-        subtitle="Forecast vs actual, month by month. Months still to come are left blank rather than shown as zero. Shown in ₹ — the plan is set in rupees."
+        title={<CardTitle icon={<BarChart3 size={16} />}>Cumulative tracking - {annual.year}</CardTitle>}
+        subtitle="Forecast vs actual, month by month. Months still to come are left blank rather than shown as zero. Shown in ₹ - the plan is set in rupees."
       >
         <CumulativeTrackingChart data={annual} />
       </Card>
 
-      {/* §3.4 — recurring-revenue movement: is the client base under the revenue
+      {/* §3.4 - recurring-revenue movement: is the client base under the revenue
           growing or shrinking? Not split by line: an enrolment's level maps to a
           programme, but churn is counted per student across the whole roster. */}
       <Card
-        title={<CardTitle icon={<Users size={16} />}>Client movement — {annual.year}</CardTitle>}
+        title={<CardTitle icon={<Users size={16} />}>Client movement - {annual.year}</CardTitle>}
         subtitle="Clients gained and lost each month against the active client base."
       >
         <ClientMovementChart months={clientMovement} />

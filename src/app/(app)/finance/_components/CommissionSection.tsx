@@ -119,8 +119,8 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
         {report.offDayReviews > 0 && (
           <p className="mt-3 rounded-field bg-watch-soft px-3 py-2 text-xs font-medium text-watch">
             {report.offDayReviews} discovery call{report.offDayReviews === 1 ? " is" : "s are"} credited on a
-            caller&rsquo;s day off (a Saturday they don&rsquo;t work). Confirm who covered — and record the cover
-            on the discovery outcome — so the commission is split to the right person.
+            caller&rsquo;s day off (a Saturday they don&rsquo;t work). Confirm who covered - and record the cover
+            on the discovery outcome - so the commission is split to the right person.
           </p>
         )}
       </Card>

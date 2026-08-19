@@ -1,5 +1,5 @@
 /**
- * Levels — isomorphic types + pure helpers for the configurable level/tier catalogue.
+ * Levels - isomorphic types + pure helpers for the configurable level/tier catalogue.
  *
  * NO prisma, NO server-only: the settings UI, finance UI and pipeline forms all import from here.
  * The DB-facing reader lives in `src/server/levels.ts`; the admin CRUD in `src/server/level-actions.ts`.

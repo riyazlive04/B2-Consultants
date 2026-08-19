@@ -39,7 +39,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
   // modal keeps working across the re-renders that editing causes.
   const [picking, setPicking] = useState<{ colIdx: number; blockId: string } | null>(null);
 
-  // The last content known to be on the server. Compared against `sections` to decide dirtiness —
+  // The last content known to be on the server. Compared against `sections` to decide dirtiness -
   // a boolean flag would go stale the moment a save landed while an edit was in flight.
   const savedRef = useRef(JSON.stringify(page.sections));
   const dirty = JSON.stringify(sections) !== savedRef.current;
@@ -61,7 +61,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
     setSavedAt(new Date());
   }, [canManage, page.id, sections]);
 
-  // Autosave. GHL shows "Last saved 3:38 PM" and the team will expect the same — but the real
+  // Autosave. GHL shows "Last saved 3:38 PM" and the team will expect the same - but the real
   // reason is that a builder without it loses work to a closed tab, and this content is the
   // public face of the business.
   useEffect(() => {
@@ -183,7 +183,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
       </div>
 
       {showRevisions && (
-        <Card title="History" subtitle="Every save is snapshotted — restoring is itself a save, so nothing is lost">
+        <Card title="History" subtitle="Every save is snapshotted - restoring is itself a save, so nothing is lost">
           {page.revisions.length === 0 ? (
             <p className="text-sm text-ink-3">No earlier versions yet.</p>
           ) : (
@@ -294,7 +294,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
               className="mx-auto overflow-hidden rounded-card border border-line bg-white"
               style={{ width: device === "mobile" ? 390 : "100%", maxWidth: "100%" }}
             >
-              {/* The same component the public route renders, so what is on screen is what ships —
+              {/* The same component the public route renders, so what is on screen is what ships -
                   a preview built from a second implementation is a preview that drifts. */}
               <SitePageRenderer
                 sections={sections}
@@ -324,7 +324,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
             url: img.url,
             width: img.width ?? undefined,
             height: img.height ?? undefined,
-            // An alt already written for THIS placement wins — it is the more specific description
+            // An alt already written for THIS placement wins - it is the more specific description
             // of the two, and swapping the image should not silently discard someone's wording.
             ...(existingAlt ? {} : img.alt ? { alt: img.alt } : {}),
           });
@@ -501,7 +501,7 @@ function BlockFields({
           <textarea
             className={area}
             rows={3}
-            placeholder="Label|/path — one per line"
+            placeholder="Label|/path - one per line"
             value={(b.items ?? []).join("\n")}
             onChange={(e) => onPatch({ items: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })}
           />
@@ -559,7 +559,7 @@ function BlockFields({
       return (
         <div>
           {label}
-          <Hint>Edited on the site&apos;s Menu tab — one menu, every page.</Hint>
+          <Hint>Edited on the site&apos;s Menu tab - one menu, every page.</Hint>
         </div>
       );
     default:

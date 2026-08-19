@@ -26,7 +26,7 @@ function monthlyEquivalentInr(p: { amountInrMinor: bigint; frequency: string }):
  *
  * `range` (default "this-month") drives the home page's KPI date-range control. It
  * shifts the "last 3 calendar months" burn window to end at the LAST day the selected
- * range covers, not always today — "Last Month" shows the runway as it stood at the end
+ * range covers, not always today - "Last Month" shows the runway as it stood at the end
  * of last month. "This Month"/"QTD" both end today, so they match the original
  * always-today anchor exactly. Every caller that doesn't pass `range` (the top-bar badge,
  * the notification centre, Cash Health's getCashOverview) keeps today's exact behavior.
@@ -50,7 +50,7 @@ export const getRunwaySnapshot = cache(async (range: KpiRangeKey = "this-month")
     (a, e) => a + Number(aggInrMinor(e.amountInrMinor, e.amountEurMinor, e.fxRateUsed)),
     0,
   );
-  // Average over the months that actually have expense data, not a flat /3 —
+  // Average over the months that actually have expense data, not a flat /3 -
   // a young business (or an un-backfilled month) would otherwise dilute burn
   // and overstate runway, silencing the <3/<6-month alerts.
   const monthsWithData = new Set(
@@ -141,13 +141,13 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
   const monthlyFixedInr = activePayables.reduce((a, p) => a + monthlyEquivalentInr(p), 0);
 
   /**
-   * Money already promised that recurs never — and therefore falls through EVERY other
+   * Money already promised that recurs never - and therefore falls through EVERY other
    * figure on this page:
    *
-   *   · break-even  — `monthlyEquivalentMinor` returns 0 for ONE_TIME, correctly: a one-off
+   *   · break-even  - `monthlyEquivalentMinor` returns 0 for ONE_TIME, correctly: a one-off
    *                   is not a standing commitment and must not raise the line forever;
-   *   · burn        — burn reads Expense, and a payable becomes an expense only once PAID;
-   *   · due-this-month / dueSoonUnderfunded — both go through `dueOf`, which needs a
+   *   · burn        - burn reads Expense, and a payable becomes an expense only once PAID;
+   *   · due-this-month / dueSoonUnderfunded - both go through `dueOf`, which needs a
    *                   `nextDueDate`, and a one-time payable is routinely entered without one.
    *
    * Each of those rules is right on its own. Together they left a hole exactly where the
@@ -182,7 +182,7 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
     amountInrRaw: p.amountInrMinor.toString(),
     frequency: p.frequency,
     // H5: a recurring payable's stored date is the ANCHOR it was set up with, not its next
-    // occurrence — a monthly payable entered in January still read "15 Jan" in July. Rolled
+    // occurrence - a monthly payable entered in January still read "15 Jan" in July. Rolled
     // forward at read time so the column tells the truth; the stored row is left untouched, so
     // the "due on the 15th" fact survives however long the page goes unvisited.
     nextDueDate: dueOf(p)?.toISOString() ?? null,
@@ -255,7 +255,7 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
     receivables,
     payables: payableRows,
     dueThisMonthInr: dueThisMonth.reduce((a, p) => a + Number(p.amountInrMinor), 0),
-    /** Promised, non-recurring, and not yet paid — see the note at the computation. */
+    /** Promised, non-recurring, and not yet paid - see the note at the computation. */
     commitments: {
       oneTimeInr: committedOneTimeInr,
       cashAfterInr: cashAfterCommitmentsInr,

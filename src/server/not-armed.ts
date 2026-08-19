@@ -28,7 +28,7 @@ import { readDeliveryStatuses } from "./intake-route";
  *   · every accrual off          → finance postings that exist and never post.
  *
  * Each of those looked like a bug from the outside. None of them was. A feature that is built,
- * off, and unmentioned is indistinguishable from a feature that is broken — so this makes the
+ * off, and unmentioned is indistinguishable from a feature that is broken - so this makes the
  * distinction visible, once, in one list.
  *
  * ── The contract ────────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       consequence:
         "Nothing that runs on a clock happens: no slot top-up, no outreach ladder, no dunning, no digests, no retention sweep. Most other switches on this list do nothing without it.",
       where: beatAt
-        ? `Last tick ${beatAt.toISOString()} — the scheduler has stopped. Check the cron container / task.`
+        ? `Last tick ${beatAt.toISOString()} - the scheduler has stopped. Check the cron container / task.`
         : "The scheduler has never ticked. Check the cron sidecar and CRON_SECRET.",
       needsDeploy: true,
     },
@@ -106,10 +106,10 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       name: "Email (Resend)",
       armed: email.enabled,
       consequence:
-        "Password resets, invoices, the dunning ladder, digests and the SOP's opt-in alert all silently do nothing — the send is attempted and discarded.",
+        "Password resets, invoices, the dunning ladder, digests and the SOP's opt-in alert all silently do nothing - the send is attempted and discarded.",
       where: email.envEnabled
         ? email.configured
-          ? "Sending is paused — Conversations → Settings"
+          ? "Sending is paused - Conversations → Settings"
           : "Set RESEND_API_KEY and save a verified From address at Conversations → Settings"
         : 'Set EMAIL_ENABLED="true" and RESEND_API_KEY, then save a From address at Conversations → Settings',
       needsDeploy: !email.envEnabled || !email.apiKey,
@@ -119,9 +119,9 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       name: "WhatsApp (WATI)",
       armed: wati.enabled,
       consequence:
-        "No booking confirmations, reminders, payment nudges or SOP messages reach anyone. The outreach ladder still advances — it just talks to nobody.",
+        "No booking confirmations, reminders, payment nudges or SOP messages reach anyone. The outreach ladder still advances - it just talks to nobody.",
       where: wati.envEnabled
-        ? "Sending is paused or unconfigured — /whatsapp"
+        ? "Sending is paused or unconfigured - /whatsapp"
         : 'Set WATI_ENABLED="true" with the endpoint and token',
       needsDeploy: !wati.envEnabled,
     },
@@ -137,7 +137,7 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       key: "speedToLead",
       name: "Speed-to-lead alert",
       armed: speedToLead.enabled,
-      consequence: "Nobody is told when a new lead goes uncontacted past the SLA — the 5-minute clock runs with no alarm on it.",
+      consequence: "Nobody is told when a new lead goes uncontacted past the SLA - the 5-minute clock runs with no alarm on it.",
       where: "Console → System → Alerts & Chasing",
     },
     {
@@ -172,7 +172,7 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       key: "invoicePosting",
       name: "Invoice-issuance posting",
       armed: posting.invoiceIssuancePosting.enabled,
-      consequence: "Issuing an invoice records no receivable in the ledger — revenue appears only when cash arrives.",
+      consequence: "Issuing an invoice records no receivable in the ledger - revenue appears only when cash arrives.",
       where: "Console → System → Maintenance",
     },
     {
@@ -185,6 +185,6 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
     },
   ];
 
-  // Not-armed first — this is a to-do list, not a status board. Stable order within each half.
+  // Not-armed first - this is a to-do list, not a status board. Stable order within each half.
   return items.sort((a, b) => Number(a.armed) - Number(b.armed));
 }

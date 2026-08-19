@@ -4,7 +4,7 @@
  *   npx tsx prisma/seed-qualification.ts
  *
  * The catalogue is DERIVED by `catalogueFromIntake()` from INTAKE_OPTIONS and
- * BANT_ANSWER_SCORES — the very tables `computeBant()` scores against — rather than
+ * BANT_ANSWER_SCORES - the very tables `computeBant()` scores against - rather than
  * hand-transcribed. That is the whole safety argument for Track D: a hand-written seed is
  * "equivalent by inspection", a claim that survives exactly until someone mistypes a 3 as a
  * 5 in a 40-row score table and nobody notices, because the resulting verdict still looks
@@ -32,7 +32,7 @@ async function main() {
       include: { _count: { select: { answers: true } } },
     });
 
-    // A v1 that has already been answered is frozen — the DB trigger would reject the write
+    // A v1 that has already been answered is frozen - the DB trigger would reject the write
     // anyway, and re-seeding must not be the thing that trips it.
     if (existing && existing._count.answers > 0) {
       skipped++;
@@ -65,7 +65,7 @@ async function main() {
     `Qualification catalogue: ${created} created · ${updated} updated · ${skipped} left frozen (already answered)`,
   );
   console.log(`  ${catalogue.length} questions, ${scored} of them scored (BUDGET / AUTHORITY / NEED / TIMELINE).`);
-  console.log("  Next: npx tsx prisma/replay-bant.ts — the cutover gate.");
+  console.log("  Next: npx tsx prisma/replay-bant.ts - the cutover gate.");
 }
 
 main()

@@ -52,7 +52,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
   const [published, setPublished] = useState(form.published);
   const [saving, setSaving] = useState(false);
   const [openId, setOpenId] = useState<string | null>(form.fields[0]?.id ?? null);
-  /** The field the canvas has selected — what the right-hand inspector is editing. */
+  /** The field the canvas has selected - what the right-hand inspector is editing. */
   const [selectedId, setSelectedId] = useState<string | null>(form.fields[0]?.id ?? null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [drawerOpen, setDrawerOpen] = useState(true);
@@ -77,7 +77,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
     setOpenId(id);
     setItems((fs) => {
       const src = fs[index];
-      // A duplicated question cannot keep the key — two questions writing the same key would have
+      // A duplicated question cannot keep the key - two questions writing the same key would have
       // the second silently overwrite the first in every response.
       const copy: FormItem = {
         ...src,
@@ -93,7 +93,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
       const gone = fs[index];
       const rest = fs.filter((_, i) => i !== index);
       // Deleting a section must take its inbound branches with it, or `saveForm` rejects the whole
-      // form for pointing at a section that no longer exists — with no clue which question did it.
+      // form for pointing at a section that no longer exists - with no clue which question did it.
       return gone.type === "section"
         ? rest.map((f) => ({
             ...f,
@@ -113,7 +113,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
   /**
    * Add from the element palette.
    *
-   * A tile is a TYPE plus the fields that make it that tile — "First Name" is a `text` question
+   * A tile is a TYPE plus the fields that make it that tile - "First Name" is a `text` question
    * whose key is `firstName`. The preset is layered over `newItem` so a palette entry only has to
    * state what differs, and a type gaining a better default picks it up everywhere.
    *
@@ -129,7 +129,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
     setItems((fs) => {
       const seed = fs.filter((f) => !isStaticItem(f.type)).length + 1;
       const created: FormItem = { ...newItem(p.type, id, seed), ...p.preset, id, type: p.type };
-      // A contact key can only be claimed once — two questions writing `email` means the second
+      // A contact key can only be claimed once - two questions writing `email` means the second
       // silently overwrites the first on the contact record.
       if (created.key && fs.some((f) => f.key === created.key)) created.key = `${created.key}_${seed}`;
       const at = fs.findIndex((f) => f.id === selectedId);
@@ -175,7 +175,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
   /**
    * Legal branch targets for the item at `index`: sections that come after it.
    *
-   * Computed per item rather than once for the form, because "later" is relative — and forward-only
+   * Computed per item rather than once for the form, because "later" is relative - and forward-only
    * targets are what make a loop unconstructable rather than merely discouraged.
    */
   function laterSections(index: number) {
@@ -186,7 +186,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
   }
 
   /**
-   * The stacked list of fields — the keyboard-accessible way to edit the same draft the canvas
+   * The stacked list of fields - the keyboard-accessible way to edit the same draft the canvas
    * edits by pointing. Lives under the canvas in a collapsed panel rather than being replaced by
    * it: a pointer-only builder is not a builder for everyone.
    */
@@ -212,7 +212,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
 
         {items.length === 0 && (
           <Card>
-            <p className="text-sm text-ink-3">No questions yet — add one below.</p>
+            <p className="text-sm text-ink-3">No questions yet - add one below.</p>
           </Card>
         )}
 
@@ -274,8 +274,8 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
               </label>
               {settings.createOpportunity && (
                 <div className="mt-2 space-y-2">
-                  <Select placeholder="— pipeline —" value={settings.pipelineId ?? ""} onChange={(e) => setS("pipelineId", e.target.value)} options={pickers.pipelines.map((p) => ({ value: p.id, label: p.name }))} />
-                  <Select placeholder="— stage —" value={settings.stageId ?? ""} onChange={(e) => setS("stageId", e.target.value)} options={(activePipeline?.stages ?? []).map((s) => ({ value: s.id, label: s.name }))} />
+                  <Select placeholder="- pipeline -" value={settings.pipelineId ?? ""} onChange={(e) => setS("pipelineId", e.target.value)} options={pickers.pipelines.map((p) => ({ value: p.id, label: p.name }))} />
+                  <Select placeholder="- stage -" value={settings.stageId ?? ""} onChange={(e) => setS("stageId", e.target.value)} options={(activePipeline?.stages ?? []).map((s) => ({ value: s.id, label: s.name }))} />
                   <input {...dealValueProps.attrs} className={inputCls} value={settings.opportunityValueInr ?? ""} onChange={dealValueProps.onChange} placeholder="Deal value ₹ (optional)" />
                 </div>
               )}
@@ -304,7 +304,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
                 {/* Said plainly: Google enforces this with a sign-in and we cannot. Promising
                     more than a cookie can deliver is how a "verified" number turns out not to be. */}
                 <span className="block text-caption font-normal text-ink-3">
-                  A cookie on their browser — stops a double-tap, not a determined person
+                  A cookie on their browser - stops a double-tap, not a determined person
                 </span>
               </span>
               <Switch checked={!!settings.limitOneResponse} onChange={(v) => setS("limitOneResponse", v)} />
@@ -322,7 +322,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
     /**
      * The builder shell.
      *
-     * Three columns — element palette, the form itself, the inspector — under one toolbar, which
+     * Three columns - element palette, the form itself, the inspector - under one toolbar, which
      * is the arrangement the team already knows from Synamate. The point of copying it is not
      * imitation: it is that everything here is edited by POINTING at it on the form, and that only
      * works if the form is the biggest thing on screen with its tools either side.
@@ -431,12 +431,12 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
             {/*
               The stacked list, kept and collapsed.
               Not nostalgia: clicking a rendered form is a POINTING interaction and is not
-              reachable by keyboard alone. This tree is — every field is a real focusable control
+              reachable by keyboard alone. This tree is - every field is a real focusable control
               in document order. Both views edit the same draft, so they cannot disagree.
             */}
             <details className="mx-6 mb-6 rounded-card border border-line bg-surface">
               <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-ink-2">
-                Outline view — edit as a list (keyboard accessible)
+                Outline view - edit as a list (keyboard accessible)
               </summary>
               <div className="space-y-3 border-t border-line p-4">{outlineList}</div>
             </details>
@@ -467,7 +467,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
                   </div>
                 </div>
                 <div className="p-3">
-                  {/* The real field editor, not a second copy of it — see ItemEditor's `variant`. */}
+                  {/* The real field editor, not a second copy of it - see ItemEditor's `variant`. */}
                   <ItemEditor
                     variant="panel"
                     scoring={scoring}

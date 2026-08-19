@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ACTIVE } from "@/lib/soft-delete";
 
 /**
- * "A new lead just landed for you" — the feed behind the 30s in-app popup.
+ * "A new lead just landed for you" - the feed behind the 30s in-app popup.
  *
  * Scoped and deliberately tiny: this is polled every 30s per open tab, so it must never grow
  * into a page-worth of queries. It returns only leads ASSIGNED TO THE CALLER that arrived
@@ -13,7 +13,7 @@ import { ACTIVE } from "@/lib/soft-delete";
  *
  * Why polling and not SSE/websockets: the app has no real-time transport at all, and a
  * persistent connection is the fragile thing on a phone that sleeps and switches networks.
- * A 30s poll of one indexed query (`@@index([assignedToId])`) is cheap and self-healing —
+ * A 30s poll of one indexed query (`@@index([assignedToId])`) is cheap and self-healing -
  * the same trade-off /api/conversations/poll and the notification bell already make.
  */
 

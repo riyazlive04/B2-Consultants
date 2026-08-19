@@ -19,7 +19,7 @@ import type { StepCalendars } from "@/server/booking-calendars";
  * The page editor: a canvas of the real page, an inspector for the selected node, and the
  * history that makes experimenting safe.
  *
- * Replaces a 15,000-pixel form of nested textareas. The difference is not cosmetic — with the
+ * Replaces a 15,000-pixel form of nested textareas. The difference is not cosmetic - with the
  * form you edited a tree and imagined the page; here you point at the thing you want to change.
  *
  * ── History ────────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ export default function PageEditor({
   forms: { id: string; name: string }[];
   /** Real open slots per booking-block owner, forwarded to the canvas. */
   calendars: StepCalendars;
-  /** The section library. Empty is a valid state — the picker says so rather than hiding. */
+  /** The section library. Empty is a valid state - the picker says so rather than hiding. */
   snippets: SnippetRow[];
   snippetCategories: string[];
   /** The funnel's global header/footer, drawn around the canvas as context. See Canvas. */
@@ -67,7 +67,7 @@ export default function PageEditor({
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [showPalette, setShowPalette] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
-  /** The subtree queued for "Save as section" — held here so the dialog survives a deselect. */
+  /** The subtree queued for "Save as section" - held here so the dialog survives a deselect. */
   const [saving, setSaving] = useState<Block[] | null>(null);
   const past = useRef<Block[][]>([]);
   const future = useRef<Block[][]>([]);
@@ -84,7 +84,7 @@ export default function PageEditor({
     (next: Block[], coalesce = false) => {
       const now = Date.now();
       if (coalesce && now - lastPush.current < COALESCE_MS && past.current.length) {
-        // Keep the snapshot already on the stack — it predates this burst of typing.
+        // Keep the snapshot already on the stack - it predates this burst of typing.
       } else {
         past.current.push(blocks);
         if (past.current.length > 100) past.current.shift();
@@ -126,8 +126,8 @@ export default function PageEditor({
 
   /**
    * Where a new block lands: inside the selection if it can hold children, otherwise directly
-   * after it, otherwise at the end of the page. Silently appending to the document end — which
-   * is what the old builder did — meant scrolling to the bottom to find what you just added.
+   * after it, otherwise at the end of the page. Silently appending to the document end - which
+   * is what the old builder did - meant scrolling to the bottom to find what you just added.
    */
   function addBlock(type: BlockType) {
     const node = makeNode(type);
@@ -156,7 +156,7 @@ export default function PageEditor({
     if (selected && (selected.type === "section" || selected.type === "row" || selected.type === "column" || selected.type === "card")) {
       for (const n of nodes) next = appendChild(next, selected.id, n);
     } else if (selected) {
-      // Reversed, because each node is inserted directly after the SAME anchor — walking forwards
+      // Reversed, because each node is inserted directly after the SAME anchor - walking forwards
       // would land the library's sections on the page in the opposite order to the preview.
       for (const n of [...nodes].reverse()) next = insertAfter(next, selected.id, n);
     } else {
@@ -176,7 +176,7 @@ export default function PageEditor({
     const key = device === "mobile" ? "styleMobile" : "style";
     const merged = { ...(selected[key] ?? {}), ...p };
     // Drop keys set back to undefined so an unset override doesn't linger as `{fontSize:
-    // undefined}` — which would serialise into the page JSON as noise forever.
+    // undefined}` - which would serialise into the page JSON as noise forever.
     for (const k of Object.keys(merged) as (keyof NodeStyle)[]) if (merged[k] === undefined) delete merged[k];
     commit(updateNode(blocks, selected.id, { [key]: merged }));
   }
@@ -223,7 +223,7 @@ export default function PageEditor({
             device={device}
             onMove={(dragId, targetId, mode) => commit(moveNode(blocks, dragId, targetId, mode))}
             // Typed straight into the page. Coalesced in history like the inspector's text field,
-            // so one edit of a headline is one undo — not one per keystroke.
+            // so one edit of a headline is one undo - not one per keystroke.
             onEditText={(id, text) => commit(updateNode(blocks, id, { text }), true)}
             chromeBefore={chromeBefore}
             chromeAfter={chromeAfter}

@@ -10,14 +10,14 @@ import type { ContactListFilters } from "@/server/contacts-metrics";
 
 /**
  * Multi-field filter panel + saved views (BUILD_CHECKLIST.md §3) sitting above ContactsTable.
- * Every filter is a URL search param, so the Contacts page stays a plain server-rendered list —
+ * Every filter is a URL search param, so the Contacts page stays a plain server-rendered list -
  * this component only ever reads/writes the URL, `getContactsList` in page.tsx does the actual
  * filtering server-side (see contacts-metrics.ts).
  *
  * Saved views are `localStorage`-only, per the task's own guidance: a proper server-side store
  * would need a schema change (a per-user "saved view" table), which is off-limits this round.
  * `AppSetting` was considered as a founder-config-shaped alternative, but it's a single global
- * JSON blob the founder edits from /console — not a per-user list a telecaller adds to freely —
+ * JSON blob the founder edits from /console - not a per-user list a telecaller adds to freely -
  * so it's the wrong shape for this. localStorage also means each device keeps its own views,
  * which is a real limitation (not synced across a user's laptop + phone) but avoids inventing a
  * new persistence layer for a Phase-2, non-schema pass.
@@ -41,7 +41,7 @@ const STAGE_OPTS = [
   { value: "NO_SHOW", label: "No Show" },
 ];
 
-// Full LeadSource enum (not just the subset offered when manually adding a contact) — an
+// Full LeadSource enum (not just the subset offered when manually adding a contact) - an
 // existing lead can carry a webhook-ingested source (META_ADS / LANDING_PAGE) that the "Add
 // contact" form never lets a human pick, so the filter must still be able to find it.
 const SOURCE_OPTS = [
@@ -79,7 +79,7 @@ export function ContactsFilterBar({ filters }: { filters: ContactListFilters }) 
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [newViewName, setNewViewName] = useState("");
 
-  // Local buffers for the two free-text fields so every keystroke doesn't force a navigation —
+  // Local buffers for the two free-text fields so every keystroke doesn't force a navigation -
   // debounced into the URL 400ms after typing stops.
   const [qLocal, setQLocal] = useState(searchParams.get("q") ?? "");
   const [cityLocal, setCityLocal] = useState(searchParams.get("city") ?? "");
@@ -103,7 +103,7 @@ export function ContactsFilterBar({ filters }: { filters: ContactListFilters }) 
       const v = next[k];
       if (v) usp.set(k, v);
     }
-    // Any filter change starts back at page 1 — a stale cursor from the old filter set would
+    // Any filter change starts back at page 1 - a stale cursor from the old filter set would
     // point into results the new `where` clause may not even contain.
     router.push(usp.toString() ? `${pathname}?${usp}` : pathname);
   }
@@ -145,7 +145,7 @@ export function ContactsFilterBar({ filters }: { filters: ContactListFilters }) 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
-      /* private browsing / storage full — the view just won't survive reload */
+      /* private browsing / storage full - the view just won't survive reload */
     }
   }
 
@@ -176,7 +176,7 @@ export function ContactsFilterBar({ filters }: { filters: ContactListFilters }) 
           <input
             value={qLocal}
             onChange={(e) => setQLocal(e.target.value)}
-            placeholder="Search contacts — name, phone, email…"
+            placeholder="Search contacts - name, phone, email…"
             aria-label="Search contacts"
             className="h-10 w-full rounded-field border border-line-strong bg-surface pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary-soft"
           />

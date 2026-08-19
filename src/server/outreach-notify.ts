@@ -4,14 +4,14 @@ import { getEmailRuntime, sendResendEmail } from "@/lib/email";
 import { formatDateTimeInZone } from "@/lib/format";
 
 /**
- * Step 1 — "the outreach specialist will be getting the required information also via E-Mail".
+ * Step 1 - "the outreach specialist will be getting the required information also via E-Mail".
  *
  * The SOP's opt-in step has two outputs: a row in the sheet AND an email to the specialist. The
- * row existed; the email did not — `lib/email.ts` was never imported by any intake path, so a new
+ * row existed; the email did not - `lib/email.ts` was never imported by any intake path, so a new
  * opt-in produced no email, no push and no in-app alert (gap A of the report).
  *
  * Fail-safe by construction: never throws, and lead capture never awaits the result. An opt-in
- * must land in the database even if Resend is down — losing the lead would be far worse than
+ * must land in the database even if Resend is down - losing the lead would be far worse than
  * losing the notification.
  */
 
@@ -24,7 +24,7 @@ async function recipientsFor(assignedToId: string | null): Promise<{ id: string;
     });
     if (owner && owner.status === "ACTIVE" && owner.email) return [owner];
   }
-  // Unassigned (or the owner is suspended) — an opt-in must never go unnoticed.
+  // Unassigned (or the owner is suspended) - an opt-in must never go unnoticed.
   return prisma.user.findMany({
     where: { status: "ACTIVE", role: "ADMIN" },
     select: { id: true, name: true, email: true },
@@ -37,12 +37,12 @@ function esc(s: string): string {
 
 /**
  * The email body carries exactly the fields the SOP's sheet row carries, so the checklist's
- * "Email contains the same lead data as the sheet row (no field mismatch)" holds by construction —
+ * "Email contains the same lead data as the sheet row (no field mismatch)" holds by construction -
  * both read from the same Lead record.
  */
 /**
- * The app's public origin. `BETTER_AUTH_URL` is the codebase's convention for this — the same
- * variable `signingUrl()` and the bookings page use — so there is one place to set it, not two.
+ * The app's public origin. `BETTER_AUTH_URL` is the codebase's convention for this - the same
+ * variable `signingUrl()` and the bookings page use - so there is one place to set it, not two.
  *
  * Returns null when unset. An email link MUST be absolute: a relative href renders as a dead link
  * in a mail client, so the caller drops the button rather than shipping one that goes nowhere.
@@ -63,15 +63,15 @@ function renderNewLeadEmail(lead: {
   const optIn = formatDateTimeInZone(lead.createdAt, "Asia/Kolkata");
   const rows: [string, string][] = [
     ["Name", lead.name],
-    ["Contact number", lead.phone ?? "—"],
-    ["Email", lead.email ?? "—"],
-    ["City", lead.city ?? "—"],
+    ["Contact number", lead.phone ?? "-"],
+    ["Email", lead.email ?? "-"],
+    ["City", lead.city ?? "-"],
     ["Source", lead.leadSource],
     ["Opted in (IST)", optIn],
   ];
   const html = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px">
-      <h2 style="margin:0 0 4px">New opt-in — ${esc(lead.name)}</h2>
+      <h2 style="margin:0 0 4px">New opt-in - ${esc(lead.name)}</h2>
       <p style="margin:0 0 16px;color:#666">
         Reach out within 5 minutes (SOP Step 2), then log the time contacted.
       </p>
@@ -96,12 +96,12 @@ function renderNewLeadEmail(lead: {
           : ""
       }
     </div>`;
-  return { subject: `New opt-in: ${lead.name} — reach out within 5 min`, html };
+  return { subject: `New opt-in: ${lead.name} - reach out within 5 min`, html };
 }
 
 /**
  * Notify the outreach specialist of a new opt-in. Resolves silently when email is not armed
- * (EMAIL_ENABLED / RESEND_API_KEY / fromEmail unset) — same fail-closed stance as the WATI layer.
+ * (EMAIL_ENABLED / RESEND_API_KEY / fromEmail unset) - same fail-closed stance as the WATI layer.
  */
 export async function notifyNewOptIn(leadId: string): Promise<void> {
   try {

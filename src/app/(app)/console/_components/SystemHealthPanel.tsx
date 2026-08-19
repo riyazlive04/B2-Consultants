@@ -8,7 +8,7 @@ import { Card, Hint } from "./kit";
  *
  * The console is full of switches for engines that only run when an external scheduler calls a
  * cron route. Nothing on any screen said whether that was actually happening, so a dead scheduler
- * looked exactly like a quiet week — and every toggle above kept claiming to be "on".
+ * looked exactly like a quiet week - and every toggle above kept claiming to be "on".
  *
  * Three questions, answered on one card:
  *   1. Is each cron actually being called, and did it succeed?
@@ -49,7 +49,7 @@ function ageLabel(mins: number | null): string {
 
 function CronRow({ row }: { row: CronRowView }) {
   // Three distinct states, three distinct fixes. "Never run" means nothing is calling the route
-  // at all — a scheduler that was never wired. "Stale" means it used to be called and stopped.
+  // at all - a scheduler that was never wired. "Stale" means it used to be called and stopped.
   // "Failing" means it is being called and throwing. Collapsing these into one red dot would
   // hide which of the three you're looking at.
   const state = row.neverRun
@@ -111,7 +111,7 @@ export function SystemHealthPanel({
           Scheduled jobs
         </h4>
         <Hint>
-          Every engine in this app runs only when an external scheduler calls its cron route — the
+          Every engine in this app runs only when an external scheduler calls its cron route - the
           app has no clock of its own. A job that has <strong>never run</strong> isn&apos;t wired up;
           one that&apos;s <strong>stale</strong> was wired up and stopped.
         </Hint>

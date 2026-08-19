@@ -2,14 +2,14 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { istMonthKeyOf } from "../dates";
 
-describe("istMonthKeyOf — bucketing instants into IST months", () => {
+describe("istMonthKeyOf - bucketing instants into IST months", () => {
   test("a midday instant lands in its own month", () => {
     assert.equal(istMonthKeyOf(new Date("2026-07-15T09:00:00Z")), "2026-07");
   });
 
   test("the 5.5-hour window after IST midnight belongs to the NEW month, not the old one", () => {
     // 2026-07-01 01:00 IST is 2026-06-30 19:30 UTC. Taking the raw UTC month would file a
-    // July lead under June — the exact misbucketing this helper exists to prevent.
+    // July lead under June - the exact misbucketing this helper exists to prevent.
     assert.equal(istMonthKeyOf(new Date("2026-06-30T19:30:00Z")), "2026-07");
   });
 

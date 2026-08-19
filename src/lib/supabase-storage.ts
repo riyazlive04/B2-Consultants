@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Supabase Storage — the media origin for the marketing site.
+ * Supabase Storage - the media origin for the marketing site.
  *
  * ── Why raw fetch and not @supabase/supabase-js ───────────────────────────────────────────────
  * We use exactly three endpoints (upload, delete, public URL) and none of the SDK's session,
@@ -27,7 +27,7 @@ import "server-only";
 export type StorageConfig = { url: string; key: string; bucket: string };
 
 /**
- * Returns null when unconfigured rather than throwing, so every caller must decide what to do —
+ * Returns null when unconfigured rather than throwing, so every caller must decide what to do -
  * and the upload route can answer with a clear 503 instead of a stack trace. Same fail-closed
  * contract as the WATI and lead-webhook seams.
  */
@@ -38,7 +38,7 @@ export function storageConfig(): StorageConfig | null {
   return { url, key, bucket: process.env.SUPABASE_STORAGE_BUCKET || "site-media" };
 }
 
-/** The public URL of a stored object. No credentials — the bucket is public-read by design. */
+/** The public URL of a stored object. No credentials - the bucket is public-read by design. */
 export function publicUrl(cfg: StorageConfig, storageKey: string): string {
   return `${cfg.url}/storage/v1/object/public/${cfg.bucket}/${storageKey}`;
 }
@@ -66,7 +66,7 @@ export async function uploadObject(
     body: new Uint8Array(body),
   });
   if (res.ok) return { ok: true };
-  // Surface Supabase's own message — "Bucket not found" and "invalid JWT" are the two failures
+  // Surface Supabase's own message - "Bucket not found" and "invalid JWT" are the two failures
   // that actually happen on first setup, and both are unrecognisable as a bare status code.
   const detail = await res.text().catch(() => "");
   return { ok: false, error: `Storage upload failed (${res.status}): ${detail.slice(0, 300)}` };
@@ -85,7 +85,7 @@ export async function deleteObject(cfg: StorageConfig, storageKey: string): Prom
  *
  * Date-prefixed so the bucket stays browsable by hand, and suffixed with randomness so two people
  * uploading `logo.png` in the same minute do not collide. The original filename is kept in the
- * MediaAsset row for display — it is NOT trusted here, because a filename is attacker-controlled
+ * MediaAsset row for display - it is NOT trusted here, because a filename is attacker-controlled
  * and this string becomes a URL path.
  */
 export function buildStorageKey(filename: string, random: string, now: Date): string {

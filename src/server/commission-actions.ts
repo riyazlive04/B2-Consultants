@@ -17,14 +17,14 @@ import type { ActionResult } from "./finance-actions";
  * Commission payout runs (audit §C #23).
  *
  * getCommissionReport computes the deal-team split per payment at read time, but nothing ever
- * RECORDED a run or posted the expense — the founder read a screen and paid out of band. This
+ * RECORDED a run or posted the expense - the founder read a screen and paid out of band. This
  * turns "run this month's payout" into one click that:
  *   1. snapshots the month's per-person totals into a CommissionPayoutRun (unique per month), and
- *   2. optionally ACCRUES it to the ledger — Dr Team-salaries / Cr Accounts-payable — so the P&L
+ *   2. optionally ACCRUES it to the ledger - Dr Team-salaries / Cr Accounts-payable - so the P&L
  *      recognises the commission and the payable is on the books.
  *
  * It is ADMIN-triggered (finance.write), never a cron: a human clicking is the sign-off, and money
- * never moves on a schedule. The accrual is Dr expense / Cr AP, NOT Cr cash — it asserts the cost
+ * never moves on a schedule. The accrual is Dr expense / Cr AP, NOT Cr cash - it asserts the cost
  * is owed, not that it was paid, so recording a run can't overstate the bank. The ledger half is
  * additionally gated on financePosting.commissionAccrual (OFF by default); with it off the run is
  * still recorded as a snapshot, just not posted. Idempotent per month.
@@ -50,7 +50,7 @@ export async function runCommissionPayout(): Promise<ActionResult> {
   const totalInrMinor = BigInt(report.totals.reduce((s, t) => s + t.amountInrMinor, 0));
   const lines = report.totals.map((t) => ({ name: t.name, amountInrMinor: t.amountInrMinor, deals: t.deals }));
 
-  // 1. Record the snapshot first — it is the primary artefact and must survive even if the
+  // 1. Record the snapshot first - it is the primary artefact and must survive even if the
   //    optional ledger posting later fails (e.g. an unseeded chart of accounts).
   const run = await prisma.commissionPayoutRun.upsert({
     where: { month: monthDate },
@@ -74,7 +74,7 @@ export async function runCommissionPayout(): Promise<ActionResult> {
     try {
       const draft: DraftEntry = {
         date: istToday(),
-        narration: `Commission owed — ${monthKey}`,
+        narration: `Commission owed - ${monthKey}`,
         sourceType: "MANUAL",
         sourceId: COMMISSION_SOURCE(monthKey),
         postedById: session.user.id,
@@ -89,7 +89,7 @@ export async function runCommissionPayout(): Promise<ActionResult> {
         await prisma.commissionPayoutRun.update({ where: { id: run.id }, data: { postedEntryId: entryId } });
       }
     } catch {
-      // Leave the snapshot recorded, posting withheld — never fail the run over an accounting hiccup.
+      // Leave the snapshot recorded, posting withheld - never fail the run over an accounting hiccup.
     }
   }
 
@@ -98,7 +98,7 @@ export async function runCommissionPayout(): Promise<ActionResult> {
     section: "finance",
     entityType: "CommissionPayoutRun",
     entityId: run.id,
-    summary: `Recorded the ${monthKey} commission payout — ${formatInrMinor(totalInrMinor)} across ${lines.length} ${lines.length === 1 ? "person" : "people"}${postedEntryId ? " (recorded as owed in the ledger)" : ""}`,
+    summary: `Recorded the ${monthKey} commission payout - ${formatInrMinor(totalInrMinor)} across ${lines.length} ${lines.length === 1 ? "person" : "people"}${postedEntryId ? " (recorded as owed in the ledger)" : ""}`,
     meta: { month: monthKey, totalInrMinor: totalInrMinor.toString(), people: lines.length, posted: Boolean(postedEntryId) },
   });
 
@@ -127,7 +127,7 @@ export async function voidCommissionPayout(runId: string): Promise<ActionResult>
         }),
       );
     } catch {
-      // best-effort — proceed to drop the snapshot regardless
+      // best-effort - proceed to drop the snapshot regardless
     }
   }
   await prisma.commissionPayoutRun.delete({ where: { id: runId } });

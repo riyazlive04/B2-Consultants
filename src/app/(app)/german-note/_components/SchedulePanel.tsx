@@ -35,7 +35,7 @@ function EventFields({ event }: { event?: GnEventRow }) {
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Class title">
-          <TextInput name="title" required maxLength={160} placeholder="A1 · Class 13 — Modalverben" defaultValue={event?.title} />
+          <TextInput name="title" required maxLength={160} placeholder="A1 · Class 13 - Modalverben" defaultValue={event?.title} />
         </Field>
         <Field label="Session type">
           <Select name="type" options={EVENT_TYPE_OPTIONS} defaultValue={event?.type ?? "LIVE_CLASS"} />
@@ -101,7 +101,7 @@ function EventCard({ e, canManage, onEdit, onChanged, onTakeRegister }: {
         )}
         {/* The register sits on PAST classes only. Marking a class that hasn't happened is a
             misclick, and a sheet full of absences for a future date would turn every student
-            red — the action re-checks this server-side rather than trusting the hidden button. */}
+            red - the action re-checks this server-side rather than trusting the hidden button. */}
         {canManage && e.isPast && (
           <button type="button"
             className="inline-flex items-center gap-1.5 rounded-btn border border-line-strong px-3 py-1.5 text-sm font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink"
@@ -158,7 +158,7 @@ export function SchedulePanel({ batchId, events, canManage }: { batchId: string;
 
       {events.length === 0 && (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          No classes scheduled{canManage ? " — schedule the next live class above." : " yet — your tutor will post the schedule here."}
+          No classes scheduled{canManage ? " - schedule the next live class above." : " yet - your tutor will post the schedule here."}
         </p>
       )}
 

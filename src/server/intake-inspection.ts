@@ -5,13 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { ACTIVE } from "@/lib/soft-delete";
 
 /**
- * "What did the landing page actually send us?" — the Console report behind the inbound mapping.
+ * "What did the landing page actually send us?" - the Console report behind the inbound mapping.
  *
  * ── Why a report and not a log line ──────────────────────────────────────────────
  * The webhook routes could already print raw payloads (`LEAD_WEBHOOK_DEBUG`), which is fine for
  * a developer tailing a terminal and useless for the person who has to maintain the mapping. It
  * also prints lead PII into a log with no retention policy, and it has to be deliberately turned
- * on — so by the time anyone notices scores are missing, the deliveries that would have
+ * on - so by the time anyone notices scores are missing, the deliveries that would have
  * explained it are gone.
  *
  * This reads what was already stored on each Lead at capture time, so the evidence is there
@@ -29,7 +29,7 @@ export type UnmappedField = {
 };
 
 export type UnresolvedAnswer = {
-  /** Our question key — this one WAS matched, but its answer text was not recognised. */
+  /** Our question key - this one WAS matched, but its answer text was not recognised. */
   questionKey: string;
   count: number;
   /** The unrecognised answer texts. These are what to paste into the alias box. */
@@ -45,18 +45,18 @@ export type IntakeMappingReport = {
   unmapped: UnmappedField[];
   /**
    * The expensive failure: the question matched, the ANSWER did not. These leads have a score,
-   * and it is too low — the dimension scored 0 for want of an alias. Listed first in the UI.
+   * and it is too low - the dimension scored 0 for want of an alias. Listed first in the UI.
    */
   unresolved: UnresolvedAnswer[];
   /** When the most recent inspected capture arrived, so a stale report is obvious. */
   lastCaptureAt: string | null;
   /**
-   * Scoring COVERAGE over the last 7 days — every lead captured, not just the ones that left
+   * Scoring COVERAGE over the last 7 days - every lead captured, not just the ones that left
    * evidence behind.
    *
    * The rest of this report can only describe captures it has evidence for, which means the total
-   * failure — a landing page whose fields match nothing and which therefore produces no mapped
-   * answers at all — used to look identical to "no leads arrived". These two counts are read
+   * failure - a landing page whose fields match nothing and which therefore produces no mapped
+   * answers at all - used to look identical to "no leads arrived". These two counts are read
    * straight off the Lead table, so they are true even when `inspected` is 0. When `captured` is
    * healthy and `scored` is 0, the mapping is broken, and the panel says so.
    */

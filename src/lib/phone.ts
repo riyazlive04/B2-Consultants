@@ -74,6 +74,22 @@ export function normalizeWhatsappNumber(
   return null;
 }
 
+/**
+ * The form a phone number is STORED in: E.164 with the "+" ("+919789961631").
+ *
+ * Lead capture used to store whatever the form sent - "+91 09789961631" with the Indian trunk
+ * zero left in after the country code, or "98765 43210" with no code at all - and that raw
+ * string is what every screen then showed. Canonicalising on the way in means one number has
+ * one spelling everywhere. A number libphonenumber cannot make sense of is kept as typed
+ * (trimmed) rather than dropped: losing a lead's only contact detail is worse than an odd string.
+ */
+export function canonicalPhone(raw: string | null | undefined, defaultCountry: string = DEFAULT_COUNTRY): string | null {
+  const s = (raw ?? "").trim();
+  if (!s) return null;
+  const normalized = normalizeWhatsappNumber(s, defaultCountry);
+  return normalized ? `+${normalized}` : s;
+}
+
 /** Pretty international form for display, e.g. "+91 98765 43210". Falls back to "+digits". */
 export function displayWhatsappNumber(normalized: string | null | undefined): string {
   if (!normalized) return "-";

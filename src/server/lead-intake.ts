@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma, type LeadSource, type Source, type Lead } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
-import { normalizeWhatsappNumber } from "@/lib/phone";
+import { canonicalPhone, normalizeWhatsappNumber } from "@/lib/phone";
 import { pickFirstCaller } from "./assignment";
 import { notifyNewOptIn } from "./outreach-notify";
 import { scoreLeadAtOptIn } from "./lead-qualification";
@@ -94,7 +94,8 @@ function bound(input: IntakeLead): IntakeLead {
   return {
     ...input,
     name: input.name.slice(0, 160),
-    phone: cut(input.phone, 32) ?? null,
+    // Stored canonical ("+919789961631"), never as typed - see canonicalPhone.
+    phone: canonicalPhone(cut(input.phone, 32)),
     email: cut(input.email, 254),
     city: cut(input.city, 120),
     industry: cut(input.industry, 160),

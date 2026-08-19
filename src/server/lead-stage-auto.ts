@@ -2,6 +2,8 @@ import "server-only";
 import type { LeadStage, WhatsAppKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { syncDefaultOpportunity } from "./opportunity-sync";
+import { pickFirstCaller } from "./assignment";
+import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 
 /**
  * Which WhatsApp touchpoints mean "this prospect has now been messaged" for the board.
@@ -26,7 +28,43 @@ const STAGE_ON_SENT: Partial<Record<WhatsAppKind, { to: LeadStage; from: readonl
 export async function advanceLeadStageForWhatsApp(leadId: string, kind: WhatsAppKind): Promise<boolean> {
   const rule = STAGE_ON_SENT[kind];
   if (!rule) return false;
-  return advanceLeadStage(leadId, rule.to, rule.from);
+  const moved = await advanceLeadStage(leadId, rule.to, rule.from);
+  // "WhatsApp Sent" is the point a human takes over (SOP Step 4/5: the first call), so the lead
+  // MUST have a caller by now. Capture already assigns one through the 80/20 rotation; this is
+  // the safety net for a lead that arrived while the rotation was empty or everyone was capped.
+  if (rule.to === "WHATSAPP_SENT") await ensureLeadOwner(leadId);
+  return moved;
+}
+
+/**
+ * Give an unowned lead a caller through the first-call rotation (Nilofer 80 / Asma 20 as
+ * configured) and put that owner on its board card. No-op when the lead already has an owner -
+ * a manual reassignment is never overridden - or when no rotation is configured.
+ */
+export async function ensureLeadOwner(leadId: string): Promise<boolean> {
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { name: true, stage: true, assignedToId: true, deletedAt: true },
+  });
+  if (!lead || lead.deletedAt || lead.assignedToId) return false;
+  const ownerId = await pickFirstCaller().catch(() => null);
+  if (!ownerId) return false;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.lead.update({ where: { id: leadId }, data: { assignedToId: ownerId } });
+    // Same stage, same column - this only carries the new owner onto the card.
+    await syncDefaultOpportunity(tx, leadId, lead.stage);
+  });
+  const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { name: true } });
+  await logSystemActivity(SYSTEM_ACTORS.outreach, {
+    action: "lead.assign",
+    section: "pipeline",
+    entityType: "Lead",
+    entityId: leadId,
+    summary: `Assigned ${lead.name} to ${owner?.name ?? "a caller"} by the first-call rotation`,
+    meta: { assignedToId: ownerId, trigger: "WHATSAPP_SENT" },
+  });
+  return true;
 }
 
 /**

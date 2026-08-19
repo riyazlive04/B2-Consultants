@@ -467,22 +467,39 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
         // the form's own name/value settings, which is the right trade against losing the lead.
         await ensureDefaultOpportunity(prisma, leadId);
       } else {
-        const fx = await getTodayInrPerEur();
-        const inr = settings.opportunityValueInr?.trim() ? majorStringToMinor(settings.opportunityValueInr) : 0n;
-        const max = await prisma.opportunity.aggregate({ where: { stageId: settings.stageId }, _max: { position: true } });
-        await prisma.opportunity.create({
-          data: {
-            leadId,
-            pipelineId: settings.pipelineId,
-            stageId: settings.stageId,
-            name,
-            valueInrMinor: inr,
-            valueEurMinor: inrMinorToEurMinor(inr, fx.rate),
-            fxRateUsed: fx.rate,
-            source: toLeadSource(settings.leadSource),
-            position: (max._max.position ?? -1) + 1,
-          },
+        /**
+         * One card per person per pipeline. The submission is deduped onto an existing LEAD
+         * above, but this used to create a fresh card every time regardless - so someone who
+         * filled the form twice (or came back after their card was deleted) showed up on the
+         * board as two identical "Mohamed Riyaz" cards. If a live card already exists on this
+         * pipeline the submission is recorded and the existing card stands where it is.
+         */
+        const alreadyOnBoard = await prisma.opportunity.findFirst({
+          where: { leadId, pipelineId: settings.pipelineId, deletedAt: null },
+          select: { id: true },
         });
+        if (!alreadyOnBoard) {
+          const fx = await getTodayInrPerEur();
+          const inr = settings.opportunityValueInr?.trim() ? majorStringToMinor(settings.opportunityValueInr) : 0n;
+          const max = await prisma.opportunity.aggregate({ where: { stageId: settings.stageId }, _max: { position: true } });
+          // The card is born with the lead's owner, so the rotation's choice is visible on the
+          // board from the first paint rather than only on the desk.
+          const owner = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+          await prisma.opportunity.create({
+            data: {
+              leadId,
+              pipelineId: settings.pipelineId,
+              stageId: settings.stageId,
+              name,
+              valueInrMinor: inr,
+              valueEurMinor: inrMinorToEurMinor(inr, fx.rate),
+              fxRateUsed: fx.rate,
+              source: toLeadSource(settings.leadSource),
+              assignedToId: owner?.assignedToId ?? null,
+              position: (max._max.position ?? -1) + 1,
+            },
+          });
+        }
       }
     }
   }

@@ -84,10 +84,13 @@ export async function ensureDefaultOpportunity(
   tx: Prisma.TransactionClient,
   leadId: string,
 ): Promise<void> {
-  const existing = await tx.opportunity.count({
-    where: { leadId, pipeline: { isDefault: true, deletedAt: null } },
+  // LIVE cards only. This used to count archived ones too, so a lead whose cards had all been
+  // deleted from the board "had a card" and never got a visible one back - and conversely,
+  // nothing here noticed a lead with no live card at all.
+  const live = await tx.opportunity.count({
+    where: { leadId, deletedAt: null, pipeline: { isDefault: true, deletedAt: null } },
   });
-  if (existing > 0) return;
+  if (live > 0) return;
 
   const lead = await tx.lead.findUnique({
     where: { id: leadId },
@@ -98,6 +101,30 @@ export async function ensureDefaultOpportunity(
 
   const target = await defaultBoardStage(tx, lead.stage, lead.paymentPlan);
   if (!target) return;
+
+  // A lead coming back after its card was deleted gets THAT card back, in the right column, not
+  // a second one. Restoring keeps the card's notes and history; creating would strand them on
+  // an archived row and leave two "Mohamed Riyaz" cards the moment the old one is restored.
+  const archived = await tx.opportunity.findFirst({
+    where: { leadId, deletedAt: { not: null }, pipeline: { isDefault: true, deletedAt: null } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (archived) {
+    const max = await tx.opportunity.aggregate({ where: { stageId: target.id }, _max: { position: true } });
+    await tx.opportunity.update({
+      where: { id: archived.id },
+      data: {
+        deletedAt: null,
+        deletedById: null,
+        stageId: target.id,
+        status: statusForLegacyStage(columnStageFor(lead.stage)),
+        assignedToId: lead.assignedToId,
+        position: (max._max.position ?? -1) + 1,
+      },
+    });
+    return;
+  }
 
   const max = await tx.opportunity.aggregate({ where: { stageId: target.id }, _max: { position: true } });
   await tx.opportunity.create({
@@ -133,20 +160,27 @@ export async function syncDefaultOpportunity(
   newStage: LeadStage,
 ): Promise<void> {
   const opps = await tx.opportunity.findMany({
-    where: { leadId, pipeline: { isDefault: true, deletedAt: null } },
-    select: { id: true, stageId: true, wonAt: true },
+    where: { leadId, deletedAt: null, pipeline: { isDefault: true, deletedAt: null } },
+    select: { id: true, stageId: true, wonAt: true, assignedToId: true },
   });
   if (!opps.length) return;
   // Which of the two won columns a win goes to is the lead's payment plan, so it has to be read
-  // - the caller only tells us the stage. Cheap: one column, and only when a card exists.
-  const lead = await tx.lead.findUnique({ where: { id: leadId }, select: { paymentPlan: true } });
+  // - the caller only tells us the stage. Cheap: one column, and only when a card exists. The
+  // owner rides along: a lead assigned after its card was made (rotation on re-opt-in, a manual
+  // reassignment) otherwise keeps showing an ownerless card while the desk says it has a caller.
+  const lead = await tx.lead.findUnique({ where: { id: leadId }, select: { paymentPlan: true, assignedToId: true } });
   const target = await defaultBoardStage(tx, newStage, lead?.paymentPlan ?? null);
   if (!target) return;
   const status = statusForLegacyStage(columnStageFor(newStage));
   const max = await tx.opportunity.aggregate({ where: { stageId: target.id }, _max: { position: true } });
   let pos = (max._max.position ?? -1) + 1;
   for (const o of opps) {
-    if (o.stageId === target.id) continue; // already in the right column
+    const ownerPatch = lead && o.assignedToId !== lead.assignedToId ? { assignedToId: lead.assignedToId } : {};
+    if (o.stageId === target.id) {
+      // Already in the right column - only the owner may need catching up.
+      if (Object.keys(ownerPatch).length) await tx.opportunity.update({ where: { id: o.id }, data: ownerPatch });
+      continue;
+    }
     await tx.opportunity.update({
       where: { id: o.id },
       data: {
@@ -154,6 +188,7 @@ export async function syncDefaultOpportunity(
         status,
         wonAt: status === "WON" ? o.wonAt ?? new Date() : null,
         position: pos++,
+        ...ownerPatch,
       },
     });
   }

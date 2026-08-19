@@ -188,7 +188,9 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
         orderBy: { position: "asc" },
         take: STAGE_CARD_LIMIT + 1, // fetch one extra to detect overflow without a second COUNT query
         include: {
-          lead: { select: { id: true, name: true, phone: true } },
+          // The lead's owner is the fallback for a card that was created without one (the native
+          // form path until 19/08/2026, or any card made before the lead was assigned).
+          lead: { select: { id: true, name: true, phone: true, assignedTo: { select: { id: true, name: true } } } },
           assignedTo: { select: { id: true, name: true } },
           // Counted here rather than in a second pass: Prisma resolves it as one grouped subquery
           // over the same rows already being fetched, so the badge costs no extra round trip.
@@ -241,8 +243,8 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
       contactPhone: o.lead.phone,
       source: o.source,
       valueInr: formatInrMinor(o.valueInrMinor),
-      ownerName: o.assignedTo?.name ?? null,
-      ownerId: o.assignedTo?.id ?? null,
+      ownerName: o.assignedTo?.name ?? o.lead.assignedTo?.name ?? null,
+      ownerId: o.assignedTo?.id ?? o.lead.assignedTo?.id ?? null,
       status: o.status,
       position: o.position,
       stageId: o.stageId,

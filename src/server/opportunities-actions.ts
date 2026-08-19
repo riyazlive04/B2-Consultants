@@ -8,6 +8,7 @@ import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
 import { majorStringToMinor } from "@/lib/format";
 import { parseMentions } from "@/lib/gn-mentions";
 import { optionalRule, rule } from "@/lib/field-rules";
+import { canonicalPhone } from "@/lib/phone";
 import { statusForLegacyStage } from "@/lib/opportunity-status";
 import { LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
 import { emitTrigger } from "./automation";
@@ -1125,7 +1126,7 @@ export async function updateOpportunityContact(leadId: string, form: FormData): 
   const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true, phone: true, email: true } });
   if (!lead) return { ok: false, error: "Contact not found" };
 
-  const data = { name: d.name, phone: d.phone || null, email: d.email || null };
+  const data = { name: d.name, phone: canonicalPhone(d.phone), email: d.email || null };
   const diff = diffFields(lead, data);
   if (!diff.changed.length) return { ok: true };
 

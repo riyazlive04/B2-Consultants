@@ -25,6 +25,7 @@ describe("planReturningOptIn - the case this was built for", () => {
     // three times in fifteen minutes and appeared nowhere.
     const plan = planReturningOptIn(state({ stage: "LOST", assignedToId: null, journey: null }));
     assert.deepEqual(plan, {
+      restore: false,
       reopenStage: true,
       needsOwner: true,
       restartJourney: true,
@@ -41,13 +42,42 @@ describe("planReturningOptIn - the case this was built for", () => {
   });
 });
 
-describe("planReturningOptIn - what it must not disturb", () => {
-  it("leaves an archived lead alone: archiving is a decision, not an accident", () => {
+describe("planReturningOptIn - an archived lead who comes back", () => {
+  it("restores an archived lead and gives it the full fresh start", () => {
+    // 19/08/2026: a card deleted from the board archived the lead; the same person re-submitted
+    // ninety seconds later, was deduped onto the archived row, received the intro WhatsApp, and
+    // was invisible on every board and desk. A new submission is the person, not the webhook.
     const plan = planReturningOptIn(
       state({ stage: "LOST", assignedToId: null, journey: null, deletedAt: new Date() }),
     );
-    assert.deepEqual(plan, { reopenStage: false, needsOwner: false, restartJourney: false, reopened: false });
+    assert.deepEqual(plan, {
+      restore: true,
+      reopenStage: true,
+      needsOwner: true,
+      restartJourney: true,
+      reopened: true,
+    });
   });
+
+  it("restores even when the archived lead was already NEW_LEAD and owned - but writes no stage row", () => {
+    const plan = planReturningOptIn(state({ deletedAt: new Date() }));
+    assert.equal(plan.restore, true);
+    assert.equal(plan.reopenStage, false);
+    assert.equal(plan.needsOwner, false);
+    assert.equal(plan.restartJourney, true);
+    assert.equal(plan.reopened, true);
+  });
+
+  it("restores an archived lead that had booked before - they are live again, whatever comes next", () => {
+    const plan = planReturningOptIn(
+      state({ stage: "LOST", deletedAt: new Date(), journey: { phase: "IGNORED", bookingId: "bk_1" } }),
+    );
+    assert.equal(plan.restore, true);
+    assert.equal(plan.reopened, true);
+  });
+});
+
+describe("planReturningOptIn - what it must not disturb", () => {
 
   it("leaves a lead that already booked alone, even when it looks dormant", () => {
     // bookingId set is the strongest signal there is: they are past the queue.
@@ -90,12 +120,12 @@ describe("planReturningOptIn - what it must not disturb", () => {
 describe("planReturningOptIn - the three triggers are independent", () => {
   it("an unassigned but otherwise live lead gets an owner and nothing else", () => {
     const plan = planReturningOptIn(state({ assignedToId: null }));
-    assert.deepEqual(plan, { reopenStage: false, needsOwner: true, restartJourney: false, reopened: true });
+    assert.deepEqual(plan, { restore: false, reopenStage: false, needsOwner: true, restartJourney: false, reopened: true });
   });
 
   it("a journeyless live lead gets a journey and nothing else", () => {
     const plan = planReturningOptIn(state({ journey: null }));
-    assert.deepEqual(plan, { reopenStage: false, needsOwner: false, restartJourney: true, reopened: true });
+    assert.deepEqual(plan, { restore: false, reopenStage: false, needsOwner: false, restartJourney: true, reopened: true });
   });
 
   it("every dormant phase restarts the clock", () => {

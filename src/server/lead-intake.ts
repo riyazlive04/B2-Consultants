@@ -271,6 +271,9 @@ async function acceptReturningOptIn(
       where: { id: existing.id },
       data: {
         ...fillBlanks,
+        // Un-archive FIRST: every other write below assumes a live lead, and a restored row
+        // with a stale `deletedById` would claim someone archived it after it came back.
+        ...(plan.restore ? { deletedAt: null, deletedById: null } : {}),
         ...(plan.reopenStage ? { stage: "NEW_LEAD" as const } : {}),
         ...(assignedToId ? { assignedToId } : {}),
       },

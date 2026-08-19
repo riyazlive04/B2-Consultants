@@ -46,6 +46,24 @@ export type ReturningLeadState = {
 };
 
 export type ReturningOptInPlan = {
+  /**
+   * Un-archive the lead (clear the soft-delete) before anything else.
+   *
+   * ── Why an archived lead IS resurrected by a fresh opt-in ──────────────────────────────
+   * This used to be a hard stop ("somebody chose to archive this"). On 19/08/2026 it produced
+   * the worst outcome the dedupe can: a card deleted from the board archived the lead, the same
+   * person submitted the form again ninety seconds later, the dedupe matched them to the
+   * archived row, the intro WhatsApp went out - and the person was invisible on every board and
+   * desk, because every live read filters on `deletedAt`. A human had raised their hand and
+   * nobody could see it.
+   *
+   * The concern the hard stop protected against - a flaky webhook redelivering one old
+   * submission and undoing a deliberate archive - is handled on the redelivery branch, which
+   * matches on the external record id and never re-opens. A NEW submission is the person, not
+   * the webhook, and the person gets a fresh start: live, re-queued, back on the board. If they
+   * were archived for cause, an admin re-archives with one click; the reverse mistake is silent.
+   */
+  restore: boolean;
   /** Move the stage back to NEW_LEAD (and write a stage-history row). */
   reopenStage: boolean;
   /** Run the assignment rotation - the lead currently has no owner. */
@@ -61,6 +79,7 @@ export type ReturningOptInPlan = {
 };
 
 const INERT: ReturningOptInPlan = {
+  restore: false,
   reopenStage: false,
   needsOwner: false,
   restartJourney: false,
@@ -70,14 +89,24 @@ const INERT: ReturningOptInPlan = {
 /**
  * Decide what a fresh opt-in should do to an existing lead.
  *
- * Two hard stops, both "the record already means something we must not overwrite":
- *   • archived - somebody chose to archive this; a webhook must not resurrect it;
- *   • the journey carries a booking - they booked, so they are not a cold lead to be re-queued.
- * In both cases the caller still fills in blank contact fields, which is why this returns a plan
+ * One hard stop - the journey carries a booking: they booked, so they are not a cold lead to be
+ * re-queued. The caller still fills in blank contact fields, which is why this returns a plan
  * rather than a bare boolean.
+ *
+ * An ARCHIVED lead is the opposite of a hard stop: it is restored and given the full fresh-start
+ * treatment (see `restore` above). Its stage is reset whatever it was - an archived row has no
+ * caller mid-chase to yank it away from - and its journey clock restarts from this opt-in.
  */
 export function planReturningOptIn(state: ReturningLeadState): ReturningOptInPlan {
-  if (state.deletedAt) return INERT;
+  if (state.deletedAt) {
+    return {
+      restore: true,
+      reopenStage: state.stage !== "NEW_LEAD",
+      needsOwner: state.assignedToId === null,
+      restartJourney: true,
+      reopened: true,
+    };
+  }
   if (state.journey?.bookingId) return INERT;
 
   const reopenStage = REOPENABLE_STAGES.includes(state.stage);
@@ -87,6 +116,7 @@ export function planReturningOptIn(state: ReturningLeadState): ReturningOptInPla
   const restartJourney = state.journey === null || DORMANT_PHASES.includes(state.journey.phase);
 
   return {
+    restore: false,
     reopenStage,
     needsOwner,
     restartJourney,

@@ -5,18 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowDown, ArrowLeft, ArrowUp, ExternalLink, Globe, History, Monitor,
-  Image as ImageIcon, Plus, Smartphone, Trash2,
+  MousePointerClick, Plus, Smartphone, Trash2,
 } from "lucide-react";
 import { Btn, IconButton } from "@/components/ui/controls";
-import { Card, Hint, Pill } from "@/components/ui/kit";
-import { Select } from "@/components/ui/form";
+import { Card, Pill } from "@/components/ui/kit";
 import { toast, askConfirm } from "@/components/ui/feedback";
-import SitePageRenderer from "@/components/sites/SitePageRenderer";
+import SitePageRenderer, { type EditorSelection } from "@/components/sites/SitePageRenderer";
 import MediaPicker, { type PickedImage } from "@/components/sites/MediaPicker";
 import { groupedTemplates, templateByKey } from "@/lib/site-templates";
-import type { SiteBlock, SiteSectionBlock } from "@/lib/site-types";
+import type { SiteBlock, SiteBlockType, SiteSectionBlock } from "@/lib/site-types";
 import type { PageDetail } from "@/server/sites-metrics";
 import { restoreRevision, savePageSections, togglePublishPage, updatePageMeta } from "@/server/sites-actions";
+import { BlockInspector, SectionInspector } from "./Inspector";
 
 const input =
   "h-9 w-full rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary";
@@ -26,18 +26,33 @@ const area =
 /** Autosave delay. Long enough that typing a paragraph is one save, not forty. */
 const AUTOSAVE_MS = 2500;
 
+/** Starting content for an element added by hand, so it is visible (and clickable) immediately. */
+function blankBlock(type: SiteBlockType, id: string): SiteBlock {
+  switch (type) {
+    case "heading": return { id, type, text: "New heading", align: "center" };
+    case "subheading": return { id, type, text: "New sub heading", align: "center" };
+    case "text": return { id, type, text: "New paragraph. Click to edit this text in the panel on the right." };
+    case "button": return { id, type, label: "Click here", href: "#", align: "center" };
+    case "bullets": return { id, type, items: ["First point", "Second point", "Third point"] };
+    case "spacer": return { id, type, size: 32 };
+    case "image": return { id, type, url: "", alt: "", align: "center" };
+    default: return { id, type };
+  }
+}
+
 export default function PageBuilder({ page, canManage }: { page: PageDetail; canManage: boolean }) {
   const router = useRouter();
 
   const [sections, setSections] = useState<SiteSectionBlock[]>(page.sections);
-  const [selected, setSelected] = useState<string | null>(page.sections[0]?.id ?? null);
+  const [sel, setSel] = useState<EditorSelection | null>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [showRevisions, setShowRevisions] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   // Which block the media picker is filling in. Held as a coordinate rather than a callback so the
   // modal keeps working across the re-renders that editing causes.
-  const [picking, setPicking] = useState<{ colIdx: number; blockId: string } | null>(null);
+  const [picking, setPicking] = useState<{ sectionId: string; colIdx: number; blockId: string } | null>(null);
 
   // The last content known to be on the server. Compared against `sections` to decide dirtiness -
   // a boolean flag would go stale the moment a save landed while an edit was in flight.
@@ -79,7 +94,23 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  const active = useMemo(() => sections.find((s) => s.id === selected) ?? null, [sections, selected]);
+  // Escape clears the selection - the same gesture every design tool uses to "click away".
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+      setSel(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const activeSection = useMemo(() => sections.find((s) => s.id === sel?.sectionId) ?? null, [sections, sel]);
+  const activeBlock = useMemo(() => {
+    if (!activeSection || sel?.colIdx === undefined || !sel.blockId) return null;
+    return activeSection.columns[sel.colIdx]?.find((b) => b.id === sel.blockId) ?? null;
+  }, [activeSection, sel]);
 
   function patchSection(id: string, patch: Partial<SiteSectionBlock>) {
     setSections((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -98,12 +129,13 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
     if (!t) return;
     const built = t.build(nextSeed());
     setSections((prev) => [...prev, built]);
-    setSelected(built.id);
+    setSel({ sectionId: built.id });
+    setShowLibrary(false);
   }
   async function removeSection(id: string) {
     if (!(await askConfirm({ title: "Remove this section?", danger: true }))) return;
     setSections((prev) => prev.filter((s) => s.id !== id));
-    if (selected === id) setSelected(null);
+    if (sel?.sectionId === id) setSel(null);
   }
   function patchBlock(sectionId: string, colIdx: number, blockId: string, patch: Partial<SiteBlock>) {
     setSections((prev) =>
@@ -119,6 +151,30 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
       ),
     );
   }
+  function addBlock(sectionId: string, colIdx: number, type: SiteBlockType) {
+    const id = `b${nextSeed()}`;
+    setSections((prev) =>
+      prev.map((s) =>
+        s.id !== sectionId
+          ? s
+          : { ...s, columns: s.columns.map((col, ci) => (ci !== colIdx ? col : [...col, blankBlock(type, id)])) },
+      ),
+    );
+    setSel({ sectionId, colIdx, blockId: id });
+  }
+  async function removeBlock(sectionId: string, colIdx: number, blockId: string) {
+    if (!(await askConfirm({ title: "Remove this element?", danger: true }))) return;
+    setSections((prev) =>
+      prev.map((s) =>
+        s.id !== sectionId
+          ? s
+          : { ...s, columns: s.columns.map((col, ci) => (ci !== colIdx ? col : col.filter((b) => b.id !== blockId))) },
+      ),
+    );
+    setSel({ sectionId });
+  }
+
+  const inspectorOpen = canManage && !!activeSection;
 
   return (
     <div className="w-full space-y-4">
@@ -218,40 +274,53 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[300px_1fr]">
-        {/* ── Left: structure + editing ── */}
+      {/* ── Workspace: structure | canvas | inspector ──
+          The inspector column only exists while something is selected, so the canvas gets the
+          room back the moment the author clicks away. */}
+      <div
+        className={`grid grid-cols-1 gap-4 ${
+          inspectorOpen ? "xl:grid-cols-[240px_minmax(0,1fr)_340px]" : "xl:grid-cols-[240px_minmax(0,1fr)]"
+        }`}
+      >
+        {/* ── Left: structure ── */}
         <div className="space-y-4">
           <Card title="Sections" flush>
             <div className="space-y-1 p-2">
               {sections.length === 0 && (
                 <p className="px-2 py-3 text-sm text-ink-3">Add a section to start building.</p>
               )}
-              {sections.map((s, i) => (
-                <div
-                  key={s.id}
-                  className={`flex items-center gap-1 rounded-field px-2 py-1.5 ${
-                    s.id === selected ? "bg-primary-soft" : "hover:bg-surface-2"
-                  }`}
-                >
-                  <button
-                    onClick={() => setSelected(s.id)}
-                    className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${
-                      s.id === selected ? "text-primary-strong" : "text-ink-2"
-                    }`}
+              {sections.map((s, i) => {
+                const on = s.id === sel?.sectionId;
+                return (
+                  <div
+                    key={s.id}
+                    className={`flex items-center gap-0.5 rounded-field px-1.5 py-1 ${on ? "bg-primary-soft" : "hover:bg-surface-2"}`}
                   >
-                    {s.name || "Section"}
-                  </button>
-                  <IconButton label="Move up" onClick={() => moveSection(i, -1)}><ArrowUp size={13} /></IconButton>
-                  <IconButton label="Move down" onClick={() => moveSection(i, 1)}><ArrowDown size={13} /></IconButton>
-                  <IconButton label="Remove section" onClick={() => removeSection(s.id)}><Trash2 size={13} /></IconButton>
-                </div>
-              ))}
+                    <button
+                      onClick={() => setSel({ sectionId: s.id })}
+                      className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${on ? "text-primary-strong" : "text-ink-2"}`}
+                    >
+                      {s.name || "Section"}
+                    </button>
+                    <IconButton size="sm" label="Move up" onClick={() => moveSection(i, -1)}><ArrowUp size={13} /></IconButton>
+                    <IconButton size="sm" label="Move down" onClick={() => moveSection(i, 1)}><ArrowDown size={13} /></IconButton>
+                    <IconButton size="sm" label="Remove section" onClick={() => removeSection(s.id)}><Trash2 size={13} /></IconButton>
+                  </div>
+                );
+              })}
             </div>
+            {canManage && (
+              <div className="border-t border-line p-2">
+                <Btn size="sm" variant={showLibrary ? "soft" : "outline"} icon={<Plus size={14} />} onClick={() => setShowLibrary((v) => !v)} className="w-full">
+                  Add a section
+                </Btn>
+              </div>
+            )}
           </Card>
 
-          {canManage && (
-            <Card title="Add a section">
-              <div className="space-y-3">
+          {canManage && showLibrary && (
+            <Card title="Section library" flush>
+              <div className="max-h-[60vh] space-y-3 overflow-y-auto p-3">
                 {groupedTemplates().map((g) => (
                   <div key={g.group}>
                     <p className="mb-1 text-caption font-semibold uppercase text-ink-3">{g.group}</p>
@@ -275,27 +344,28 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
             </Card>
           )}
 
-          {active && canManage && (
-            <SectionInspector
-              section={active}
-              onPatch={(patch) => patchSection(active.id, patch)}
-              onPatchBlock={(ci, bid, patch) => patchBlock(active.id, ci, bid, patch)}
-              onOpenPicker={(ci, bid) => setPicking({ colIdx: ci, blockId: bid })}
-            />
-          )}
-
           {canManage && <PageMetaCard page={page} />}
         </div>
 
-        {/* ── Right: live preview ── */}
-        <Card title="Preview" subtitle={device === "mobile" ? "390px viewport" : "full width"} flush>
-          <div className="overflow-x-auto bg-surface-2 p-4">
+        {/* ── Centre: the canvas ── */}
+        <Card
+          title="Canvas"
+          subtitle={
+            canManage
+              ? device === "mobile" ? "390px viewport · click any element to edit it" : "Click any element to edit it"
+              : device === "mobile" ? "390px viewport" : "full width"
+          }
+          flush
+        >
+          <div className="overflow-x-auto bg-surface-2 p-4" onClick={() => setSel(null)}>
             <div
               className="mx-auto overflow-hidden rounded-card border border-line bg-white"
               style={{ width: device === "mobile" ? 390 : "100%", maxWidth: "100%" }}
+              onClick={(e) => e.stopPropagation()}
             >
               {/* The same component the public route renders, so what is on screen is what ships -
-                  a preview built from a second implementation is a preview that drifts. */}
+                  a preview built from a second implementation is a preview that drifts. Edit mode
+                  adds the click targets and the selection ring; nothing else differs. */}
               <SitePageRenderer
                 sections={sections}
                 header={page.header}
@@ -305,22 +375,57 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
                 incoming={{}}
                 fromPath={page.path}
                 siteDomain={page.siteDomain}
+                edit={canManage ? { selected: sel, onSelect: setSel } : undefined}
               />
             </div>
           </div>
         </Card>
+
+        {/* ── Right: the inspector ── */}
+        {inspectorOpen && activeSection && (
+          <Card flush className="sticky top-4 max-h-[calc(100vh-2rem)] self-start overflow-hidden">
+            {activeBlock && sel?.colIdx !== undefined && sel.blockId ? (
+              <BlockInspector
+                key={activeBlock.id}
+                block={activeBlock}
+                themePrimary={page.theme.primary}
+                themeText={page.theme.text}
+                onPatch={(p) => patchBlock(activeSection.id, sel.colIdx!, sel.blockId!, p)}
+                onRemove={() => removeBlock(activeSection.id, sel.colIdx!, sel.blockId!)}
+                onOpenPicker={() => setPicking({ sectionId: activeSection.id, colIdx: sel.colIdx!, blockId: sel.blockId! })}
+                onClose={() => setSel(null)}
+              />
+            ) : (
+              <SectionInspector
+                key={activeSection.id}
+                section={activeSection}
+                onPatch={(p) => patchSection(activeSection.id, p)}
+                onAddBlock={(ci, type) => addBlock(activeSection.id, ci, type)}
+                onRemove={() => removeSection(activeSection.id)}
+                onClose={() => setSel(null)}
+              />
+            )}
+          </Card>
+        )}
       </div>
+
+      {canManage && !inspectorOpen && (
+        <p className="flex items-center gap-1.5 text-caption text-ink-3">
+          <MousePointerClick size={13} /> Tip: click any heading, paragraph, button or image on the canvas to edit it - or click a section&apos;s background to change the band.
+        </p>
+      )}
 
       <MediaPicker
         open={picking !== null}
         onClose={() => setPicking(null)}
         onPick={(img: PickedImage) => {
-          if (!picking || !active) return;
-          const existingAlt = active.columns[picking.colIdx]?.find((x) => x.id === picking.blockId)?.alt;
+          if (!picking) return;
+          const section = sections.find((s) => s.id === picking.sectionId);
+          const existingAlt = section?.columns[picking.colIdx]?.find((x) => x.id === picking.blockId)?.alt;
           // The intrinsic dimensions come across with the URL. That is the whole reason the picker
           // returns an object rather than a string: without them the renderer guesses, and the
           // page shifts under the visitor as each image arrives.
-          patchBlock(active.id, picking.colIdx, picking.blockId, {
+          patchBlock(picking.sectionId, picking.colIdx, picking.blockId, {
             url: img.url,
             width: img.width ?? undefined,
             height: img.height ?? undefined,
@@ -333,238 +438,6 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
       />
     </div>
   );
-}
-
-/** Edits the selected section: its band styling, and the text of the blocks inside it. */
-function SectionInspector({
-  section,
-  onPatch,
-  onPatchBlock,
-  onOpenPicker,
-}: {
-  section: SiteSectionBlock;
-  onPatch: (patch: Partial<SiteSectionBlock>) => void;
-  onPatchBlock: (colIdx: number, blockId: string, patch: Partial<SiteBlock>) => void;
-  onOpenPicker: (colIdx: number, blockId: string) => void;
-}) {
-  const bg = section.background;
-  return (
-    <Card title={section.name || "Section"} subtitle="Band styling and content">
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-caption font-semibold uppercase text-ink-3">
-            Width
-            <Select
-              size="sm"
-              value={section.width}
-              onChange={(e) => onPatch({ width: e.target.value as SiteSectionBlock["width"] })}
-              options={[
-                { value: "full", label: "Full bleed" },
-                { value: "contained", label: "Contained" },
-              ]}
-            />
-          </label>
-          <label className="text-caption font-semibold uppercase text-ink-3">
-            Background
-            <Select
-              size="sm"
-              value={bg.kind}
-              onChange={(e) => {
-                const kind = e.target.value;
-                onPatch({
-                  background:
-                    kind === "color"
-                      ? { kind: "color", color: bg.kind === "color" ? bg.color : "#4949ef" }
-                      : kind === "image"
-                        ? { kind: "image", url: bg.kind === "image" ? bg.url : "" }
-                        : { kind: "none" },
-                });
-              }}
-              options={[
-                { value: "none", label: "None" },
-                { value: "color", label: "Colour" },
-                { value: "image", label: "Image" },
-              ]}
-            />
-          </label>
-        </div>
-
-        {bg.kind === "color" && (
-          <div className="flex gap-1.5">
-            <input
-              type="color"
-              className="h-9 w-12 rounded-field border border-line bg-surface"
-              value={bg.color}
-              onChange={(e) => onPatch({ background: { kind: "color", color: e.target.value } })}
-            />
-            <input
-              className={input}
-              value={bg.color}
-              onChange={(e) => onPatch({ background: { kind: "color", color: e.target.value } })}
-            />
-          </div>
-        )}
-        {bg.kind === "image" && (
-          <input
-            className={input}
-            placeholder="Image URL"
-            value={bg.url}
-            onChange={(e) => onPatch({ background: { kind: "image", url: e.target.value, overlay: bg.overlay } })}
-          />
-        )}
-
-        <div className="grid grid-cols-2 gap-2">
-          {(["Top", "Bottom"] as const).map((lbl, idx) => (
-            <label key={lbl} className="text-caption font-semibold uppercase text-ink-3">
-              Padding {lbl}
-              <input
-                type="number"
-                className={input}
-                value={section.padding[idx]}
-                onChange={(e) => {
-                  const next: [number, number] = [...section.padding];
-                  next[idx] = Number(e.target.value) || 0;
-                  onPatch({ padding: next });
-                }}
-              />
-            </label>
-          ))}
-        </div>
-
-        <div className="space-y-3 border-t border-line pt-3">
-          {section.columns.map((col, ci) => (
-            <div key={ci}>
-              {section.columns.length > 1 && (
-                <p className="mb-1 text-caption font-semibold uppercase text-ink-3">Column {ci + 1}</p>
-              )}
-              <div className="space-y-2">
-                {col.map((b) => (
-                  <BlockFields
-                    key={b.id}
-                    b={b}
-                    onPatch={(p) => onPatchBlock(ci, b.id, p)}
-                    onOpenPicker={() => onOpenPicker(ci, b.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function BlockFields({
-  b,
-  onPatch,
-  onOpenPicker,
-}: {
-  b: SiteBlock;
-  onPatch: (patch: Partial<SiteBlock>) => void;
-  onOpenPicker: () => void;
-}) {
-  const label = <p className="mb-1 text-caption font-semibold uppercase text-ink-3">{b.type}</p>;
-
-  switch (b.type) {
-    case "heading":
-    case "subheading":
-    case "text":
-      return (
-        <div>
-          {label}
-          <textarea
-            className={area}
-            rows={b.type === "text" ? 3 : 1}
-            value={b.text ?? ""}
-            onChange={(e) => onPatch({ text: e.target.value })}
-          />
-        </div>
-      );
-    case "bullets":
-      return (
-        <div>
-          {label}
-          <textarea
-            className={area}
-            rows={3}
-            placeholder="One item per line"
-            value={(b.items ?? []).join("\n")}
-            onChange={(e) => onPatch({ items: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })}
-          />
-        </div>
-      );
-    case "footerLinks":
-      return (
-        <div>
-          {label}
-          <textarea
-            className={area}
-            rows={3}
-            placeholder="Label|/path - one per line"
-            value={(b.items ?? []).join("\n")}
-            onChange={(e) => onPatch({ items: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })}
-          />
-        </div>
-      );
-    case "button":
-      return (
-        <div>
-          {label}
-          <div className="space-y-1.5">
-            <input className={input} placeholder="Label" value={b.label ?? ""} onChange={(e) => onPatch({ label: e.target.value })} />
-            <input className={input} placeholder="Link" value={b.href ?? ""} onChange={(e) => onPatch({ href: e.target.value })} />
-            <label className="flex items-center gap-1.5 text-caption text-ink-2">
-              <input
-                type="checkbox"
-                checked={b.forwardParams ?? false}
-                onChange={(e) => onPatch({ forwardParams: e.target.checked })}
-              />
-              Carry utm &amp; click ids to the target
-            </label>
-          </div>
-        </div>
-      );
-    case "image":
-    case "logo":
-      return (
-        <div>
-          {label}
-          <div className="space-y-1.5">
-            {b.url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={b.url} alt={b.alt ?? ""} className="h-20 w-full rounded-field bg-surface-2 object-contain" />
-            )}
-            <Btn size="sm" variant="ghost" icon={<ImageIcon size={13} />} onClick={onOpenPicker}>
-              {b.url ? "Replace image" : "Choose image"}
-            </Btn>
-            <input className={input} placeholder="Image URL" value={b.url ?? ""} onChange={(e) => onPatch({ url: e.target.value })} />
-            <input className={input} placeholder="Alt text" value={b.alt ?? ""} onChange={(e) => onPatch({ alt: e.target.value })} />
-            <Hint>
-              Picking from the library also records the image&apos;s real dimensions, which is what
-              stops the page jumping as it loads. A pasted URL cannot.
-            </Hint>
-          </div>
-        </div>
-      );
-    case "video":
-    case "map":
-      return (
-        <div>
-          {label}
-          <input className={input} placeholder="Embed URL" value={b.url ?? ""} onChange={(e) => onPatch({ url: e.target.value })} />
-        </div>
-      );
-    case "nav":
-      return (
-        <div>
-          {label}
-          <Hint>Edited on the site&apos;s Menu tab - one menu, every page.</Hint>
-        </div>
-      );
-    default:
-      return null;
-  }
 }
 
 /** Title, path and SEO. Separate from the body so a copy edit never risks moving the URL. */

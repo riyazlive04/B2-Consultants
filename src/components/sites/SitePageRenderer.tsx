@@ -9,6 +9,22 @@ import type {
 } from "@/lib/site-types";
 
 /**
+ * What the editor has selected on the canvas: a whole section, or one block inside it.
+ * Lives here because the renderer is what draws the selection, and the builder only imports it.
+ */
+export type EditorSelection = { sectionId: string; colIdx?: number; blockId?: string };
+
+/**
+ * Edit mode. When present, every section and block becomes clickable and the selected one is
+ * outlined. When absent (the public route, the thumbnail) the output is byte-for-byte what it
+ * was before edit mode existed - no wrappers, no handlers, nothing for a visitor to notice.
+ */
+export type EditCtx = {
+  selected: EditorSelection | null;
+  onSelect: (sel: EditorSelection) => void;
+};
+
+/**
  * Renders a marketing page.
  *
  * ── Why this is not `SiteBlocks.tsx` ──────────────────────────────────────────────────────────
@@ -32,7 +48,20 @@ type Ctx = {
   siteDomain?: string | null;
   nav: NavItem[];
   logoUrl?: string | null;
+  edit?: EditCtx;
 };
+
+/** The Styles-tab overrides as inline CSS. Absent fields fall through to the class defaults. */
+function textStyle(b: SiteBlock): React.CSSProperties {
+  const s = b.style;
+  if (!s) return {};
+  return {
+    fontSize: s.fontSize !== undefined ? `${s.fontSize}px` : undefined,
+    fontWeight: s.fontWeight,
+    letterSpacing: s.letterSpacing !== undefined ? `${s.letterSpacing}px` : undefined,
+    textTransform: s.textTransform,
+  };
+}
 
 const ALIGN: Record<string, string> = {
   left: "text-left",
@@ -113,6 +142,7 @@ function Anchor({
   style,
   children,
   forwardParams,
+  newTab,
 }: {
   href: string;
   ctx: Ctx;
@@ -120,6 +150,7 @@ function Anchor({
   style?: React.CSSProperties;
   children: React.ReactNode;
   forwardParams?: boolean;
+  newTab?: boolean;
 }) {
   // Server-side forwarding only helps where a request actually exists - the editor preview, or a
   // dynamically rendered page. The public pages are STATIC, so `incoming` is empty there and the
@@ -130,6 +161,8 @@ function Anchor({
     fromPath: ctx.fromPath,
   });
   const external = isExternalHref(href, ctx.siteDomain);
+  // In the editor a click selects the element; it must never navigate the builder away.
+  const inEditor = !!ctx.edit;
   return (
     <a
       href={target || "#"}
@@ -138,7 +171,8 @@ function Anchor({
       {...(forwardParams ? { "data-forward": "1" } : {})}
       // noopener is the one that matters - an external target with window.opener can navigate the
       // page that opened it. noreferrer is kept alongside it as the conventional pair.
-      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+      {...(external || newTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+      {...(inEditor ? { onClick: (e: React.MouseEvent) => e.preventDefault(), tabIndex: -1 } : {})}
     >
       {children}
     </a>
@@ -154,7 +188,7 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
       return (
         <h1
           className={`text-[2.5rem] font-bold leading-tight sm:text-[3.25rem] ${align}`}
-          style={{ fontFamily: "var(--site-heading-font)", color: inkFor(b, onBand, theme.text) }}
+          style={{ fontFamily: "var(--site-heading-font)", color: inkFor(b, onBand, theme.text), ...textStyle(b) }}
         >
           {b.text}
         </h1>
@@ -164,7 +198,7 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
       return (
         <h2
           className={`text-2xl font-semibold leading-snug sm:text-3xl ${align}`}
-          style={{ fontFamily: "var(--site-heading-font)", color: inkFor(b, onBand, theme.text) }}
+          style={{ fontFamily: "var(--site-heading-font)", color: inkFor(b, onBand, theme.text), ...textStyle(b) }}
         >
           {b.text}
         </h2>
@@ -174,7 +208,7 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
       return (
         <p
           className={`whitespace-pre-wrap text-base leading-relaxed ${align}`}
-          style={{ color: inkFor(b, onBand, theme.textMuted) }}
+          style={{ color: inkFor(b, onBand, theme.textMuted), ...textStyle(b) }}
         >
           {b.text}
         </p>
@@ -234,21 +268,27 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
 
     case "button": {
       const filled = b.variant !== "soft" && b.variant !== "outline";
+      const s = b.style;
       return (
         <div className={align}>
           <Anchor
             href={b.href ?? "#"}
             ctx={ctx}
             forwardParams={b.forwardParams}
-            className="inline-flex h-14 items-center justify-center px-9 text-base font-bold transition-opacity hover:opacity-90"
+            newTab={b.newTab}
+            className={`inline-flex flex-col items-center justify-center px-9 text-base font-bold leading-tight transition-opacity hover:opacity-90 ${b.subText ? "py-3" : ""}`}
             style={{
-              borderRadius: "var(--site-radius)",
-              background: filled ? "var(--site-primary)" : b.variant === "soft" ? "#ffffff" : "transparent",
-              color: filled ? "var(--site-on-primary)" : "var(--site-primary)",
-              border: b.variant === "outline" ? "2px solid var(--site-primary)" : undefined,
+              minHeight: 56,
+              borderRadius: s?.radius !== undefined ? `${s.radius}px` : "var(--site-radius)",
+              background:
+                s?.background ?? (filled ? "var(--site-primary)" : b.variant === "soft" ? "#ffffff" : "transparent"),
+              color: b.color ?? (filled ? "var(--site-on-primary)" : "var(--site-primary)"),
+              border: b.variant === "outline" ? `2px solid ${s?.background ?? "var(--site-primary)"}` : undefined,
+              ...textStyle(b),
             }}
           >
-            {b.label || "Continue"}
+            <span>{b.label || "Continue"}</span>
+            {b.subText && <span className="mt-0.5 text-[0.7em] font-medium opacity-85">{b.subText}</span>}
           </Anchor>
         </div>
       );
@@ -258,7 +298,7 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
       return (
         <ul
           className="list-disc space-y-2 pl-6 text-base leading-relaxed"
-          style={{ color: inkFor(b, onBand, theme.textMuted) }}
+          style={{ color: inkFor(b, onBand, theme.textMuted), ...textStyle(b) }}
         >
           {(b.items ?? []).map((it, i) => (
             <li key={i}>{it}</li>
@@ -337,8 +377,48 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
   }
 }
 
+/**
+ * Editor-only click target around one block. Rendered ONLY when `ctx.edit` is set, so the public
+ * DOM never carries it. The selected block gets a solid ring; anything else a dashed one on hover,
+ * which is how the author discovers that everything on the canvas is clickable.
+ */
+function EditBox({
+  sel,
+  ctx,
+  label,
+  children,
+}: {
+  sel: { sectionId: string; colIdx: number; blockId: string };
+  ctx: Ctx;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const edit = ctx.edit!;
+  const active = edit.selected?.blockId === sel.blockId;
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      data-edit-block
+      onClick={(e) => { e.stopPropagation(); edit.onSelect(sel); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); edit.onSelect(sel); } }}
+      className={`relative cursor-pointer rounded-sm outline-offset-4 ${active ? "" : "hover:outline hover:outline-1 hover:outline-dashed hover:outline-blue-400"}`}
+      style={active ? { outline: "2px solid #2563eb", outlineOffset: 4 } : undefined}
+    >
+      {active && (
+        <span className="pointer-events-none absolute -top-6 left-0 z-10 rounded-sm bg-blue-600 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">
+          {label}
+        </span>
+      )}
+      {children}
+    </div>
+  );
+}
+
 function Section({ s, ctx }: { s: SiteSectionBlock; ctx: Ctx }) {
   const onBand = s.background.kind !== "none";
+  const edit = ctx.edit;
+  const sectionActive = !!edit && edit.selected?.sectionId === s.id && !edit.selected?.blockId;
   const inner = (
     <div
       className={
@@ -356,9 +436,15 @@ function Section({ s, ctx }: { s: SiteSectionBlock; ctx: Ctx }) {
     >
       {s.columns.map((col, ci) => (
         <div key={ci} className="flex flex-col gap-5">
-          {col.map((b) => (
-            <Block key={b.id} b={b} ctx={ctx} onBand={onBand} />
-          ))}
+          {col.map((b) =>
+            edit ? (
+              <EditBox key={b.id} sel={{ sectionId: s.id, colIdx: ci, blockId: b.id }} ctx={ctx} label={b.type}>
+                <Block b={b} ctx={ctx} onBand={onBand} />
+              </EditBox>
+            ) : (
+              <Block key={b.id} b={b} ctx={ctx} onBand={onBand} />
+            ),
+          )}
         </div>
       ))}
     </div>
@@ -376,9 +462,22 @@ function Section({ s, ctx }: { s: SiteSectionBlock; ctx: Ctx }) {
         ...(s.width === "contained"
           ? { maxWidth: "var(--site-content)", margin: "0 auto", borderRadius: "var(--site-radius)" }
           : {}),
+        // Section selection ring sits INSIDE the band (inset) so it never clips at the canvas edge.
+        ...(sectionActive ? { boxShadow: "inset 0 0 0 2px #2563eb" } : {}),
       }}
-      className="px-5"
+      className={`px-5 ${edit ? "relative cursor-pointer" : ""}`}
+      {...(edit
+        ? {
+            "data-edit-section": "1",
+            onClick: () => edit.onSelect({ sectionId: s.id }),
+          }
+        : {})}
     >
+      {sectionActive && (
+        <span className="pointer-events-none absolute left-2 top-2 z-10 rounded-sm bg-blue-600 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">
+          {s.name || "Section"}
+        </span>
+      )}
       <div style={{ maxWidth: "var(--site-content)", margin: "0 auto" }}>{inner}</div>
     </section>
   );
@@ -393,6 +492,7 @@ export default function SitePageRenderer({
   incoming,
   fromPath,
   siteDomain,
+  edit,
 }: {
   sections: SiteSectionBlock[];
   header?: SiteSectionBlock[];
@@ -402,8 +502,13 @@ export default function SitePageRenderer({
   incoming: Record<string, string>;
   fromPath: string;
   siteDomain?: string | null;
+  /** Editor only - see EditCtx. The public route never passes this. */
+  edit?: EditCtx;
 }) {
-  const ctx: Ctx = { theme, incoming, fromPath, siteDomain, nav };
+  // Header and footer are shared across the site and edited on the site screen, so they stay
+  // inert on the page canvas even in edit mode - only the page's own sections are selectable.
+  const ctx: Ctx = { theme, incoming, fromPath, siteDomain, nav, edit };
+  const sharedCtx: Ctx = { ...ctx, edit: undefined };
   const fonts = fontHref(theme);
   return (
     <div
@@ -418,13 +523,13 @@ export default function SitePageRenderer({
       {/* Next hoists a stylesheet link rendered here into <head>, so the font request starts with
           the document rather than after hydration. */}
       {fonts && <link rel="stylesheet" href={fonts} />}
-      {header?.map((s) => <Section key={s.id} s={s} ctx={ctx} />)}
+      {header?.map((s) => <Section key={s.id} s={s} ctx={sharedCtx} />)}
       <main>
         {sections.map((s) => (
           <Section key={s.id} s={s} ctx={ctx} />
         ))}
       </main>
-      {footer?.map((s) => <Section key={s.id} s={s} ctx={ctx} />)}
+      {footer?.map((s) => <Section key={s.id} s={s} ctx={sharedCtx} />)}
     </div>
   );
 }

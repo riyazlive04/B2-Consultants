@@ -118,6 +118,24 @@ export type SiteBlockType =
   | "logo"
   | "footerLinks";
 
+/**
+ * Per-element presentation overrides, set from the editor's Styles tab. Every field is optional
+ * and absent means "use the theme" - so a page built before these existed renders exactly as
+ * it did, and an author only ever overrides the one property they meant to.
+ */
+export type BlockStyle = {
+  /** px. */
+  fontSize?: number;
+  fontWeight?: 400 | 500 | 600 | 700 | 800;
+  /** px; may be negative for tight headlines. */
+  letterSpacing?: number;
+  textTransform?: "none" | "uppercase" | "capitalize";
+  /** Background of the element itself - today only buttons paint one. */
+  background?: string;
+  /** Corner radius in px. Absent = the theme radius. */
+  radius?: number;
+};
+
 export type SiteBlock = {
   id: string;
   type: SiteBlockType;
@@ -126,10 +144,15 @@ export type SiteBlock = {
   url?: string;
   alt?: string;
   label?: string;
+  /** Second, smaller line under a button's label ("Free · 45 min"). */
+  subText?: string;
   href?: string;
+  /** Open the link in a new tab. Internal links default to the same tab; external ones always open new. */
+  newTab?: boolean;
   /** See NavItem.forwardParams - same job, for a CTA button. */
   forwardParams?: boolean;
   variant?: "primary" | "soft" | "outline";
+  style?: BlockStyle;
   items?: string[];
   /** Spacer height in px. */
   size?: number;
@@ -184,6 +207,29 @@ function normaliseBackground(raw: unknown): SectionBackground {
   return { kind: "none" };
 }
 
+const WEIGHTS = new Set([400, 500, 600, 700, 800]);
+
+function normaliseStyle(raw: unknown): BlockStyle | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const s: BlockStyle = {};
+  const fs = num(o.fontSize);
+  if (fs !== undefined && fs >= 8 && fs <= 200) s.fontSize = fs;
+  const fw = num(o.fontWeight);
+  if (fw !== undefined && WEIGHTS.has(fw)) s.fontWeight = fw as BlockStyle["fontWeight"];
+  const ls = num(o.letterSpacing);
+  if (ls !== undefined && ls >= -10 && ls <= 40) s.letterSpacing = ls;
+  if (o.textTransform === "uppercase" || o.textTransform === "capitalize" || o.textTransform === "none") {
+    s.textTransform = o.textTransform;
+  }
+  const bg = str(o.background, 40);
+  if (bg) s.background = bg;
+  const r = num(o.radius);
+  if (r !== undefined && r >= 0 && r <= 200) s.radius = r;
+  // An empty object is dropped so "no overrides" serialises the same way it always did.
+  return Object.keys(s).length ? s : undefined;
+}
+
 function normaliseBlock(raw: unknown, i: number): SiteBlock | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -200,9 +246,12 @@ function normaliseBlock(raw: unknown, i: number): SiteBlock | null {
     url: str(o.url),
     alt: str(o.alt, 300),
     label: str(o.label, 200),
+    subText: str(o.subText, 200),
     href: str(o.href),
+    newTab: o.newTab === true,
     forwardParams: o.forwardParams === true,
     variant,
+    style: normaliseStyle(o.style),
     items: Array.isArray(o.items)
       ? o.items.filter((x): x is string => typeof x === "string").map((s) => s.slice(0, 500))
       : undefined,

@@ -48,6 +48,22 @@ export type BoardCard = {
    * them as 0.0 alongside genuinely poor ones is how a good lead gets buried.
    */
   bantAvg: number | null;
+  /**
+   * Who the discovery call is actually booked with, once one is booked.
+   *
+   * NOT the lead's assignee: those are two different people doing two different jobs. The
+   * assignee is whoever chased the opt-in; this is whose diary the call sits in, and from the
+   * booked column onwards that is the fact the board is being read for.
+   */
+  bookedWithName: string | null;
+  /**
+   * Their profile photo, when they have uploaded one at /profile.
+   *
+   * Carried because initials do not survive this team: "Ameen" and "Asma" both reduce to a
+   * single "A", so a card showing initials alone cannot say which of them the call is with -
+   * which is the entire question the avatar is there to answer.
+   */
+  bookedWithImage: string | null;
 };
 
 export type BoardStage = {
@@ -220,7 +236,12 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
                 where: { status: { not: "CANCELLED" } },
                 orderBy: { createdAt: "desc" },
                 take: 1,
-                select: { bantAvg: true, bantScore: true, bantVerdict: true, bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true },
+                select: {
+                  bantAvg: true, bantScore: true, bantVerdict: true,
+                  bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true,
+                  // Whose calendar the call landed in - the slot's owner, not the lead's.
+                  slot: { select: { assignedTo: { select: { name: true, image: true } } } },
+                },
               },
               assignedTo: { select: { id: true, name: true } },
               outreachJourney: { select: { optInAt: true } },
@@ -297,6 +318,8 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
       optInAt: (o.lead.outreachJourney?.optInAt ?? o.lead.createdAt).toISOString(),
       firstCallAt: firstCallByLead.get(o.lead.id)?.toISOString() ?? null,
       bantAvg: resolveBant(o.lead.bookings[0] ?? null, o.lead)?.avg ?? null,
+      bookedWithName: o.lead.bookings[0]?.slot?.assignedTo?.name ?? null,
+      bookedWithImage: o.lead.bookings[0]?.slot?.assignedTo?.image ?? null,
     }));
 
     const stageAll = allByStage.get(s.id) ?? 0n; // column header: every card, any status

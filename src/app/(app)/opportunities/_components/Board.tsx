@@ -679,6 +679,11 @@ function OppCard({
     ? null
     : firstCallVerdict(new Date(card.optInAt), card.firstCallAt ? new Date(card.firstCallAt) : null, new Date(now));
   const accent = verdict && card.status === "OPEN" ? VERDICT_STYLE[verdict.state] : null;
+  // Only from the booked column onwards, and only when a booking actually names someone - a card
+  // dragged there by hand has no booking behind it, and inventing an owner would be a worse
+  // answer than falling back to the lead's assignee.
+  const bookedWith =
+    showBant && card.bookedWithName ? { name: card.bookedWithName, image: card.bookedWithImage } : null;
   /**
    * A drag MUST put something on the dataTransfer to start.
    *
@@ -719,7 +724,27 @@ function OppCard({
         {/* The owner rides as an avatar in the corner rather than a labelled row at the bottom:
             it is the one field people scan across a whole column, and a name repeated on every
             card costs a line each without ever being read in full. */}
-        {card.ownerName ? (
+        {/*
+          From the booked column onwards the corner shows WHOSE CALL IT IS, not who chased the
+          opt-in. Two different people doing two different jobs, and once a call is in the diary
+          the second one is what the board is being read for.
+
+          The name rides alongside the picture whenever that person has no profile photo, because
+          initials cannot carry this: "Ameen" and "Asma" both reduce to "A". A card that says "A"
+          answers the question with the wrong half of the alphabet. Once they upload a photo at
+          /profile the label drops away and the corner goes back to being just a face.
+        */}
+        {bookedWith ? (
+          <span
+            className="flex flex-none items-center gap-1"
+            title={`Discovery call with ${bookedWith.name}`}
+          >
+            {!bookedWith.image && (
+              <span className="text-caption font-medium text-ink-3">{bookedWith.name.split(" ")[0]}</span>
+            )}
+            <Avatar name={bookedWith.name} image={bookedWith.image} size={22} />
+          </span>
+        ) : card.ownerName ? (
           <span className="flex-none" title={`Owner: ${card.ownerName}`}>
             <Avatar name={card.ownerName} size={22} />
           </span>

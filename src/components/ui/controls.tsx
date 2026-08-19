@@ -142,8 +142,10 @@ export function Switch({
   disabled?: boolean;
   label?: string;
 }) {
+  // Vertical margin lives on the wrapper, not the track: the knob is positioned against the
+  // wrapper, so a margin on the input would push the track down out from under it.
   return (
-    <span className="relative inline-flex flex-none">
+    <span className="relative my-1.5 inline-flex h-7 w-12 flex-none">
       <input
         type="checkbox"
         role="switch"
@@ -153,7 +155,7 @@ export function Switch({
         disabled={disabled}
         aria-checked={checked}
         onChange={(e) => onChange?.(e.target.checked)}
-        className="peer my-1.5 h-7 w-12 cursor-pointer appearance-none rounded-full bg-line-strong transition-colors checked:bg-good focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+        className="peer h-7 w-12 cursor-pointer appearance-none rounded-full bg-line-strong transition-colors checked:bg-good focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
       />
       <span
         aria-hidden

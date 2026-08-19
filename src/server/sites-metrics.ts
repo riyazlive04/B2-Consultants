@@ -51,6 +51,8 @@ export type SitePageRow = {
   views: number;
   updatedAt: Date;
   sectionCount: number;
+  /** The page's own sections, so the site screen can draw a live thumbnail of each page. */
+  sections: SiteSectionBlock[];
 };
 
 export type SiteDetail = {
@@ -99,10 +101,10 @@ export async function getSiteDetail(id: string): Promise<SiteDetail | null> {
     faviconUrl: site.faviconUrl,
     metaPixelId: site.metaPixelId,
     gaMeasurementId: site.gaMeasurementId,
-    pages: site.pages.map(({ sections, ...p }) => ({
-      ...p,
-      sectionCount: normaliseSections(sections).length,
-    })),
+    pages: site.pages.map(({ sections, ...p }) => {
+      const normalised = normaliseSections(sections);
+      return { ...p, sectionCount: normalised.length, sections: normalised };
+    }),
     header: shared("HEADER"),
     footer: shared("FOOTER"),
   };

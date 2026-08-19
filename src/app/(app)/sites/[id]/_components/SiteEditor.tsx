@@ -3,19 +3,21 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ExternalLink, Globe, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, FileText, Globe, Plus, Trash2, X } from "lucide-react";
 import { Btn, IconButton } from "@/components/ui/controls";
-import { Card, Pill, Hint } from "@/components/ui/kit";
+import { Card, EmptyState, Hint } from "@/components/ui/kit";
 import { toast, askConfirm } from "@/components/ui/feedback";
-import type { SiteDetail } from "@/server/sites-metrics";
+import type { SiteDetail, SitePageRow } from "@/server/sites-metrics";
 import type { NavItem } from "@/lib/site-types";
 import {
   createPage,
   deletePage,
   setSiteDomain,
+  togglePublishPage,
   togglePublishSite,
   updateSiteSettings,
 } from "@/server/sites-actions";
+import PageCard from "./PageCard";
 
 const input =
   "h-9 w-full rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary";
@@ -24,6 +26,7 @@ export default function SiteEditor({ site, canManage }: { site: SiteDetail; canM
   const router = useRouter();
   const [tab, setTab] = useState<"pages" | "nav" | "brand" | "domain">("pages");
 
+  const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newPath, setNewPath] = useState("");
   const [nav, setNav] = useState<NavItem[]>(site.nav);
@@ -84,82 +87,90 @@ export default function SiteEditor({ site, canManage }: { site: SiteDetail; canM
       </div>
 
       {tab === "pages" && (
-        <Card title="Pages">
-          <div className="space-y-1.5">
-            {site.pages.length === 0 && <p className="text-sm text-ink-3">No pages yet.</p>}
-            {site.pages.map((p) => (
-              <div key={p.id} className="flex items-center gap-2 rounded-field px-2 py-2 hover:bg-surface-2">
-                <Link href={`/sites/${site.id}/pages/${p.id}`} className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-ink">{p.title}</span>
-                  <span className="block truncate font-mono text-caption text-ink-3">
-                    {p.path} · {p.sectionCount} {p.sectionCount === 1 ? "section" : "sections"}
-                  </span>
-                </Link>
-                <Pill tone={p.published ? "good" : "neutral"}>{p.published ? "Live" : "Draft"}</Pill>
-                {site.published && p.published && (
-                  <a
-                    href={`/s/${site.slug}${p.path === "/" ? "" : p.path}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Open the live page"
-                  >
-                    <IconButton label="Open live"><ExternalLink size={13} /></IconButton>
-                  </a>
-                )}
-                {canManage && (
-                  <IconButton
-                    label="Delete page"
-                    onClick={async () => {
-                      if (!(await askConfirm({ title: `Delete "${p.title}"?`, danger: true }))) return;
-                      run(() => deletePage(p.id), "Page deleted");
-                    }}
-                  >
-                    <Trash2 size={13} />
-                  </IconButton>
-                )}
-              </div>
-            ))}
-          </div>
-
+        <div className="space-y-4">
           {canManage && (
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              <input
-                className={`${input} sm:w-48`}
-                placeholder="Page title"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-              />
-              <input
-                className={`${input} sm:w-48`}
-                placeholder="/path"
-                value={newPath}
-                onChange={(e) => setNewPath(e.target.value)}
-              />
+            <div className="flex justify-end">
               <Btn
-                size="sm"
-                icon={<Plus size={14} />}
-                disabled={!newTitle.trim()}
-                busy={busy}
-                onClick={() =>
-                  run(async () => {
-                    const res = await createPage(site.id, newTitle, newPath || newTitle);
-                    if (res.ok) {
-                      setNewTitle("");
-                      setNewPath("");
-                    }
-                    return res;
-                  }, "Page added")
-                }
+                variant="primary"
+                icon={adding ? <X size={16} /> : <Plus size={16} />}
+                onClick={() => setAdding((v) => !v)}
               >
-                Add page
+                {adding ? "Cancel" : "Add new page"}
               </Btn>
+            </div>
+          )}
+
+          {canManage && adding && (
+            <Card title="New page">
+              <div className="flex flex-wrap gap-1.5">
+                <input
+                  className={`${input} sm:w-56`}
+                  placeholder="Page title"
+                  value={newTitle}
+                  autoFocus
+                  onChange={(e) => setNewTitle(e.target.value)}
+                />
+                <input
+                  className={`${input} sm:w-56`}
+                  placeholder="/path"
+                  value={newPath}
+                  onChange={(e) => setNewPath(e.target.value)}
+                />
+                <Btn
+                  size="sm"
+                  variant="primary"
+                  icon={<Plus size={14} />}
+                  disabled={!newTitle.trim()}
+                  busy={busy}
+                  onClick={() =>
+                    run(async () => {
+                      const res = await createPage(site.id, newTitle, newPath || newTitle);
+                      if (res.ok) {
+                        setNewTitle("");
+                        setNewPath("");
+                        setAdding(false);
+                      }
+                      return res;
+                    }, "Page added")
+                  }
+                >
+                  Create page
+                </Btn>
+              </div>
               <Hint>
                 The path is reproduced exactly - enter <span className="font-mono">/aboutus</span>, not
                 “About Us”, if that is the live URL you are matching.
               </Hint>
+            </Card>
+          )}
+
+          {site.pages.length === 0 ? (
+            <EmptyState
+              icon={<FileText size={20} />}
+              title="No pages yet"
+              body="Add the first page - the home page usually lives at / - then open it to lay out its sections."
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {site.pages.map((p) => (
+                <PageCard
+                  key={p.id}
+                  site={site}
+                  page={p}
+                  canManage={canManage}
+                  busy={busy}
+                  onTogglePublish={(page: SitePageRow) =>
+                    run(() => togglePublishPage(page.id), page.published ? "Page unpublished" : "Page published")
+                  }
+                  onDelete={async (page: SitePageRow) => {
+                    if (!(await askConfirm({ title: `Delete "${page.title}"?`, danger: true }))) return;
+                    run(() => deletePage(page.id), "Page deleted");
+                  }}
+                />
+              ))}
             </div>
           )}
-        </Card>
+        </div>
       )}
 
       {tab === "nav" && (

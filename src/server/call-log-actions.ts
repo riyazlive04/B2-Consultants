@@ -7,6 +7,7 @@ import { requireSection } from "@/lib/rbac";
 import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { logActivity } from "./activity-log";
 import { resolveStageAfterCall } from "@/lib/call-outcome";
+import { clampCalledAt } from "@/lib/offline-calls";
 import { syncDefaultOpportunity } from "./opportunity-sync";
 import type { ActionResult } from "./finance-actions";
 
@@ -43,6 +44,15 @@ const callSchema = z.object({
    * because a stage select disagreed would be a strictly worse outcome than not moving the card.
    */
   nextStage: z.string().trim().max(40).optional().or(z.literal("")),
+  /**
+   * When the Call button was pressed, as the device saw it (ISO). The outcome form opens as the
+   * call ends, so without this the logged time would be the END of the conversation plus however
+   * long the notes took - and speed-to-lead would measure typing speed. Optional: the desks'
+   * "Log outcome" button (no dial) posts nothing and gets the server clock. Clamped server-side
+   * exactly like an offline replay - it can never sit in the future or reach back past the queue
+   * age, so it cannot be used to flatter the five-minute number.
+   */
+  calledAt: z.string().trim().optional().or(z.literal("")),
 });
 
 const OUTCOME_LABELS: Record<string, string> = {
@@ -78,6 +88,12 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
   // why the automatic move takes precedence over the select.
   const nextStage = resolveStageAfterCall(lead.stage, d.outcome, d.nextStage);
 
+  // The dial instant, if the client sent one and it parses; otherwise now. See the schema note.
+  const receivedAt = new Date();
+  const claimed = d.calledAt ? new Date(d.calledAt) : null;
+  const calledAt =
+    claimed && !Number.isNaN(claimed.getTime()) ? clampCalledAt(claimed, receivedAt).calledAt : receivedAt;
+
   const row = await prisma.$transaction(async (tx) => {
     const created = await tx.callLog.create({
       data: {
@@ -85,6 +101,7 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
         userId: session.user.id,
         outcome: d.outcome,
         notes: d.notes || null,
+        calledAt,
       },
     });
     // Keep speed-to-lead honest: the first connected conversation IS first contact. Mirrors
@@ -93,7 +110,7 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
     if (d.outcome === "SPOKE") {
       await tx.lead.updateMany({
         where: { id: leadId, contactedAt: null },
-        data: { contactedAt: new Date() },
+        data: { contactedAt: calledAt },
       });
     }
     // The stage move rides in the SAME transaction as the call log: a logged call that
@@ -127,6 +144,8 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
 
   revalidatePath("/my-desk");
   revalidatePath("/pipeline");
+  // The board colours its cards by the first call, so it has to hear about this one.
+  revalidatePath("/opportunities");
   return { ok: true };
 }
 

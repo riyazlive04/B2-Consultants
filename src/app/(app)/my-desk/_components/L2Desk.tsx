@@ -22,7 +22,8 @@ import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/feedback";
 import { NewLeadWatcher } from "./NewLeadWatcher";
 import { TargetAttainment } from "./TargetAttainment";
-import { LogOutcomeModal } from "./LogOutcomeModal";
+import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
+import { DialButton } from "@/components/calls/DialButton";
 import { useOfflineCalls } from "./useOfflineCalls";
 
 /**
@@ -40,15 +41,12 @@ function timeIst(iso: string): string {
   });
 }
 
-function DialLink({ phone, name }: { phone: string; name: string }) {
+/** Click-to-dial. `onDial` fires with the dial instant so the outcome form can carry it. */
+function DialLink({ phone, name, onDial }: { phone: string; name: string; onDial?: (at: Date) => void }) {
   return (
-    <a
-      href={`tel:${phone.replace(/[^\d+]/g, "")}`}
-      aria-label={`Call ${name} on ${phone}`}
-      className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3 py-1.5 text-sm font-semibold text-on-accent hover:bg-primary-strong"
-    >
+    <DialButton phone={phone} name={name} onDial={onDial ?? (() => undefined)}>
       <PhoneCall size={14} /> Call
-    </a>
+    </DialButton>
   );
 }
 
@@ -267,7 +265,7 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
   );
 }
 
-function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead) => void }) {
+function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead, calledAt?: Date) => void }) {
   return (
     <li className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
       <div className="min-w-0 flex-1">
@@ -289,7 +287,7 @@ function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead) => void }) 
           Shown even without a phone number: a call can be returned on WhatsApp or the number can
           be wrong, and "wrong number" is itself an outcome worth recording. */}
       <div className="flex flex-none items-center gap-2">
-        {lead.phone && <DialLink phone={lead.phone} name={lead.name} />}
+        {lead.phone && <DialLink phone={lead.phone} name={lead.name} onDial={(at) => onLog(lead, at)} />}
         <Btn variant="soft" size="sm" onClick={() => onLog(lead)}>Log outcome</Btn>
       </div>
     </li>
@@ -300,7 +298,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
   const router = useRouter();
   const [routing, setRouting] = useState<L2Call | null>(null);
   /** A lead being logged against from "Your leads" - the chase form, not the routing form. */
-  const [logging, setLogging] = useState<L2Lead | null>(null);
+  const [logging, setLogging] = useState<{ lead: L2Lead; calledAt?: Date } | null>(null);
 
   /**
    * The same offline queue L1 uses. A discovery specialist makes the same phone calls from the
@@ -372,7 +370,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
           <Card>
             <ul className="-mx-4 -mb-2">
               {desk.myLeads.map((l) => (
-                <LeadRow key={l.id} lead={l} onLog={setLogging} />
+                <LeadRow key={l.id} lead={l} onLog={(lead, calledAt) => setLogging({ lead, calledAt })} />
               ))}
             </ul>
           </Card>
@@ -397,7 +395,8 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
       {routing && <RouteModal call={routing} onClose={() => setRouting(null)} />}
       {logging && (
         <LogOutcomeModal
-          lead={{ id: logging.id, name: logging.name, phone: logging.phone }}
+          lead={{ id: logging.lead.id, name: logging.lead.name, phone: logging.lead.phone }}
+          calledAt={logging.calledAt}
           online={online}
           queueCall={queueCall}
           onClose={() => {

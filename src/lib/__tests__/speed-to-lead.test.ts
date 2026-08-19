@@ -7,6 +7,8 @@ import {
   alertSubject,
   formatAge,
   formatHitRate,
+  firstCallVerdict,
+  firstCallLabel,
   type SpeedToLeadLead,
 } from "../speed-to-lead";
 
@@ -238,5 +240,48 @@ describe("formatting", () => {
   test("the subject line is singular for one lead", () => {
     const r = speedToLeadReport([lead({ id: "a", optInAt: minutesAgo(20) })], NOW, OPTS);
     assert.equal(alertSubject(r), "1 lead waiting - oldest 20 min");
+  });
+});
+
+describe("firstCallVerdict - the board card's green / red rule", () => {
+  const at = (minsAgo: number) => new Date(NOW.getTime() - minsAgo * MIN);
+
+  test("called inside five minutes is HIT, with the delta in minutes", () => {
+    const v = firstCallVerdict(at(10), at(7), NOW); // opted in 10 min ago, called 3 min later
+    assert.equal(v.state, "HIT");
+    assert.equal(v.minutes, 3);
+    assert.equal(firstCallLabel(v), "Called in 3 min");
+  });
+
+  test("exactly five minutes still counts - the target is 'within', not 'under'", () => {
+    assert.equal(firstCallVerdict(at(10), at(5), NOW).state, "HIT");
+  });
+
+  test("called after five minutes is LATE, however long ago the call was", () => {
+    const v = firstCallVerdict(at(60), at(48), NOW); // 12 min to the call
+    assert.equal(v.state, "LATE");
+    assert.equal(v.minutes, 12);
+    assert.equal(firstCallLabel(v), "Called after 12 min");
+  });
+
+  test("not called and under five minutes old is DUE with a countdown", () => {
+    const v = firstCallVerdict(at(2), null, NOW);
+    assert.equal(v.state, "DUE");
+    assert.equal(v.secondsLeft, 180);
+    assert.equal(firstCallLabel(v), "Call due - 3:00 left");
+  });
+
+  test("not called and past five minutes is OVERDUE, reporting the age", () => {
+    const v = firstCallVerdict(at(18), null, NOW);
+    assert.equal(v.state, "OVERDUE");
+    assert.equal(v.minutes, 18);
+    assert.equal(v.secondsLeft, null);
+    assert.equal(firstCallLabel(v), "Not called - 18 min");
+  });
+
+  test("a call stamped before the opt-in (clock skew) is a zero-minute HIT, never negative", () => {
+    const v = firstCallVerdict(at(5), at(6), NOW);
+    assert.equal(v.state, "HIT");
+    assert.equal(v.minutes, 0);
   });
 });

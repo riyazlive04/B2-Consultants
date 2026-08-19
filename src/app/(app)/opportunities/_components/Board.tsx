@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Plus, Settings2, GripVertical, Trash2, ChevronUp, ChevronDown, Pin,
-  ChevronLeft, ChevronRight, Phone, MessageCircle, StickyNote, User,
+  ChevronLeft, ChevronRight, Phone, MessageCircle, StickyNote, User, Timer,
 } from "lucide-react";
 import type { BoardData } from "@/server/opportunities-metrics";
 import { Btn, IconButton } from "@/components/ui/controls";
@@ -26,6 +26,10 @@ import {
 import { LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
 import { SYNAMATE_STAGES } from "@/lib/pipeline-stages";
 import { OpportunityDialog } from "./OpportunityDialog";
+import { SpeedToLeadReport } from "./SpeedToLeadReport";
+import { DialButton } from "@/components/calls/DialButton";
+import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
+import { firstCallVerdict, firstCallLabel, type FirstCallState } from "@/lib/speed-to-lead";
 
 // Options for mapping a stage back to a lead-lifecycle stage (the bridge that syncs a card move to
 // Lead.stage). "" = no sync; the board stays a standalone process - offered on custom pipelines
@@ -96,6 +100,19 @@ export default function Board({
   const [editCard, setEditCard] = useState<Card | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  // A dial from a card: who was called and when the button was pressed. Opens the outcome form.
+  const [callLog, setCallLog] = useState<{ lead: { id: string; name: string; phone: string | null }; calledAt: Date } | null>(null);
+  // Wall clock for the cards' five-minute verdicts. Null on first paint ON PURPOSE: this component
+  // is server-rendered too, and seeding Date.now() there makes the server and the browser disagree
+  // on "2:40 left" by a second - a hydration mismatch that re-renders the whole board. The chips
+  // appear after mount and then tick every 15 s.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, []);
   const [createFirstOpen, setCreateFirstOpen] = useState(false);
   const [mobileStageId, setMobileStageId] = useState<string>(board.stages[0]?.id ?? "");
 
@@ -376,6 +393,9 @@ export default function Board({
               Manage board
             </Btn>
           )}
+          <Btn variant="ghost" icon={<Timer size={16} />} onClick={() => setReportOpen(true)} title="Time from opt-in to first call, per setter">
+            Speed to lead
+          </Btn>
           <Btn icon={<Plus size={16} />} onClick={() => { setAddError(null); setAddOpen(true); }}>
             Add opportunity
           </Btn>
@@ -400,6 +420,8 @@ export default function Board({
                 card={card}
                 draggable={false}
                 dragActive={false}
+                now={now}
+                onDial={(lead, at) => setCallLog({ lead, calledAt: at })}
                 onOpen={() => { setEditError(null); setEditCard(card); }}
               />
             ))}
@@ -487,6 +509,8 @@ export default function Board({
                   onDragStart={() => setDragId(card.id)}
                   onDragEnd={() => setDragId(null)}
                   onDropOn={dragEnabled ? (e) => { e.stopPropagation(); onDrop(stage.id, i); } : undefined}
+                  now={now}
+                  onDial={(lead, at) => setCallLog({ lead, calledAt: at })}
                   onOpen={() => { setEditError(null); setEditCard(card); }}
                 />
               ))}
@@ -563,6 +587,20 @@ export default function Board({
 
       {/* Manage board */}
       {canConfigure && <ManageBoard board={board} open={manageOpen} onClose={() => setManageOpen(false)} />}
+
+      {/* Speed to lead - the report behind the toolbar button */}
+      <SpeedToLeadReport open={reportOpen} onClose={() => setReportOpen(false)} />
+
+      {/* Outcome form, opened by a card's Call button a moment after the dial, stamped with the
+          dial instant. Online-only here (the desks carry the offline queue; the board is where
+          managers call from). Refresh on close so the card's colour reflects the call. */}
+      {callLog && (
+        <LogOutcomeModal
+          lead={callLog.lead}
+          calledAt={callLog.calledAt}
+          onClose={() => { setCallLog(null); router.refresh(); }}
+        />
+      )}
     </div>
   );
 }
@@ -578,6 +616,14 @@ function StageTotals({ stage }: { stage: Stage }) {
   );
 }
 
+/** Card accent + chip colours for the first-call verdict. Closed cards keep the chip, lose the accent. */
+const VERDICT_STYLE: Record<FirstCallState, { fg: string; bg: string }> = {
+  HIT: { fg: "var(--good)", bg: "var(--good-bg)" },
+  LATE: { fg: "var(--bad)", bg: "var(--bad-bg)" },
+  OVERDUE: { fg: "var(--bad)", bg: "var(--bad-bg)" },
+  DUE: { fg: "var(--warn)", bg: "var(--warn-bg)" },
+};
+
 function OppCard({
   card,
   draggable,
@@ -586,6 +632,8 @@ function OppCard({
   onDragEnd,
   onDropOn,
   onOpen,
+  now,
+  onDial,
 }: {
   card: Card;
   draggable: boolean;
@@ -594,7 +642,18 @@ function OppCard({
   onDragEnd?: () => void;
   onDropOn?: (e: React.DragEvent) => void;
   onOpen: () => void;
+  /** Wall clock for the five-minute verdict; null before mount (no chip yet). */
+  now: number | null;
+  /** The card's Call button was pressed - open the outcome form for this lead, stamped. */
+  onDial: (lead: { id: string; name: string; phone: string | null }, calledAt: Date) => void;
 }) {
+  // First-call verdict: green inside five minutes, red late or overdue, amber while the clock
+  // runs. Only OPEN cards wear the coloured accent - a won or lost deal's first-call time is
+  // history worth a chip, not a border that shouts across a closed column.
+  const verdict = now === null
+    ? null
+    : firstCallVerdict(new Date(card.optInAt), card.firstCallAt ? new Date(card.firstCallAt) : null, new Date(now));
+  const accent = verdict && card.status === "OPEN" ? VERDICT_STYLE[verdict.state] : null;
   /**
    * A drag MUST put something on the dataTransfer to start.
    *
@@ -626,6 +685,9 @@ function OppCard({
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); }
       }}
       className={`cursor-pointer rounded-field border border-line bg-surface p-3 shadow-card transition-shadow hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ${dragActive ? "opacity-40" : ""}`}
+      // The accent is a coloured left edge rather than a full border: it reads at a glance down a
+      // column, and leaves the hover / focus ring alone.
+      style={accent ? { boxShadow: `inset 3px 0 0 ${accent.fg}` } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{card.name}</p>
@@ -656,15 +718,34 @@ function OppCard({
         </div>
       </dl>
 
+      {/* Speed to lead: the first call against the five-minute target. Spoken in words, not
+          just colour, so the verdict survives colour-blindness and a monochrome print. */}
+      {verdict && (
+        <span
+          className="tnum mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold"
+          style={{ background: VERDICT_STYLE[verdict.state].bg, color: VERDICT_STYLE[verdict.state].fg }}
+          title={card.firstCallAt ? `First call logged ${new Date(card.firstCallAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}` : "No call logged yet"}
+        >
+          <Timer size={11} aria-hidden /> {firstCallLabel(verdict)}
+        </span>
+      )}
+
       {/* Quick actions. Every icon here does something real - a decorative icon row on a card
           people click all day is worse than none. `stopPropagation` so acting on a card does not
           also open its edit modal. */}
       <div className="mt-2 flex items-center gap-1 border-t border-line pt-2">
         {card.contactPhone && (
           <>
-            <CardAction href={`tel:${card.contactPhone}`} label={`Call ${card.contactName}`}>
+            {/* Dials AND, a moment later, opens the outcome form stamped with the dial time -
+                see DialButton. That stamp is what the chip above is measured from. */}
+            <DialButton
+              phone={card.contactPhone}
+              name={card.contactName}
+              variant="icon"
+              onDial={(at) => onDial({ id: card.contactId, name: card.contactName, phone: card.contactPhone }, at)}
+            >
               <Phone size={13} />
-            </CardAction>
+            </DialButton>
             <CardAction
               href={`https://wa.me/${card.contactPhone.replace(/[^0-9]/g, "")}`}
               external

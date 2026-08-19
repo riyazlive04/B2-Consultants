@@ -49,17 +49,28 @@ const AUTO_CLOSING = new Set(["NOT_INTERESTED", "WRONG_NUMBER"]);
 
 export type LogOutcomeTarget = { id: string; name: string; phone: string | null };
 
+const IST_TIME = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Kolkata",
+});
+
 export function LogOutcomeModal({
   lead,
   onClose,
   queueCall,
   online = true,
+  calledAt,
 }: {
   lead: LogOutcomeTarget;
   onClose: () => void;
   /** Offline fallback. Omit for an online-only desk; supplying it is strongly preferred. */
   queueCall?: (leadId: string, outcome: string, notes: string, nextStage?: string) => Promise<boolean>;
   online?: boolean;
+  /**
+   * When the Call button was pressed. Set by `DialButton`, which opens this modal as the call
+   * ends; the instant travels with the outcome so the logged call time is the dial, not the
+   * moment the notes were finished. Absent when opened from a plain "Log outcome" button.
+   */
+  calledAt?: Date;
 }) {
   const [error, setError] = useState<string | null>(null);
   // Mirrors the form's own default so the stage control's visibility tracks the select.
@@ -67,7 +78,12 @@ export function LogOutcomeModal({
   const autoCloses = AUTO_CLOSING.has(outcome);
 
   return (
-    <Modal open onClose={onClose} title={`Log outcome - ${lead.name}`} subtitle={lead.phone ?? undefined}>
+    <Modal
+      open
+      onClose={onClose}
+      title={`Log outcome - ${lead.name}`}
+      subtitle={[lead.phone, calledAt ? `call started ${IST_TIME.format(calledAt)} IST` : null].filter(Boolean).join(" · ") || undefined}
+    >
       <form
         action={async (form) => {
           setError(null);
@@ -113,6 +129,8 @@ export function LogOutcomeModal({
         }}
         className="space-y-4"
       >
+        {/* The dial instant rides along with the outcome. See `calledAt` above. */}
+        {calledAt && <input type="hidden" name="calledAt" value={calledAt.toISOString()} />}
         <Field label="What happened?">
           <Select
             name="outcome"

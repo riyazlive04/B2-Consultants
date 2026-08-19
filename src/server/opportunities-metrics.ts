@@ -29,6 +29,14 @@ export type BoardCard = {
   stageId: string;
   /** Notes already on this card, for the badge. 0 renders no badge. */
   noteCount: number;
+  /**
+   * Speed-to-lead inputs (ISO strings - BoardData crosses the server/client boundary).
+   * `optInAt` is the journey's clock when the lead has one, else the lead's creation; `firstCallAt`
+   * is the earliest logged call of ANY outcome. The verdict is computed client-side so the DUE
+   * countdown can tick without a round trip - see lib/speed-to-lead.firstCallVerdict.
+   */
+  optInAt: string;
+  firstCallAt: string | null;
 };
 
 export type BoardStage = {
@@ -190,7 +198,13 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
         include: {
           // The lead's owner is the fallback for a card that was created without one (the native
           // form path until 19/08/2026, or any card made before the lead was assigned).
-          lead: { select: { id: true, name: true, phone: true, assignedTo: { select: { id: true, name: true } } } },
+          lead: {
+            select: {
+              id: true, name: true, phone: true, createdAt: true,
+              assignedTo: { select: { id: true, name: true } },
+              outreachJourney: { select: { optInAt: true } },
+            },
+          },
           assignedTo: { select: { id: true, name: true } },
           // Counted here rather than in a second pass: Prisma resolves it as one grouped subquery
           // over the same rows already being fetched, so the badge costs no extra round trip.
@@ -226,6 +240,16 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
     if (r.status === "OPEN") openByStage.set(r.stageId, (openByStage.get(r.stageId) ?? 0n) + v);
   }
 
+  // First call per lead, in ONE grouped query across every card on the board rather than a
+  // per-card subquery (up to 300 cards x N columns). Any outcome counts - the speed-to-lead
+  // question on the board is "did someone pick up the phone in five minutes", not "did they
+  // get through", which is what `contactedAt` / the desk's SPOKE rule measure.
+  const leadIds = [...new Set(stages.flatMap((s) => s.opps.slice(0, STAGE_CARD_LIMIT).map((o) => o.lead.id)))];
+  const firstCalls = leadIds.length
+    ? await prisma.callLog.groupBy({ by: ["leadId"], where: { leadId: { in: leadIds } }, _min: { calledAt: true } })
+    : [];
+  const firstCallByLead = new Map(firstCalls.map((r) => [r.leadId, r._min.calledAt]));
+
   let totalCount = 0;
   let grandTotal = 0n; // OPEN only - the live pipeline value
   let weightedGrandTotal = 0n; // OPEN only, probability-weighted
@@ -249,6 +273,8 @@ export async function getBoard(pipelineId?: string, filters: BoardFilters = {}):
       position: o.position,
       stageId: o.stageId,
       noteCount: o._count.notes,
+      optInAt: (o.lead.outreachJourney?.optInAt ?? o.lead.createdAt).toISOString(),
+      firstCallAt: firstCallByLead.get(o.lead.id)?.toISOString() ?? null,
     }));
 
     const stageAll = allByStage.get(s.id) ?? 0n; // column header: every card, any status

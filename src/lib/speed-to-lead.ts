@@ -154,6 +154,58 @@ export function alertSubject(report: SpeedToLeadReport): string {
   return `${n} lead${n === 1 ? "" : "s"} waiting - oldest ${formatAge(report.worstAgeMinutes)}`;
 }
 
+// ───────────────────────── First-call verdict (board card + report) ─────────────────────────
+
+/**
+ * How the FIRST CALL to a lead stands against the five-minute target.
+ *
+ *   HIT      - called within five minutes of opting in
+ *   LATE     - called, but after the five minutes had passed
+ *   DUE      - not yet called, and the five minutes are still running
+ *   OVERDUE  - not yet called, and the five minutes are gone
+ *
+ * This is the ATTEMPT, not the connection: the setter's job is to pick up the phone within five
+ * minutes, and a no-answer at minute three is that job done. `slaFor` / `contactedAt` measure the
+ * first CONVERSATION (SPOKE only) and stay as they are - the two answer different questions, and
+ * the board card and the speed report ask this one.
+ */
+export type FirstCallState = "HIT" | "LATE" | "DUE" | "OVERDUE";
+
+export type FirstCallVerdict = {
+  state: FirstCallState;
+  /** HIT/LATE: minutes from opt-in to the call. DUE/OVERDUE: minutes since opt-in. Whole minutes, floor. */
+  minutes: number;
+  /** DUE only: whole seconds left on the clock. */
+  secondsLeft: number | null;
+};
+
+export const FIRST_CALL_TARGET_MS = 5 * MINUTE_MS;
+
+export function firstCallVerdict(optInAt: Date, firstCallAt: Date | null, now: Date): FirstCallVerdict {
+  if (firstCallAt) {
+    const delta = Math.max(0, firstCallAt.getTime() - optInAt.getTime());
+    return { state: delta <= FIRST_CALL_TARGET_MS ? "HIT" : "LATE", minutes: Math.floor(delta / MINUTE_MS), secondsLeft: null };
+  }
+  const age = Math.max(0, now.getTime() - optInAt.getTime());
+  if (age <= FIRST_CALL_TARGET_MS) {
+    return { state: "DUE", minutes: Math.floor(age / MINUTE_MS), secondsLeft: Math.ceil((FIRST_CALL_TARGET_MS - age) / 1000) };
+  }
+  return { state: "OVERDUE", minutes: Math.floor(age / MINUTE_MS), secondsLeft: null };
+}
+
+/** One-line label for a verdict chip: "Called in 3 min", "Not called - 18 min", "Call due - 1:40 left". */
+export function firstCallLabel(v: FirstCallVerdict): string {
+  switch (v.state) {
+    case "HIT": return `Called in ${formatAge(v.minutes)}`;
+    case "LATE": return `Called after ${formatAge(v.minutes)}`;
+    case "OVERDUE": return `Not called - ${formatAge(v.minutes)}`;
+    case "DUE": {
+      const s = v.secondsLeft ?? 0;
+      return `Call due - ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} left`;
+    }
+  }
+}
+
 /** "3 min" / "2 h 15 min" / "1 d 4 h". Compact enough for a subject line. */
 export function formatAge(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;

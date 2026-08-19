@@ -1143,3 +1143,109 @@ export async function updateOpportunityContact(leadId: string, form: FormData): 
   revalidatePath(`/contacts/${leadId}`);
   return { ok: true };
 }
+
+// ─────────────────────────── Speed-to-lead report (the board's popup) ───────────────────────────
+// "How long did it take to CALL each lead" - the first logged call of any outcome, against the
+// lead's opt-in, per setter and per lead. Gated on the opportunities section like everything else
+// on the board, which is every role except tutors and students.
+
+export type SpeedToLeadRow = {
+  leadId: string;
+  name: string;
+  ownerId: string | null;
+  ownerName: string | null;
+  optInAt: string;
+  firstCallAt: string | null;
+  stage: string;
+};
+
+export type SpeedToLeadOwnerStat = {
+  ownerId: string | null;
+  ownerName: string;
+  leads: number;
+  called: number;
+  withinFive: number;
+  /** Median minutes from opt-in to first call, over the called leads. Null when none called. */
+  medianMinutes: number | null;
+  /** Still uncalled and past five minutes. */
+  overdue: number;
+};
+
+export type SpeedToLeadBoardReport = {
+  rangeDays: number;
+  generatedAt: string;
+  owners: SpeedToLeadOwnerStat[];
+  rows: SpeedToLeadRow[];
+  /** True when the per-lead list was capped - the owner stats still cover every lead. */
+  truncated: boolean;
+};
+
+const REPORT_ROW_CAP = 300;
+
+export async function getSpeedToLeadBoardReport(rangeDays: number): Promise<SpeedToLeadBoardReport> {
+  await requireSection("opportunities");
+  const days = [1, 7, 30].includes(rangeDays) ? rangeDays : 7;
+  const now = new Date();
+  const since = new Date(now.getTime() - days * 86_400_000);
+
+  const leads = await prisma.lead.findMany({
+    where: { deletedAt: null, createdAt: { gte: since } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true, name: true, createdAt: true, stage: true, assignedToId: true,
+      assignedTo: { select: { name: true } },
+      outreachJourney: { select: { optInAt: true } },
+    },
+  });
+  const ids = leads.map((l) => l.id);
+  const firstCalls = ids.length
+    ? await prisma.callLog.groupBy({ by: ["leadId"], where: { leadId: { in: ids } }, _min: { calledAt: true } })
+    : [];
+  const firstBy = new Map(firstCalls.map((r) => [r.leadId, r._min.calledAt!]));
+
+  const FIVE = 5 * 60_000;
+  const rows: SpeedToLeadRow[] = [];
+  const stats = new Map<string | null, SpeedToLeadOwnerStat & { deltas: number[] }>();
+
+  for (const l of leads) {
+    const optInAt = l.outreachJourney?.optInAt ?? l.createdAt;
+    const firstCallAt = firstBy.get(l.id) ?? null;
+    const key = l.assignedToId;
+    const s = stats.get(key) ?? {
+      ownerId: key, ownerName: l.assignedTo?.name ?? "Unassigned",
+      leads: 0, called: 0, withinFive: 0, medianMinutes: null, overdue: 0, deltas: [],
+    };
+    s.leads++;
+    if (firstCallAt) {
+      const delta = Math.max(0, firstCallAt.getTime() - optInAt.getTime());
+      s.called++;
+      if (delta <= FIVE) s.withinFive++;
+      s.deltas.push(delta / 60_000);
+    } else if (now.getTime() - optInAt.getTime() > FIVE) {
+      s.overdue++;
+    }
+    stats.set(key, s);
+    rows.push({
+      leadId: l.id, name: l.name, ownerId: key, ownerName: l.assignedTo?.name ?? null,
+      optInAt: optInAt.toISOString(), firstCallAt: firstCallAt?.toISOString() ?? null, stage: l.stage,
+    });
+  }
+
+  const owners = [...stats.values()]
+    .map(({ deltas, ...s }) => {
+      const sorted = [...deltas].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const median = !sorted.length ? null : sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+      return { ...s, medianMinutes: median === null ? null : Math.round(median * 10) / 10 };
+    })
+    // Named setters first by volume; "Unassigned" last, whatever its count.
+    .sort((a, b) => (a.ownerId === null ? 1 : 0) - (b.ownerId === null ? 1 : 0) || b.leads - a.leads);
+
+  return {
+    rangeDays: days,
+    generatedAt: now.toISOString(),
+    owners,
+    rows: rows.slice(0, REPORT_ROW_CAP),
+    truncated: rows.length > REPORT_ROW_CAP,
+  };
+}

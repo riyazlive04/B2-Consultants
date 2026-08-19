@@ -25,7 +25,8 @@ import { NewLeadWatcher } from "./NewLeadWatcher";
 import { TargetAttainment } from "./TargetAttainment";
 import { useOfflineCalls } from "./useOfflineCalls";
 // Shared with L2Desk - see LogOutcomeModal.tsx for why it moved out of this file.
-import { LogOutcomeModal } from "./LogOutcomeModal";
+import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
+import { DialButton } from "@/components/calls/DialButton";
 
 /**
  * Level 1 - Outreach Specialist desk (rebuild spec §6).
@@ -95,19 +96,6 @@ function FiveMinuteCountdown({
   );
 }
 
-/** Click-to-dial. On a phone this opens the dialler pre-filled; on a desktop softphone, the same. */
-function DialLink({ phone, name }: { phone: string; name: string }) {
-  return (
-    <a
-      href={`tel:${phone.replace(/[^\d+]/g, "")}`}
-      aria-label={`Call ${name} on ${phone}`}
-      className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3 py-1.5 text-sm font-semibold text-on-accent hover:bg-primary-strong"
-    >
-      <PhoneCall size={14} /> Call
-    </a>
-  );
-}
-
 function QueueRow({
   lead,
   bucket,
@@ -115,7 +103,8 @@ function QueueRow({
 }: {
   lead: L1QueueLead;
   bucket: QueueBucket;
-  onLog: (l: L1QueueLead) => void;
+  /** `calledAt` is set when the row's Call button was the trigger - the dial instant. */
+  onLog: (l: L1QueueLead, calledAt?: Date) => void;
 }) {
   return (
     <li className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
@@ -147,9 +136,15 @@ function QueueRow({
           {lead.callCount > 0 ? ` · ${lead.callCount} call${lead.callCount === 1 ? "" : "s"} logged` : " · never called"}
         </p>
       </div>
-      {/* Two clearly distinct actions (Error Log L3): "Call" dials, "Log outcome" records. */}
+      {/* Two clearly distinct actions (Error Log L3): "Call" dials, "Log outcome" records. The
+          Call button ALSO opens the outcome form a moment later, stamped with the dial time, so
+          the usual path is one tap; "Log outcome" stays for a call made outside the app. */}
       <div className="flex flex-none items-center gap-2">
-        {lead.phone && <DialLink phone={lead.phone} name={lead.name} />}
+        {lead.phone && (
+          <DialButton phone={lead.phone} name={lead.name} onDial={(at) => onLog(lead, at)}>
+            <PhoneCall size={14} /> Call
+          </DialButton>
+        )}
         <Btn variant="soft" size="sm" onClick={() => onLog(lead)}>Log outcome</Btn>
       </div>
     </li>
@@ -158,7 +153,7 @@ function QueueRow({
 
 export function L1Desk({ desk }: { desk: L1DeskData }) {
   const router = useRouter();
-  const [logging, setLogging] = useState<L1QueueLead | null>(null);
+  const [logging, setLogging] = useState<{ lead: L1QueueLead; calledAt?: Date } | null>(null);
   const offline = useOfflineCalls(() => router.refresh());
 
   // `desk.total`, not the array lengths: the server trims each bucket to what is rendered, so
@@ -253,7 +248,7 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
                 >
                   <ul className="-mx-4 -mb-2">
                     {leads.map((l) => (
-                      <QueueRow key={l.id} lead={l} bucket={bucket} onLog={setLogging} />
+                      <QueueRow key={l.id} lead={l} bucket={bucket} onLog={(lead, calledAt) => setLogging({ lead, calledAt })} />
                     ))}
                   </ul>
                   {count > leads.length && (
@@ -346,7 +341,11 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
                       })} IST · {b.phone}
                     </p>
                   </div>
-                  <DialLink phone={b.phone} name={b.name} />
+                  {/* A booked call's outcome is recorded by the specialist who runs it, so
+                      this dial stamps nothing - it only opens the dialler. */}
+                  <DialButton phone={b.phone} name={b.name} onDial={() => undefined}>
+                    <PhoneCall size={14} /> Call
+                  </DialButton>
                 </li>
               ))}
             </ul>
@@ -376,7 +375,8 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
 
       {logging && (
         <LogOutcomeModal
-          lead={logging}
+          lead={logging.lead}
+          calledAt={logging.calledAt}
           onClose={() => setLogging(null)}
           queueCall={offline.queueCall}
           online={offline.online}

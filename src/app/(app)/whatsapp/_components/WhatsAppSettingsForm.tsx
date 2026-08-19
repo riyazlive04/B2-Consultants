@@ -105,11 +105,16 @@ export function WhatsAppSettingsForm({
     else if (!name) setParams((p) => ({ ...p, [kind]: "" }));
   };
 
+  // Dirty tracking for the sticky save bar. The inputs are uncontrolled, so the form's own
+  // change event is the only cheap signal that something differs from what was loaded.
+  const [dirty, setDirty] = useState(false);
+
   const submit = async (fd: FormData) => {
     setSaving(true);
     const res = await saveWatiSettings(fd);
     setSaving(false);
     toast(res.message, res.ok ? "success" : "error");
+    if (res.ok) setDirty(false);
   };
 
   const refresh = async () => {
@@ -122,7 +127,7 @@ export function WhatsAppSettingsForm({
   };
 
   return (
-    <form action={submit} className="space-y-8">
+    <form action={submit} onChange={() => setDirty(true)} className="space-y-8">
       {/* ── Test mode ──────────────────────────────────────────────────────────────
           First on the page and loud when active, because everything below it is
           meaningless if you don't know where the messages are actually going. */}
@@ -394,11 +399,14 @@ export function WhatsAppSettingsForm({
         </div>
       </section>
 
-      <div className="flex justify-end">
+      {/* Sticky so the save is always in reach — this form is long enough that scrolling to
+          the bottom is the step people forget, and nothing above it takes effect until saved. */}
+      <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end gap-3 border-t border-line bg-surface px-1 py-3">
+        {dirty && <span className="text-caption font-medium text-warn">Unsaved changes</span>}
         <button
           type="submit"
           disabled={saving}
-          className="rounded-btn bg-accent px-5 py-2 text-sm font-semibold text-on-accent transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="rounded-btn bg-accent px-5 py-2 text-sm font-semibold text-on-accent shadow-card transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save settings"}
         </button>

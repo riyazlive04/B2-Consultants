@@ -221,20 +221,30 @@ describe("end to end - a landing-page submission becomes a band score", () => {
     assert.ok(mapping.scorable);
 
     const bant = scoreFromAnswers(mapping.answers, questions);
-    assert.equal(bant.bantAvg, 5, "every dimension answered at its maximum");
-    assert.equal(bant.bantScore, 4);
+    /**
+     * 4.2, not 5, and the gap is the point.
+     *
+     * This prospect answered every question the live form ASKS, each at its maximum. The sixth
+     * scored question - `commitment` - is not on the form any more, so it scores 0 and still
+     * divides: (5 + 5 + 5 + 5 + 0 + 5) / 6 = 4.17. A perfect submission cannot reach 5 while a
+     * scored question goes unasked. The verdict survives here because CONFIRM only needs > 3;
+     * nearer the CANCEL line at 2 the same missing 0.8 is what decides a rejection.
+     */
+    assert.equal(bant.bantAvg, 4.2, "every question the form asks, answered at its maximum");
+    assert.equal(bant.bantScore, 4, "all four dimensions still met");
     assert.equal(bant.bantVerdict, "CONFIRM");
   });
 
-  test("a missing dimension drags the average down rather than being excluded", () => {
-    // No Authority question answered at all: Authority scores 0 and STILL divides by four.
+  test("an unanswered question drags the average down rather than being excluded", () => {
+    // Three of the six scored questions answered at the top; the other three score 0 and STILL
+    // divide. Excluding them would report this partial submission as a perfect 5.
     const mapping = mapInboundAnswers(
       { readyToInvest: "ready_now", alreadyApplied: "interviews_no_offer", whenStartGermany: "6_months" },
       CATALOGUE,
     );
     const bant = scoreFromAnswers(mapping.answers, CATALOGUE);
     assert.equal(bant.bantAuthority, false);
-    assert.equal(bant.bantAvg, 3.8, "(5 + 0 + 5 + 5) / 4");
-    assert.equal(bant.bantScore, 3);
+    assert.equal(bant.bantAvg, 2.5, "(5 + 0 + 0 + 5 + 0 + 5) / 6");
+    assert.equal(bant.bantScore, 3, "the dimension booleans still read the best evidence");
   });
 });

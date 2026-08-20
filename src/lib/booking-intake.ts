@@ -236,6 +236,15 @@ const answerScore = (field: keyof typeof BANT_ANSWER_SCORES, value: string | nul
  * mean and bantVerdict applies Ameen's thresholds. The booleans + 0-4 bantScore keep the
  * exact shape the pipeline "Call these first" ranking already consumes.
  */
+export const SCORED_QUESTION_KEYS = [
+  "readyToInvest",
+  "currentIncome",
+  "decisionMaking",
+  "alreadyApplied",
+  "commitment",
+  "whenStartGermany",
+] as const;
+
 export function computeBant(input: BantInput): BantResult {
   const budget = Math.max(answerScore("readyToInvest", input.readyToInvest), answerScore("currentIncome", input.currentIncome));
   const authority = answerScore("decisionMaking", input.decisionMaking);
@@ -243,8 +252,26 @@ export function computeBant(input: BantInput): BantResult {
   const timeline = answerScore("whenStartGermany", input.whenStartGermany);
 
   const dims = [budget, authority, need, timeline];
-  const bantAvg = Math.round((dims.reduce((a, b) => a + b, 0) / dims.length) * 10) / 10;
   const met = dims.map((d) => d >= DIMENSION_MET_AT);
+  /**
+   * The average is over the six QUESTIONS, not the four dimensions (founder decision,
+   * 20/08/2026). Budget therefore carries two votes and Authority one, which is the weighting
+   * the sales team had been applying by hand in the "New BANT" sheet.
+   *
+   * ── The `commitment` trap, stated where it will be found ────────────────────────
+   * The public form no longer ASKS `commitment`, so it scores 0 on every live submission and
+   * costs every prospect ~0.3 of a point. That is a constant, so it changes no ranking - but
+   * the verdict thresholds are absolute, and `< 2` auto-disqualifies. The fix is to re-add the
+   * question to the form or drop it from `SCORED_QUESTION_KEYS`; leaving it here means turning
+   * people away over a question nobody was asked.
+   *
+   * The dimension booleans and `bantScore` above are deliberately UNCHANGED - they still take
+   * the best evidence per dimension, because the pipeline's "call these first" ranking consumes
+   * them and that is a different question from "how strong is this prospect overall".
+   */
+  const scores = SCORED_QUESTION_KEYS.map((k) => answerScore(k, input[k as keyof BantInput]));
+  const bantAvg = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;
+
   return {
     bantBudget: met[0],
     bantAuthority: met[1],

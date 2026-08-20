@@ -78,9 +78,18 @@ export function optionScore(q: QuestionSpec, value: string | null | undefined): 
 /**
  * Score a submission against a question catalogue.
  *
- * Always divides by the four scored dimensions, never by "dimensions that had a question" -
- * a catalogue with no Budget question means Budget scores 0, not that Budget is excluded
- * from the mean. Dropping it from the denominator would quietly inflate every verdict.
+ * The average is over every SCORED QUESTION, mirroring `computeBant` - so a dimension with two
+ * questions carries twice the weight of one with a single question. That is the founders' own
+ * hand-scoring made explicit (20/08/2026).
+ *
+ * Divides by the questions the catalogue HAS, never by "questions that were answered": an
+ * unanswered scored question contributes 0 and stays in the denominator. Dropping it would
+ * quietly inflate the verdict of every incomplete submission, which is the opposite of what a
+ * qualification score is for. The consequence is that a scored question the form never asks
+ * costs every prospect a share of their score - see the note in `computeBant`.
+ *
+ * The dimension booleans below are unchanged and still take the best evidence per dimension,
+ * because the pipeline ranking consumes them.
  */
 export function scoreFromAnswers(answers: AnswerMap, questions: QuestionSpec[]): BantResult {
   const dims = SCORED_DIMENSIONS.map((dimension) => {
@@ -89,7 +98,9 @@ export function scoreFromAnswers(answers: AnswerMap, questions: QuestionSpec[]):
     return forDim.reduce((best, q) => Math.max(best, optionScore(q, answers[q.key])), 0);
   });
 
-  const bantAvg = Math.round((dims.reduce((a, b) => a + b, 0) / dims.length) * 10) / 10;
+  const scored = questions.filter((q) => (SCORED_DIMENSIONS as readonly BantDimension[]).includes(q.dimension));
+  const total = scored.reduce((sum, q) => sum + optionScore(q, answers[q.key]), 0);
+  const bantAvg = scored.length ? Math.round((total / scored.length) * 10) / 10 : 0;
   const met = dims.map((d) => d >= DIMENSION_MET_AT);
 
   return {

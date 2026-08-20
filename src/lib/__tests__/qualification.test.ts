@@ -123,16 +123,28 @@ describe("qualification - the rules that are easy to get wrong", () => {
       { readyToInvest: "need_clarity", currentIncome: "gt_1l" },
       CATALOGUE,
     );
-    // Budget 5, the other three unanswered → 0. Mean = 1.25 → rounded 1.3.
+    // The BOOLEAN still takes the best evidence for the dimension - that is what the pipeline
+    // ranking reads, and it is unchanged.
     assert.equal(r.bantBudget, true);
+    // The AVERAGE is over the six scored QUESTIONS (2.5 + 5 + four unanswered) / 6 = 1.25 → 1.3.
+    // It coincides with the old four-dimension figure here; the test below separates them.
     assert.equal(r.bantAvg, 1.3);
   });
 
-  test("the mean always divides by four dimensions, even if a catalogue omits one", () => {
-    // Dropping an absent dimension from the denominator would quietly inflate every verdict.
+  test("the average is per QUESTION, so a two-question dimension carries twice the weight", () => {
+    // This is what separates the current rule from the old one. Both Budget questions answered at
+    // the top, nothing else: per-question gives (5 + 5) / 6 = 1.7, per-dimension would give
+    // 5 / 4 = 1.3. Budget's two votes are the founders' own hand-weighting, made explicit.
+    const r = scoreFromAnswers({ readyToInvest: "ready_now", currentIncome: "gt_1l" }, CATALOGUE);
+    assert.equal(r.bantAvg, 1.7);
+  });
+
+  test("an unanswered scored question stays in the denominator", () => {
+    // Dropping it would quietly inflate the verdict of every incomplete submission. This is also
+    // why a scored question the form never asks costs EVERY prospect a share of their score.
     const budgetOnly = CATALOGUE.filter((q) => q.dimension === "BUDGET");
     const r = scoreFromAnswers({ readyToInvest: "ready_now" }, budgetOnly);
-    assert.equal(r.bantAvg, 1.3); // 5 / 4 = 1.25 → 1.3, NOT 5
+    assert.equal(r.bantAvg, 2.5); // 5 / 2 budget questions, NOT 5 and NOT 5/4
     assert.equal(SCORED_DIMENSIONS.length, 4);
   });
 

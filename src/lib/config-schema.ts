@@ -1201,6 +1201,40 @@ export function coerceCallDistribution(value: unknown): CallDistributionConfig {
   return parsed.success ? parsed.data : DEFAULT_CALL_DISTRIBUTION;
 }
 
+// ───────────────────────── qualification scoring ─────────────────────────
+
+/**
+ * Which scorer decides the BANT verdict on a booking.
+ *
+ * ── Why this is a switch and not just "use the catalogue" ────────────────────────
+ * The verdict decides who gets called and, with auto-disqualify on, who gets turned away with
+ * an email. Changing how it is computed is a business decision, so it is made once, deliberately,
+ * and can be undone in one click without a deploy.
+ *
+ *   "shipped"    - `computeBant()` and its hardcoded tables. The behaviour since day one.
+ *   "catalogue"  - the founder-editable questions in Console → Qualification.
+ *
+ * Ships as "shipped". Flipping is gated in the UI on the replay reporting ZERO disagreements
+ * (prisma/replay-bant.ts), which proves the catalogue reproduces every historical verdict before
+ * it is allowed to produce a new one.
+ *
+ * Note the fallback is not symmetric: on "catalogue" a submission the catalogue CANNOT score -
+ * empty table, a question deactivated mid-flight - falls back to the shipped scorer rather than
+ * scoring nobody. A prospect must never be rejected because a settings screen was mid-edit.
+ */
+export const qualificationConfigSchema = z.object({
+  scorer: z.enum(["shipped", "catalogue"]).default("shipped"),
+});
+
+export type QualificationConfig = z.infer<typeof qualificationConfigSchema>;
+
+export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = { scorer: "shipped" };
+
+export function coerceQualificationConfig(value: unknown): QualificationConfig {
+  const parsed = qualificationConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_QUALIFICATION_CONFIG;
+}
+
 // ───────────────────────── speed-to-lead alert ─────────────────────────
 
 /**

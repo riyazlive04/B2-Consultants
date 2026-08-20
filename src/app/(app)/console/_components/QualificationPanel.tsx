@@ -12,6 +12,7 @@ import {
   createQualificationQuestion,
   updateQualificationQuestion,
   setQualificationQuestionActive,
+  setQualificationScorer,
 } from "@/server/qualification-actions";
 
 /**
@@ -50,6 +51,9 @@ export type AdminQuestion = {
 
 export type ShadowStatus = { total: number; scored: number; disagreements: number; readyToFlip: boolean };
 
+/** Which scorer is live right now - see `qualificationConfigSchema`. */
+export type ScorerMode = "shipped" | "catalogue";
+
 /**
  * What the landing page actually sent, and what we failed to read.
  *
@@ -58,6 +62,75 @@ export type ShadowStatus = { total: number; scored: number; disagreements: numbe
  * scores that are quietly too low - the failure mode that never gets reported because nothing
  * looks broken.
  */
+/**
+ * Which scorer is live, why it may not be switchable, and the switch itself.
+ *
+ * The three states are kept visually distinct because they mean very different things to the
+ * person about to edit a score table: LIVE means their next save changes who gets called;
+ * READY means it does not yet but one click would; BLOCKED means the catalogue and the shipped
+ * tables disagree and nothing should move until that is resolved.
+ */
+function ScorerSwitch({ shadow, scorer }: { shadow: ShadowStatus; scorer: ScorerMode }) {
+  const router = useRouter();
+  const [busy, start] = useTransition();
+  const live = scorer === "catalogue";
+
+  const flip = (next: ScorerMode) =>
+    start(async () => {
+      const res = await setQualificationScorer(next);
+      if (!res.ok) return toast(res.error, "error");
+      toast(next === "catalogue" ? "These questions now decide the verdict" : "Reverted to the shipped scoring tables");
+      router.refresh();
+    });
+
+  const tone = live
+    ? "border-ok bg-ok-soft text-ok-ink"
+    : shadow.readyToFlip
+      ? "border-ok bg-ok-soft text-ok-ink"
+      : "border-warn bg-warn-soft text-warn-ink";
+
+  return (
+    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-field border px-4 py-3 text-sm ${tone}`}>
+      <span className="min-w-0 flex-1">
+        {live ? (
+          <>
+            <strong>These questions are live.</strong> Every new booking is scored from the table
+            below, and a change here changes who gets called - and, while auto-disqualify is on,
+            who is turned away.
+          </>
+        ) : shadow.scored === 0 ? (
+          <>
+            <strong>Not live - nothing scored yet.</strong> Bookings are scored by the shipped
+            tables. The catalogue is recorded alongside for comparison, but a booking has to come
+            in before there is any evidence it agrees.
+          </>
+        ) : shadow.disagreements > 0 ? (
+          <>
+            <strong>Not live - {shadow.disagreements} disagreement(s) across {shadow.scored} scored
+            bookings.</strong>{" "}
+            The catalogue has drifted from the shipped scorer. Re-seed it
+            (<code>prisma/seed-qualification.ts</code>) before switching anything.
+          </>
+        ) : (
+          <>
+            <strong>Not live - but ready.</strong> The catalogue reproduces all {shadow.scored}{" "}
+            historical verdicts exactly, so switching changes nothing today and everything you edit
+            afterwards.
+          </>
+        )}
+      </span>
+      <button
+        type="button"
+        disabled={busy || (!live && !shadow.readyToFlip)}
+        onClick={() => flip(live ? "shipped" : "catalogue")}
+        className="flex-none rounded-btn border border-current px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+      >
+        {busy ? "Saving…" : live ? "Revert to shipped scoring" : "Make these questions live"}
+      </button>
+    </div>
+  );
+}
+
 function InboundReport({ report }: { report: IntakeMappingReport }) {
   const nothingWrong = report.unresolved.length === 0 && report.unmapped.length === 0;
 
@@ -185,10 +258,12 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
 export function QualificationPanel({
   questions,
   shadow,
+  scorer,
   inbound,
 }: {
   questions: AdminQuestion[];
   shadow: ShadowStatus;
+  scorer: ScorerMode;
   inbound: IntakeMappingReport;
 }) {
   const router = useRouter();
@@ -230,34 +305,9 @@ export function QualificationPanel({
         toward Budget when the invest answer is lukewarm.
       </Hint>
 
-      {/* The gate. Deliberately loud: an admin editing here must know whether it is live. */}
-      <div
-        className={`rounded-field border px-4 py-3 text-sm ${
-          shadow.readyToFlip
-            ? "border-ok bg-ok-soft text-ok-ink"
-            : "border-warn bg-warn-soft text-warn-ink"
-        }`}
-      >
-        {shadow.scored === 0 ? (
-          <>
-            <strong>Shadow mode - no submissions scored yet.</strong> The live booking form
-            still scores from its original columns. This catalogue is recorded alongside and
-            compared, but nothing reads it.
-          </>
-        ) : shadow.disagreements > 0 ? (
-          <>
-            <strong>Shadow mode - {shadow.disagreements} disagreement(s) across {shadow.scored} scored bookings.</strong>{" "}
-            The catalogue in this database has drifted from the shipped scorer. Re-seed it
-            (<code>prisma/seed-qualification.ts</code>) before anything is switched over.
-          </>
-        ) : (
-          <>
-            <strong>Gate passed - {shadow.scored} bookings, zero disagreements.</strong> The
-            catalogue reproduces every historical verdict exactly, so the public form can be
-            switched to it.
-          </>
-        )}
-      </div>
+      {/* The gate, and the switch it guards. Deliberately loud: an admin editing scores below
+          needs to know in one glance whether those edits decide anything. */}
+      <ScorerSwitch shadow={shadow} scorer={scorer} />
 
       <InboundReport report={inbound} />
 

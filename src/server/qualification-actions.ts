@@ -8,7 +8,8 @@ import { capabilityCheck } from "@/lib/rbac";
 import { normalizeLevelCode } from "@/lib/levels";
 import type { QuestionOption } from "@/lib/qualification";
 import { logActivity } from "./activity-log";
-import { QUALIFICATION_CACHE_TAG } from "./qualification";
+import { QUALIFICATION_CACHE_TAG, shadowAgreement } from "./qualification";
+import { getQualificationConfig, writeQualificationConfig } from "./founder-config";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -325,5 +326,53 @@ export async function reorderQualificationQuestions(ids: string[]): Promise<Acti
 
   revalidateTag(QUALIFICATION_CACHE_TAG);
   revalidatePath("/console");
+  return { ok: true };
+}
+
+/**
+ * Choose which scorer decides the BANT verdict.
+ *
+ * Switching TO the catalogue is gated on the replay agreeing on every historical booking. The
+ * gate is re-checked HERE and not merely rendered in the UI: the panel's banner is a view of a
+ * cached number, and the decision this flips - who gets called, who gets a rejection email - is
+ * not one to take on a stale read. Switching BACK is never gated; undoing a change must not
+ * depend on the thing you are undoing being healthy.
+ */
+export async function setQualificationScorer(scorer: "shipped" | "catalogue"): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("qualification.manage");
+  if (!allowed) return denied;
+
+  const before = await getQualificationConfig();
+  if (before.scorer === scorer) return { ok: true };
+
+  if (scorer === "catalogue") {
+    const gate = await shadowAgreement();
+    if (!gate.readyToFlip) {
+      return {
+        ok: false,
+        error:
+          gate.scored === 0
+            ? "No submissions have been scored yet, so there is nothing to prove the catalogue matches. Take a booking first."
+            : `The catalogue disagrees with the current scorer on ${gate.disagreements} of ${gate.scored} bookings. Re-seed it before switching.`,
+      };
+    }
+  }
+
+  await writeQualificationConfig({ ...before, scorer });
+  await logActivity(session, {
+    action: "qualification.scorer.set",
+    section: "bookings",
+    entityType: "AppSetting",
+    entityId: "qualificationConfig",
+    summary:
+      scorer === "catalogue"
+        ? "Switched BANT scoring to the editable question catalogue"
+        : "Switched BANT scoring back to the shipped tables",
+    meta: { from: before.scorer, to: scorer },
+  });
+
+  revalidateTag(QUALIFICATION_CACHE_TAG);
+  revalidatePath("/console");
+  revalidatePath("/book");
   return { ok: true };
 }

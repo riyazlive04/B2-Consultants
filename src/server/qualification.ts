@@ -9,7 +9,8 @@ import {
   type QuestionOption,
   type AnswerMap,
 } from "@/lib/qualification";
-import { computeBant, type BantInput } from "@/lib/booking-intake";
+import { computeBant, type BantInput, type BantResult } from "@/lib/booking-intake";
+import { getQualificationConfig } from "./founder-config";
 
 /**
  * Qualification catalogue reads (ER v2 Track D). Admin CRUD is in
@@ -138,6 +139,63 @@ export async function shadowScore(input: BantInput & AnswerMap): Promise<ShadowS
   } catch {
     return { shadowAvg: null, configVersion: null, agrees: null };
   }
+}
+
+/**
+ * The BANT verdict that is ACTUALLY USED, and where it came from.
+ *
+ * This is the Track D flip. Until now `computeBant()`'s hardcoded tables produced every live
+ * verdict and the catalogue only ever ran alongside it, recorded and ignored. With the founder
+ * switch on "catalogue", the questions in Console → Qualification decide instead - which is what
+ * makes that screen a control rather than a description.
+ *
+ * ── Failing safe is the whole design here ────────────────────────────────────────
+ * This runs inside the public booking submit, and the verdict decides whether a prospect keeps
+ * their call or is turned away with a rejection email. So every failure mode falls back to the
+ * shipped scorer rather than to a low score:
+ *
+ *   · switch is "shipped"            → shipped scorer
+ *   · catalogue empty or unreadable  → shipped scorer
+ *   · catalogue throws               → shipped scorer
+ *
+ * Scoring nobody would be a silent mass-rejection; scoring them the old way is merely the old
+ * behaviour. `shadowAvg` is still recorded on every submission either way, so the comparison
+ * that justified the flip keeps running after it.
+ */
+export type LiveScore = {
+  result: BantResult;
+  /** Which scorer produced `result` - written to the booking so a verdict can be explained later. */
+  source: "shipped" | "catalogue";
+  shadowAvg: number | null;
+  configVersion: number | null;
+};
+
+export async function scoreSubmission(input: BantInput & AnswerMap): Promise<LiveScore> {
+  const shipped = computeBant(input);
+  let questions: Awaited<ReturnType<typeof getQualificationQuestions>> = [];
+  try {
+    questions = await getQualificationQuestions();
+  } catch {
+    return { result: shipped, source: "shipped", shadowAvg: null, configVersion: null };
+  }
+  if (questions.length === 0) {
+    return { result: shipped, source: "shipped", shadowAvg: null, configVersion: null };
+  }
+
+  let catalogue: BantResult | null = null;
+  try {
+    catalogue = scoreFromAnswers(input, questions);
+  } catch {
+    catalogue = null;
+  }
+  const configVersion = Math.max(...questions.map((q) => q.version));
+  const shadowAvg = catalogue ? catalogue.bantAvg : null;
+
+  const { scorer } = await getQualificationConfig();
+  if (scorer === "catalogue" && catalogue) {
+    return { result: catalogue, source: "catalogue", shadowAvg, configVersion };
+  }
+  return { result: shipped, source: "shipped", shadowAvg, configVersion };
 }
 
 /**

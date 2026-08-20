@@ -31,7 +31,7 @@ import { getGoalsWithProgress } from "@/server/goals";
 import { listTutorFees } from "@/server/tutor-fees";
 import { getAllQualificationQuestions, shadowAgreement } from "@/server/qualification";
 import { getIntakeMappingReport } from "@/server/intake-inspection";
-import { getCallDistribution } from "@/server/founder-config";
+import { getCallDistribution, getQualificationConfig } from "@/server/founder-config";
 import { getBookableTeamMembers } from "@/server/booking-metrics";
 import { listRewardGrants, listRewardRules } from "@/server/rewards";
 import { SectionsPanel } from "./_components/SectionsPanel";
@@ -110,13 +110,14 @@ export default async function ConsolePage() {
   // ER v2 Tracks C + D. Kept in their own Promise.all rather than appended to the tuple
   // above: that one is already at the length where an added entry silently shifts a
   // destructured name, and these two are unrelated to the config block.
-  const [tutorFeeRows, qualificationQuestions, shadowStatus, inboundReport, callDistribution, roster, capabilityPeople, notArmed] =
+  const [tutorFeeRows, qualificationQuestions, shadowStatus, inboundReport, callDistribution, qualificationConfig, roster, capabilityPeople, notArmed] =
     await Promise.all([
       listTutorFees(),
       getAllQualificationQuestions(),
       shadowAgreement(),
       getIntakeMappingReport(),
       getCallDistribution(),
+      getQualificationConfig(),
       // The rotation roster. ACTIVE only - a former team member must not be offered a share of
       // future work, and `pickFirstCaller` excludes them anyway, so listing them would show a
       // control that does nothing.
@@ -325,6 +326,7 @@ export default async function ConsolePage() {
                       <QualificationPanel
                         questions={qualificationQuestions}
                         shadow={shadowStatus}
+                        scorer={qualificationConfig.scorer}
                         inbound={inboundReport}
                       />
                     ),

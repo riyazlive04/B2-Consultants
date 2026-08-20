@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
-import { computeBant, INTAKE_OPTIONS } from "@/lib/booking-intake";
+import { INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { qualifiedFromBant } from "@/lib/outreach-sop";
 import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/consent";
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
@@ -22,7 +22,7 @@ import { upsertIntakeLead } from "./lead-intake";
 import { syncDefaultOpportunity } from "./opportunity-sync";
 import { observedOriginDomain } from "./request-origin";
 import { mirrorBookingScoreToLead } from "./lead-qualification";
-import { shadowScore } from "./qualification";
+import { scoreSubmission } from "./qualification";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
 import { promoteIntoFreedSlot, runBookingConfirmations } from "./booking-automation";
 import { sendEmailMessage } from "./messaging";
@@ -216,8 +216,15 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   }
 
   const rules = await getBookingRulesConfig();
-  const bant = computeBant(d);
-  const shadow = await shadowScore(d);
+  /**
+   * The verdict, from whichever scorer the founder has selected (Console → Qualification).
+   *
+   * Was `computeBant(d)` with the catalogue running alongside it and being ignored. Now one call
+   * decides and reports which scorer answered - and falls back to the shipped tables on any
+   * failure, because the alternative on this path is rejecting a prospect over a config error.
+   */
+  const scored = await scoreSubmission(d);
+  const bant = scored.result;
   const utm = d.utm ? sanitizeUtm(d.utm) : null;
 
   // The evidence half of the gate above. Written inside whichever transaction ends up
@@ -283,11 +290,11 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     // ER v2 Track D - SHADOW ONLY. What the configurable question catalogue would have
     // scored this submission. Recorded beside the live verdict and read by nothing: the
     // decision below still comes from `bant`, exactly as it did before the catalogue
-    // existed. `shadowScore` swallows its own errors and returns nulls, because a
-    // measurement that could break a prospect's booking is worse than no measurement.
-    // The flip is gated on prisma/replay-bant.ts reporting zero disagreements.
-    bantShadowAvg: shadow.shadowAvg,
-    bantConfigVersion: shadow.configVersion,
+    // existed. `scoreSubmission` swallows its own errors and falls back to the shipped
+    // tables, because a scoring failure that could reject a prospect is worse than an
+    // unrecorded measurement. Which scorer is live is set in Console → Qualification.
+    bantShadowAvg: scored.shadowAvg,
+    bantConfigVersion: scored.configVersion,
   };
 
   // ── Auto-disqualify ──────────────────────────────────────────────────────────

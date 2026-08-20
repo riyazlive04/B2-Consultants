@@ -7,6 +7,9 @@ import {
   coerceAgreementWorkflow,
   coerceCallDistribution,
   coerceBookingRulesConfig,
+  coerceQualificationConfig,
+  DEFAULT_QUALIFICATION_CONFIG,
+  type QualificationConfig,
   coerceSlotPatternConfig,
   coerceBookingCalendarsConfig,
   coerceCommissionRulesConfig,
@@ -94,6 +97,7 @@ export const SSS_CONFIG_KEY = "sssConfig";
 export const DAILY_LOG_TARGETS_KEY = "dailyLogTargets";
 export const DAILY_LOG_EOD_KEY = "dailyLogEod";
 export const AGREEMENT_WORKFLOW_KEY = "agreementWorkflow";
+export const QUALIFICATION_KEY = "qualificationConfig";
 export const CALL_DISTRIBUTION_KEY = "callDistribution";
 export const TUTOR_FEE_KEY = "tutorFee";
 export const BOOK_ORDER_KEY = "bookOrders";
@@ -172,6 +176,21 @@ export const getGamificationConfig = cache(async (): Promise<GamificationConfig>
   const row = await readSetting(GAMIFICATION_KEY);
   return row ? coerceGamificationConfig(row.value) : DEFAULT_GAMIFICATION_CONFIG;
 });
+
+/** Which scorer produces the BANT verdict - see `qualificationConfigSchema`. */
+export const getQualificationConfig = cache(async (): Promise<QualificationConfig> => {
+  const row = await readSetting(QUALIFICATION_KEY);
+  return row ? coerceQualificationConfig(row.value) : DEFAULT_QUALIFICATION_CONFIG;
+});
+
+export async function writeQualificationConfig(config: QualificationConfig): Promise<void> {
+  await prisma.appSetting.upsert({
+    where: { key: QUALIFICATION_KEY },
+    create: { key: QUALIFICATION_KEY, value: config as unknown as Prisma.InputJsonValue },
+    update: { value: config as unknown as Prisma.InputJsonValue },
+  });
+  revalidateFounderConfig();
+}
 
 export const getBookingRulesConfig = cache(async (): Promise<BookingRulesConfig> => {
   const row = await readSetting(BOOKING_RULES_KEY);

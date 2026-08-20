@@ -32,13 +32,18 @@ import { computeBant, INTAKE_OPTIONS, type BantInput } from "../booking-intake";
 
 const CATALOGUE = catalogueFromIntake();
 
-/** The six questions that actually move the score. */
+/**
+ * The five questions that actually move the score - and every one is on the live form.
+ *
+ * `commitment` is absent on purpose: it was scored while the form had stopped asking it, which
+ * divided every average by a guaranteed zero. Kept out of this list so the test fails if it is
+ * ever scored again without being asked again.
+ */
 const SCORED_KEYS = [
   "readyToInvest",
   "currentIncome",
   "decisionMaking",
   "alreadyApplied",
-  "commitment",
   "whenStartGermany",
 ] as const;
 
@@ -49,7 +54,7 @@ describe("qualification - the catalogue reproduces today's form", () => {
     assert.equal(new Set(keys).size, keys.length);
   });
 
-  test("the scored six carry a dimension; the rest are context-only", () => {
+  test("the scored five carry a dimension; the rest are context-only", () => {
     for (const q of CATALOGUE) {
       const expected = (SCORED_KEYS as readonly string[]).includes(q.key);
       assert.equal(q.dimension !== "NONE", expected, `${q.key} dimension`);
@@ -99,7 +104,10 @@ describe("qualification - EXHAUSTIVE agreement with the shipped scorer", () => {
     assert.equal(checked, expected);
     // A floor, not an equality: it catches a list collapsing to nothing (which would make the
     // "exhaustive" walk vacuously pass) without pinning the suite to one catalogue revision.
-    assert.ok(checked > 500, `only ${checked} combinations enumerated`);
+    // Lowered from 500 to 300 on 20/08/2026 when `commitment` stopped being scored - dropping a
+    // question legitimately shrinks the space (1620 → 405), and a floor that fails on a correct
+    // change is a floor nobody keeps.
+    assert.ok(checked > 300, `only ${checked} combinations enumerated`);
   });
 
   test("a completely empty submission also agrees", () => {
@@ -126,17 +134,16 @@ describe("qualification - the rules that are easy to get wrong", () => {
     // The BOOLEAN still takes the best evidence for the dimension - that is what the pipeline
     // ranking reads, and it is unchanged.
     assert.equal(r.bantBudget, true);
-    // The AVERAGE is over the six scored QUESTIONS (2.5 + 5 + four unanswered) / 6 = 1.25 → 1.3.
-    // It coincides with the old four-dimension figure here; the test below separates them.
-    assert.equal(r.bantAvg, 1.3);
+    // The AVERAGE is over the five scored QUESTIONS: (2.5 + 5 + three unanswered) / 5 = 1.5.
+    assert.equal(r.bantAvg, 1.5);
   });
 
   test("the average is per QUESTION, so a two-question dimension carries twice the weight", () => {
     // This is what separates the current rule from the old one. Both Budget questions answered at
-    // the top, nothing else: per-question gives (5 + 5) / 6 = 1.7, per-dimension would give
+    // the top, nothing else: per-question gives (5 + 5) / 5 = 2.0, per-dimension would give
     // 5 / 4 = 1.3. Budget's two votes are the founders' own hand-weighting, made explicit.
     const r = scoreFromAnswers({ readyToInvest: "ready_now", currentIncome: "gt_1l" }, CATALOGUE);
-    assert.equal(r.bantAvg, 1.7);
+    assert.equal(r.bantAvg, 2);
   });
 
   test("an unanswered scored question stays in the denominator", () => {

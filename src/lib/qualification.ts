@@ -124,8 +124,11 @@ export const DIMENSION_BY_KEY: Record<string, BantDimension> = {
   currentIncome: "BUDGET",
   decisionMaking: "AUTHORITY",
   alreadyApplied: "NEED",
-  commitment: "NEED",
   whenStartGermany: "TIMELINE",
+  // `commitment` is intentionally NOT here. The live form stopped asking it, and a scored
+  // question the form never asks divides the average while contributing nothing - see
+  // SCORED_QUESTION_KEYS in booking-intake.ts. It stays in the catalogue as an unscored
+  // question so its wording and past answers survive; it just no longer counts.
 };
 
 /** The founders' wording for each question, as the public form asks it today. */

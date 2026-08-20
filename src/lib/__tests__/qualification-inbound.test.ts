@@ -221,16 +221,9 @@ describe("end to end - a landing-page submission becomes a band score", () => {
     assert.ok(mapping.scorable);
 
     const bant = scoreFromAnswers(mapping.answers, questions);
-    /**
-     * 4.2, not 5, and the gap is the point.
-     *
-     * This prospect answered every question the live form ASKS, each at its maximum. The sixth
-     * scored question - `commitment` - is not on the form any more, so it scores 0 and still
-     * divides: (5 + 5 + 5 + 5 + 0 + 5) / 6 = 4.17. A perfect submission cannot reach 5 while a
-     * scored question goes unasked. The verdict survives here because CONFIRM only needs > 3;
-     * nearer the CANCEL line at 2 the same missing 0.8 is what decides a rejection.
-     */
-    assert.equal(bant.bantAvg, 4.2, "every question the form asks, answered at its maximum");
+    // Every question the form asks, answered at its maximum, reaches a clean 5. It could not
+    // while `commitment` was scored but unasked - that blank capped a perfect submission at 4.2.
+    assert.equal(bant.bantAvg, 5, "every question the form asks, answered at its maximum");
     assert.equal(bant.bantScore, 4, "all four dimensions still met");
     assert.equal(bant.bantVerdict, "CONFIRM");
   });
@@ -244,7 +237,7 @@ describe("end to end - a landing-page submission becomes a band score", () => {
     );
     const bant = scoreFromAnswers(mapping.answers, CATALOGUE);
     assert.equal(bant.bantAuthority, false);
-    assert.equal(bant.bantAvg, 2.5, "(5 + 0 + 0 + 5 + 0 + 5) / 6");
+    assert.equal(bant.bantAvg, 3, "(5 + 0 + 0 + 5 + 5) / 5");
     assert.equal(bant.bantScore, 3, "the dimension booleans still read the best evidence");
   });
 });

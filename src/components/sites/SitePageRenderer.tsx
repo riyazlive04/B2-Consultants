@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { buildForwardedHref, isExternalHref } from "@/lib/site-links";
 import type {
+  ColumnStyle,
   NavItem,
   SectionBackground,
   SiteBlock,
@@ -60,6 +61,42 @@ function textStyle(b: SiteBlock): React.CSSProperties {
     fontWeight: s.fontWeight,
     letterSpacing: s.letterSpacing !== undefined ? `${s.letterSpacing}px` : undefined,
     textTransform: s.textTransform,
+    lineHeight: s.lineHeight,
+    maxWidth: s.maxWidth !== undefined ? `${s.maxWidth}px` : undefined,
+    // A capped block is still a block, so it stays hard left unless it was asked to centre. The
+    // auto margins are what make "centred, 600px wide" mean the same thing it does in the design.
+    ...(s.maxWidth !== undefined && b.align === "center"
+      ? { marginLeft: "auto", marginRight: "auto" }
+      : {}),
+  };
+}
+
+/**
+ * The coloured tail of a headline, rendered inline so it stays on the same line as the rest of
+ * the sentence. Absent `accentText` renders nothing at all - not an empty span.
+ */
+function Accent({ b }: { b: SiteBlock }) {
+  if (!b.accentText) return null;
+  return <span style={{ color: b.accentColor ?? "var(--site-primary)" }}>{b.accentText}</span>;
+}
+
+/** A column's own box. Returns {} for a plain column, so the markup is unchanged without one. */
+function columnStyle(c: ColumnStyle | null | undefined): React.CSSProperties {
+  if (!c) return {};
+  return {
+    background: c.background,
+    color: c.color,
+    padding: c.padding ? c.padding.map((v) => `${v}px`).join(" ") : undefined,
+    borderRadius: c.radius !== undefined ? `${c.radius}px` : undefined,
+    border: c.borderWidth ? `${c.borderWidth}px solid ${c.borderColor ?? "rgba(0,0,0,.08)"}` : undefined,
+    gap: c.gap !== undefined ? `${c.gap}px` : undefined,
+    justifyContent: c.justify ? (c.justify === "start" ? "flex-start" : c.justify === "end" ? "flex-end" : "center") : undefined,
+    boxShadow:
+      c.shadow === "card"
+        ? "0 2px 12px rgba(0,0,0,.03)"
+        : c.shadow === "soft"
+          ? "0 8px 24px rgba(0,0,0,.06)"
+          : undefined,
   };
 }
 
@@ -118,6 +155,8 @@ function backgroundStyle(bg: SectionBackground): React.CSSProperties {
         backgroundSize: "cover",
         backgroundPosition: "center",
       };
+    case "gradient":
+      return { backgroundImage: bg.css };
     default:
       return {};
   }
@@ -191,6 +230,7 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
           style={{ fontFamily: "var(--site-heading-font)", color: inkFor(b, onBand, theme.text), ...textStyle(b) }}
         >
           {b.text}
+          <Accent b={b} />
         </h1>
       );
 
@@ -201,6 +241,7 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
           style={{ fontFamily: "var(--site-heading-font)", color: inkFor(b, onBand, theme.text), ...textStyle(b) }}
         >
           {b.text}
+          <Accent b={b} />
         </h2>
       );
 
@@ -211,6 +252,7 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
           style={{ color: inkFor(b, onBand, theme.textMuted), ...textStyle(b) }}
         >
           {b.text}
+          <Accent b={b} />
         </p>
       );
 
@@ -308,7 +350,10 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
 
     case "logo":
       return b.url ? (
-        <Anchor href="/" ctx={ctx} className="inline-block">
+        // The site root, which is only "/" once a real domain is attached: while the site is served
+        // under /s/<slug> a bare "/" is the DASHBOARD, and clicking the logo drops a marketing
+        // visitor on a login screen. Authored per block so the value can follow the cutover.
+        <Anchor href={b.href ?? "/"} ctx={ctx} className="inline-block">
           <Image
             src={b.url}
             alt={b.alt || "Logo"}
@@ -331,7 +376,9 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
               ctx={ctx}
               forwardParams={item.forwardParams}
               className="text-base font-medium transition-opacity hover:opacity-75"
-              style={{ color: inkFor(b, onBand, theme.text) }}
+              // The Styles tab reaches the menu too: at the renderer default of 16px a five-item
+              // menu does not fit the header row it is designed for.
+              style={{ color: inkFor(b, onBand, theme.text), ...textStyle(b) }}
             >
               {item.label}
             </Anchor>
@@ -415,43 +462,79 @@ function EditBox({
   );
 }
 
+/** Strip anything that is not an identifier character - this value goes into a CSS selector. */
+const cssSafe = (v: string) => [...v].filter((c) => /[A-Za-z0-9_-]/.test(c)).join("");
+
+/**
+ * The grid rules for a multi-column band, as a scoped stylesheet rather than an inline style.
+ *
+ * ── Why this replaced the inline `gridTemplateColumns` ────────────────────────────────────────
+ * The old code paired a `md:grid-cols-N` class with an inline `repeat(N, …)`. Tailwind never
+ * generates a class for a runtime N, so the class did nothing - and the inline style has no
+ * breakpoint, so it applied at EVERY width. A four-card band rendered as four ~70px columns on a
+ * phone. This traffic is a Meta audience: it is mostly phones, so that is most of the audience.
+ *
+ * The cascade is kept out of it: the mobile default is declared in this same block instead of
+ * borrowing `grid-cols-1` from Tailwind, so the rules cannot lose a specificity tie to a
+ * stylesheet whose position in the document we do not control.
+ *
+ * Three or more columns pass through two-up on tablets before stacking, which is what the design
+ * does with its four stat tiles rather than dropping straight from four to one.
+ */
+function GridRules({ id, weights }: { id: string; weights: number[] }) {
+  const sel = `[data-cols="${id}"]`;
+  const cols = weights.length;
+  const mid = cols >= 3 ? 2 : cols;
+  // Weights only describe the full-width row; the folded ones are always equal.
+  const wide = weights.map((w) => `minmax(0,${w}fr)`).join(" ");
+  const css =
+    `${sel}{display:grid;gap:40px;grid-template-columns:minmax(0,1fr)}` +
+    `@media(min-width:768px){${sel}{grid-template-columns:repeat(${mid},minmax(0,1fr))}}` +
+    `@media(min-width:1024px){${sel}{grid-template-columns:${wide}}}`;
+  // Raw insertion, as in SiteBlocks: as JSX children React escapes the quotes in the selector on
+  // the server but not on the client, and every such rule becomes a hydration mismatch. The id is
+  // filtered by cssSafe, so nothing from stored page JSON can close the selector.
+  return <style dangerouslySetInnerHTML={{ __html: css }} />;
+}
+
 function Section({ s, ctx }: { s: SiteSectionBlock; ctx: Ctx }) {
   const onBand = s.background.kind !== "none";
   const edit = ctx.edit;
   const sectionActive = !!edit && edit.selected?.sectionId === s.id && !edit.selected?.blockId;
+  const multi = s.columns.length > 1;
+  const gridId = `sc-${cssSafe(s.id)}`;
   const inner = (
-    <div
-      className={
-        s.columns.length > 1
-          ? `grid grid-cols-1 gap-10 md:grid-cols-${Math.min(s.columns.length, 4)}`
-          : ""
-      }
-      // Tailwind cannot generate `md:grid-cols-N` for a runtime N, so the column count is set
-      // inline. The class above stays for the gap and the mobile single-column default.
-      style={
-        s.columns.length > 1
-          ? { gridTemplateColumns: `repeat(${s.columns.length}, minmax(0, 1fr))` }
-          : undefined
-      }
-    >
-      {s.columns.map((col, ci) => (
-        <div key={ci} className="flex flex-col gap-5">
+    <div {...(multi ? { "data-cols": gridId } : {})}>
+      {multi && (
+        <GridRules id={gridId} weights={s.columns.map((_, i) => s.columnStyles?.[i]?.grow ?? 1)} />
+      )}
+      {s.columns.map((col, ci) => {
+        const cs = s.columnStyles?.[ci] ?? null;
+        // A card that sets its own text colour is a band as far as its contents are concerned:
+        // the blocks inside must INHERIT it rather than paint the theme's ink over the top.
+        const colBand = onBand || !!cs?.color;
+        return (
+        <div key={ci} className="flex flex-col gap-5" style={columnStyle(cs)}>
           {col.map((b) =>
             edit ? (
               <EditBox key={b.id} sel={{ sectionId: s.id, colIdx: ci, blockId: b.id }} ctx={ctx} label={b.type}>
-                <Block b={b} ctx={ctx} onBand={onBand} />
+                <Block b={b} ctx={ctx} onBand={colBand} />
               </EditBox>
             ) : (
-              <Block key={b.id} b={b} ctx={ctx} onBand={onBand} />
+              <Block key={b.id} b={b} ctx={ctx} onBand={colBand} />
             ),
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 
   return (
     <section
+      // The menu links to bands by anchor ("/#about"); the value is filtered to an identifier by
+      // the normaliser, and an unset anchor emits no attribute at all.
+      id={s.anchor}
       style={{
         ...backgroundStyle(s.background),
         paddingTop: s.padding[0],

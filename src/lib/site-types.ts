@@ -100,7 +100,20 @@ export type SectionWidth =
 export type SectionBackground =
   | { kind: "none" }
   | { kind: "color"; color: string }
-  | { kind: "image"; url: string; overlay?: string };
+  | { kind: "image"; url: string; overlay?: string }
+  /**
+   * A CSS gradient, stored as the raw `linear-gradient(...)` / `radial-gradient(...)` value.
+   *
+   * A flat colour cannot express the navy the site's hero and CTA bands are actually painted in -
+   * it is a three-stop 165deg ramp, and approximating it with its middle stop is visibly not the
+   * same band. Kept as a string rather than a stop list because the value is copied verbatim from
+   * a design, and a structured model would only have to be flattened back into this on render.
+   *
+   * Validated at the normaliser, not here: only `linear-gradient(...)` and `radial-gradient(...)`
+   * are accepted, so a stored page cannot smuggle `url(...)` or a second declaration into the
+   * style attribute.
+   */
+  | { kind: "gradient"; css: string };
 
 export type SiteBlockType =
   | "heading"
@@ -134,12 +147,84 @@ export type BlockStyle = {
   background?: string;
   /** Corner radius in px. Absent = the theme radius. */
   radius?: number;
+  /**
+   * Cap the element's own width in px, independent of the section's.
+   *
+   * A centred intro paragraph under a section title runs to the full 1170px content width without
+   * this, which is roughly 160 characters a line - unreadable, and not what any of these designs
+   * do. Centred blocks are centred within the cap.
+   */
+  maxWidth?: number;
+  /** Unitless line-height. Tight (1.05) on a display number, loose (1.8) on body copy. */
+  lineHeight?: number;
+};
+
+/**
+ * A column's own box - background, padding, radius, border.
+ *
+ * ── Why this is not per-block styling ─────────────────────────────────────────────────────────
+ * A card on this design is FOUR blocks (icon, title, paragraph, feature list) that share one white
+ * rounded box. Painting a background on each block gives four boxes; painting it on the section
+ * gives one band behind all three cards. The box belongs to the column, which is the only node
+ * between the two.
+ *
+ * ── Why a parallel array and not a field on the column ────────────────────────────────────────
+ * `columns` is `SiteBlock[][]` - a bare list with no node of its own - and every page, template
+ * and builder call site is written against that shape. `columnStyles[i]` styles column `i` and
+ * leaves all of them untouched; turning columns into objects would be a migration of every stored
+ * page for a feature that is optional on all of them.
+ */
+export type ColumnStyle = {
+  background?: string;
+  /** Text colour for the whole card. Set it and the blocks inside inherit, as on a coloured band. */
+  color?: string;
+  /** px, CSS shorthand order: [top, right, bottom, left]. */
+  padding?: [number, number, number, number];
+  radius?: number;
+  borderWidth?: number;
+  borderColor?: string;
+  shadow?: "none" | "card" | "soft";
+  /**
+   * This column's share of the row, as a grid fr weight. Default 1 - every column equal.
+   *
+   * Equal columns cannot describe a header (a small logo, a wide menu, a button) or the founder
+   * band's 1 / 1.3 portrait-and-copy split. Applied only at the widest breakpoint: once the row
+   * has folded to two-up or stacked, a weight is describing a layout that is no longer there.
+   */
+  grow?: number;
+  /**
+   * Where the blocks sit vertically when this column is shorter than the row.
+   *
+   * Grid stretches every column to the tallest one, so a short column next to three paragraphs of
+   * copy pins its contents to the top with the remainder as dead space below - which reads as a
+   * mistake rather than as a layout. Default "start", the behaviour every existing page has.
+   */
+  justify?: "start" | "center" | "end";
+  /**
+   * Vertical gap between the blocks in px.
+   *
+   * The column's default is a generous 20px, which is right for a page band and wrong inside a
+   * card: a heading and the caption belonging to it read as one unit at 8px and as two unrelated
+   * lines at 20px. Every card on this design sets it.
+   */
+  gap?: number;
 };
 
 export type SiteBlock = {
   id: string;
   type: SiteBlockType;
   text?: string;
+  /**
+   * The tail of the line, painted in the accent colour - "…get <span>hired in Germany.</span>".
+   *
+   * Every headline on this site ends in a coloured phrase, and it has to stay on the SAME line as
+   * the rest of the sentence. Two stacked blocks cannot do that: they are two paragraphs with a
+   * gap between them, which reads as two headlines. One field, appended inline, is the whole
+   * mechanism - and it degrades to nothing when unset, so no existing block changes.
+   */
+  accentText?: string;
+  /** Colour of `accentText`. Absent = the theme's primary, which is what it means every time. */
+  accentColor?: string;
   align?: "left" | "center" | "right";
   url?: string;
   alt?: string;
@@ -175,8 +260,19 @@ export type SiteSectionBlock = {
   background: SectionBackground;
   /** Vertical padding in px: [top, bottom]. */
   padding: [number, number];
+  /**
+   * The `id` this band renders with, so the header menu can link to it as `/#about`.
+   *
+   * Explicitly authored rather than reusing `id`: the storage id is a generated string the author
+   * never sees, and a menu built on it would break the moment a section is rebuilt from a
+   * template. It is also the only field here a visitor can observe, so it is filtered to
+   * `[A-Za-z][A-Za-z0-9_-]*` at the normaliser rather than trusted.
+   */
+  anchor?: string;
   /** Columns of blocks. One entry = a single column; two = the live "About Me" band. */
   columns: SiteBlock[][];
+  /** Per-column box, positionally matched to `columns`. See ColumnStyle. */
+  columnStyles?: (ColumnStyle | null)[];
 };
 
 // ─────────────────────────── Normalisation ───────────────────────────
@@ -204,7 +300,56 @@ function normaliseBackground(raw: unknown): SectionBackground {
     const url = str(o.url, 2000);
     return url ? { kind: "image", url, overlay: str(o.overlay, 40) } : { kind: "none" };
   }
+  if (o.kind === "gradient") {
+    const css = str(o.css, 400);
+    // The value lands in a style attribute, so it is checked rather than trusted: one gradient
+    // function, balanced parens, and no `;`, `{`, `}` or `url(` that could close the declaration
+    // and start another. A page that fails the check renders as a plain band, not as an injection.
+    const ok =
+      !!css &&
+      /^(linear|radial)-gradient\([^;{}]*\)$/.test(css) &&
+      !/url\s*\(/i.test(css) &&
+      css.split("(").length === css.split(")").length;
+    return ok ? { kind: "gradient", css } : { kind: "none" };
+  }
   return { kind: "none" };
+}
+
+const SHADOWS = new Set(["none", "card", "soft"]);
+
+/** [t, r, b, l] in px, or undefined - a partial box is dropped rather than half-applied. */
+function box(raw: unknown): [number, number, number, number] | undefined {
+  if (!Array.isArray(raw) || raw.length !== 4) return undefined;
+  const v = raw.map(num);
+  return v.every((x): x is number => x !== undefined && x >= 0 && x <= 400)
+    ? [v[0], v[1], v[2], v[3]] as [number, number, number, number]
+    : undefined;
+}
+
+function normaliseColumnStyle(raw: unknown): ColumnStyle | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const c: ColumnStyle = {};
+  const bg = str(o.background, 400);
+  if (bg) c.background = bg;
+  const col = str(o.color, 40);
+  if (col) c.color = col;
+  const pad = box(o.padding);
+  if (pad) c.padding = pad;
+  const r = num(o.radius);
+  if (r !== undefined && r >= 0 && r <= 200) c.radius = r;
+  const bw = num(o.borderWidth);
+  if (bw !== undefined && bw >= 0 && bw <= 20) c.borderWidth = bw;
+  const bc = str(o.borderColor, 40);
+  if (bc) c.borderColor = bc;
+  if (typeof o.shadow === "string" && SHADOWS.has(o.shadow)) c.shadow = o.shadow as ColumnStyle["shadow"];
+  const g = num(o.gap);
+  if (g !== undefined && g >= 0 && g <= 200) c.gap = g;
+  const gr = num(o.grow);
+  if (gr !== undefined && gr > 0 && gr <= 20) c.grow = gr;
+  if (o.justify === "center" || o.justify === "end" || o.justify === "start") c.justify = o.justify;
+  // An empty object is dropped, so "no box" serialises as null on the way back out too.
+  return Object.keys(c).length ? c : null;
 }
 
 const WEIGHTS = new Set([400, 500, 600, 700, 800]);
@@ -226,6 +371,10 @@ function normaliseStyle(raw: unknown): BlockStyle | undefined {
   if (bg) s.background = bg;
   const r = num(o.radius);
   if (r !== undefined && r >= 0 && r <= 200) s.radius = r;
+  const mw = num(o.maxWidth);
+  if (mw !== undefined && mw >= 40 && mw <= 2000) s.maxWidth = mw;
+  const lh = num(o.lineHeight);
+  if (lh !== undefined && lh >= 0.8 && lh <= 3) s.lineHeight = lh;
   // An empty object is dropped so "no overrides" serialises the same way it always did.
   return Object.keys(s).length ? s : undefined;
 }
@@ -242,6 +391,8 @@ function normaliseBlock(raw: unknown, i: number): SiteBlock | null {
     id: str(o.id, 60) ?? `b${i}`,
     type: type as SiteBlockType,
     text: str(o.text, 20000),
+    accentText: str(o.accentText, 500),
+    accentColor: str(o.accentColor, 40),
     align,
     url: str(o.url),
     alt: str(o.alt, 300),
@@ -279,12 +430,21 @@ export function normaliseSections(raw: unknown): SiteSectionBlock[] {
     const o = r as Record<string, unknown>;
     const padRaw = Array.isArray(o.padding) ? o.padding : [];
     const cols = Array.isArray(o.columns) ? o.columns : [];
+    const colStyles = Array.isArray(o.columnStyles) ? o.columnStyles.map(normaliseColumnStyle) : [];
+    // An anchor is a DOM id a visitor's URL can address, so it is filtered to an identifier here
+    // rather than escaped at render - there is exactly one place to get that wrong.
+    const anchorRaw = str(o.anchor, 60);
+    const anchor = anchorRaw && /^[A-Za-z][A-Za-z0-9_-]*$/.test(anchorRaw) ? anchorRaw : undefined;
     return [{
       id: str(o.id, 60) ?? `s${i}`,
       name: str(o.name, 120),
       width: o.width === "contained" ? "contained" : "full",
       background: normaliseBackground(o.background),
       padding: [num(padRaw[0]) ?? 64, num(padRaw[1]) ?? 64],
+      anchor,
+      // Dropped entirely when no column carries a box, so a page that never used one serialises
+      // exactly as it did before this field existed.
+      columnStyles: colStyles.some((c) => c !== null) ? colStyles : undefined,
       // A section with no columns at all is still a section - an empty band the editor can fill,
       // not a reason to drop the row and silently lose it from the page.
       columns: (cols.length ? cols : [[]]).map((col) =>

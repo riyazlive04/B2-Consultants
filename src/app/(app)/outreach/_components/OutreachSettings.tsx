@@ -42,9 +42,9 @@ const SLA_FIELDS: {
   // "check back in 15 minutes" is a thing the founder wants to say, and a whole-hours box cannot
   // say it. `field` is the form key the action reads; the stored config keeps hours, and
   // `fromHours`/`toField` are the one conversion, applied here and nowhere else.
-  { key: "check1Hours", field: "check1Minutes", label: "Check 1 wait", hint: "Step 5 - after the intro / first call", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
-  { key: "check2Hours", field: "check2Minutes", label: "Check 2 wait", hint: "Step 7 - after the follow-up message", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
-  { key: "finalCheckHours", field: "finalCheckMinutes", label: "Final check wait", hint: "Step 9 - after the follow-up call", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
+  { key: "check1Hours", field: "check1Minutes", label: "Check 1 wait", hint: "Step 5 - minutes after the intro message", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
+  { key: "check2Hours", field: "check2Minutes", label: "Check 2 wait", hint: "Step 7 - minutes after OPT-IN, not after the follow-up", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
+  { key: "finalCheckHours", field: "finalCheckMinutes", label: "Final check wait", hint: "Step 9 - minutes after OPT-IN", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
   { key: "discoConfirm1LeadHours", label: "Disco confirm 1", hint: "Step 14 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
   { key: "discoConfirm2LeadHours", label: "Disco confirm 2", hint: "Step 15 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
   { key: "discoCancelLeadHours", label: "Disco cancellation", hint: "Step 16 - hours before the call", unit: "h", max: SLA_HOURS_MAX },

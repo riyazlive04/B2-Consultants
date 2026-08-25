@@ -265,23 +265,39 @@ export function planJourney(
       }
     }
 
-    // Step 7 - one hour after Step 6. Anchored on the WhatsApp follow-up ALONE, even though
-    // Step 6b sends an email on the same trigger: the two are one chase on two channels, and
-    // anchoring on whichever was acted on last would make the check window depend on send order
-    // rather than on the process.
+    /**
+     * Step 7 - measured from OPT-IN, not from Step 6.
+     *
+     * The founder's instruction (25/08/2026): "I need the message to be sent after 2 hours of
+     * optin submission". Anchoring on the follow-up made the setting mean "105 minutes after
+     * whenever Step 6 happened to go out", which is a number nobody can reason about - the
+     * founder thinks in "how long has this prospect been sitting there", and the box should say
+     * what they mean. So `check2Hours` is now the age of the LEAD, and 120 minutes is 120
+     * minutes.
+     *
+     * Still GATED on Step 6 having actually run: the ladder is a sequence, and checking "did
+     * they book?" before the chase that asks them to book is meaningless. Only the deadline
+     * moved, not the order. One consequence worth knowing: if Step 6 runs late - a stalled cron,
+     * a retrofitted step - the opt-in deadline may already be in the past, and Check 2 then falls
+     * due on the next tick rather than waiting out a fresh window.
+     */
     const a6 = actedAt(state, "FOLLOWUP_WHATSAPP");
-    if (a6) add("CHECK_2", plus(a6, sla.check2Hours));
+    if (a6) add("CHECK_2", plus(state.optInAt, sla.check2Hours));
 
     // Step 8 - only once Check 2 has run.
     if (acted(state, "CHECK_2")) {
       add("FOLLOWUP_CALL", actedAt(state, "CHECK_2") ?? now);
     }
 
-    // Step 9 - two hours after Step 8. The SOP's NO branch at Step 8 ends the cycle outright
-    // (checklist §H), so no final check is scheduled in that case.
+    // Step 9 - measured from OPT-IN, for the same reason as Check 2 above, and kept consistent
+    // with it deliberately: three boxes that look identical in the settings panel must not mean
+    // two different things. Its anchor was a HUMAN action (the follow-up call), which made the
+    // deadline depend on when someone got round to ringing.
+    // The SOP's NO branch at Step 8 still ends the cycle outright (checklist §H), so no final
+    // check is scheduled in that case.
     const a8 = actedAt(state, "FOLLOWUP_CALL");
     if (a8 && !saidNo(state, "FOLLOWUP_CALL")) {
-      add("FINAL_CHECK", plus(a8, sla.finalCheckHours));
+      add("FINAL_CHECK", plus(state.optInAt, sla.finalCheckHours));
     }
   }
 

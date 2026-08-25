@@ -607,8 +607,15 @@ export type OutreachSla = {
 export const DEFAULT_SLA: OutreachSla = {
   reactionMinutes: 5,
   check1Hours: 2,
-  check2Hours: 1,
-  finalCheckHours: 2,
+  /**
+   * Check 2 and the final check are measured from OPT-IN (see `planJourney`), so these two
+   * defaults are RE-EXPRESSED in that anchor rather than changed in effect. The SOP's ladder is
+   * intro → 2h → check 1 → follow-up → 1h → check 2 → call → 2h → final check, which from opt-in
+   * is the 3h and 5h below. Leaving them at 1 and 2 after the anchor moved would have quietly
+   * turned the documented process into a much tighter one.
+   */
+  check2Hours: 3,
+  finalCheckHours: 5,
   discoConfirm1LeadHours: 36,
   discoConfirm2LeadHours: 24,
   discoCancelLeadHours: 12,

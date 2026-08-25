@@ -2,11 +2,13 @@
  * Step 6b - the booking chase by email.
  *
  * The email follow-up rides the SAME trigger as the WhatsApp one (Check 1 came back "not
- * booked"), so these tests pin the two behaviours that are easy to get wrong: that it never
- * fires before the check has run, and that adding it did not move Check 2's anchor.
+ * booked"), so these tests pin what is easy to get wrong: that it never fires before the check
+ * has run, and that its send time cannot move any deadline.
  *
  * Also covers fractional SLA windows, because "check back in 15 minutes" is stored as 0.25 hours
- * and the whole ladder does its arithmetic in hours.
+ * and the whole ladder does its arithmetic in hours - and the opt-in anchor for Check 2, which
+ * is what makes a settings box reading "120 min" actually mean 120 minutes since the prospect
+ * opted in, rather than 120 minutes after whenever the chase happened to go out.
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
@@ -78,17 +80,18 @@ describe("Step 6b - email follow-up", () => {
     assert.equal(planned(s, at(2 * HR), "FOLLOWUP_EMAIL"), undefined);
   });
 
-  // The regression this guards: anchoring Check 2 on "whichever follow-up was acted on last"
-  // would make the window depend on send order between two channels rather than on the process.
-  test("Check 2 still anchors on the WhatsApp follow-up, not the email", () => {
+  // The regression this guards: Check 2 is measured from OPT-IN, so neither follow-up's send
+  // time may move it. Before the anchor moved it rode on the WhatsApp step, which meant a late
+  // cron tick silently shifted the founder's deadline.
+  test("neither follow-up's send time moves Check 2 - it is measured from opt-in", () => {
     let s = done(base(), "INTRO_WHATSAPP", T0);
     s = done(s, "CHECK_1", at(2 * HR));
     s = done(s, "FOLLOWUP_WHATSAPP", at(2 * HR));
     s = done(s, "FOLLOWUP_EMAIL", at(5 * HR)); // deliberately much later
     assert.equal(
       planned(s, at(5 * HR), "CHECK_2")!.dueAt.getTime(),
-      at(2 * HR + DEFAULT_SLA.check2Hours * HR).getTime(),
-      "the email's send time must not move Check 2",
+      at(DEFAULT_SLA.check2Hours * HR).getTime(),
+      "Check 2 is opt-in + check2Hours, whenever the chase happened to go out",
     );
   });
 
@@ -101,22 +104,28 @@ describe("Step 6b - email follow-up", () => {
 });
 
 describe("fractional SLA windows", () => {
-  // 0.25h = 15min, which is what the founder's settings screen now writes when it saves "15".
-  const sla = { ...DEFAULT_SLA, check1Hours: 0.25, check2Hours: 1.75 };
+  // The founder's live settings: check back 15 minutes after the intro, then again at the
+  // 2-hour mark. 0.25h and 2h are what the settings screen writes when it saves "15" and "120".
+  const sla = { ...DEFAULT_SLA, check1Hours: 0.25, check2Hours: 2 };
 
   test("Check 1 at 0.25h lands exactly 15 minutes after the intro", () => {
     const s = done(base(), "INTRO_WHATSAPP", T0);
     assert.equal(planned(s, T0, "CHECK_1", sla)!.dueAt.getTime(), at(15 * MIN).getTime());
   });
 
-  test("Check 2 at 1.75h after a 15-minute Check 1 lands 2h after opt-in", () => {
+  test("Check 2 at 120 minutes lands exactly 2h after OPT-IN", () => {
     let s = done(base(), "INTRO_WHATSAPP", T0);
     s = done(s, "CHECK_1", at(15 * MIN));
     s = done(s, "FOLLOWUP_WHATSAPP", at(15 * MIN));
-    assert.equal(
-      planned(s, at(15 * MIN), "CHECK_2", sla)!.dueAt.getTime(),
-      at(2 * HR).getTime(),
-      "15min + 1.75h is the 2-hour mark measured from opt-in",
-    );
+    assert.equal(planned(s, at(15 * MIN), "CHECK_2", sla)!.dueAt.getTime(), at(2 * HR).getTime());
+  });
+
+  // The retrofit case that skewed the first live test: Step 6 ran an hour late, and under the
+  // old anchor that dragged Check 2 an hour late with it. Opt-in anchoring holds the deadline.
+  test("a late follow-up does not drag Check 2 with it", () => {
+    let s = done(base(), "INTRO_WHATSAPP", T0);
+    s = done(s, "CHECK_1", at(76 * MIN));
+    s = done(s, "FOLLOWUP_WHATSAPP", at(76 * MIN));
+    assert.equal(planned(s, at(76 * MIN), "CHECK_2", sla)!.dueAt.getTime(), at(2 * HR).getTime());
   });
 });

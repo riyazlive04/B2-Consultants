@@ -627,9 +627,11 @@ describe("Config", () => {
 
   test("garbage SLA values fall back to the SOP defaults rather than firing forever", () => {
     const c = coerceOutreachConfig({ sla: { check1Hours: 0, discoConfirm1LeadHours: -5, check2Hours: "x" } });
-    assert.equal(c.sla.check1Hours, 2);
-    assert.equal(c.sla.discoConfirm1LeadHours, 36);
-    assert.equal(c.sla.check2Hours, 1);
+    // Compared against DEFAULT_SLA rather than literals: these defaults are re-expressed when a
+    // step's anchor moves, and a hardcoded copy here would fail for the wrong reason.
+    assert.equal(c.sla.check1Hours, DEFAULT_SLA.check1Hours);
+    assert.equal(c.sla.discoConfirm1LeadHours, DEFAULT_SLA.discoConfirm1LeadHours);
+    assert.equal(c.sla.check2Hours, DEFAULT_SLA.check2Hours);
   });
 
   test("valid overrides survive", () => {

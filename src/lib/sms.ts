@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { checkRecipient } from "@/lib/outbound-allowlist";
 
 /**
  * SMS channel - Twilio HTTP client + config. Mirrors the WATI seam:
@@ -74,6 +75,9 @@ export async function sendTwilioSms(opts: {
   to: string;
   body: string;
 }): Promise<SendResult> {
+  const gate = checkRecipient(opts.to, "sms");
+  if (!gate.allowed) return { ok: false, error: gate.reason };
+
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 12_000);
   try {

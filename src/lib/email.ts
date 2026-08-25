@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { checkRecipient } from "@/lib/outbound-allowlist";
 
 /**
  * Email channel - Resend HTTP client + config. Mirrors the WATI seam:
@@ -92,6 +93,11 @@ export async function sendResendEmail(opts: {
    *  support doesn't apply here - this is a plain fetch, not the SDK). */
   attachments?: { filename: string; content: string }[];
 }): Promise<SendResult> {
+  // Last gate before the wire - every outbound email in the app (password resets, invoices,
+  // dunning, digests, the SOP opt-in alert) funnels through this one function.
+  const gate = checkRecipient(opts.to, "email");
+  if (!gate.allowed) return { ok: false, error: gate.reason };
+
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 12_000);
   try {

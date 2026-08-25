@@ -12,6 +12,7 @@ import {
   type WatiTemplateSummary,
 } from "@/lib/whatsapp";
 import { normalizeWhatsappNumber, toCountry } from "@/lib/phone";
+import { checkRecipient } from "@/lib/outbound-allowlist";
 
 /**
  * WATI (WhatsApp Business API) - server-only config + HTTP client.
@@ -417,6 +418,10 @@ export async function sendSessionMessage(args: {
   messageText: string;
 }): Promise<WatiSendResult> {
   const { endpoint, token, whatsappNumber, messageText } = args;
+
+  const gate = checkRecipient(whatsappNumber, "whatsapp");
+  if (!gate.allowed) return { ok: false, skipped: true, watiMessageId: null, error: gate.reason };
+
   const url =
     `${endpoint.replace(/\/+$/, "")}/api/v1/sendSessionMessage/${encodeURIComponent(whatsappNumber)}` +
     `?messageText=${encodeURIComponent(messageText)}`;
@@ -464,6 +469,13 @@ export async function sendTemplateMessage(args: {
   parameters: WatiParameter[];
 }): Promise<WatiSendResult> {
   const { endpoint, token, whatsappNumber, templateName, broadcastName, parameters } = args;
+
+  // Last gate before the wire. Placed here rather than in the callers because every outbound
+  // WhatsApp path in the app funnels through this function - the SOP ladder, dunning, booking
+  // confirmations and the "Run reminders now" button alike.
+  const gate = checkRecipient(whatsappNumber, "whatsapp");
+  if (!gate.allowed) return { ok: false, skipped: true, watiMessageId: null, error: gate.reason };
+
   const url = `${endpoint.replace(/\/+$/, "")}/api/v1/sendTemplateMessage?whatsappNumber=${encodeURIComponent(whatsappNumber)}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);

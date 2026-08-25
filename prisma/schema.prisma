@@ -3654,6 +3654,7 @@ enum OutreachStep {
   FIRST_CALL // Step 4  - call right after the intro message
   CHECK_1 // Step 5  - wait 2h, then run the Step 10 booking check
   FOLLOWUP_WHATSAPP // Step 6  - not booked at check 1
+  FOLLOWUP_EMAIL // Step 6b - same trigger as Step 6, sent by email alongside it
   CHECK_2 // Step 7  - wait 1h, then re-run the booking check
   FOLLOWUP_CALL // Step 8  - not booked at check 2
   FINAL_CHECK // Step 9  - wait 2h; not booked → IGNORE
@@ -3707,6 +3708,7 @@ enum OutreachStepStatus {
 enum OutreachChannel {
   WHATSAPP
   CALL
+  EMAIL // Step 6b - the booking chase also goes out by email, not WhatsApp alone
   SYSTEM // internal checks (Step 5/7/9/10) and calendar actions (Step 17/22)
 }
 

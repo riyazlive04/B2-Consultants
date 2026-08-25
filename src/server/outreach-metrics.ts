@@ -30,7 +30,7 @@ export type QueueStep = {
   step: OutreachStep;
   sopStep: string;
   label: string;
-  channel: "WHATSAPP" | "CALL" | "SYSTEM";
+  channel: "WHATSAPP" | "CALL" | "EMAIL" | "SYSTEM";
   dueAt: string;
   /** Actionable right now (materialised, DUE, and past its due time). */
   actionable: boolean;

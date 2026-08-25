@@ -257,13 +257,18 @@ export function planJourney(
         // as ringing them reads as pestering, and the SOP's own order is call, then follow-up.
         if (acted(state, "FIRST_CALL")) {
           add("FOLLOWUP_WHATSAPP", actedAt(state, "FIRST_CALL") ?? now);
+          add("FOLLOWUP_EMAIL", actedAt(state, "FIRST_CALL") ?? now);
         }
       } else {
         add("FOLLOWUP_WHATSAPP", actedAt(state, "CHECK_1") ?? now);
+        add("FOLLOWUP_EMAIL", actedAt(state, "CHECK_1") ?? now);
       }
     }
 
-    // Step 7 - one hour after Step 6.
+    // Step 7 - one hour after Step 6. Anchored on the WhatsApp follow-up ALONE, even though
+    // Step 6b sends an email on the same trigger: the two are one chase on two channels, and
+    // anchoring on whichever was acted on last would make the check window depend on send order
+    // rather than on the process.
     const a6 = actedAt(state, "FOLLOWUP_WHATSAPP");
     if (a6) add("CHECK_2", plus(a6, sla.check2Hours));
 

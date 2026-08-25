@@ -606,6 +606,19 @@ const CONFIG_FIELD_LABELS: Record<string, string> = {
 const slaHours = (label: string) => blankToUndefined(intInRange(1, 720, label));
 
 /**
+ * The three booking-chase windows, in MINUTES.
+ *
+ * They are stored as fractional hours (`check1Hours` and friends) because the whole ladder does
+ * its arithmetic in hours, and that is not worth churning. But the founder needs to express
+ * "fifteen minutes", and an hours box that only accepts whole numbers cannot say it - which is
+ * the entire reason these three are separated out from `slaHours`. The form collects minutes,
+ * this validates minutes, and the mapping below divides by 60 exactly once.
+ *
+ * Upper bound is 30 days in minutes, matching `slaHours`' own ceiling.
+ */
+const slaMinutes = (label: string) => blankToUndefined(intInRange(1, 43_200, label));
+
+/**
  * The settings form, re-checked server-side.
  *
  * A BLANK box still means "leave this as it is" - the inputs are prefilled, so clearing one is how
@@ -620,9 +633,9 @@ const slaHours = (label: string) => blankToUndefined(intInRange(1, 720, label));
  */
 const outreachConfigSchema = z.object({
   reactionMinutes: blankToUndefined(intInRange(1, 1440, "Reaction time")),
-  check1Hours: slaHours("Check 1 wait"),
-  check2Hours: slaHours("Check 2 wait"),
-  finalCheckHours: slaHours("Final check wait"),
+  check1Minutes: slaMinutes("Check 1 wait"),
+  check2Minutes: slaMinutes("Check 2 wait"),
+  finalCheckMinutes: slaMinutes("Final check wait"),
   discoConfirm1LeadHours: slaHours("Disco confirm 1"),
   discoConfirm2LeadHours: slaHours("Disco confirm 2"),
   discoCancelLeadHours: slaHours("Disco cancellation"),
@@ -671,9 +684,14 @@ export async function saveOutreachConfig(form: FormData): Promise<ActionResult> 
     },
     sla: {
       reactionMinutes: num(d.reactionMinutes, DEFAULT_SLA.reactionMinutes),
-      check1Hours: num(d.check1Hours, DEFAULT_SLA.check1Hours),
-      check2Hours: num(d.check2Hours, DEFAULT_SLA.check2Hours),
-      finalCheckHours: num(d.finalCheckHours, DEFAULT_SLA.finalCheckHours),
+      // Minutes in, fractional hours out. Blank still means "leave as it is", so the fallback is
+      // the CURRENT stored value rather than the shipped default - resetting a founder's tuned
+      // 15-minute window back to the SOP's 2 hours because a box was left empty would be the
+      // exact "saves a different number than the one on screen" failure this schema guards.
+      check1Hours: d.check1Minutes === undefined ? current.sla.check1Hours : Number(d.check1Minutes) / 60,
+      check2Hours: d.check2Minutes === undefined ? current.sla.check2Hours : Number(d.check2Minutes) / 60,
+      finalCheckHours:
+        d.finalCheckMinutes === undefined ? current.sla.finalCheckHours : Number(d.finalCheckMinutes) / 60,
       discoConfirm1LeadHours: num(d.discoConfirm1LeadHours, DEFAULT_SLA.discoConfirm1LeadHours),
       discoConfirm2LeadHours: num(d.discoConfirm2LeadHours, DEFAULT_SLA.discoConfirm2LeadHours),
       discoCancelLeadHours: num(d.discoCancelLeadHours, DEFAULT_SLA.discoCancelLeadHours),

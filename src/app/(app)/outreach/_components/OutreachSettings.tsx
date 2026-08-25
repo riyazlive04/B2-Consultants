@@ -24,12 +24,27 @@ import { saveOutreachConfig, runOutreachNow, backfillJourneys } from "@/server/o
  * of stating a rule once (see lib/field-rules).
  */
 const SLA_HOURS_MAX = 720;
+const SLA_MINUTES_MAX = 43_200; // the same 30-day ceiling, expressed in minutes
 
-const SLA_FIELDS: { key: keyof OutreachConfig["sla"]; label: string; hint: string; unit: string; max: number }[] = [
+const SLA_FIELDS: {
+  key: keyof OutreachConfig["sla"];
+  /** Form input name. Defaults to `key` - set only where the input's unit differs from storage. */
+  field?: string;
+  label: string;
+  hint: string;
+  unit: string;
+  max: number;
+  /** Stored as hours, entered as minutes. */
+  inMinutes?: boolean;
+}[] = [
   { key: "reactionMinutes", label: "Reaction time", hint: "Step 2 - contact within this, or the SOP skips to Step 10", unit: "min", max: 1440 },
-  { key: "check1Hours", label: "Check 1 wait", hint: "Step 5 - after the intro / first call", unit: "h", max: SLA_HOURS_MAX },
-  { key: "check2Hours", label: "Check 2 wait", hint: "Step 7 - after the follow-up message", unit: "h", max: SLA_HOURS_MAX },
-  { key: "finalCheckHours", label: "Final check wait", hint: "Step 9 - after the follow-up call", unit: "h", max: SLA_HOURS_MAX },
+  // The three booking-chase windows are entered in MINUTES, not hours. They are the short ones -
+  // "check back in 15 minutes" is a thing the founder wants to say, and a whole-hours box cannot
+  // say it. `field` is the form key the action reads; the stored config keeps hours, and
+  // `fromHours`/`toField` are the one conversion, applied here and nowhere else.
+  { key: "check1Hours", field: "check1Minutes", label: "Check 1 wait", hint: "Step 5 - after the intro / first call", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
+  { key: "check2Hours", field: "check2Minutes", label: "Check 2 wait", hint: "Step 7 - after the follow-up message", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
+  { key: "finalCheckHours", field: "finalCheckMinutes", label: "Final check wait", hint: "Step 9 - after the follow-up call", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
   { key: "discoConfirm1LeadHours", label: "Disco confirm 1", hint: "Step 14 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
   { key: "discoConfirm2LeadHours", label: "Disco confirm 2", hint: "Step 15 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
   { key: "discoCancelLeadHours", label: "Disco cancellation", hint: "Step 16 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
@@ -46,7 +61,9 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
   // founder has actually ticked instant sending.
   const [instantIntro, setInstantIntro] = useState(config.instantIntro.enabled);
 
-  const messageSteps = OUTREACH_STEPS.filter((s) => s.channel === "WHATSAPP");
+  // Every step that can be SENT without a human, which is now both messaging channels. CALL and
+  // SYSTEM steps are excluded because there is nothing for a machine to auto-send in them.
+  const messageSteps = OUTREACH_STEPS.filter((s) => s.channel === "WHATSAPP" || s.channel === "EMAIL");
 
   return (
     <div className="space-y-4">
@@ -227,11 +244,14 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
                 <span className="flex items-center gap-1.5">
                   <input
                     type="number"
-                    name={f.key}
+                    name={f.field ?? f.key}
                     min={1}
                     max={f.max}
                     step="1"
-                    defaultValue={config.sla[f.key]}
+                    // Rounded, not floored: 0.25 h is 15 min exactly, but a value hand-edited in
+                    // the database to something like 0.2333 h must still show as a whole 14 rather
+                    // than silently truncating to 13 and saving that back on the next submit.
+                    defaultValue={f.inMinutes ? Math.round(config.sla[f.key] * 60) : config.sla[f.key]}
                     className="w-20 rounded-field border border-line bg-surface px-2 py-1.5 tnum"
                   />
                   <span className="text-muted">{f.unit}</span>

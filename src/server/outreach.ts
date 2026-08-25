@@ -12,6 +12,7 @@ import {
   type OutreachConfig,
   type OutreachVars,
 } from "@/lib/outreach-sop";
+import { sendEmailMessage } from "./messaging";
 import {
   planJourney,
   normalizeEmail,
@@ -226,9 +227,9 @@ export function renderStep(
   row: JourneyRow,
   step: OutreachStep,
   specialistName: string,
-): { body: string | null; unresolved: string[] } {
+): { body: string | null; subject: string | null; unresolved: string[] } {
   const def = STEP_BY_KEY[step];
-  if (!def?.body) return { body: null, unresolved: [] };
+  if (!def?.body) return { body: null, subject: null, unresolved: [] };
 
   const firstName = (row.lead.name ?? "").trim().split(/\s+/)[0] || row.lead.name;
   const isSss = step.startsWith("SSS_");
@@ -247,10 +248,13 @@ export function renderStep(
   if (row.zoomLink) vars["<<INSERT ZOOM LINK HERE>>"] = row.zoomLink;
 
   const body = renderOutreachTemplate(def.body, vars);
+  // The subject goes through the SAME variable pool as the body, so a subject naming the
+  // prospect cannot drift from the greeting inside the mail.
+  const subject = def.subject ? renderOutreachTemplate(def.subject, vars) : null;
   // The video placeholder is an instruction to the human, not a variable - it is expected to
   // survive rendering, so it never counts as "unresolved".
   const unresolved = unresolvedVars(body).filter((v) => v !== "<< ATTACH VIDEO TO THIS MESSAGE>>");
-  return { body, unresolved };
+  return { body, subject, unresolved };
 }
 
 /** "Sat 18 Jul, 07:00 PM" → ["Sat 18 Jul", "07:00 PM"]. */
@@ -477,13 +481,13 @@ async function autoSendDue(
     (s) =>
       s.status === "DUE" &&
       cfg.autoSend[s.step] === true &&
-      STEP_BY_KEY[s.step]?.channel === "WHATSAPP" &&
+      (STEP_BY_KEY[s.step]?.channel === "WHATSAPP" || STEP_BY_KEY[s.step]?.channel === "EMAIL") &&
       isActionable({ status: s.status, dueAt: s.dueAt, actedAt: s.actedAt, outcome: s.outcome }, now),
   );
 
   for (const s of due) {
     const specialist = row.respTouchpoint?.name ?? cfg.defaultSpecialistName;
-    const { body, unresolved } = renderStep(row, s.step, specialist);
+    const { body, subject, unresolved } = renderStep(row, s.step, specialist);
     if (!body) continue;
 
     if (unresolved.length) {
@@ -492,10 +496,13 @@ async function autoSendDue(
       continue;
     }
 
-    if (!mapToWhatsAppKind(s.step)) continue; // not a WhatsApp step - nothing to auto-send
+    const isEmail = STEP_BY_KEY[s.step]?.channel === "EMAIL";
+    if (!isEmail && !mapToWhatsAppKind(s.step)) continue; // not a WhatsApp step - nothing to auto-send
 
     // Shared with the instant-intro path. See `sopWhatsAppSend` for why this is one function.
-    const res = await sopWhatsAppSend(row, s.step, specialist, body);
+    const res = isEmail
+      ? await sopEmailSend(row, subject, body)
+      : await sopWhatsAppSend(row, s.step, specialist, body);
 
     if (res.sent) {
       await markSent(s.id, body, null, res.messageId);
@@ -551,6 +558,34 @@ export async function sopWhatsAppSend(
     bodySummary: body,
     logSkips: false,
   });
+}
+
+/**
+ * Send one SOP step by email, shaped to the same return contract as `sopWhatsAppSend` so the
+ * caller's send/mark/log path stays one branch rather than two.
+ *
+ * Goes through `sendEmailMessage` rather than Resend directly: that is where the EMAIL_ENABLED
+ * gate, the `message` delivery log and the recipient allowlist already live, and a second path
+ * around them is exactly how an outbound channel ends up unlogged or ungated.
+ */
+async function sopEmailSend(row: JourneyRow, subject: string | null, body: string) {
+  if (!row.lead.email) {
+    return { sent: false, status: "SKIPPED" as const, error: "lead has no email address", messageId: null };
+  }
+  const res = await sendEmailMessage({
+    leadId: row.leadId,
+    to: row.lead.email,
+    subject: subject ?? "Your free Discovery Call spot is still open",
+    body,
+    // No human pressed send. Matches the null `sentById` convention the WhatsApp path uses.
+    sentById: null,
+  });
+  return {
+    sent: res.status === "SENT",
+    status: res.status,
+    error: res.ok && res.status === "SENT" ? null : res.message,
+    messageId: null,
+  };
 }
 
 /**

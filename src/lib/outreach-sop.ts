@@ -141,6 +141,34 @@ Please use the link to book a call directly with our team: https://optin.b2consu
 
 Do let me know if you need assistance. `;
 
+/**
+ * Step 6b - the booking chase by email.
+ *
+ * NOT a transcription of the SOP: the document's Step 6 is WhatsApp only, and this channel did
+ * not exist when it was written. Per the provenance rule at the top of this file, that makes the
+ * wording new rather than founder-approved - so it deliberately says nothing the approved
+ * WhatsApp follow-up does not already say, and carries the same booking link. Treat it as
+ * provisional until it has been signed off like the rest.
+ *
+ * Plain text, rendered to HTML at send time. The subject is separate because email needs one and
+ * the SOP's bracketed-variable syntax is kept identical to every other body here.
+ */
+const TPL_FOLLOWUP_EMAIL_SUBJECT = `[Prospect’s First Name], your free Discovery Call spot is still open`;
+
+const TPL_FOLLOWUP_EMAIL = `Hi [Prospect’s First Name],
+
+[Your Name] here from B2 Consultants. I saw you haven’t booked your *FREE* Personalized Discovery Call with our team yet.
+
+We only have a few spots available in the coming week, and we don’t want you to miss this window.
+
+You can book a call directly with our team here:
+https://optin.b2consultants.de/apply
+
+Do let me know if you need any assistance.
+
+[Your Name]
+B2 Consultants`;
+
 /** Step 13 - Disco Welcome WhatsApp 1. */
 const TPL_DISCO_WELCOME = `Hi [Prospect’s First Name], this is [Your Name] from B2 Consultants
 
@@ -344,6 +372,8 @@ export type OutreachStepDef = {
   /** The step this one waits on, for AFTER_PREV anchoring. */
   after?: OutreachStep;
   body?: string;
+  /** EMAIL steps only - the subject line. WhatsApp and CALL steps have no use for one. */
+  subject?: string;
   /** Steps that need a Zoom link resolved before they can be sent (checklist §R). */
   needsZoom?: boolean;
 };
@@ -383,6 +413,16 @@ export const OUTREACH_STEPS: OutreachStepDef[] = [
     anchor: "IMMEDIATE",
     slaKey: null,
     body: TPL_FOLLOWUP,
+  },
+  {
+    step: "FOLLOWUP_EMAIL",
+    sopStep: "Step 6b",
+    label: "Email follow-up - not booked",
+    channel: "EMAIL",
+    anchor: "IMMEDIATE",
+    slaKey: null,
+    body: TPL_FOLLOWUP_EMAIL,
+    subject: TPL_FOLLOWUP_EMAIL_SUBJECT,
   },
   {
     step: "CHECK_2",

@@ -3,7 +3,12 @@ import type { OutreachPhase, OutreachStep, QualifiedVerdict } from "@prisma/clie
 import { prisma } from "@/lib/prisma";
 import { formatDateTimeInZone } from "@/lib/format";
 import { reactionState, isActionable, type JourneyState } from "@/lib/outreach-engine";
-import { STEP_BY_KEY, CALL_SCRIPTS } from "@/lib/outreach-sop";
+import {
+  STEP_BY_KEY,
+  CALL_SCRIPTS,
+  DEFAULT_SLA,
+  type OutreachSla,
+} from "@/lib/outreach-sop";
 import { readOutreachConfig, projectJourney, renderStep, type JourneyRow } from "./outreach";
 
 /**
@@ -132,19 +137,16 @@ function toQueueRow(row: JourneyRow, now: Date, sla: ReturnType<typeof defaultSl
   };
 }
 
-function defaultSla() {
-  return {
-    reactionMinutes: 5,
-    check1Hours: 2,
-    check2Hours: 1,
-    finalCheckHours: 2,
-    discoConfirm1LeadHours: 36,
-    discoConfirm2LeadHours: 24,
-    discoCancelLeadHours: 12,
-    sssConfirm1LeadHours: 24,
-    sssConfirm2LeadHours: 12,
-    sssCancelLeadHours: 10,
-  };
+/**
+ * The fallback windows used when no config row has been saved yet.
+ *
+ * This WAS a hand-written copy of DEFAULT_SLA, and it had already drifted - it still said
+ * `check2Hours: 1` after the real default moved to 3, so a queue rendered before the founder
+ * ever opened Settings measured its reaction state against numbers the engine no longer used.
+ * Returning the single source of truth is the fix; a second copy would only drift again.
+ */
+function defaultSla(): OutreachSla {
+  return { ...DEFAULT_SLA };
 }
 
 export type OutreachQueue = {

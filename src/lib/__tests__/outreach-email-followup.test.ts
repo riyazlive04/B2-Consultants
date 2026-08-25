@@ -129,3 +129,96 @@ describe("fractional SLA windows", () => {
     assert.equal(planned(s, at(76 * MIN), "CHECK_2", sla)!.dueAt.getTime(), at(2 * HR).getTime());
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// The founder's full opt-in flow (25/08/2026): 5min → 120min → 180min → 300min
+// ═══════════════════════════════════════════════════════════════════
+
+describe("the founder's booking-chase cadence", () => {
+  const sla = {
+    ...DEFAULT_SLA,
+    check1Hours: 5 / 60, // 5 minutes
+    check2Hours: 2,
+    check3Hours: 3,
+    finalCheckHours: 5,
+  };
+
+  test("every check is measured from opt-in, so the four windows form one timeline", () => {
+    let s = done(base(), "INTRO_WHATSAPP", T0);
+    assert.equal(planned(s, T0, "CHECK_1", sla)!.dueAt.getTime(), at(5 * MIN).getTime());
+
+    s = done(s, "CHECK_1", at(5 * MIN));
+    s = done(s, "FOLLOWUP_WHATSAPP", at(5 * MIN));
+    assert.equal(planned(s, at(5 * MIN), "CHECK_2", sla)!.dueAt.getTime(), at(2 * HR).getTime());
+
+    s = done(s, "CHECK_2", at(2 * HR));
+    s = done(s, "FOLLOWUP_WHATSAPP_2", at(2 * HR));
+    assert.equal(planned(s, at(2 * HR), "CHECK_3", sla)!.dueAt.getTime(), at(3 * HR).getTime());
+
+    s = done(s, "CHECK_3", at(3 * HR));
+    s = done(s, "FOLLOWUP_CALL", at(3 * HR), "YES");
+    assert.equal(planned(s, at(3 * HR), "FINAL_CHECK", sla)!.dueAt.getTime(), at(5 * HR).getTime());
+  });
+
+  test("the second WhatsApp chase waits for Check 2, not Check 1", () => {
+    let s = done(base(), "INTRO_WHATSAPP", T0);
+    s = done(s, "CHECK_1", at(5 * MIN));
+    assert.equal(planned(s, at(5 * MIN), "FOLLOWUP_WHATSAPP_2", sla), undefined);
+  });
+
+  test("the telecaller is not raised until the SECOND message has also failed", () => {
+    let s = done(base(), "INTRO_WHATSAPP", T0);
+    s = done(s, "CHECK_1", at(5 * MIN));
+    s = done(s, "FOLLOWUP_WHATSAPP", at(5 * MIN));
+    s = done(s, "CHECK_2", at(2 * HR));
+    // Check 2 has run but the second chase has not been sent - no call yet.
+    assert.equal(planned(s, at(2 * HR), "FOLLOWUP_CALL", sla), undefined);
+  });
+});
+
+describe("qualification outcome after a booking", () => {
+  const sla = { ...DEFAULT_SLA, postBookingDelayMinutes: 5 };
+
+  function booked(q: "YES" | "NO") {
+    let s = base({ booked: true, qualified: q });
+    s = done(s, "BANT_QUALIFICATION", T0);
+    s = done(s, "KEY_METRICS_TRANSFER", T0);
+    return s;
+  }
+
+  test("qualified: welcome goes out on BOTH channels, 5 minutes after", () => {
+    const s = booked("YES");
+    for (const step of ["DISCO_WELCOME", "DISCO_WELCOME_EMAIL"] as const) {
+      assert.equal(planned(s, T0, step, sla)!.dueAt.getTime(), at(5 * MIN).getTime(), step);
+    }
+  });
+
+  test("not qualified: the notice goes out on both channels and NO welcome is sent", () => {
+    const s = booked("NO");
+    assert.ok(planned(s, T0, "DISCO_REJECT_MSG", sla));
+    assert.ok(planned(s, T0, "DISCO_REJECT_EMAIL", sla));
+    assert.equal(planned(s, T0, "DISCO_WELCOME", sla), undefined);
+  });
+
+  // The ordering that matters: nobody should find an empty calendar before being told why.
+  test("not qualified: the call is NOT released until the prospect has been told", () => {
+    const s = booked("NO");
+    assert.equal(planned(s, T0, "DISCO_CANCEL", sla), undefined, "cancel must wait for the notice");
+
+    const told = done(s, "DISCO_REJECT_EMAIL", at(5 * MIN));
+    assert.ok(planned(told, at(5 * MIN), "DISCO_CANCEL", sla), "once told, the slot is released");
+  });
+
+  // WhatsApp cannot send this without an approved template, so requiring BOTH channels would
+  // strand the cancellation forever.
+  test("either channel alone is enough to release the call", () => {
+    const viaWhatsApp = done(booked("NO"), "DISCO_REJECT_MSG", at(5 * MIN));
+    assert.ok(planned(viaWhatsApp, at(5 * MIN), "DISCO_CANCEL", sla));
+  });
+
+  test("a zero after-booking delay sends immediately, as the SOP specifies", () => {
+    const s = booked("YES");
+    const immediate = { ...sla, postBookingDelayMinutes: 0 };
+    assert.equal(planned(s, T0, "DISCO_WELCOME", immediate)!.dueAt.getTime(), T0.getTime());
+  });
+});

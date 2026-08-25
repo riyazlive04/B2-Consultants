@@ -218,7 +218,7 @@ describe("Submission pack - Meta's mechanical rules", () => {
 });
 
 describe("Submission pack - categories", () => {
-  test("all nine are MARKETING", () => {
+  test("every promotional template is MARKETING; only a pure transaction notice may be UTILITY", () => {
     // Meta allows UTILITY only for a template that is non-promotional and carries no persuasive
     // intent; mixed content defaults to MARKETING. Every body here sells while it informs, so
     // none of them clears that bar - see the rationale on SUBMISSION_TEMPLATES.
@@ -227,7 +227,19 @@ describe("Submission pack - categories", () => {
     // promotional copy has to come OUT of the body, which is a proposedFix and a business
     // decision. Flipping the category alone would earn a silent re-categorisation from Meta and
     // an abuse flag, which is exactly the mistake this test exists to catch.
+    // The ONE documented exception. b2_sop_not_qualified tells someone a booked appointment has
+    // been cancelled: no offer, no link, no persuasion. That is a transaction update, and
+    // declaring it UTILITY is correct usage rather than the gaming this test guards against.
+    // Any OTHER template claiming UTILITY is the mistake, and still fails here.
+    const UTILITY_ALLOWED = new Set(["b2_sop_not_qualified"]);
     for (const t of SUBMISSION_TEMPLATES) {
+      if (UTILITY_ALLOWED.has(t.name)) {
+        assert.ok(
+          t.category === "UTILITY" || t.category === "MARKETING",
+          `${t.name} may be UTILITY or MARKETING`,
+        );
+        continue;
+      }
       assert.equal(t.category, "MARKETING", `${t.name} should be MARKETING`);
     }
   });

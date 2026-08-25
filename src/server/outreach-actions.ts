@@ -635,7 +635,11 @@ const outreachConfigSchema = z.object({
   reactionMinutes: blankToUndefined(intInRange(1, 1440, "Reaction time")),
   check1Minutes: slaMinutes("Check 1 wait"),
   check2Minutes: slaMinutes("Check 2 wait"),
+  check3Minutes: slaMinutes("Check 3 wait"),
   finalCheckMinutes: slaMinutes("Final check wait"),
+  // Already stored in minutes, so it needs no conversion - only the same bounds.
+  postBookingDelayMinutes: blankToUndefined(intInRange(0, 1440, "After-booking delay")),
+  discoConfirmCallLeadHours: slaHours("Disco confirm calls"),
   discoConfirm1LeadHours: slaHours("Disco confirm 1"),
   discoConfirm2LeadHours: slaHours("Disco confirm 2"),
   discoCancelLeadHours: slaHours("Disco cancellation"),
@@ -690,8 +694,11 @@ export async function saveOutreachConfig(form: FormData): Promise<ActionResult> 
       // exact "saves a different number than the one on screen" failure this schema guards.
       check1Hours: d.check1Minutes === undefined ? current.sla.check1Hours : Number(d.check1Minutes) / 60,
       check2Hours: d.check2Minutes === undefined ? current.sla.check2Hours : Number(d.check2Minutes) / 60,
+      check3Hours: d.check3Minutes === undefined ? current.sla.check3Hours : Number(d.check3Minutes) / 60,
       finalCheckHours:
         d.finalCheckMinutes === undefined ? current.sla.finalCheckHours : Number(d.finalCheckMinutes) / 60,
+      postBookingDelayMinutes: num(d.postBookingDelayMinutes, current.sla.postBookingDelayMinutes),
+      discoConfirmCallLeadHours: num(d.discoConfirmCallLeadHours, current.sla.discoConfirmCallLeadHours),
       discoConfirm1LeadHours: num(d.discoConfirm1LeadHours, DEFAULT_SLA.discoConfirm1LeadHours),
       discoConfirm2LeadHours: num(d.discoConfirm2LeadHours, DEFAULT_SLA.discoConfirm2LeadHours),
       discoCancelLeadHours: num(d.discoCancelLeadHours, DEFAULT_SLA.discoCancelLeadHours),

@@ -60,6 +60,41 @@ const OUTCOME_OPTIONS = [
  * client. Seeding from `initialMsLeft`, which the SERVER computed and serialised, makes both
  * passes render the same string; the effect below then takes over with the live clock.
  */
+/**
+ * How long this lead has been waiting, counting UP from opt-in as hh:mm:ss.
+ *
+ * SEPARATE from `FiveMinuteCountdown` on purpose. That one is an SLA clock with a deadline and a
+ * red breach state; this one has no deadline at all - it answers "how long has this person been
+ * sitting here", which is what the telecaller needs when the ladder hands them a lead three hours
+ * after opt-in. Merging them would have meant one component with two meanings and a countdown
+ * whose behaviour changed depending on a prop.
+ *
+ * Seeds from the SERVER-computed `initialMs` for the hydration reason documented on the countdown
+ * below, then re-anchors on the absolute `optInAt` so a tab left open stays honest.
+ */
+function SinceOptIn({ optInAt, initialMs }: { optInAt: string; initialMs: number }) {
+  const start = new Date(optInAt).getTime();
+  const [ms, setMs] = useState(initialMs);
+
+  useEffect(() => {
+    setMs(Date.now() - start);
+    const id = setInterval(() => setMs(Date.now() - start), 1000);
+    return () => clearInterval(id);
+  }, [start]);
+
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const hh = Math.floor(total / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return (
+    <span className="tnum text-caption text-muted" title={`Opted in ${new Date(optInAt).toLocaleString()}`}>
+      {pad(hh)}:{pad(mm)}:{pad(ss)} since opt-in
+    </span>
+  );
+}
+
 function FiveMinuteCountdown({
   deadline,
   initialMsLeft,
@@ -115,6 +150,14 @@ function QueueRow({
           </Link>
           {bucket === "FIVE_MINUTE" && (
             <FiveMinuteCountdown deadline={lead.fiveMinuteBy} initialMsLeft={lead.msToFiveMinute} />
+          )}
+          {/* ONLY on the bucket the SOP raises a call into - the leads that reached Step 8 with no
+              booking. Everywhere else this counter is noise: a telecaller working the 5-minute
+              queue already has a countdown, and putting a second clock beside it competes with
+              the one that has a deadline. Here there IS no deadline, and "how long has this
+              person been waiting" is exactly the question the caller needs answered. */}
+          {bucket === "NOT_BOOKED_AFTER_MESSAGE" && (
+            <SinceOptIn optInAt={lead.optInAt} initialMs={lead.msSinceOptIn} />
           )}
           {/* Only when there IS a score. A "Not scored" chip on every row of a 25-row queue is
               noise - most leads have never been asked, and that is the normal case, not a

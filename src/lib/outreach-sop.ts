@@ -169,6 +169,63 @@ Do let me know if you need any assistance.
 [Your Name]
 B2 Consultants`;
 
+/**
+ * Step 13c - the booked call is being cancelled because BANT came back below the bar.
+ *
+ * NEW WORDING, not from the SOP - the document has no not-qualified notice, so this is
+ * provisional under the provenance rule at the top of this file. It deliberately does NOT say
+ * "you are not qualified": the prospect is a person who did what we asked, and the honest and
+ * kinder framing is that this particular call is not the right fit right now.
+ *
+ * WHATSAPP CANNOT SEND THIS YET. Business-initiated WhatsApp must use a template Meta has
+ * approved, and there is no approved b2 template for it - see SOP_NOT_QUALIFIED in
+ * `STEP_TO_KIND`, which is deliberately left unmapped so the step waits in the queue for a human
+ * rather than sending the WRONG approved template. The EMAIL counterpart has no such limit and
+ * sends immediately.
+ */
+const TPL_NOT_QUALIFIED = `Hi [Prospect’s First Name], this is [Your Name] from B2 Consultants.
+
+Thank you for booking a Personalized Discovery Call with us. Having looked at your answers, our programme isn’t the right fit for your situation at this stage, so we’ve released your call slot.
+
+This isn’t a no forever - circumstances change, and you’re welcome to come back to us when yours do.
+
+Wishing you all the best with your plans for Germany.`;
+
+const TPL_NOT_QUALIFIED_EMAIL_SUBJECT = `[Prospect’s First Name], about your Discovery Call booking`;
+
+/** Step 13d - the email counterpart of Step 13c. Same message, same reservations. */
+const TPL_NOT_QUALIFIED_EMAIL = TPL_NOT_QUALIFIED;
+
+/**
+ * Step 13b - the disco welcome by email. Mirrors the APPROVED `b2_sop_disco_welcome` WhatsApp
+ * template rather than inventing a second voice, so a prospect reading both sees one message.
+ */
+const TPL_DISCO_WELCOME_EMAIL_SUBJECT = `[Prospect’s First Name], your Discovery Call is confirmed for [DATE]`;
+
+const TPL_DISCO_WELCOME_EMAIL = `Hi [Prospect’s First Name], this is [Your Name] from B2 Consultants.
+
+I saw you booked a Personalized Discovery Call with our team on [DATE] at [TIME] IST.
+
+The team is preparing for your call and will get back to you if we need more information on further steps.
+
+Meanwhile, you can visit our case studies page to understand more about what our students have to say about us:
+https://casestudies.b2consultants.de/casestudies
+
+See you soon!`;
+
+/** Step 16b - the email counterpart of the cancellation notice. Mirrors `TPL_DISCO_CANCEL`. */
+const TPL_DISCO_CANCEL_EMAIL_SUBJECT = `[Prospect’s First Name], your Discovery Call slot has been released`;
+
+const TPL_DISCO_CANCEL_EMAIL = `Hi [Prospect’s First Name],
+
+Since we didn’t receive your confirmation, we’ve had to cancel your Personalized Discovery Call slot and release it for another candidate.
+
+If you would still like to speak with our team, you can book a new slot here:
+https://optin.b2consultants.de/apply
+
+[Your Name]
+B2 Consultants`;
+
 /** Step 13 - Disco Welcome WhatsApp 1. */
 const TPL_DISCO_WELCOME = `Hi [Prospect’s First Name], this is [Your Name] from B2 Consultants
 
@@ -434,6 +491,26 @@ export const OUTREACH_STEPS: OutreachStepDef[] = [
     after: "FOLLOWUP_WHATSAPP",
   },
   {
+    step: "FOLLOWUP_WHATSAPP_2",
+    sopStep: "Step 7b",
+    label: "WhatsApp follow-up 2 - still not booked",
+    channel: "WHATSAPP",
+    anchor: "IMMEDIATE",
+    slaKey: null,
+    // Same words as Step 6 - it is the same ask, and the approved template says it well. Its own
+    // KIND though, so a differently-worded template can be bound later without touching Step 6.
+    body: TPL_FOLLOWUP,
+  },
+  {
+    step: "CHECK_3",
+    sopStep: "Step 7c → 10",
+    label: "Check 3 - booked?",
+    channel: "SYSTEM",
+    anchor: "AFTER_PREV",
+    slaKey: "check3Hours",
+    after: "FOLLOWUP_WHATSAPP_2",
+  },
+  {
     step: "FOLLOWUP_CALL",
     sopStep: "Step 8",
     label: "Call follow-up - not booked",
@@ -476,6 +553,35 @@ export const OUTREACH_STEPS: OutreachStepDef[] = [
     body: TPL_DISCO_WELCOME,
   },
   {
+    step: "DISCO_WELCOME_EMAIL",
+    sopStep: "Step 13b",
+    label: "Disco welcome - email",
+    channel: "EMAIL",
+    anchor: "IMMEDIATE",
+    slaKey: null,
+    body: TPL_DISCO_WELCOME_EMAIL,
+    subject: TPL_DISCO_WELCOME_EMAIL_SUBJECT,
+  },
+  {
+    step: "DISCO_REJECT_MSG",
+    sopStep: "Step 13c",
+    label: "Not qualified - WhatsApp",
+    channel: "WHATSAPP",
+    anchor: "IMMEDIATE",
+    slaKey: null,
+    body: TPL_NOT_QUALIFIED,
+  },
+  {
+    step: "DISCO_REJECT_EMAIL",
+    sopStep: "Step 13d",
+    label: "Not qualified - email",
+    channel: "EMAIL",
+    anchor: "IMMEDIATE",
+    slaKey: null,
+    body: TPL_NOT_QUALIFIED_EMAIL,
+    subject: TPL_NOT_QUALIFIED_EMAIL_SUBJECT,
+  },
+  {
     step: "DISCO_CONFIRM_1",
     sopStep: "Step 14",
     label: "Disco confirmation 1",
@@ -501,7 +607,7 @@ export const OUTREACH_STEPS: OutreachStepDef[] = [
     label: "Disco confirmation call 1 of 2",
     channel: "CALL",
     anchor: "BEFORE_DISCO",
-    slaKey: "discoConfirm2LeadHours",
+    slaKey: "discoConfirmCallLeadHours",
   },
   {
     step: "DISCO_CONFIRM_CALL_2",
@@ -509,7 +615,7 @@ export const OUTREACH_STEPS: OutreachStepDef[] = [
     label: "Disco confirmation call 2 of 2",
     channel: "CALL",
     anchor: "BEFORE_DISCO",
-    slaKey: "discoConfirm2LeadHours",
+    slaKey: "discoConfirmCallLeadHours",
   },
   {
     step: "DISCO_CANCEL_MSG",
@@ -519,6 +625,16 @@ export const OUTREACH_STEPS: OutreachStepDef[] = [
     anchor: "BEFORE_DISCO",
     slaKey: "discoCancelLeadHours",
     body: TPL_DISCO_CANCEL,
+  },
+  {
+    step: "DISCO_CANCEL_EMAIL",
+    sopStep: "Step 16b",
+    label: "Disco cancellation - email",
+    channel: "EMAIL",
+    anchor: "BEFORE_DISCO",
+    slaKey: "discoCancelLeadHours",
+    body: TPL_DISCO_CANCEL_EMAIL,
+    subject: TPL_DISCO_CANCEL_EMAIL_SUBJECT,
   },
   {
     step: "DISCO_CANCEL",
@@ -589,6 +705,8 @@ export type OutreachSla = {
   /** Step 7 - wait this long after the Step 6 follow-up. */
   check2Hours: number;
   /** Step 9 - wait this long after the Step 8 call. */
+  /** Step 7c - the third booking check, measured from opt-in. */
+  check3Hours: number;
   finalCheckHours: number;
   /** Step 14 - send at least this many hours before the disco call. */
   discoConfirm1LeadHours: number;
@@ -602,6 +720,19 @@ export type OutreachSla = {
   sssConfirm2LeadHours: number;
   /** Step 21 - cancellation message at least this many hours before. */
   sssCancelLeadHours: number;
+  /**
+   * Step 16 - how many hours before the disco call the telecaller's two confirmation attempts
+   * are raised. Previously these rode on `discoConfirm2LeadHours`, which meant the calls were
+   * scheduled at the same moment as the 24h reminder rather than in their own window.
+   */
+  discoConfirmCallLeadHours: number;
+  /**
+   * Steps 13/13c - how long after a booking is matched the qualification outcome is acted on.
+   * A short delay, not zero: BANT is scored the instant the booking lands, and messaging someone
+   * in the same second they finished the form reads as a machine. Expressed in MINUTES because
+   * that is the scale it operates at.
+   */
+  postBookingDelayMinutes: number;
 };
 
 export const DEFAULT_SLA: OutreachSla = {
@@ -615,6 +746,10 @@ export const DEFAULT_SLA: OutreachSla = {
    * turned the documented process into a much tighter one.
    */
   check2Hours: 3,
+  // The SOP has no third check - it goes straight from Step 7 to the call. This default keeps
+  // that shape by sitting between check 2 and the final check; the founder's own cadence
+  // (3 hours) is set in settings.
+  check3Hours: 4,
   finalCheckHours: 5,
   discoConfirm1LeadHours: 36,
   discoConfirm2LeadHours: 24,
@@ -622,6 +757,8 @@ export const DEFAULT_SLA: OutreachSla = {
   sssConfirm1LeadHours: 24,
   sssConfirm2LeadHours: 12,
   sssCancelLeadHours: 10,
+  discoConfirmCallLeadHours: 12,
+  postBookingDelayMinutes: 5,
 };
 
 export type OutreachConfig = {
@@ -711,10 +848,20 @@ export const DEFAULT_OUTREACH_CONFIG: OutreachConfig = {
 export function coerceOutreachConfig(raw: unknown): OutreachConfig {
   const v = (raw ?? {}) as Partial<OutreachConfig>;
   const sla = { ...DEFAULT_SLA, ...(v.sla ?? {}) };
-  // A zero or negative window would make a step permanently due - clamp to something sane.
+  /**
+   * A zero or negative WINDOW would make a step permanently due - clamp to something sane.
+   *
+   * `postBookingDelayMinutes` is the one exception, and it is a real one: it is a deliberate
+   * pause, not a window, and 0 is a meaningful value meaning "send immediately", which is what
+   * the SOP itself specifies. Clamping it like the rest would take a founder who typed 0 and
+   * silently give them 5 minutes - the settings screen showing one number while the engine used
+   * another, which is the exact failure the rest of this validation exists to prevent.
+   */
+  const ALLOWS_ZERO: ReadonlySet<keyof OutreachSla> = new Set(["postBookingDelayMinutes"]);
   for (const k of Object.keys(sla) as (keyof OutreachSla)[]) {
     const n = Number(sla[k]);
-    sla[k] = Number.isFinite(n) && n > 0 ? n : DEFAULT_SLA[k];
+    const floorOk = ALLOWS_ZERO.has(k) ? n >= 0 : n > 0;
+    sla[k] = Number.isFinite(n) && floorOk ? n : DEFAULT_SLA[k];
   }
   return {
     enabled: v.enabled === true,

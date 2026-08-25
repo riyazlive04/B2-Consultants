@@ -79,6 +79,15 @@ export type L1QueueLead = {
   /** Milliseconds left on the 5-minute clock; negative once elapsed. */
   msToFiveMinute: number;
   /**
+   * Milliseconds SINCE opt-in, for the age counter that runs up rather than down.
+   *
+   * Server-computed for the same reason as `msToFiveMinute`: the counter is a client component,
+   * so seeding its state from `Date.now()` would render one value on the server and a different
+   * one a second later in the browser, and React discards the whole boundary on that mismatch.
+   * The component re-anchors on the absolute `optInAt` immediately afterwards.
+   */
+  msSinceOptIn: number;
+  /**
    * ISO instant the 5-minute clock expires. The countdown anchors on this ABSOLUTE instant
    * rather than on `msToFiveMinute`, so a tab left open for an hour shows the right number
    * instead of the value that was true when the page rendered.
@@ -450,6 +459,7 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
         first?.syncedAt && connectedAt ? syncLagMs(connectedAt, first.syncedAt) : null,
       callCount: l._count.callLogs,
       msToFiveMinute: verdict.msToFiveMinute,
+      msSinceOptIn: Math.max(0, now.getTime() - optInAt.getTime()),
       fiveMinuteBy: verdict.fiveMinuteBy.toISOString(),
       state: verdict.state,
       window: verdict.window,

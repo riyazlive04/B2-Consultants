@@ -145,8 +145,9 @@ describe("Step 2 - branch routing", () => {
     const s = done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", at(1 * MIN));
     const now = at(45 * MIN); // well past the window, contactedAt still null
     assert.equal(reactionState(s, now, DEFAULT_SLA).branch, "SLOW", "the raw SLA reading is SLOW…");
-    // …but the ladder must not act on that: Check 1 stays anchored to the intro, not to `now`.
-    assert.equal(planned(s, now, "CHECK_1")!.dueAt.getTime(), at(1 * MIN + 2 * HR).getTime());
+    // …but the ladder must not act on that. Check 1 is anchored on OPT-IN, so it is a fixed
+    // deadline that `now` cannot move - which is the property this test exists to protect.
+    assert.equal(planned(s, now, "CHECK_1")!.dueAt.getTime(), at(2 * HR).getTime());
   });
 });
 
@@ -154,12 +155,12 @@ describe("Step 2 - branch routing", () => {
 // STEPS 5/7/9 - the booking-chase ladder (checklist §E, §G, §I)
 // ═══════════════════════════════════════════════════════════════════
 
-describe("Step 5 - Check 1 fires exactly 2h after Step 3/4", () => {
+describe("Step 5 - Check 1 fires exactly 2h after OPT-IN", () => {
   const s = done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", at(1 * MIN));
   const due = planned(s, at(2 * MIN), "CHECK_1")!.dueAt;
 
-  test("due at intro + 2h", () => {
-    assert.equal(due.getTime(), at(1 * MIN + 2 * HR).getTime());
+  test("due at opt-in + 2h", () => {
+    assert.equal(due.getTime(), at(2 * HR).getTime());
   });
 
   test("not actionable at boundary − 1min", () => {
@@ -174,9 +175,14 @@ describe("Step 5 - Check 1 fires exactly 2h after Step 3/4", () => {
     assert.equal(isActionable(step({ status: "DUE", dueAt: due }), new Date(due.getTime() + MIN)), true);
   });
 
-  test("anchors on the LATER of Step 3 and Step 4", () => {
+  /**
+   * This used to assert the opposite - that Check 1 anchored on the LATER of Step 3 and Step 4.
+   * The founder's flow counts every window from opt-in, so a first call at any hour must not
+   * push the deadline out. Same test subject, inverted expectation, deliberately.
+   */
+  test("a late first call does NOT push Check 1 out", () => {
     const withCall = done(s, "FIRST_CALL", at(30 * MIN));
-    assert.equal(planned(withCall, at(31 * MIN), "CHECK_1")!.dueAt.getTime(), at(30 * MIN + 2 * HR).getTime());
+    assert.equal(planned(withCall, at(31 * MIN), "CHECK_1")!.dueAt.getTime(), at(2 * HR).getTime());
   });
 });
 
@@ -287,19 +293,52 @@ function qualifiedState(q: "YES" | "MAYBE" | "NO", discoAt: Date): JourneyState 
 describe("Step 13 - Disco welcome", () => {
   const discoAt = at(100 * HR);
 
-  test("sent immediately on YES, not delayed (checklist §M)", () => {
-    const p = planned(qualifiedState("YES", discoAt), T0, "DISCO_WELCOME");
+  /**
+   * Checklist §M says "sent immediately on qualification". That is still what a zero delay does,
+   * and the SOP default is preserved by that assertion. The founder's own cadence adds a short
+   * `postBookingDelayMinutes` so the reply does not land in the same second as the form, which
+   * the second assertion pins.
+   */
+  test("sent immediately on YES when the delay is zero (checklist §M)", () => {
+    const sla = { ...DEFAULT_SLA, postBookingDelayMinutes: 0 };
+    const p = planJourney(qualifiedState("YES", discoAt), T0, sla).materialise.find((m) => m.step === "DISCO_WELCOME");
     assert.ok(p);
     assert.equal(p.dueAt.getTime(), T0.getTime());
+  });
+
+  test("otherwise it waits exactly the configured after-booking delay", () => {
+    const sla = { ...DEFAULT_SLA, postBookingDelayMinutes: 5 };
+    const p = planJourney(qualifiedState("YES", discoAt), T0, sla).materialise.find((m) => m.step === "DISCO_WELCOME");
+    assert.equal(p!.dueAt.getTime(), at(5 * MIN).getTime());
   });
 
   test("sent immediately on MAYBE too", () => {
     assert.ok(planned(qualifiedState("MAYBE", discoAt), T0, "DISCO_WELCOME"));
   });
 
-  test("NOT sent on NO - routed straight to cancellation, skipping Disco welcome (checklist §O)", () => {
+  /**
+   * Checklist §O - NO skips the welcome entirely. That half is unchanged.
+   *
+   * What changed: the cancellation no longer fires in the same pass. The founder's flow tells the
+   * prospect first, on both channels, and only then releases the slot - so DISCO_CANCEL now waits
+   * for that notice rather than appearing immediately. Finding an empty calendar with no message
+   * is the outcome this ordering prevents.
+   */
+  test("NOT sent on NO - the not-qualified notice goes out instead (checklist §O)", () => {
     const plan = planJourney(qualifiedState("NO", discoAt), T0, DEFAULT_SLA);
     assert.equal(plan.materialise.find((m) => m.step === "DISCO_WELCOME"), undefined);
+    assert.ok(plan.materialise.find((m) => m.step === "DISCO_REJECT_MSG"));
+    assert.ok(plan.materialise.find((m) => m.step === "DISCO_REJECT_EMAIL"));
+    assert.equal(
+      plan.materialise.find((m) => m.step === "DISCO_CANCEL"),
+      undefined,
+      "the slot is not released until the prospect has been told",
+    );
+  });
+
+  test("on NO, the cancellation follows once the notice has gone out", () => {
+    const told = done(qualifiedState("NO", discoAt), "DISCO_REJECT_EMAIL", at(5 * MIN));
+    const plan = planJourney(told, at(5 * MIN), DEFAULT_SLA);
     assert.ok(plan.materialise.find((m) => m.step === "DISCO_CANCEL"));
   });
 
@@ -675,13 +714,13 @@ describe("firstCallMode - deferring the first call until a booking check comes b
     assert.ok(hasStep(p, "CHECK_1"), "the check is what eventually triggers the call");
   });
 
-  test("after_check anchors the check on the intro, since no call precedes it", () => {
+  test("after_check schedules the check from OPT-IN, whichever mode is in play", () => {
     const p = plan(introSent(), at(2 * MIN), AFTER);
     const check = p.materialise.find((m) => m.step === "CHECK_1")!;
     assert.equal(
       check.dueAt.getTime(),
-      at(1 * MIN + DEFAULT_SLA.check1Hours * HR).getTime(),
-      "intro actedAt + check1Hours",
+      at(DEFAULT_SLA.check1Hours * HR).getTime(),
+      "optInAt + check1Hours - the anchor does not depend on firstCallMode",
     );
   });
 

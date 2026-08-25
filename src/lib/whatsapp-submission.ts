@@ -182,6 +182,36 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     vars: [V.name("Priya"), V.sender("Nilofer")],
   },
   {
+    sopStep: "Step 7b",
+    kind: "SOP_FOLLOWUP_2",
+    step: "FOLLOWUP_WHATSAPP_2",
+    name: "b2_sop_followup_not_booked_2",
+    category: "MARKETING",
+    language: "en",
+    categoryNote: "The second chase at an un-booked prospect. Same promotional ask as Step 6 → MARKETING.",
+    vars: [V.name("Priya"), V.sender("Nilofer")],
+    notes: [
+      "Body is IDENTICAL to b2_sop_followup_not_booked - it is the same ask, made once more.",
+      "Submitted as its own template rather than re-sending Step 6's so the two can be worded apart later, and so per-template delivery stats separate the first chase from the second.",
+    ],
+  },
+  {
+    sopStep: "Step 13c",
+    kind: "SOP_NOT_QUALIFIED",
+    step: "DISCO_REJECT_MSG",
+    name: "b2_sop_not_qualified",
+    category: "UTILITY",
+    language: "en",
+    categoryNote:
+      "The ONE template here with a real claim to UTILITY: it carries no offer, no link and no persuasion - it tells someone that an appointment they booked has been cancelled. That is a transaction update. If Meta re-categorises it as MARKETING, accept it rather than adding promotional copy to argue the point.",
+    vars: [V.name("Priya"), V.sender("Nilofer")],
+    notes: [
+      "NOT in the SOP document - written for the founder's flow of 25/08/2026, so the wording has not been through the same sign-off as the transcribed templates.",
+      "Deliberately does not say 'you are not qualified'. The prospect did what was asked of them; the message says the programme is not the right fit at this stage and leaves the door open.",
+      "UNTIL THIS IS APPROVED, the step has no bound template and waits in the queue for a human. It is never auto-sent with the wrong text - see STEP_TO_KIND in server/outreach.ts.",
+    ],
+  },
+  {
     sopStep: "Step 13",
     kind: "SOP_DISCO_WELCOME",
     step: "DISCO_WELCOME",

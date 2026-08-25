@@ -166,6 +166,11 @@ function plus(anchor: Date, hours: number): Date {
   return new Date(anchor.getTime() + hours * HR);
 }
 
+/** The same, for the one window the SOP expresses in minutes rather than hours. */
+function plusMinutes(anchor: Date, minutes: number): Date {
+  return new Date(anchor.getTime() + minutes * 60_000);
+}
+
 /** Is a materialised step actionable right now? */
 export function isActionable(s: StepState, now: Date): boolean {
   return s.status === "DUE" && now.getTime() >= s.dueAt.getTime();
@@ -232,11 +237,20 @@ export function planJourney(
       }
     }
 
-    // Step 5 - Check 1, two hours after Step 3/4 (the later of them: either may be the last thing
-    // the prospect actually experienced).
+    /**
+     * Step 5 - Check 1, measured from OPT-IN like every other booking check.
+     *
+     * It used to anchor on the later of Step 3/4, which made "check back in 5 minutes" mean
+     * five minutes after whenever the intro happened to send. The founder's flow counts every
+     * window from the moment the prospect opted in, so all four checks now share one origin and
+     * the settings screen can be read as a single timeline.
+     *
+     * Still gated on the intro existing: checking whether someone booked before we have asked
+     * them to is meaningless.
+     */
     const chaseAnchor = laterOf(actedAt(state, "INTRO_WHATSAPP"), actedAt(state, "FIRST_CALL"));
     if (chaseAnchor) {
-      add("CHECK_1", plus(chaseAnchor, sla.check1Hours));
+      add("CHECK_1", plus(state.optInAt, sla.check1Hours));
     } else if (!onIntroPath) {
       // The SOP's late-contact branch skips the intro flow and checks the booking right away.
       add("CHECK_1", now);
@@ -284,9 +298,21 @@ export function planJourney(
     const a6 = actedAt(state, "FOLLOWUP_WHATSAPP");
     if (a6) add("CHECK_2", plus(state.optInAt, sla.check2Hours));
 
-    // Step 8 - only once Check 2 has run.
+    // Step 7b - the SECOND WhatsApp chase, once Check 2 has come back with no booking. A human
+    // is not spent yet; the message gets one more turn first.
     if (acted(state, "CHECK_2")) {
-      add("FOLLOWUP_CALL", actedAt(state, "CHECK_2") ?? now);
+      add("FOLLOWUP_WHATSAPP_2", actedAt(state, "CHECK_2") ?? now);
+    }
+
+    // Step 7c - Check 3, again from opt-in.
+    if (acted(state, "FOLLOWUP_WHATSAPP_2")) {
+      add("CHECK_3", plus(state.optInAt, sla.check3Hours));
+    }
+
+    // Step 8 - the telecaller rings, but only after the second message has also failed to land
+    // a booking. This is the point the ladder stops being automated.
+    if (acted(state, "CHECK_3")) {
+      add("FOLLOWUP_CALL", actedAt(state, "CHECK_3") ?? now);
     }
 
     // Step 9 - measured from OPT-IN, for the same reason as Check 2 above, and kept consistent
@@ -312,8 +338,18 @@ export function planJourney(
   // ═══ Steps 13–16: the Disco ladder. Gated on Qualified = YES/MAYBE. ═══
   const q = state.qualified;
   if (state.booked && q && qualifiedContinues(q) && acted(state, "KEY_METRICS_TRANSFER")) {
-    // Step 13 - "sent immediately on qualification", not delayed (checklist §M).
-    add("DISCO_WELCOME", actedAt(state, "KEY_METRICS_TRANSFER") ?? now);
+    /**
+     * Step 13 / 13b - the welcome, on BOTH channels, after the post-booking delay.
+     *
+     * The SOP says "immediately on qualification" (checklist §M) and that is still the intent -
+     * `postBookingDelayMinutes` is a few minutes, not a wait. It exists because BANT is scored
+     * the instant the booking lands, and answering someone in the same second they finished a
+     * form reads as a machine. Set it to 0 and the original behaviour is back exactly.
+     */
+    const qualifiedAt = actedAt(state, "KEY_METRICS_TRANSFER") ?? now;
+    const afterDelay = plusMinutes(qualifiedAt, sla.postBookingDelayMinutes);
+    add("DISCO_WELCOME", afterDelay);
+    add("DISCO_WELCOME_EMAIL", afterDelay);
 
     if (state.discoAt && !state.whatsappConfirmed) {
       // Step 14 - at least 36h before.
@@ -337,16 +373,35 @@ export function planJourney(
       // must be logged (checklist §N) - this is the gate that enforces it.
       if (acted(state, "DISCO_CONFIRM_CALL_1") && acted(state, "DISCO_CONFIRM_CALL_2")) {
         add("DISCO_CANCEL_MSG", minus(state.discoAt, sla.discoCancelLeadHours));
+        add("DISCO_CANCEL_EMAIL", minus(state.discoAt, sla.discoCancelLeadHours));
       }
-      if (acted(state, "DISCO_CANCEL_MSG")) {
-        add("DISCO_CANCEL", actedAt(state, "DISCO_CANCEL_MSG") ?? now);
+      // Either channel is enough to proceed to the actual cancellation - see the Qualified = NO
+      // branch below for why this is an OR and not an AND.
+      if (acted(state, "DISCO_CANCEL_MSG") || acted(state, "DISCO_CANCEL_EMAIL")) {
+        add("DISCO_CANCEL", actedAt(state, "DISCO_CANCEL_MSG") ?? actedAt(state, "DISCO_CANCEL_EMAIL") ?? now);
       }
     }
   }
 
-  // ═══ Step 17: Qualified = NO diverts straight to cancellation, skipping Step 13 entirely. ═══
+  /**
+   * ═══ Steps 13c/13d + 17: Qualified = NO. ═══
+   *
+   * The prospect booked, BANT came back under the bar, and the call is being released. They are
+   * TOLD before it happens - on both channels - and only then is the slot cancelled. Doing it the
+   * other way round means someone finds an empty calendar with no explanation.
+   *
+   * `DISCO_CANCEL` is what actually releases the slot (see the server engine), so it is gated on
+   * the notice having gone out rather than firing the moment the verdict lands.
+   */
   if (state.booked && q === "NO" && acted(state, "KEY_METRICS_TRANSFER")) {
-    add("DISCO_CANCEL", now);
+    const rejectedAt = plusMinutes(actedAt(state, "KEY_METRICS_TRANSFER") ?? now, sla.postBookingDelayMinutes);
+    add("DISCO_REJECT_MSG", rejectedAt);
+    add("DISCO_REJECT_EMAIL", rejectedAt);
+    // Either channel having reached them is enough to proceed. Requiring BOTH would strand the
+    // cancellation behind the WhatsApp step, which cannot send until Meta approves a template.
+    if (acted(state, "DISCO_REJECT_MSG") || acted(state, "DISCO_REJECT_EMAIL")) {
+      add("DISCO_CANCEL", now);
+    }
   }
 
   // ═══ Steps 19–22: the SSS ladder. Gated on Highly Qualified = YES. ═══

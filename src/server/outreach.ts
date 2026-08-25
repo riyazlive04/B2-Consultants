@@ -682,11 +682,17 @@ const STEP_TO_KIND = {
   INTRO_WHATSAPP: "SOP_INTRO",
   FOLLOWUP_WHATSAPP: "SOP_FOLLOWUP",
   FOLLOWUP_WHATSAPP_2: "SOP_FOLLOWUP_2",
-  // DISCO_REJECT_MSG is DELIBERATELY ABSENT. Business-initiated WhatsApp must use a template Meta
-  // has approved, and B2 has none for a not-qualified notice - the closest approved template says
-  // "we didn't receive your confirmation", which is untrue here and would be a lie told to a real
-  // person. With no mapping the step stays DUE in the queue for a human, which is the correct
-  // failure. Map it to SOP_NOT_QUALIFIED once a template is approved in WATI.
+  /**
+   * Mapped, but SHIPPED OFF (founder's instruction, 25/08/2026): `autoSend.DISCO_REJECT_MSG` is
+   * false until `b2_sop_not_qualified` clears Meta review, and the founder ticks it themselves.
+   *
+   * The wiring is here so nothing has to be edited on approval day, and two independent guards
+   * stop it sending before then: the auto-send flag, and the fact that no WATI template is bound
+   * to SOP_NOT_QUALIFIED yet - an unbound kind is skipped by the send layer rather than falling
+   * back to another template. It must NEVER borrow b2_sop_disco_cancel, which says "we didn't
+   * receive your confirmation" - untrue for a BANT rejection, and a lie told to a real person.
+   */
+  DISCO_REJECT_MSG: "SOP_NOT_QUALIFIED",
   DISCO_WELCOME: "SOP_DISCO_WELCOME",
   DISCO_CONFIRM_1: "SOP_DISCO_CONFIRM_1",
   DISCO_CONFIRM_2: "SOP_DISCO_CONFIRM_2",

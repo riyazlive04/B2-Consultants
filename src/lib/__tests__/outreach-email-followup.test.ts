@@ -296,3 +296,41 @@ describe("the disco ladder never fires for a call that has already happened", ()
     assert.ok(planned(s, T0, "DISCO_CONFIRM_1", sla));
   });
 });
+
+describe("a journey that ends in this pass is handed no new work", () => {
+  const sla = { ...DEFAULT_SLA, check1Hours: 5 / 60, check2Hours: 2, check3Hours: 3, finalCheckHours: 5 };
+
+  /**
+   * The 27/08/2026 orphan. The final check wrote a prospect off and the SAME plan handed her a
+   * FOLLOWUP_CALL. `pendingReminders` only sees steps already DUE, so the new one survived - and
+   * the engine's scan skips terminal phases, so nothing ever came back for it. A telecaller was
+   * left holding a call for a lead the system had closed.
+   */
+  test("the final check does not also raise a telecaller call", () => {
+    let s = done(base(), "INTRO_WHATSAPP", T0);
+    s = done(s, "CHECK_1", at(5 * MIN));
+    s = done(s, "FOLLOWUP_WHATSAPP", at(5 * MIN));
+    s = done(s, "CHECK_2", at(2 * HR));
+    s = done(s, "FOLLOWUP_WHATSAPP_2", at(2 * HR));
+    s = done(s, "CHECK_3", at(3 * HR), "NOT_BOOKED");
+    s = done(s, "FINAL_CHECK", at(5 * HR), "NOT_BOOKED");
+
+    const plan = planJourney(s, at(5 * HR), sla);
+    assert.equal(plan.phase, "IGNORED", "the final check ends the journey");
+    assert.deepEqual(plan.materialise, [], "nothing new may be planned for a closed journey");
+  });
+
+  test("steps left DUE when the journey ends are superseded, not orphaned", () => {
+    let s = done(base(), "INTRO_WHATSAPP", T0);
+    s = { ...s, steps: { ...s.steps, FIRST_CALL: step({ status: "DUE", dueAt: T0, actedAt: null }) } };
+    s = done(s, "CHECK_1", at(5 * MIN));
+    s = done(s, "FOLLOWUP_WHATSAPP", at(5 * MIN));
+    s = done(s, "CHECK_2", at(2 * HR));
+    s = done(s, "FOLLOWUP_WHATSAPP_2", at(2 * HR));
+    s = done(s, "CHECK_3", at(3 * HR), "NOT_BOOKED");
+    s = done(s, "FINAL_CHECK", at(5 * HR), "NOT_BOOKED");
+
+    const plan = planJourney(s, at(5 * HR), sla);
+    assert.ok(plan.supersede.includes("FIRST_CALL"), "an unworked call must not outlive the journey");
+  });
+});

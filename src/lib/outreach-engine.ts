@@ -454,10 +454,41 @@ export function planJourney(
     }
   }
 
+  const phase = nextPhase(state, now, sla);
+
+  /**
+   * A journey that becomes terminal in THIS pass is handed no new work.
+   *
+   * `pendingReminders` only sees steps that were already DUE, so anything materialised in the
+   * same plan that ended the journey survived as an orphan - and the engine's scan excludes
+   * terminal phases, so nothing ever came back to clean it up. Jesheeba Fathima M (27/08/2026)
+   * was written off by the final check and simultaneously handed a FOLLOWUP_CALL, which then sat
+   * DUE in the telecaller's queue permanently: a caller being asked to ring someone the system
+   * had already closed.
+   *
+   * Superseding the freshly-planned steps rather than returning them is what makes the two
+   * halves of this plan agree with each other.
+   */
+  if (isTerminal(phase)) {
+    /**
+     * Every DUE step, not `pendingReminders(state)` - that reads `state.phase`, which is the
+     * phase BEFORE this pass and is still live, so it reports nothing for a journey ending right
+     * now. Reading the steps directly is what makes the sweep match the phase we just computed.
+     */
+    const stillDue = (Object.entries(state.steps) as [OutreachStep, StepState | undefined][])
+      .filter(([, v]) => v?.status === "DUE")
+      .map(([k]) => k);
+    return {
+      materialise: [],
+      supersede: [...new Set([...supersede, ...stillDue, ...materialise.map((m) => m.step)])],
+      phase,
+    };
+  }
+
   return {
     materialise: materialise.slice(),
     supersede: supersede.concat(pendingReminders(state)),
-    phase: nextPhase(state, now, sla),
+    phase,
   };
 }
 
@@ -472,11 +503,16 @@ function pendingReminders(state: JourneyState): OutreachStep[] {
   const stillDue = (step: OutreachStep) => st(state, step)?.status === "DUE";
 
   const discoLadder: OutreachStep[] = [
+    "DISCO_WELCOME",
+    "DISCO_WELCOME_EMAIL",
+    "DISCO_REJECT_MSG",
+    "DISCO_REJECT_EMAIL",
     "DISCO_CONFIRM_1",
     "DISCO_CONFIRM_2",
     "DISCO_CONFIRM_CALL_1",
     "DISCO_CONFIRM_CALL_2",
     "DISCO_CANCEL_MSG",
+    "DISCO_CANCEL_EMAIL",
   ];
   const sssLadder: OutreachStep[] = ["SSS_CONFIRM_1", "SSS_CONFIRM_2", "SSS_CANCEL_MSG"];
   const chaseLadder: OutreachStep[] = [
@@ -484,7 +520,10 @@ function pendingReminders(state: JourneyState): OutreachStep[] {
     "FIRST_CALL",
     "CHECK_1",
     "FOLLOWUP_WHATSAPP",
+    "FOLLOWUP_EMAIL",
     "CHECK_2",
+    "FOLLOWUP_WHATSAPP_2",
+    "CHECK_3",
     "FOLLOWUP_CALL",
     "FINAL_CHECK",
   ];

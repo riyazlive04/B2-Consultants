@@ -179,8 +179,10 @@ describe("the founder's booking-chase cadence", () => {
 describe("qualification outcome after a booking", () => {
   const sla = { ...DEFAULT_SLA, postBookingDelayMinutes: 5 };
 
+  // `discoAt` is REQUIRED, not decoration: the ladder is gated on the call still being ahead of
+  // us, and every message it sends names the date. A booking with no slot has no date to name.
   function booked(q: "YES" | "NO") {
-    let s = base({ booked: true, qualified: q });
+    let s = base({ booked: true, qualified: q, discoAt: at(48 * HR) });
     s = done(s, "BANT_QUALIFICATION", T0);
     s = done(s, "KEY_METRICS_TRANSFER", T0);
     return s;
@@ -253,5 +255,44 @@ describe("the write-off deadline cannot be stranded by an upstream stall", () =>
   test("a booked prospect never gets a final check", () => {
     const s = { ...done(base(), "INTRO_WHATSAPP", T0), booked: true };
     assert.equal(planned(s, at(5 * HR), "FINAL_CHECK", sla), undefined);
+  });
+});
+
+describe("the disco ladder never fires for a call that has already happened", () => {
+  const sla = { ...DEFAULT_SLA, postBookingDelayMinutes: 5 };
+
+  function bookedAt(discoAt: Date, q: "YES" | "NO" = "YES") {
+    let s = base({ phase: "QUALIFICATION", booked: true, qualified: q, discoAt });
+    s = done(s, "BANT_QUALIFICATION", T0);
+    return s;
+  }
+
+  /**
+   * The 27/08/2026 near-miss. Closing Step 11's row retroactively started this ladder for two
+   * prospects whose calls had passed two days earlier - "your Discovery Call is confirmed for
+   * [DATE]" was five minutes from being sent about an appointment that had already been written
+   * off as a no-show.
+   */
+  test("a welcome is NOT planned when the call time is in the past", () => {
+    const s = bookedAt(at(-2 * HR));
+    assert.equal(planned(s, T0, "DISCO_WELCOME", sla), undefined);
+    assert.equal(planned(s, T0, "DISCO_WELCOME_EMAIL", sla), undefined);
+  });
+
+  test("no confirmation reminder is planned for a past call either", () => {
+    const s = bookedAt(at(-2 * HR));
+    assert.equal(planned(s, T0, "DISCO_CONFIRM_1", sla), undefined);
+  });
+
+  test("the not-qualified notice is also suppressed once the call has passed", () => {
+    const s = bookedAt(at(-2 * HR), "NO");
+    assert.equal(planned(s, T0, "DISCO_REJECT_MSG", sla), undefined);
+    assert.equal(planned(s, T0, "DISCO_REJECT_EMAIL", sla), undefined);
+  });
+
+  test("but an UPCOMING call still gets the full ladder", () => {
+    const s = bookedAt(at(48 * HR));
+    assert.ok(planned(s, T0, "DISCO_WELCOME", sla), "a future call must still be welcomed");
+    assert.ok(planned(s, T0, "DISCO_CONFIRM_1", sla));
   });
 });

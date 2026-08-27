@@ -352,6 +352,17 @@ export function planJourney(
   // ═══ Steps 13–16: the Disco ladder. Gated on Qualified = YES/MAYBE. ═══
   const q = state.qualified;
   /**
+   * NOTHING in the disco ladder may fire for a call that has already happened.
+   *
+   * Every message below is about an UPCOMING appointment - "your call is confirmed for [DATE]",
+   * "please confirm your slot". Sent after the fact they are nonsense, and on 27/08/2026 they
+   * came within five minutes of going out for real: closing the Step 11 row retroactively
+   * started this ladder for two prospects whose calls had passed two days earlier and whose
+   * bookings had just been written off as no-shows. `booked` does not catch that - it only asks
+   * whether a booking is LINKED, not whether it is still ahead of us or still alive.
+   */
+  const callUpcoming = state.discoAt !== null && state.discoAt.getTime() > now.getTime();
+  /**
    * Gated on the QUALIFICATION VERDICT, not on Step 12.
    *
    * Step 12 (Key Metrics transfer + assign owners) is a human data-entry task into a sheet this
@@ -360,7 +371,7 @@ export function planJourney(
    * two booked, qualified prospects reached their call time with nothing sent. Step 12 remains a
    * to-do in the queue; it just no longer gates what the prospect receives.
    */
-  if (state.booked && q && qualifiedContinues(q) && acted(state, "BANT_QUALIFICATION")) {
+  if (state.booked && callUpcoming && q && qualifiedContinues(q) && acted(state, "BANT_QUALIFICATION")) {
     /**
      * Step 13 / 13b - the welcome, on BOTH channels, after the post-booking delay.
      *
@@ -416,7 +427,9 @@ export function planJourney(
    * `DISCO_CANCEL` is what actually releases the slot (see the server engine), so it is gated on
    * the notice having gone out rather than firing the moment the verdict lands.
    */
-  if (state.booked && q === "NO" && acted(state, "BANT_QUALIFICATION")) {
+  // Same clock guard: telling someone their call is cancelled is pointless once it has been
+  // and gone. The post-call sweep in the server engine closes those out instead.
+  if (state.booked && callUpcoming && q === "NO" && acted(state, "BANT_QUALIFICATION")) {
     const rejectedAt = plusMinutes(actedAt(state, "BANT_QUALIFICATION") ?? now, sla.postBookingDelayMinutes);
     add("DISCO_REJECT_MSG", rejectedAt);
     add("DISCO_REJECT_EMAIL", rejectedAt);

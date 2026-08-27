@@ -32,6 +32,7 @@ import {
 } from "./sections";
 import { GOAL_METRICS } from "./goals";
 import { REWARD_WINDOWS, type RewardTrigger } from "./rewards";
+import { DEFAULT_CALLBACK_CHASE } from "./callback-chase";
 
 const DATE_KEY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD date");
 const slug = z.string().trim().min(1).max(60).regex(/^[a-zA-Z0-9._-]+$/, "Letters, numbers, dot, dash and underscore only");
@@ -1155,6 +1156,29 @@ export const callDistributionSchema = z.object({
    * at 10am is still owed a connection at 3pm.
    */
   followUpRestHours: z.number().int().min(0).max(720).default(24),
+  /**
+   * The call-back chase - "I rang them, they didn't book, ring them again" (founder, 27/08/2026).
+   *
+   * SEPARATE FROM `followUpRestHours` ABOVE, deliberately. That dial rests old leads and workshop
+   * follow-up, where the right answer is measured in days; this one governs a live conversation
+   * that has just happened, where the right answer is measured in hours. One number could not be
+   * both, and sharing it meant a prospect spoken to at 10am could not be rung back before tomorrow.
+   *
+   * `maxCallbacks` counts APPEARANCES on the desk, not dials: the pitch call is the call being
+   * called back FROM. At 3, a prospect is asked three more times and then the chase is given up.
+   *
+   * The close-out is a real, outward-facing consequence, so both halves are switchable
+   * independently - a founder may want the card filed without a message going out, or the message
+   * without the card moving, and finding that out should not need a deploy.
+   */
+  callbackChase: z
+    .object({
+      gapHours: z.number().int().min(1).max(168),
+      maxCallbacks: z.number().int().min(1).max(20),
+      closeWhenExhausted: z.boolean(),
+      notifyOnClose: z.boolean(),
+    })
+    .default(DEFAULT_CALLBACK_CHASE),
   /** Ranking weights. Shape mirrors `PriorityWeights` in lib/lead-priority.ts. */
   priority: z.object({
     bantPerPoint: z.number().min(0).max(50),
@@ -1185,6 +1209,8 @@ export const DEFAULT_CALL_DISTRIBUTION: CallDistributionConfig = {
   // 24 is NOT the old behaviour - the old behaviour was 0, and it is the bug. A lead worked today
   // comes back tomorrow; anything shorter and the caller is looking at the person they just rang.
   followUpRestHours: 24,
+  // 4 hours, 3 call-backs - the founder's numbers, verbatim.
+  callbackChase: DEFAULT_CALLBACK_CHASE,
   priority: {
     bantPerPoint: 10,
     highlyQualifiedBonus: 15,

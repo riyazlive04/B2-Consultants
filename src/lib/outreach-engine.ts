@@ -337,7 +337,16 @@ export function planJourney(
 
   // ═══ Steps 13–16: the Disco ladder. Gated on Qualified = YES/MAYBE. ═══
   const q = state.qualified;
-  if (state.booked && q && qualifiedContinues(q) && acted(state, "KEY_METRICS_TRANSFER")) {
+  /**
+   * Gated on the QUALIFICATION VERDICT, not on Step 12.
+   *
+   * Step 12 (Key Metrics transfer + assign owners) is a human data-entry task into a sheet this
+   * app has no integration with, so it can only ever be ticked by hand. Hanging every
+   * customer-facing message off it meant the whole ladder waited on admin - which is exactly how
+   * two booked, qualified prospects reached their call time with nothing sent. Step 12 remains a
+   * to-do in the queue; it just no longer gates what the prospect receives.
+   */
+  if (state.booked && q && qualifiedContinues(q) && acted(state, "BANT_QUALIFICATION")) {
     /**
      * Step 13 / 13b - the welcome, on BOTH channels, after the post-booking delay.
      *
@@ -346,7 +355,7 @@ export function planJourney(
      * the instant the booking lands, and answering someone in the same second they finished a
      * form reads as a machine. Set it to 0 and the original behaviour is back exactly.
      */
-    const qualifiedAt = actedAt(state, "KEY_METRICS_TRANSFER") ?? now;
+    const qualifiedAt = actedAt(state, "BANT_QUALIFICATION") ?? now;
     const afterDelay = plusMinutes(qualifiedAt, sla.postBookingDelayMinutes);
     add("DISCO_WELCOME", afterDelay);
     add("DISCO_WELCOME_EMAIL", afterDelay);
@@ -393,8 +402,8 @@ export function planJourney(
    * `DISCO_CANCEL` is what actually releases the slot (see the server engine), so it is gated on
    * the notice having gone out rather than firing the moment the verdict lands.
    */
-  if (state.booked && q === "NO" && acted(state, "KEY_METRICS_TRANSFER")) {
-    const rejectedAt = plusMinutes(actedAt(state, "KEY_METRICS_TRANSFER") ?? now, sla.postBookingDelayMinutes);
+  if (state.booked && q === "NO" && acted(state, "BANT_QUALIFICATION")) {
+    const rejectedAt = plusMinutes(actedAt(state, "BANT_QUALIFICATION") ?? now, sla.postBookingDelayMinutes);
     add("DISCO_REJECT_MSG", rejectedAt);
     add("DISCO_REJECT_EMAIL", rejectedAt);
     // Either channel having reached them is enough to proceed. Requiring BOTH would strand the

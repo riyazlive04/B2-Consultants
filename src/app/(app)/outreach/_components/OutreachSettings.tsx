@@ -48,6 +48,7 @@ const SLA_FIELDS: {
   { key: "finalCheckHours", field: "finalCheckMinutes", label: "Final check wait", hint: "Step 9 - minutes after OPT-IN; not booked moves the card to Lost", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
   { key: "postBookingDelayMinutes", field: "postBookingDelayMinutes", label: "After-booking delay", hint: "Steps 13/13c - minutes after a booking before the qualified / not-qualified messages go out", unit: "min", max: SLA_MINUTES_MAX },
   { key: "discoConfirmCallLeadHours", label: "Disco confirm calls", hint: "Step 16 - hours before the call, both telecaller attempts", unit: "h", max: SLA_HOURS_MAX },
+  { key: "noShowSweepHours", label: "Write off after call", hint: "Hours AFTER the call - unconfirmed and no outcome logged moves the card to Cancelled/Unqualified", unit: "h", max: SLA_HOURS_MAX },
   { key: "discoConfirm1LeadHours", label: "Disco confirm 1", hint: "Step 14 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
   { key: "discoConfirm2LeadHours", label: "Disco confirm 2", hint: "Step 15 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
   { key: "discoCancelLeadHours", label: "Disco cancellation", hint: "Step 16 - hours before the call", unit: "h", max: SLA_HOURS_MAX },

@@ -7,6 +7,12 @@ import { istBoundaryToInstant, istMonthInstantRange, istToday } from "@/lib/date
 import { syncLagMs } from "@/lib/offline-calls";
 import { resolveBant, type BantSnapshot } from "@/lib/bant-view";
 import { priorityScore } from "@/lib/lead-priority";
+import {
+  callbackVerdict,
+  isChaseableStage,
+  summariseCalls,
+  type CallbackVerdict,
+} from "@/lib/callback-chase";
 import { getCallDistribution } from "./founder-config";
 import {
   bucketForLead,
@@ -105,6 +111,27 @@ export type L1QueueLead = {
    * unasked rather than poor.
    */
   bant: BantSnapshot | null;
+  /**
+   * Where this lead stands in the call-back chase, or null when it is not in one.
+   *
+   * Only ever non-null on the `OPTED_NOT_BOOKED` bucket - every other bucket is either a lead
+   * nobody has got through to yet (the SLA clocks) or work chosen on a different basis (old
+   * leads, workshop follow-up), and a chase counter on those rows would be answering a question
+   * they are not being listed for.
+   */
+  callback: {
+    /** Which call-back is owed: 1-based, capped at the founder's maximum. */
+    round: number;
+    maxCallbacks: number;
+    /** Call-backs already answered by a dial. `round - 1` in every normal case. */
+    callbacksMade: number;
+    /** ISO of the most recent dial of any outcome - what the four-hour gap ran from. */
+    lastCallAt: string;
+    /** Whole hours since that dial, server-computed. Drives "last called 6h ago". */
+    hoursSinceLastCall: number;
+    /** ISO of the instant this call-back fell due. Always in the past for a listed row. */
+    dueSince: string;
+  } | null;
 };
 
 export type L1Targets = {
@@ -142,6 +169,29 @@ export type L1Desk = {
    * three leads.
    */
   ownedCallable: number;
+  /**
+   * Leads whose call-back chase has run out: spoken to, chased the founder's maximum number of
+   * times, still no booking, and the final gap has closed.
+   *
+   * Reported rather than listed. They are no longer this caller's work - the sweep in
+   * `server/callback-chase.ts` files them under Cancelled/Unqualified on the next tick - but a
+   * bucket that simply shrinks by four overnight with nothing said is how people conclude the
+   * desk lost their leads. This is the sentence that explains where they went.
+   *
+   * Non-zero only in the window between the chase expiring and the sweep running, so on a healthy
+   * install it reads 0 nearly all the time. A number that stays high means the sweep is not
+   * ticking, which is worth seeing.
+   */
+  callbackExhausted: number;
+  /**
+   * The founder's chase settings, echoed so the desk can explain the rule it is applying.
+   *
+   * `closesWhenExhausted` rides along because the sentence under the bucket changes with it: with
+   * the close-out off the cards stay where they are, and telling a caller their prospects have
+   * been filed under Cancelled/Unqualified when they are still sitting on the board would send
+   * them looking for leads in the wrong column.
+   */
+  callbackRule: { gapHours: number; maxCallbacks: number; closesWhenExhausted: boolean };
   /** Server clock at build time, so the client countdown doesn't drift off a wrong local clock. */
   now: string;
 };
@@ -440,6 +490,61 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
   /** True while a lead is resting off the discretionary buckets after its most recent call. */
   const resting = (leadId: string) => lastCallAt.has(leadId);
 
+  /**
+   * ── The call-back chase ────────────────────────────────────────────────────────
+   *
+   * A lead is IN the chase when it has opted in, has been spoken to, and still has no booking.
+   * Every lead reaching the bucket assignment below has already connected - `bucketForLead`
+   * returns a bucket for anything that has not - so the connection is implied and only the
+   * journey needs testing here.
+   *
+   * IGNORED journeys are excluded: the SOP has already given that prospect up, and a second
+   * engine re-opening the chase would resurrect leads the process closed on purpose.
+   *
+   * `isChaseableStage` is the same list the close-out sweep uses, and it is what keeps the two
+   * honest with each other - see CHASEABLE_STAGES. It also fixes a smaller wrong: a lead whose
+   * stage says a call IS booked, but whose journey never got linked to one, used to be listed as
+   * "not yet booked" on the strength of the missing link alone.
+   */
+  const inChase = (l: (typeof openLeads)[number]): boolean =>
+    Boolean(l.outreachJourney) &&
+    !l.outreachJourney!.bookingId &&
+    l.outreachJourney!.phase !== "IGNORED" &&
+    isChaseableStage(l.stage);
+
+  /**
+   * Every dial on the chase candidates, as scalars.
+   *
+   * Deliberately NOT the `_max(calledAt)` groupBy above, and deliberately not capped. The chase
+   * needs four facts per lead - first connection, last dial, its outcome, and how many dials came
+   * after the connection - and a grouped max can supply only one of them. `summariseCalls` is the
+   * shared reducer, so the desk and the close-out sweep count a prospect's chances identically.
+   *
+   * The read is bounded structurally rather than by a `take`: the candidate set is capped by
+   * the two working-set reads above, and a lead LEAVES the chase after the founder's maximum
+   * number of call-backs, so dials per lead cannot grow without bound. A `take` here would be
+   * worse than no cap - truncating newest-first loses the first connection and drops the lead out
+   * of the bucket entirely, truncating oldest-first loses the last dial and lists a lead that was
+   * rung five minutes ago.
+   */
+  const chaseIds = openLeads.filter(inChase).map((l) => l.id);
+  const chaseCalls = chaseIds.length
+    ? await prisma.callLog.findMany({
+        where: { leadId: { in: chaseIds } },
+        select: { leadId: true, calledAt: true, outcome: true },
+      })
+    : [];
+  const callsByLead = new Map<string, { calledAt: Date; outcome: string }[]>();
+  for (const c of chaseCalls) {
+    const list = callsByLead.get(c.leadId);
+    if (list) list.push(c);
+    else callsByLead.set(c.leadId, [{ calledAt: c.calledAt, outcome: c.outcome }]);
+  }
+  const chaseFor = (leadId: string): CallbackVerdict =>
+    callbackVerdict(summariseCalls(callsByLead.get(leadId) ?? []), callCfg.callbackChase, now);
+  /** Chases that ran out this cycle - reported under the bucket, not listed in it. */
+  let callbackExhausted = 0;
+
   for (const l of openLeads) {
     const optInAt = l.outreachJourney?.optInAt ?? l.createdAt;
     const first = l.callLogs[0];
@@ -467,6 +572,8 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
       // No booking to prefer here - the dial queue is by definition prospects who have not
       // booked yet, so the lead's own score is the only one that exists.
       bant: resolveBant(null, l),
+      // Filled in only on the call-back bucket below. See `L1QueueLead.callback`.
+      callback: null,
     };
 
     /**
@@ -518,11 +625,51 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
      * The SLA buckets above are deliberately NOT rested: those are same-day commitments, and a
      * lead that rang out this morning is still owed a connection this afternoon.
      */
+    /**
+     * ── Spoken to, still not booked: the call-back chase ─────────────────────────
+     *
+     * This bucket used to be a STANDING condition - "has a journey and no booking" - rested by
+     * the same global `followUpRestHours` as old leads and workshop follow-up. So it could say
+     * how many people had not booked, and nothing else: not who had already been chased three
+     * times, not when it was fair to ring back, and not when to stop. A prospect could be rung
+     * indefinitely, and the caller had no way to tell a first attempt from a fifth.
+     *
+     * Now the bucket IS the chase, and the four states it can be in are handled here rather than
+     * collapsed into "show it / don't":
+     *
+     *   DUE         - the gap has closed and a call-back is owed. The only state that lists.
+     *   RESTING     - rung within the last `gapHours`. Off the screen, on purpose.
+     *   EXHAUSTED   - every call-back spent. Counted for the note under the bucket; the sweep in
+     *                 server/callback-chase.ts files it under Cancelled/Unqualified.
+     *   REFUSED     - they said no. Unreachable in practice (a refusal moves the lead to LOST and
+     *                 `callable` excludes that), handled anyway so a stage left behind by a failed
+     *                 write cannot restart a chase against someone who declined.
+     *
+     * `continue` in every case: a lead in the chase belongs to no other bucket. Falling through
+     * would file a rested prospect under "old leads" the moment they aged past thirty days, which
+     * is the double-listing the rest window exists to prevent.
+     */
+    if (inChase(l)) {
+      const v = chaseFor(l.id);
+      if (v.state === "DUE") {
+        entry.callback = {
+          round: v.round,
+          maxCallbacks: v.maxCallbacks,
+          callbacksMade: v.callbacksMade,
+          lastCallAt: v.lastCallAt!.toISOString(),
+          hoursSinceLastCall: Math.max(0, Math.floor((now.getTime() - v.lastCallAt!.getTime()) / 3_600_000)),
+          dueSince: v.nextDueAt!.toISOString(),
+        };
+        queue.OPTED_NOT_BOOKED.push(entry);
+      } else if (v.state === "EXHAUSTED") {
+        callbackExhausted++;
+      }
+      continue;
+    }
+
     if (resting(l.id)) continue;
 
-    if (l.outreachJourney && !l.outreachJourney.bookingId && l.outreachJourney.phase !== "IGNORED") {
-      queue.OPTED_NOT_BOOKED.push(entry);
-    } else if (l.leadSource === "WORKSHOP" && optInAt >= workshopCutoff) {
+    if (l.leadSource === "WORKSHOP" && optInAt >= workshopCutoff) {
       queue.WORKSHOP.push(entry);
     } else if (optInAt < oldLeadCutoff) {
       queue.OLD_LEADS.push(entry);
@@ -566,7 +713,20 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
       ).score,
     ]),
   );
-  for (const key of ["DAY_DUE", "NIGHT_DUE", "EARLY_DUE", "OPTED_NOT_BOOKED", "WORKSHOP", "OLD_LEADS"] as const) {
+  /**
+   * The call-back list sorts by WAIT, not by score.
+   *
+   * Every lead here has already been spoken to, so the ranking weights - which exist to decide
+   * who to approach first out of a cold pile - have had their say. What is left to decide is who
+   * has been kept waiting longest since their call-back fell due, and that is a fairness question
+   * with one right answer. Ties fall back to the founder's ranking.
+   */
+  queue.OPTED_NOT_BOOKED.sort(
+    (a, b) =>
+      (a.callback?.dueSince ?? "").localeCompare(b.callback?.dueSince ?? "") ||
+      (scoreFor.get(b.id) ?? 0) - (scoreFor.get(a.id) ?? 0),
+  );
+  for (const key of ["DAY_DUE", "NIGHT_DUE", "EARLY_DUE", "WORKSHOP", "OLD_LEADS"] as const) {
     queue[key].sort(
       (a, b) =>
         (scoreFor.get(b.id) ?? 0) - (scoreFor.get(a.id) ?? 0) || a.optInAt.localeCompare(b.optInAt),
@@ -680,6 +840,12 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
     },
     tomorrow,
     ownedCallable,
+    callbackExhausted,
+    callbackRule: {
+      gapHours: callCfg.callbackChase.gapHours,
+      maxCallbacks: callCfg.callbackChase.maxCallbacks,
+      closesWhenExhausted: callCfg.callbackChase.closeWhenExhausted,
+    },
     now: now.toISOString(),
   };
 });

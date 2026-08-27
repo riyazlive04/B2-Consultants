@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarClock, CloudOff, CloudUpload, PhoneCall, Target, Timer } from "lucide-react";
+import { CalendarClock, CloudOff, CloudUpload, PhoneCall, PhoneOutgoing, Target, Timer } from "lucide-react";
 import type { L1Desk as L1DeskData, L1QueueLead } from "@/server/l1-desk-metrics";
 import { syncLagLabel } from "@/lib/offline-calls";
 import {
@@ -95,6 +95,40 @@ function SinceOptIn({ optInAt, initialMs }: { optInAt: string; initialMs: number
   );
 }
 
+/**
+ * "Call-back 2 of 3" - where this prospect stands in the chase.
+ *
+ * Shown only on the call-back bucket, and it is the whole reason that bucket was rebuilt: the
+ * list used to say who had not booked and nothing about who had already been asked three times.
+ * A caller working top-down needs to know whether they are making a first approach or spending
+ * someone's last chance, because those are different conversations.
+ *
+ * The FINAL call-back is coloured as a breach rather than a warning. It is not "running late",
+ * it is the last one - after this the file closes on its own - and that is worth a caller's
+ * attention in the way an amber chip among twenty amber chips is not.
+ */
+function CallbackChip({ round, maxCallbacks }: { round: number; maxCallbacks: number }) {
+  const last = round >= maxCallbacks;
+  return (
+    <span
+      className="tnum inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold"
+      style={{
+        background: last ? "var(--bad-bg)" : "var(--warn-bg)",
+        color: last ? "var(--bad)" : "var(--warn)",
+      }}
+      title={
+        last
+          ? `Last call-back. If they still don't book, the card moves to Cancelled/Unqualified on its own.`
+          : `You have called back ${round - 1} time${round - 1 === 1 ? "" : "s"} already.`
+      }
+    >
+      <PhoneOutgoing size={12} aria-hidden />
+      Call-back {round} of {maxCallbacks}
+      {last && <span className="sr-only"> - the last one</span>}
+    </span>
+  );
+}
+
 function FiveMinuteCountdown({
   deadline,
   initialMsLeft,
@@ -145,7 +179,11 @@ function QueueRow({
     <li className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/pipeline?lead=${lead.id}`} className="truncate font-medium text-ink hover:underline">
+          {/* The contact record, not the pipeline board. This used to link to
+              `/pipeline?lead=<id>`, a parameter that page has never read - so every name on the
+              desk opened the same unfiltered board. `/contacts/<id>` is the card that actually
+              holds this prospect's history: every call, every message, every stage move. */}
+          <Link href={`/contacts/${lead.id}`} className="truncate font-medium text-ink hover:underline">
             {lead.name}
           </Link>
           {bucket === "FIVE_MINUTE" && (
@@ -158,6 +196,9 @@ function QueueRow({
               person been waiting" is exactly the question the caller needs answered. */}
           {bucket === "NOT_BOOKED_AFTER_MESSAGE" && (
             <SinceOptIn optInAt={lead.optInAt} initialMs={lead.msSinceOptIn} />
+          )}
+          {lead.callback && (
+            <CallbackChip round={lead.callback.round} maxCallbacks={lead.callback.maxCallbacks} />
           )}
           {/* Only when there IS a score. A "Not scored" chip on every row of a 25-row queue is
               noise - most leads have never been asked, and that is the normal case, not a
@@ -176,7 +217,15 @@ function QueueRow({
         <p className="mt-0.5 truncate text-caption text-muted">
           {lead.phone ?? "no number"}
           {lead.city ? ` · ${lead.city}` : ""} · {LEAD_SOURCE_LABELS[lead.leadSource] ?? lead.leadSource}
-          {lead.callCount > 0 ? ` · ${lead.callCount} call${lead.callCount === 1 ? "" : "s"} logged` : " · never called"}
+          {/* On a call-back row the useful fact is WHEN, not how many: the caller is deciding
+              whether enough time has passed to ring again, and "3 calls logged" does not answer
+              that. Everywhere else the count stays, because there the question really is
+              "has anyone tried this person at all". */}
+          {lead.callback
+            ? ` · last called ${lead.callback.hoursSinceLastCall}h ago`
+            : lead.callCount > 0
+              ? ` · ${lead.callCount} call${lead.callCount === 1 ? "" : "s"} logged`
+              : " · never called"}
         </p>
       </div>
       {/* Two clearly distinct actions (Error Log L3): "Call" dials, "Log outcome" records. The
@@ -287,7 +336,14 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
                       </span>
                     </CardTitle>
                   }
-                  subtitle={`${meta.why} · ${meta.target}`}
+                  subtitle={
+                    /* The call-back bucket states the RULE it is applying, because the rule is the
+                       only thing that explains why a lead you rang this morning is not on the
+                       screen. Without it a caller reads the absence as the desk having lost them. */
+                    bucket === "OPTED_NOT_BOOKED"
+                      ? `${meta.why} Each reappears ${desk.callbackRule.gapHours}h after your last call, up to ${desk.callbackRule.maxCallbacks} time${desk.callbackRule.maxCallbacks === 1 ? "" : "s"}.`
+                      : `${meta.why} · ${meta.target}`
+                  }
                 >
                   <ul className="-mx-4 -mb-2">
                     {leads.map((l) => (
@@ -297,6 +353,23 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
                   {count > leads.length && (
                     <p className="mt-3 text-caption text-muted">
                       Showing the {leads.length} most urgent of {count}. Work these first - the rest move up as you clear them.
+                    </p>
+                  )}
+                  {/* Where the ones that vanished went.
+
+                      A bucket that quietly shrinks overnight is how people conclude the desk has
+                      lost their leads, and "we gave up on four of your prospects" is not something
+                      a screen should leave unsaid. Only rendered while there ARE any, which on a
+                      healthy install is the short window between a chase running out and the cron
+                      filing it - so a number that sits here for days means the sweep is not
+                      ticking, which is itself worth seeing. */}
+                  {bucket === "OPTED_NOT_BOOKED" && desk.callbackExhausted > 0 && (
+                    <p className="mt-3 text-caption text-muted">
+                      {desk.callbackExhausted} more had all {desk.callbackRule.maxCallbacks} call-back
+                      {desk.callbackRule.maxCallbacks === 1 ? "" : "s"} and still didn&apos;t book.
+                      {desk.callbackRule.closesWhenExhausted
+                        ? " They're being closed to Cancelled/Unqualified, so they aren't yours to chase any more."
+                        : " The chase has stopped, so they won't come back here - their cards stay where they are on the board."}
                     </p>
                   )}
                 </Card>

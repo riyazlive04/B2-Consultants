@@ -9,6 +9,7 @@ import { hasCapability, capabilityDeniedMessage } from "@/lib/capabilities";
 import { formatDateTimeInZone } from "@/lib/format";
 import { coerceOutreachConfig, DEFAULT_SLA, qualifiedFromBant, STEP_BY_KEY } from "@/lib/outreach-sop";
 import { logActivity, diffFields } from "./activity-log";
+import { markDiscoveryConfirmed } from "./lead-stage-auto";
 import {
   getJourney,
   markSent,
@@ -155,7 +156,8 @@ export async function logCallOutcome(form: FormData): Promise<ActionResult> {
 
   const log = await prisma.outreachStepLog.findUnique({
     where: { id: parsed.data.stepLogId },
-    include: { journey: { select: { lead: { select: { name: true } } } } },
+    // `leadId` rides along so a verbal YES can move the lead's card, not just the journey flag.
+    include: { journey: { select: { leadId: true, lead: { select: { name: true } } } } },
   });
   if (!log) return fail("Step not found");
   if (log.status !== "DUE") return fail(`This step is already ${log.status.toLowerCase()}`);
@@ -181,6 +183,9 @@ export async function logCallOutcome(form: FormData): Promise<ActionResult> {
       where: { id: log.journeyId },
       data: { whatsappConfirmed: true, whatsappConfirmedAt: new Date() },
     });
+    // A yes given to a telecaller is worth exactly as much as a yes typed into WhatsApp, so it
+    // moves the card the same way. That is the founder's second confirmation channel.
+    await markDiscoveryConfirmed(log.journey.leadId, "call").catch(() => undefined);
   }
 
   await refreshJourney(log.journeyId);
@@ -402,6 +407,9 @@ export async function setWhatsappConfirmed(form: FormData): Promise<ActionResult
     },
     include: { lead: { select: { name: true } } },
   });
+  // Only a YES moves the card. A NO leaves the lead where it is and red-flags the row above -
+  // "not confirmed" is not a funnel position, it is a reason to chase.
+  if (yes) await markDiscoveryConfirmed(j.leadId, "manual").catch(() => undefined);
   await refreshJourney(parsed.data.journeyId);
 
   await logActivity(session, {
@@ -640,6 +648,7 @@ const outreachConfigSchema = z.object({
   // Already stored in minutes, so it needs no conversion - only the same bounds.
   postBookingDelayMinutes: blankToUndefined(intInRange(0, 1440, "After-booking delay")),
   discoConfirmCallLeadHours: slaHours("Disco confirm calls"),
+  noShowSweepHours: slaHours("Write off after call"),
   discoConfirm1LeadHours: slaHours("Disco confirm 1"),
   discoConfirm2LeadHours: slaHours("Disco confirm 2"),
   discoCancelLeadHours: slaHours("Disco cancellation"),
@@ -699,6 +708,7 @@ export async function saveOutreachConfig(form: FormData): Promise<ActionResult> 
         d.finalCheckMinutes === undefined ? current.sla.finalCheckHours : Number(d.finalCheckMinutes) / 60,
       postBookingDelayMinutes: num(d.postBookingDelayMinutes, current.sla.postBookingDelayMinutes),
       discoConfirmCallLeadHours: num(d.discoConfirmCallLeadHours, current.sla.discoConfirmCallLeadHours),
+      noShowSweepHours: num(d.noShowSweepHours, current.sla.noShowSweepHours),
       discoConfirm1LeadHours: num(d.discoConfirm1LeadHours, DEFAULT_SLA.discoConfirm1LeadHours),
       discoConfirm2LeadHours: num(d.discoConfirm2LeadHours, DEFAULT_SLA.discoConfirm2LeadHours),
       discoCancelLeadHours: num(d.discoCancelLeadHours, DEFAULT_SLA.discoCancelLeadHours),

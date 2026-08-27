@@ -260,6 +260,116 @@ export function CallDistributionPanel({
         </div>
       </Card>
 
+      {/* ── The call-back chase ─────────────────────────────────────────────────── */}
+      <Card>
+        <p className="text-caption font-semibold uppercase text-ink-3">
+          Call-backs after you&apos;ve spoken to someone
+        </p>
+        <p className="mt-1 text-caption text-ink-3">
+          A prospect the team has spoken to who hasn&apos;t booked comes back onto the caller&apos;s
+          desk under <strong>&ldquo;Called, not booked - call back&rdquo;</strong>. This is how long
+          they rest between attempts and how many attempts they get before the team stops chasing.
+          It is separate from the rest window below, which governs cold work measured in days.
+        </p>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="text-caption uppercase text-ink-3">
+            Wait between call-backs (hours)
+            <span className="mt-1 block">
+              <NumInput
+                value={draft.callbackChase.gapHours}
+                min={1}
+                max={168}
+                onChange={(v) =>
+                  setDraft((d) => ({ ...d, callbackChase: { ...d.callbackChase, gapHours: v } }))
+                }
+              />
+            </span>
+            <span className="mt-1 block normal-case text-ink-3">
+              After every call the prospect drops off the list for this long, then reappears. Any
+              call restarts it - including one that rang out, because the caller still did the work.
+            </span>
+          </label>
+
+          <label className="text-caption uppercase text-ink-3">
+            How many call-backs before giving up
+            <span className="mt-1 block">
+              <NumInput
+                value={draft.callbackChase.maxCallbacks}
+                min={1}
+                max={20}
+                onChange={(v) =>
+                  setDraft((d) => ({ ...d, callbackChase: { ...d.callbackChase, maxCallbacks: v } }))
+                }
+              />
+            </span>
+            <span className="mt-1 block normal-case text-ink-3">
+              How many times the desk asks for a call-back. The first conversation isn&apos;t one of
+              them - it&apos;s the call being called back from.
+            </span>
+          </label>
+        </div>
+
+        {/* Says what the numbers above will actually do, on a clock. Two integers do not tell a
+            founder that they have just set the team to give up on a prospect inside a working day,
+            and that is exactly the mistake this box exists to make visible before it is saved. */}
+        <p className="mt-3 rounded-field bg-surface-2 px-3 py-2 text-caption text-ink-3">
+          As set: you speak to someone, and if they haven&apos;t booked they come back{" "}
+          <strong className="text-ink">{draft.callbackChase.gapHours} hours</strong> later,{" "}
+          <strong className="text-ink">{draft.callbackChase.maxCallbacks} time
+          {draft.callbackChase.maxCallbacks === 1 ? "" : "s"}</strong> in all. If they still
+          haven&apos;t booked{" "}
+          {draft.callbackChase.gapHours * (draft.callbackChase.maxCallbacks + 1) >= 24
+            ? `about ${Math.round((draft.callbackChase.gapHours * (draft.callbackChase.maxCallbacks + 1)) / 24)} day${Math.round((draft.callbackChase.gapHours * (draft.callbackChase.maxCallbacks + 1)) / 24) === 1 ? "" : "s"}`
+            : `${draft.callbackChase.gapHours * (draft.callbackChase.maxCallbacks + 1)} hours`}{" "}
+          after that first conversation, the chase ends.
+        </p>
+
+        <div className="mt-4 space-y-3 border-t border-line pt-4">
+          <div>
+            <Toggle
+              checked={draft.callbackChase.closeWhenExhausted}
+              onChange={(v) =>
+                setDraft((d) => ({ ...d, callbackChase: { ...d.callbackChase, closeWhenExhausted: v } }))
+              }
+              label="Move the card to Cancelled/Unqualified when the chase ends"
+            />
+            <p className="mt-1 text-caption text-ink-3">
+              {draft.callbackChase.closeWhenExhausted ? (
+                <>
+                  The card leaves the caller&apos;s desk and is filed under Cancelled/Unqualified,
+                  with the reason written into the lead&apos;s history. Off, the chase still stops
+                  but the card sits in its current column until somebody moves it.
+                </>
+              ) : (
+                <>
+                  <strong className="text-ink">Nothing is filed.</strong> The prospect stops
+                  appearing for call-backs, but the card stays where it is, so the board will
+                  gradually fill with leads nobody is chasing any more.
+                </>
+              )}
+            </p>
+          </div>
+
+          <div>
+            <Toggle
+              checked={draft.callbackChase.notifyOnClose}
+              onChange={(v) =>
+                setDraft((d) => ({ ...d, callbackChase: { ...d.callbackChase, notifyOnClose: v } }))
+              }
+              label="Send the prospect a WhatsApp when the chase ends"
+            />
+            <p className="mt-1 text-caption text-ink-3">
+              Sent automatically, with no one pressing send. It currently uses the{" "}
+              <strong>SOP 7b &ldquo;still not booked&rdquo;</strong> template - so bind an approved
+              template to that touchpoint in WhatsApp → Settings, or nothing goes out and the reason
+              is written on the message row. Someone who said &ldquo;not interested&rdquo; or gave a
+              wrong number is never messaged: that ends the chase on the spot.
+            </p>
+          </div>
+        </div>
+      </Card>
+
       {/* ── Ranking ─────────────────────────────────────────────────────────────── */}
       <Card>
         <p className="text-caption font-semibold uppercase text-ink-3">Which lead comes first</p>

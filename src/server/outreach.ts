@@ -376,6 +376,26 @@ export async function runDueOutreach(): Promise<OutreachRun> {
     const row = await getJourney(id);
     if (!row) continue;
 
+    /**
+     * ── Close Step 11's row whenever a verdict exists. ──
+     *
+     * Recording the verdict on the JOURNEY without closing the STEP left the whole disco ladder
+     * unreachable: Steps 13-17 are gated on Step 11 having been acted, so two prospects
+     * (25/08/2026) sat at `qualified: YES` with no welcome, no confirmation reminders and no
+     * cancellation - their calls came and went untouched.
+     *
+     * Written as a reconciliation over "has a verdict" rather than inside the branch that just
+     * computed one, deliberately: the branch only runs when `qualified` was still null, so a
+     * journey verdicted BEFORE this fix - or by a human in the UI - would never be repaired by it
+     * and would stay stuck for good.
+     */
+    if (row.qualified) {
+      await prisma.outreachStepLog.updateMany({
+        where: { journeyId: id, step: "BANT_QUALIFICATION", status: "DUE" },
+        data: { status: "SENT", actedAt: now, outcome: row.qualified },
+      });
+    }
+
     // ── Auto-derive the Qualified verdict from BANT (Step 11). The verdict is a pure function of
     // the score, so the engine can take it; a human can still override it in the UI.
     //
@@ -488,6 +508,63 @@ export async function runDueOutreach(): Promise<OutreachRun> {
           meta: { freedSlot: res.freedSlot },
         });
       }
+    }
+
+    /**
+     * ── The call came and went. ──
+     *
+     * The SOP ladder is entirely pre-call: every confirmation and cancellation window is
+     * measured BEFORE the slot. So a prospect who booked, never confirmed, and never showed had
+     * nothing at all happen to them once the time passed - the card stayed in "Discovery Call
+     * Booked" indefinitely and the board went on counting a call that never took place. That is
+     * exactly what happened to two prospects on 26/08/2026.
+     *
+     * Deliberately narrow. It fires ONLY when all of these hold:
+     *   · the slot start is more than `noShowSweepHours` in the past (grace for a late call, or
+     *     a specialist who has not logged the outcome yet),
+     *   · the booking is still BOOKED - anyone who marked it COMPLETED, NO_SHOW or CANCELLED has
+     *     said what happened, and their answer is not overwritten,
+     *   · the prospect never confirmed.
+     * A confirmed prospect who simply did not show is left alone: that is a no-show for a human
+     * to judge, not a cancellation.
+     */
+    const sweepBefore = new Date(now.getTime() - cfg.sla.noShowSweepHours * 3_600_000);
+    const stale = await prisma.outreachJourney.findUnique({
+      where: { id },
+      select: {
+        whatsappConfirmed: true,
+        booking: { select: { id: true, status: true, slotId: true, slot: { select: { startsAt: true } } } },
+      },
+    });
+    const staleSlot = stale?.booking?.slot?.startsAt;
+    if (
+      stale &&
+      !stale.whatsappConfirmed &&
+      stale.booking?.status === "BOOKED" &&
+      staleSlot &&
+      staleSlot < sweepBefore
+    ) {
+      const freedSlotId = stale.booking.slotId;
+      await prisma.$transaction(async (tx) => {
+        // NO_SHOW rather than CANCELLED: the slot was consumed - nobody else could book it - and
+        // recording it as cancelled would understate how much calendar the no-shows are costing.
+        await tx.bookingRequest.update({ where: { id: stale.booking!.id }, data: { status: "NO_SHOW" } });
+        if (freedSlotId) {
+          await tx.appointmentSlot.update({ where: { id: freedSlotId }, data: { status: "OPEN" } });
+        }
+      });
+      // "Cancelled/Unqualified" on the board is LeadStage LOST. Only from the stages that mean
+      // "still in the discovery conversation" - a lead someone has since moved on is left alone.
+      await advanceLeadStage(leadId, "LOST", ["STRATEGY_CALL_BOOKED", "DISCO_BOOKED", "DISCO_NOT_BOOKED"]);
+      await logSystemActivity(SYSTEM_ACTORS.outreach, {
+        action: "outreach.disco.noshow",
+        section: "outreach",
+        entityType: "OutreachJourney",
+        entityId: id,
+        summary: `${lead.name} never confirmed and the call time passed - moved to Cancelled/Unqualified`,
+        meta: { slotAt: staleSlot.toISOString() },
+      });
+      run.phaseChanges++;
     }
 
     // ── Auto-send anything the admin has opted in AND that is actually due.

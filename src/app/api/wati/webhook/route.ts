@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { takeToken, tooManyRequests, RATE_RULES } from "@/lib/rate-limit";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { readWatiSettings } from "@/lib/wati";
+import { isConfirmationReply } from "@/lib/confirmation-reply";
+import { markDiscoveryConfirmed } from "@/server/lead-stage-auto";
 
 /**
  * Inbound WATI webhook - two jobs:
@@ -55,25 +57,6 @@ function isStopMessage(text: string): boolean {
   return /^\s*(stop|unsubscribe|opt[\s-]?out|cancel|remove me)\b/i.test(text);
 }
 
-/**
- * Does this reply actually CONFIRM attendance?
- *
- * The SOP's confirmation templates say "Please reply *YES* to confirm your participation", and the
- * Key Metrics "WhatsApp Confirmed" column is meant to mean exactly that. Treating any inbound text
- * as a confirmation - which is what this webhook used to do - marks "no thanks, not interested" as
- * confirmed, and the prospect keeps a slot they've just declined.
- *
- * Deliberately narrow and fail-closed: an unrecognised reply is NOT a confirmation, it simply
- * stays a reply for the specialist to read and action by hand (outreach-actions.setWhatsappConfirmed).
- * Accepting a few common phrasings around the SOP's own instruction is the whole scope here - this
- * is not sentiment analysis, and it must never guess.
- */
-function isConfirmationMessage(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  // Reject explicit negations first: "no", "not yes", "yes... actually no" must never confirm.
-  if (/\b(no|not|can'?t|cannot|won'?t|unable|reschedule|another time|busy)\b/.test(t)) return false;
-  return /^\s*(yes|yess+|ya|yeah|yep|yup|sure|ok(ay)?|confirmed?|confirming|i'?m in|will join|joining|👍|✅)\b/i.test(t);
-}
 
 /**
  * Apply a delivery-status callback.
@@ -138,6 +121,9 @@ async function confirmJourneyFor(leadId: string): Promise<void> {
       where: { id: journey.id },
       data: { whatsappConfirmed: true, whatsappConfirmedAt: now },
     });
+    // The flag alone was invisible on the board. This is the prospect saying yes, which is
+    // precisely what "Pre-Qualified & Confirmed" means - see markDiscoveryConfirmed.
+    await markDiscoveryConfirmed(leadId, "whatsapp").catch(() => undefined);
   }
 }
 
@@ -177,7 +163,7 @@ async function handleInbound(sender: string, text: string): Promise<void> {
     // …but REPLIED is NOT the same as confirmed. The SOP's "WhatsApp Confirmed" / "Sales Call
     // Confirmed" columns (and the booking's confirmedAt) mean the prospect said yes, so only an
     // actual YES flips them. Anything else stays a reply for a human to read.
-    if (isConfirmationMessage(text)) {
+    if (isConfirmationReply(text)) {
       if (lastOutbound.leadId) await confirmJourneyFor(lastOutbound.leadId);
       if (lastOutbound.bookingRequestId) await confirmBookingFor(lastOutbound.bookingRequestId);
     }

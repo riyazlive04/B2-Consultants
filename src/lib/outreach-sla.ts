@@ -187,9 +187,15 @@ export const QUEUE_BUCKET_META: Record<
     why: "Arrived before 09:00 - owed a connection today.",
     target: "100% same day",
   },
+  /**
+   * Was "Opted in, not yet booked" - a standing list of everyone without a booking, which said
+   * nothing about who had already been chased and how often. It is now the call-back chase
+   * (lib/callback-chase.ts): spoken to, no booking, rung a bounded number of times at a fixed
+   * gap, then given up on. The KEY is unchanged so nothing that reads it has to move.
+   */
   OPTED_NOT_BOOKED: {
-    title: "Opted in, not yet booked",
-    why: "Replaces reconciling the opt-in sheet against the booking sheet by hand.",
+    title: "Called, not booked - call back",
+    why: "You spoke to these and they haven't booked. Each reappears once the call-back gap has passed.",
     target: "30–40% of leads booked",
   },
   OLD_LEADS: {

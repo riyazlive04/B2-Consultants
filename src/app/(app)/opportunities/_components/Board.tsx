@@ -23,7 +23,7 @@ import {
   getOpportunityNotes, createOpportunityNote, toggleOpportunityNotePin, deleteOpportunityNote,
   type OpportunityNote,
 } from "@/server/opportunities-actions";
-import { LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
+import { COLUMN_OWNING_STAGES, LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
 import { SYNAMATE_STAGES } from "@/lib/pipeline-stages";
 import { OpportunityDialog } from "./OpportunityDialog";
 import { SpeedToLeadReport } from "./SpeedToLeadReport";
@@ -43,9 +43,17 @@ const BANT_PASS = 2;
 // Options for mapping a stage back to a lead-lifecycle stage (the bridge that syncs a card move to
 // Lead.stage). "" = no sync; the board stays a standalone process - offered on custom pipelines
 // only, since an unmapped column on the default board swallows deals (opportunities-actions).
+/**
+ * Only stages that can actually OWN a column.
+ *
+ * This offered all seventeen, and three of them were dead choices: `DISCO_NOT_BOOKED`,
+ * `DISCO_COMPLETED` and `PROPOSAL_SENT` fold into another stage's column, so `boardColumnFor`
+ * sends their leads elsewhere and a column mapped to one of them never receives a card. The
+ * mapping saved, the toast said it worked, and the column stayed empty forever.
+ */
 const LIFECYCLE_OPTS = [
   { value: "", label: "- No lead-stage sync -" },
-  ...Object.entries(LEAD_STAGE_LABELS).map(([value, label]) => ({ value, label })),
+  ...COLUMN_OWNING_STAGES.map((value) => ({ value, label: LEAD_STAGE_LABELS[value] ?? value })),
 ];
 const LIFECYCLE_OPTS_REQUIRED = LIFECYCLE_OPTS.slice(1);
 

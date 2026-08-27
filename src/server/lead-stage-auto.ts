@@ -37,6 +37,72 @@ export async function advanceLeadStageForWhatsApp(leadId: string, kind: WhatsApp
 }
 
 /**
+ * The prospect has CONFIRMED they will attend - move them to "Pre-Qualified & Confirmed".
+ *
+ * ── The distinction this exists to record (founder, 27/08/2026) ──────────────────
+ *   "BANT only pre-qualifies but the lead have to manually confirm over the WhatsApp message
+ *    reply or confirm over the call (by telecaller) or over the email, then they have to be
+ *    moved to this (Pre-Qualified & Confirmed) stage."
+ *
+ * So there are two different facts and two different columns:
+ *   Discovery Call Booked      - a slot is held, and BANT has scored them automatically.
+ *   Pre-Qualified & Confirmed  - a HUMAN said yes. Scoring cannot produce this; only the
+ *                                prospect can, on whichever channel they happen to answer on.
+ *
+ * ── Why it is one function and not four ─────────────────────────────────────────
+ * Four places already recorded a confirmation - the WATI reply webhook, a telecaller logging a
+ * verbal yes on a Step 16 call, a specialist ticking the Key Metrics column, and the Bookings
+ * confirm loop - and not one of them moved the card. That is why the board reads 3 in Discovery
+ * Call Booked and 0 in Pre-Qualified & Confirmed: the column had no writer at all.
+ *
+ * Adding the move at each site separately would leave the same gap open for the fifth channel.
+ * This is the one place the rule lives, exactly as `advanceLeadStageForWhatsApp` above is the one
+ * place the "a sent intro moves the card" rule lives.
+ *
+ * ── The `from` whitelist ────────────────────────────────────────────────────────
+ * Confirmation is evidence about the EARLY funnel, so it may only pull a lead forward from there.
+ * A prospect already at DISCO_COMPLETED or SSS_BOOKED has overtaken this signal and is left alone
+ * (`advanceLeadStage` enforces it). DISCO_NOT_BOOKED is included on purpose: the auto-cancel
+ * ladders and the call-back close-out both file leads there, and someone who then answers is
+ * plainly still live - a confirmation should be able to bring them back.
+ *
+ * Returns whether the card actually moved, so the caller can log it honestly.
+ */
+export async function markDiscoveryConfirmed(
+  leadId: string,
+  channel: "whatsapp" | "call" | "email" | "manual",
+): Promise<boolean> {
+  const moved = await advanceLeadStage(leadId, "DISCO_BOOKED", [
+    "NEW_LEAD",
+    "WHATSAPP_SENT",
+    "STRATEGY_CALL_BOOKED",
+    "DISCO_NOT_BOOKED",
+  ]);
+  if (!moved) return false;
+
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true } });
+  await logSystemActivity(SYSTEM_ACTORS.outreach, {
+    action: "lead.stage.change",
+    section: "pipeline",
+    entityType: "Lead",
+    entityId: leadId,
+    // The CHANNEL is in the sentence, not just the meta. "Confirmed" and "confirmed by replying
+    // to the WhatsApp" are different amounts of evidence, and the person auditing a slot that was
+    // held for someone who never turned up needs to know which one they are looking at.
+    summary: `${lead?.name ?? "A lead"} confirmed their discovery call ${CONFIRM_CHANNEL[channel]} - moved to Pre-Qualified & Confirmed`,
+    meta: { channel, toStage: "DISCO_BOOKED" },
+  });
+  return true;
+}
+
+const CONFIRM_CHANNEL: Record<"whatsapp" | "call" | "email" | "manual", string> = {
+  whatsapp: "by replying to the WhatsApp",
+  call: "on a call with the telecaller",
+  email: "by replying to the email",
+  manual: "(recorded by a specialist)",
+};
+
+/**
  * Give an unowned lead a caller through the first-call rotation (Nilofer 80 / Asma 20 as
  * configured) and put that owner on its board card. No-op when the lead already has an owner -
  * a manual reassignment is never overridden - or when no rotation is configured.

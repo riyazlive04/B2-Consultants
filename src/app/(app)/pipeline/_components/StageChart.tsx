@@ -9,12 +9,16 @@ import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, PROGRAM_LEVEL_LABELS } from "@/l
 import type { LeadRow } from "@/server/pipeline-metrics";
 
 // Live stage distribution: where every lead sits right now (Section B stages).
-const STAGE_ORDER = [
-  "NEW_LEAD", "DISCO_BOOKED", "DISCO_NOT_BOOKED", "DISCO_COMPLETED",
-  "SSS_BOOKED", "SSS_COMPLETED", "PROPOSAL_SENT",
-  "SENT_TO_WORKSHOP", "WORKSHOP_FOLLOWUP", "OFFER_FOLLOWUP", "DEPOSIT_FOLLOWUP", "DEPOSIT_PAID",
-  "WON", "LOST", "NO_SHOW",
-] as const;
+/**
+ * Every stage, in funnel order.
+ *
+ * `WHATSAPP_SENT` and `STRATEGY_CALL_BOOKED` were added as board columns on 06/08/2026 and never
+ * reached this list, so the two busiest early-funnel stages were missing from a chart whose whole
+ * job is "where does every lead sit right now" - their leads were simply not drawn. Taken from
+ * LEAD_STAGE_LABELS now, which is already written in funnel order, so the next stage added
+ * appears here without anyone remembering to.
+ */
+const STAGE_ORDER = Object.keys(LEAD_STAGE_LABELS);
 
 const stageColor = (s: string) =>
   s === "WON" || s === "DEPOSIT_PAID" ? "var(--ok)"

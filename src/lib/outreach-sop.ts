@@ -733,6 +733,19 @@ export type OutreachSla = {
    * that is the scale it operates at.
    */
   postBookingDelayMinutes: number;
+  /**
+   * How many hours AFTER a discovery call's start time the engine writes it off when nobody
+   * confirmed and nobody recorded an outcome.
+   *
+   * Every other window in the disco ladder is measured BEFORE the call. Nothing was measured
+   * after it, so a prospect who never confirmed simply sat in "Discovery Call Booked" once their
+   * slot had come and gone - the board kept counting a call that never happened. This is the
+   * sweep that closes them.
+   *
+   * A grace period, not a deadline: the call may be running late, or the specialist may not have
+   * logged the outcome yet, and writing someone off mid-conversation would be worse than waiting.
+   */
+  noShowSweepHours: number;
 };
 
 export const DEFAULT_SLA: OutreachSla = {
@@ -759,6 +772,7 @@ export const DEFAULT_SLA: OutreachSla = {
   sssCancelLeadHours: 10,
   discoConfirmCallLeadHours: 12,
   postBookingDelayMinutes: 5,
+  noShowSweepHours: 2,
 };
 
 export type OutreachConfig = {

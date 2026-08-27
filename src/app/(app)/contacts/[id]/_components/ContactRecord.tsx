@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Pencil, Plus, X, StickyNote, GitBranch, MessageCircle, PhoneCall,
+  ArrowLeft, Pencil, Plus, X, StickyNote, GitBranch, MessageCircle, PhoneCall, PhoneOutgoing,
   CalendarCheck, CheckCircle2, Pin, Trash2, Clock, GraduationCap,
 } from "lucide-react";
 import type { CustomFieldDefinition } from "@prisma/client";
@@ -42,7 +42,10 @@ const TONE_TEXT: Record<Tone, string> = {
 
 const KIND_ICON = {
   NOTE: StickyNote, STAGE_CHANGE: GitBranch, WHATSAPP: MessageCircle,
-  OUTCOME: PhoneCall, BOOKING: CalendarCheck, TASK: CheckCircle2,
+  // OUTCOME is a DISCOVERY call graded by the specialist; CALL is one dial by a telecaller. Two
+  // different events that both involve a phone, so they get two different phone icons rather than
+  // one - a timeline where the give-up is preceded by three identical rows explains nothing.
+  OUTCOME: PhoneCall, CALL: PhoneOutgoing, BOOKING: CalendarCheck, TASK: CheckCircle2,
 } as const;
 
 function prettyStage(s: string) {

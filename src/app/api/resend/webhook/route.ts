@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { MessageStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
+import { htmlToText, isConfirmationReply } from "@/lib/confirmation-reply";
+import { markDiscoveryConfirmed } from "@/server/lead-stage-auto";
 
 /**
  * Inbound Resend webhook - Resend signs its webhook deliveries via Svix. Two jobs, mirroring the
@@ -122,10 +124,6 @@ async function fetchReceivedEmail(emailId: string): Promise<ReceivedEmail | null
   }
 }
 
-function htmlToText(html: string): string {
-  return html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
-
 async function handleReceived(emailId: string, fallbackFrom: string, fallbackSubject: string | null): Promise<void> {
   const full = await fetchReceivedEmail(emailId);
   const from = (full?.from || fallbackFrom || "").trim();
@@ -150,6 +148,48 @@ async function handleReceived(emailId: string, fallbackFrom: string, fallbackSub
       read: false,
     },
   });
+
+  /**
+   * Email is the third channel a prospect may confirm on (founder, 27/08/2026) - and until now
+   * the only one that was recorded and then ignored. An inbound reply was logged, linked to the
+   * lead, and that was the end of it: a prospect who answered "Yes" by email was still chased by
+   * the confirmation ladder and their slot was still auto-cancelled for being unconfirmed.
+   *
+   * `quoted: true` is what makes this work at all. A mail client quotes the entire original
+   * underneath the reply, the original IS the confirmation request, and it contains the words
+   * "cannot" and "reschedule" - so without stripping it, the fail-closed negation guard would
+   * reject essentially every genuine yes. See lib/confirmation-reply.ts.
+   *
+   * Gated on the SAME journey phase as the WhatsApp path, through the same helper, so a yes means
+   * one thing regardless of where it arrived.
+   */
+  if (leadId && isConfirmationReply(body, { quoted: true })) {
+    await confirmDiscoveryByEmail(leadId);
+  }
+}
+
+/**
+ * Apply an emailed YES to whichever confirmation is open for this lead.
+ *
+ * Deliberately narrower than the WhatsApp equivalent: it sets the Disco confirmation only. The
+ * SSS ladder's confirmation carries a personalised video and a founder's calendar slot, and the
+ * SOP asks for it on WhatsApp - promoting an email reply to an SSS confirmation would be
+ * inventing a rule nobody wrote. A yes at any other time is friendliness and sets nothing.
+ */
+async function confirmDiscoveryByEmail(leadId: string): Promise<void> {
+  const journey = await prisma.outreachJourney.findUnique({
+    where: { leadId },
+    select: { id: true, phase: true, whatsappConfirmed: true },
+  });
+  if (!journey || journey.phase !== "DISCO_CONFIRMATION" || journey.whatsappConfirmed) return;
+
+  await prisma.outreachJourney.update({
+    where: { id: journey.id },
+    // The column is named for WhatsApp because the Key Metrics sheet named it that; it has always
+    // meant "the prospect confirmed", which is why a verbal yes on a Step 16 call sets it too.
+    data: { whatsappConfirmed: true, whatsappConfirmedAt: new Date() },
+  });
+  await markDiscoveryConfirmed(leadId, "email").catch(() => undefined);
 }
 
 export async function POST(req: NextRequest) {

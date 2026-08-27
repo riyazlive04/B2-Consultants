@@ -1,5 +1,7 @@
 /** Shared shapes for the Automation engine (Phase 5) - Synamate "Workflows". Isomorphic. */
 
+import { LEAD_STAGE_LABELS } from "./labels";
+
 export type TriggerType =
   | "FORM_SUBMITTED"
   | "TAG_ADDED"
@@ -82,24 +84,16 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   IF_TAG: "If contact has tag…",
 };
 
-export const LEAD_STAGE_OPTIONS: { value: string; label: string }[] = [
-  { value: "NEW_LEAD", label: "Fresh Optins" },
-  { value: "WHATSAPP_SENT", label: "WhatsApp Sent" },
-  { value: "STRATEGY_CALL_BOOKED", label: "Discovery Call Booked" },
-  // Renamed off "Discovery Booked" when the column above took that name: two entries a word
-  // apart in one dropdown is how an automation gets pointed at the wrong stage.
-  { value: "DISCO_BOOKED", label: "Pre-Qualified & Confirmed" },
-  { value: "DISCO_NOT_BOOKED", label: "Discovery Not Booked" },
-  { value: "DISCO_COMPLETED", label: "Discovery Completed" },
-  { value: "SSS_BOOKED", label: "Strategy Session Booked" },
-  { value: "SSS_COMPLETED", label: "Strategy Session Completed" },
-  { value: "PROPOSAL_SENT", label: "Proposal Sent" },
-  { value: "SENT_TO_WORKSHOP", label: "Sent to Workshop" },
-  { value: "WORKSHOP_FOLLOWUP", label: "Workshop Follow-up" },
-  { value: "OFFER_FOLLOWUP", label: "Offer Follow-up" },
-  { value: "DEPOSIT_FOLLOWUP", label: "Deposit Follow-up" },
-  { value: "DEPOSIT_PAID", label: "Deposit Paid" },
-  { value: "WON", label: "Won" },
-  { value: "LOST", label: "Lost" },
-  { value: "NO_SHOW", label: "No Show" },
-];
+/**
+ * The stages an automation trigger or action can name.
+ *
+ * Derived, not retyped. This list carried its own wording - "Discovery Not Booked", "Strategy
+ * Session Booked", "Proposal Sent" - which meant an automation was configured against names that
+ * appeared nowhere else in the app, and the person wiring it up had to guess which board column
+ * they were actually targeting. One of those names had already collided once: DISCO_BOOKED was
+ * hand-patched here off "Discovery Booked" when the column above claimed that name, and nowhere
+ * else was corrected. That is the drift this removes.
+ */
+export const LEAD_STAGE_OPTIONS: { value: string; label: string }[] = Object.entries(
+  LEAD_STAGE_LABELS,
+).map(([value, label]) => ({ value, label }));

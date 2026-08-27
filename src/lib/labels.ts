@@ -131,29 +131,44 @@ export const SOURCE_LABELS: Record<string, string> = {
 };
 
 /**
- * Lead lifecycle stages, in funnel order.
+ * Lead lifecycle stages, in funnel order - named after the BOARD COLUMN each one lives in.
  *
- * Worded as the live Synamate board words them - we are replacing that tool, and the team reads
- * both during the changeover, so "Offer and didn't buy" must not appear here as "Offer made -
- * didn't buy". The board's twelve columns use the same strings (`lib/pipeline-stages.ts`).
+ * ── One vocabulary, because three was one too many (founder, 27/08/2026) ─────────
+ * The same enum used to be worded three different ways depending on which screen you were on:
+ * the board called a stage "Pre-Qualified & Confirmed", this map called it "DISCO Call booked",
+ * and the Contacts filter called it "Disco Booked". So `STRATEGY_CALL_BOOKED` ("Discovery Call
+ * Booked") and `DISCO_BOOKED` ("DISCO Call booked") read as the same thing in the board's
+ * lead-stage dropdown while being two different points in the funnel - and once BANT scoring
+ * became automatic, the moment that separated them stopped being visible to anyone anyway.
  *
- * NEW_LEAD, WHATSAPP_SENT and STRATEGY_CALL_BOOKED now DO have columns of their own (06/08/2026),
- * so they take the board's exact wording - "Fresh Optins", not "New lead".
+ * The rule now: THE COLUMN NAMES THE STAGE. `lib/pipeline-stages.ts` holds the columns, this map
+ * follows it, and `labels.test.ts` fails the build if the two ever drift apart again.
  *
- * The remaining DISCO_ and PROPOSAL_SENT labels are still deliberately NOT the board's: those
- * stages have no column (they fold into "Pre-Qualified & Confirmed" and "Offer and didn't buy"),
- * so they keep the precise name the funnel %, commission and radar all describe them by.
+ * ── The three that share a column, and why they carry a suffix ───────────────────
+ * There are 17 lifecycle stages and 15 columns, so three stages have no column of their own and
+ * fold into another one's. Naming those three after their column alone would put two identically
+ * named rows in the stage-distribution chart and two identical options in a filter - strictly
+ * worse than the drift being fixed. Each therefore gets its column's name plus the one word that
+ * distinguishes it, so both facts survive: which column it is filed in, and which stage it is.
+ *
+ * `WON` is the documented exception: it is the one stage with TWO columns ("Split Pay" and
+ * "Full pay", told apart by `Lead.paymentPlan`), so there is no single column name to take and
+ * the lifecycle name stands.
  */
 export const LEAD_STAGE_LABELS: Record<string, string> = {
   NEW_LEAD: "Fresh Optins",
   WHATSAPP_SENT: "WhatsApp Sent",
   STRATEGY_CALL_BOOKED: "Discovery Call Booked",
-  DISCO_BOOKED: "DISCO Call booked",
-  DISCO_NOT_BOOKED: "DISCO Call NOT booked",
-  DISCO_COMPLETED: "DISCO Call completed",
+  DISCO_BOOKED: "Pre-Qualified & Confirmed",
+  // Shares Cancelled/Unqualified with LOST. The difference: this one never reached a call at all.
+  DISCO_NOT_BOOKED: "Cancelled/Unqualified - never booked",
+  // Shares Pre-Qualified & Confirmed with DISCO_BOOKED. The difference: the call has happened.
+  DISCO_COMPLETED: "Pre-Qualified & Confirmed - call done",
   SSS_BOOKED: "SSS Call Booked",
   SSS_COMPLETED: "SSS Call Confirmed",
-  PROPOSAL_SENT: "Proposal sent",
+  // Shares "Offer and didn't buy" with OFFER_FOLLOWUP. The column is named for the outcome, this
+  // stage for the moment: an offer is out and nobody has said no yet.
+  PROPOSAL_SENT: "Offer and didn’t buy - awaiting decision",
   SENT_TO_WORKSHOP: "Sent to Workshop",
   WORKSHOP_FOLLOWUP: "Summit Follow Up",
   OFFER_FOLLOWUP: "Offer and didn’t buy",
@@ -163,6 +178,32 @@ export const LEAD_STAGE_LABELS: Record<string, string> = {
   LOST: "Cancelled/Unqualified",
   NO_SHOW: "No Shows/Rescheduled",
 };
+
+/**
+ * The stages that can own a board column - i.e. everything except the three that fold into
+ * another stage's column.
+ *
+ * Exported because the board's "Syncs lead stage" picker must not offer the other three. Mapping
+ * a column to `DISCO_COMPLETED` looks like it works and silently does nothing: `boardColumnFor`
+ * sends a DISCO_COMPLETED lead to the Pre-Qualified & Confirmed column instead, so the column the
+ * admin just mapped never receives a single card.
+ */
+export const COLUMN_OWNING_STAGES: readonly string[] = [
+  "NEW_LEAD",
+  "WHATSAPP_SENT",
+  "STRATEGY_CALL_BOOKED",
+  "DISCO_BOOKED",
+  "SSS_BOOKED",
+  "SSS_COMPLETED",
+  "SENT_TO_WORKSHOP",
+  "WORKSHOP_FOLLOWUP",
+  "OFFER_FOLLOWUP",
+  "DEPOSIT_FOLLOWUP",
+  "DEPOSIT_PAID",
+  "WON",
+  "LOST",
+  "NO_SHOW",
+];
 
 /**
  * Funnel order for a DataTable `order` prop - the LABELS, because a stage column's sort

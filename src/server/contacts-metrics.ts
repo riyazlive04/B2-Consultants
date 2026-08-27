@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { formatInrMinor, formatEurMinor } from "@/lib/format";
 import { resolveBant, type BantSnapshot } from "@/lib/bant-view";
 import { ACTIVE } from "@/lib/soft-delete";
+import { WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
 
 /**
  * Read layer for the Synamate-parity Contacts CRM (SYNAMATE_CLONE_SPEC §5).
@@ -221,7 +222,16 @@ export async function getContactListFilters(): Promise<ContactListFilters> {
 
 export type TimelineEvent = {
   id: string;
-  kind: "NOTE" | "STAGE_CHANGE" | "WHATSAPP" | "OUTCOME" | "BOOKING" | "TASK";
+  /**
+   * `CALL` is every logged dial - the one thing this timeline never showed.
+   *
+   * Its absence was strange rather than deliberate: the empty state has always promised "notes,
+   * CALLS, messages, stage changes and appointments", and calls were the only one of the five
+   * missing. It matters more now that the call-back chase runs off exactly these rows - a card
+   * that says "moved to Cancelled/Unqualified" with no visible reason invites the question this
+   * timeline exists to answer, and the answer is the three call-backs above it.
+   */
+  kind: "NOTE" | "STAGE_CHANGE" | "WHATSAPP" | "OUTCOME" | "BOOKING" | "TASK" | "CALL";
   at: Date;
   title: string;
   body: string | null;
@@ -306,6 +316,18 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
         take: 100,
       },
       whatsappMessages: { orderBy: { createdAt: "desc" }, take: 100 },
+      /**
+       * Every dial, oldest first.
+       *
+       * ASCENDING deliberately, unlike its neighbours: the call-back round each row belongs to is
+       * its POSITION in the sequence, so the numbering has to be computed forwards even though
+       * the timeline is finally sorted newest-first.
+       */
+      callLogs: {
+        include: { user: { select: { name: true } } },
+        orderBy: { calledAt: "asc" },
+        take: 100,
+      },
       outcomes: { orderBy: { callDate: "desc" }, take: 50 },
       bookings: { include: { slot: { select: { startsAt: true } } }, orderBy: { createdAt: "desc" }, take: 50 },
       /**
@@ -354,12 +376,60 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
       id: `wa-${w.id}`,
       kind: "WHATSAPP",
       at: w.createdAt,
-      title: `WhatsApp ${w.direction === "INBOUND" ? "received" : "sent"}${w.kind ? ` · ${w.kind}` : ""}`,
-      body: w.body ?? null,
+      // The touchpoint's NAME, not its enum constant. "SOP 7b · Second follow-up, still not
+      // booked" tells the reader what the prospect received; "SOP_FOLLOWUP_2" makes them go and
+      // look it up, which on a record meant to explain a decision is the whole cost.
+      title: `WhatsApp ${w.direction === "INBOUND" ? "received" : "sent"}${w.kind ? ` · ${WHATSAPP_KIND_LABELS[w.kind] ?? w.kind}` : ""}`,
+      // A skipped or failed send has a written reason and no body. Showing the reason is the
+      // point: "nothing went out because no template is bound" must not look like silence.
+      body: w.body ?? w.error ?? null,
       authorName: null,
-      tone: w.status === "FAILED" ? "bad" : w.direction === "INBOUND" ? "good" : "primary",
+      tone:
+        w.status === "FAILED"
+          ? "bad"
+          : w.status === "SKIPPED"
+            ? "warn"
+            : w.direction === "INBOUND"
+              ? "good"
+              : "primary",
     });
   }
+
+  /**
+   * The dials, numbered the way the call-back chase numbers them.
+   *
+   * The first CONNECTED call opens the chase, and everything after it is a call-back - so the
+   * labels here are the same sequence the caller saw on their desk ("Call-back 2 of 3") and the
+   * same one the give-up entry counts. Anything before the first connection is an attempt, not a
+   * call-back, and is labelled as such rather than being given a round number it never had.
+   *
+   * Kept in step with `lib/callback-chase.ts` by construction: both count dials after the first
+   * SPOKE, and both treat a dial that rang out as a real attempt.
+   */
+  const firstSpokeIdx = lead.callLogs.findIndex((c) => c.outcome === "SPOKE");
+  lead.callLogs.forEach((c, i) => {
+    const outcome = c.outcome.replaceAll("_", " ").toLowerCase();
+    const label =
+      firstSpokeIdx === -1 || i < firstSpokeIdx
+        ? `Call attempt ${i + 1}`
+        : i === firstSpokeIdx
+          ? "Call - first connected"
+          : `Call-back ${i - firstSpokeIdx}`;
+    timeline.push({
+      id: `call-${c.id}`,
+      kind: "CALL",
+      at: c.calledAt,
+      title: `${label} · ${outcome}`,
+      body: c.notes ?? null,
+      authorName: c.user?.name ?? null,
+      tone:
+        c.outcome === "SPOKE"
+          ? "good"
+          : c.outcome === "NOT_INTERESTED" || c.outcome === "WRONG_NUMBER"
+            ? "bad"
+            : "neutral",
+    });
+  });
   for (const o of lead.outcomes) {
     timeline.push({
       id: `outcome-${o.id}`,

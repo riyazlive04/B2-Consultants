@@ -7,6 +7,7 @@ import { Btn } from "@/components/ui/controls";
 import { Select } from "@/components/ui/form";
 import { DatePicker } from "@/components/ui/DatePicker";
 import type { ContactListFilters } from "@/server/contacts-metrics";
+import { LEAD_STAGE_LABELS } from "@/lib/labels";
 
 /**
  * Multi-field filter panel + saved views (BUILD_CHECKLIST.md §3) sitting above ContactsTable.
@@ -23,23 +24,18 @@ import type { ContactListFilters } from "@/server/contacts-metrics";
  * new persistence layer for a Phase-2, non-schema pass.
  */
 
-const STAGE_OPTS = [
-  { value: "NEW_LEAD", label: "New Lead" },
-  { value: "DISCO_BOOKED", label: "Disco Booked" },
-  { value: "DISCO_NOT_BOOKED", label: "Disco Not Booked" },
-  { value: "DISCO_COMPLETED", label: "Disco Completed" },
-  { value: "SSS_BOOKED", label: "SSS Booked" },
-  { value: "SSS_COMPLETED", label: "SSS Completed" },
-  { value: "PROPOSAL_SENT", label: "Proposal Sent" },
-  { value: "SENT_TO_WORKSHOP", label: "Sent To Workshop" },
-  { value: "WORKSHOP_FOLLOWUP", label: "Workshop Followup" },
-  { value: "OFFER_FOLLOWUP", label: "Offer Followup" },
-  { value: "DEPOSIT_FOLLOWUP", label: "Deposit Followup" },
-  { value: "DEPOSIT_PAID", label: "Deposit Paid" },
-  { value: "WON", label: "Won" },
-  { value: "LOST", label: "Lost" },
-  { value: "NO_SHOW", label: "No Show" },
-];
+/**
+ * Stage options, from the ONE stage vocabulary.
+ *
+ * This list used to be typed out here with names of its own - "Disco Booked", "Lost", "New Lead"
+ * - so the same lead was called three different things depending on whether you were looking at
+ * the board, a report or this filter. It had also gone stale: `WHATSAPP_SENT` and
+ * `STRATEGY_CALL_BOOKED` were added as board columns on 06/08/2026 and never reached it, so two
+ * of the busiest stages simply could not be filtered for.
+ *
+ * Deriving it fixes both at once and means the next stage added is here automatically.
+ */
+const STAGE_OPTS = Object.entries(LEAD_STAGE_LABELS).map(([value, label]) => ({ value, label }));
 
 // Full LeadSource enum (not just the subset offered when manually adding a contact) - an
 // existing lead can carry a webhook-ingested source (META_ADS / LANDING_PAGE) that the "Add

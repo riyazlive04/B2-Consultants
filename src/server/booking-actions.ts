@@ -10,6 +10,7 @@ import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { qualifiedFromBant } from "@/lib/outreach-sop";
+import { markDiscoveryConfirmed } from "./lead-stage-auto";
 import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/consent";
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
 import { optionalRule, rule } from "@/lib/field-rules";
@@ -868,12 +869,31 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
 /** Manually mark a booking confirmed (or clear it). The auto-cancel engine reads confirmedAt. */
 export async function setBookingConfirmed(id: string, confirmed: boolean): Promise<ActionResult> {
   const session = await requireSection("bookings");
-  const booking = await prisma.bookingRequest.findUnique({ where: { id }, select: { id: true, name: true } });
+  // `leadId` so the confirmation can move the card as well as stop the auto-cancel engine.
+  const booking = await prisma.bookingRequest.findUnique({
+    where: { id },
+    select: { id: true, name: true, leadId: true },
+  });
   if (!booking) return { ok: false, error: "Booking not found" };
   await prisma.bookingRequest.update({
     where: { id },
     data: { confirmedAt: confirmed ? new Date() : null },
   });
+  /**
+   * The board follows the confirmation.
+   *
+   * `confirmedAt` used to do one job - stop the auto-cancel engine releasing the slot - and the
+   * card stayed in "Discovery Call Booked" whatever the prospect said. But a confirmed booking IS
+   * the definition of Pre-Qualified & Confirmed: BANT pre-qualified them, and this is the human
+   * saying yes.
+   *
+   * Only on the way IN. Clearing a confirmation does not rewind the lead: `confirmed: false` is
+   * used to correct a mis-click and to re-arm the chase, and dragging the card backwards on a
+   * correction would rewrite the stage history for something that never happened.
+   */
+  if (confirmed && booking.leadId) {
+    await markDiscoveryConfirmed(booking.leadId, "manual").catch(() => undefined);
+  }
   await logActivity(session, {
     action: "booking.confirm",
     section: "bookings",

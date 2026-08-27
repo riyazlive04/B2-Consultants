@@ -35,6 +35,8 @@
  *    don't log in; the team uses this in sessions to motivate them).
  */
 
+import { LEAD_STAGE_LABELS } from "./labels";
+
 // ───────────────────────────── shared types ─────────────────────────────
 
 export type DailyLogVariant = "DISCOVERY_SPECIALIST" | "APPOINTMENT_SETTER" | "DELIVERY_COACH";
@@ -640,19 +642,20 @@ const MILESTONE_INDEX: Record<string, number> = Object.fromEntries(
   MILESTONE_ORDER.map((m, i) => [m, i]),
 );
 
-/** Human names for the lead stages XP can be earned on - also rendered by the console. */
-export const STAGE_LABELS_SHORT: Record<string, string> = {
-  DISCO_BOOKED: "Discovery call booked",
-  SSS_BOOKED: "SSS call booked",
-  SSS_COMPLETED: "SSS call completed",
-  PROPOSAL_SENT: "Proposal sent",
-  SENT_TO_WORKSHOP: "Sent to workshop",
-  OFFER_FOLLOWUP: "Offer follow-up",
-  WORKSHOP_FOLLOWUP: "Workshop follow-up",
-  DEPOSIT_FOLLOWUP: "Deposit follow-up",
-  DEPOSIT_PAID: "Deposit collected",
-  WON: "Deal won",
-};
+/**
+ * Lead-stage names for the Arena feed and the XP console.
+ *
+ * An alias for the app's one stage vocabulary, not a list of its own. It used to hold ten
+ * hand-written names, and `DISCO_BOOKED: "Discovery call booked"` was the exact collision the
+ * founder reported: two stages both reading as "discovery call booked", one of them on a
+ * scoreboard telling somebody what they had earned XP for. It also covered only ten of the
+ * seventeen stages, so a move into any of the other seven showed the raw enum constant.
+ *
+ * The export name is kept because three screens import it; there is nothing "short" about it now,
+ * and nothing should be - a scoreboard naming a stage differently from the board it came from is
+ * how people stop trusting the number beside it.
+ */
+export const STAGE_LABELS_SHORT: Record<string, string> = LEAD_STAGE_LABELS;
 
 /** metric → the daily-log field it sums. Metrics absent here are event-counted. */
 const METRIC_LOG_FIELD: Partial<Record<EmployeeBadgeMetric, string>> = {

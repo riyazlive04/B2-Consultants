@@ -229,6 +229,10 @@ export function planJourney(
 
     if (onIntroPath) {
       add("INTRO_WHATSAPP", state.optInAt);
+      // Step 1 is "welcome on WhatsApp AND email", and both halves now live in this ladder. The
+      // email used to come from a separate automation workflow, which meant one requirement was
+      // owned by two systems that knew nothing about each other.
+      add("INTRO_EMAIL", state.optInAt);
       // Step 4 straight after Step 3 is the SOP as B2 wrote it: message, then ring, regardless of
       // whether the prospect has had any chance to act. Under "after_check" the call is deferred
       // until a booking check has actually come back empty - see the CHECK_1 branch below.
@@ -517,6 +521,7 @@ function pendingReminders(state: JourneyState): OutreachStep[] {
   const sssLadder: OutreachStep[] = ["SSS_CONFIRM_1", "SSS_CONFIRM_2", "SSS_CANCEL_MSG"];
   const chaseLadder: OutreachStep[] = [
     "INTRO_WHATSAPP",
+    "INTRO_EMAIL",
     "FIRST_CALL",
     "CHECK_1",
     "FOLLOWUP_WHATSAPP",

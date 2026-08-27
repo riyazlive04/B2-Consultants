@@ -3654,6 +3654,7 @@ model ResumeReview {
 /// double-send. Step 16's two required call attempts are separate values for the same reason.
 enum OutreachStep {
   INTRO_WHATSAPP // Step 3  - immediately after opt-in (target <5 min)
+  INTRO_EMAIL // Step 3b - the same welcome by email, so one ladder owns all of Step 1
   FIRST_CALL // Step 4  - call right after the intro message
   CHECK_1 // Step 5  - wait 2h, then run the Step 10 booking check
   FOLLOWUP_WHATSAPP // Step 6  - not booked at check 1

@@ -226,6 +226,36 @@ https://optin.b2consultants.de/apply
 [Your Name]
 B2 Consultants`;
 
+/**
+ * Step 3b - the opt-in welcome by email.
+ *
+ * Mirrors the APPROVED `b2_sop_intro` WhatsApp wording rather than inventing a second voice: a
+ * prospect receives both within a minute of each other, and two different accounts of what B2
+ * does would read as two different companies. The emoji and the WhatsApp bold markers are gone
+ * because they are WhatsApp conventions, not email ones; nothing else is changed.
+ *
+ * This replaces the "New lead nurture" workflow's SEND_EMAIL, which said only "thanks for
+ * reaching out" and carried no booking link - so the email half of Step 1 asked for nothing.
+ */
+const TPL_INTRO_EMAIL_SUBJECT = `[Prospect’s First Name], your free Discovery Call with B2 Consultants`;
+
+const TPL_INTRO_EMAIL = `Hi [Prospect’s First Name], this is [Your Name] from B2 Consultants.
+
+Thanks for showing interest in finding your next job in Germany.
+
+To help you further, we would like to invite you to book a 20 minute FREE Personalized Discovery Call to understand your requirements and current situation.
+
+You can book your call here:
+https://optin.b2consultants.de/apply
+
+If you have questions about our coaching programme, this short video has Ameen explaining the 3 mistakes people usually make, and the 3 secrets to overcome them:
+https://optin.b2consultants.de/lang
+
+Prefer a hand with booking? Just reply to this email and one of our team will call you.
+
+[Your Name]
+B2 Consultants`;
+
 /** Step 13 - Disco Welcome WhatsApp 1. */
 const TPL_DISCO_WELCOME = `Hi [Prospect’s First Name], this is [Your Name] from B2 Consultants
 
@@ -444,6 +474,16 @@ export const OUTREACH_STEPS: OutreachStepDef[] = [
     anchor: "IMMEDIATE",
     slaKey: null,
     body: TPL_INTRO,
+  },
+  {
+    step: "INTRO_EMAIL",
+    sopStep: "Step 3b",
+    label: "Welcome email",
+    channel: "EMAIL",
+    anchor: "IMMEDIATE",
+    slaKey: null,
+    body: TPL_INTRO_EMAIL,
+    subject: TPL_INTRO_EMAIL_SUBJECT,
   },
   {
     step: "FIRST_CALL",

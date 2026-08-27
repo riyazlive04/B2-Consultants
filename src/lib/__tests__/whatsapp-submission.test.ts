@@ -61,9 +61,24 @@ describe("Submission pack - the app can actually supply what the templates decla
   test("every variable the touchpoint offers is used by its template", () => {
     // The reverse: an offered-but-unused variable is dead config that will confuse whoever maps
     // the template in Settings.
+    //
+    // This is the TIDINESS direction, not the safety one - the assertion above is what stops a
+    // template declaring a variable we cannot fill. A touchpoint may legitimately offer more
+    // than its pack template uses when the founder binds an APPROVED template that was not
+    // authored from the SOP, and the pool is a menu for that binding rather than a payload.
+    //
+    // SOP_DISCO_CANCEL is the case: Step 16 fires 12h BEFORE the call, and the pack's
+    // b2_sop_disco_cancel actually reads "we noticed you missed your scheduled call" - which is
+    // untrue at that moment. b2_booking_auto_cancelled says the slot is being released for lack
+    // of confirmation, which is correct, and it needs {{booking_url}}.
+    const BINDS_OUTSIDE_THE_PACK: Partial<Record<string, readonly string[]>> = {
+      SOP_DISCO_CANCEL: ["booking_url"],
+    };
     for (const t of SUBMISSION_TEMPLATES) {
       const declared = new Set(t.vars.map((v) => v.name));
+      const allowed = new Set(BINDS_OUTSIDE_THE_PACK[t.kind] ?? []);
       for (const v of WHATSAPP_AVAILABLE_VARS[t.kind]) {
+        if (allowed.has(v)) continue;
         assert.ok(declared.has(v), `${t.kind} offers {{${v}}} but ${t.name} never declares it`);
       }
     }

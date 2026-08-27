@@ -98,7 +98,7 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   SOP_DISCO_WELCOME: "Outreach SOP Step 13 - BANT verdict is YES or MAYBE and the call is booked.",
   SOP_DISCO_CONFIRM_1: "Outreach SOP Step 14 - at least 36h before the discovery call.",
   SOP_DISCO_CONFIRM_2: "Outreach SOP Step 15 - at least 24h before, if Step 14 drew no reply.",
-  SOP_DISCO_CANCEL: "Outreach SOP Step 16 - at least 12h before, unconfirmed after two calls.",
+  SOP_DISCO_CANCEL: "Outreach SOP Step 16 - at least 12h before the call, unconfirmed after two call attempts. Bind a template that says the slot is being RELEASED for lack of confirmation, not one that says the call was missed: at this point it has not happened yet.",
   SOP_SSS_CONFIRM_1: "Outreach SOP Step 19 - at least 24h before the SSS. Carries the personalized video.",
   SOP_SSS_CONFIRM_2: "Outreach SOP Step 20 - at least 12h before the SSS, if Step 19 drew no reply.",
   SOP_SSS_CANCEL: "Outreach SOP Step 21 - at least 10h before the SSS, still unconfirmed.",
@@ -156,7 +156,11 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   SOP_DISCO_WELCOME: ["name", "sender", "date", "time"],
   SOP_DISCO_CONFIRM_1: ["name", "date", "time", "zoom_link"],
   SOP_DISCO_CONFIRM_2: ["name", "date", "time", "zoom_link"],
-  SOP_DISCO_CANCEL: ["name"],
+  // `booking_url` was added 27/08/2026 so this touchpoint can bind b2_booking_auto_cancelled,
+  // whose closing line offers a new time. The step fires 12h BEFORE the call, so the template it
+  // used to carry - b2_sop_disco_cancel, "we noticed you missed your scheduled call" - was
+  // telling people they had missed an appointment that had not happened yet.
+  SOP_DISCO_CANCEL: ["name", "booking_url"],
   SOP_SSS_CONFIRM_1: ["name", "sender", "date", "time"],
   SOP_SSS_CONFIRM_2: ["name", "date", "time", "zoom_link"],
   SOP_SSS_CANCEL: ["name"],

@@ -321,8 +321,22 @@ export function planJourney(
     // deadline depend on when someone got round to ringing.
     // The SOP's NO branch at Step 8 still ends the cycle outright (checklist §H), so no final
     // check is scheduled in that case.
-    const a8 = actedAt(state, "FOLLOWUP_CALL");
-    if (a8 && !saidNo(state, "FOLLOWUP_CALL")) {
+    /**
+     * Step 9 - the write-off deadline, and it is a CLOCK, not a consequence.
+     *
+     * It used to require Step 8 to have been acted, which made the whole ladder a chain that any
+     * single link could strand. That is not theoretical: a prospect (25/08/2026) sat 44 hours at
+     * "second chase due" because SOP_FOLLOWUP_2 had no approved WhatsApp template bound, so the
+     * message could never send, so Check 3 never materialised, so the telecaller was never
+     * raised, so this deadline never existed. Nothing was wrong with the prospect - one unbound
+     * template silently switched off the founder's 300-minute rule for everybody.
+     *
+     * The founder's rule is "300 minutes after opt-in, if there is still no booking, close the
+     * card". So it is scheduled for any live chase, whatever did or did not happen upstream.
+     * `booked` already guards the whole block, and an explicit NO at Step 8 ends the cycle
+     * outright (checklist §H), which is the one case that must not also get a final check.
+     */
+    if (!saidNo(state, "FOLLOWUP_CALL")) {
       add("FINAL_CHECK", plus(state.optInAt, sla.finalCheckHours));
     }
   }

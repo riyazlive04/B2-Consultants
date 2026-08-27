@@ -222,3 +222,36 @@ describe("qualification outcome after a booking", () => {
     assert.equal(planned(s, T0, "DISCO_WELCOME", immediate)!.dueAt.getTime(), T0.getTime());
   });
 });
+
+describe("the write-off deadline cannot be stranded by an upstream stall", () => {
+  const sla = { ...DEFAULT_SLA, check1Hours: 5 / 60, check2Hours: 2, check3Hours: 3, finalCheckHours: 5 };
+
+  // The real incident: SOP_FOLLOWUP_2 had no approved WhatsApp template, so the second chase
+  // could never send, and under the old chain that switched off the 300-minute rule entirely.
+  test("a message stuck DUE forever does not stop the final check", () => {
+    let s = done(base(), "INTRO_WHATSAPP", T0);
+    s = done(s, "CHECK_1", at(5 * MIN));
+    s = done(s, "FOLLOWUP_WHATSAPP", at(5 * MIN));
+    s = done(s, "CHECK_2", at(2 * HR));
+    // FOLLOWUP_WHATSAPP_2 materialised but never sent - no acted timestamp.
+    s = { ...s, steps: { ...s.steps, FOLLOWUP_WHATSAPP_2: step({ status: "DUE", dueAt: at(2 * HR), actedAt: null }) } };
+
+    assert.equal(planned(s, at(2 * HR), "CHECK_3", sla), undefined, "the chain itself is unchanged");
+    assert.equal(
+      planned(s, at(2 * HR), "FINAL_CHECK", sla)!.dueAt.getTime(),
+      at(5 * HR).getTime(),
+      "but the deadline still exists, measured from opt-in",
+    );
+  });
+
+  test("an explicit NO at the follow-up call still ends the cycle with no final check", () => {
+    let s = done(base(), "INTRO_WHATSAPP", T0);
+    s = done(s, "FOLLOWUP_CALL", at(3 * HR), "NO");
+    assert.equal(planned(s, at(3 * HR), "FINAL_CHECK", sla), undefined);
+  });
+
+  test("a booked prospect never gets a final check", () => {
+    const s = { ...done(base(), "INTRO_WHATSAPP", T0), booked: true };
+    assert.equal(planned(s, at(5 * HR), "FINAL_CHECK", sla), undefined);
+  });
+});

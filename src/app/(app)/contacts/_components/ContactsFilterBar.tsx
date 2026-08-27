@@ -210,7 +210,7 @@ export function ContactsFilterBar({ filters }: { filters: ContactListFilters }) 
                     type="button"
                     onClick={() => loadView(v)}
                     className="flex-1 truncate rounded-field px-2 py-1.5 text-left text-sm text-ink-2 hover:bg-surface-2 hover:text-ink"
-                  >
+                   title={v.name}>
                     {v.name}
                   </button>
                   <button

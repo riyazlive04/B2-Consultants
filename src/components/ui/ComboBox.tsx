@@ -157,7 +157,7 @@ export function ComboBox({
                       isSel ? "font-medium text-ink" : "",
                     ].join(" ")}
                   >
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    <span className="min-w-0 flex-1 truncate" title={o.label}>{o.label}</span>
                     {o.hint && (
                       <span className="tnum flex-none text-caption text-ink-3">{o.hint}</span>
                     )}

@@ -213,7 +213,7 @@ export function AgreementClientPicker({
                       }`}
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-ink">{c.name}</span>
+                        <span className="block truncate text-sm font-medium text-ink" title={c.name}>{c.name}</span>
                         <span className="block truncate text-caption text-muted">
                           {c.subtitle}
                           {c.phone ? ` · ${c.phone}` : ""}

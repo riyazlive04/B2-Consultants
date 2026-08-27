@@ -183,7 +183,7 @@ function QueueRow({
               `/pipeline?lead=<id>`, a parameter that page has never read - so every name on the
               desk opened the same unfiltered board. `/contacts/<id>` is the card that actually
               holds this prospect's history: every call, every message, every stage move. */}
-          <Link href={`/contacts/${lead.id}`} className="truncate font-medium text-ink hover:underline">
+          <Link href={`/contacts/${lead.id}`} className="truncate font-medium text-ink hover:underline" title={lead.name}>
             {lead.name}
           </Link>
           {bucket === "FIVE_MINUTE" && (
@@ -449,7 +449,7 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
               {desk.tomorrow.unconfirmed.map((b) => (
                 <li key={b.id} className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-ink">{b.name}</p>
+                    <p className="truncate font-medium text-ink" title={b.name}>{b.name}</p>
                     <p className="text-caption text-muted">
                       {new Date(b.startsAt).toLocaleString("en-IN", {
                         timeZone: "Asia/Kolkata",

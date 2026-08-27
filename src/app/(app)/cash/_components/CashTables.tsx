@@ -16,7 +16,7 @@ export function TopReceivablesTable({ rows }: { rows: ReceivableRow[] }) {
   const maxBalance = Math.max(1, ...topRows.map((r) => r.balanceInr));
 
   const columns: Column<ReceivableRow>[] = [
-    { key: "student", header: "Student", cell: (r) => <span className="max-w-[140px] truncate font-medium">{r.studentName}</span>, value: (r) => r.studentName },
+    { key: "student", header: "Student", cell: (r) => <span className="max-w-[140px] truncate font-medium" title={r.studentName}>{r.studentName}</span>, value: (r) => r.studentName },
     {
       key: "balance", header: "Balance", align: "right",
       cell: (r) => (

@@ -118,7 +118,7 @@ export function LogEntryCard({
           <div className="min-w-0">
             {mode === "team" && entry.person ? (
               <>
-                <p className="truncate text-body-strong text-ink">{entry.person.name}</p>
+                <p className="truncate text-body-strong text-ink" title={entry.person.name}>{entry.person.name}</p>
                 <p className="truncate text-caption text-muted">
                   {entry.person.role} · {whenLabel}
                   {entry.submittedTimeLabel ? ` · ${entry.submittedTimeLabel}` : ""}

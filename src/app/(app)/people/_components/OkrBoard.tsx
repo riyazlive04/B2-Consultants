@@ -116,7 +116,7 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
             <div className="min-w-64 flex-1 space-y-1">
               {m.okrs.map((o) => (
                 <div key={o.id} className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="truncate">{o.title}</span>
+                  <span className="truncate" title={o.title}>{o.title}</span>
                   <span className="tnum text-xs text-muted">
                     {o.currentProgress ?? "-"} / {o.targetValue} · {formatPct(o.completionPct)}
                   </span>

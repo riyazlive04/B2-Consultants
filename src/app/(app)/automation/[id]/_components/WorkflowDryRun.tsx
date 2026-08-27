@@ -395,7 +395,7 @@ function SampleRow({ run, open, onToggle }: { run: ProjectedEnrollment; open: bo
       >
         <span className="flex min-w-0 items-center gap-2">
           {open ? <ChevronDown size={15} className="text-ink-3" /> : <ChevronRight size={15} className="text-ink-3" />}
-          <span className="truncate font-medium text-ink">{run.leadName}</span>
+          <span className="truncate font-medium text-ink" title={run.leadName}>{run.leadName}</span>
           {run.cutShort && <Pill tone="bad">cut short</Pill>}
         </span>
         <span className="shrink-0 text-caption text-ink-3">

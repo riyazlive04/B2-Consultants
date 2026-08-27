@@ -275,7 +275,7 @@ function SlotCell({
           className="mt-0.5 flex cursor-grab items-center gap-1 truncate text-xs font-semibold text-ink active:cursor-grabbing"
         >
           <GripVertical size={12} className="flex-none text-ink-3" />
-          <span className="truncate">{slot.prospectName ?? "Booked"}</span>
+          <span className="truncate" title={slot.prospectName ?? "Booked"}>{slot.prospectName ?? "Booked"}</span>
         </div>
       ) : (
         <p className="mt-0.5 truncate text-xs font-semibold text-muted">{slot.status === "OPEN" ? "Open" : "Blocked"}</p>

@@ -86,7 +86,7 @@ export default async function GnBatchPage({ params }: { params: { batchId: strin
           <ul className="mt-3 space-y-1.5">
             {batch.members.length === 0 && <li className="text-xs text-muted">No members yet.</li>}
             {batch.members.map((m) => (
-              <li key={m.id} className="truncate text-sm text-ink-2">
+              <li key={m.id} className="truncate text-sm text-ink-2" title={m.fullName}>
                 {m.fullName}
               </li>
             ))}

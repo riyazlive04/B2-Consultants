@@ -82,8 +82,8 @@ export async function RecentWins() {
                 {w.emoji}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-ink">{w.title}</span>
-                <span className="block truncate text-caption text-muted">{w.detail}</span>
+                <span className="block truncate text-sm font-semibold text-ink" title={w.title}>{w.title}</span>
+                <span className="block truncate text-caption text-muted" title={w.detail}>{w.detail}</span>
               </span>
               <span className="tnum flex-none text-caption text-ink-3">{formatDate(w.when)}</span>
             </Link>

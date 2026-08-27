@@ -72,10 +72,10 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
         </div>
         {m.status !== "ACTIVE" && <Pill tone="warn">{TEAM_STATUS_LABELS[m.status]}</Pill>}
       </div>
-      <p className="mt-2 truncate text-xs text-muted">{m.email}</p>
+      <p className="mt-2 truncate text-xs text-muted" title={m.email}>{m.email}</p>
       {m.dateJoined && <p className="text-xs text-muted">Joined {formatDate(m.dateJoined)}</p>}
       {m.keyResponsibilities && (
-        <p className="mt-2 line-clamp-3 text-xs text-muted">{m.keyResponsibilities}</p>
+        <p className="mt-2 line-clamp-3 text-xs text-muted" title={m.keyResponsibilities}>{m.keyResponsibilities}</p>
       )}
       <div className="mt-3 flex items-center gap-2 text-sm">
         <Btn variant="ghost" size="sm" onClick={() => { setEditing(m); setAdding(false); }}>

@@ -447,7 +447,7 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
             {selected ? (
               <>
                 <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
-                  <p className="truncate text-sm font-semibold text-ink">{selected.label || "Untitled"}</p>
+                  <p className="truncate text-sm font-semibold text-ink" title={selected.label || "Untitled"}>{selected.label || "Untitled"}</p>
                   <div className="flex flex-none items-center gap-0.5">
                     <IconBtn label="Move up" disabled={selectedIndex === 0} onClick={() => move(selectedIndex, -1)}>
                       <ArrowUp size={14} />

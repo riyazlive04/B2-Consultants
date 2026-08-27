@@ -166,7 +166,7 @@ export function ChartTooltip({
             {r.color && (
               <span aria-hidden className="h-2 w-2 flex-none rounded-full" style={{ background: r.color }} />
             )}
-            <span className="min-w-0 flex-1 truncate text-surface-2 opacity-80">{r.label}</span>
+            <span className="min-w-0 flex-1 truncate text-surface-2 opacity-80" title={r.label}>{r.label}</span>
             <span className="tnum flex-none font-semibold text-surface">{r.value}</span>
           </li>
         ))}

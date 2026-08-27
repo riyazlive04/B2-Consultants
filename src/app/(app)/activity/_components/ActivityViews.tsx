@@ -103,7 +103,7 @@ export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
                     <div className="flex min-w-0 items-center gap-2.5">
                       <ActorMark name={r.actorName} role={r.actorRole} />
                       <div className="min-w-0">
-                        <p className="truncate text-body-strong text-ink">{r.summary}</p>
+                        <p className="truncate text-body-strong text-ink" title={r.summary}>{r.summary}</p>
                         <p className="truncate text-caption text-muted">
                           {r.actorName} · {roleLabel(r.actorRole)} ·{" "}
                           {/* Exact time is the point of the page; the relative form is the

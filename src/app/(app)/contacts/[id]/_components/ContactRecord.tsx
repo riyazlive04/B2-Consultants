@@ -129,7 +129,7 @@ export default function ContactRecord({
               <div className="min-w-0 flex-1">
                 <h1 className="font-display text-h2 text-ink">{contact.name}</h1>
                 <p className="text-sm text-ink-2">{contact.phone ?? "No phone"}</p>
-                {contact.email && <p className="truncate text-sm text-ink-3">{contact.email}</p>}
+                {contact.email && <p className="truncate text-sm text-ink-3" title={contact.email}>{contact.email}</p>}
               </div>
               <Link href={`/conversations?contact=${contact.id}`}>
                 <IconButton label="Message contact"><MessageCircle size={16} /></IconButton>

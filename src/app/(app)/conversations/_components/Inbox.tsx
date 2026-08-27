@@ -108,7 +108,7 @@ export default function Inbox({
                 <div className="min-w-0 flex-1">
                   <p className={`flex items-center gap-1.5 text-sm font-semibold ${active ? "text-primary-strong" : "text-ink"}`}>
                     {t.unread && <span aria-label="Unread" title="Unread" className="h-2 w-2 flex-none rounded-full bg-accent" />}
-                    <span className="truncate">{t.name}</span>
+                    <span className="truncate" title={t.name}>{t.name}</span>
                   </p>
                   <p className="flex items-center gap-1 truncate text-caption text-ink-3">
                     <Icon size={11} /> {t.lastSnippet}

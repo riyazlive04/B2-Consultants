@@ -97,7 +97,7 @@ export function BadgeChip({ badge, size = "md" }: { badge: UnlockedBadge; size?:
       >
         <span aria-hidden>{badge.icon}</span>
       </span>
-      <span className={`w-full truncate text-caption leading-tight ${unlocked ? "font-semibold" : "text-muted"}`}>
+      <span className={`w-full truncate text-caption leading-tight ${unlocked ? "font-semibold" : "text-muted"}`} title={badge.name}>
         {badge.name}
       </span>
     </div>
@@ -211,9 +211,9 @@ export function Podium({
             <span className={rank === 0 ? "text-3xl" : "text-2xl"} aria-hidden>
               {medals[rank]}
             </span>
-            <p className="w-full truncate text-center text-sm font-bold">{e.name}</p>
+            <p className="w-full truncate text-center text-sm font-bold" title={e.name}>{e.name}</p>
             <p className="tnum text-xs font-semibold text-accent">{e.value}</p>
-            <p className="w-full truncate text-center text-caption text-muted">{e.detail}</p>
+            <p className="w-full truncate text-center text-caption text-muted" title={e.detail}>{e.detail}</p>
             {e.badge}
             <div
               className={`w-full rounded-t-xl border border-b-0 border-line ${heights[rank]}`}

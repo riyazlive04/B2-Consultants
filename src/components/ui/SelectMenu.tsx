@@ -188,7 +188,7 @@ export function SelectMenu({
                   isSel && !o.disabled ? "font-medium text-ink" : "",
                 ].join(" ")}
               >
-                <span className="truncate">{o.label}</span>
+                <span className="truncate" title={o.label}>{o.label}</span>
                 {isSel && <Check size={15} className="flex-none text-primary" />}
               </div>
             );

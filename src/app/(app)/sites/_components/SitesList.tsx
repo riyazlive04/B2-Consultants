@@ -49,7 +49,7 @@ export default function SitesList({
               <Card className="h-full transition-colors hover:border-primary">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-display text-h2 font-semibold text-ink">{s.name}</p>
+                    <p className="truncate font-display text-h2 font-semibold text-ink" title={s.name}>{s.name}</p>
                     <p className="mt-0.5 truncate font-mono text-caption text-ink-3">
                       {/* The domain is the real address once DNS cuts over; until then the site
                           lives under /s/<slug>, and showing that is how anyone finds it. */}

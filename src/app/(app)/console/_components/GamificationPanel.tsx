@@ -379,7 +379,7 @@ function XpRulesEditor({ ruleset, patch }: EditorProps) {
 function XpField({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
   return (
     <label className="flex items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
-      <span className="min-w-0 truncate text-ink-2">{label}</span>
+      <span className="min-w-0 truncate text-ink-2" title={label}>{label}</span>
       <div className="w-24 flex-none">
         <NumInput ariaLabel={label} value={value} onChange={onChange} max={100000} />
       </div>
@@ -657,7 +657,7 @@ function StudentEditor({ ruleset, patch }: EditorProps) {
             ["cooling", "🌥️ Cooling - idle up to"],
           ] as const).map(([k, label]) => (
             <label key={k} className="flex items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
-              <span className="min-w-0 truncate text-ink-2">{label}</span>
+              <span className="min-w-0 truncate text-ink-2" title={label}>{label}</span>
               <div className="w-20 flex-none">
                 <NumInput
                   ariaLabel={label}

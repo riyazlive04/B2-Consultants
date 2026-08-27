@@ -183,7 +183,7 @@ export function BlockInspector({
       <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-ink">{BLOCK_LABEL[block.type]}</p>
-          <p className="truncate font-mono text-caption text-ink-3">{block.id}</p>
+          <p className="truncate font-mono text-caption text-ink-3" title={block.id}>{block.id}</p>
         </div>
         <button type="button" aria-label="Deselect" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-btn text-ink-3 hover:bg-surface-2 hover:text-ink">
           <X size={15} />

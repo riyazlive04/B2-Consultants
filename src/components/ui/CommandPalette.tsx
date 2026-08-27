@@ -236,8 +236,8 @@ export function CommandPalette({ sections = [] }: { sections?: PaletteSection[] 
                     >
                       <Icon size={16} className="flex-none text-ink-3" />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{r.label}</span>
-                        {r.sublabel && <span className="block truncate text-caption text-ink-3">{r.sublabel}</span>}
+                        <span className="block truncate text-sm font-medium" title={r.label}>{r.label}</span>
+                        {r.sublabel && <span className="block truncate text-caption text-ink-3" title={r.sublabel}>{r.sublabel}</span>}
                       </span>
                       {active && <CornerDownLeft size={14} className="flex-none text-primary-strong" />}
                     </button>

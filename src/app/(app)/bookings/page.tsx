@@ -368,7 +368,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                               </p>
                             ) : (
                               s.assignedToName && (
-                                <p className="mt-0.5 truncate text-caption text-muted">{s.assignedToName}</p>
+                                <p className="mt-0.5 truncate text-caption text-muted" title={s.assignedToName}>{s.assignedToName}</p>
                               )
                             )}
                           </div>

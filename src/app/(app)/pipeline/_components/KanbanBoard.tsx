@@ -117,8 +117,8 @@ export function KanbanBoard({ leads, stages }: { leads: KanbanLead[]; stages: st
                     <div className="flex items-start gap-1.5">
                       {lead.canMove && <GripVertical size={13} className="mt-0.5 flex-none text-ink-3" />}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-ink">{lead.name}</p>
-                        {lead.ownerName && <p className="truncate text-xs text-muted">{lead.ownerName}</p>}
+                        <p className="truncate text-sm font-medium text-ink" title={lead.name}>{lead.name}</p>
+                        {lead.ownerName && <p className="truncate text-xs text-muted" title={lead.ownerName}>{lead.ownerName}</p>}
                         {lead.valueLabel && <p className="tnum mt-0.5 text-xs text-ink-2">{lead.valueLabel}</p>}
                       </div>
                     </div>

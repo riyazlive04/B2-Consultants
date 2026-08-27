@@ -130,7 +130,7 @@ export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
             {/* Wraps rather than truncates: this card lives in the contact profile's 360px column,
                 where "Agreement pending - ready to send" is exactly the sentence that gets cut. */}
             <p className="font-display text-sm font-semibold text-ink">{agreementStateHeadline(state)}</p>
-            {documentNo && <p className="truncate text-caption text-muted">{documentNo}</p>}
+            {documentNo && <p className="truncate text-caption text-muted" title={documentNo}>{documentNo}</p>}
           </div>
         </div>
         <AgreementStateBadge state={state} config={config} size="sm" />

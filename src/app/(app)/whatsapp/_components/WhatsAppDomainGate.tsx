@@ -142,7 +142,7 @@ export function WhatsAppDomainGate({
         )}
         {list.map((d) => (
           <li key={d} className="flex items-center justify-between rounded-field border border-line bg-surface-2 px-3 py-2">
-            <span className="truncate text-sm font-medium text-ink">{d}</span>
+            <span className="truncate text-sm font-medium text-ink" title={d}>{d}</span>
             <button
               type="button"
               onClick={() => setList((p) => p.filter((x) => x !== d))}

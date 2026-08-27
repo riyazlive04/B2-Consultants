@@ -507,7 +507,7 @@ function StepRow({
   return (
     <div className={testing ? "rounded-field border border-line" : undefined}>
       <div className={`flex items-center gap-1 rounded-field px-2 py-1.5 ${step.id === activeId ? "bg-primary-soft" : "hover:bg-surface-2"}`}>
-        <button onClick={() => onSelect(step.id)} className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${step.id === activeId ? "text-primary-strong" : "text-ink-2"}`}>
+        <button onClick={() => onSelect(step.id)} className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${step.id === activeId ? "text-primary-strong" : "text-ink-2"}`} title={step.name}>
           {step.name}
         </button>
         {index > 0 && <IconButton label="Move up" onClick={() => onMove(index, -1)}><ArrowUp size={13} /></IconButton>}

@@ -98,7 +98,7 @@ export function SnippetPicker({
                     <Thumb blocks={s.blocks} />
                     <div className="flex items-center gap-2 px-3 py-2.5">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-ink">{s.name}</p>
+                        <p className="truncate text-sm font-semibold text-ink" title={s.name}>{s.name}</p>
                         <p className="text-caption text-ink-3">
                           {s.nodeCount} {s.nodeCount === 1 ? "block" : "blocks"}
                           {s.builtIn && " · built-in"}

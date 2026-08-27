@@ -222,11 +222,11 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           {call.leadId ? (
-            <Link href={`/pipeline?lead=${call.leadId}`} className="truncate font-medium text-ink hover:underline">
+            <Link href={`/pipeline?lead=${call.leadId}`} className="truncate font-medium text-ink hover:underline" title={call.name}>
               {call.name}
             </Link>
           ) : (
-            <span className="truncate font-medium text-ink">{call.name}</span>
+            <span className="truncate font-medium text-ink" title={call.name}>{call.name}</span>
           )}
           {/* Before the status pill: on this screen the score is what decides how the call is
               prepared, and the confirmation state is what decides whether it happens at all. */}
@@ -241,7 +241,7 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
             <Pill tone="warn">Unconfirmed</Pill>
           )}
         </div>
-        <p className="mt-0.5 truncate text-caption text-muted">{call.phone}</p>
+        <p className="mt-0.5 truncate text-caption text-muted" title={call.phone}>{call.phone}</p>
         <CallPrep call={call} />
       </div>
       <div className="flex flex-none items-center gap-2">
@@ -270,7 +270,7 @@ function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead, calledAt?: 
     <li className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/pipeline?lead=${lead.id}`} className="truncate font-medium text-ink hover:underline">
+          <Link href={`/pipeline?lead=${lead.id}`} className="truncate font-medium text-ink hover:underline" title={lead.name}>
             {lead.name}
           </Link>
           <Pill tone={lead.stage === "DISCO_NOT_BOOKED" ? "warn" : "neutral"}>

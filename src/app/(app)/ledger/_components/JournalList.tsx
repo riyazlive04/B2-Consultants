@@ -84,7 +84,7 @@ export function JournalList({ entries }: { entries: Entry[] }) {
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={`truncate text-sm font-semibold text-ink ${isVoid ? "text-muted line-through" : ""}`}>
+                  <span className={`truncate text-sm font-semibold text-ink ${isVoid ? "text-muted line-through" : ""}`} title={e.narration}>
                     {e.narration}
                   </span>
                   {isVoid && <Pill tone="bad">Void</Pill>}

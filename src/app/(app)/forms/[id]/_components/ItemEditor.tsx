@@ -129,7 +129,7 @@ export function ItemEditor({
               {item.label || <span className="text-ink-3">Untitled</span>}
               {item.required && <span className="text-bad"> *</span>}
             </span>
-            {!open && <span className="block truncate text-caption text-ink-3">{summary}</span>}
+            {!open && <span className="block truncate text-caption text-ink-3" title={summary}>{summary}</span>}
           </span>
         </button>
       )}

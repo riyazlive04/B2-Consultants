@@ -493,7 +493,7 @@ export default function Board({
               <>
                 <div className="border-b border-line px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-ink">{stage.name}</span>
+                    <span className="truncate text-sm font-semibold text-ink" title={stage.name}>{stage.name}</span>
                     {/* A column with no lead stage mapped is a ONE-WAY DOOR: a card dropped in it
                         stops writing through to Lead.stage, and the stage sync can never move it
                         back out because it only targets mapped columns. Production had two such
@@ -728,7 +728,7 @@ function OppCard({
       style={accent ? { boxShadow: `inset 3px 0 0 ${accent.fg}` } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{card.name}</p>
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink" title={card.name}>{card.name}</p>
         {/* The owner rides as an avatar in the corner rather than a labelled row at the bottom:
             it is the one field people scan across a whole column, and a name repeated on every
             card costs a line each without ever being read in full. */}
@@ -772,7 +772,7 @@ function OppCard({
         </div>
         <div className="flex gap-2">
           <dt className="w-12 flex-none text-ink-3">Value</dt>
-          <dd className="min-w-0 truncate font-semibold text-ink">{card.valueInr}</dd>
+          <dd className="min-w-0 truncate font-semibold text-ink" title={card.valueInr}>{card.valueInr}</dd>
         </div>
       </dl>
 

@@ -301,10 +301,10 @@ export function PersonCell({
       <Avatar name={name} image={image} />
       <div className="min-w-0">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-          <span className="truncate">{name}</span>
+          <span className="truncate" title={name}>{name}</span>
           {badge}
         </p>
-        {secondary && <p className="truncate text-xs text-ink-3">{secondary}</p>}
+        {secondary && <p className="truncate text-xs text-ink-3" title={secondary}>{secondary}</p>}
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowUpRight, Maximize2 } from "lucide-react";
 import { SIGNAL_META, type SignalLevel } from "@/lib/signals";
 import { Sparkline } from "./Sparkline";
+import { InfoHint } from "./InfoHint";
 import { Modal } from "./Modal";
 import { useCanNavigate } from "@/components/shell/SectionAccess";
 
@@ -104,7 +105,10 @@ export function MetricCard({
   const tint = signal ? SIGNAL_META[signal] : undefined;
   const barColor = tint ? tint.color : "var(--primary)";
   const className =
-    "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-line bg-surface p-6 shadow-card";
+    // `[container-type:inline-size]` makes the card a query container so the figure below can
+    // size itself in `cqi` (see the note there). Safe next to `overflow-hidden`: the built-in
+    // Modal portals to <body>, and the only absolute child is the tint bar this card already owns.
+    "group rise-in card-hover relative flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-card border border-line bg-surface p-6 shadow-card [container-type:inline-size]";
 
   // Built-in expand applies only when the card isn't a link and the caller hasn't taken the click.
   const selfExpand = !linkable && !onClick;
@@ -147,29 +151,13 @@ export function MetricCard({
               floor (9rem was tried) also wrapped the 4-up row at 1440px, where the old
               icon-beside-label layout had room and looked right. */}
           <span className="flex min-w-[min(7rem,100%)] flex-1 items-start gap-1.5 text-label uppercase text-ink-3">
-            <span className="line-clamp-2 min-w-0">{label}</span>
-            {tooltip && (
-              // keyboard- and touch-reachable (§5.9): the definition shows on
-              // hover AND focus, not only via the mouse-only title attribute
-              <span className="group/tip relative inline-flex" tabIndex={0} aria-label={tooltip}>
-                <span
-                  aria-hidden
-                  className="inline-flex h-4 w-4 flex-none cursor-help items-center justify-center rounded-full border border-line bg-surface-2 text-caption leading-none text-muted"
-                >
-                  i
-                </span>
-                <span
-                  role="tooltip"
-                  // `text-surface`, not `text-white`: --ink is near-white in the dark
-                  // theme, so a hardcoded white label rendered white-on-white there.
-                  // Pinned to the bottom gutters on phones, centred bubble from `sm` - see InfoHint
-                  // for why (a 224px bubble does not fit either side of a chip on a 390px screen).
-                  className="pointer-events-none fixed inset-x-4 bottom-4 z-30 w-auto translate-x-0 whitespace-normal rounded-field bg-ink px-3 py-2 text-left text-caption font-normal normal-case leading-snug tracking-normal text-surface opacity-0 shadow-pop transition-opacity group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100 sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-full sm:z-20 sm:mt-1.5 sm:w-56 sm:-translate-x-1/2 sm:px-2.5 sm:py-1.5 sm:shadow-soft"
-                >
-                  {tooltip}
-                </span>
-              </span>
-            )}
+            <span className="line-clamp-2 min-w-0" title={label}>{label}</span>
+            {/* keyboard- and touch-reachable (§5.9): the definition shows on hover AND
+                focus, not only via the mouse-only title attribute. This used to be an
+                inline copy of the InfoHint markup; it was clipped by the card's own
+                `overflow-hidden` exactly like the hero's hints were, so both now share
+                the one portalled implementation. */}
+            {tooltip && <InfoHint text={tooltip} />}
           </span>
         </div>
         {linkable ? (
@@ -189,9 +177,19 @@ export function MetricCard({
         ) : null}
       </div>
 
-      {/* §2.1 `metric` (28/34, Jakarta 700, tabular) - the token existed but was never used */}
-      <div className="font-display tnum truncate text-metric tracking-tight">{value}</div>
-      {secondary && <div className="tnum truncate text-sm text-muted">{secondary}</div>}
+      {/* §2.1 `metric` (28/34, Jakarta 700, tabular) - the token existed but was never used.
+          NOT `truncate`. A KPI figure is one unbreakable "word", so an ellipsis lands INSIDE the
+          number: "₹5,00,874" became "₹5,00,8…" on a narrow card, which is not a smaller figure,
+          it is a WRONG one, and there was no title to recover it from (the value is a ReactNode).
+          The number now shrinks to fit its own card instead - `cqi` is a percentage of the card's
+          inline size, so it responds to the card's width rather than the viewport's, which is the
+          thing that actually varies here (2-up on a phone, 6-up on /funnel at 1024px). It never
+          grows past the 28px token and never drops below 18px; below that, `break-words` lets a
+          pathological value wrap rather than be cut. */}
+      <div className="font-display tnum break-words text-[clamp(18px,7cqi,28px)] leading-[1.2] tracking-tight">
+        {value}
+      </div>
+      {secondary && <div className="tnum break-words text-sm text-muted">{secondary}</div>}
       {delta && <DeltaChip {...delta} />}
 
       {typeof progress === "number" && (

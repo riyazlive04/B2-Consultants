@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import type { BusinessLineView } from "@/lib/business-line";
 import { setBusinessLineView } from "@/server/business-line-view";
 import { SegmentToggle } from "@/components/ui/SegmentToggle";
+import { CurrencyToggle } from "@/components/ui/CurrencyToggle";
 
 /**
  * Switches the home dashboard between the businesses - instantly (Error Log E1/E3/E4).
@@ -60,7 +61,16 @@ export function DashboardSwitcher({
 
   return (
     <div className="space-y-8">
-      <SegmentToggle active={view} onSelect={choose} label="Business" />
+      {/* Business on the left, ₹/€ on the right - the same row Finance puts its two switches on,
+          so the currency control sits WITH the money it flips instead of up in the page header.
+          It was already on this page, but tucked beside the range switch and stripped of its
+          "Currency" label, which read as page chrome rather than as the control for the hero
+          directly beneath it. Same provider and same storage key as Finance (one instance, in
+          the (app) layout), so the currency picked on either page is the one both open in. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SegmentToggle active={view} onSelect={choose} label="Business" />
+        <CurrencyToggle />
+      </div>
       <div hidden={view !== "ALL"}>{combined}</div>
       <div hidden={view !== "B2"}>{b2}</div>
       {/* Pipeline, cash and wins are B2 concepts - German Note has no sales pipeline, so they

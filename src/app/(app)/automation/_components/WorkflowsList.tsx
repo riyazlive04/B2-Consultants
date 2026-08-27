@@ -246,7 +246,7 @@ export default function WorkflowsList({
             <li key={f.id} className="flex items-center justify-between gap-3 px-5 py-3">
               <Link href={`/automation?folder=${f.id}`} className="flex min-w-0 items-center gap-2.5 text-sm font-semibold text-ink hover:text-primary">
                 <Folder size={16} className="flex-none text-ink-3" />
-                <span className="truncate">{f.name}</span>
+                <span className="truncate" title={f.name}>{f.name}</span>
               </Link>
               <div className="flex flex-none items-center gap-1">
                 <span className="mr-1 text-caption text-ink-3 tnum">

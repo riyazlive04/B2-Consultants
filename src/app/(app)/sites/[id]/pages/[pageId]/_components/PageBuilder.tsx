@@ -188,7 +188,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
       {/* ── Toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="truncate font-display text-display-l font-bold text-ink">{page.title}</h1>
+          <h1 className="truncate font-display text-display-l font-bold text-ink" title={page.title}>{page.title}</h1>
           <p className="mt-0.5 flex items-center gap-2 font-mono text-caption text-ink-3">
             <span>{page.path}</span>
             <span aria-live="polite" className="font-sans">
@@ -299,7 +299,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
                     <button
                       onClick={() => setSel({ sectionId: s.id })}
                       className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${on ? "text-primary-strong" : "text-ink-2"}`}
-                    >
+                     title={s.name || "Section"}>
                       {s.name || "Section"}
                     </button>
                     <IconButton size="sm" label="Move up" onClick={() => moveSection(i, -1)}><ArrowUp size={13} /></IconButton>

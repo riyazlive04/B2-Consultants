@@ -250,7 +250,7 @@ export async function GermanNoteDashboard() {
                   className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-ink">{d.fullName}</p>
+                    <p className="truncate font-medium text-ink" title={d.fullName}>{d.fullName}</p>
                     <p className="text-caption text-muted">
                       {d.workshopName} · paid {compact(d.paid)} of {compact(d.final)}
                       {d.nextDueDate ? ` · next due ${formatDate(d.nextDueDate)}` : ""}

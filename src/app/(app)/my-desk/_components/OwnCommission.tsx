@@ -88,7 +88,7 @@ export function OwnCommission({ data }: { data: OwnCommissionData }) {
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-medium text-ink">{l.studentName}</span>
+                    <span className="truncate font-medium text-ink" title={l.studentName}>{l.studentName}</span>
                     {/* §6 asks for the split to be visible where a lead was shared. The
                         colleague is named; their amount deliberately is not. */}
                     {l.sharedWith.length > 0 && (

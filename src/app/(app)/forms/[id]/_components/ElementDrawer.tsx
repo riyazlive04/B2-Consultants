@@ -93,7 +93,7 @@ export default function ElementDrawer({
                   }`}
                 >
                   <Icon name={it.icon} />
-                  <span className="line-clamp-2 text-[10px] font-medium leading-tight text-ink-2">{it.label}</span>
+                  <span className="line-clamp-2 text-[10px] font-medium leading-tight text-ink-2" title={it.label}>{it.label}</span>
                 </button>
               ))}
             </div>

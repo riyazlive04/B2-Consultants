@@ -161,7 +161,7 @@ export function MentionTextArea({
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-lvl-gn/10 text-caption font-bold text-ink">
                   {c.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                 </span>
-                <span className="truncate">{c.name}</span>
+                <span className="truncate" title={c.name}>{c.name}</span>
               </button>
             </li>
           ))}

@@ -56,7 +56,7 @@ export function StageChart({ leads }: { leads: LeadRow[] }) {
               s.count > 0 ? "cursor-pointer hover:bg-ink/5" : "cursor-default"
             }`}
           >
-            <span className="w-28 flex-none truncate text-xs font-medium text-muted sm:w-44 sm:text-sm">
+            <span className="w-28 flex-none truncate text-xs font-medium text-muted sm:w-44 sm:text-sm" title={s.label}>
               {s.label}
             </span>
             <div className="h-6 flex-1 overflow-hidden rounded-full bg-surface-2">

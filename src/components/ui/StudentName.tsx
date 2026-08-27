@@ -10,7 +10,7 @@
 export function StudentName({ name, code }: { name: string; code?: string | null }) {
   return (
     <span className="inline-flex min-w-0 items-baseline gap-1.5">
-      <span className="truncate">{name}</span>
+      <span className="truncate" title={name}>{name}</span>
       {code && <span className="tnum flex-none text-caption font-medium text-ink-3">{code}</span>}
     </span>
   );

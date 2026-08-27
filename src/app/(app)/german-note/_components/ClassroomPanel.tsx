@@ -95,7 +95,7 @@ function ModuleManager({ batchId, modules, onChanged }: { batchId: string; modul
                 <ChevronDown size={14} />
               </button>
             </span>
-            <span className="flex-1 truncate text-sm font-medium">{m.title}</span>
+            <span className="flex-1 truncate text-sm font-medium" title={m.title}>{m.title}</span>
             <button type="button" aria-label="Rename module" className="text-muted hover:text-ink" onClick={() => setRenaming(m)}>
               <Pencil size={14} />
             </button>

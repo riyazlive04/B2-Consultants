@@ -44,8 +44,8 @@ export default function PageCard({
     <div className="flex flex-col overflow-hidden rounded-card border border-line bg-surface shadow-card transition-colors hover:border-primary">
       <div className="flex items-center justify-between gap-2 px-4 pt-3.5">
         <div className="min-w-0">
-          <p className="truncate text-[15px] font-medium text-ink">{page.title}</p>
-          <p className="truncate font-mono text-caption text-ink-3">{page.path}</p>
+          <p className="truncate text-[15px] font-medium text-ink" title={page.title}>{page.title}</p>
+          <p className="truncate font-mono text-caption text-ink-3" title={page.path}>{page.path}</p>
         </div>
         <div className="flex flex-none items-center gap-1.5">
           <Pill tone={page.published ? "good" : "neutral"}>{page.published ? "Live" : "Draft"}</Pill>

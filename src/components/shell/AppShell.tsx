@@ -210,7 +210,7 @@ export function AppShell({
           <span aria-hidden className="absolute bottom-2 left-0 top-2 w-[3px] rounded-full bg-primary" />
         )}
         <Icon size={18} strokeWidth={2.1} className="flex-none" />
-        {!compact && <span className="truncate">{item.label}</span>}
+        {!compact && <span className="truncate" title={item.label}>{item.label}</span>}
       </Link>
     );
   };
@@ -321,12 +321,12 @@ export function AppShell({
           {!compact && (
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                <span className="truncate">{user.name}</span>
+                <span className="truncate" title={user.name}>{user.name}</span>
                 <span className="flex-none rounded-full bg-primary-soft px-1.5 py-0.5 text-caption font-semibold uppercase tracking-wide text-primary-strong">
                   {roleLabel}
                 </span>
               </p>
-              <p className="truncate text-xs text-ink-3">{user.email}</p>
+              <p className="truncate text-xs text-ink-3" title={user.email}>{user.email}</p>
             </div>
           )}
         </Link>
@@ -433,7 +433,7 @@ export function AppShell({
             <span className="flex-none">{bellSlot}</span>
             <Link href="/profile" title="Your profile" className="flex flex-none items-center gap-2 rounded-full py-1 md:pr-2">
               <Avatar size={34} />
-              <span className="hidden max-w-36 truncate text-sm font-semibold text-ink xl:inline">
+              <span className="hidden max-w-36 truncate text-sm font-semibold text-ink xl:inline" title={user.name}>
                 {user.name}
               </span>
             </Link>

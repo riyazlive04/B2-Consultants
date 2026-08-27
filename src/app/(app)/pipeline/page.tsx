@@ -471,7 +471,7 @@ export default async function PipelinePage({
                   )}
                   {callSplit.members.map((m) => (
                     <div key={m.userId} className="flex items-center gap-3">
-                      <span className="w-24 flex-none truncate text-sm font-medium sm:w-32">{m.name}</span>
+                      <span className="w-24 flex-none truncate text-sm font-medium sm:w-32" title={m.name}>{m.name}</span>
                       <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-surface-2">
                         <div
                           className="h-full rounded-full"

@@ -197,7 +197,7 @@ export function FinanceBento({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-1.5 truncate text-sm font-semibold">
-                    <span className="truncate">{p.studentName}</span>
+                    <span className="truncate" title={p.studentName}>{p.studentName}</span>
                     {p.studentCode && (
                       <span className="tnum flex-none text-caption font-medium text-ink-3">{p.studentCode}</span>
                     )}
@@ -305,7 +305,7 @@ export function FinanceBento({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-baseline gap-1.5 text-sm font-semibold">
-                    <span className="truncate">{p.studentName}</span>
+                    <span className="truncate" title={p.studentName}>{p.studentName}</span>
                     {p.studentCode && (
                       <span className="tnum flex-none text-caption font-medium text-ink-3">{p.studentCode}</span>
                     )}

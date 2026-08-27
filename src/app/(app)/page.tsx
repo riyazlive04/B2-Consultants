@@ -4,7 +4,7 @@ import {
   Timer, Trophy, Wallet, Waypoints,
 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { CurrencyToggle, Money } from "@/components/ui/CurrencyToggle";
+import { Money } from "@/components/ui/CurrencyToggle";
 import { PageHeader, SectionHeading, ViewAll } from "@/components/ui/kit";
 import { OnboardingWalkthrough } from "@/components/onboarding/OnboardingWalkthrough";
 import { WorkTracker } from "./_components/WorkTracker";
@@ -275,12 +275,11 @@ export default async function Home({
         title={`Welcome back, ${firstName}`}
         subtitle={`Here is where things stand - ${formatDate(istToday())}.`}
         actions={
+          // The ₹/€ toggle used to sit here. It now rides the business-switch row inside
+          // DashboardSwitcher, next to the money it flips, the way Finance does it.
           (isAdmin || isHead) && (
             <div className="flex flex-wrap items-center gap-3">
               <KpiRangeSwitch active={range} />
-              {/* Same preference as Finance (one storage key), so the currency you picked there
-                  is the currency this page opens in. */}
-              {isAdmin && <CurrencyToggle label={false} />}
             </div>
           )
         }

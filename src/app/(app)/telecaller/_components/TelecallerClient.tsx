@@ -143,7 +143,7 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
               <div key={t.teamProfileId} className="rounded-card border border-line bg-surface p-4 shadow-card">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-display text-base font-semibold">{t.name}</p>
+                    <p className="truncate font-display text-base font-semibold" title={t.name}>{t.name}</p>
                     <p className="truncate text-xs text-muted">{LOG_VARIANT_LABELS[t.logVariant] ?? t.roleTitle}</p>
                   </div>
                   <Btn variant="soft" size="sm" onClick={() => assignTo(t.teamProfileId)}>

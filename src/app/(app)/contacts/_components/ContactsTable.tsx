@@ -166,8 +166,8 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
         <Link href={`/contacts/${r.id}`} className="flex items-center gap-3 group">
           <Avatar name={r.name} size={34} />
           <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-ink group-hover:text-primary">{r.name}</span>
-            <span className="block truncate text-xs text-ink-3">{r.email ?? "-"}</span>
+            <span className="block truncate text-sm font-semibold text-ink group-hover:text-primary" title={r.name}>{r.name}</span>
+            <span className="block truncate text-xs text-ink-3" title={r.email ?? "-"}>{r.email ?? "-"}</span>
           </span>
         </Link>
       ),

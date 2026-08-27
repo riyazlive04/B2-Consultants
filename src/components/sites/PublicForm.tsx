@@ -844,7 +844,7 @@ function FileField({
     <div className="space-y-2">
       {value ? (
         <div className="flex items-center gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
-          <span className="min-w-0 flex-1 truncate text-ink-2">{name || "Uploaded"}</span>
+          <span className="min-w-0 flex-1 truncate text-ink-2" title={name || "Uploaded"}>{name || "Uploaded"}</span>
           <button
             type="button"
             onClick={() => { onChange(""); setName(""); }}

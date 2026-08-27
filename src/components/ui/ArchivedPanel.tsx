@@ -88,7 +88,7 @@ export function ArchivedPanel({
         >
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2">
-              <span className="truncate font-medium text-ink">{row.primary}</span>
+              <span className="truncate font-medium text-ink" title={row.primary}>{row.primary}</span>
               {row.detail && <span className="shrink-0 text-xs text-ink-3">{row.detail}</span>}
             </div>
             <div className="mt-0.5 text-xs text-ink-2">

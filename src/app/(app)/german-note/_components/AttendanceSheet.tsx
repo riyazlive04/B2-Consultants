@@ -120,7 +120,7 @@ export function AttendanceSheetModal({
             {rows.map((r) => (
               <li key={r.studentId} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-ink">{r.studentName}</span>
+                  <span className="block truncate text-sm font-medium text-ink" title={r.studentName}>{r.studentName}</span>
                   {r.studentCode && (
                     <span className="block text-caption tabular-nums text-muted">{r.studentCode}</span>
                   )}

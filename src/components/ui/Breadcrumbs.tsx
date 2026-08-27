@@ -20,14 +20,14 @@ export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }): ReactNode {
             <li key={`${item.label}-${i}`} className="flex items-center gap-1.5 min-w-0">
               {i > 0 && <ChevronRight size={14} className="flex-none text-ink-3" aria-hidden />}
               {item.href && !isLast ? (
-                <Link href={item.href} className="truncate transition-colors hover:text-ink hover:underline">
+                <Link href={item.href} className="truncate transition-colors hover:text-ink hover:underline" title={item.label}>
                   {item.label}
                 </Link>
               ) : (
                 <span
                   className={`truncate ${isLast ? "font-medium text-ink" : ""}`}
                   aria-current={isLast ? "page" : undefined}
-                >
+                 title={item.label}>
                   {item.label}
                 </span>
               )}

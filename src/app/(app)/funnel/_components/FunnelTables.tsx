@@ -96,7 +96,7 @@ export function FunnelSnapshotsTable({ snapshots }: { snapshots: SnapshotRow[] }
     { key: "enrollments", header: "Enrolments", align: "right", sortable: false, cell: (s) => s.enrollments },
     { key: "gb", header: "GB downloads", align: "right", sortable: false, cell: (s) => s.ghostedDownloads },
     { key: "workshop", header: "Workshop", align: "right", sortable: false, cell: (s) => s.workshopAttendees },
-    { key: "notes", header: "Notes", sortable: false, cell: (s) => <span className="max-w-64 truncate text-muted">{s.notes ?? ""}</span> },
+    { key: "notes", header: "Notes", sortable: false, cell: (s) => <span className="max-w-64 truncate text-muted" title={s.notes ?? ""}>{s.notes ?? ""}</span> },
   ];
 
   return <DataTable rows={snapshots} columns={snapshotColumns} filterPlaceholder="Filter weeks…" />;

@@ -216,7 +216,7 @@ function Builder({
                 >
                   <FileText size={16} className="flex-none text-ink-3" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-ink">{r.title}</span>
+                    <span className="block truncate text-sm font-medium text-ink" title={r.title}>{r.title}</span>
                     <span className="block truncate text-caption text-muted">{r.language} · {r.updatedAt}</span>
                   </span>
                   {loadingId === r.id ? (

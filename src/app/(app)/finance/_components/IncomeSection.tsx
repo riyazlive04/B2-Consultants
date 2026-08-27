@@ -9,6 +9,7 @@ import { Btn } from "@/components/ui/controls";
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { ComboBox } from "@/components/ui/ComboBox";
+import { InstalmentSchedule } from "./InstalmentSchedule";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import {
   optionsFrom, PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, PROGRAM_LEVEL_LABELS,
@@ -248,6 +249,10 @@ export function IncomeSection({
                 defaultInr={editing ? minorToInput(editing.instalmentExtraInrRaw) : ""}
                 defaultEur={editing ? minorToInput(editing.instalmentExtraEurRaw) : ""}
               />
+              {/* Only on a NEW entry. Editing an income row must not silently rewrite a schedule
+                  the student has already agreed to and may have started paying against - that
+                  edit belongs in the receivable itself, under Pending. */}
+              {!editing && <InstalmentSchedule />}
             </>
           )}
           <Field label="Payment method">

@@ -468,7 +468,22 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   const fx = await getTodayInrPerEur();
   const fxRate = Number(fx.rate);
   const inrOnlyPair = (inr: number) => ({ inr, eur: fxRate > 0 ? inr / fxRate : 0 });
-  const [pendingRows, runway, missingLoggers, monthIncomes, target, payablesDueSoon, weekSnapshot] =
+  /**
+   * The follow-up window for a scheduled instalment: 10 days before it falls due, OR from the
+   * first of the month it falls in, whichever arrives first. The two rules exist for different
+   * habits - a rolling 10 days catches a date wherever it lands, and "everything due this month"
+   * is the one planning sweep on the 1st - so the horizon is simply the later of the two edges,
+   * and an instalment enters the list the moment either rule starts pointing at it.
+   */
+  const upcomingHorizon = new Date(
+    Math.max(
+      today.getTime() + 10 * 86_400_000,
+      // `month.end` is exclusive, so step back a day to land on the last of this month.
+      month.end.getTime() - 86_400_000,
+    ),
+  );
+
+  const [pendingRows, runway, missingLoggers, monthIncomes, target, payablesDueSoon, weekSnapshot, instalmentsDueSoon] =
     await Promise.all([
       getPendingRows(),
       getRunwaySnapshot(),
@@ -510,6 +525,25 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       prisma.weeklyFunnelSnapshot.findFirst({
         where: { weekStart: { gte: new Date(today.getTime() - 7 * 86400000) } },
       }),
+      // Instalments still to come. `gte: today` deliberately excludes anything already past due -
+      // those are the overdue receivable's business, and a date cannot be both "follow this up
+      // before it lands" and "this one got away".
+      prisma.instalment.findMany({
+        where: {
+          status: { in: ["DUE", "OVERDUE"] },
+          dueDate: { gte: today, lte: upcomingHorizon },
+          pendingPayment: { ...ACTIVE, status: { in: ["ACTIVE", "OVERDUE"] } },
+        },
+        select: {
+          dueDate: true,
+          amountInrMinor: true,
+          amountEurMinor: true,
+          fxRateUsed: true,
+          pendingPayment: { select: { studentName: true } },
+        },
+        orderBy: { dueDate: "asc" },
+        take: 100,
+      }),
     ]);
 
   const overdue = pendingRows.filter((p) => p.overdue && p.balance.inr > 0);
@@ -525,6 +559,36 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       severity: "risk",
       title: `${overdue.length} overdue payment${overdue.length > 1 ? "s" : ""} - {m0}`,
       body: `${overdue[0].studentName}${overdue.length > 1 ? ` and ${overdue.length - 1} more` : ""} past the due date.`,
+      href: "/finance",
+      amounts: [total],
+    });
+  }
+
+  /**
+   * Instalments worth chasing BEFORE they are missed - the whole point of writing the due dates
+   * down on the income entry. `watch`, not `risk`: nothing has gone wrong yet, and colouring an
+   * on-time plan red is how a founder learns to ignore the band.
+   *
+   * Each instalment carries its own EUR figure from the rate stamped when the plan was agreed,
+   * so this total is exact in both currencies rather than converted at read time.
+   */
+  if (instalmentsDueSoon.length > 0) {
+    const total = instalmentsDueSoon.reduce(
+      (a, i) => ({
+        inr: a.inr + Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
+        eur: a.eur + Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
+      }),
+      { inr: 0, eur: 0 },
+    );
+    const first = instalmentsDueSoon[0];
+    const others = instalmentsDueSoon.length - 1;
+    items.push({
+      id: "instalments-due-soon",
+      severity: "watch",
+      title: `${instalmentsDueSoon.length} instalment${instalmentsDueSoon.length > 1 ? "s" : ""} due soon - {m0}`,
+      body: `${first.pendingPayment.studentName} on ${formatDate(first.dueDate)}${
+        others > 0 ? ` and ${others} more` : ""
+      }. Follow up before the date, not after it.`,
       href: "/finance",
       amounts: [total],
     });

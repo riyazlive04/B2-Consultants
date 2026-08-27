@@ -1351,7 +1351,11 @@ export type DunningConfig = z.infer<typeof dunningConfigSchema>;
 export const DEFAULT_DUNNING_CONFIG: DunningConfig = {
   enabled: false,
   stages: {
-    upcoming: { enabled: true, dayOffset: -3, channel: "EMAIL" },
+    // -10, matching the in-app follow-up window (server/notifications.ts): the founder is told to
+    // chase 10 days out, so the student hearing about it 3 days out put the two reminders on
+    // different clocks. `enabled` below still ships FALSE - an outbound engine that arms itself on
+    // first boot is not a default anyone should get by accident.
+    upcoming: { enabled: true, dayOffset: -10, channel: "EMAIL" },
     missed: { enabled: true, dayOffset: 1, channel: "EMAIL" },
     final: { enabled: true, dayOffset: 7, channel: "EMAIL" },
   },

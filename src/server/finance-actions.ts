@@ -13,7 +13,7 @@ import { appendAudit, LedgerError, postEntry, restatedDate, voidEntryForSource }
 import { expenseEntryDraft, incomeEntryDraft } from "./finance-posting";
 import { isKnownLevel, levelIncomeAccounts } from "./levels";
 import { logActivity, diffFields } from "./activity-log";
-import { archiveData, restoreData } from "@/lib/soft-delete";
+import { ACTIVE, archiveData, restoreData } from "@/lib/soft-delete";
 
 /** Finance is Admin-only in every direction (PRD1 §4.1). All actions re-check. */
 
@@ -59,9 +59,70 @@ const incomeSchema = z.object({
   instalmentCount: blankToUndefined(intInRange(2, 36, "Number of instalments must be")),
   instalmentExtraInr: moneyInput,
   instalmentExtraEur: moneyInput,
+  /** The remaining due dates, as JSON from InstalmentSchedule. See parseSchedule below. */
+  instalmentSchedule: z.string().optional(),
   studentId: z.string().optional(), // optional link → student LTV (CONTEXT §7)
   notes: optionalRule("text"),
 });
+
+/** One agreed future payment: when it is due and how much of the fee it covers. */
+type ScheduledInstalment = { dueDate: Date; inrMinor: bigint; eurMinor: bigint };
+
+/**
+ * The due dates typed on the income form, validated into rows we can bill against.
+ *
+ * Arrives as ONE JSON field rather than repeated inputs, because this action parses with
+ * `Object.fromEntries(form)` - which keeps only the last value of a repeated name, so three
+ * `dueDate` inputs would silently arrive as one date.
+ *
+ * Empty rows are dropped rather than rejected: the form always shows at least one row, so a
+ * founder recording a payment against a plan that already exists submits a blank one every time.
+ * A row with SOME of its answers is a different thing - a half-filled date or a date with no
+ * money against it is a slip, and saying so beats billing a student for zero.
+ */
+function parseSchedule(
+  raw: string | undefined,
+  incomeDate: Date,
+): { error: string } | { schedule: ScheduledInstalment[] } {
+  if (!raw?.trim()) return { schedule: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { error: "The instalment schedule could not be read - re-enter the due dates" };
+  }
+  if (!Array.isArray(parsed)) return { error: "The instalment schedule could not be read - re-enter the due dates" };
+
+  const schedule: ScheduledInstalment[] = [];
+  const seen = new Set<number>();
+  for (const entry of parsed) {
+    const row = entry as { dueDate?: unknown; amountInr?: unknown; amountEur?: unknown };
+    const dueDate = typeof row.dueDate === "string" ? row.dueDate.trim() : "";
+    const inr = typeof row.amountInr === "string" ? row.amountInr.trim() : "";
+    const eur = typeof row.amountEur === "string" ? row.amountEur.trim() : "";
+    if (!dueDate && !inr && !eur) continue; // an untouched row
+    if (!dueDate) return { error: "Every instalment needs a due date" };
+    if (!inr && !eur) return { error: `Enter how much is due on ${dueDate} in INR, EUR, or both` };
+
+    const due = parseDateInput(dueDate);
+    if (Number.isNaN(due.getTime())) return { error: `${dueDate} is not a date we can read` };
+    // A "next due date" that has already been and gone is a typo, not a plan. The income's own
+    // date is the floor rather than today, so back-dating a payment still works.
+    if (due.getTime() <= incomeDate.getTime()) {
+      return { error: `Instalment dates must be after the payment date - ${formatDate(due)} is not` };
+    }
+    if (seen.has(due.getTime())) return { error: `There are two instalments due on ${formatDate(due)}` };
+    seen.add(due.getTime());
+
+    schedule.push({
+      dueDate: due,
+      inrMinor: inr ? majorStringToMinor(inr) : BigInt(0),
+      eurMinor: eur ? majorStringToMinor(eur) : BigInt(0),
+    });
+  }
+  schedule.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+  return { schedule };
+}
 
 /**
  * The instalment answers only mean something for an INSTALMENT entry - switching a row back to
@@ -156,6 +217,58 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
   if ("error" in instalment) return { ok: false, error: instalment.error };
   if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
+  const incomeDate = parseDateInput(d.date);
+  // Only an INSTALMENT entry carries a schedule; switching back to full payment discards any
+  // dates left in the form rather than billing for a plan the founder just cancelled.
+  const parsedSchedule = parseSchedule(
+    d.paymentType === "INSTALMENT" ? d.instalmentSchedule : undefined,
+    incomeDate,
+  );
+  if ("error" in parsedSchedule) return { ok: false, error: parsedSchedule.error };
+  const schedule = parsedSchedule.schedule;
+
+  /**
+   * The count and the dates have to describe the same plan. This payment is instalment 1, so a
+   * 4-instalment plan needs 3 dates after it. Caught here because the alternative is a receivable
+   * that quietly bills for two instalments while the income row says four - and the figure nobody
+   * checks is the one that says the student owes nothing more.
+   */
+  if (schedule.length > 0 && "instalmentCount" in instalment && instalment.instalmentCount) {
+    const expected = instalment.instalmentCount - 1;
+    if (schedule.length !== expected) {
+      return {
+        ok: false,
+        error:
+          `A ${instalment.instalmentCount}-instalment plan needs ${expected} more due date${expected === 1 ? "" : "s"} after this payment - there ${schedule.length === 1 ? "is 1" : `are ${schedule.length}`}.`,
+      };
+    }
+  }
+
+  /**
+   * A student has ONE live receivable per level, so a second schedule for the same pair would
+   * double the money we think is owed. Refused before anything is written, rather than saved and
+   * quietly ignored: the income is still in the form, so clearing the dates and submitting again
+   * records the payment against the plan that already exists.
+   */
+  if (schedule.length > 0) {
+    const existing = await prisma.pendingPayment.findFirst({
+      where: {
+        ...ACTIVE,
+        status: { in: ["ACTIVE", "OVERDUE"] },
+        programLevel: d.programLevel,
+        ...(d.studentId ? { studentId: d.studentId } : { studentName: d.studentName }),
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      return {
+        ok: false,
+        error:
+          `${d.studentName} already has an instalment plan for this level. Clear the due dates to record just this payment, and edit the plan under Pending payments.`,
+      };
+    }
+  }
+
   const fx = await getTodayInrPerEur();
   const incomeAccounts = await levelIncomeAccounts();
   let created: Income | null = null;
@@ -163,7 +276,7 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
     await prisma.$transaction(async (tx) => {
       const income = await tx.income.create({
         data: {
-          date: parseDateInput(d.date),
+          date: incomeDate,
           studentName: d.studentName,
           amountInrMinor: d.amountInr?.trim() ? majorStringToMinor(d.amountInr) : BigInt(0),
           amountEurMinor: d.amountEur?.trim() ? majorStringToMinor(d.amountEur) : BigInt(0),
@@ -177,6 +290,70 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
           enteredById: session.user.id,
         },
       });
+
+      /**
+       * The agreed plan becomes a real receivable, in the same transaction as the payment that
+       * started it - so a schedule can never exist without the income that agreed it, or the
+       * other way round.
+       *
+       * TOTAL FEE IS THE WHOLE FEE, not just what is left. `getPendingRows` computes the balance
+       * as `toCollect - everything this student has paid`, so a total covering only the future
+       * instalments would have this very payment subtracted from it and understate the debt by
+       * exactly one instalment. Total = received now + everything still scheduled, and the balance
+       * then falls by itself as each instalment is recorded as income.
+       *
+       * `planExtra` stays ZERO. It is the Console's per-plan-length surcharge, added ON TOP of the
+       * fee, and the amounts typed here are what the student was actually asked to pay - already
+       * inclusive. Charging the surcharge again would bill it twice. The income row keeps its own
+       * `instalmentExtra` fields as the record of what the plan cost.
+       *
+       * `intervalDays` stays null too: these dates were chosen one at a time, so "every 30 days"
+       * would describe a rhythm this plan does not have.
+       */
+      if (schedule.length > 0) {
+        const scheduledInr = schedule.reduce((a, s) => a + s.inrMinor, BigInt(0));
+        const scheduledEur = schedule.reduce((a, s) => a + s.eurMinor, BigInt(0));
+        const plan = await tx.pendingPayment.create({
+          data: {
+            studentName: d.studentName,
+            studentId: d.studentId || null,
+            programLevel: d.programLevel,
+            totalFeeInrMinor: income.amountInrMinor + scheduledInr,
+            totalFeeEurMinor: income.amountEurMinor + scheduledEur,
+            fxRateUsed: fx.rate,
+            nextDueDate: schedule[0].dueDate,
+            numEmis: schedule.length + 1,
+            status: "ACTIVE",
+          },
+        });
+        await tx.instalment.createMany({
+          data: [
+            // Seq 1 is the payment being recorded right now, stored PAID. The schedule then reads
+            // as the whole plan rather than only its unpaid tail, which is what makes "1 of 4
+            // paid" answerable from the row itself.
+            {
+              pendingPaymentId: plan.id,
+              seq: 1,
+              amountInrMinor: income.amountInrMinor,
+              amountEurMinor: income.amountEurMinor,
+              fxRateUsed: fx.rate,
+              dueDate: incomeDate,
+              paidDate: incomeDate,
+              status: "PAID" as const,
+            },
+            ...schedule.map((s, i) => ({
+              pendingPaymentId: plan.id,
+              seq: i + 2,
+              amountInrMinor: s.inrMinor,
+              amountEurMinor: s.eurMinor,
+              fxRateUsed: fx.rate,
+              dueDate: s.dueDate,
+              status: "DUE" as const,
+            })),
+          ],
+        });
+      }
+
       const entryId = await postEntry(tx, incomeEntryDraft(income, incomeAccounts));
       await appendAudit(tx, {
         actorId: session.user.id,

@@ -209,6 +209,8 @@ export async function getRevisionSections(revisionId: string): Promise<SiteSecti
 
 export type PublicPage = {
   title: string;
+  /** The site this page belongs to, for og:site_name. */
+  siteName: string;
   seoTitle: string | null;
   seoDescription: string | null;
   ogImageUrl: string | null;
@@ -233,7 +235,7 @@ export async function getPublicPage(siteSlug: string, path: string): Promise<Pub
   const site = await prisma.site.findFirst({
     where: { slug: siteSlug, published: true },
     select: {
-      domain: true, theme: true, navMenu: true, metaPixelId: true, gaMeasurementId: true,
+      name: true, domain: true, theme: true, navMenu: true, metaPixelId: true, gaMeasurementId: true,
       sections: { select: { kind: true, blocks: true } },
       pages: {
         where: { path, published: true, deletedAt: null },
@@ -253,6 +255,7 @@ export async function getPublicPage(siteSlug: string, path: string): Promise<Pub
 
   return {
     title: page.title,
+    siteName: site.name,
     seoTitle: page.seoTitle,
     seoDescription: page.seoDescription,
     ogImageUrl: page.ogImageUrl,
@@ -268,13 +271,35 @@ export async function getPublicPage(siteSlug: string, path: string): Promise<Pub
   };
 }
 
-/** Every published path on a site - for the sitemap. */
-export async function getPublishedPaths(siteSlug: string): Promise<string[]> {
-  const rows = await prisma.sitePage.findMany({
-    where: { site: { slug: siteSlug, published: true }, published: true, deletedAt: null, noIndex: false },
-    select: { path: true },
-  });
-  return rows.map((r) => r.path);
+/**
+ * Every page that belongs in the sitemap, across every published site.
+ *
+ * Four gates, and each one is a page that must NOT be advertised to a crawler: the site has to be
+ * published, the page has to be published, it must not be soft-deleted, and it must not be marked
+ * noIndex (the legal shells are). `domain` rides along because the canonical host is the site's
+ * own once DNS is cut over - a sitemap listing /s/<slug>/... while the page canonicalises to
+ * b2consultants.de would list URLs Google then discards as duplicates.
+ *
+ * Returns [] rather than throwing when the database is unreachable: an empty sitemap is a
+ * temporary loss of a discovery hint, a 500 on /sitemap.xml is an error in Search Console.
+ */
+export async function getSitemapPages(): Promise<
+  { slug: string; domain: string | null; path: string; updatedAt: Date }[]
+> {
+  try {
+    const rows = await prisma.sitePage.findMany({
+      where: { published: true, deletedAt: null, noIndex: false, site: { published: true } },
+      select: { path: true, updatedAt: true, site: { select: { slug: true, domain: true } } },
+    });
+    return rows.map((r) => ({
+      slug: r.site.slug,
+      domain: r.site.domain,
+      path: r.path,
+      updatedAt: r.updatedAt,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 /**

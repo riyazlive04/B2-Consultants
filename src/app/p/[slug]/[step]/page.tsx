@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { VISITOR_COOKIE } from "@/lib/ab";
 import { getPublicStep, recordStepView } from "@/server/funnels-metrics";
 import SiteBlocks from "@/components/sites/SiteBlocks";
+import { funnelCanonical, publicMetadata } from "@/lib/public-seo";
 
 export const dynamic = "force-dynamic";
 
@@ -12,15 +13,31 @@ function visitorId(): string | null {
   return cookies().get(VISITOR_COOKIE)?.value ?? null;
 }
 
+/**
+ * Funnel steps are SHARED far more often than they are searched for - a WhatsApp broadcast, an ad,
+ * a link pasted into a group - so the Open Graph card is the part that earns its keep here.
+ *
+ * They stay out of the index on purpose, and `index: false` now says so out loud rather than
+ * inheriting it from the dashboard layout by accident. Two reasons a funnel does not belong in
+ * search results: a thank-you or booking-confirmation step ranking for the brand is actively
+ * embarrassing, and a landing page that duplicates the site's pitch competes with the site itself
+ * for the same query. `follow` stays on, so the links out of a funnel are still crawled.
+ *
+ * If a particular funnel ever SHOULD be indexed - a genuine content landing page rather than an ad
+ * destination - that is a per-step flag on FunnelStep, not a change to this default.
+ */
 export async function generateMetadata({ params }: { params: { slug: string; step: string } }): Promise<Metadata> {
   // Assignment is pure, so this second call cannot disagree with the one in the body below about
   // which variant is being shown - the title always describes the page that ships.
   const data = await getPublicStep(params.slug, params.step, visitorId());
-  if (!data) return { title: "Not found" };
-  return {
+  if (!data) return { title: "Not found", robots: { index: false, follow: false } };
+  return publicMetadata({
     title: data.step.seoTitle || `${data.funnelName} - ${data.step.name}`,
-    description: data.step.seoDescription ?? undefined,
-  };
+    description: data.step.seoDescription,
+    canonical: funnelCanonical(params.slug, params.step),
+    siteName: data.funnelName,
+    index: false,
+  });
 }
 
 function pickUtm(sp: Record<string, string | string[] | undefined>): Record<string, string> {

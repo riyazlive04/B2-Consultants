@@ -4,6 +4,7 @@ import { getAllPublishedPageParams, getPublicPage } from "@/server/sites-metrics
 import SitePageRenderer from "@/components/sites/SitePageRenderer";
 import ForwardParams from "@/components/sites/ForwardParams";
 import SiteTracking from "@/components/sites/SiteTracking";
+import { publicMetadata, siteCanonical } from "@/lib/public-seo";
 
 /**
  * The public marketing site, served at /s/<slug>/<path> until a real domain is attached.
@@ -47,19 +48,31 @@ function toPath(segments?: string[]): string {
   return `/${segments.join("/")}`;
 }
 
+/**
+ * Title, description, canonical, Open Graph, Twitter card and an EXPLICIT robots directive.
+ *
+ * The explicit robots is load-bearing. The root layout marks the whole app `noindex, nofollow`
+ * because it is an internal dashboard, and Next merges metadata downwards - so a marketing page
+ * that simply says nothing about robots inherits "do not index me" and disappears from search
+ * without a single thing looking broken. `publicMetadata` always emits the key.
+ */
 export async function generateMetadata({
   params,
 }: {
   params: { slug: string; path?: string[] };
 }): Promise<Metadata> {
-  const page = await getPublicPage(params.slug, toPath(params.path));
-  if (!page) return { title: "Not found" };
-  return {
+  const path = toPath(params.path);
+  const page = await getPublicPage(params.slug, path);
+  if (!page) return { title: "Not found", robots: { index: false, follow: false } };
+
+  return publicMetadata({
     title: page.seoTitle || page.title,
-    description: page.seoDescription ?? undefined,
-    openGraph: page.ogImageUrl ? { images: [page.ogImageUrl] } : undefined,
-    robots: page.noIndex ? { index: false, follow: false } : undefined,
-  };
+    description: page.seoDescription,
+    canonical: siteCanonical(page.siteDomain, params.slug, path),
+    imageUrl: page.ogImageUrl,
+    siteName: page.siteName,
+    index: !page.noIndex,
+  });
 }
 
 export default async function PublicSitePage({

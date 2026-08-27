@@ -233,6 +233,29 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
     if (systemOff && !logSkips) {
       return { messageId: null, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
     }
+    /**
+     * A data-skip writes a row so the reason is not invisible - but ONCE, not once per tick.
+     *
+     * The SOP engine re-attempts a DUE step every time the cron runs, so a reason that cannot
+     * change on its own ("No WATI template configured") produced one row per lead per minute.
+     * Between 25/08 and 27/08 that was 5,175 rows for two prospects, which buries the real
+     * delivery history on their contact cards and grows without bound.
+     *
+     * So: for an engine-driven caller, if the most recent attempt for this touchpoint and
+     * recipient was already skipped for the SAME reason, stay silent. The trace still exists -
+     * the first row - and the moment the reason CHANGES (a template gets bound, a number is
+     * fixed) a new row is written, which is the transition worth recording.
+     */
+    if (!logSkips) {
+      const last = await prisma.whatsAppMessage.findFirst({
+        where: { kind, direction: "OUTBOUND", ...targetWhere(target) },
+        orderBy: { createdAt: "desc" },
+        select: { status: true, error: true },
+      });
+      if (last?.status === "SKIPPED" && last.error === skipReason) {
+        return { messageId: null, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
+      }
+    }
     const messageId = await writeRow({
       kind,
       status: "SKIPPED",
@@ -460,6 +483,23 @@ async function throttleOk(
   if (opts.maxCount !== undefined) {
     const count = await prisma.whatsAppMessage.count({ where: { ...base, status: { in: SUCCESSFUL } } });
     if (count >= opts.maxCount) return false;
+
+    /**
+     * ATTEMPTS, not just successes.
+     *
+     * Counting only successful sends against the cap means a send that always fails never
+     * reaches it, so it is retried until the underlying event passes. On 25-26/08/2026 one
+     * prospect got ten BOOKING_REMINDER attempts, every 2h15m through the night, each rejected
+     * by Meta with "Message undeliverable as Meta has restricted it for higher quality
+     * messaging" - a QUALITY restriction, which hammering it can only deepen. Nothing reached
+     * him, and the retries were making the number worse for everyone else.
+     *
+     * The allowance above `maxCount` is what keeps a genuinely transient failure recoverable
+     * while stopping a hard one from becoming a storm.
+     */
+    const RETRY_ALLOWANCE = 2;
+    const attempts = await prisma.whatsAppMessage.count({ where: base });
+    if (attempts >= opts.maxCount + RETRY_ALLOWANCE) return false;
   }
   if (opts.minSpacingMs !== undefined) {
     const last = await prisma.whatsAppMessage.findFirst({

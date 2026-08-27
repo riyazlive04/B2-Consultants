@@ -379,7 +379,19 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
       // The touchpoint's NAME, not its enum constant. "SOP 7b · Second follow-up, still not
       // booked" tells the reader what the prospect received; "SOP_FOLLOWUP_2" makes them go and
       // look it up, which on a record meant to explain a decision is the whole cost.
-      title: `WhatsApp ${w.direction === "INBOUND" ? "received" : "sent"}${w.kind ? ` · ${WHATSAPP_KIND_LABELS[w.kind] ?? w.kind}` : ""}`,
+      // The VERB reports the outcome, not the attempt. Ten failed pre-call reminders all read
+      // "WhatsApp sent" here while the prospect received nothing - the founder reasonably read
+      // the card as proof of delivery and asked why the messages never arrived. The red tone
+      // below always said otherwise, but nobody reads a colour over a sentence.
+      title: `WhatsApp ${
+        w.direction === "INBOUND"
+          ? "received"
+          : w.status === "FAILED"
+            ? "FAILED"
+            : w.status === "SKIPPED"
+              ? "skipped"
+              : "sent"
+      }${w.kind ? ` · ${WHATSAPP_KIND_LABELS[w.kind] ?? w.kind}` : ""}`,
       // A skipped or failed send has a written reason and no body. Showing the reason is the
       // point: "nothing went out because no template is bound" must not look like silence.
       body: w.body ?? w.error ?? null,

@@ -200,11 +200,36 @@ function CallPrep({ call }: { call: L2Call }) {
               before their answers were being kept.
             </p>
           ) : (
-            <dl className="space-y-1.5">
+            <dl className="divide-y divide-line">
               {call.answers.map((a, i) => (
-                <div key={`${a.question}-${i}`} className="text-caption">
-                  <dt className="text-muted">{a.question}</dt>
-                  <dd className="font-medium text-ink">{a.answer}</dd>
+                <div key={`${a.question}-${i}`} className="flex items-start justify-between gap-3 py-1.5 text-caption">
+                  <div className="min-w-0 flex-1">
+                    <dt className="text-muted" title={a.question}>{a.question}</dt>
+                    <dd className="font-medium text-ink">{a.answer}</dd>
+                  </div>
+                  {/* The mark this answer earned. A specialist opening this card is deciding what
+                      to press on in the next ten minutes, and the weak answer is the thing to
+                      press on - it was the one number this screen never showed. */}
+                  {a.score !== null && (
+                    <span
+                      title={
+                        a.counted
+                          ? `Scored ${a.score} out of 5`
+                          : `Scored ${a.score} out of 5, but this question no longer divides the average`
+                      }
+                      className={`tnum flex-none rounded px-1.5 py-0.5 font-semibold ${
+                        !a.counted
+                          ? "bg-surface-2 text-muted"
+                          : a.score >= 3
+                            ? "bg-ok-soft text-ok"
+                            : a.score >= 2
+                              ? "bg-warn-soft text-warn"
+                              : "bg-risk-soft text-risk"
+                      }`}
+                    >
+                      {a.score}/5
+                    </span>
+                  )}
                 </div>
               ))}
             </dl>
@@ -222,7 +247,7 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           {call.leadId ? (
-            <Link href={`/pipeline?lead=${call.leadId}`} className="truncate font-medium text-ink hover:underline" title={call.name}>
+            <Link href={`/contacts/${call.leadId}`} className="truncate font-medium text-ink hover:underline" title={call.name}>
               {call.name}
             </Link>
           ) : (
@@ -270,7 +295,7 @@ function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead, calledAt?: 
     <li className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/pipeline?lead=${lead.id}`} className="truncate font-medium text-ink hover:underline" title={lead.name}>
+          <Link href={`/contacts/${lead.id}`} className="truncate font-medium text-ink hover:underline" title={lead.name}>
             {lead.name}
           </Link>
           <Pill tone={lead.stage === "DISCO_NOT_BOOKED" ? "warn" : "neutral"}>

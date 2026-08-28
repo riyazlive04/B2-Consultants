@@ -200,7 +200,7 @@ export const BANT_ANSWER_SCORES: Record<string, Record<string, number>> = {
 };
 
 /** A dimension counts as "met" (the boolean the pipeline ranking consumes) at ≥3/5. */
-const DIMENSION_MET_AT = 3;
+export const DIMENSION_MET_AT = 3;
 
 /** Verdict thresholds on the 0-5 average: >3 confirm · 2-3 doubt · <2 cancel. */
 export function bantVerdictFor(avg: number): "CONFIRM" | "DOUBT" | "CANCEL" {
@@ -228,7 +228,13 @@ export type BantResult = {
   bantVerdict: "CONFIRM" | "DOUBT" | "CANCEL";
 };
 
-const answerScore = (field: keyof typeof BANT_ANSWER_SCORES, value: string | null | undefined) =>
+/**
+ * The 0-5 the scorer gives ONE answer. Exported because the contact record and the caller's
+ * desk now show it per question: "why did this prospect score 2.6" is only answerable from
+ * the individual answers, and re-deriving that table in the view layer is how the number on
+ * screen starts disagreeing with the number in the verdict.
+ */
+export const answerScore = (field: keyof typeof BANT_ANSWER_SCORES, value: string | null | undefined) =>
   BANT_ANSWER_SCORES[field][value ?? ""] ?? 0;
 
 /**

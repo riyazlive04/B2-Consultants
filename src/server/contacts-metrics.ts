@@ -4,6 +4,7 @@ import { Prisma, LeadStage, LeadSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatInrMinor, formatEurMinor } from "@/lib/format";
 import { resolveBant, type BantSnapshot } from "@/lib/bant-view";
+import { bookingAnswerLines, storedAnswerLines, type BantAnswerLine } from "@/lib/bant-answers";
 import { ACTIVE } from "@/lib/soft-delete";
 import { WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
 
@@ -285,7 +286,7 @@ export type ContactDetail = {
   bant: BantSnapshot | null;
   bantScoredAt: Date | null;
   /** The individual answers behind the score, in the order the form asked them. */
-  answers: { question: string; dimension: string; answer: string; score: number | null }[];
+  answers: BantAnswerLine[];
   timeline: TimelineEvent[];
 };
 
@@ -346,6 +347,13 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
     },
   });
   if (!lead) return null;
+
+  /**
+   * The submission the verdict was taken on. Picked once and reused for both the score and the
+   * answers below, so they can never come from different bookings.
+   */
+  const scoredBooking = lead.bookings.find((b) => b.bantAvg !== null) ?? null;
+  const bookingLines = bookingAnswerLines(scoredBooking);
 
   // Build the merged activity timeline (newest first).
   const timeline: TimelineEvent[] = [];
@@ -530,17 +538,19 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
      *
      * Null means NOT SCORED, and the UI must render it as that, never as zero.
      */
-    bant: resolveBant(
-      lead.bookings.find((b) => b.bantAvg !== null) ?? null,
-      lead,
-    ),
+    bant: resolveBant(scoredBooking, lead),
     bantScoredAt: lead.bantScoredAt,
-    answers: lead.answers.map((a) => ({
-      question: a.question.text,
-      dimension: a.question.dimension,
-      answer: a.answerRaw,
-      score: a.score,
-    })),
+    /**
+     * Booking answers FIRST, stored answers as the fallback - the same precedence resolveBant
+     * applies to the score, so the number and the answers under it can never describe different
+     * submissions.
+     *
+     * This card used to read `lead.answers` alone, which are written only by the landing-page
+     * opt-in path. A prospect who qualified by BOOKING A DISCOVERY CALL - most of them - had
+     * their answers sitting in the booking's own columns the whole time and saw an empty card
+     * saying the answers "were not kept".
+     */
+    answers: bookingLines.length > 0 ? bookingLines : storedAnswerLines(lead.answers),
     timeline,
   };
 }

@@ -6,8 +6,7 @@ import { ACTIVE } from "@/lib/soft-delete";
 import { istBoundaryToInstant, istMonthInstantRange, istMonthRange, istToday } from "@/lib/dates";
 import { rate } from "@/lib/outreach-sla";
 import { resolveBant, type BantSnapshot } from "@/lib/bant-view";
-import { intakeLabel, INTAKE_OPTIONS } from "@/lib/booking-intake";
-import { DIMENSION_BY_KEY, QUESTION_TEXT } from "@/lib/qualification";
+import { bookingAnswerLines, storedAnswerLines, type BantAnswerLine as BantAnswerLineT } from "@/lib/bant-answers";
 
 /**
  * Level 2 - Discovery Specialist desk (rebuild spec §7).
@@ -45,15 +44,11 @@ export type L2Call = {
    */
   bant: BantSnapshot | null;
   /** The individual answers behind the score, in catalogue order. The call prep. */
-  answers: BantAnswerLine[];
+  answers: BantAnswerLineT[];
 };
 
-/** One answered qualification question, ready to render. */
-export type BantAnswerLine = {
-  question: string;
-  answer: string;
-  dimension: BantDimension;
-};
+/** One answered qualification question, ready to render. Shared with the contact record. */
+export type { BantAnswerLine } from "@/lib/bant-answers";
 
 export type L2Targets = {
   callsToday: number;
@@ -94,12 +89,6 @@ function istTodayInstants() {
   };
 }
 
-/** The six scored intake columns, in the order the form asks them. */
-const SCORED_BOOKING_KEYS = [
-  "whenStartGermany", "alreadyApplied", "commitment",
-  "readyToInvest", "currentIncome", "decisionMaking",
-] as const satisfies readonly (keyof typeof INTAKE_OPTIONS)[];
-
 /**
  * The answers behind the score, as the discovery specialist should read them.
  *
@@ -114,25 +103,12 @@ const SCORED_BOOKING_KEYS = [
 function answerLinesFor(
   booking: Record<string, unknown> | null,
   lead: {
-    answers: { answerRaw: string; question: { text: string; dimension: BantDimension } }[];
+    answers: { answerRaw: string; score: number | null; question: { text: string; dimension: BantDimension } }[];
   } | null,
-): BantAnswerLine[] {
-  const fromBooking = SCORED_BOOKING_KEYS.flatMap((key) => {
-    const value = booking?.[key];
-    if (typeof value !== "string" || !value) return [];
-    return [{
-      question: QUESTION_TEXT[key] ?? key,
-      answer: intakeLabel(key, value),
-      dimension: DIMENSION_BY_KEY[key] ?? ("NONE" as BantDimension),
-    }];
-  });
+): BantAnswerLineT[] {
+  const fromBooking = bookingAnswerLines(booking);
   if (fromBooking.length > 0) return fromBooking;
-
-  return (lead?.answers ?? []).map((a) => ({
-    question: a.question.text,
-    answer: a.answerRaw,
-    dimension: a.question.dimension,
-  }));
+  return storedAnswerLines(lead?.answers ?? []);
 }
 
 export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
@@ -187,6 +163,7 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
                   where: { bookingRequestId: null },
                   select: {
                     answerRaw: true,
+                    score: true,
                     question: { select: { text: true, dimension: true, orderIndex: true } },
                   },
                   orderBy: { question: { orderIndex: "asc" } },

@@ -428,6 +428,53 @@ function Opps({ contact }: { contact: ContactDetail }) {
 }
 
 /**
+ * One answer's contribution: which BANT dimension it speaks to, and the 0-5 it scored.
+ *
+ * A question that scores nothing renders as a dash rather than a 0. They are different facts -
+ * "we asked and they answered badly" versus "this was context, it was never worth marks" - and
+ * a 0 against a context question is the fastest way to make a specialist distrust the whole card.
+ */
+function AnswerScore({ line }: { line: ContactDetail["answers"][number] }) {
+  const letter = line.dimension === "NONE" ? null : line.dimension[0];
+  return (
+    <span className="flex flex-none items-center gap-1.5">
+      {letter && (
+        <span
+          title={`Counts towards ${line.dimension.toLowerCase()}`}
+          className="grid h-5 w-5 place-items-center rounded bg-surface-2 text-caption font-bold text-ink-3"
+        >
+          {letter}
+        </span>
+      )}
+      {line.score === null ? (
+        <span className="text-caption text-ink-3" title="Context only - this question scores nothing">
+          -
+        </span>
+      ) : (
+        <span
+          title={
+            line.counted
+              ? `Scored ${line.score} out of 5${line.derived ? " by the current scoring table" : ""}`
+              : `Scored ${line.score} out of 5, but this question no longer divides the average`
+          }
+          className={`tnum rounded px-1.5 py-0.5 text-caption font-semibold ${
+            !line.counted
+              ? "bg-surface-2 text-muted"
+              : line.score >= 3
+                ? "bg-ok-soft text-ok"
+                : line.score >= 2
+                  ? "bg-warn-soft text-warn"
+                  : "bg-risk-soft text-risk"
+          }`}
+        >
+          {line.score}/5
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
  * How this person qualified - the band score and the answers behind it.
  *
  * ── Why this card exists ────────────────────────────────────────────────────────
@@ -494,14 +541,23 @@ function BantCard({ contact }: { contact: ContactDetail }) {
       </div>
 
       {contact.answers.length > 0 ? (
-        <dl className="mt-4 space-y-2 border-t border-line pt-3">
-          {contact.answers.map((a, i) => (
-            <div key={`${a.question}-${i}`}>
-              <dt className="text-caption text-ink-3">{a.question}</dt>
-              <dd className="text-sm font-medium text-ink">{a.answer}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className="mt-4 border-t border-line pt-3">
+          <p className="text-caption text-ink-3">
+            What they answered, and what each answer scored. A greyed score is one that no longer
+            divides the average - the form stopped asking it.
+          </p>
+          <dl className="mt-2 divide-y divide-line">
+            {contact.answers.map((a, i) => (
+              <div key={`${a.question}-${i}`} className="flex items-start justify-between gap-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <dt className="text-caption text-ink-3" title={a.question}>{a.question}</dt>
+                  <dd className="text-sm font-medium text-ink">{a.answer}</dd>
+                </div>
+                <AnswerScore line={a} />
+              </div>
+            ))}
+          </dl>
+        </div>
       ) : (
         <p className="mt-3 border-t border-line pt-3 text-caption text-ink-3">
           A score was recorded but the individual answers were not kept - this prospect was scored

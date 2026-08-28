@@ -178,7 +178,7 @@ export function DeskClient({ desk }: { desk: TelecallerDesk }) {
               <li key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
                 <div className="min-w-[180px] flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link href={`/pipeline?lead=${l.id}`} className="text-sm font-semibold text-accent hover:underline">
+                    <Link href={`/contacts/${l.id}`} className="text-sm font-semibold text-accent hover:underline">
                       {l.name}
                     </Link>
                     <Pill tone={l.callCount === 0 ? "warn" : "neutral"}>

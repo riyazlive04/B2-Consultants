@@ -654,6 +654,8 @@ const outreachConfigSchema = z.object({
   discoCancelLeadHours: slaHours("Disco cancellation"),
   sssConfirm1LeadHours: slaHours("SSS confirm 1"),
   sssConfirm2LeadHours: slaHours("SSS confirm 2"),
+  sssConfirm3LeadHours: slaHours("SSS confirm 3"),
+  sssConfirmCallLeadHours: slaHours("SSS confirm call"),
   sssCancelLeadHours: slaHours("SSS cancellation"),
   maxPerRun: blankToUndefined(intInRange(1, 1000, "Max journeys per run")),
   defaultSpecialistName: blankToUndefined(z.string().trim().max(80, "Sender name is too long")),
@@ -714,6 +716,8 @@ export async function saveOutreachConfig(form: FormData): Promise<ActionResult> 
       discoCancelLeadHours: num(d.discoCancelLeadHours, DEFAULT_SLA.discoCancelLeadHours),
       sssConfirm1LeadHours: num(d.sssConfirm1LeadHours, DEFAULT_SLA.sssConfirm1LeadHours),
       sssConfirm2LeadHours: num(d.sssConfirm2LeadHours, DEFAULT_SLA.sssConfirm2LeadHours),
+      sssConfirm3LeadHours: num(d.sssConfirm3LeadHours, current.sla.sssConfirm3LeadHours),
+      sssConfirmCallLeadHours: num(d.sssConfirmCallLeadHours, current.sla.sssConfirmCallLeadHours),
       sssCancelLeadHours: num(d.sssCancelLeadHours, DEFAULT_SLA.sssCancelLeadHours),
     },
   });

@@ -320,6 +320,23 @@ He’s prepared something very specific for your profile and would love to see y
 
 <<INSERT ZOOM LINK HERE>>`;
 
+/**
+ * L2 - the prospect did not join their discovery call.
+ *
+ * TRANSCRIBED FROM THE APPROVED WATI TEMPLATE `b2_sop_disco_cancel`, read from the WATI API on
+ * 27/08/2026 - not written here. That template's text is a POST-miss message, which is why it was
+ * wrong bound to Step 16 (12h BEFORE the call, telling people they had missed something that had
+ * not happened) and is exactly right for this step.
+ */
+const TPL_DISCO_NOSHOW = `Hi [Prospect’s First Name],
+
+We noticed you missed your scheduled Personalized Discovery Call.
+
+If you’re still interested in exploring career opportunities in Germany, you can book a new appointment at a time that works for you:
+https://optin.b2consultants.de/apply
+
+If you have any questions, we’re happy to help.`;
+
 /** Step 21 - SSS Call Cancellation WhatsApp 3 (≥10h before). */
 const TPL_SSS_CANCEL = `Hey [Prospect’s First Name], since we didn’t receive your confirmation, we had to release your Success Strategy Session slot for another candidate.
 
@@ -685,6 +702,31 @@ export const OUTREACH_STEPS: OutreachStepDef[] = [
     slaKey: null,
   },
   {
+    step: "DISCO_NOSHOW_CALL_1",
+    sopStep: "L2 · no-show",
+    label: "No-show - call attempt 1",
+    channel: "CALL",
+    anchor: "IMMEDIATE",
+    slaKey: null,
+  },
+  {
+    step: "DISCO_NOSHOW_CALL_2",
+    sopStep: "L2 · no-show",
+    label: "No-show - call attempt 2",
+    channel: "CALL",
+    anchor: "IMMEDIATE",
+    slaKey: null,
+  },
+  {
+    step: "DISCO_NOSHOW_MSG",
+    sopStep: "L2 · no-show",
+    label: "No-show - WhatsApp",
+    channel: "WHATSAPP",
+    anchor: "IMMEDIATE",
+    slaKey: null,
+    body: TPL_DISCO_NOSHOW,
+  },
+  {
     step: "SSS_CONFIRM_1",
     sopStep: "Step 19",
     label: "SSS confirmation 1 (+ video)",
@@ -702,6 +744,23 @@ export const OUTREACH_STEPS: OutreachStepDef[] = [
     slaKey: "sssConfirm2LeadHours",
     body: TPL_SSS_CONFIRM_2,
     needsZoom: true,
+  },
+  {
+    step: "SSS_CONFIRM_3",
+    sopStep: "Step 20b",
+    label: "SSS confirmation 3",
+    channel: "WHATSAPP",
+    anchor: "BEFORE_SSS",
+    slaKey: "sssConfirm3LeadHours",
+    body: TPL_SSS_CONFIRM_2,
+  },
+  {
+    step: "SSS_CONFIRM_CALL",
+    sopStep: "Step 20c",
+    label: "SSS confirmation call",
+    channel: "CALL",
+    anchor: "BEFORE_SSS",
+    slaKey: "sssConfirmCallLeadHours",
   },
   {
     step: "SSS_CANCEL_MSG",
@@ -758,6 +817,10 @@ export type OutreachSla = {
   sssConfirm1LeadHours: number;
   /** Step 20 - send at least this many hours before the SSS call. */
   sssConfirm2LeadHours: number;
+  /** Step 20b - the third SSS confirmation, this many hours before the call. */
+  sssConfirm3LeadHours: number;
+  /** Step 20c - the specialist rings to confirm, this many hours before the call. */
+  sssConfirmCallLeadHours: number;
   /** Step 21 - cancellation message at least this many hours before. */
   sssCancelLeadHours: number;
   /**
@@ -809,7 +872,13 @@ export const DEFAULT_SLA: OutreachSla = {
   discoCancelLeadHours: 12,
   sssConfirm1LeadHours: 24,
   sssConfirm2LeadHours: 12,
-  sssCancelLeadHours: 10,
+  sssConfirm3LeadHours: 6,
+  sssConfirmCallLeadHours: 3,
+  /**
+   * Was 10, which predates the 6h and 3h rungs and would have put the cancellation BEFORE the
+   * call that is supposed to save it. It has to sit after the 3-hour attempt.
+   */
+  sssCancelLeadHours: 2,
   discoConfirmCallLeadHours: 12,
   postBookingDelayMinutes: 5,
   noShowSweepHours: 2,

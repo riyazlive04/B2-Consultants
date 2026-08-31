@@ -252,7 +252,11 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     sopStep: "Step 16",
     kind: "SOP_DISCO_CANCEL",
     step: "DISCO_CANCEL_MSG",
-    name: "b2_sop_disco_cancel",
+    // NOT b2_sop_disco_cancel, despite the name. That template's approved text says the call was
+    // MISSED, and this step fires 12h BEFORE it - it now lives on DISCO_NOSHOW_MSG, where a miss
+    // has actually happened. b2_booking_auto_cancelled is approved and says the true thing here:
+    // the slot is being released for lack of confirmation.
+    name: "b2_booking_auto_cancelled",
     category: "MARKETING",
     language: "en",
     categoryNote:
@@ -291,6 +295,37 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     ],
   },
   {
+    sopStep: "Step 20b",
+    kind: "SOP_SSS_CONFIRM_3",
+    step: "SSS_CONFIRM_3",
+    name: "b2_sop_sss_confirm_3",
+    category: "MARKETING",
+    language: "en",
+    categoryNote:
+      "The third SSS confirmation. Same body and same promotional framing as Step 20 → MARKETING.",
+    vars: [V.name("Priya"), V.date("Sat 18 Jul"), V.time("07:00 PM"), V.zoom()],
+    notes: [
+      "Body is IDENTICAL to b2_sop_sss_confirm_2 - the same ask, made once more at the 6-hour mark.",
+      "Its own template so the 6h rung can be worded apart later, and so delivery stats separate it from the 12h one.",
+      "Until it is approved, bind SOP_SSS_CONFIRM_3 to b2_sop_sss_confirm_2 in WhatsApp → Settings; the text is the same.",
+    ],
+  },
+  {
+    sopStep: "L2 · no-show",
+    kind: "SOP_DISCO_NOSHOW",
+    step: "DISCO_NOSHOW_MSG",
+    name: "b2_sop_disco_cancel",
+    category: "MARKETING",
+    language: "en",
+    categoryNote:
+      "Carries a re-booking CTA and link, which is promotional → MARKETING. Same reasoning as the other post-miss messages.",
+    vars: [V.name("Priya")],
+    notes: [
+      "ALREADY APPROVED in WATI, and this is where its text belongs: \"We noticed you missed your scheduled Personalized Discovery Call... you can book a new appointment\".",
+      "It was previously bound to Step 16, which fires 12h BEFORE the call - so it told people they had missed an appointment that had not happened yet. Step 16 now uses b2_booking_auto_cancelled.",
+    ],
+  },
+  {
     sopStep: "Step 21",
     kind: "SOP_SSS_CANCEL",
     step: "SSS_CANCEL_MSG",
@@ -319,6 +354,8 @@ const TO_WATI: OutreachVars = {
  */
 const BODY_SUFFIX: Partial<Record<OutreachStep, string>> = {
   SSS_CONFIRM_2: "\n\nPlease reply *YES* to confirm.",
+  // Same body as Step 20, so the same trailing-variable problem and the same fix.
+  SSS_CONFIRM_3: "\n\nPlease reply *YES* to confirm.",
 };
 
 /**

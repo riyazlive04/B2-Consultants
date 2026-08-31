@@ -101,8 +101,9 @@ describe("Submission pack - bodies are derived from the SOP, not retyped", () =>
           .trim();
       const sopStripped = strip(sop);
       const bodyStripped = strip(body);
-      // Step 20 gets one documented closing line appended; everything else must match exactly.
-      if (t.step === "SSS_CONFIRM_2") {
+      // Steps 20 and 20b get one documented closing line appended - they share a body, so they
+      // share its trailing-variable problem and its fix. Everything else must match exactly.
+      if (t.step === "SSS_CONFIRM_2" || t.step === "SSS_CONFIRM_3") {
         assert.ok(bodyStripped.startsWith(sopStripped), `${t.name} must keep the SOP wording as its prefix`);
       } else {
         assert.equal(bodyStripped, sopStripped, `${t.name} drifted from the SOP text`);

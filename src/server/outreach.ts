@@ -85,7 +85,12 @@ const JOURNEY_INCLUDE = {
   // `bantAvg`/`bantSource` ride along so Step 11 can score a prospect who answered the band-score
   // questions on the LANDING PAGE rather than on our booking form - see `bantForQualification`.
   lead: {
-    select: { id: true, name: true, phone: true, email: true, bantAvg: true, bantSource: true },
+    select: {
+      id: true, name: true, phone: true, email: true, bantAvg: true, bantSource: true,
+      // Only the fields the projection needs, and only NO_SHOW rows: the Level 2 chase turns on
+      // a specialist having recorded that the prospect did not join.
+      outcomes: { where: { outcome: "NO_SHOW" }, select: { callDate: true }, orderBy: { callDate: "desc" }, take: 1 },
+    },
   },
   booking: { include: { slot: { select: { startsAt: true } } } },
   respTouchpoint: { select: { id: true, name: true } },
@@ -134,6 +139,7 @@ export function projectJourney(row: JourneyRow): JourneyState {
     whatsappConfirmed: row.whatsappConfirmed,
     salesCallConfirmed: row.salesCallConfirmed,
     highlyQualified: row.highlyQualified,
+    discoNoShow: row.lead.outcomes.length > 0,
     steps,
   };
 }
@@ -776,6 +782,8 @@ const STEP_TO_KIND = {
   DISCO_CANCEL_MSG: "SOP_DISCO_CANCEL",
   SSS_CONFIRM_1: "SOP_SSS_CONFIRM_1",
   SSS_CONFIRM_2: "SOP_SSS_CONFIRM_2",
+  SSS_CONFIRM_3: "SOP_SSS_CONFIRM_3",
+  DISCO_NOSHOW_MSG: "SOP_DISCO_NOSHOW",
   SSS_CANCEL_MSG: "SOP_SSS_CANCEL",
 } as const satisfies Partial<Record<OutreachStep, WhatsAppKind>>;
 

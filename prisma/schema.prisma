@@ -3156,7 +3156,9 @@ enum WhatsAppKind {
   SOP_DISCO_CANCEL // Step 16 - ≥12h before, unconfirmed after two calls
   SOP_SSS_CONFIRM_1 // Step 19 - ≥24h before the SSS, carries the personalized video
   SOP_SSS_CONFIRM_2 // Step 20 - ≥12h before the SSS, no reply to Step 19
-  SOP_SSS_CANCEL // Step 21 - ≥10h before the SSS, still unconfirmed
+  SOP_SSS_CONFIRM_3 // Step 20b - ≥6h before the SSS, no reply to Steps 19/20
+  SOP_DISCO_NOSHOW // L2 - the prospect did not join their discovery call
+  SOP_SSS_CANCEL // Step 21 - unconfirmed after the 3h call
   // ── Bookings confirmation loop (Module E). The in-house Bookings section's own confirm-or-cancel
   // cadence, independent of the Outreach SOP ladder above (which runs off a separate OutreachJourney).
   BOOKING_CONFIRM_REQUEST // asks the prospect to reply YES to hold their upcoming slot
@@ -3677,9 +3679,17 @@ enum OutreachStep {
   DISCO_CANCEL_MSG // Step 16 - at least 12h before, only after both calls failed
   DISCO_CANCEL_EMAIL // Step 16b - the same cancellation notice by email
   DISCO_CANCEL // Step 17/18 - cancel the calendar appointment, mark the row RED
+  // ── Level 2, the call itself: the prospect did not join. Two call attempts, then a
+  // message, then the booking is closed out. Level 1's ladder ends at the booking; this
+  // picks up on the day.
+  DISCO_NOSHOW_CALL_1 // L2 - ring the no-show, first attempt
+  DISCO_NOSHOW_CALL_2 // L2 - second attempt, required before giving up
+  DISCO_NOSHOW_MSG // L2 - WhatsApp after both attempts failed
   SSS_CONFIRM_1 // Step 19 - at least 24h before the SSS call (carries the personalized video)
   SSS_CONFIRM_2 // Step 20 - at least 12h before, only if Step 19 got no reply
-  SSS_CANCEL_MSG // Step 21 - at least 10h before, still unconfirmed
+  SSS_CONFIRM_3 // Step 20b - at least 6h before, still no reply
+  SSS_CONFIRM_CALL // Step 20c - at least 3h before, the specialist rings to confirm
+  SSS_CANCEL_MSG // Step 21 - unconfirmed after the 3h call
   SSS_CANCEL // Step 22/23 - cancel the SSS appointment, mark the row RED
 }
 

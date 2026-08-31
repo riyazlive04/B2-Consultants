@@ -33,6 +33,7 @@ function base(over: Partial<JourneyState> = {}): JourneyState {
     whatsappConfirmed: false,
     salesCallConfirmed: false,
     highlyQualified: null,
+    discoNoShow: false,
     steps: {},
     ...over,
   };

@@ -54,7 +54,9 @@ const SLA_FIELDS: {
   { key: "discoCancelLeadHours", label: "Disco cancellation", hint: "Step 16 - hours before the call", unit: "h", max: SLA_HOURS_MAX },
   { key: "sssConfirm1LeadHours", label: "SSS confirm 1", hint: "Step 19 - hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
   { key: "sssConfirm2LeadHours", label: "SSS confirm 2", hint: "Step 20 - hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
-  { key: "sssCancelLeadHours", label: "SSS cancellation", hint: "Step 21 - hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
+  { key: "sssConfirm3LeadHours", label: "SSS confirm 3", hint: "Step 20b - hours before the SSS", unit: "h", max: SLA_HOURS_MAX },
+  { key: "sssConfirmCallLeadHours", label: "SSS confirm call", hint: "Step 20c - hours before the SSS, the specialist rings", unit: "h", max: SLA_HOURS_MAX },
+  { key: "sssCancelLeadHours", label: "SSS cancellation", hint: "Step 21 - hours before the SSS, after the confirm call failed", unit: "h", max: SLA_HOURS_MAX },
 ];
 
 export function OutreachSettings({ config, watiLive }: { config: OutreachConfig; watiLive: boolean }) {

@@ -55,6 +55,7 @@ function base(over: Partial<JourneyState> = {}): JourneyState {
     whatsappConfirmed: false,
     salesCallConfirmed: false,
     highlyQualified: null,
+    discoNoShow: false,
     steps: {},
     ...over,
   };
@@ -467,7 +468,7 @@ describe("Step 18 - Highly Qualified gate", () => {
 // STEPS 19–21 - the SSS ladder (checklist §Q)
 // ═══════════════════════════════════════════════════════════════════
 
-describe("Steps 19/20/21 - SSS ladder fires at 24h/12h/10h", () => {
+describe("Steps 19-21 - SSS ladder fires at 24h/12h/6h/3h/2h", () => {
   const sssAt = at(100 * HR);
   const ladder = (steps: OutreachStep[]) => {
     let s = base({ phase: "SSS_CONFIRMATION", booked: true, qualified: "YES", highlyQualified: true, sssAt });
@@ -476,9 +477,13 @@ describe("Steps 19/20/21 - SSS ladder fires at 24h/12h/10h", () => {
   };
 
   for (const [label, stepKey, hours, prereq] of [
+    // The Level 2 flowchart adds a 6h message and a 3h call between the 12h reminder and the
+    // cancellation, so the cancellation moved from 10h (which was BEFORE both of them) to 2h.
     ["Step 19", "SSS_CONFIRM_1", 24, []],
     ["Step 20", "SSS_CONFIRM_2", 12, ["SSS_CONFIRM_1"]],
-    ["Step 21", "SSS_CANCEL_MSG", 10, ["SSS_CONFIRM_1", "SSS_CONFIRM_2"]],
+    ["Step 20b", "SSS_CONFIRM_3", 6, ["SSS_CONFIRM_1", "SSS_CONFIRM_2"]],
+    ["Step 20c", "SSS_CONFIRM_CALL", 3, ["SSS_CONFIRM_1", "SSS_CONFIRM_2", "SSS_CONFIRM_3"]],
+    ["Step 21", "SSS_CANCEL_MSG", 2, ["SSS_CONFIRM_1", "SSS_CONFIRM_2", "SSS_CONFIRM_3", "SSS_CONFIRM_CALL"]],
   ] as const) {
     describe(`${label} - T−${hours}h`, () => {
       const due = planned(ladder(prereq as unknown as OutreachStep[]), T0, stepKey as OutreachStep)!.dueAt;

@@ -59,6 +59,7 @@ async function tick(journeyId: string, now: Date) {
     whatsappConfirmed: row.whatsappConfirmed,
     salesCallConfirmed: row.salesCallConfirmed,
     highlyQualified: row.highlyQualified,
+    discoNoShow: false,
     steps,
   };
 

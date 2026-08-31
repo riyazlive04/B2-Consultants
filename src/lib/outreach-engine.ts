@@ -46,6 +46,14 @@ export type JourneyState = {
   whatsappConfirmed: boolean;
   salesCallConfirmed: boolean;
   highlyQualified: boolean | null;
+  /**
+   * The discovery call happened and the prospect did not join - a specialist recorded NO_SHOW.
+   *
+   * Distinct from `!whatsappConfirmed`, which only says they never replied to a reminder, and
+   * from the post-call sweep, which writes off people who never confirmed. This is a human
+   * saying "I was on the call and they were not", and it is what opens the Level 2 chase.
+   */
+  discoNoShow: boolean;
   steps: Partial<Record<OutreachStep, StepState>>;
 };
 
@@ -133,6 +141,16 @@ function actedAt(state: JourneyState, step: OutreachStep): Date | null {
 /** A CALL step whose logged outcome was an explicit "NO". */
 function saidNo(state: JourneyState, step: OutreachStep): boolean {
   return (st(state, step)?.outcome ?? "").toUpperCase() === "NO";
+}
+
+/**
+ * A CALL step whose logged outcome was an explicit "YES" - the specialist reached them.
+ *
+ * Note this is NOT `!saidNo`: an attempt logged with no outcome at all is neither, and must
+ * count as "no answer" rather than silently reading as a reply the prospect never gave.
+ */
+function saidYes(state: JourneyState, step: OutreachStep): boolean {
+  return (st(state, step)?.outcome ?? "").toUpperCase() === "YES";
 }
 
 /**
@@ -444,13 +462,51 @@ export function planJourney(
     }
   }
 
+  /**
+   * ═══ Level 2: the prospect did not join their discovery call. ═══
+   *
+   * The Level 1 ladder ends at the booking and every disco step before this is measured BEFORE
+   * the call. This is the only branch that runs after it, and it opens on a human judgement -
+   * a specialist recording NO_SHOW - not on a clock, because only someone who sat on the call
+   * knows whether anybody turned up.
+   *
+   * Two call attempts before the message, mirroring the confirmation ladder's insistence on the
+   * same: one unanswered ring is not evidence that somebody is gone. A specialist who reaches
+   * them logs the attempt as YES, and the chase stops there - what happens next is a reschedule,
+   * which is a booking, not a message.
+   */
+  if (state.discoNoShow) {
+    add("DISCO_NOSHOW_CALL_1", now);
+    if (acted(state, "DISCO_NOSHOW_CALL_1") && !saidYes(state, "DISCO_NOSHOW_CALL_1")) {
+      add("DISCO_NOSHOW_CALL_2", actedAt(state, "DISCO_NOSHOW_CALL_1") ?? now);
+    }
+    if (
+      acted(state, "DISCO_NOSHOW_CALL_1") &&
+      acted(state, "DISCO_NOSHOW_CALL_2") &&
+      !saidYes(state, "DISCO_NOSHOW_CALL_1") &&
+      !saidYes(state, "DISCO_NOSHOW_CALL_2")
+    ) {
+      add("DISCO_NOSHOW_MSG", actedAt(state, "DISCO_NOSHOW_CALL_2") ?? now);
+    }
+  }
+
   // ═══ Steps 19–22: the SSS ladder. Gated on Highly Qualified = YES. ═══
   if (state.highlyQualified === true && state.sssAt && !state.salesCallConfirmed) {
     add("SSS_CONFIRM_1", minus(state.sssAt, sla.sssConfirm1LeadHours));
     if (acted(state, "SSS_CONFIRM_1")) {
       add("SSS_CONFIRM_2", minus(state.sssAt, sla.sssConfirm2LeadHours));
     }
+    // Step 20b - 6h before, still no reply.
     if (acted(state, "SSS_CONFIRM_2")) {
+      add("SSS_CONFIRM_3", minus(state.sssAt, sla.sssConfirm3LeadHours));
+    }
+    // Step 20c - 3h before, a human rings. The flowchart puts a CALL here before giving up, for
+    // the same reason the disco ladder does: a message that went unanswered is not a decision.
+    if (acted(state, "SSS_CONFIRM_3")) {
+      add("SSS_CONFIRM_CALL", minus(state.sssAt, sla.sssConfirmCallLeadHours));
+    }
+    // Step 21 - only once that call has been attempted and did not confirm.
+    if (acted(state, "SSS_CONFIRM_CALL") && !saidYes(state, "SSS_CONFIRM_CALL")) {
       add("SSS_CANCEL_MSG", minus(state.sssAt, sla.sssCancelLeadHours));
     }
     if (acted(state, "SSS_CANCEL_MSG")) {
@@ -518,7 +574,15 @@ function pendingReminders(state: JourneyState): OutreachStep[] {
     "DISCO_CANCEL_MSG",
     "DISCO_CANCEL_EMAIL",
   ];
-  const sssLadder: OutreachStep[] = ["SSS_CONFIRM_1", "SSS_CONFIRM_2", "SSS_CANCEL_MSG"];
+  const sssLadder: OutreachStep[] = [
+    "SSS_CONFIRM_1",
+    "SSS_CONFIRM_2",
+    "SSS_CONFIRM_3",
+    "SSS_CONFIRM_CALL",
+    "SSS_CANCEL_MSG",
+  ];
+  // The Level 2 no-show chase. Two unworked call attempts must not outlive their journey either.
+  const noShowChase: OutreachStep[] = ["DISCO_NOSHOW_CALL_1", "DISCO_NOSHOW_CALL_2", "DISCO_NOSHOW_MSG"];
   const chaseLadder: OutreachStep[] = [
     "INTRO_WHATSAPP",
     "INTRO_EMAIL",
@@ -538,7 +602,7 @@ function pendingReminders(state: JourneyState): OutreachStep[] {
   // Booking lands mid-chase: the SOP jumps to Step 11 and the chase is moot.
   if (state.booked) out.push(...chaseLadder.filter((s) => stillDue(s) && s !== "CHECK_1"));
   if (isTerminal(state.phase)) {
-    out.push(...[...chaseLadder, ...discoLadder, ...sssLadder].filter(stillDue));
+    out.push(...[...chaseLadder, ...discoLadder, ...sssLadder, ...noShowChase].filter(stillDue));
   }
   return Array.from(new Set(out));
 }

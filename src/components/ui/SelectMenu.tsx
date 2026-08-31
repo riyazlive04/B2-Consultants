@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { SelectHTMLAttributes } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
+import { useFormReset } from "./use-form-reset";
 
 /**
  * App-styled select (§5.5, "fully custom popover" - the option list is ours, not the OS
@@ -56,6 +57,12 @@ export function SelectMenu({
   const [uncontrolled, setUncontrolled] = useState<string>(
     (defaultValue as string) ?? (placeholder ? "" : options[0]?.value ?? ""),
   );
+
+  // A successful save calls form.reset(), which restores the hidden <select> and would otherwise
+  // leave this trigger showing the previous entry's option - see `useFormReset`.
+  useFormReset(selectRef, () => {
+    if (!controlled) setUncontrolled(selectRef.current?.value ?? "");
+  });
   const currentVal = controlled ? ((value as string) ?? "") : uncontrolled;
   const currentOpt = options.find((o) => o.value === currentVal);
 

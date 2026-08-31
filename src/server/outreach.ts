@@ -80,7 +80,7 @@ export async function ensureJourney(leadId: string, optInAt?: Date) {
   }
 }
 
-const JOURNEY_INCLUDE = {
+export const JOURNEY_INCLUDE = {
   steps: true,
   // `bantAvg`/`bantSource` ride along so Step 11 can score a prospect who answered the band-score
   // questions on the LANDING PAGE rather than on our booking form - see `bantForQualification`.

@@ -9,7 +9,7 @@ import {
   DEFAULT_SLA,
   type OutreachSla,
 } from "@/lib/outreach-sop";
-import { readOutreachConfig, projectJourney, renderStep, type JourneyRow } from "./outreach";
+import { readOutreachConfig, projectJourney, renderStep, JOURNEY_INCLUDE, type JourneyRow } from "./outreach";
 
 /**
  * Outreach SOP - reads for the queue and the Key Metrics sheet.
@@ -18,15 +18,14 @@ import { readOutreachConfig, projectJourney, renderStep, type JourneyRow } from 
  * "Key Metrics Sales B2_2026.xlsx" as the SOP knows it. Both project the same journey rows.
  */
 
-const INCLUDE = {
-  steps: true,
-  // `bantAvg` rides along so a prospect scored on the LANDING PAGE - rather than on our booking
-  // form - still shows a Key Metrics score instead of an em dash.
-  lead: { select: { id: true, name: true, phone: true, email: true, bantAvg: true } },
-  booking: { include: { slot: { select: { startsAt: true } } } },
-  respTouchpoint: { select: { id: true, name: true } },
-  respDisco: { select: { id: true, name: true } },
-} as const;
+// The include lives in `outreach.ts` and is imported, NOT restated here.
+//
+// It was restated here once, and the copy fell behind: `projectJourney` grew
+// `discoNoShow: row.lead.outcomes.length` for the Level 2 no-show chase while this copy still
+// selected `lead` without `outcomes`. The `as JourneyRow` cast below hid the mismatch from the
+// compiler, so both /outreach and /my-desk threw "Cannot read properties of undefined" in
+// production. Sharing the one include means the next field added to the projection is a build
+// error here rather than a 500 on two pages.
 
 // ─────────────────────────────── The due queue ───────────────────────────────
 
@@ -166,12 +165,12 @@ export async function getOutreachQueue(): Promise<OutreachQueue> {
 
   const rows = await prisma.outreachJourney.findMany({
     where: { phase: { notIn: ["IGNORED", "CANCELLED", "CLOSED_NOT_HQ", "COMPLETED"] } },
-    include: INCLUDE,
+    include: JOURNEY_INCLUDE,
     orderBy: { optInAt: "desc" },
     take: 300,
   });
 
-  const mapped = rows.map((r) => toQueueRow(r as JourneyRow, now, cfg.sla, cfg.defaultSpecialistName));
+  const mapped = rows.map((r) => toQueueRow(r, now, cfg.sla, cfg.defaultSpecialistName));
 
   const due = mapped.filter((r) => r.next !== null);
   const upcoming = mapped.filter((r) => r.next === null && r.steps.length > 0);
@@ -247,7 +246,7 @@ function berlinLabel(d: Date): string {
 export async function getKeyMetrics(): Promise<KeyMetricsRow[]> {
   const rows = await prisma.outreachJourney.findMany({
     where: { bookingId: { not: null } },
-    include: INCLUDE,
+    include: JOURNEY_INCLUDE,
     orderBy: { optInAt: "desc" },
     take: 500,
   });
@@ -307,7 +306,7 @@ export async function getAssignableUsers() {
 export async function getClosedJourneys() {
   const rows = await prisma.outreachJourney.findMany({
     where: { phase: { in: ["IGNORED", "CANCELLED", "CLOSED_NOT_HQ", "COMPLETED"] } },
-    include: INCLUDE,
+    include: JOURNEY_INCLUDE,
     orderBy: { updatedAt: "desc" },
     take: 200,
   });

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { InputHTMLAttributes } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
+import { useFormReset } from "./use-form-reset";
 
 /**
  * App-styled date + time picker - the last native popup replaced (see {@link MonthPicker}).
@@ -85,6 +86,12 @@ export function DateTimePicker({
   const [open, setOpen] = useState(false);
 
   const [uncontrolled, setUncontrolled] = useState<string>((defaultValue as string) ?? "");
+
+  // A successful save calls form.reset(), which restores the hidden input and would otherwise
+  // leave this trigger showing the previous entry - see `useFormReset`.
+  useFormReset(inputRef, () => {
+    if (!controlled) setUncontrolled(inputRef.current?.value ?? "");
+  });
   const current = controlled ? ((value as string) ?? "") : uncontrolled;
   const parsed = parseLocal(current);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { useFormReset } from "./use-form-reset";
 import { Check } from "lucide-react";
 import {
   baseCls, errCls, okCls, Popover, sizeCls, useControlProps, type ControlSize,
@@ -61,6 +62,23 @@ export function ComboBox({
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(defaultText);
   const [selected, setSelected] = useState(defaultValue);
+
+  /**
+   * Follow `form.reset()` back to the defaults - see `useFormReset`.
+   *
+   * Worse here than on the pickers, and worth spelling out. BOTH inputs this renders are
+   * React-CONTROLLED (`value={text}`, `value={selected}`), so a reset does not merely fail to
+   * update the display: the browser cannot clear them at all, because React re-asserts the state
+   * on the next render. After saving one payment the box kept the previous student's name AND
+   * their hidden id, so the next entry silently linked its money to the wrong student's record.
+   *
+   * Restored to the mounted defaults rather than read back from the DOM, precisely because a
+   * controlled input's DOM value is the state we are trying to correct.
+   */
+  useFormReset(inputRef, () => {
+    setText(defaultText);
+    setSelected(defaultValue);
+  });
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const listId = useId();

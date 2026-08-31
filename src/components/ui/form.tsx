@@ -106,6 +106,23 @@ export const TextInput = forwardRef<
   HTMLInputElement,
   InputHTMLAttributes<HTMLInputElement> & { kind?: FieldKind }
 >(function TextInput({ kind, ...props }, ref) {
+  /**
+   * Every hook runs BEFORE the picker branch below, never after it.
+   *
+   * `useControlProps` used to sit under the `if (Picker)` early return, which made it a
+   * conditional hook - flagged by react-hooks/rules-of-hooks as an error. A field whose `type`
+   * changes between renders (a date field that becomes a text field, say) would shift every
+   * later hook by one slot and hand this input another control's state. That is the same class
+   * of "the control shows one thing and submits another" bug the pickers just had; it costs
+   * nothing to call the hook unconditionally, and the picker branch simply ignores it.
+   *
+   * Pull only the DOM-safe ARIA attrs. useControlProps also returns raw `describedBy` and
+   * `invalid` (consumed by the custom Select/DatePicker/PhoneField for styling) - spreading
+   * those onto a native <input> leaked them as junk `describedby`/`invalid` attributes and
+   * threw a React warning on every form in the app.
+   */
+  const { cls, "aria-describedby": ariaDescribedBy, "aria-invalid": ariaInvalid } = useControlProps();
+
   // Any date-ish field gets the app's own popover (§5.5) - same call site, no native OS popup.
   const Picker = props.type ? DATEISH_PICKERS[props.type as keyof typeof DATEISH_PICKERS] : undefined;
   if (Picker) {
@@ -113,11 +130,6 @@ export const TextInput = forwardRef<
     const { type: _t, size: _s, ...rest } = props;
     return <Picker {...rest} />;
   }
-  // Pull only the DOM-safe ARIA attrs. useControlProps also returns raw `describedBy`
-  // and `invalid` (consumed by the custom Select/DatePicker/PhoneField for styling) -
-  // spreading those onto a native <input> leaked them as junk `describedby`/`invalid`
-  // attributes and threw a React warning on every form in the app.
-  const { cls, "aria-describedby": ariaDescribedBy, "aria-invalid": ariaInvalid } = useControlProps();
   const { attrs, onChange } = fieldKindProps<HTMLInputElement>(kind, props.onChange);
   const native = NATIVE_DATEISH.has(props.type ?? "") ? "dateish-native" : "";
   return (

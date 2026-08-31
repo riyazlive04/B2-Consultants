@@ -140,9 +140,22 @@ export const SECTION_CATALOGUE = [
   // explainer for anyone with no telecaller profile, since "telecaller" is a
   // TeamProfile.logVariant, not a role that could gate a section.
   { key: "my-desk", label: "My Desk", href: "/my-desk", phase: 1, icon: "phone", group: "My Work", roles: ["ADMIN", "HEAD", "USER"] },
-  // §3 gives Tutor `O` here, and this screen is already self-scoped - it is the person's OWN log,
-  // which is also where a tutor's sessions-delivered figure comes from.
-  { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "My Work", roles: ["HEAD", "USER", "TUTOR"] },
+  /**
+   * §3 gives Tutor `O` here, and this screen is already self-scoped - it is the person's OWN log,
+   * which is also where a tutor's sessions-delivered figure comes from.
+   *
+   * USER is NOT in this list, and that is the telecallers (founder's call). Their day is already
+   * counted from their actual calls - My Desk shows their own numbers, Telecaller Pay shows the
+   * team board, both derived from CallLog rather than self-reported. Asking them to also write a
+   * daily log recorded the same day twice by two methods that could disagree, and the hand-typed
+   * one is the one nobody can check. They are off the People logs board for the same reason.
+   *
+   * Coaches (HEAD) and tutors keep it: a delivery session leaves no CallLog behind, so their log
+   * IS the record of it. USER is a single role covering L1/L2/L3, so if a non-telecaller USER
+   * ever needs this back it is one toggle in Console → Sections or their Access dialog, per
+   * person - which is the mechanism this catalogue is designed to be tuned by.
+   */
+  { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "My Work", roles: ["HEAD", "TUTOR"] },
   // STUDENT portal: their own journey only.
   { key: "my-journey", label: "My Journey", href: "/my-journey", phase: 2, icon: "map", group: "My Work", roles: ["STUDENT"] },
   { key: "arena", label: "Arena", href: "/arena", phase: 2, icon: "trophy", group: "My Work", roles: ["ADMIN", "HEAD", "USER"] },

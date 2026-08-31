@@ -627,16 +627,64 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
     if (err) return { ok: false, error: err };
   }
 
-  // Sessions, accounts and the invite cascade. The team profile and student record
-  // survive with a null userId - their history is not this person's login.
-  await prisma.user.delete({ where: { id: userId } });
+  /**
+   * RETIRE THE EMPLOYMENT RECORD IN THE SAME BREATH AS THE LOGIN.
+   *
+   * Deleting the User cascades sessions, accounts and the invite, and `TeamProfile.userId` is
+   * `onDelete: SetNull` - so the profile survives, which is correct: a person's employment record
+   * has to keep resolving on every call, commission and audit row they ever produced, and the
+   * schema is explicit that it must never be purged.
+   *
+   * What was missing is that nothing marked it retired. The profile kept `status: ACTIVE` and a
+   * null `terminatedAt`, and OrgChart splits current from former team members on exactly that
+   * field - so a deleted person stayed on the org chart as current staff, with their name, role
+   * and email still on screen. Reported live: "Nilofer was deleted but I saw her details".
+   *
+   * The stamp below is the same one `terminateTeamMember` writes, for the same reason it writes
+   * it: `User.status` and `TeamProfile.status` are never kept in sync by anything else, and
+   * different modules filter on different ones. Deleting the User removes the UserStatus half
+   * entirely, which makes stamping the TeamProfile half the only way the two can agree.
+   *
+   * NOT a delete of the profile. Terminating preserves the history; deleting would orphan every
+   * row that names this person.
+   */
+  const profile = await prisma.teamProfile.findFirst({
+    where: { userId },
+    select: { id: true, fullName: true, terminatedAt: true },
+  });
+
+  await prisma.$transaction([
+    // Already terminated (they were retired properly and are only now losing their login):
+    // leave the original date, reason and successor alone rather than overwriting the record
+    // of what actually happened.
+    ...(profile && !profile.terminatedAt
+      ? [
+          prisma.teamProfile.update({
+            where: { id: profile.id },
+            data: {
+              status: "INACTIVE" as never,
+              terminatedAt: new Date(),
+              terminatedById: session.user.id,
+              terminationReason: "Account deleted",
+              // Out of the first-call rotation. `pickFirstCaller` already skips a profile with
+              // no user, but a share left behind makes the Console roster read wrong.
+              firstCallSharePct: 0,
+            },
+          }),
+        ]
+      : []),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
+
   await logActivity(session, {
     action: "user.delete",
     section: "people",
     entityType: "User",
     entityId: userId,
-    summary: `Deleted ${target.name}'s account (${target.email})`,
-    meta: { email: target.email, role: target.role },
+    summary: profile && !profile.terminatedAt
+      ? `Deleted ${target.name}'s account (${target.email}) and retired their team profile`
+      : `Deleted ${target.name}'s account (${target.email})`,
+    meta: { email: target.email, role: target.role, teamProfileRetired: Boolean(profile && !profile.terminatedAt) },
   });
   revalidatePath("/people");
   return { ok: true };

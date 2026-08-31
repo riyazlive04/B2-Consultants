@@ -33,7 +33,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: { wee
     <div className="w-full space-y-8">
       <PageHeader
         icon={<Filter size={20} />}
-        title="Conversion Funnel"
+        title="Funnel Report"
         subtitle="Free content → paid programs: where people stop, and what it costs. Weekly snapshots, not real-time."
       />
 

@@ -6,7 +6,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { resetSectionsConfig, saveSectionsConfig } from "@/server/console-actions";
 import {
   APP_ROLES,
-  SECTION_GROUPS,
+  SECTION_GROUPS_ASSIGNABLE,
   SECTION_ICON_NAMES,
   type AppRole,
   type ResolvedSection,
@@ -27,7 +27,7 @@ import { Card, ColHead, ColRow, ColScroll, Hint, Picker, SaveBar, TextIn, Toggle
  */
 
 const ICON_OPTIONS = SECTION_ICON_NAMES.map((n) => ({ value: n, label: n }));
-const GROUP_OPTIONS = SECTION_GROUPS.map((g) => ({ value: g, label: g }));
+const GROUP_OPTIONS = SECTION_GROUPS_ASSIGNABLE.map((g) => ({ value: g, label: g }));
 
 const ROLE_LABELS: Record<AppRole, string> = {
   ADMIN: "Admin",

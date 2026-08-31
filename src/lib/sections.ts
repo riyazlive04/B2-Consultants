@@ -29,12 +29,58 @@ export const SECTION_ICON_NAMES = [
 ] as const;
 export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];
 
-/** Sidebar groups the console offers. Free text would let a typo orphan a section.
- *  "Money" was one 10-item blob fusing accounting with the whole sales CRM; it's split
- *  into "Sales" (the pipeline → contacts → deals flow a rep lives in) and "Finance" (the
- *  founder's accounting screens). "Money" is kept last as a legacy-safe fallback so any
- *  saved founder config that still references it resolves rather than orphaning a section. */
-export const SECTION_GROUPS = ["Sales", "Finance", "People", "Insights", "Workspace", "Money"] as const;
+/**
+ * Sidebar groups the console offers. Free text would let a typo orphan a section.
+ *
+ * ── Why these seven ─────────────────────────────────────────────────────────────
+ * The rail carried ~27 items in five groups, overflowing about 400px below the fold (see
+ * AppShell, which had to grow per-group collapse to cope). The size was not really the
+ * problem; the shape was. "Insights" had grown into an eight-item drawer holding a
+ * landing-page builder, the public website, a WhatsApp console, an inbox and a CV tool -
+ * none of which are insights - so its name predicted nothing and every lookup meant
+ * reading all eight. "People" was doing the same job for four unrelated audiences at once:
+ * staff admin, customers, someone's own daily work, and a tutor's lesson tool.
+ *
+ * A group name should let you skip the group. These seven are cut so that each one answers
+ * a single question - what am I doing today, who are we selling to, how do we reach them,
+ * how are our students, what did we earn, how are we doing, who runs this - and none holds
+ * more than five items for any one role. Same 24 sections, nothing removed, nothing
+ * renamed except the one pair that genuinely collided (see "funnel" below).
+ *
+ * "People", "Workspace" and "Money" are kept in this list as legacy-safe fallbacks: a saved
+ * founder config that still names one must resolve rather than orphaning its section.
+ */
+export const SECTION_GROUPS = [
+  "My Work",
+  "Sales",
+  "Marketing",
+  "Students",
+  "Finance",
+  "Insights",
+  "Admin",
+  // Legacy - no longer assigned in the catalogue, still resolvable from a saved config.
+  "People",
+  "Workspace",
+  "Money",
+] as const;
+
+/**
+ * The groups the Console actually OFFERS, as opposed to the ones it will accept.
+ *
+ * `SECTION_GROUPS` has to keep the retired names or `config-schema`'s `z.enum` would reject a
+ * config saved before the regrouping, orphaning every section in it. But a founder opening the
+ * dropdown should not be invited to file something under "Money" - a name nothing has used since
+ * that group was split - so the picker reads this shorter list instead.
+ */
+export const SECTION_GROUPS_ASSIGNABLE = [
+  "My Work",
+  "Sales",
+  "Marketing",
+  "Students",
+  "Finance",
+  "Insights",
+  "Admin",
+] as const satisfies readonly SectionGroup[];
 export type SectionGroup = (typeof SECTION_GROUPS)[number];
 
 type SectionCatalogueEntry = {
@@ -65,13 +111,6 @@ type SectionCatalogueEntry = {
 };
 
 export const SECTION_CATALOGUE = [
-  { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"] },
-  { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"] },
-  // Read-only journal + trial balance (SPEC §10.4, §12). Admin-only: it is the audit
-  // surface for every rupee the other Finance screens summarise.
-  // Hidden in code: off in the nav and unreachable by route. The page and its posting engine
-  // stay intact, so the console can switch it back on without any code change.
-  { key: "ledger", label: "Ledger", href: "/ledger", phase: 1, icon: "scale", group: "Finance", roles: ["ADMIN"], hidden: true },
   /**
    * ROLE DEFAULTS FOLLOW SPEC §3 (`02-dashboard-rebuild-by-role-and-access.md`), by the founder's
    * ruling: grant what the matrix grants, and switch off per person from Console → Sections or
@@ -83,7 +122,35 @@ export const SECTION_CATALOGUE = [
    * putting them on /students would hand them every other student's record. Same for Tutor and
    * Student on Bookings, and Student on Invoices. `R`/`E`/`F` rows are granted outright; `O` rows
    * are granted only where the section itself is already self-scoped (My Desk, Daily Log).
+   *
+   * ORDER IS MEANINGFUL. The default sidebar order follows this array, and AppShell lets each
+   * group land where its FIRST member does - so moving one entry can move its whole group. The
+   * seven blocks below are therefore written in the order they should appear on the rail.
    */
+
+  // ─────────────────────────────── My Work ───────────────────────────────
+  // What the person signed in is doing today, first, because it is the only block that is
+  // theirs. These were scattered through the old "People" group behind Users and Agreements -
+  // My Desk in particular is where a telecaller lives all day, and it sat fourth in a group of
+  // six. Every role sees a different two or three of these, and no role sees an empty group.
+
+  // The telecaller's OWN numbers + today's call list - a personal work view (the counterpart to
+  // "Telecaller Pay": that board is Ameen looking at the team, this is Nilofer/Asma looking at
+  // themselves). USER is in the default list; ADMIN can inspect it, and the page renders an
+  // explainer for anyone with no telecaller profile, since "telecaller" is a
+  // TeamProfile.logVariant, not a role that could gate a section.
+  { key: "my-desk", label: "My Desk", href: "/my-desk", phase: 1, icon: "phone", group: "My Work", roles: ["ADMIN", "HEAD", "USER"] },
+  // §3 gives Tutor `O` here, and this screen is already self-scoped - it is the person's OWN log,
+  // which is also where a tutor's sessions-delivered figure comes from.
+  { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "My Work", roles: ["HEAD", "USER", "TUTOR"] },
+  // STUDENT portal: their own journey only.
+  { key: "my-journey", label: "My Journey", href: "/my-journey", phase: 2, icon: "map", group: "My Work", roles: ["STUDENT"] },
+  { key: "arena", label: "Arena", href: "/arena", phase: 2, icon: "trophy", group: "My Work", roles: ["ADMIN", "HEAD", "USER"] },
+  // Help belongs beside your own work, not in an admin drawer. It is also what keeps this group
+  // non-empty for a Tutor or a Student, who would otherwise be left with a single item.
+  { key: "guide", label: "App Guide", href: "/guide", phase: 1, icon: "book-open", group: "My Work", roles: ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR"] },
+
+  // ──────────────────────────────── Sales ────────────────────────────────
   /**
    * ── The Sales group is THREE entries, not five ──────────────────────────────────
    * It held Pipeline · Contacts · Opportunities · Bookings · Outreach, two of which are the same
@@ -91,7 +158,7 @@ export const SECTION_CATALOGUE = [
    * `Opportunity.stageId` mirrored back onto `Lead.stage`. A telecaller opening the rail saw
    * five doors into what is, to them, one job.
    *
-   * Opportunities and Outreach are now `offRail` - off the sidebar, still fully built and still
+   * Opportunities and Outreach are `offRail` - off the sidebar, still fully built and still
    * reachable, because both are surfaced as TABS on Pipeline, which is where they belong:
    * Outreach is the SOP queue for the pipeline, Opportunities is the same pipeline as a board.
    * The founder can put either back on the rail from Console → Sections at any time.
@@ -123,6 +190,50 @@ export const SECTION_CATALOGUE = [
   // Key Metrics sheet it feeds. USER is in the default list because the outreach specialist IS a
   // USER - this is their day's work, not an admin report.
   { key: "outreach", label: "Outreach", href: "/outreach", phase: 1, icon: "message-circle", group: "Sales", roles: ["ADMIN", "USER"], offRail: true },
+
+  // ────────────────────────────── Marketing ──────────────────────────────
+  // How a stranger first reaches us, and how we answer them. All five of these used to sit in
+  // "Insights", which is what made that group unreadable: a landing-page builder, the public
+  // website and a shared inbox are things you BUILD and OPERATE, not numbers you read.
+
+  // The public marketing website (b2consultants.de), replacing the GHL-hosted one. ADMIN-only at
+  // the section level AND write-gated on `sites.manage`: unlike Forms and Funnels, which capture
+  // leads, editing this changes what every ad click lands on.
+  { key: "sites", label: "Website", href: "/sites", phase: 2, icon: "globe", group: "Marketing", roles: ["ADMIN"] },
+  // Synamate Sites parity (Phase 2): native form + funnel/landing-page builders with public hosting.
+  { key: "funnels", label: "Funnels", href: "/funnels", phase: 2, icon: "layout-template", group: "Marketing", roles: ["ADMIN", "USER"] },
+  { key: "forms", label: "Forms", href: "/forms", phase: 2, icon: "file-text", group: "Marketing", roles: ["ADMIN", "USER"] },
+  { key: "whatsapp", label: "WhatsApp", href: "/whatsapp", phase: 3, icon: "message-circle", group: "Marketing", roles: ["ADMIN"] },
+  // Synamate Conversations parity (Phase 4): unified Email + SMS + WhatsApp inbox + templates.
+  { key: "conversations", label: "Conversations", href: "/conversations", phase: 4, icon: "inbox", group: "Marketing", roles: ["ADMIN"] },
+
+  // ─────────────────────────────── Students ──────────────────────────────
+  // Everything about a person once they have bought: their record, their contract, and the two
+  // tools we deliver to them. These were split across "People" (Students, Agreements, German
+  // Note) and "Insights" (CV Studio), so answering "what is going on with this student" meant
+  // opening two unrelated groups.
+
+  // §3: Head F · L1/L2/L3 R. Tutor and Student are `O` - a student's own record is /my-journey and
+  // a tutor's own batch roster is on German Note; this board is every student.
+  { key: "students", label: "Students", href: "/students", phase: 2, icon: "graduation-cap", group: "Students", roles: ["ADMIN", "HEAD", "USER"] },
+  // §3: Head E · L3 E (L1/L2 hidden). L1/L2/L3 are one USER role, so USER is granted here and the
+  // ones who shouldn't have it are switched off per person. Student is `O` - their own agreement
+  // is on /my-journey. Issuing still needs the `agreements.issue` capability regardless.
+  { key: "agreements", label: "Agreements", href: "/agreements", phase: 4, icon: "file-signature", group: "Students", roles: ["ADMIN", "HEAD", "USER"] },
+  // German Note LMS: batches + class recordings + community (Phase 4).
+  { key: "german-note", label: "German Note", href: "/german-note", phase: 4, icon: "languages", group: "Students", roles: ["ADMIN", "HEAD", "TUTOR", "STUDENT"] },
+  // The CV diagnostic (stores nothing). A student-facing tool, so it belongs beside the student
+  // it is delivered to, not in a group of analytics screens.
+  { key: "cv-check", label: "CV Studio", href: "/cv-check", phase: 2, icon: "file-search", group: "Students", roles: ["ADMIN", "HEAD", "STUDENT"] },
+
+  // ─────────────────────────────── Finance ───────────────────────────────
+  { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"] },
+  { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"] },
+  // Read-only journal + trial balance (SPEC §10.4, §12). Admin-only: it is the audit
+  // surface for every rupee the other Finance screens summarise.
+  // Hidden in code: off in the nav and unreachable by route. The page and its posting engine
+  // stay intact, so the console can switch it back on without any code change.
+  { key: "ledger", label: "Ledger", href: "/ledger", phase: 1, icon: "scale", group: "Finance", roles: ["ADMIN"], hidden: true },
   // Synamate Payments parity (Phase 3): invoices, estimates, products, subscriptions.
   { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"] },
   // Kept last in the Finance group on purpose: the default sidebar order follows this
@@ -130,55 +241,40 @@ export const SECTION_CATALOGUE = [
   // §3 "Commissions - all": Head R. The telecaller tiers get their OWN commission on My Desk, not
   // the whole-team board - §3 gives them `O` here, not `R`.
   { key: "telecaller", label: "Telecaller Pay", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN", "HEAD"] },
-  { key: "people", label: "Users", href: "/people", phase: 2, icon: "users", group: "People", roles: ["ADMIN"] },
-  // §3: Head F · L1/L2/L3 R. Tutor and Student are `O` - a student's own record is /my-journey and
-  // a tutor's own batch roster is on German Note; this board is every student.
-  { key: "students", label: "Students", href: "/students", phase: 2, icon: "graduation-cap", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
-  // §3: Head E · L3 E (L1/L2 hidden). L1/L2/L3 are one USER role, so USER is granted here and the
-  // ones who shouldn't have it are switched off per person. Student is `O` - their own agreement
-  // is on /my-journey. Issuing still needs the `agreements.issue` capability regardless.
-  { key: "agreements", label: "Agreements", href: "/agreements", phase: 4, icon: "file-signature", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
-  // §3 gives Tutor `O` here, and this screen is already self-scoped - it is the person's OWN log,
-  // which is also where a tutor's sessions-delivered figure comes from.
-  { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "People", roles: ["HEAD", "USER", "TUTOR"] },
-  // The telecaller's OWN numbers + today's call list - a personal work view (the counterpart to
-  // "Telecaller Pay": that board is Ameen looking at the team, this is Nilofer/Asma looking at
-  // themselves), so it sits under People. USER is in the default list; ADMIN can inspect it, and
-  // the page renders an explainer for anyone with no telecaller profile, since "telecaller" is a
-  // TeamProfile.logVariant, not a role that could gate a section.
-  { key: "my-desk", label: "My Desk", href: "/my-desk", phase: 1, icon: "phone", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
-  { key: "arena", label: "Arena", href: "/arena", phase: 2, icon: "trophy", group: "People", roles: ["ADMIN", "HEAD", "USER"] },
-  // STUDENT portal: their own journey only + the CV diagnostic (stores nothing).
-  { key: "my-journey", label: "My Journey", href: "/my-journey", phase: 2, icon: "map", group: "People", roles: ["STUDENT"] },
-  // German Note LMS: batches + class recordings + community (Phase 4).
-  { key: "german-note", label: "German Note", href: "/german-note", phase: 4, icon: "languages", group: "People", roles: ["ADMIN", "HEAD", "TUTOR", "STUDENT"] },
-  { key: "funnel", label: "Conversion Funnel", href: "/funnel", phase: 3, icon: "filter", group: "Insights", roles: ["ADMIN"] },
-  // Synamate Sites parity (Phase 2): native form + funnel/landing-page builders with public hosting.
-  { key: "forms", label: "Forms", href: "/forms", phase: 2, icon: "file-text", group: "Insights", roles: ["ADMIN", "USER"] },
-  { key: "funnels", label: "Funnels", href: "/funnels", phase: 2, icon: "layout-template", group: "Insights", roles: ["ADMIN", "USER"] },
-  // The public marketing website (b2consultants.de), replacing the GHL-hosted one. ADMIN-only at
-  // the section level AND write-gated on `sites.manage`: unlike Forms and Funnels, which capture
-  // leads, editing this changes what every ad click lands on.
-  { key: "sites", label: "Website", href: "/sites", phase: 2, icon: "globe", group: "Insights", roles: ["ADMIN"] },
-  { key: "cv-check", label: "CV Studio", href: "/cv-check", phase: 2, icon: "file-search", group: "Insights", roles: ["ADMIN", "HEAD", "STUDENT"] },
-  { key: "whatsapp", label: "WhatsApp", href: "/whatsapp", phase: 3, icon: "message-circle", group: "Insights", roles: ["ADMIN"] },
-  // Synamate Conversations parity (Phase 4): unified Email + SMS + WhatsApp inbox + templates.
-  { key: "conversations", label: "Conversations", href: "/conversations", phase: 4, icon: "inbox", group: "Insights", roles: ["ADMIN"] },
+
+  // ─────────────────────────────── Insights ──────────────────────────────
+  // What is left once the builders and the inboxes move out: the two screens you open to READ a
+  // number rather than to do a job. A two-item group is the point here, not an oversight.
+
   // Reporting & Analytics Agent (Phase 6, BUILD_CHECKLIST §10): a minimal pivot report - object →
   // group-by → aggregate - closes the "every number lives on a hardcoded page" gap without new
-  // schema. Admin-only, like the rest of Insights' cross-cutting views.
+  // schema.
   // §3: Head R · L1/L2/L3 O. Row-level scoping inside the report decides what each one can pull.
   { key: "reports", label: "Reports", href: "/reports", phase: 6, icon: "bar-chart", group: "Insights", roles: ["ADMIN", "HEAD", "USER"] },
-  { key: "console", label: "Founder Console", href: "/console", phase: 1, icon: "sliders", group: "Workspace", roles: ["ADMIN"], locked: true },
+  /**
+   * "Funnel Report", not "Conversion Funnel".
+   *
+   * The old label sat four rows above "Funnels" in the SAME group, and the two are unrelated:
+   * this is a read-only conversion report, "Funnels" is the landing-page builder. Two names that
+   * read the same, side by side, describing different things, is a trap rather than a label.
+   * They now sit in different groups AND read differently. `key` is untouched, so no access, no
+   * route and no saved config changes.
+   */
+  { key: "funnel", label: "Funnel Report", href: "/funnel", phase: 3, icon: "filter", group: "Insights", roles: ["ADMIN"] },
+
+  // ──────────────────────────────── Admin ────────────────────────────────
+  // Who runs the system. Every member is ADMIN-only, so this group simply does not render for
+  // anyone else - which is exactly why "App Guide" was moved out of it and up to My Work.
+  { key: "console", label: "Founder Console", href: "/console", phase: 1, icon: "sliders", group: "Admin", roles: ["ADMIN"], locked: true },
+  { key: "people", label: "Users", href: "/people", phase: 2, icon: "users", group: "Admin", roles: ["ADMIN"] },
   // Who did what, when - every write in the app, with an exact IST timestamp.
   // `locked`, for the same reason `console` is: this is the screen that shows whether the
   // access rules are being respected, so it must not be switchable-off or grantable to the
   // people it reports on. A telecaller who could hide the log, or read it, would defeat it.
-  { key: "activity", label: "Activity Log", href: "/activity", phase: 1, icon: "shield", group: "Workspace", roles: ["ADMIN"], locked: true },
+  { key: "activity", label: "Activity Log", href: "/activity", phase: 1, icon: "shield", group: "Admin", roles: ["ADMIN"], locked: true },
   // Synamate Automation parity (Phase 5): trigger → action workflow engine.
   // Hidden in code for now - off in the nav and unreachable by route until re-enabled.
-  { key: "automation", label: "Automation", href: "/automation", phase: 5, icon: "workflow", group: "Workspace", roles: ["ADMIN"], hidden: true },
-  { key: "guide", label: "App Guide", href: "/guide", phase: 1, icon: "book-open", group: "Workspace", roles: ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR"] },
+  { key: "automation", label: "Automation", href: "/automation", phase: 5, icon: "workflow", group: "Admin", roles: ["ADMIN"], hidden: true },
 ] as const satisfies readonly SectionCatalogueEntry[];
 
 export type SectionKey = (typeof SECTION_CATALOGUE)[number]["key"];

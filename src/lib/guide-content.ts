@@ -91,7 +91,7 @@ export const GUIDES: GuideEntry[] = [
     tip: "There is no way to farm points: corrections and backward moves earn nothing. The only strategy is doing the work.",
   },
   {
-    section: "people", icon: "👥", title: "People", href: "/people",
+    section: "people", icon: "👥", title: "Users", href: "/people",
     what: "Team profiles, OKRs, daily-log board and user accounts. Admin-only.",
     steps: [
       "Daily logs tab: who logged today, the 7 PM missing badge, weekly totals per person.",
@@ -128,7 +128,7 @@ export const GUIDES: GuideEntry[] = [
     tip: "Momentum cooling? Book a session - activity is what keeps the flame alive.",
   },
   {
-    section: "cv-check", icon: "🧾", title: "CV Diagnostic", href: "/cv-check",
+    section: "cv-check", icon: "🧾", title: "CV Studio", href: "/cv-check",
     what: "Upload/paste CV + target JD → JD-match score, B2-template conformance, generated fix-list.",
     steps: [
       "Upload the CV as a PDF or Word (.docx) - or paste the text - on the left, the German JD on the right, hit Run diagnostic. Uploaded files are read in-memory and never stored.",
@@ -152,7 +152,7 @@ export const GUIDES: GuideEntry[] = [
     tip: "Recordings play right on the page - use “open original” to open them on Fathom itself.",
   },
   {
-    section: "funnel", icon: "⏬", title: "Conversion Funnel", href: "/funnel",
+    section: "funnel", icon: "⏬", title: "Funnel Report", href: "/funnel",
     what: "Awareness → enrolled, weekly snapshots, drop-off alert, source attribution. Admin-only.",
     steps: [
       "Every Monday, save the weekly snapshot - awareness and GB downloads are manual, the rest is pre-filled from Pipeline/Students.",

@@ -8,6 +8,7 @@ import { capabilityCheck, requireSection } from "@/lib/rbac";
 import { parseMentions } from "@/lib/gn-mentions";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { emitTrigger } from "./automation";
+import { afterResponse } from "./after-response";
 import { findDuplicateLead } from "./lead-intake";
 import { ensureDefaultOpportunity } from "./opportunity-sync";
 import { pickFirstCaller } from "./assignment";
@@ -116,7 +117,10 @@ export async function createContact(form: FormData): Promise<ActionResult> {
     summary: `Added contact ${d.name}`,
     meta: { phone: d.phone, leadSource: d.leadSource },
   });
-  await emitTrigger("CONTACT_CREATED", { leadId: newLeadId });
+  // Deferred: `emitTrigger` RUNS the automation engine, executing every send step of every
+  // matching workflow before it returns. Nobody adding a contact is waiting to watch that
+  // happen, and an enrollment that does not finish here is resumed by `runDueWorkflows()`.
+  afterResponse("contact-created", () => emitTrigger("CONTACT_CREATED", { leadId: newLeadId }));
   reval();
   return { ok: true };
 }
@@ -275,7 +279,8 @@ export async function addContactTag(leadId: string, name: string): Promise<Actio
     summary: `Tagged ${lead.name} "${clean}"`,
     meta: { tag: clean, tagId: tag.id },
   });
-  await emitTrigger("TAG_ADDED", { leadId, tag: clean });
+  // Deferred - see the note in `createContact`. Same engine, same reason.
+  afterResponse("tag-added", () => emitTrigger("TAG_ADDED", { leadId, tag: clean }));
   reval(leadId);
   return { ok: true };
 }
@@ -318,7 +323,16 @@ export async function bulkAddTag(leadIds: string[], name: string): Promise<Actio
     summary: `Tagged ${leadIds.length} contact${leadIds.length === 1 ? "" : "s"} "${clean}"`,
     meta: { tag: clean, leadIds },
   });
-  for (const id of leadIds) await emitTrigger("TAG_ADDED", { leadId: id, tag: clean });
+  /**
+   * The worst instance of the inline-engine problem in the app: one full engine run PER CONTACT,
+   * sequentially, inside the request. Tagging fifty people meant fifty workflow runs - each one
+   * potentially an outbound WhatsApp with a twelve-second ceiling - before the page came back.
+   * Still sequential once deferred, deliberately: firing fifty concurrent enrolments at a pooled
+   * ten-connection database from a one-vCPU box trades a slow save for a stalled one.
+   */
+  afterResponse(`bulk-tag-added:${leadIds.length}`, async () => {
+    for (const id of leadIds) await emitTrigger("TAG_ADDED", { leadId: id, tag: clean });
+  });
   reval();
   return { ok: true };
 }

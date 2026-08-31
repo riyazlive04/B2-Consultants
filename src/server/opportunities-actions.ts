@@ -12,6 +12,7 @@ import { canonicalPhone } from "@/lib/phone";
 import { statusForLegacyStage } from "@/lib/opportunity-status";
 import { LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
 import { emitTrigger } from "./automation";
+import { afterResponse } from "./after-response";
 import { logActivity, diffFields } from "./activity-log";
 import { applySynamateStages } from "./pipeline-reshape";
 import type { OpportunityStatus, LeadStage, PaymentPlan } from "@prisma/client";
@@ -150,7 +151,14 @@ export async function moveOpportunity(
     });
   }
 
-  if (stageChangedTo) await emitTrigger("STAGE_CHANGED", { leadId: opp.leadId, stage: stageChangedTo });
+  // Deferred: this runs the automation engine inline, and it is on the drag-and-drop path - the
+  // one interaction in the app that has to feel instant. The card has already moved in the
+  // database; a workflow that has not finished enrolling is picked back up by runDueWorkflows().
+  if (stageChangedTo) {
+    const movedLeadId = opp.leadId;
+    const movedTo = stageChangedTo;
+    afterResponse("stage-changed", () => emitTrigger("STAGE_CHANGED", { leadId: movedLeadId, stage: movedTo }));
+  }
 
   revalidatePath("/opportunities");
   revalidatePath("/pipeline");

@@ -14,6 +14,7 @@ import { upsertIntakeLead } from "./lead-intake";
 import { observedOriginDomain } from "./request-origin";
 import { ensureDefaultOpportunity } from "./opportunity-sync";
 import { emitTrigger } from "./automation";
+import { afterResponse } from "./after-response";
 import { logActivity, diffFields } from "./activity-log";
 import {
   defaultFormFields, defaultFormSettings, slugify, CONTACT_FIELD_KEYS,
@@ -407,6 +408,8 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
   const phone = text("phone");
 
   let leadId: string | null = null;
+  /** Set only when a lead was captured; run after the response - see where it is assigned. */
+  let deferredSideEffects: (() => Promise<void>) | null = null;
   if (name && phone) {
     const { lead } = await upsertIntakeLead({
       name,
@@ -427,81 +430,105 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
     for (const [k, v] of Object.entries(data)) {
       if (!(CONTACT_FIELD_KEYS as readonly string[]).includes(k)) extra[k] = answerToText(v);
     }
-    if (Object.keys(extra).length) {
-      const cur = (await prisma.lead.findUnique({ where: { id: leadId }, select: { customFields: true } }))?.customFields as Record<string, string> | null;
-      await prisma.lead.update({
-        where: { id: leadId },
-        data: { customFields: { ...(cur ?? {}), ...extra } as Prisma.InputJsonObject },
-      });
-    }
-
-    if (settings.tag) {
-      const tagName = settings.tag.trim().toLowerCase();
-      const tag = await prisma.tag.upsert({ where: { name: tagName }, update: {}, create: { name: tagName } });
-      await prisma.lead.update({ where: { id: leadId }, data: { tags: { connect: { id: tag.id } } } });
-    }
-
-    if (settings.createOpportunity && settings.pipelineId && settings.stageId) {
-      /**
-       * `deletedAt: null` on the stage AND its pipeline - the guard this lookup used to be missing.
-       *
-       * A form's `stageId` is frozen at configuration time, but a column can be soft-deleted long
-       * afterwards, and `deleteStage` only refuses when the column ALREADY holds cards - nothing
-       * stopped new ones being written into a deleted one. The board renders live columns only
-       * (opportunities-metrics), so such a card is created, counted in every total, and invisible
-       * on the board. Seen in production on 06/08/2026: the "Free Consultation" form still pointed
-       * at a "New Lead" column deleted the day before, so its captures silently went nowhere.
-       */
-      const stage = await prisma.pipelineStage.findFirst({
-        where: {
-          id: settings.stageId,
-          pipelineId: settings.pipelineId,
-          deletedAt: null,
-          pipeline: { deletedAt: null },
-        },
-        select: { pipelineId: true },
-      });
-      if (!stage) {
-        // The configured column is gone. File the lead onto the default board instead of dropping
-        // it - a card in the wrong column is recoverable, a capture nobody can see is not. Costs
-        // the form's own name/value settings, which is the right trade against losing the lead.
-        await ensureDefaultOpportunity(prisma, leadId);
-      } else {
-        /**
-         * One card per person per pipeline. The submission is deduped onto an existing LEAD
-         * above, but this used to create a fresh card every time regardless - so someone who
-         * filled the form twice (or came back after their card was deleted) showed up on the
-         * board as two identical "Mohamed Riyaz" cards. If a live card already exists on this
-         * pipeline the submission is recorded and the existing card stands where it is.
-         */
-        const alreadyOnBoard = await prisma.opportunity.findFirst({
-          where: { leadId, pipelineId: settings.pipelineId, deletedAt: null },
-          select: { id: true },
+    /**
+     * Everything from here on happens AFTER this person is told "Thanks!".
+     *
+     * The lead row and the submission row are still written inside the request - those ARE the
+     * capture, and losing one is the only failure this path cannot recover from. What used to
+     * follow them, and no longer does, is a queue of work the submitter has no stake in and was
+     * being charged for anyway, at ~310ms per cross-region round trip (see `after-response.ts`):
+     * the custom-answers blob, the tag, the opportunity card (which pulls a live FX rate over
+     * HTTP), and then `emitTrigger`, which runs the automation engine INLINE - executing every
+     * send step of every matching workflow, each an outbound WATI call, until one of them
+     * happens to hit a WAIT. A form with a three-message welcome sequence made the visitor wait
+     * for all three to be delivered before their own browser was allowed to say "Thanks!".
+     *
+     * Kept as ONE sequential block rather than several, because the order inside it is load
+     * bearing: a workflow can branch on a tag (`IF_TAG`), so the tag must be written before
+     * `emitTrigger` looks at it - exactly the order these ran in before.
+     */
+    const capturedLeadId = lead.id;
+    deferredSideEffects = async () => {
+      const leadId = capturedLeadId;
+      if (Object.keys(extra).length) {
+        const cur = (await prisma.lead.findUnique({ where: { id: leadId }, select: { customFields: true } }))?.customFields as Record<string, string> | null;
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: { customFields: { ...(cur ?? {}), ...extra } as Prisma.InputJsonObject },
         });
-        if (!alreadyOnBoard) {
-          const fx = await getTodayInrPerEur();
-          const inr = settings.opportunityValueInr?.trim() ? majorStringToMinor(settings.opportunityValueInr) : 0n;
-          const max = await prisma.opportunity.aggregate({ where: { stageId: settings.stageId }, _max: { position: true } });
-          // The card is born with the lead's owner, so the rotation's choice is visible on the
-          // board from the first paint rather than only on the desk.
-          const owner = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
-          await prisma.opportunity.create({
-            data: {
-              leadId,
-              pipelineId: settings.pipelineId,
-              stageId: settings.stageId,
-              name,
-              valueInrMinor: inr,
-              valueEurMinor: inrMinorToEurMinor(inr, fx.rate),
-              fxRateUsed: fx.rate,
-              source: toLeadSource(settings.leadSource),
-              assignedToId: owner?.assignedToId ?? null,
-              position: (max._max.position ?? -1) + 1,
-            },
+      }
+
+      if (settings.tag) {
+        const tagName = settings.tag.trim().toLowerCase();
+        const tag = await prisma.tag.upsert({ where: { name: tagName }, update: {}, create: { name: tagName } });
+        await prisma.lead.update({ where: { id: leadId }, data: { tags: { connect: { id: tag.id } } } });
+      }
+
+      if (settings.createOpportunity && settings.pipelineId && settings.stageId) {
+        /**
+         * `deletedAt: null` on the stage AND its pipeline - the guard this lookup used to be missing.
+         *
+         * A form's `stageId` is frozen at configuration time, but a column can be soft-deleted long
+         * afterwards, and `deleteStage` only refuses when the column ALREADY holds cards - nothing
+         * stopped new ones being written into a deleted one. The board renders live columns only
+         * (opportunities-metrics), so such a card is created, counted in every total, and invisible
+         * on the board. Seen in production on 06/08/2026: the "Free Consultation" form still pointed
+         * at a "New Lead" column deleted the day before, so its captures silently went nowhere.
+         */
+        const stage = await prisma.pipelineStage.findFirst({
+          where: {
+            id: settings.stageId,
+            pipelineId: settings.pipelineId,
+            deletedAt: null,
+            pipeline: { deletedAt: null },
+          },
+          select: { pipelineId: true },
+        });
+        if (!stage) {
+          // The configured column is gone. File the lead onto the default board instead of dropping
+          // it - a card in the wrong column is recoverable, a capture nobody can see is not. Costs
+          // the form's own name/value settings, which is the right trade against losing the lead.
+          await ensureDefaultOpportunity(prisma, leadId);
+        } else {
+          /**
+           * One card per person per pipeline. The submission is deduped onto an existing LEAD
+           * above, but this used to create a fresh card every time regardless - so someone who
+           * filled the form twice (or came back after their card was deleted) showed up on the
+           * board as two identical "Mohamed Riyaz" cards. If a live card already exists on this
+           * pipeline the submission is recorded and the existing card stands where it is.
+           */
+          const alreadyOnBoard = await prisma.opportunity.findFirst({
+            where: { leadId, pipelineId: settings.pipelineId, deletedAt: null },
+            select: { id: true },
           });
+          if (!alreadyOnBoard) {
+            const fx = await getTodayInrPerEur();
+            const inr = settings.opportunityValueInr?.trim() ? majorStringToMinor(settings.opportunityValueInr) : 0n;
+            const max = await prisma.opportunity.aggregate({ where: { stageId: settings.stageId }, _max: { position: true } });
+            // The card is born with the lead's owner, so the rotation's choice is visible on the
+            // board from the first paint rather than only on the desk.
+            const owner = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+            await prisma.opportunity.create({
+              data: {
+                leadId,
+                pipelineId: settings.pipelineId,
+                stageId: settings.stageId,
+                name,
+                valueInrMinor: inr,
+                valueEurMinor: inrMinorToEurMinor(inr, fx.rate),
+                fxRateUsed: fx.rate,
+                source: toLeadSource(settings.leadSource),
+                assignedToId: owner?.assignedToId ?? null,
+                position: (max._max.position ?? -1) + 1,
+              },
+            });
+          }
         }
       }
-    }
+      // Enrol into any workflow watching this form. Runs the engine, so it is the single
+      // slowest thing here and the one that most needed to stop blocking a response.
+      await emitTrigger("FORM_SUBMITTED", { leadId, formId: dbForm.id });
+    };
   }
 
   await prisma.$transaction([
@@ -527,7 +554,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
     });
   }
 
-  if (leadId) await emitTrigger("FORM_SUBMITTED", { leadId, formId: dbForm.id });
+  if (deferredSideEffects) afterResponse(`form-submit:${dbForm.slug}`, deferredSideEffects);
 
   revalidatePath("/contacts");
   revalidatePath(`/forms/${dbForm.id}`);

@@ -10,6 +10,7 @@ import { formatEurMinor, formatInrMinor, majorStringToMinor } from "@/lib/format
 import { parseDateInput } from "@/lib/dates";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { emitTrigger } from "./automation";
+import { afterResponse } from "./after-response";
 import { appendAudit, LedgerError, postEntry } from "./ledger";
 import { paymentEntryDraft } from "./finance-posting";
 import { getInvoicePdfData } from "./payments-metrics";
@@ -736,7 +737,11 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
     await syncInvoiceIssuance(invoiceId, session.user.id);
   }
 
-  if (paidLeadId) await emitTrigger("INVOICE_PAID", { leadId: paidLeadId });
+  // Deferred - the engine run belongs after the receipt is confirmed, not in front of it.
+  if (paidLeadId) {
+    const leadId = paidLeadId;
+    afterResponse("invoice-paid", () => emitTrigger("INVOICE_PAID", { leadId }));
+  }
   revalidatePath("/payments");
   revalidatePath(`/payments/${invoiceId}`);
   revalidatePath("/ledger");

@@ -5,6 +5,7 @@ import { istToday } from "@/lib/dates";
 import { canonicalPhone, normalizeWhatsappNumber } from "@/lib/phone";
 import { pickFirstCaller } from "./assignment";
 import { notifyNewOptIn } from "./outreach-notify";
+import { afterResponse } from "./after-response";
 import { scoreLeadAtOptIn } from "./lead-qualification";
 import { sendIntroNow } from "./outreach-instant";
 import { planReturningOptIn } from "@/lib/returning-opt-in";
@@ -185,35 +186,55 @@ export async function findDuplicateLead(input: {
  * row; scoring only the freshly-created ones would leave exactly the returning, most-engaged
  * prospects unscored.
  *
- * The score is AWAITED, unlike `notifyNewOptIn`. That one is an email nobody is blocked on; this
- * one decides who the SOP puts in front of a caller, and a route handler's response can end the
- * execution context - a fire-and-forget write would be lost precisely when traffic is heaviest.
+ * Scoring is DEFERRED rather than awaited, for the reasons set out on the `afterResponse` call
+ * below. It still runs on every capture, deduped ones included; it just no longer runs while a
+ * person watches a spinner.
  */
 export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
   const result = await resolveIntakeLead(rawInput);
-  if (rawInput.intakePayload) {
-    await scoreLeadAtOptIn(result.lead.id, rawInput.intakePayload);
-  }
 
   /**
-   * SOP Step 3, sent the moment they opt in - the founder's "don't wait for a telecaller".
+   * Scoring and the intro send now run AFTER the caller is answered - see `after-response.ts`.
    *
-   * ONLY on `created`. A deduped lead is someone we have already met: they may be mid-chase, or
-   * booked, or have asked us to stop months ago, and re-inviting them to book is at best noise.
-   * The dedupe branches return early precisely because that person already has a journey - this
-   * is the one place where "new row" and "new human" mean the same thing.
+   * Both used to be awaited, on the reasoning that "a route handler's response can end the
+   * execution context". That is a serverless property, and this app is not serverless: it ships
+   * as the Next.js standalone server under `CMD ["node", "server.js"]`, so the process outlives
+   * the response and a deferred promise really does finish. What the old shape cost was paid
+   * entirely by the person filling in the form - scoring is ~4 cross-region round trips (~1.2s)
+   * and the intro is ~10 more plus a WATI call that is allowed 12 seconds before it gives up.
    *
-   * AWAITED, unlike `notifyNewOptIn`. A webhook's response can end the execution context, and a
-   * send lost to that would be invisible - no row, no error, just a prospect nobody contacted. It
-   * costs the webhook a second and it never throws (see `sendIntroNow`'s contract), so the caller
-   * cannot be broken by it. Scoring above is awaited for the same reason.
+   * They stay in ONE deferred block, in this order, because the order matters: the intro renders
+   * from fields scoring may have just written, and running them concurrently would put two
+   * writers on the same Lead row.
    *
-   * The source gate lives inside `sendIntroNow` so the whitelist is stated once, next to the
-   * reasoning for it.
+   * Nothing is lost if the container restarts mid-flight. An unsent Step 3 stays DUE and
+   * `autoSendDue()` picks it up on the next outreach tick, which is already the documented
+   * contract of `sendIntroNow` - that recoverability is what makes these eligible to defer.
    */
-  if (result.created) {
-    await sendIntroNow(result.lead.id, result.lead.source);
-  }
+  afterResponse(`intake:${result.lead.id}`, async () => {
+    if (rawInput.intakePayload) {
+      await scoreLeadAtOptIn(result.lead.id, rawInput.intakePayload);
+    }
+
+    /**
+     * SOP Step 3, sent the moment they opt in - the founder's "don't wait for a telecaller".
+     *
+     * ONLY on `created`. A deduped lead is someone we have already met: they may be mid-chase, or
+     * booked, or have asked us to stop months ago, and re-inviting them to book is at best noise.
+     * The dedupe branches return early precisely because that person already has a journey - this
+     * is the one place where "new row" and "new human" mean the same thing.
+     *
+     * Deferred, not awaited - it was costing the submitter a WATI round trip (up to 12s) for a
+     * message they are not waiting to see. It cannot be silently lost: `sendIntroNow` leaves the
+     * step DUE on any failure, and the outreach cron sends whatever is still DUE.
+     *
+     * The source gate lives inside `sendIntroNow` so the whitelist is stated once, next to the
+     * reasoning for it.
+     */
+    if (result.created) {
+      await sendIntroNow(result.lead.id, result.lead.source);
+    }
+  });
 
   return result;
 }
@@ -359,14 +380,49 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
   // registration creates a lead with phone "", and the second one silently merges into it -
   // two different people, one record. Absence of a number is not evidence of sameness.
   const phone = input.phone?.trim() || null;
-  if (phone) {
-    const normalized = normalizeWhatsappNumber(phone);
-    const byPhone = normalized
-      ? await findLeadByNormalizedPhone(normalized, phone)
-      : await prisma.lead.findFirst({ where: { phone } });
-    if (byPhone) {
-      return { ...(await acceptReturningOptIn(byPhone, input, utm)), created: false, deduped: "phone" };
-    }
+  const normalized = phone ? normalizeWhatsappNumber(phone) : null;
+  const email = input.email?.trim();
+
+  /**
+   * Everything this capture needs to decide, started AT ONCE.
+   *
+   * These four reads used to run one after another, and at ~310ms per cross-region round trip
+   * (see `after-response.ts`) that ordering was most of what a person felt when they pressed
+   * Submit: the phone lookup, then the email lookup, then the rotation (five round trips on its
+   * own), then the pipeline config - roughly nine sequential hops before the first write.
+   * None of them depends on the answer to any other, so the wait is now the SLOWEST of them
+   * rather than the SUM.
+   *
+   * The rotation and config reads are speculative: only the create path below uses them, so on a
+   * dedupe they are thrown away. That is deliberate and safe - both are pure reads, both already
+   * degrade to a default rather than throwing, and both carry their own `.catch` so an ignored
+   * rejection can never surface as an unhandled one when a dedupe branch returns first.
+   */
+  const phoneMatch: Promise<Lead | null> = !phone
+    ? Promise.resolve(null)
+    : normalized
+      ? findLeadByNormalizedPhone(normalized, phone)
+      : prisma.lead.findFirst({ where: { phone } });
+
+  const emailMatch: Promise<Lead | null> = !email
+    ? Promise.resolve(null)
+    : prisma.lead.findFirst({
+        // Case-insensitive, the same folding findDuplicateLead and the booking form use.
+        where: { email: { equals: email, mode: "insensitive" } },
+      });
+
+  // Auto-assign the first caller per the configured rotation (80/20 split, Saturday rule) - a
+  // failure here must never block lead capture.
+  const rotationPick = pickFirstCaller().catch(() => null);
+  // Defaults to true; a config read that fails must not block capture either.
+  const autoCreateOpportunityRead = getPipelineConfig()
+    .then((c) => c.autoCreateOpportunity)
+    .catch(() => true);
+
+  const [byPhone, byEmail] = await Promise.all([phoneMatch, emailMatch]);
+
+  if (byPhone) {
+    return { ...(await acceptReturningOptIn(byPhone, input, utm)), created: false, deduped: "phone" };
   }
 
   /**
@@ -386,25 +442,15 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
    * phone is - absence is not evidence of sameness, and `""` would otherwise match every other
    * email-less lead to each other.
    */
-  const email = input.email?.trim();
-  if (email) {
-    const byEmail = await prisma.lead.findFirst({
-      // Case-insensitive, the same folding findDuplicateLead and the booking form use.
-      where: { email: { equals: email, mode: "insensitive" } },
-    });
-    if (byEmail) {
-      return { ...(await acceptReturningOptIn(byEmail, input, utm)), created: false, deduped: "email" };
-    }
+  if (byEmail) {
+    return { ...(await acceptReturningOptIn(byEmail, input, utm)), created: false, deduped: "email" };
   }
 
-  // 3. brand-new lead. Auto-assign the first caller per the configured rotation
-  // (80/20 split, Saturday rule) - a failure here must never block lead capture.
-  const assignedToId = await pickFirstCaller().catch(() => null);
-  // Read OUTSIDE the transaction - it is a cached config read, and holding a transaction open
-  // across it buys nothing. Defaults to true; a config read that fails must not block capture.
-  const autoCreateOpportunity = await getPipelineConfig()
-    .then((c) => c.autoCreateOpportunity)
-    .catch(() => true);
+  // 3. brand-new lead. Both reads were started above and are settled or nearly so by now; they
+  // are awaited OUTSIDE the transaction, because holding one open across a config read buys
+  // nothing and costs the pooler a connection.
+  const assignedToId = await rotationPick;
+  const autoCreateOpportunity = await autoCreateOpportunityRead;
   const lead = await prisma.$transaction(async (tx) => {
     const created = await tx.lead.create({
       data: {

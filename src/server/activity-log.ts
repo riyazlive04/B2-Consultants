@@ -5,6 +5,7 @@ import type { AppSession } from "@/lib/rbac";
 import type { SectionKey } from "@/lib/sections";
 import type { ActivityAction } from "@/lib/activity-actions";
 import { sanitiseMeta } from "@/lib/activity-diff";
+import { afterResponse } from "./after-response";
 
 /**
  * The write half of the activity log - "who did what, when", for every action in the app.
@@ -22,11 +23,19 @@ import { sanitiseMeta } from "@/lib/activity-diff";
  *    already got from your guard; there is no `actorId` parameter to pass the wrong id to.
  *    An action can't be logged in someone else's name because there's no way to say a name.
  *
- * 2. Logging NEVER breaks the action. A failure here is swallowed and reported to the
- *    server console. The alternative - a logging bug rolling back a telecaller's call log -
+ * 2. Logging NEVER breaks the action, and never DELAYS it either. A failure here is swallowed
+ *    and reported. The alternative - a logging bug rolling back a telecaller's call log -
  *    is strictly worse than a missing row. For the same reason this runs OUTSIDE the
  *    caller's transaction: an activity row is a record that the attempt happened, and
  *    joining the transaction would erase exactly the failed attempts worth reviewing.
+ *
+ *    "Never delays it" is the newer half. Nearly every action in the app ends with one of
+ *    these, and each one was an extra ~310ms cross-region round trip (see after-response.ts)
+ *    between a person pressing Save and the app answering - paid on every save, to write a row
+ *    nobody is waiting to read. The row is now written after the response. Callers can keep
+ *    awaiting this: it still returns a promise, it just no longer has anything to wait for.
+ *    The one thing this rules out is reading the row back in the same request, which nothing
+ *    does - the feed is a separate page load.
  *
  * WHERE TO CALL IT
  * After the write has succeeded, before `return { ok: true }`. Compose `summary` where the
@@ -63,7 +72,7 @@ export type ActivityInput = {
 type Actor = Pick<AppSession, "role"> & { user: { id: string; name?: string | null; email?: string | null } };
 
 export async function logActivity(session: Actor, input: ActivityInput): Promise<void> {
-  try {
+  afterResponse(`activity:${input.action}`, async () => {
     await prisma.activityLog.create({
       data: {
         actorId: session.user.id,
@@ -78,14 +87,13 @@ export async function logActivity(session: Actor, input: ActivityInput): Promise
         entityId: input.entityId,
         summary: input.summary,
         // Centrally sanitised: a BigInt amount anywhere in `meta` would make this write throw,
-        // and the catch below would then lose the entry silently. See sanitiseMeta.
+        // and a throw here would then lose the entry silently. See sanitiseMeta.
         meta: (input.meta === undefined ? undefined : sanitiseMeta(input.meta)) as never,
       },
     });
-  } catch (err) {
-    // Never surface to the caller - see rule 2 above.
-    console.error("[activity-log] failed to record", input.action, err);
-  }
+  });
+  // No try/catch: `afterResponse` logs and reports whatever this throws. Rule 2 is unchanged -
+  // it is just enforced one level up now, where the failure can no longer reach the caller at all.
 }
 
 /**

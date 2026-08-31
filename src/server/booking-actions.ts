@@ -27,6 +27,7 @@ import { scoreSubmission } from "./qualification";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
 import { promoteIntoFreedSlot, runBookingConfirmations } from "./booking-automation";
 import { sendEmailMessage } from "./messaging";
+import { afterResponse } from "./after-response";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -476,20 +477,39 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
     throw e;
   }
 
-  // Application Logic §4.3 stage 2 - the fuller booking intake supersedes the landing page's
-  // opt-in score on the Lead. Outside the transaction: the authoritative copy is already
-  // committed on `BookingRequest`, so this is a convenience mirror for the pipeline surfaces and
-  // must not be able to roll a confirmed booking back.
-  await mirrorBookingScoreToLead(lead.id, bant);
+  /**
+   * The booking is COMMITTED at this point. Everything below is downstream of it, and used to be
+   * charged to the person who had just picked a slot: a score mirror, the automation engine run
+   * inline (every send step of every BOOKING_CREATED workflow), and a WhatsApp confirmation with
+   * a 12-second ceiling of its own. At ~310ms per cross-region round trip (see
+   * `after-response.ts`) that turned "your call is booked" into a long, blank wait for a
+   * decision that had already been made.
+   *
+   * Deferred as ONE sequential block, in the original order - the confirmation message reads
+   * fields the mirror may have just written, and the two must not race each other onto the Lead.
+   *
+   * Safe to lose to a restart in exactly the way the old comments already describe: the mirror is
+   * a convenience copy of what `BookingRequest` authoritatively holds, an enrollment keeps its
+   * `nextRunAt` for `runDueWorkflows()`, and an unsent confirmation is re-attempted by the
+   * booking automation tick.
+   */
+  const bookedLeadId = lead.id;
+  afterResponse(`booking:${bookingId}`, async () => {
+    // Application Logic §4.3 stage 2 - the fuller booking intake supersedes the landing page's
+    // opt-in score on the Lead. Outside the transaction: the authoritative copy is already
+    // committed on `BookingRequest`, so this is a convenience mirror for the pipeline surfaces
+    // and must not be able to roll a confirmed booking back.
+    await mirrorBookingScoreToLead(bookedLeadId, bant);
 
-  // Tell the automation engine a booking happened, the same way moveOpportunity fires
-  // STAGE_CHANGED after its own transaction commits. Previously nothing called this for a
-  // booking, so BOOKING_CREATED workflows could never enroll a single contact.
-  await emitTrigger("BOOKING_CREATED", { leadId: lead.id });
+    // Tell the automation engine a booking happened, the same way moveOpportunity fires
+    // STAGE_CHANGED after its own transaction commits. Previously nothing called this for a
+    // booking, so BOOKING_CREATED workflows could never enroll a single contact.
+    await emitTrigger("BOOKING_CREATED", { leadId: bookedLeadId });
 
-  // Wave-2: fire the WhatsApp booking confirmation. No-op (and writes no row) unless WATI is
-  // configured + enabled; it never throws, so it can't affect the booking result.
-  await sendBookingConfirmation(bookingId);
+    // Wave-2: fire the WhatsApp booking confirmation. No-op (and writes no row) unless WATI is
+    // configured + enabled; it never throws, so it can't affect the booking result.
+    await sendBookingConfirmation(bookingId);
+  });
 
   revalidatePath("/bookings");
   revalidatePath("/book");

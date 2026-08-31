@@ -11,6 +11,8 @@ import { intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 import { allocateStudentCode } from "./student-code";
+import { normalizeStudentCode } from "@/lib/student-code";
+import { Prisma } from "@prisma/client";
 
 /**
  * Students (PRD2 §4). Profiles/enrollments/satisfaction/deletes = Admin.
@@ -36,8 +38,33 @@ const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
 const B2_LEVELS = ["SOLO", "GUIDED", "ELITE"] as const; // German Note excluded (PRD2 §4)
 
+/** A duplicate `code` is the one failure these actions can cause, and it must read as English. */
+const DUPLICATE_CODE = "That student ID is already taken - every student needs their own.";
+const isDuplicateCode = (e: unknown) =>
+  e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+
 const studentSchema = z.object({
   fullName: rule("name"),
+  /**
+   * The human-readable student number, now editable rather than generated-and-frozen.
+   *
+   * Optional at every call site: left blank on CREATE it is allocated as before, and left blank
+   * on UPDATE the existing code is kept rather than cleared. That asymmetry is deliberate - the
+   * code is printed on agreements and quoted on calls, so "I did not type anything" must never
+   * be read as "remove their identifier".
+   *
+   * Format is checked but not imposed. `parseStudentCode` already tolerates anything outside
+   * `B2-d+` (it returns null, and the generator skips it), so a code carried over from another
+   * system is allowed to stay in its own shape. What is refused is only what would break a URL,
+   * a CSV cell or a search box.
+   */
+  code: z
+    .string()
+    .trim()
+    .max(24, "A student ID can be at most 24 characters")
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, "Use letters, numbers, dashes, dots or slashes")
+    .optional()
+    .or(z.literal("")),
   email: optionalRule("email"),
   phone: optionalRule("phone"),
   // Free text: "3D Printing" / "SAP S/4HANA Consultant" are real answers here.
@@ -77,32 +104,41 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
   const start = parseDateInput(e.data.enrollmentDate);
   const { duration, programEndDate } = derivedDuration(e.data.programLevel, start);
 
-  const student = await prisma.student.create({
-    data: {
-      code: await allocateStudentCode(),
-      fullName: s.data.fullName,
-      email: s.data.email || null,
-      phone: s.data.phone || null,
-      industry: s.data.industry || null,
-      targetRole: s.data.targetRole || null,
-      leadSource: s.data.leadSource || null,
-      internalNotes: s.data.internalNotes || null,
-      enrollments: {
-        create: {
-          programLevel: e.data.programLevel,
-          enrollmentDate: start,
-          duration,
-          programEndDate,
-          totalSessionsPlanned: e.data.totalSessionsPlanned?.trim()
-            ? parseInt(e.data.totalSessionsPlanned, 10)
-            : null,
-          assignedCoach: e.data.assignedCoach || "Karthick",
-          closerId: e.data.closerId || null,
-          milestoneLogs: { create: { newMilestone: "ONBOARDING" } },
+  // Typed in wins; blank falls back to the next generated number, exactly as before.
+  const typedCode = normalizeStudentCode(s.data.code);
+  let student;
+  try {
+    student = await prisma.student.create({
+      data: {
+        code: typedCode ?? (await allocateStudentCode()),
+        fullName: s.data.fullName,
+        email: s.data.email || null,
+        phone: s.data.phone || null,
+        industry: s.data.industry || null,
+        targetRole: s.data.targetRole || null,
+        leadSource: s.data.leadSource || null,
+        internalNotes: s.data.internalNotes || null,
+        enrollments: {
+          create: {
+            programLevel: e.data.programLevel,
+            enrollmentDate: start,
+            duration,
+            programEndDate,
+            totalSessionsPlanned: e.data.totalSessionsPlanned?.trim()
+              ? parseInt(e.data.totalSessionsPlanned, 10)
+              : null,
+            assignedCoach: e.data.assignedCoach || "Karthick",
+            closerId: e.data.closerId || null,
+            milestoneLogs: { create: { newMilestone: "ONBOARDING" } },
+          },
         },
       },
-    },
-  });
+    });
+  } catch (e) {
+    // `code` is @unique - a typed-in duplicate is refused by the database, not by a read.
+    if (isDuplicateCode(e)) return { ok: false, error: DUPLICATE_CODE };
+    throw e;
+  }
 
   // Auto-link past income entries by matching name (fee pulled from Finance, PRD2 §4.1)
   const candidates = await prisma.income.findMany({ where: { studentId: null } });
@@ -186,6 +222,9 @@ export async function updateStudent(id: string, form: FormData): Promise<ActionR
   const session = await requireAdmin();
   const s = studentSchema.safeParse(Object.fromEntries(form));
   if (!s.success) return { ok: false, error: firstError(s.error) };
+  // Blank means "leave it alone", never "clear it" - the code is printed on agreements and
+  // quoted on calls, so an empty box must not strip a student of their identifier.
+  const nextCode = normalizeStudentCode(s.data.code);
   const data = {
     fullName: s.data.fullName,
     email: s.data.email || null,
@@ -194,9 +233,17 @@ export async function updateStudent(id: string, form: FormData): Promise<ActionR
     targetRole: s.data.targetRole || null,
     leadSource: s.data.leadSource || null,
     internalNotes: s.data.internalNotes || null,
+    ...(nextCode ? { code: nextCode } : {}),
   };
   const before = await prisma.student.findUnique({ where: { id } });
-  await prisma.student.update({ where: { id }, data });
+  try {
+    await prisma.student.update({ where: { id }, data });
+  } catch (e) {
+    // `code` is @unique, so the database is what rejects a collision - there is no read-then-write
+    // window here to lose a race in.
+    if (isDuplicateCode(e)) return { ok: false, error: DUPLICATE_CODE };
+    throw e;
+  }
   const diff = before
     ? diffFields<Record<string, unknown>>(before, data)
     : { changed: [], before: {}, after: {} };

@@ -153,6 +153,9 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
             <Field label="Full name">
               <TextInput kind="name" name="fullName" required />
             </Field>
+            <Field label="Student ID" hint="Leave blank to allocate the next one automatically">
+              <TextInput name="code" placeholder="B2-0042" />
+            </Field>
             <Field label="Email">
               <TextInput kind="email" name="email" />
             </Field>

@@ -289,6 +289,9 @@ export function StudentDetailClient({
             className="mt-4 grid grid-cols-1 gap-4 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-3"
           >
             <Field label="Full name"><TextInput kind="name" name="fullName" required defaultValue={student.fullName} /></Field>
+            <Field label="Student ID" hint="Quoted on calls and printed on agreements - change it only if it is wrong">
+              <TextInput name="code" defaultValue={student.code ?? ""} placeholder="B2-0042" />
+            </Field>
             <Field label="Email"><TextInput kind="email" name="email" defaultValue={student.email ?? ""} /></Field>
             <Field label="Phone"><TextInput kind="phone" name="phone" defaultValue={student.phone ?? ""} /></Field>
             <Field label="Industry"><TextInput name="industry" defaultValue={student.industry ?? ""} /></Field>

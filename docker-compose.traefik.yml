@@ -68,7 +68,7 @@ services:
       traefik.http.services.b2app.loadbalancer.server.port: "3000"
     environment:
       # --- Required. The container refuses to boot without these (src/lib/env.ts) ---
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the :6543 pooler URL}
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the :5432 session pooler URL}
       DIRECT_URL: ${DIRECT_URL:?set DIRECT_URL to the :5432 pooler URL}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?must be https://<your-domain>, no trailing slash}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?openssl rand -base64 32}

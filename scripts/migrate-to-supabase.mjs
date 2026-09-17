@@ -377,7 +377,7 @@ console.log(
   `\nDONE - ${sourceTotal} rows in Supabase, verified table by table.\n\n` +
     "Next:\n" +
     "  1. Point .env at Supabase (see .env.supabase.example) - app DATABASE_URL uses the\n" +
-    "     POOLER (:6543) with ?pgbouncer=true; DIRECT_URL keeps :5432 for migrations.\n" +
+    "     SESSION pooler (:5432) with ?connection_limit=8; DIRECT_URL is :5432 as well.\n" +
     "  2. Confirm the lockdown took: Data API should see nothing.\n" +
     "       psql <target> -c \"SET ROLE anon; SELECT count(*) FROM lead;\"   -- expect: permission denied\n" +
     "  3. Rotate every secret in .env - they have lived in a local file.\n"

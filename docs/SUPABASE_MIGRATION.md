@@ -38,7 +38,7 @@ only to an AAAA record. **Use the pooler for everything:**
 
 | Purpose | Host | Mode |
 |---|---|---|
-| App | `aws-0-ap-southeast-1.pooler.supabase.com:6543` + `?pgbouncer=true` | transaction |
+| App | `aws-0-ap-southeast-1.pooler.supabase.com:5432` + `?connection_limit=8` | **session** (was `:6543` transaction until 17 Sep 2026 - ~5x slower per query) |
 | Migrations / scripts | `aws-0-ap-southeast-1.pooler.supabase.com:5432` | **session** |
 
 The session pooler is the IPv4 stand-in for a direct connection: it holds one backend for
@@ -189,8 +189,8 @@ psql "<DIRECT_URL>" -c "SET ROLE anon; SELECT count(*) FROM lead;"   # expect: p
 ## Cutover
 
 1. Copy the two URLs from `.env.supabase.example` into `.env`.
-   `DATABASE_URL` → pooler `:6543` **with `?pgbouncer=true`** (PgBouncer is in transaction
-   mode; Prisma's prepared statements break without it). `DIRECT_URL` → `:5432`.
+   `DATABASE_URL` → session pooler `:5432` with `?connection_limit=8` (originally `:6543` with
+   `?pgbouncer=true`; see the table above for why it moved). `DIRECT_URL` → `:5432`.
    `prisma/schema.prisma` already declares both — no schema change needed.
 2. `npm run build && npm start`, then log in and check Finance, the LMS batches, and a
    student record render.

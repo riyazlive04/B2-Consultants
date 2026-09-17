@@ -115,10 +115,12 @@ docker compose -f docker-compose.prod.yml logs -f
 1. **Use the POOLER host, not the direct one.** The URL Supabase shows first
    (`db.<ref>.supabase.co`) is IPv6-only and will not connect from most VPS hosts. Use
    `aws-0-ap-southeast-1.pooler.supabase.com`, with username `postgres.<ref>`.
-   - `DATABASE_URL` → port **6543** (`?pgbouncer=true&connection_limit=10`) — runtime. Keep
-     `connection_limit` at 10+, NOT 1: this is a long-running server and each page fires many
-     queries at once, so `=1` serialises them into a `P2024` connection-pool timeout.
-   - `DIRECT_URL` → port **5432** — migrations only (pgbouncer can't hold the migrate lock).
+   - `DATABASE_URL` → port **5432** session pooler (`?connection_limit=8`, no `pgbouncer=true`)
+     - runtime. Not `:6543`: the transaction pooler measured ~300ms per trivial query from the
+     VPS against ~60ms in session mode (17 Sep 2026), and this long-running server is what
+     session mode is for. Keep `connection_limit` at 8, NOT 1 (`=1` serialises a page's
+     parallel queries into a `P2024` timeout) and not much higher (the project caps at 60).
+   - `DIRECT_URL` → port **5432** - migrations (a transaction pooler can't hold the migrate lock).
 2. **Percent-encode the DB password.** A literal `@` must become `%40` or the URL parser
    misreads the host.
 3. **`BETTER_AUTH_URL` = `https://<your-domain>`, no trailing slash.** It is the base for

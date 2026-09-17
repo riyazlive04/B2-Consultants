@@ -291,17 +291,12 @@ export function AppShell({
           );
         })}
 
-        {/* Account */}
+        {/* My Profile - its own top-level item. It used to sit under an "Account" heading that
+            held nothing else, which read as an empty menu. */}
         <div>
-          {compact ? (
-            <div className="mx-2 mb-1 border-t border-line" />
-          ) : (
-            <p className="px-3 pb-1 text-label font-semibold uppercase text-ink-3">
-              Account
-            </p>
-          )}
+          {compact && <div className="mx-2 mb-1 border-t border-line" />}
           <NavRow
-            item={{ key: "profile", label: "My Profile", href: "/profile", phase: 0, icon: "layout-grid", group: "Account" }}
+            item={{ key: "profile", label: "My Profile", href: "/profile", phase: 0, icon: "layout-grid", group: "Profile" }}
             compact={compact}
           />
         </div>

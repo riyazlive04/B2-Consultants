@@ -22,7 +22,6 @@ import { getFinanceOverview } from "@/server/finance-metrics";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { getCommissionReport } from "@/server/commission-metrics";
 import { getActiveLevels } from "@/server/levels";
-import { getStudentCodeMap } from "@/server/students-metrics";
 import { resolveBusinessLine } from "@/server/business-line-view";
 import { levelOptions } from "@/lib/levels";
 import { CommissionSection } from "./_components/CommissionSection";
@@ -66,22 +65,41 @@ export default async function FinancePage({
    */
   const periodSpec = parsePeriod(searchParams ?? {});
   const period = resolvePeriod(periodSpec);
-  const [{ metrics, incomes, expenses, pendings }, commission, fx, archIncomes, archExpenses, archPendings] =
-    await Promise.all([
-      getFinanceOverview(period),
-      getCommissionReport(),
-      // Same rate the server actions stamp on save, so the form's ₹↔€ preview
-      // matches what actually gets stored.
-      getTodayInrPerEur(),
-      getArchivedIncomes(),
-      getArchivedExpenses(),
-      getArchivedPendingPayments(),
-    ]);
+  // Everything that does not depend on another result goes in this one wave. Each query is a
+  // round trip to the database, and these used to run one after another.
+  const [
+    { metrics, incomes, expenses, pendings },
+    commission,
+    fx,
+    archIncomes,
+    archExpenses,
+    archPendings,
+    studentRows,
+    activeLevels,
+    line,
+  ] = await Promise.all([
+    getFinanceOverview(period),
+    getCommissionReport(),
+    // Same rate the server actions stamp on save, so the form's ₹↔€ preview
+    // matches what actually gets stored.
+    getTodayInrPerEur(),
+    getArchivedIncomes(),
+    getArchivedExpenses(),
+    getArchivedPendingPayments(),
+    prisma.student.findMany({
+      orderBy: { fullName: "asc" },
+      select: { id: true, fullName: true, code: true },
+    }),
+    getActiveLevels(),
+    // Sticky across navigation via cookie, but an explicit `?line=` in the URL still wins -
+    // linking a colleague a specific view was a deliberate property of the old design
+    // (Error Log E1/E4). See server/business-line-view.ts.
+    resolveBusinessLine(searchParams?.line) as Promise<BusinessLineView>,
+  ]);
   const fxRate = Number(fx.rate);
   const fxDate = fx.date.toISOString();
   const archivedCount = archIncomes.length + archExpenses.length + archPendings.length;
   const canPurge = session.role === "ADMIN";
-  const waByPending = await getWhatsAppStatusMap("pendingPaymentId", pendings.map((p) => p.id));
   const today = toDateInputValue(istToday());
   const monthKey = today.slice(0, 7);
   // Follows the SELECTED window, not today - a page showing June that says "July" is worse
@@ -90,32 +108,27 @@ export default async function FinancePage({
   // §6.1: the code rides as a `hint` - visible in the dropdown and searchable, but never
   // written into the name field (see ComboBox). `studentCodeById` lets the tables below
   // show the same code beside a denormalised studentName.
-  const studentRows = await prisma.student.findMany({
-    orderBy: { fullName: "asc" },
-    select: { id: true, fullName: true, code: true },
-  });
   const studentOptions = studentRows.map((s) => ({
     value: s.id,
     label: s.fullName,
     hint: s.code ?? undefined,
   }));
-  // Shared with Cash Health's age analysis - see getStudentCodeMap for why it isn't inline.
-  const studentCodeById = await getStudentCodeMap();
-  const activeLevels = await getActiveLevels();
+  // The same map getStudentCodeMap builds for Cash Health, taken from the rows already loaded
+  // above rather than reading the whole Student table a second time.
+  const studentCodeById: Record<string, string> = Object.fromEntries(
+    studentRows.flatMap((s) => (s.code ? [[s.id, s.code] as const] : [])),
+  );
   const levelOpts = levelOptions(activeLevels); // income/pending accept any level (incl. bundles)
 
   // ── Business line (§1). "ALL" stays the default so the page is unchanged for
   //    anyone who never touches the switch. An unknown ?line= falls back to ALL.
   const kindByLevel = new Map(activeLevels.map((l) => [l.code, l.kind as string]));
   const lineOfLevel = (code: string) => lineForKind(kindByLevel.get(code));
-  // Sticky across navigation via cookie, but an explicit `?line=` in the URL still wins -
-  // linking a colleague a specific view was a deliberate property of the old design
-  // (Error Log E1/E4). See server/business-line-view.ts.
-  const line: BusinessLineView = await resolveBusinessLine(searchParams?.line);
   const seg = line === "ALL" ? null : metrics.segments[line];
   const { start: monthStart, endExclusive: monthEndExclusive } = period;
   const monthEndInclusive = new Date(monthEndExclusive.getTime() - 86_400_000);
-  const [annual, clientMovement, recognition] = await Promise.all([
+  const [waByPending, annual, clientMovement, recognition] = await Promise.all([
+    getWhatsAppStatusMap("pendingPaymentId", pendings.map((p) => p.id)),
     getAnnualPerformance(line === "ALL" ? null : line),
     getClientMovement(),
     // Deliberately NOT segmented by business line. Recognition is about time, not about which

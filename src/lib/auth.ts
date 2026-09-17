@@ -111,6 +111,15 @@ export const auth = betterAuth({
         defaultValue: "USER",
         input: false, // cannot be set from the client, ever
       },
+      // What requireSession() guards on. getSession already loads the whole user row (session
+      // join), so declaring these hands them back from that same query instead of a second
+      // user.findUnique on every page - one fewer database round trip per request. All are
+      // server-owned: input:false, so no auth endpoint can write them.
+      sectionAccess: { type: "json", required: false, input: false },
+      capabilities: { type: "json", required: false, input: false },
+      status: { type: "string", required: false, input: false },
+      themePreference: { type: "string", required: false, input: false },
+      mustChangePassword: { type: "boolean", required: false, input: false },
     },
   },
   // NO session.cookieCache: it serialises the whole user (incl. data-URL avatars,

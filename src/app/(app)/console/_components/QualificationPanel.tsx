@@ -408,20 +408,89 @@ const DIMENSIONS: BantDimension[] = ["BUDGET", "AUTHORITY", "NEED", "TIMELINE", 
 const KINDS: QuestionKind[] = ["SELECT", "MULTI_SELECT", "BOOLEAN", "TEXT", "LONG_TEXT", "NUMBER"];
 
 /**
- * Aliases are merged onto the options for reading, but stored in their own column - so the
- * Options JSON box must show them stripped, or a save would round-trip them back into the
- * frozen `options` value and the version guard would reject the next edit.
+ * The answers box is plain text, one `answer text | score` per line. The server still takes the
+ * option list as JSON, so the form converts on submit - see `toServerForm`.
+ *
+ * Each option also has an internal `value`, the id past answers are stored under. The admin
+ * never types it: an existing option keeps its value (matched by its text, or by its line when
+ * the text itself was reworded), and a new one gets a slug of its text. Aliases are left out
+ * here - they live in their own column, and round-tripping them into `options` would make the
+ * version guard see a change that was never made.
  */
-function stripAliases(options: QuestionOption[]): Omit<QuestionOption, "aliases">[] {
-  return options.map(({ value, label, score }) => ({ value, label, score }));
+function optionsToText(options: QuestionOption[]): string {
+  return options.map((o) => `${o.label} | ${o.score}`).join("\n");
 }
 
-/** The alias editor's text form: one `value: alias, alias` line per option that has any. */
+/** The mapping box, keyed by answer text rather than the internal value the admin never sees. */
 function aliasesToText(options: QuestionOption[]): string {
   return options
     .filter((o) => o.aliases?.length)
-    .map((o) => `${o.value}: ${o.aliases!.join(", ")}`)
+    .map((o) => `${o.label} | ${o.aliases!.join(", ")}`)
     .join("\n");
+}
+
+const slug = (t: string) =>
+  t.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "option";
+
+/** Split "text | tail" on the LAST pipe, so answer text may itself contain one. */
+function splitPipe(line: string): [string, string | null] {
+  const at = line.lastIndexOf("|");
+  return at < 0 ? [line.trim(), null] : [line.slice(0, at).trim(), line.slice(at + 1).trim()];
+}
+
+/**
+ * Turn the text boxes back into what the server action parses: `options` as JSON and
+ * `answerAliases` as `value: alias, alias` lines. Returns an error message for a line it cannot
+ * read, rather than guessing a score.
+ */
+function toServerForm(fd: FormData, previous: QuestionOption[]): string | null {
+  const lines = String(fd.get("options") ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const byLabel = new Map(previous.map((o) => [o.label.trim().toLowerCase(), o]));
+  const matched = new Set<string>();
+  // First pass: an answer whose text is unchanged keeps its value, wherever it moved to.
+  const parsed = lines.map((line) => {
+    const [label, tail] = splitPipe(line);
+    const prev = byLabel.get(label.toLowerCase());
+    if (prev) matched.add(prev.value);
+    return { label, tail, prev };
+  });
+  const used = new Set<string>();
+  const options: { value: string; label: string; score: number }[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const { label, tail } = parsed[i];
+    let { prev } = parsed[i];
+    if (!label) return `Line ${i + 1} has no answer text`;
+    const score = tail === null || tail === "" ? 0 : Number(tail);
+    if (!Number.isFinite(score) || score < 0 || score > 5) {
+      return `"${label}": the score after | must be a number from 0 to 5`;
+    }
+    // Second pass: a reworded answer on the same line as an unmatched old one is that answer.
+    if (!prev && previous[i] && !matched.has(previous[i].value)) {
+      prev = previous[i];
+      matched.add(prev.value);
+    }
+    const base = prev?.value ?? slug(label);
+    let value = base;
+    for (let n = 2; used.has(value); n++) value = `${base}_${n}`;
+    used.add(value);
+    options.push({ value, label, score });
+  }
+  fd.set("options", options.length ? JSON.stringify(options) : "");
+
+  const valueByLabel = new Map(options.map((o) => [o.label.toLowerCase(), o.value]));
+  const aliasLines: string[] = [];
+  for (const line of String(fd.get("answerAliases") ?? "").split("\n")) {
+    if (!line.trim()) continue;
+    const [label, aliases] = splitPipe(line);
+    const value = valueByLabel.get(label.toLowerCase());
+    if (!value) return `Other wording for "${label}": no answer above has that text`;
+    if (aliases) aliasLines.push(`${value}: ${aliases}`);
+  }
+  fd.set("answerAliases", aliasLines.join("\n"));
+  return null;
 }
 
 function QuestionForm({
@@ -434,7 +503,13 @@ function QuestionForm({
   busy: boolean;
 }) {
   return (
-    <form action={onSubmit} className="mt-3 grid gap-3 rounded-field border border-line bg-surface-2 p-3">
+    <form
+      action={(fd) => {
+        const error = toServerForm(fd, question?.options ?? []);
+        if (error) return toast(error, "error");
+        onSubmit(fd);
+      }}
+      className="mt-3 grid gap-3 rounded-field border border-line bg-surface-2 p-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-caption uppercase text-ink-3">
           Key
@@ -501,27 +576,35 @@ function QuestionForm({
       </div>
 
       <label className="text-caption uppercase text-ink-3">
-        Options - JSON: [{"{"}&quot;value&quot;,&quot;label&quot;,&quot;score&quot;{"}"}], score 0–5
+        Answers - one per line: answer text | score (0-5)
         <textarea
           name="options"
-          rows={4}
-          defaultValue={JSON.stringify(stripAliases(question?.options ?? []), null, 0)}
-          className="mt-1 w-full rounded-field border border-line bg-surface px-2 py-1 font-mono text-caption text-ink"
+          rows={Math.max(4, (question?.options.length ?? 0) + 1)}
+          defaultValue={optionsToText(question?.options ?? [])}
+          placeholder={"No, I haven't started applying. | 2\nI've applied, but no responses | 4\nI got some interviews, but no offer | 5"}
+          className="mt-1 w-full rounded-field border border-line bg-surface px-2 py-1 text-sm normal-case text-ink"
         />
+        <span className="mt-1 block normal-case text-ink-3">
+          Leave the score off for a Context only question. Text and number questions need no answers.
+        </span>
       </label>
 
       {/* ── Inbound mapping ───────────────────────────────────────────────────────────────
           Editable even on an ANSWERED question without spawning a new version: these two fields
           change how an external form's wording is RECOGNISED, not what was asked or what it
           scored. See `updateQualificationQuestion`. */}
-      <fieldset className="grid gap-3 rounded-field border border-line bg-surface p-3">
-        <legend className="px-1 text-caption font-semibold uppercase text-ink-3">
-          Landing-page mapping
-        </legend>
+      <details
+        open={!!(question?.inboundKeys.length || question?.options.some((o) => o.aliases?.length))}
+        className="rounded-field border border-line bg-surface p-3"
+      >
+        <summary className="cursor-pointer text-caption font-semibold uppercase text-ink-3">
+          Advanced: landing-page wording
+        </summary>
+        <div className="mt-3 grid gap-3">
         <p className="text-caption text-ink-3">
-          What this question is called, and what its answers are called, on the form that feeds
-          Pabbly. Capitalisation, spaces, dashes and underscores are ignored - only add an entry
-          when the wording genuinely differs.
+          Only needed when the opt-in form words this question or its answers differently from
+          above. Answers already match on the key and the answer text, ignoring capitalisation,
+          spaces and punctuation. The panel warns you when a submitted answer did not match.
         </p>
 
         <label className="text-caption uppercase text-ink-3">
@@ -535,16 +618,17 @@ function QuestionForm({
         </label>
 
         <label className="text-caption uppercase text-ink-3">
-          Answer wording - one option per line, <code>value: text, text</code>
+          Other wording for an answer - answer text | other wording, other wording
           <textarea
             name="answerAliases"
             rows={Math.max(3, question?.options.length ?? 3)}
             defaultValue={aliasesToText(question?.options ?? [])}
-            placeholder={"immediately: Right away, ASAP\n3_months: Within 3 months"}
+            placeholder={"Immediately | Right away, ASAP\nWithin 3 months | In the next 3 months"}
             className="mt-1 w-full rounded-field border border-line bg-surface-2 px-2 py-1 font-mono text-caption text-ink"
           />
         </label>
-      </fieldset>
+        </div>
+      </details>
 
       <div className="flex items-center gap-3">
         <button

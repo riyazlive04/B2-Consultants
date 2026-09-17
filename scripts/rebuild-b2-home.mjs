@@ -181,23 +181,26 @@ export const HEADER = [
   sec("hdr", "Header", {
     bg: color(NAVY),
     pad: [14, 14],
-    // A logo, a seven-item menu and a button. The menu needs ~540px at 14px on one line, so the
-    // logo column gives up the room it never used.
-    columnStyles: [{ grow: 0.7 }, { grow: 3.4 }, { grow: 1.5 }],
+    // A logo, a seven-item menu and a button, on one line down to a 1024px viewport: the menu needs
+    // ~510px at 13px and the short button label ~190px, so the logo column gives up the room it
+    // never used.
+    columnStyles: [{ grow: 0.6 }, { grow: 3.6 }, { grow: 1.3 }],
     columns: [
       [{ id: "hdr-logo", type: "logo", url: LOGO, alt: "B2 Consultants", href: SITE_ROOT, width: 48, height: 48 }],
-      [{ id: "hdr-nav", type: "nav", align: "center", style: { fontSize: 14, fontWeight: 500 } }],
+      [{ id: "hdr-nav", type: "nav", align: "center", style: { fontSize: 13, fontWeight: 500 } }],
       [
         {
           id: "hdr-cta",
           type: "button",
-          label: "Book a Free Discovery Call",
-          href: OPTIN,
+          // Shorter than the in-page CTAs: the full label wraps to three lines in the header column.
+          label: "Book a Free Call",
+          // The header sends visitors through our own VSL funnel; the in-page CTAs still go to OPTIN.
+          href: "https://b2app.sirahagents.com/p/vsl-funnel/landing",
           forwardParams: true,
           newTab: true,
           align: "right",
           color: "#ffffff",
-          style: { background: RED, radius: 6, fontSize: 14, fontWeight: 600 },
+          style: { background: RED, radius: 6, fontSize: 13, fontWeight: 600 },
         },
       ],
     ],

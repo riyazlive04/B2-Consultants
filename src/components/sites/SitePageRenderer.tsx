@@ -251,8 +251,24 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
           className={`whitespace-pre-wrap text-base leading-relaxed ${align}`}
           style={{ color: inkFor(b, onBand, theme.textMuted), ...textStyle(b) }}
         >
-          {b.text}
-          <Accent b={b} />
+          {b.style?.background ? (
+            // A background on text is a badge ("Most Popular"): it hugs the words, not the column.
+            <span
+              className="inline-block px-3.5 py-1"
+              style={{
+                background: b.style.background,
+                borderRadius: b.style.radius !== undefined ? `${b.style.radius}px` : "999px",
+              }}
+            >
+              {b.text}
+              <Accent b={b} />
+            </span>
+          ) : (
+            <>
+              {b.text}
+              <Accent b={b} />
+            </>
+          )}
         </p>
       );
 
@@ -403,6 +419,39 @@ function Block({ b, ctx, onBand }: { b: SiteBlock; ctx: Ctx; onBand: boolean }) 
               >
                 {label || href}
               </Anchor>
+            );
+          })}
+        </div>
+      );
+
+    case "cards":
+      // Sections own the page grid; this is the one grid that lives INSIDE a column, so a card set
+      // can sit under the copy beside a portrait instead of breaking out into a band of its own.
+      return (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {(b.items ?? []).map((raw, i) => {
+            const [icon, heading, desc] = raw.split("|").map((s) => s.trim());
+            return (
+              <div
+                key={i}
+                className="flex flex-col gap-2 rounded-xl p-[18px]"
+                style={{
+                  background: onBand ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,.03)",
+                  border: `1px solid ${onBand ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,.08)"}`,
+                }}
+              >
+                {icon && <span className="text-[22px] leading-none">{icon}</span>}
+                {heading && (
+                  <span className="text-sm font-bold" style={{ color: onBand ? "#ffffff" : theme.text }}>
+                    {heading}
+                  </span>
+                )}
+                {desc && (
+                  <span className="text-[13px] leading-normal" style={{ color: inkFor(b, onBand, theme.textMuted) }}>
+                    {desc}
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>

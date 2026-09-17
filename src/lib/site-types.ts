@@ -129,7 +129,9 @@ export type SiteBlockType =
   | "form"
   | "nav"
   | "logo"
-  | "footerLinks";
+  | "footerLinks"
+  /** A two-up grid of small cards, `items` as "icon|title|description" - lets cards sit inside a column. */
+  | "cards";
 
 /**
  * Per-element presentation overrides, set from the editor's Styles tab. Every field is optional
@@ -279,7 +281,7 @@ export type SiteSectionBlock = {
 
 const BLOCK_TYPES = new Set<string>([
   "heading", "subheading", "text", "image", "button", "bullets",
-  "divider", "spacer", "video", "map", "form", "nav", "logo", "footerLinks",
+  "divider", "spacer", "video", "map", "form", "nav", "logo", "footerLinks", "cards",
 ]);
 
 function str(v: unknown, max = 2000): string | undefined {

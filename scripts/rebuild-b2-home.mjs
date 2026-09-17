@@ -28,16 +28,14 @@
  *    headline takes a value between the live desktop and mobile sizes (title 40/30 -> 34). The
  *    hero sets no size at all, because the renderer's own default is already 40px phone / 52px
  *    desktop - which is the live page's own pair.
- * 2. The two "Learn more" / "Read all success stories" links are dropped. On the live page they
- *    point at #programs-page and #success-stories, neither of which exists in the document - they
- *    are dead anchors, and reproducing them as real-looking links would be worse than the CTA
- *    that already sits under each grid.
+ * 2. "Learn more" and "Read all success stories" go to b2consultants.de/programs and
+ *    /successstories. The live page's own success-stories link is a dead #success-stories anchor.
  * 3. The footer's legal links point at b2consultants.de. Our own /privacy and /terms exist but are
  *    unpublished, so linking them internally would 404 for every visitor. Repoint them the moment
  *    those pages are published.
- * 4. Step numbers and the founder portrait panel are numerals and a tinted panel, not the circular
- *    badge and the 4:5 image frame the live page draws. A circle around one block is the one thing
- *    the block model cannot express, and the live page's own portrait is a placeholder anyway.
+ * 4. Step numbers are numerals, not the circular badge the live page draws - a circle around one
+ *    block is the one thing the block model cannot express. The founder's "14+ Years" badge sits
+ *    under the portrait rather than overlapping its corner, for the same reason.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -82,16 +80,20 @@ export const THEME = {
 };
 
 /**
- * The header menu.
+ * The header menu, in the live header's order.
  *
- * Every item is an on-page anchor, which is what the live header does too. It is also the only
- * honest option here: "/" is the only PUBLISHED page on this site, so a menu of page links would
- * be a menu of 404s.
+ * Sections this page has are on-page anchors. Media, GCS and Career are pages that exist only on
+ * b2consultants.de: "/" is the only PUBLISHED page on this site, so pointing them at our own paths
+ * would be a menu of 404s. Same reasoning as the footer's legal links (note 3).
  */
+const LIVE = "https://b2consultants.de";
 export const NAV = [
   { label: "About Us", href: "#about" },
   { label: "Programs", href: "#programs" },
+  { label: "Media", href: `${LIVE}/media` },
+  { label: "GCS", href: `${LIVE}/gcs` },
   { label: "Success Stories", href: "#success" },
+  { label: "Career", href: `${LIVE}/career` },
   { label: "Contact", href: "#contact" },
 ];
 
@@ -163,15 +165,6 @@ const CARD_WHITE = {
   shadow: "card",
   gap: 12,
 };
-/** A card on the navy band - the founder's credentials. */
-const CARD_DARK = {
-  background: "rgba(255,255,255,0.04)",
-  padding: [18, 18, 18, 18],
-  radius: 10,
-  borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.07)",
-  gap: 8,
-};
 
 /** icon + bold title + description: the shape of nearly every card on this page. */
 const iconCard = (p, icon, heading, desc, o = {}) => [
@@ -188,8 +181,9 @@ export const HEADER = [
   sec("hdr", "Header", {
     bg: color(NAVY),
     pad: [14, 14],
-    // A logo, a five-item menu and a button. Equal thirds wrap the menu onto a second line.
-    columnStyles: [{ grow: 1 }, { grow: 2.4 }, { grow: 1.6 }],
+    // A logo, a seven-item menu and a button. The menu needs ~540px at 14px on one line, so the
+    // logo column gives up the room it never used.
+    columnStyles: [{ grow: 0.7 }, { grow: 3.4 }, { grow: 1.5 }],
     columns: [
       [{ id: "hdr-logo", type: "logo", url: LOGO, alt: "B2 Consultants", href: SITE_ROOT, width: 48, height: 48 }],
       [{ id: "hdr-nav", type: "nav", align: "center", style: { fontSize: 14, fontWeight: 500 } }],
@@ -232,7 +226,13 @@ export const FOOTER = [
         {
           id: "ftr-l1",
           type: "footerLinks",
-          items: ["About Us|#about", "Programs|#programs", "Success Stories|#success"],
+          items: [
+            "About Us|#about",
+            "Programs|#programs",
+            "Success Stories|#success",
+            `Media|${LIVE}/media`,
+            `GCS|${LIVE}/gcs`,
+          ],
         },
       ],
       [
@@ -413,14 +413,18 @@ const features = (id, items) =>
 
 const program = (p, tier, name, desc, items, badge) => [
   ...(badge
-    ? [text(`${p}-b`, badge, { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 },
-        { color: RED })]
+    ? [text(`${p}-b`, badge,
+        { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, background: RED },
+        { color: "#ffffff" })]
     : []),
   text(`${p}-tier`, tier, { fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2 },
     { color: RED }),
   title(`${p}-n`, name, { fontSize: 26, fontWeight: 800, letterSpacing: -0.5 }, { color: INK }),
   text(`${p}-d`, desc, { fontSize: 15, lineHeight: 1.7 }, { color: MUTED }),
   features(`${p}-f`, items),
+  // A one-item footerLinks rather than a button: a button is a 56px padded pill, the live link is
+  // plain bold text.
+  { id: `${p}-more`, type: "footerLinks", items: [`Learn more →|${LIVE}/programs`], color: INK },
 ];
 
 const PROGRAM_CARD = {
@@ -497,28 +501,24 @@ const FOUNDER = sec("founder", "Meet the founder", {
   bg: color(NAVY),
   pad: [80, 40],
   anchor: "about",
-  columnStyles: [
-    {
-      background: "linear-gradient(135deg,#1a3a6e,#0d1b3e)",
-      padding: [56, 28, 56, 28],
-      radius: 16,
-      borderWidth: 2,
-      borderColor: "rgba(255,255,255,0.08)",
-      gap: 6,
-      grow: 1,
-      justify: "center",
-    },
-    { grow: 1.3 },
-  ],
+  // Portrait left, and the story AND the credential cards right - on the live page the cards sit
+  // under the copy, not in a band of their own.
+  columnStyles: [{ grow: 1, justify: "center", gap: 14 }, { grow: 1.3 }],
   columns: [
     [
-      text("fd-mark", "B2", { fontSize: 68, fontWeight: 800, letterSpacing: -2, lineHeight: 1.1 },
-        { align: "center", color: "rgba(255,255,255,0.10)" }),
-      text("fd-years", "14+ Years", { fontSize: 26, fontWeight: 800, letterSpacing: -0.5 },
-        { align: "center", color: "#ffffff" }),
-      text("fd-years-l", "Living in Germany",
-        { fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 },
-        { align: "center", color: ON_DARK_FAINT }),
+      {
+        id: "fd-photo",
+        type: "image",
+        url: "/media/ameen-founder.webp",
+        alt: "Ameen, founder of B2 Consultants",
+        width: 900,
+        height: 1125,
+      },
+      // The live page overlaps this badge onto the photo's corner; the block model has no overlap,
+      // so it sits directly under the photo instead.
+      text("fd-years", "14+ Years  ·  Living in Germany",
+        { fontSize: 15, fontWeight: 800, letterSpacing: -0.2, background: "#ffffff", radius: 10 },
+        { align: "right", color: INK }),
     ],
     [
       text("fd-k", "Meet the Founder",
@@ -532,26 +532,18 @@ const FOUNDER = sec("founder", "Meet the founder", {
         { fontSize: 16, lineHeight: 1.8 }, { color: ON_DARK }),
       text("fd-p3", "He teaches what he has lived. Not theory from a textbook. Real experience from real life in Germany. That is the difference.",
         { fontSize: 16, lineHeight: 1.8 }, { color: ON_DARK }),
+      {
+        id: "fd-creds",
+        type: "cards",
+        color: ON_DARK,
+        items: [
+          "🎓|Studied in Germany|Completed higher education in the German university system",
+          "🌎|German Citizen|Full German citizenship earned through years of integration",
+          "💼|Works in Germany|Active professional career in the German industry",
+          "📜|Consulate-Grade Documents|Produces credibility documents for the German Consulate and companies",
+        ],
+      },
     ],
-  ],
-});
-
-const cred = (p, icon, heading, desc) => [
-  text(`${p}-i`, icon, { fontSize: 22, lineHeight: 1 }, {}),
-  text(`${p}-t`, heading, { fontSize: 14, fontWeight: 700 }, { color: "#ffffff" }),
-  text(`${p}-d`, desc, { fontSize: 13, lineHeight: 1.5 }, { color: ON_DARK }),
-];
-
-const FOUNDER_CREDS = sec("founder-creds", "Founder credentials", {
-  bg: color(NAVY),
-  pad: [0, 80],
-  columnStyles: [CARD_DARK, CARD_DARK, CARD_DARK, CARD_DARK],
-  columns: [
-    cred("c1", "🎓", "Studied in Germany", "Completed higher education in the German university system"),
-    cred("c2", "🌎", "German Citizen", "Full German citizenship earned through years of integration"),
-    cred("c3", "💼", "Works in Germany", "Active professional career in the German industry"),
-    cred("c4", "📜", "Consulate-Grade Documents",
-      "Produces credibility documents for the German Consulate and companies"),
   ],
 });
 
@@ -578,19 +570,29 @@ const TESTIMONIAL_CARD = { ...CARD_WHITE, gap: 14 };
 
 const STORIES_GRID = sec("stories-grid", "Success stories", {
   bg: color(TINT),
-  pad: [0, 80],
+  pad: [0, 40],
   columnStyles: [TESTIMONIAL_CARD, TESTIMONIAL_CARD, TESTIMONIAL_CARD],
   columns: [
     testimonial("ts1",
-      "I had been applying to German companies for over a year with zero response. After joining B2 Consultants, I understood why. My resume was wrong. My approach was wrong. Within 4 months of following the guided strategy, I had 3 interview calls and one offer. I am now working in Munich as a Software Developer.",
-      "Rajesh K.", "Software Developer, Munich"),
+      "I got a call from HR at BMW Group for a discussion, followed by an online assessment for the role I applied to. I followed the same approach shared by B2 Consultants, prioritizing my skill set before applying. Getting noticed by a company like BMW showed me the strategy actually works.",
+      "Anish Kumar", "Senior AI Engineer"),
     testimonial("ts2",
-      "As a Mechanical Engineer, I thought Germany would be impossible without knowing German fluently. B2 Consultants showed me which companies hire in English, how to position my experience, and how to prepare for German-style interviews. I got hired in Stuttgart within 5 months.",
-      "Priya S.", "Mechanical Engineer, Stuttgart"),
+      "Living in Germany, I recently faced the challenge of losing my job, a difficult and uncertain time. But instead of giving up, I took action. I joined a resume and social profile update session, reflected on my skills and goals, and focused on moving forward. I'm very happy to share that I've now received and accepted a new job offer. The session was incredibly helpful in positioning myself better and highlighting my skills more effectively.",
+      "Baby Karuppusamy", "IT Engineer"),
     testimonial("ts3",
-      "The best part about B2 Consultants is the honesty. They told me exactly what I needed to improve and did not sugarcoat anything. The founder personally reviewed my profile, fixed my CV, and coached me for interviews. I am now in Frankfurt working as an IT Consultant. Worth every rupee.",
-      "Arun M.", "IT Consultant, Frankfurt"),
+      "I'm really happy to share that I recently received internship offers from DHL Supply Chain and Volkswagen Financial Services. During my preparation, I focused a lot on optimizing my resume based on the guidance and instructions shared in this community, which helped me get interview calls and eventually convert them into offers.",
+      "Pranavi Pandiarajan", "Supply Chain Management"),
   ],
+});
+
+/** Its own section so it spans the grid; the grid's bottom padding is trimmed to keep it close. */
+const STORIES_MORE = sec("stories-more", "Success stories link", {
+  bg: color(TINT),
+  pad: [0, 80],
+  columns: [[
+    { id: "st-more", type: "footerLinks", align: "center", color: INK,
+      items: [`Read all success stories →|${LIVE}/successstories`] },
+  ]],
 });
 
 const WHY_HEAD = sec("why-head", "Why us heading", {
@@ -653,9 +655,9 @@ export const HOME = [
   PROGRAMS_GRID,
   PROGRAMS_CTA,
   FOUNDER,
-  FOUNDER_CREDS,
   STORIES_HEAD,
   STORIES_GRID,
+  STORIES_MORE,
   WHY_HEAD,
   WHY_1,
   WHY_2,

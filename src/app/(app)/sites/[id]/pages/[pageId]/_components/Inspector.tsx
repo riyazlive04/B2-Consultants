@@ -36,6 +36,7 @@ const BLOCK_LABEL: Record<SiteBlockType, string> = {
   nav: "Menu",
   logo: "Logo",
   footerLinks: "Footer links",
+  cards: "Cards",
 };
 
 /** Elements an author can add into a section by hand. Header/footer-only types are left out. */
@@ -235,6 +236,17 @@ export function BlockInspector({
                 <textarea
                   className={area}
                   rows={4}
+                  value={(block.items ?? []).join("\n")}
+                  onChange={(e) => onPatch({ items: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) })}
+                />
+              </Field>
+            )}
+
+            {block.type === "cards" && (
+              <Field label="Cards" hint="Icon|Title|Description - one card per line.">
+                <textarea
+                  className={area}
+                  rows={5}
                   value={(block.items ?? []).join("\n")}
                   onChange={(e) => onPatch({ items: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) })}
                 />

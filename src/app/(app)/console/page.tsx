@@ -59,6 +59,9 @@ import type { AppRole } from "@/lib/sections";
 import { PerPersonPanel } from "./_components/PerPersonPanel";
 import { NotArmedPanel } from "./_components/NotArmedPanel";
 import { getNotArmedReport } from "@/server/not-armed";
+import { LeadWebhookPanel } from "./_components/LeadWebhookPanel";
+import { getLeadWebhookConfig, LEAD_WEBHOOK_NAME, LEAD_WEBHOOK_PATH } from "@/server/lead-webhook";
+import { readDeliveryStatuses } from "@/server/intake-route";
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +140,9 @@ export default async function ConsolePage() {
       // disarmed feature apart from a broken one.
       getNotArmedReport(),
     ]);
+
+  // Lead webhook switch - its own pair for the same reason as the tuple above.
+  const [leadWebhook, deliveries] = await Promise.all([getLeadWebhookConfig(), readDeliveryStatuses()]);
 
   /**
    * Resolve each person's EFFECTIVE capabilities - role defaults merged with their overrides -
@@ -365,6 +371,17 @@ export default async function ConsolePage() {
                   {
                     label: "Operations",
                     content: <OperationsPanel bookOrders={bookOrders} pipeline={pipelineConfig} />,
+                  },
+                  {
+                    label: "Lead Webhook",
+                    content: (
+                      <LeadWebhookPanel
+                        enabled={leadWebhook.enabled}
+                        webhookKey={leadWebhook.key}
+                        path={LEAD_WEBHOOK_PATH}
+                        lastDelivery={deliveries[LEAD_WEBHOOK_NAME] ?? null}
+                      />
+                    ),
                   },
                 ]}
               />

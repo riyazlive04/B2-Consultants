@@ -128,6 +128,25 @@ export const SECTION_CATALOGUE = [
    * seven blocks below are therefore written in the order they should appear on the rail.
    */
 
+  // ─────────────────────────────── Finance ───────────────────────────────
+  // First on the rail by the founder's choice (17 Sep 2026): Finance is what Ameen opens most.
+  // Admin-only except Telecaller Pay, so a Head sees that one item at the top and no other role
+  // sees this block at all.
+  { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"] },
+  { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"] },
+  // Read-only journal + trial balance (SPEC §10.4, §12). Admin-only: it is the audit
+  // surface for every rupee the other Finance screens summarise.
+  // Hidden in code: off in the nav and unreachable by route. The page and its posting engine
+  // stay intact, so the console can switch it back on without any code change.
+  { key: "ledger", label: "Ledger", href: "/ledger", phase: 1, icon: "scale", group: "Finance", roles: ["ADMIN"], hidden: true },
+  // Synamate Payments parity (Phase 3): invoices, estimates, products, subscriptions.
+  { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"] },
+  // Kept last in the Finance group on purpose: the default sidebar order follows this
+  // catalogue order, so placing "Telecaller Pay" after Payments drops it to the bottom of Finance.
+  // §3 "Commissions - all": Head R. The telecaller tiers get their OWN commission on My Desk, not
+  // the whole-team board - §3 gives them `O` here, not `R`.
+  { key: "telecaller", label: "Telecaller Pay", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN", "HEAD"] },
+
   // ─────────────────────────────── My Work ───────────────────────────────
   // What the person signed in is doing today, first, because it is the only block that is
   // theirs. These were scattered through the old "People" group behind Users and Agreements -
@@ -238,22 +257,6 @@ export const SECTION_CATALOGUE = [
   // The CV diagnostic (stores nothing). A student-facing tool, so it belongs beside the student
   // it is delivered to, not in a group of analytics screens.
   { key: "cv-check", label: "CV Studio", href: "/cv-check", phase: 2, icon: "file-search", group: "Students", roles: ["ADMIN", "HEAD", "STUDENT"] },
-
-  // ─────────────────────────────── Finance ───────────────────────────────
-  { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"] },
-  { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"] },
-  // Read-only journal + trial balance (SPEC §10.4, §12). Admin-only: it is the audit
-  // surface for every rupee the other Finance screens summarise.
-  // Hidden in code: off in the nav and unreachable by route. The page and its posting engine
-  // stay intact, so the console can switch it back on without any code change.
-  { key: "ledger", label: "Ledger", href: "/ledger", phase: 1, icon: "scale", group: "Finance", roles: ["ADMIN"], hidden: true },
-  // Synamate Payments parity (Phase 3): invoices, estimates, products, subscriptions.
-  { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"] },
-  // Kept last in the Finance group on purpose: the default sidebar order follows this
-  // catalogue order, so placing "Telecaller Pay" after Payments drops it to the bottom of Finance.
-  // §3 "Commissions - all": Head R. The telecaller tiers get their OWN commission on My Desk, not
-  // the whole-team board - §3 gives them `O` here, not `R`.
-  { key: "telecaller", label: "Telecaller Pay", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN", "HEAD"] },
 
   // ─────────────────────────────── Insights ──────────────────────────────
   // What is left once the builders and the inboxes move out: the two screens you open to READ a

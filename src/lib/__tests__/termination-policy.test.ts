@@ -8,6 +8,7 @@ import {
   openOpportunityWhere,
   ownedCompanyWhere,
   activeJourneyWhere,
+  teamStatusClosesLogin,
   SETTLED_LEAD_STAGES,
   TERMINAL_JOURNEY_PHASES,
 } from "../termination-policy";
@@ -120,5 +121,24 @@ describe("termination policy - every predicate is scoped to one person", () => {
       const json = JSON.stringify(w);
       assert.ok(json.includes(USER), `a predicate with no owner clause would migrate everyone: ${json}`);
     }
+  });
+});
+
+describe("termination policy - which status closes the login", () => {
+  test("Inactive means gone, so it takes the login with it", () => {
+    // The founder-reported bug: People > Edit > Status "Inactive" retired the card and nothing
+    // else, and the person who had left kept signing in. Nothing at the door reads
+    // TeamProfile.status, so whoever writes INACTIVE must suspend the User in the same breath.
+    assert.equal(teamStatusClosesLogin("INACTIVE"), true);
+  });
+
+  test("On leave is an absence, not a departure - access survives it", () => {
+    // Pinned because it is the one status that must NOT behave like "left": someone on leave
+    // still reads their inbox, and the app treats them as staff throughout.
+    assert.equal(teamStatusClosesLogin("ON_LEAVE"), false);
+  });
+
+  test("Active never closes a login", () => {
+    assert.equal(teamStatusClosesLogin("ACTIVE"), false);
   });
 });

@@ -9,6 +9,7 @@ import { istMinutesOfDay, istToday } from "@/lib/dates";
 import { formatIstMinutes } from "@/lib/config-schema";
 import { activityDate } from "@/lib/activity-actions";
 import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
+import { teamStatusClosesLogin } from "@/lib/termination-policy";
 import { getDailyLogEod } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
 import { LOG_FIELD_UNIT } from "@/lib/labels";
@@ -66,9 +67,68 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
     dailyCallTarget: Math.min(999, d.dailyCallTarget?.trim() ? parseInt(d.dailyCallTarget, 10) : 0),
   };
 
+  /**
+   * WHO LOSES THEIR LOGIN WHEN THIS SAVES.
+   *
+   * "Inactive" is the status an Admin picks on this form when someone has LEFT - but nothing at
+   * the door reads `TeamProfile.status`: sign-in (`lib/auth.ts`) and `requireSession`
+   * (`lib/rbac.ts`) read `User.status` alone. So retiring the card used to leave the leaver with
+   * FULL access - a fresh sign-in worked, the browser they already had open kept working, the
+   * APIs answered and a copied cookie still worked. It happened: someone who had left the
+   * company could still sign in and work.
+   *
+   * So the two writes `suspendUser` makes ride along here, in the SAME transaction as the
+   * profile row: the two statuses can never end up disagreeing, and the person is evicted
+   * before the button settles instead of keeping the session they are holding.
+   * `teamStatusClosesLogin` is what says "Inactive" means gone and "On leave" does not.
+   *
+   * THE REVERSE IS DELIBERATELY NOT DONE. Setting a profile back to "Active" does not reopen
+   * the login. Nothing records WHY a login was suspended, so this path cannot tell its own
+   * suspension apart from one an Admin made for another reason (a security hold, an unreturned
+   * laptop), and blanket reactivation would silently undo that. Distinguishing them would need
+   * a new column; until then reopening access stays one explicit step in Users & access >
+   * Reactivate, which brings the team profile back with it.
+   */
+  const profileUserId = id
+    ? (await prisma.teamProfile.findUnique({ where: { id }, select: { userId: true } }))?.userId ?? null
+    : null;
+  // `TeamProfile.userId` is the link, with the email as the fallback this action already uses
+  // everywhere else: a profile added BEFORE its invite was accepted carries a null `userId`, and
+  // that person's login has to close too - otherwise the original bug survives for exactly the
+  // people whose card was made first.
+  const linkedUserId =
+    profileUserId ?? (await prisma.user.findUnique({ where: { email: d.email }, select: { id: true } }))?.id ?? null;
+  const closingUserId = linkedUserId && teamStatusClosesLogin(d.status) ? linkedUserId : null;
+
+  if (closingUserId) {
+    /**
+     * The rails `suspendUser` has, checked BEFORE anything is written so a refusal leaves the
+     * profile exactly as it was rather than half-saved: this save can take an Admin's access
+     * away, and an Admin who locks themselves - or the last Admin - out has no way back in.
+     */
+    if (closingUserId === session.user.id) {
+      return { ok: false, error: "You cannot mark your own profile inactive - it would close your own login" };
+    }
+    const target = await prisma.user.findUnique({ where: { id: closingUserId }, select: { role: true } });
+    if (target?.role === "ADMIN") {
+      const otherAdmins = await prisma.user.count({
+        where: { role: "ADMIN", status: "ACTIVE", id: { not: closingUserId } },
+      });
+      if (otherAdmins === 0) return { ok: false, error: "At least one active Admin must remain." };
+    }
+  }
+
+  // Suspend and evict, the same pair `suspendUser` and `terminateTeamMember` write.
+  const closeLogin = closingUserId
+    ? [
+        prisma.user.update({ where: { id: closingUserId }, data: { status: "SUSPENDED" } }),
+        prisma.session.deleteMany({ where: { userId: closingUserId } }),
+      ]
+    : [];
+
   if (id) {
     const before = await prisma.teamProfile.findUnique({ where: { id } });
-    await prisma.teamProfile.update({ where: { id }, data });
+    await prisma.$transaction([prisma.teamProfile.update({ where: { id }, data }), ...closeLogin]);
     const diff = before
       ? diffFields<Record<string, unknown>>(before, data)
       : { changed: [], before: {}, after: {} };
@@ -84,10 +144,18 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
     }
   } else {
     const max = await prisma.teamProfile.aggregate({ _max: { orderIndex: true } });
-    // link to the login user with the same email, if one exists
-    const user = await prisma.user.findUnique({ where: { email: d.email } });
-    const created = await prisma.teamProfile.create({
-      data: { ...data, orderIndex: (max._max.orderIndex ?? 0) + 1, userId: user?.id ?? null },
+    // `linkedUserId` above is the login user with the same email, if one exists.
+    // Interactive form here only because the new row's id is needed for the activity entry -
+    // an array transaction cannot hand it back once the login writes are spread in.
+    const created = await prisma.$transaction(async (tx) => {
+      const row = await tx.teamProfile.create({
+        data: { ...data, orderIndex: (max._max.orderIndex ?? 0) + 1, userId: linkedUserId },
+      });
+      if (closingUserId) {
+        await tx.user.update({ where: { id: closingUserId }, data: { status: "SUSPENDED" } });
+        await tx.session.deleteMany({ where: { userId: closingUserId } });
+      }
+      return row;
     });
     await logActivity(session, {
       action: "profile.create",
@@ -95,7 +163,20 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
       entityType: "TeamProfile",
       entityId: created.id,
       summary: `Added ${d.fullName} to the team - ${d.roleTitle}`,
-      meta: { roleTitle: d.roleTitle, dashboardRole: d.dashboardRole, email: d.email, linked: !!user },
+      meta: { roleTitle: d.roleTitle, dashboardRole: d.dashboardRole, email: d.email, linked: linkedUserId !== null },
+    });
+  }
+  if (closingUserId) {
+    // A `profile.update` row listing "status" among its changed fields does not answer the
+    // question the founder actually asks the Activity Log - "why did their login stop working".
+    // Logged the way `suspendUser` logs it, against the User, so both entries read together.
+    await logActivity(session, {
+      action: "user.suspend",
+      section: "people",
+      entityType: "User",
+      entityId: closingUserId,
+      summary: `Suspended ${d.fullName}'s login - their team profile was marked inactive`,
+      meta: { via: "team profile status", teamStatus: d.status },
     });
   }
   // keep the login role in sync when the profile is linked to a user

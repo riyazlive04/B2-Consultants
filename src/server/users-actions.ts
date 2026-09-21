@@ -536,6 +536,12 @@ export async function reinstateTeamMember(profileId: string): Promise<ActionResu
       // erasing them would make the gap in their history unexplained.
       data: { status: "ACTIVE", terminatedAt: null, terminatedById: null },
     }),
+    // The login comes back ACTIVE whatever it was before. Nothing records WHY a login was
+    // suspended, so this cannot tell "suspended by the offboard" apart from "suspended weeks
+    // earlier over a security hold, then offboarded" - and refusing to reopen it would leave a
+    // reinstated member sitting on the org chart with no way in. Recording a suspension reason
+    // needs a schema change; until then an Admin who had a separate hold on this account
+    // re-applies it in Users & access > Suspend.
     ...(profile.userId
       ? [prisma.user.update({ where: { id: profile.userId }, data: { status: "ACTIVE" as never } })]
       : []),
@@ -568,18 +574,41 @@ export async function suspendUser(userId: string): Promise<ActionResult> {
   const err = await lastAdminError(userId, null);
   if (target.role === "ADMIN" && err) return { ok: false, error: err };
 
+  /**
+   * THE TEAM PROFILE GOES WITH THE LOGIN.
+   *
+   * `User.status` and `TeamProfile.status` are kept in sync by nothing else, and different
+   * modules filter on different ones - the pay board and the first-call rotation read
+   * TeamStatus, every assignee dropdown reads UserStatus. A suspended person who still reads
+   * ACTIVE on the org chart keeps being offered work they cannot sign in to do.
+   *
+   * Only an ACTIVE profile is touched. "On leave" is a separate, deliberate statement about the
+   * same person, and overwriting it would lose it - `reactivateUser` would then have nothing to
+   * put back. `terminatedAt` is NOT stamped either: this is a reversible hold, not a departure,
+   * and stamping it would move them to "former team members" as if they had left.
+   */
+  const profile = await prisma.teamProfile.findFirst({
+    where: { userId, status: "ACTIVE" },
+    select: { id: true },
+  });
+
   // Suspend and evict in one transaction: they are logged out before the button settles.
   await prisma.$transaction([
     prisma.user.update({ where: { id: userId }, data: { status: "SUSPENDED" } }),
     prisma.session.deleteMany({ where: { userId } }),
+    ...(profile
+      ? [prisma.teamProfile.update({ where: { id: profile.id }, data: { status: "INACTIVE" } })]
+      : []),
   ]);
   await logActivity(session, {
     action: "user.suspend",
     section: "people",
     entityType: "User",
     entityId: userId,
-    summary: `Suspended ${target.name}`,
-    meta: { role: target.role },
+    summary: profile
+      ? `Suspended ${target.name} - their team profile is now inactive too`
+      : `Suspended ${target.name}`,
+    meta: { role: target.role, teamProfileDeactivated: Boolean(profile) },
   });
   revalidatePath("/people");
   return { ok: true };
@@ -597,14 +626,45 @@ export async function reactivateUser(userId: string): Promise<ActionResult> {
   const rail = privilegeError(session, target, target.role, {});
   if (rail) return { ok: false, error: rail };
 
-  await prisma.user.update({ where: { id: userId }, data: { status: "ACTIVE" } });
+  /**
+   * THE TEAM PROFILE COMES BACK WITH THE LOGIN.
+   *
+   * Offboarding and suspension both close the login and retire the profile together, so
+   * reopening one half on its own left the org chart listing a former member - terminated,
+   * successor recorded - who could sign in and work again. Reversing both is the same
+   * restoration `reinstateTeamMember` performs, and for the same reasons: the termination
+   * reason and successor are KEPT, because they explain a period this person was gone, and the
+   * work that moved to a successor stays there because it has been worked in the meantime.
+   *
+   * An ON_LEAVE profile is left alone: it was never what closed the login, so it is not this
+   * button's to undo.
+   */
+  const profile = await prisma.teamProfile.findFirst({
+    where: { userId },
+    select: { id: true, status: true, terminatedAt: true },
+  });
+  const returning = profile ? profile.status === "INACTIVE" || profile.terminatedAt !== null : false;
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { status: "ACTIVE" } }),
+    ...(profile && returning
+      ? [
+          prisma.teamProfile.update({
+            where: { id: profile.id },
+            data: { status: "ACTIVE", terminatedAt: null, terminatedById: null },
+          }),
+        ]
+      : []),
+  ]);
   await logActivity(session, {
     action: "user.reinstate",
     section: "people",
     entityType: "User",
     entityId: userId,
-    summary: `Reinstated ${target.name}`,
-    meta: { role: target.role },
+    summary: returning
+      ? `Reinstated ${target.name} and returned them to the team - their share and open work are not restored automatically`
+      : `Reinstated ${target.name}`,
+    meta: { role: target.role, teamProfileRestored: returning },
   });
   revalidatePath("/people");
   return { ok: true };

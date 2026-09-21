@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, TeamStatus } from "@prisma/client";
 
 /**
  * WHAT MOVES when someone leaves, and what never does.
@@ -88,3 +88,21 @@ export const activeJourneyWhere = (userId: string): Prisma.OutreachJourneyWhereI
   phase: { notIn: [...TERMINAL_JOURNEY_PHASES] },
   OR: [{ respTouchpointId: userId }, { respDiscoId: userId }],
 });
+
+/**
+ * WHICH TEAM STATUS TAKES THE LOGIN WITH IT.
+ *
+ * `TeamProfile.status` is read by the pay board, the org chart and the first-call rotation;
+ * nothing at the door reads it. Sign-in (`lib/auth.ts`) and `requireSession` (`lib/rbac.ts`)
+ * read `User.status` alone - so whichever status means "this person has left" has to be paired
+ * with a suspension by the code that writes it, or the person keeps full access.
+ *
+ * INACTIVE is that status. ON_LEAVE is deliberately NOT: an absence is temporary and the app
+ * treats someone on leave as staff throughout, so closing their login would be a different
+ * decision than the one the Admin made.
+ *
+ * A pure predicate rather than an inline `=== "INACTIVE"` at each call site: this is the line
+ * between "gone" and "away", it is asserted in the test suite without a database, and a future
+ * status has exactly one place to declare which side it falls on.
+ */
+export const teamStatusClosesLogin = (status: TeamStatus): boolean => status === "INACTIVE";

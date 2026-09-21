@@ -1,0 +1,9 @@
+{
+  "admin":     { "email": "ameen@b2consultants.in",           "password": "", "role": "ADMIN" },
+  "head":      { "email": "karthick@b2consultants.in",        "password": "", "role": "HEAD" },
+  "asma":      { "email": "asma@b2consultants.in",            "password": "", "role": "USER" },
+  "nilofer":   { "email": "nilofer@b2consultants.in",         "password": "", "role": "USER" },
+  "student":   { "email": "student.demo@b2consultants.in",    "password": "", "role": "STUDENT" },
+  "tutor":     { "email": "tutor.demo@b2consultants.in",      "password": "", "role": "TUTOR" },
+  "gnStudent": { "email": "gn.student.demo@b2consultants.in", "password": "", "role": "STUDENT" }
+}

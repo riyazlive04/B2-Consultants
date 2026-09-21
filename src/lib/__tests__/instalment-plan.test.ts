@@ -14,9 +14,14 @@ import { test, describe } from "node:test";
 import {
   instalmentDueDates,
   instalmentExtraFor,
+  isPlanPaidInFull,
+  pickPlanForPayment,
+  settleDecision,
   splitInstalments,
+  studentNameKey,
   totalToCollect,
   type MoneyMinor,
+  type SettleInstalment,
 } from "../instalment-plan";
 import { DEFAULT_INSTALMENT_PLAN_CONFIG, type InstalmentPlanConfig } from "../config-schema";
 
@@ -146,5 +151,163 @@ describe("instalmentDueDates", () => {
 
   test("a nonsense count yields no dates", () => {
     assert.deepEqual(instalmentDueDates(first, 0, 30), []);
+  });
+});
+
+// ── Settling a plan from a recorded payment (FIN-06 / FIN-07 / FIN-08) ─────────────────────────
+//
+// The failure these guard against is the live dunning ladder chasing a student who has paid - and
+// its mirror image, a payment that silently stops the chase on a debt that is still owed.
+
+const day = (n: number) => new Date(Date.UTC(2026, 8, n));
+/** A same-currency INR row: aggInr is just the INR amount. */
+const inr = (paise: number) => ({ inr: BigInt(paise), eur: BigInt(0), aggInr: BigInt(paise) });
+const inst = (
+  id: string,
+  seq: number,
+  paise: number,
+  due: Date,
+  status: SettleInstalment["status"] = "DUE",
+): SettleInstalment => ({ id, seq, dueDate: due, status, ...inr(paise) });
+
+/** The e2e plan: Rs 10,000 x 3, instalment 1 recorded with the plan and stored PAID. */
+const plan3 = () => [
+  inst("i1", 1, 1_000_000, day(1), "PAID"),
+  inst("i2", 2, 1_000_000, day(10), "OVERDUE"),
+  inst("i3", 3, 1_000_000, day(30)),
+];
+
+describe("settleDecision", () => {
+  test("exactly one instalment's worth settles the earliest unpaid one and moves next-due on", () => {
+    const d = settleDecision(inr(1_000_000), plan3());
+    assert.deepEqual(d.settleIds, ["i2"]);
+    assert.deepEqual(d.nextDueDate, day(30));
+    assert.equal(d.allPaid, false);
+    assert.equal(d.shortfall, false);
+  });
+
+  test("an OVERDUE instalment is settled like a DUE one - this is what stops the chase (FIN-08)", () => {
+    const d = settleDecision(inr(1_000_000), plan3());
+    assert.ok(d.settleIds.includes("i2"));
+  });
+
+  test("already-paid instalments are skipped, never paid twice", () => {
+    const rows = plan3();
+    rows[1].status = "PAID";
+    assert.deepEqual(settleDecision(inr(1_000_000), rows).settleIds, ["i3"]);
+  });
+
+  test("the last instalment leaves nothing unpaid and no next due", () => {
+    const rows = plan3();
+    rows[1].status = "PAID";
+    const d = settleDecision(inr(1_000_000), rows);
+    assert.equal(d.allPaid, true);
+    assert.equal(d.nextDueDate, null);
+  });
+
+  test("paying two instalments at once settles both", () => {
+    const d = settleDecision(inr(2_000_000), plan3());
+    assert.deepEqual(d.settleIds, ["i2", "i3"]);
+    assert.equal(d.allPaid, true);
+  });
+
+  test("an overpayment settles only whole instalments - the remainder is carried nowhere", () => {
+    const d = settleDecision(inr(1_500_000), plan3());
+    assert.deepEqual(d.settleIds, ["i2"]);
+    assert.deepEqual(d.nextDueDate, day(30));
+    assert.equal(d.allPaid, false);
+  });
+
+  test("an underpayment settles nothing and leaves the instalment chaseable", () => {
+    const d = settleDecision(inr(999_999), plan3());
+    assert.deepEqual(d.settleIds, []);
+    assert.equal(d.shortfall, true);
+    assert.deepEqual(d.nextDueDate, day(10));
+  });
+
+  test("earliest means earliest DUE DATE, whatever order the rows arrive in", () => {
+    const rows = [inst("late", 3, 100, day(30)), inst("early", 2, 100, day(10))];
+    assert.deepEqual(settleDecision(inr(100), rows).settleIds, ["early"]);
+  });
+
+  test("a EUR plan paid in EUR compares cents exactly, ignoring FX drift in the aggregates", () => {
+    const eurInst: SettleInstalment = {
+      id: "e2", seq: 2, dueDate: day(10), status: "DUE",
+      inr: BigInt(0), eur: BigInt(10_000), aggInr: BigInt(900_000), // stamped at 90
+    };
+    // Paid at a stronger rupee: the INR aggregate is LOWER, but the euros are exactly right.
+    const paid = { inr: BigInt(0), eur: BigInt(10_000), aggInr: BigInt(880_000) };
+    assert.deepEqual(settleDecision(paid, [eurInst]).settleIds, ["e2"]);
+  });
+
+  test("a cross-currency payment is judged on the INR aggregate at each row's own rate", () => {
+    const inrInst = inst("x", 2, 900_000, day(10));
+    const enough = { inr: BigInt(0), eur: BigInt(10_000), aggInr: BigInt(900_000) };
+    const short = { inr: BigInt(0), eur: BigInt(9_999), aggInr: BigInt(899_910) };
+    assert.deepEqual(settleDecision(enough, [inrInst]).settleIds, ["x"]);
+    assert.deepEqual(settleDecision(short, [inrInst]).settleIds, []);
+  });
+
+  test("a plan with nothing unpaid settles nothing and is not a shortfall", () => {
+    const d = settleDecision(inr(100), [inst("p", 1, 100, day(1), "PAID")]);
+    assert.deepEqual(d.settleIds, []);
+    assert.equal(d.allPaid, true);
+    assert.equal(d.shortfall, false);
+  });
+});
+
+describe("pickPlanForPayment", () => {
+  const linked = { id: "L", studentId: "stu_1", studentName: "Asha Rao" };
+  const unlinked = { id: "U", studentId: null, studentName: "Asha  rao " };
+
+  test("an id-linked payment finds the id-linked plan", () => {
+    assert.deepEqual(pickPlanForPayment({ studentId: "stu_1", studentName: "Asha Rao" }, [linked]), { planId: "L" });
+  });
+
+  test("an id-linked plan is NEVER matched by name alone - a namesake cannot settle it", () => {
+    assert.deepEqual(pickPlanForPayment({ studentId: null, studentName: "Asha Rao" }, [linked]), { skip: "no-plan" });
+    assert.deepEqual(pickPlanForPayment({ studentId: "stu_2", studentName: "Asha Rao" }, [linked]), { skip: "no-plan" });
+  });
+
+  test("an unlinked plan is matched by name, ignoring case and spacing", () => {
+    assert.deepEqual(pickPlanForPayment({ studentId: null, studentName: "asha rao" }, [unlinked]), { planId: "U" });
+  });
+
+  test("two plausible plans is ambiguous - settle nothing, leave it to the admin", () => {
+    assert.deepEqual(
+      pickPlanForPayment({ studentId: "stu_1", studentName: "Asha Rao" }, [linked, unlinked]),
+      { skip: "ambiguous" },
+    );
+    const twin = { id: "U2", studentId: null, studentName: "Asha Rao" };
+    assert.deepEqual(pickPlanForPayment({ studentId: null, studentName: "Asha Rao" }, [unlinked, twin]), { skip: "ambiguous" });
+  });
+
+  test("no plan at all is a no-op", () => {
+    assert.deepEqual(pickPlanForPayment({ studentId: null, studentName: "Asha Rao" }, []), { skip: "no-plan" });
+  });
+
+  test("the name key matches the balance maths' normalisation", () => {
+    assert.equal(studentNameKey("  Asha   RAO "), "asha rao");
+  });
+});
+
+describe("isPlanPaidInFull", () => {
+  const due = m(3_000_000, 33_333);
+
+  test("every instalment paid and nothing left to collect: paid in full (FIN-07)", () => {
+    assert.equal(isPlanPaidInFull({ allInstalmentsPaid: true, toCollect: due, paid: m(3_000_000, 33_333) }), true);
+    assert.equal(isPlanPaidInFull({ allInstalmentsPaid: true, toCollect: due, paid: m(3_100_000, 34_000) }), true);
+  });
+
+  test("a balance that reads zero is not enough while an instalment is unpaid", () => {
+    assert.equal(isPlanPaidInFull({ allInstalmentsPaid: false, toCollect: due, paid: m(9_000_000, 99_999) }), false);
+  });
+
+  test("all instalments paid but money still owed (schedule and fee disagree): stays live", () => {
+    assert.equal(isPlanPaidInFull({ allInstalmentsPaid: true, toCollect: due, paid: m(2_999_999, 33_333) }), false);
+  });
+
+  test("FX drift that leaves either currency view owing keeps the plan open", () => {
+    assert.equal(isPlanPaidInFull({ allInstalmentsPaid: true, toCollect: due, paid: m(3_000_000, 33_332) }), false);
   });
 });

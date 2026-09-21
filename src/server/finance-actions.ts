@@ -14,6 +14,14 @@ import { expenseEntryDraft, incomeEntryDraft } from "./finance-posting";
 import { isKnownLevel, levelIncomeAccounts } from "./levels";
 import { logActivity, diffFields } from "./activity-log";
 import { ACTIVE, archiveData, restoreData } from "@/lib/soft-delete";
+import {
+  archivedSettlement,
+  CREATED_PLAN_SETTLEMENT,
+  latestSettlement,
+  settleInstalmentsForIncome,
+  unsettleIncome,
+  type SettlementRecord,
+} from "./instalment-settlement";
 
 /** Finance is Admin-only in every direction (PRD1 §4.1). All actions re-check. */
 
@@ -354,13 +362,29 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
         });
       }
 
+      /**
+       * A payment against a plan that already exists pays off that plan's next instalment(s), in
+       * this same transaction (FIN-06/07/08). Without it the schedule never moved: "next due" stuck
+       * on the instalment just paid, the plan never reached Paid in full, and the dunning ladder -
+       * which reads Instalment rows - went on chasing a student who had paid. An income that STARTS
+       * a plan is instalment 1 of it (stored PAID above) and settles nothing further.
+       *
+       * Deliberately conservative: settles only when exactly one live plan matches the student and
+       * this level, and only instalments the amount covers in full. Anything else is left exactly
+       * as it was for the admin (see instalment-settlement.ts and lib/instalment-plan.ts).
+       */
+      const settlement =
+        schedule.length > 0 ? CREATED_PLAN_SETTLEMENT : await settleInstalmentsForIncome(tx, income);
+
       const entryId = await postEntry(tx, incomeEntryDraft(income, incomeAccounts));
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "income.create",
         entityType: "Income",
         entityId: income.id,
-        payload: { entryId, studentName: income.studentName, programLevel: income.programLevel },
+        // `settlement` is the only record of which instalments this income paid off - archiving or
+        // editing the income reads it back to undo exactly that. See instalment-settlement.ts.
+        payload: { entryId, studentName: income.studentName, programLevel: income.programLevel, settlement },
       });
       created = income;
     });
@@ -429,6 +453,32 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
         },
       });
 
+      /**
+       * An edit that changes the money, the date, the level, the student or the payment type can
+       * change which instalments this income paid off - so undo what it settled and settle again
+       * from the corrected row. A notes-only edit leaves the schedule alone (and costs no reads).
+       *
+       * Only incomes recorded since settling existed take part (`autoSettle`). Editing an older
+       * income never touches a schedule, because nothing links it to the instalments it may have
+       * been marked against by hand, and guessing would be worse than leaving it.
+       */
+      let settlement: SettlementRecord | undefined;
+      const moneyChanged =
+        existing.amountInrMinor !== income.amountInrMinor ||
+        existing.amountEurMinor !== income.amountEurMinor ||
+        existing.date.getTime() !== income.date.getTime() ||
+        existing.programLevel !== income.programLevel ||
+        existing.studentId !== income.studentId ||
+        existing.studentName !== income.studentName ||
+        existing.paymentType !== income.paymentType;
+      if (moneyChanged && !existing.deletedAt) {
+        const prior = await latestSettlement(tx, id);
+        if (prior?.autoSettle) {
+          await unsettleIncome(tx, prior, existing.date, istToday());
+          settlement = await settleInstalmentsForIncome(tx, income);
+        }
+      }
+
       // Void before posting: the ledger permits only one live entry per source row.
       const voided = await voidEntryForSource(tx, "INCOME", id, {
         reason: "income edited",
@@ -444,7 +494,12 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
         action: "income.update",
         entityType: "Income",
         entityId: id,
-        payload: { reversalId: voided?.reversalId ?? null, entryId, studentName: income.studentName },
+        payload: {
+          reversalId: voided?.reversalId ?? null,
+          entryId,
+          studentName: income.studentName,
+          ...(settlement ? { settlement } : {}),
+        },
       });
       updated = income;
     });
@@ -490,12 +545,22 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
         on: istToday(),
       });
       const income = await tx.income.update({ where: { id }, data: archiveData(session.user.id) });
+      /**
+       * The money this income stood for is withdrawn, so whatever instalments it paid off become
+       * unpaid again - left PAID, the ladder would never chase a student for money they have not
+       * paid. Restoring the income settles again (restoreIncome).
+       */
+      const prior = await latestSettlement(tx, id);
+      await unsettleIncome(tx, prior, income.date, istToday());
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "income.archive",
         entityType: "Income",
         entityId: id,
-        payload: { reversalId: voided?.reversalId ?? null },
+        payload: {
+          reversalId: voided?.reversalId ?? null,
+          ...(prior ? { settlement: archivedSettlement(prior) } : {}),
+        },
       });
       removed = income;
     });
@@ -537,13 +602,17 @@ export async function restoreIncome(id: string): Promise<ActionResult> {
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       const income = await tx.income.update({ where: { id }, data: restoreData });
+      // The money counts again, so it pays off instalments again - against the schedule as it
+      // stands NOW, which may have moved on while this income was archived.
+      const prior = await latestSettlement(tx, id);
+      const settlement = prior?.autoSettle ? await settleInstalmentsForIncome(tx, income) : undefined;
       const entryId = await postEntry(tx, incomeEntryDraft(income, incomeAccounts));
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "income.restore",
         entityType: "Income",
         entityId: id,
-        payload: { entryId },
+        payload: { entryId, ...(settlement ? { settlement } : {}) },
       });
       restored = income;
     });

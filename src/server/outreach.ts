@@ -488,30 +488,39 @@ export async function runDueOutreach(): Promise<OutreachRun> {
     }
 
     /**
-     * ── Step 17/18: release the calendar, automatically.
+     * ── Steps 17/18 and 22: release the calendar, automatically.
      *
      * A SYSTEM step with no message, so it never passes through the auto-send path - it has to be
      * executed here. The planner only materialises it once the prospect has been told, on either
      * channel, so reaching this point means the notice is out and the slot should go.
+     *
+     * BOTH cancellations run through this one loop. `SSS_CANCEL` used to be raised by the planner
+     * and executed by nobody: it sat DUE for ever, the SSS slot stayed BOOKED with the prospect
+     * still attached, the journey stayed in SSS_CONFIRMATION and the lead stayed at "SSS Call
+     * Booked" - the founder's calendar quietly holding a call the SOP had already given up on.
+     * Keeping the two in one loop is what stops the second one drifting from the first again.
      */
     const dueCancels = await prisma.outreachStepLog.findMany({
-      where: { journeyId: id, status: "DUE", step: "DISCO_CANCEL", dueAt: { lte: now } },
-      select: { id: true },
+      where: { journeyId: id, status: "DUE", step: { in: ["DISCO_CANCEL", "SSS_CANCEL"] }, dueAt: { lte: now } },
+      select: { id: true, step: true },
     });
     for (const c of dueCancels) {
-      const res = await releaseDiscoBooking(id);
+      const isSss = c.step === "SSS_CANCEL";
+      const res = isSss ? await releaseSssBooking(id) : await releaseDiscoBooking(id);
       await prisma.outreachStepLog.update({
         where: { id: c.id },
         data: { status: "SENT", actedAt: now, outcome: res.cancelled ? "CANCELLED" : "ALREADY_CANCELLED" },
       });
       if (res.cancelled) {
         await logSystemActivity(SYSTEM_ACTORS.outreach, {
-          action: "outreach.disco.cancel",
+          action: isSss ? "outreach.sss.cancel" : "outreach.disco.cancel",
           section: "outreach",
           entityType: "OutreachJourney",
           entityId: id,
-          summary: `Released ${lead.name}'s discovery call${res.freedSlot ? " and re-opened the slot" : ""}`,
-          meta: { freedSlot: res.freedSlot },
+          summary: isSss
+            ? `Released ${lead.name}'s Success Strategy Session${res.freedSlot ? " and re-opened the slot" : ""}`
+            : `Released ${lead.name}'s discovery call${res.freedSlot ? " and re-opened the slot" : ""}`,
+          meta: { freedSlot: res.freedSlot, step: c.step },
         });
       }
     }
@@ -530,7 +539,10 @@ export async function runDueOutreach(): Promise<OutreachRun> {
      *     a specialist who has not logged the outcome yet),
      *   · the booking is still BOOKED - anyone who marked it COMPLETED, NO_SHOW or CANCELLED has
      *     said what happened, and their answer is not overwritten,
-     *   · the prospect never confirmed.
+     *   · the prospect never confirmed, on EITHER record - the journey's own flag or the
+     *     booking's `confirmedAt`, which is what the Bookings page and the confirmation loop
+     *     write. Reading only the journey flag is how a prospect who was confirmed on the
+     *     Bookings page was still written off as a no-show two hours after their call.
      * A confirmed prospect who simply did not show is left alone: that is a no-show for a human
      * to judge, not a cancellation.
      */
@@ -539,13 +551,16 @@ export async function runDueOutreach(): Promise<OutreachRun> {
       where: { id },
       select: {
         whatsappConfirmed: true,
-        booking: { select: { id: true, status: true, slotId: true, slot: { select: { startsAt: true } } } },
+        booking: {
+          select: { id: true, status: true, slotId: true, confirmedAt: true, slot: { select: { startsAt: true } } },
+        },
       },
     });
     const staleSlot = stale?.booking?.slot?.startsAt;
     if (
       stale &&
       !stale.whatsappConfirmed &&
+      !stale.booking?.confirmedAt &&
       stale.booking?.status === "BOOKED" &&
       staleSlot &&
       staleSlot < sweepBefore
@@ -726,6 +741,43 @@ async function releaseDiscoBooking(journeyId: string): Promise<{ cancelled: bool
 }
 
 /**
+ * Step 22 - the SSS counterpart of `releaseDiscoBooking`.
+ *
+ * Same shape, same return contract, one calendar down: the SOP's right-hand column ends "Confirmed?
+ * No → CANCEL the SSS call → End", and until now nothing in the app performed that cancellation.
+ *
+ * `cancelledAt` is the load-bearing detail. Freeing the slot clears `sssSlot.journeyId`, and
+ * `listSssNeedsScheduling` looks for exactly "highly qualified with no SSS slot" - so without the
+ * stamp a prospect the SOP had just given up on would pop straight back onto the founder's "Needs
+ * an SSS time" list to be booked all over again.
+ *
+ * The lead walks to LOST ("Cancelled/Unqualified") and only from SSS_BOOKED: anyone a human has
+ * since moved on has overtaken this signal, exactly as the no-show sweep treats its own stages.
+ */
+async function releaseSssBooking(journeyId: string): Promise<{ cancelled: boolean; freedSlot: boolean }> {
+  const row = await prisma.outreachJourney.findUnique({
+    where: { id: journeyId },
+    select: { leadId: true, cancelledAt: true, sssSlot: { select: { id: true } } },
+  });
+  // Already cancelled by a human, or no journey: nothing to do, and saying so is not an error.
+  if (!row || row.cancelledAt) return { cancelled: false, freedSlot: false };
+
+  const freedSlotId = row.sssSlot?.id ?? null;
+  await prisma.$transaction(async (tx) => {
+    if (freedSlotId) {
+      // Detach AND re-open in one write - a slot left BOOKED with no prospect is worse than either.
+      await tx.sssSlot.update({ where: { id: freedSlotId }, data: { status: "OPEN", journeyId: null } });
+    }
+    await tx.outreachJourney.update({
+      where: { id: journeyId },
+      data: { cancelledAt: new Date(), cancelReason: "No confirmation for the SSS call (SOP Step 22)" },
+    });
+  });
+  await advanceLeadStage(row.leadId, "LOST", ["SSS_BOOKED"]);
+  return { cancelled: true, freedSlot: Boolean(freedSlotId) };
+}
+
+/**
  * Send one SOP step by email, shaped to the same return contract as `sopWhatsAppSend` so the
  * caller's send/mark/log path stays one branch rather than two.
  *
@@ -848,6 +900,54 @@ export async function markSent(
     await advanceLeadStage(updated.journey.leadId, "WHATSAPP_SENT", ["NEW_LEAD"]);
   }
   return updated;
+}
+
+/**
+ * "The prospect confirmed their discovery call" - recorded on the JOURNEY, wherever it came from.
+ *
+ * The SOP's confirmation ladder (Steps 14/15/16) and the post-call no-show sweep both read
+ * `whatsappConfirmed` and nothing else. A confirmation taken anywhere off the outreach queue -
+ * the Bookings page's "Mark confirmed", a WhatsApp YES that arrived before the journey reached
+ * DISCO_CONFIRMATION - therefore left the ladder running, and the sweep went on to write the
+ * CONFIRMED booking off as a no-show and the lead as LOST two hours after the call.
+ *
+ * One function so every channel records the same fact the same way, and so the next channel that
+ * appears has somewhere obvious to call. The lead's CARD is a separate concern that
+ * `markDiscoveryConfirmed` already owns - each caller does that for itself, because who is
+ * allowed to move a card differs by channel.
+ *
+ * Fails closed in both directions: a terminal journey is not revived, and an already-confirmed one
+ * is not re-stamped. `refreshJourney` follows so the reminders are superseded at once rather than
+ * waiting for the next cron tick with a live ladder still in the specialist's queue.
+ */
+export async function markSopDiscoConfirmed(journeyId: string): Promise<boolean> {
+  const j = await prisma.outreachJourney.findUnique({
+    where: { id: journeyId },
+    select: { phase: true, whatsappConfirmed: true },
+  });
+  if (!j || j.whatsappConfirmed || isTerminal(j.phase)) return false;
+
+  await prisma.outreachJourney.update({
+    where: { id: journeyId },
+    data: { whatsappConfirmed: true, whatsappConfirmedAt: new Date() },
+  });
+  await refreshJourney(journeyId);
+  return true;
+}
+
+/**
+ * The journey a booking belongs to, for the confirmation paths above.
+ *
+ * Matched on the LINK first. The fallback is deliberately narrow - the same lead, and only while
+ * that journey has no booking of its own - because a journey already pointing at a different
+ * appointment must never be confirmed by this one.
+ */
+export async function journeyForBooking(bookingId: string, leadId: string | null): Promise<string | null> {
+  const j = await prisma.outreachJourney.findFirst({
+    where: leadId ? { OR: [{ bookingId }, { leadId, bookingId: null }] } : { bookingId },
+    select: { id: true },
+  });
+  return j?.id ?? null;
 }
 
 /**

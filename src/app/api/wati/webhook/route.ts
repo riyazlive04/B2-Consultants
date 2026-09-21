@@ -7,6 +7,8 @@ import { normalizeWhatsappNumber } from "@/lib/phone";
 import { readWatiSettings } from "@/lib/wati";
 import { isConfirmationReply } from "@/lib/confirmation-reply";
 import { markDiscoveryConfirmed } from "@/server/lead-stage-auto";
+import { isTerminal } from "@/lib/outreach-engine";
+import { markSopDiscoConfirmed } from "@/server/outreach";
 
 /**
  * Inbound WATI webhook - two jobs:
@@ -99,31 +101,55 @@ async function handleStatus(watiId: string | undefined, sender: string | null, s
 /**
  * Apply a prospect's YES to whichever confirmation ladder is currently open for them.
  *
- * Which flag it sets depends on the journey's phase, not on the message: a YES during the Disco
- * ladder is "WhatsApp Confirmed" (Steps 14/15), a YES during the SSS ladder is "Sales Call
- * Confirmed" (Steps 19/20). A YES at any other time is just friendliness and sets nothing.
+ * Which flag it sets depends on which APPOINTMENT is still ahead of them, not on the message: a
+ * YES while a discovery call is upcoming is "WhatsApp Confirmed" (Steps 14/15), a YES while the
+ * SSS ladder is open is "Sales Call Confirmed" (Steps 19/20). A YES at any other time is just
+ * friendliness and sets nothing.
+ *
+ * It used to key off `phase === "DISCO_CONFIRMATION"` alone, and that phase is only reached once
+ * Step 12 (a manual Key Metrics transfer into a sheet this app cannot see) has been ticked. So a
+ * prospect who replied YES the moment they got the welcome message was recorded as having said
+ * nothing: the 36h and 24h reminders still went out, and the post-call sweep then wrote their
+ * CONFIRMED booking off as a no-show. The gate is now the fact that decides whether the messages
+ * make sense - is the call still ahead of us - with the phase kept only as a terminal guard, so a
+ * cancelled or written-off journey is never revived by a late reply.
  */
 async function confirmJourneyFor(leadId: string): Promise<void> {
   const journey = await prisma.outreachJourney.findUnique({
     where: { leadId },
-    select: { id: true, phase: true, whatsappConfirmed: true, salesCallConfirmed: true },
+    select: {
+      id: true,
+      phase: true,
+      whatsappConfirmed: true,
+      salesCallConfirmed: true,
+      highlyQualified: true,
+      sssAt: true,
+      booking: { select: { status: true, slot: { select: { startsAt: true } } } },
+    },
   });
-  if (!journey) return;
+  if (!journey || isTerminal(journey.phase)) return;
 
   const now = new Date();
-  if (journey.phase === "SSS_CONFIRMATION" && !journey.salesCallConfirmed) {
+  // The SSS ladder is open from the Highly Qualified verdict with a time on the diary, which is
+  // exactly what `planJourney` gates its SSS steps on - the two must agree or a YES lands on the
+  // wrong appointment.
+  const sssOpen =
+    journey.phase === "SSS_CONFIRMATION" || (journey.highlyQualified === true && journey.sssAt !== null);
+  const discoUpcoming =
+    journey.booking?.status === "BOOKED" &&
+    journey.booking.slot !== null &&
+    journey.booking.slot.startsAt.getTime() > now.getTime();
+
+  if (sssOpen && !journey.salesCallConfirmed) {
     await prisma.outreachJourney.update({
       where: { id: journey.id },
       data: { salesCallConfirmed: true, salesCallConfirmedAt: now },
     });
-  } else if (journey.phase === "DISCO_CONFIRMATION" && !journey.whatsappConfirmed) {
-    await prisma.outreachJourney.update({
-      where: { id: journey.id },
-      data: { whatsappConfirmed: true, whatsappConfirmedAt: now },
-    });
+  } else if (discoUpcoming && !journey.whatsappConfirmed) {
+    const recorded = await markSopDiscoConfirmed(journey.id);
     // The flag alone was invisible on the board. This is the prospect saying yes, which is
     // precisely what "Pre-Qualified & Confirmed" means - see markDiscoveryConfirmed.
-    await markDiscoveryConfirmed(leadId, "whatsapp").catch(() => undefined);
+    if (recorded) await markDiscoveryConfirmed(leadId, "whatsapp").catch(() => undefined);
   }
 }
 

@@ -122,6 +122,19 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
           </Btn>
         </div>
 
+        {/* SOP: "Book sales call before closing the discovery call". Shown only on the Level 3
+            route, because it is the only one that has a sales call to book. Optional: without a
+            time the prospect still lands on the SSS calendar's "Needs an SSS time" list for the
+            closer to place, and no reminder goes out naming a date nobody agreed. */}
+        {outcome === "QUALIFIED_FOR_SSS" && (
+          <Field
+            label="Success Strategy Session (IST)"
+            hint="The time you agreed on the call. Leave blank and the closer will book it."
+          >
+            <TextInput type="datetime-local" name="sssAt" />
+          </Field>
+        )}
+
         {outcome === "NO_SHOW" && (
           <p className="rounded-card bg-warn-soft p-3 text-caption text-warn">
             Only mark a no-show once you have rung them directly. Per the JD a missed call is not

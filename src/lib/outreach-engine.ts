@@ -615,6 +615,15 @@ export function nextPhase(state: JourneyState, now: Date, sla: OutreachSla): Out
   if (isTerminal(state.phase)) return state.phase;
 
   if (state.salesCallConfirmed) return "COMPLETED";
+  /**
+   * Step 22 - the SSS was released because the prospect never confirmed.
+   *
+   * Read BEFORE the Highly Qualified branch below, and for the same reason the disco ladder reads
+   * `DISCO_CANCEL` before its own: the verdict that opened the ladder is still true, so without
+   * this the journey would sit in SSS_CONFIRMATION for ever with its slot already given away -
+   * which is exactly how the engine kept re-scanning a prospect whose call no longer exists.
+   */
+  if (acted(state, "SSS_CANCEL")) return "CANCELLED";
   if (state.highlyQualified === false) return "CLOSED_NOT_HQ";
   if (state.highlyQualified === true) return "SSS_CONFIRMATION";
 

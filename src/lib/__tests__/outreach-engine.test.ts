@@ -406,6 +406,23 @@ describe("Steps 14/15/16 - confirmation ladder fires at discrete offsets", () =>
     assert.ok(sup.includes("DISCO_CANCEL_MSG"));
   });
 
+  /**
+   * OUT-01. A confirmation can land long BEFORE the ladder opens - on the Bookings page the
+   * moment the call is booked, or as a WhatsApp YES answering the welcome message. The engine's
+   * only record of it is `whatsappConfirmed`, so the contract every one of those channels now
+   * writes through is this: with the flag set, Step 14 is never raised in the first place.
+   */
+  test("Step 14 is never raised for a call that was already confirmed (OUT-01)", () => {
+    const confirmed = { ...ladder([]), whatsappConfirmed: true };
+    assert.equal(planned(confirmed, T0, "DISCO_CONFIRM_1"), undefined);
+    assert.equal(planned(confirmed, T0, "DISCO_CONFIRM_2"), undefined);
+    assert.equal(
+      planJourney(confirmed, T0, DEFAULT_SLA).phase,
+      "AWAITING_DISCO",
+      "a confirmed prospect is waiting for their call, not still being chased for an answer",
+    );
+  });
+
   test("cancellation requires BOTH call attempts logged (checklist §N)", () => {
     assert.equal(planned(ladder(["DISCO_CONFIRM_1", "DISCO_CONFIRM_2"]), T0, "DISCO_CANCEL_MSG"), undefined);
     assert.equal(
@@ -462,6 +479,27 @@ describe("Step 18 - Highly Qualified gate", () => {
     const s = base({ phase: "HANDOFF", booked: true, qualified: "YES", highlyQualified: null, sssAt });
     assert.equal(planned(s, T0, "SSS_CONFIRM_1"), undefined);
   });
+
+  /**
+   * DSC-01. The desk's "Ready - route to Level 3" now writes the verdict onto the journey, and it
+   * may arrive before a time has been agreed - the closer books that on the SSS calendar. The
+   * verdict alone must move the journey into SSS_CONFIRMATION (which is what puts the prospect on
+   * the "Needs an SSS time" list) while sending nothing: every SSS message names a date, and there
+   * is no date yet.
+   */
+  test("HQ = YES with no SSS time yet → journey waits in SSS_CONFIRMATION, no message is raised", () => {
+    const s = base({ phase: "AWAITING_DISCO", booked: true, qualified: "YES", highlyQualified: true, sssAt: null });
+    const plan = planJourney(s, T0, DEFAULT_SLA);
+    assert.equal(plan.phase, "SSS_CONFIRMATION");
+    for (const m of plan.materialise) {
+      assert.ok(!m.step.startsWith("SSS_"), `no SSS step may fire without an SSS time, got ${m.step}`);
+    }
+  });
+
+  test("HQ = YES with a time → the ladder opens on the same verdict", () => {
+    const s = base({ phase: "AWAITING_DISCO", booked: true, qualified: "YES", highlyQualified: true, sssAt });
+    assert.ok(planned(s, T0, "SSS_CONFIRM_1"), "Step 19 is armed as soon as the SSS time is known");
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -507,6 +545,33 @@ describe("Steps 19-21 - SSS ladder fires at 24h/12h/6h/3h/2h", () => {
 
   test("Sales Call Confirmed → COMPLETED", () => {
     assert.equal(nextPhase({ ...ladder(["SSS_CONFIRM_1"]), salesCallConfirmed: true }, T0, DEFAULT_SLA), "COMPLETED");
+  });
+
+  /**
+   * DSC-03. The SOP's right-hand column ends "Confirmed? No → CANCEL the SSS call → End", and the
+   * engine raised SSS_CANCEL for that. Nothing executed it, so the journey sat in SSS_CONFIRMATION
+   * for ever with the slot still held. These two cases pin the "End" half: once the cancellation
+   * has run the journey is terminal, and a terminal journey is handed no further work.
+   */
+  test("Step 22 - once SSS_CANCEL has run the journey is CANCELLED, not still in SSS_CONFIRMATION", () => {
+    const cancelled = done(ladder(["SSS_CONFIRM_1", "SSS_CONFIRM_2", "SSS_CONFIRM_3", "SSS_CONFIRM_CALL", "SSS_CANCEL_MSG"]), "SSS_CANCEL", T0);
+    assert.equal(nextPhase(cancelled, T0, DEFAULT_SLA), "CANCELLED");
+    assert.equal(planJourney(cancelled, T0, DEFAULT_SLA).phase, "CANCELLED");
+  });
+
+  test("a cancelled SSS raises nothing further and sweeps up what was still DUE", () => {
+    const base_ = ladder(["SSS_CONFIRM_1", "SSS_CONFIRM_2", "SSS_CONFIRM_3", "SSS_CONFIRM_CALL", "SSS_CANCEL_MSG"]);
+    const cancelled: JourneyState = {
+      ...done(base_, "SSS_CANCEL", T0),
+      steps: {
+        ...done(base_, "SSS_CANCEL", T0).steps,
+        // A reminder the specialist never worked, left behind by the ladder.
+        SSS_CONFIRM_3: step({ status: "DUE", dueAt: at(94 * HR) }),
+      },
+    };
+    const plan = planJourney(cancelled, T0, DEFAULT_SLA);
+    assert.deepEqual(plan.materialise, [], "a cancelled SSS is handed no new work");
+    assert.ok(plan.supersede.includes("SSS_CONFIRM_3"), "and nothing is left DUE in the queue");
   });
 
   test("SSS ladder mirrors Disco but uses its OWN offsets - no copy-paste bug (checklist §Q)", () => {

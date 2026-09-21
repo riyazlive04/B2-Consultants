@@ -11,6 +11,7 @@ import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { qualifiedFromBant } from "@/lib/outreach-sop";
 import { markDiscoveryConfirmed } from "./lead-stage-auto";
+import { journeyForBooking, markSopDiscoConfirmed } from "./outreach";
 import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/consent";
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
 import { optionalRule, rule } from "@/lib/field-rules";
@@ -913,6 +914,17 @@ export async function setBookingConfirmed(id: string, confirmed: boolean): Promi
    */
   if (confirmed && booking.leadId) {
     await markDiscoveryConfirmed(booking.leadId, "manual").catch(() => undefined);
+  }
+  /**
+   * …and so does the SOP. Same reason, one layer down: the outreach engine reads the JOURNEY's
+   * confirmation flag, so a call confirmed here kept getting the 36h and 24h reminders and was
+   * then written off as a no-show by the post-call sweep. Nothing is rewound on `confirmed:
+   * false` - re-arming a chase ladder from a mis-click correction would send real messages, and
+   * the safe failure here is the queue asking a human to chase rather than the engine sending.
+   */
+  if (confirmed) {
+    const journeyId = await journeyForBooking(id, booking.leadId);
+    if (journeyId) await markSopDiscoConfirmed(journeyId).catch(() => undefined);
   }
   await logActivity(session, {
     action: "booking.confirm",

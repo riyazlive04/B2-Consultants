@@ -4,15 +4,20 @@
  * boundaries and express them as UTC-midnight dates for querying.
  */
 
-export function istToday(): Date {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
+export const IST_ZONE = "Asia/Kolkata";
+
+/** The calendar date (YYYY-MM-DD) an instant falls on in a given IANA zone. */
+export function ymdInZone(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
-  const [y, m, d] = parts.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
+  }).format(instant);
+}
+
+export function istToday(): Date {
+  return parseDateInput(ymdInZone(new Date(), IST_ZONE));
 }
 
 /** [first day of month, first day of next month) in IST terms. */
@@ -182,6 +187,39 @@ export function parseDateInput(value: string): Date {
 export function toDateInputValue(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * The date an entry form should PRE-FILL for someone recording something right now (FIN-02).
+ *
+ * The books run on IST, so the server used to pre-fill India's date everywhere. But the person
+ * doing the typing is often in Germany, where the day turns over 3.5 hours later: any time after
+ * 20:30 Berlin, India is already on the NEXT date, so the untouched default recorded a payment on
+ * a day that had not happened yet - into tomorrow, and at month end into next month. Worse, the
+ * calendar beside it rang the browser's day as "today", so the two halves of the same field
+ * disagreed and nothing on screen said which one would be saved.
+ *
+ * So the default is the day the PERSON is having - except that it may never run ahead of the day
+ * the BOOKS are having. A browser east of IST (travel) would otherwise post a future-dated entry
+ * into an IST ledger, which is the same bug seen from the other side. For India and Germany, the
+ * only two places this is used from, the cap never bites and this is simply the local date.
+ *
+ * Pure on purpose: both arguments are YYYY-MM-DD, which compares correctly as a string.
+ */
+export function entryDateFor(localYmd: string, istYmd: string): string {
+  return localYmd < istYmd ? localYmd : istYmd;
+}
+
+/**
+ * `entryDateFor` as the browser sees it - the local calendar day, capped at India's.
+ * Client-side only: on the server "local" is the VPS clock (UTC), which is nobody's day.
+ */
+export function entryTodayYmd(now = new Date()): string {
+  const local = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  return entryDateFor(local, ymdInZone(now, IST_ZONE));
+}
+
 
 /**
  * Interpret a wall-clock date + time as Asia/Kolkata and return the UTC instant.

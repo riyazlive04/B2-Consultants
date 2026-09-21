@@ -104,8 +104,8 @@ export function Field({
  */
 export const TextInput = forwardRef<
   HTMLInputElement,
-  InputHTMLAttributes<HTMLInputElement> & { kind?: FieldKind }
->(function TextInput({ kind, ...props }, ref) {
+  InputHTMLAttributes<HTMLInputElement> & { kind?: FieldKind; defaultToday?: boolean }
+>(function TextInput({ kind, defaultToday, ...props }, ref) {
   /**
    * Every hook runs BEFORE the picker branch below, never after it.
    *
@@ -128,6 +128,10 @@ export const TextInput = forwardRef<
   if (Picker) {
     // drop native `type` and `size` (a number) - the picker owns both
     const { type: _t, size: _s, ...rest } = props;
+    // `defaultToday` belongs to the date picker alone (see DatePicker). Handing it over here
+    // rather than in `rest` keeps it off the other pickers - and off a native <input>, where
+    // it would land as a junk attribute and a React warning.
+    if (Picker === DatePicker) return <DatePicker {...rest} defaultToday={defaultToday} />;
     return <Picker {...rest} />;
   }
   const { attrs, onChange } = fieldKindProps<HTMLInputElement>(kind, props.onChange);

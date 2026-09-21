@@ -128,7 +128,14 @@ export function ExpenseSection({
         <form ref={formRef} action={submit} key={editing?.id ?? "new"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Date">
-            <TextInput type="date" name="date" required defaultValue={editing ? editing.date.slice(0, 10) : today} />
+            {/* Browser's today on a new entry, the stored date when editing - see IncomeSection. */}
+            <TextInput
+              type="date"
+              name="date"
+              required
+              defaultValue={editing ? editing.date.slice(0, 10) : today}
+              defaultToday={!editing}
+            />
           </Field>
           <AmountPair
             fxRate={fxRate}

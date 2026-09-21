@@ -10,6 +10,10 @@ import { CheckboxField, Field, FormError, Select, SubmitButton, TextInput } from
 import { celebrate, toast } from "@/components/ui/feedback";
 import { createExpense, createIncome } from "@/server/finance-actions";
 import { getRecordFormData, type RecordFormData } from "@/server/record-form-data";
+// The very schedule field the Finance page uses, not a second copy of it: the due dates travel
+// as one JSON payload that createIncome parses, and two implementations of that contract is how
+// one of them quietly stops creating receivables.
+import { InstalmentSchedule } from "@/app/(app)/finance/_components/InstalmentSchedule";
 import {
   optionsFrom,
   PAYMENT_METHOD_LABELS,
@@ -109,8 +113,14 @@ function KeepOpenToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) 
 
 function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => void }) {
   const [keepOpen, setKeepOpen] = useState(false);
-  // Mirrors IncomeSection: INSTALMENT reveals the plan questions (count + extra surcharge).
-  // createIncome requires the count for instalments, so the quick form must ask too.
+  // Mirrors IncomeSection: INSTALMENT reveals the plan questions - how many instalments, the
+  // surcharge, and WHEN the rest is due. createIncome requires the count for instalments, so
+  // the quick form must ask too.
+  //
+  // The due dates are not optional polish (FIN-05). Without them this form recorded a part
+  // payment and nothing else: no receivable, no instalment rows, so nobody was reminded to
+  // follow up and the chasing ladder had nothing to chase. A payment plan agreed here is the
+  // same plan agreed on the Finance page, and it has to be written down the same way.
   const [paymentType, setPaymentType] = useState("FULL_PAYMENT");
   const { error, formRef, submit } = useQuickSubmit(
     async (fd) => {
@@ -135,7 +145,10 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
     <form ref={formRef} action={submit} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Date">
-          <TextInput type="date" name="date" required defaultValue={data.today} />
+          {/* `data.today` is India's date, fetched when the modal opened; the browser then
+              fills in its own today so a late-evening entry from Germany is not dated
+              tomorrow (FIN-02). Create-only form, so this is always a new record. */}
+          <TextInput type="date" name="date" required defaultValue={data.today} defaultToday />
         </Field>
         <Field label="Student name" hint={data.studentOptions.length > 0 ? "Search to link a student - feeds their total paid" : undefined}>
           {data.studentOptions.length > 0 ? (
@@ -180,6 +193,7 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
               eurLabel="Extra amount (€)"
               baseHint="Added to the fee for paying in instalments"
             />
+            <InstalmentSchedule className="sm:col-span-2" />
           </>
         )}
         <Field label="Payment method">
@@ -216,7 +230,8 @@ function ExpenseForm({ data, onClose }: { data: RecordFormData; onClose: () => v
     <form ref={formRef} action={submit} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Date">
-          <TextInput type="date" name="date" required defaultValue={data.today} />
+          {/* Browser's today, same as the Income tab above (FIN-02). */}
+          <TextInput type="date" name="date" required defaultValue={data.today} defaultToday />
         </Field>
         <AmountPair
           fxRate={data.fxRate}

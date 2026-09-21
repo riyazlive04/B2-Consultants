@@ -42,7 +42,15 @@ function addMonth(iso: string): string {
 
 const emptyRow = (): ScheduleRow => ({ dueDate: "", amountInr: "", amountEur: "" });
 
-export function InstalmentSchedule({ defaultRows }: { defaultRows?: ScheduleRow[] }) {
+export function InstalmentSchedule({
+  defaultRows,
+  // How wide the block sits in its form's grid. The Finance page lays income out in four
+  // columns, the Record modal in two, and the schedule has to span whichever it is in.
+  className = "sm:col-span-2 lg:col-span-4",
+}: {
+  defaultRows?: ScheduleRow[];
+  className?: string;
+}) {
   const [rows, setRows] = useState<ScheduleRow[]>(
     defaultRows?.length ? defaultRows : [emptyRow()],
   );
@@ -79,7 +87,7 @@ export function InstalmentSchedule({ defaultRows }: { defaultRows?: ScheduleRow[
     setRows((cur) => (cur.length === 1 ? cur : cur.filter((_, n) => n !== i)));
 
   return (
-    <div ref={boxRef} className="sm:col-span-2 lg:col-span-4">
+    <div ref={boxRef} className={className}>
       <p className="text-label uppercase text-ink-3">Upcoming due dates</p>
       <p className="mt-1 text-caption text-muted">
         When the rest of the fee is due. Each date becomes a receivable that is chased on its own -

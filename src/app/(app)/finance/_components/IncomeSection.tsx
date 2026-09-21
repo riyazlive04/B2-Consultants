@@ -178,7 +178,16 @@ export function IncomeSection({
         <form ref={formRef} action={submit} key={editing?.id ?? "new"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Date">
-            <TextInput type="date" name="date" required defaultValue={editing ? editing.date.slice(0, 10) : today} />
+            {/* On a NEW entry the browser fills in ITS today (FIN-02): the server default is
+                India's date, which is already tomorrow for anyone recording from Germany after
+                20:30. Editing keeps the date the row was saved with. */}
+            <TextInput
+              type="date"
+              name="date"
+              required
+              defaultValue={editing ? editing.date.slice(0, 10) : today}
+              defaultToday={!editing}
+            />
           </Field>
           <Field
             label="Student name"

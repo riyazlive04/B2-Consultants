@@ -16,6 +16,9 @@ import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 const STAGE_ON_SENT: Partial<Record<WhatsAppKind, { to: LeadStage; from: readonly LeadStage[] }>> = {
   SOP_INTRO: { to: "WHATSAPP_SENT", from: ["NEW_LEAD"] },
   DISCO_REMINDER: { to: "WHATSAPP_SENT", from: ["NEW_LEAD"] },
+  // The New Lead stage message is the intro for anyone whose SOP intro already went out in an
+  // earlier cycle (a returning or restored lead): each SOP step sends once per lead, ever.
+  STAGE_NEW_LEAD: { to: "WHATSAPP_SENT", from: ["NEW_LEAD"] },
 };
 
 /**

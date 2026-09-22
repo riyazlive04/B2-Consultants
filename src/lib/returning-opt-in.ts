@@ -43,7 +43,22 @@ export type ReturningLeadState = {
   deletedAt: Date | null;
   /** The lead's existing journey, or null when it has none (pre-SOP rows never got one). */
   journey: { phase: OutreachPhase; bookingId: string | null } | null;
+  /** When the lead's stage last changed (latest stage-history row, else when it was created). */
+  lastStageChangeAt?: Date | null;
+  /** The lead has a BOOKED call still ahead of it - a quiet stage then is a wait, not a stall. */
+  hasUpcomingBooking?: boolean;
+  /** Injected for tests; defaults to the real clock. */
+  now?: Date;
 };
+
+/**
+ * A lead whose stage has not moved for this long is stale: an opt-in from them is a fresh start,
+ * not a nudge to a live chase. Founder's rule, 22/09/2026.
+ */
+export const STALE_AFTER_DAYS = 14;
+
+/** Customers, not leads - an opt-in never drags them back to the top of the funnel. */
+const NEVER_REOPEN: readonly LeadStage[] = ["WON", "DEPOSIT_PAID"];
 
 export type ReturningOptInPlan = {
   /**
@@ -107,6 +122,27 @@ export function planReturningOptIn(state: ReturningLeadState): ReturningOptInPla
       reopened: true,
     };
   }
+  /**
+   * STALE: no stage change for STALE_AFTER_DAYS. The same fresh start an archived lead gets - back
+   * to New Lead, clock restarted - because nobody has touched this lead in two weeks, so there is
+   * no caller mid-chase to yank it away from. It overrides the booking hard stop below, which
+   * exists for a CURRENT booking: a no-show from last month is history, not a reason to ignore
+   * someone raising their hand today. A call still ahead of them is the one exception.
+   */
+  const now = state.now ?? new Date();
+  const stale =
+    !!state.lastStageChangeAt &&
+    now.getTime() - state.lastStageChangeAt.getTime() >= STALE_AFTER_DAYS * 24 * 3600_000;
+  if (stale && !state.hasUpcomingBooking && !NEVER_REOPEN.includes(state.stage)) {
+    return {
+      restore: false,
+      reopenStage: state.stage !== "NEW_LEAD",
+      needsOwner: state.assignedToId === null,
+      restartJourney: true,
+      reopened: true,
+    };
+  }
+
   if (state.journey?.bookingId) return INERT;
 
   const reopenStage = REOPENABLE_STAGES.includes(state.stage);

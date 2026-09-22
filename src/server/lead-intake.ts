@@ -275,11 +275,24 @@ async function acceptReturningOptIn(
     where: { leadId: existing.id },
     select: { phase: true, bookingId: true },
   });
+  const [lastMove, upcoming] = await Promise.all([
+    prisma.leadStageHistory.findFirst({
+      where: { leadId: existing.id },
+      orderBy: { changedAt: "desc" },
+      select: { changedAt: true },
+    }),
+    prisma.bookingRequest.findFirst({
+      where: { leadId: existing.id, status: "BOOKED", slot: { startsAt: { gt: new Date() } } },
+      select: { id: true },
+    }),
+  ]);
   const plan = planReturningOptIn({
     stage: existing.stage,
     assignedToId: existing.assignedToId,
     deletedAt: existing.deletedAt,
     journey,
+    lastStageChangeAt: lastMove?.changedAt ?? existing.createdAt,
+    hasUpcomingBooking: !!upcoming,
   });
 
   const fillBlanks = {

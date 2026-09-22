@@ -4,6 +4,7 @@ import type { LeadStage, OutreachPhase } from "@prisma/client";
 import {
   DORMANT_PHASES,
   REOPENABLE_STAGES,
+  STALE_AFTER_DAYS,
   planReturningOptIn,
   type ReturningLeadState,
 } from "../returning-opt-in";
@@ -160,5 +161,64 @@ describe("the constants stay honest", () => {
 
   it("COMPLETED is never treated as dormant", () => {
     assert.equal(DORMANT_PHASES.includes("COMPLETED"), false);
+  });
+});
+
+describe("planReturningOptIn - stale leads (no stage change for 14 days)", () => {
+  const now = new Date("2026-09-22T12:00:00Z");
+  const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 3600_000);
+  const FRESH_START = { restore: false, reopenStage: true, needsOwner: false, restartJourney: true, reopened: true };
+
+  it("sends a stale lead back to New Lead with a fresh clock", () => {
+    const plan = planReturningOptIn(
+      state({ stage: "STRATEGY_CALL_BOOKED", lastStageChangeAt: daysAgo(STALE_AFTER_DAYS), now }),
+    );
+    assert.deepEqual(plan, FRESH_START);
+  });
+
+  it("leaves a lead moved inside the window where it is", () => {
+    const plan = planReturningOptIn(
+      state({ stage: "STRATEGY_CALL_BOOKED", lastStageChangeAt: daysAgo(STALE_AFTER_DAYS - 1), now }),
+    );
+    assert.equal(plan.reopenStage, false);
+    assert.equal(plan.restartJourney, false);
+  });
+
+  it("overrides the booking hard stop for a dead booking (last month's no-show)", () => {
+    const plan = planReturningOptIn(
+      state({
+        stage: "NO_SHOW",
+        journey: { phase: "DISCO_CONFIRMATION", bookingId: "b_old" },
+        lastStageChangeAt: daysAgo(25),
+        now,
+      }),
+    );
+    assert.deepEqual(plan, FRESH_START);
+  });
+
+  it("never reopens a lead with a call still ahead of them", () => {
+    const plan = planReturningOptIn(
+      state({
+        stage: "STRATEGY_CALL_BOOKED",
+        journey: { phase: "DISCO_CONFIRMATION", bookingId: "b_live" },
+        lastStageChangeAt: daysAgo(30),
+        hasUpcomingBooking: true,
+        now,
+      }),
+    );
+    assert.equal(plan.reopened, false);
+  });
+
+  it("never drags a customer back to the top of the funnel", () => {
+    for (const stage of ["WON", "DEPOSIT_PAID"] as LeadStage[]) {
+      const plan = planReturningOptIn(state({ stage, lastStageChangeAt: daysAgo(90), now }));
+      assert.equal(plan.reopenStage, false, stage);
+    }
+  });
+
+  it("a stale lead already in New Lead only restarts its clock", () => {
+    const plan = planReturningOptIn(state({ stage: "NEW_LEAD", lastStageChangeAt: daysAgo(40), now }));
+    assert.equal(plan.reopenStage, false);
+    assert.equal(plan.restartJourney, true);
   });
 });

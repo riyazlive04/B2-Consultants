@@ -61,7 +61,9 @@ export default function StageMessagesForm({
         stage&apos;s email and WhatsApp, including new opt-ins and moves that happen alongside another
         message. A manual move undone or changed again within 20 seconds (a mis-drag) sends nothing. WhatsApp needs an approved WATI template
         bound to the stage&apos;s &quot;Stage · …&quot; touchpoint in WhatsApp → Settings, using any of {"{{name}}"},
-        {"{{sender}}"} and {"{{booking_url}}"} - an existing SOP template such as b2_sop_intro works. Email tokens: {"{{first_name}}"}, {"{{name}}"}, {"{{email}}"}, {"{{phone}}"}.
+        {"{{sender}}"}, {"{{booking_url}}"}, {"{{date}}"}, {"{{time}}"}, {"{{slot_time}}"}, {"{{zoom_link}}"} and{" "}
+        {"{{sss_url}}"}, so the existing SOP and booking templates work. Call details come from the lead&apos;s
+        booked call; a lead without one skips a template that needs them. Email tokens: {"{{first_name}}"}, {"{{name}}"}, {"{{email}}"}, {"{{phone}}"}.
       </Hint>
 
       <Card>

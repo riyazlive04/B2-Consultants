@@ -11,6 +11,7 @@ import {
 import { sendEmailMessage } from "@/server/messaging";
 import { sendWhatsApp } from "@/server/whatsapp";
 import { coerceOutreachConfig } from "@/lib/outreach-sop";
+import { formatDateTimeInZone } from "@/lib/format";
 
 /**
  * Stage messages engine: sends a stage's email + WhatsApp every time a lead enters that stage.
@@ -187,7 +188,7 @@ async function sendStageMessage(
     const out = await sendWhatsApp({
       kind: stageWhatsAppKind(stage),
       to: lead.phone,
-      vars: { name: firstName, sender, booking_url: bookingUrl() },
+      vars: { name: firstName, sender, booking_url: bookingUrl(), ...(await callVars(lead.id, stage)) },
       leadId: lead.id,
       sentById,
       bodySummary: `Stage message · ${stage}`,
@@ -239,4 +240,47 @@ async function senderName(sentById: string | null, lead: StageLead): Promise<str
   if (lead.assignedTo?.name?.trim()) return lead.assignedTo.name.trim().split(/\s+/)[0];
   const row = await prisma.appSetting.findUnique({ where: { key: "outreachConfig" } });
   return coerceOutreachConfig(row?.value ?? null).defaultSpecialistName;
+}
+
+/**
+ * The call details a stage template may ask for: {{date}}, {{time}}, {{slot_time}}, {{zoom_link}},
+ * {{sss_url}}. Same names and formats the SOP and booking templates use, so their approved
+ * templates can be bound to a stage as-is.
+ *
+ * SSS stages read the Success Strategy Session time; every other stage reads the discovery call,
+ * from the journey's booking or else the lead's latest booked slot, and only while it is BOOKED. A value that does not exist
+ * is left OUT rather than blank: a template that needs it is then skipped with a clear reason
+ * instead of sending "your call on  at ".
+ */
+async function callVars(leadId: string, stage: LeadStage): Promise<Record<string, string>> {
+  const journey = await prisma.outreachJourney.findUnique({
+    where: { leadId },
+    select: {
+      sssAt: true,
+      zoomLink: true,
+      booking: { select: { status: true, slot: { select: { startsAt: true } } } },
+    },
+  });
+  // Only a LIVE booking: a no-show or cancelled call would put an old date in a new message.
+  let disco = journey?.booking?.status === "BOOKED" ? (journey.booking.slot?.startsAt ?? null) : null;
+  if (!disco) {
+    const latest = await prisma.bookingRequest.findFirst({
+      where: { leadId, status: "BOOKED", slot: { isNot: null } },
+      orderBy: { createdAt: "desc" },
+      select: { slot: { select: { startsAt: true } } },
+    });
+    disco = latest?.slot?.startsAt ?? null;
+  }
+  const when = stage.startsWith("SSS_") ? (journey?.sssAt ?? disco) : (disco ?? journey?.sssAt ?? null);
+
+  const vars: Record<string, string> = { sss_url: "https://optin.b2consultants.de/sss" };
+  if (when) {
+    const formatted = formatDateTimeInZone(when, "Asia/Kolkata");
+    const i = formatted.lastIndexOf(", ");
+    vars.slot_time = formatted;
+    vars.date = i === -1 ? formatted : formatted.slice(0, i);
+    if (i !== -1) vars.time = formatted.slice(i + 2);
+  }
+  if (journey?.zoomLink) vars.zoom_link = journey.zoomLink;
+  return vars;
 }

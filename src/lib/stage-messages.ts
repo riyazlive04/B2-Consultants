@@ -57,8 +57,16 @@ export const STAGE_KIND_HINTS = Object.fromEntries(
   ]),
 ) as Record<StageKind, string>;
 
+/**
+ * Every variable a lead's stage can supply - the lead-facing names the SOP and booking templates
+ * use, so any of those approved templates can be bound to a stage. The call details come from the
+ * lead's booked call (server/stage-messages.ts); when a lead has none, a template that needs them
+ * is skipped with the reason logged.
+ */
+const STAGE_VARS = ["name", "sender", "booking_url", "date", "time", "slot_time", "zoom_link", "sss_url"] as const;
+
 export const STAGE_KIND_VARS = Object.fromEntries(
-  STAGE_MESSAGE_STAGES.map((s) => [`STAGE_${s}`, ["name", "sender", "booking_url"] as readonly string[]]),
+  STAGE_MESSAGE_STAGES.map((s) => [`STAGE_${s}`, STAGE_VARS as readonly string[]]),
 ) as Record<StageKind, readonly string[]>;
 
 // ───────────────────────────── config ─────────────────────────────

@@ -422,7 +422,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
       externalRef: null,
       utm: Object.keys(utm).length ? utm : null,
       originDomain: await observedOriginDomain(),
-    });
+    }, { announceReturning: true });
     leadId = lead.id;
 
     // Custom answers (non-contact keys) → the contact's customFields blob.

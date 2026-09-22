@@ -10,6 +10,7 @@ import {
 } from "@/lib/stage-messages";
 import { sendEmailMessage } from "@/server/messaging";
 import { sendWhatsApp } from "@/server/whatsapp";
+import { coerceOutreachConfig } from "@/lib/outreach-sop";
 
 /**
  * Stage messages engine: sends a stage's email + WhatsApp every time a lead enters that stage.
@@ -128,7 +129,7 @@ export async function runStageMessages() {
 async function sendForRow(r: Claimed, cfg: StageMessagesConfig): Promise<{ email: boolean; whatsapp: boolean } | null> {
   const lead = await prisma.lead.findUnique({
     where: { id: r.leadId },
-    select: { id: true, name: true, email: true, phone: true, deletedAt: true },
+    select: { id: true, name: true, email: true, phone: true, deletedAt: true, assignedTo: { select: { name: true } } },
   });
   if (!lead || lead.deletedAt) return null;
 
@@ -147,7 +148,23 @@ async function sendForRow(r: Claimed, cfg: StageMessagesConfig): Promise<{ email
     if (correctedBy) return null;
   }
 
-  const stage = r.toStage as LeadStage;
+  return sendStageMessage(lead, r.toStage as LeadStage, r.changedById, cfg);
+}
+
+type StageLead = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  assignedTo: { name: string | null } | null;
+};
+
+async function sendStageMessage(
+  lead: StageLead,
+  stage: LeadStage,
+  sentById: string | null,
+  cfg: StageMessagesConfig,
+): Promise<{ email: boolean; whatsapp: boolean } | null> {
   const msg = cfg.stages[stage];
   if (!msg || (!msg.email && !msg.whatsapp)) return null;
 
@@ -159,19 +176,20 @@ async function sendForRow(r: Claimed, cfg: StageMessagesConfig): Promise<{ email
       leadId: lead.id,
       subject: msg.subject,
       body: msg.body,
-      sentById: r.changedById,
+      sentById,
     });
     email = out.status === "SENT";
   }
 
   if (msg.whatsapp && lead.phone) {
     const firstName = (lead.name ?? "").trim().split(/\s+/)[0] || "there";
+    const sender = await senderName(sentById, lead);
     const out = await sendWhatsApp({
       kind: stageWhatsAppKind(stage),
       to: lead.phone,
-      vars: { name: firstName },
+      vars: { name: firstName, sender, booking_url: bookingUrl() },
       leadId: lead.id,
-      sentById: r.changedById,
+      sentById,
       bodySummary: `Stage message · ${stage}`,
       // Engine caller: stay silent while WhatsApp is off, and log an unbound template once, not per move.
       logSkips: false,
@@ -180,4 +198,45 @@ async function sendForRow(r: Claimed, cfg: StageMessagesConfig): Promise<{ email
   }
 
   return { email, whatsapp };
+}
+
+/**
+ * An existing lead submitted an opt-in form again: send the New Lead message without moving them.
+ *
+ * A resubmission by a lead mid-chase deliberately changes no stage (lib/returning-opt-in.ts), so
+ * the sweep never sees it. When the returning opt-in DID reopen the lead to New Lead, that wrote a
+ * history row and the sweep sends the message, so this stands down to avoid sending it twice.
+ */
+export async function announceReturningOptIn(leadId: string): Promise<void> {
+  const cfg = await getStageMessagesConfig();
+  if (!cfg.enabled) return;
+  const reopened = await prisma.leadStageHistory.findFirst({
+    where: { leadId, toStage: "NEW_LEAD", changedAt: { gte: new Date(Date.now() - 5 * 60_000) } },
+    select: { id: true },
+  });
+  if (reopened) return;
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true, name: true, email: true, phone: true, deletedAt: true, assignedTo: { select: { name: true } } },
+  });
+  if (!lead || lead.deletedAt) return;
+  await sendStageMessage(lead, "NEW_LEAD", null, cfg);
+}
+
+function bookingUrl(): string {
+  return `${(process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "")}/book`;
+}
+
+/**
+ * `{{sender}}` for a stage template, so the SOP's approved templates (which sign off with it) can
+ * be reused: whoever moved the lead, else its owner, else the SOP's default specialist name.
+ */
+async function senderName(sentById: string | null, lead: StageLead): Promise<string> {
+  if (sentById) {
+    const u = await prisma.user.findUnique({ where: { id: sentById }, select: { name: true } });
+    if (u?.name?.trim()) return u.name.trim().split(/\s+/)[0];
+  }
+  if (lead.assignedTo?.name?.trim()) return lead.assignedTo.name.trim().split(/\s+/)[0];
+  const row = await prisma.appSetting.findUnique({ where: { key: "outreachConfig" } });
+  return coerceOutreachConfig(row?.value ?? null).defaultSpecialistName;
 }

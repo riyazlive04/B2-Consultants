@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
         externalRef: id,
         notes: "Captured from Meta Lead Ad",
         intakePayload: flattenFields(data.field_data ?? []),
-      });
+      }, { announceReturning: true });
       captured += 1;
     } catch {
       /* transient Graph error - Meta will redeliver; de-dupe keeps it idempotent */

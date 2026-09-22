@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
       // A page that asks the band-score questions gets scored at opt-in. The mapping is
       // founder-editable, so this route hands over the whole payload.
       intakePayload: f,
-    });
+    }, { announceReturning: true });
 
     await recordDelivery(LEAD_WEBHOOK_NAME, true);
     return NextResponse.json({ ok: true, created, deduped, reopened });

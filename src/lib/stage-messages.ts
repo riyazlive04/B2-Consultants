@@ -58,7 +58,7 @@ export const STAGE_KIND_HINTS = Object.fromEntries(
 ) as Record<StageKind, string>;
 
 export const STAGE_KIND_VARS = Object.fromEntries(
-  STAGE_MESSAGE_STAGES.map((s) => [`STAGE_${s}`, ["name"] as readonly string[]]),
+  STAGE_MESSAGE_STAGES.map((s) => [`STAGE_${s}`, ["name", "sender", "booking_url"] as readonly string[]]),
 ) as Record<StageKind, readonly string[]>;
 
 // ───────────────────────────── config ─────────────────────────────

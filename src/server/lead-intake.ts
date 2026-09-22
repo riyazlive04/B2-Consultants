@@ -8,6 +8,7 @@ import { notifyNewOptIn } from "./outreach-notify";
 import { afterResponse } from "./after-response";
 import { scoreLeadAtOptIn } from "./lead-qualification";
 import { sendIntroNow } from "./outreach-instant";
+import { announceReturningOptIn } from "./stage-messages";
 import { planReturningOptIn } from "@/lib/returning-opt-in";
 import { ensureDefaultOpportunity } from "./opportunity-sync";
 import { getPipelineConfig } from "./founder-config";
@@ -190,7 +191,15 @@ export async function findDuplicateLead(input: {
  * below. It still runs on every capture, deduped ones included; it just no longer runs while a
  * person watches a spinner.
  */
-export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
+export async function upsertIntakeLead(
+  rawInput: IntakeLead,
+  /**
+   * `announceReturning`: this capture is an opt-in form (not a booking or a workshop sign-up), so
+   * an existing lead submitting it again gets the New Lead stage message. See
+   * `announceReturningOptIn`.
+   */
+  opts: { announceReturning?: boolean } = {},
+): Promise<IntakeResult> {
   const result = await resolveIntakeLead(rawInput);
 
   /**
@@ -233,6 +242,11 @@ export async function upsertIntakeLead(rawInput: IntakeLead): Promise<IntakeResu
      */
     if (result.created) {
       await sendIntroNow(result.lead.id, result.lead.source);
+    }
+
+    // A returning opt-in, not a webhook redelivery of the same submission.
+    if (opts.announceReturning && !result.created && result.deduped !== "externalRef") {
+      await announceReturningOptIn(result.lead.id);
     }
   });
 

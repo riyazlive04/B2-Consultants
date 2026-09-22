@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
     // decide it. Everything unrecognised is recorded as evidence and reported, never silently
     // dropped - which is what happened to every landing-page score before this line existed.
     intakePayload: f,
-  });
+  }, { announceReturning: true });
 
   // `reopened` distinguishes the two 200s that used to look identical: a genuine retry, versus a
   // dormant lead this opt-in just put back in front of a caller. Without it, "we got a 200" said

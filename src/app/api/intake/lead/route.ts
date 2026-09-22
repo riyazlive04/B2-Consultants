@@ -80,7 +80,7 @@ export const POST = intakeRoute({
        * between a mapping that can be fixed and one that fails silently forever.
        */
       intakePayload: fields,
-    });
+    }, { announceReturning: true });
 
     return NextResponse.json({ ok: true, created, deduped, reopened, leadSource: leadSource ?? "OTHER" });
   },

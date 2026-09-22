@@ -17,7 +17,7 @@ import {
   BODY_CHAR_LIMIT,
 } from "../whatsapp-submission";
 import { OUTREACH_STEPS, STEP_BY_KEY } from "../outreach-sop";
-import { WHATSAPP_AVAILABLE_VARS, WHATSAPP_KINDS } from "../whatsapp";
+import { LEAD_TEMPLATE_VARS, WHATSAPP_AVAILABLE_VARS, WHATSAPP_KINDS } from "../whatsapp";
 
 describe("Submission pack - coverage", () => {
   test("every WhatsApp step in the SOP has exactly one template", () => {
@@ -71,12 +71,17 @@ describe("Submission pack - the app can actually supply what the templates decla
     // b2_sop_disco_cancel actually reads "we noticed you missed your scheduled call" - which is
     // untrue at that moment. b2_booking_auto_cancelled says the slot is being released for lack
     // of confirmation, which is correct, and it needs {{booking_url}}.
+    //
+    // Since 22/09/2026 every lead-facing touchpoint also offers the whole LEAD_TEMPLATE_VARS pool,
+    // filled from the lead's record by sendWhatsApp, so any approved template can be bound to any
+    // of them. That pool is a deliberate menu, so it is exempt here; anything else must be used.
     const BINDS_OUTSIDE_THE_PACK: Partial<Record<string, readonly string[]>> = {
       SOP_DISCO_CANCEL: ["booking_url"],
     };
+    const leadPool = new Set<string>(LEAD_TEMPLATE_VARS);
     for (const t of SUBMISSION_TEMPLATES) {
       const declared = new Set(t.vars.map((v) => v.name));
-      const allowed = new Set(BINDS_OUTSIDE_THE_PACK[t.kind] ?? []);
+      const allowed = new Set([...(BINDS_OUTSIDE_THE_PACK[t.kind] ?? []), ...leadPool]);
       for (const v of WHATSAPP_AVAILABLE_VARS[t.kind]) {
         if (allowed.has(v)) continue;
         assert.ok(declared.has(v), `${t.kind} offers {{${v}}} but ${t.name} never declares it`);

@@ -131,7 +131,21 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
  * So: the Admin declares the template's variables in Settings; we fill each from this pool. If a
  * template asks for something we can't supply for that touchpoint, the send is skipped and says so.
  */
-export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
+/**
+ * What every LEAD-facing touchpoint can fill: `sendWhatsApp` resolves any of these the caller did
+ * not pass from the lead's own record (server/lead-template-vars.ts). Merged into each lead-facing
+ * touchpoint below, so any approved SOP/booking template can be bound to any of them.
+ */
+export const LEAD_TEMPLATE_VARS = ["name", "sender", "booking_url", "date", "time", "slot_time", "zoom_link", "sss_url"] as const;
+
+/** Touchpoints addressed to a prospect rather than a student, an agreement or a vendor. */
+const LEAD_FACING_KINDS = new Set<string>([
+  "DISCO_REMINDER", "BOOKING_CONFIRMATION", "BOOKING_REMINDER", "NO_SHOW_FOLLOWUP", "MANUAL",
+  "BOOKING_CONFIRM_REQUEST", "BOOKING_RESCHEDULED", "BOOKING_AUTO_CANCELLED", "SSS_RESCHEDULED",
+]);
+const isLeadFacing = (k: string) => LEAD_FACING_KINDS.has(k) || k.startsWith("SOP_") || k.startsWith("STAGE_");
+
+const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
   DISCO_REMINDER: ["name", "booking_url"],
   BOOKING_CONFIRMATION: ["name", "slot_time", "booking_url"],
   BOOKING_REMINDER: ["name", "slot_time", "booking_url"],
@@ -190,6 +204,13 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   BOOK_ORDER: ["publisher_name", "order_ref", "level", "student_name", "ship_to", "ship_phone"],
   ...STAGE_KIND_VARS,
 };
+
+export const WHATSAPP_AVAILABLE_VARS = Object.fromEntries(
+  Object.entries(BASE_AVAILABLE_VARS).map(([k, v]) => [
+    k,
+    isLeadFacing(k) ? [...new Set([...v, ...LEAD_TEMPLATE_VARS])] : v,
+  ]),
+) as Record<WhatsAppKind, readonly string[]>;
 
 export const WHATSAPP_STATUS_LABELS: Record<WhatsAppStatus, string> = {
   SKIPPED: "Skipped",

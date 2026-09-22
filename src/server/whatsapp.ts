@@ -1,4 +1,5 @@
 import "server-only";
+import { bookingUrl, leadTemplateVars } from "./lead-template-vars";
 import { Prisma, type WhatsAppKind, type WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
@@ -48,9 +49,6 @@ function firstName(full: string): string {
   return n || full.trim() || "there";
 }
 
-function bookingUrl(): string {
-  return `${(process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "")}/book`;
-}
 
 // ───────────────────────────── Core send ─────────────────────────────
 
@@ -157,7 +155,7 @@ async function writeRow(input: {
  * Send one WhatsApp template message and log it. Fail-safe: resolves a SendOutcome, never throws.
  */
 export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcome> {
-  const { kind, to, vars, sentById = null, target, logSkips = true, dryRun = false } = {
+  const { kind, to, sentById = null, target, logSkips = true, dryRun = false } = {
     ...input,
     target: {
       leadId: input.leadId,
@@ -171,6 +169,16 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
 
   const runtime = input.runtime ?? (await getWatiRuntime());
   const template = runtime.settings.templates[kind];
+  /**
+   * A message to a LEAD whose template wants a variable the caller did not pass: fill it from the
+   * lead's own record (server/lead-template-vars.ts), so any approved template can be bound to any
+   * lead-facing touchpoint. The caller's own values always win - they know the specific booking.
+   */
+  let vars = input.vars;
+  if (template && target.leadId && template.params.some((p) => !vars[p])) {
+    const fromLead = await leadTemplateVars(target.leadId, { sss: kind.includes("SSS"), sentById }).catch(() => ({}));
+    vars = { ...fromLead, ...Object.fromEntries(Object.entries(vars).filter(([, v]) => v !== "" && v != null)) };
+  }
   const number = normalizeWhatsappNumber(to, runtime.settings.defaultCountry);
   const label = WHATSAPP_KIND_LABELS[kind];
   const body = input.bodySummary ?? label;

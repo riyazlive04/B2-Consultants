@@ -10,8 +10,6 @@ import {
 } from "@/lib/stage-messages";
 import { sendEmailMessage } from "@/server/messaging";
 import { sendWhatsApp } from "@/server/whatsapp";
-import { coerceOutreachConfig } from "@/lib/outreach-sop";
-import { formatDateTimeInZone } from "@/lib/format";
 
 /**
  * Stage messages engine: sends a stage's email + WhatsApp every time a lead enters that stage.
@@ -130,7 +128,7 @@ export async function runStageMessages() {
 async function sendForRow(r: Claimed, cfg: StageMessagesConfig): Promise<{ email: boolean; whatsapp: boolean } | null> {
   const lead = await prisma.lead.findUnique({
     where: { id: r.leadId },
-    select: { id: true, name: true, email: true, phone: true, deletedAt: true, assignedTo: { select: { name: true } } },
+    select: { id: true, name: true, email: true, phone: true, deletedAt: true },
   });
   if (!lead || lead.deletedAt) return null;
 
@@ -157,7 +155,6 @@ type StageLead = {
   name: string | null;
   email: string | null;
   phone: string | null;
-  assignedTo: { name: string | null } | null;
 };
 
 async function sendStageMessage(
@@ -184,11 +181,12 @@ async function sendStageMessage(
 
   if (msg.whatsapp && lead.phone) {
     const firstName = (lead.name ?? "").trim().split(/\s+/)[0] || "there";
-    const sender = await senderName(sentById, lead);
     const out = await sendWhatsApp({
       kind: stageWhatsAppKind(stage),
       to: lead.phone,
-      vars: { name: firstName, sender, booking_url: bookingUrl(), ...(await callVars(lead.id, stage)) },
+      // Everything else a template asks for (sender, date, time, booking_url...) is filled by
+      // sendWhatsApp from the lead's record - see server/lead-template-vars.ts.
+      vars: { name: firstName },
       leadId: lead.id,
       sentById,
       bodySummary: `Stage message · ${stage}`,
@@ -218,69 +216,8 @@ export async function announceReturningOptIn(leadId: string): Promise<void> {
   if (reopened) return;
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
-    select: { id: true, name: true, email: true, phone: true, deletedAt: true, assignedTo: { select: { name: true } } },
+    select: { id: true, name: true, email: true, phone: true, deletedAt: true },
   });
   if (!lead || lead.deletedAt) return;
   await sendStageMessage(lead, "NEW_LEAD", null, cfg);
-}
-
-function bookingUrl(): string {
-  return `${(process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "")}/book`;
-}
-
-/**
- * `{{sender}}` for a stage template, so the SOP's approved templates (which sign off with it) can
- * be reused: whoever moved the lead, else its owner, else the SOP's default specialist name.
- */
-async function senderName(sentById: string | null, lead: StageLead): Promise<string> {
-  if (sentById) {
-    const u = await prisma.user.findUnique({ where: { id: sentById }, select: { name: true } });
-    if (u?.name?.trim()) return u.name.trim().split(/\s+/)[0];
-  }
-  if (lead.assignedTo?.name?.trim()) return lead.assignedTo.name.trim().split(/\s+/)[0];
-  const row = await prisma.appSetting.findUnique({ where: { key: "outreachConfig" } });
-  return coerceOutreachConfig(row?.value ?? null).defaultSpecialistName;
-}
-
-/**
- * The call details a stage template may ask for: {{date}}, {{time}}, {{slot_time}}, {{zoom_link}},
- * {{sss_url}}. Same names and formats the SOP and booking templates use, so their approved
- * templates can be bound to a stage as-is.
- *
- * SSS stages read the Success Strategy Session time; every other stage reads the discovery call,
- * from the journey's booking or else the lead's latest booked slot, and only while it is BOOKED. A value that does not exist
- * is left OUT rather than blank: a template that needs it is then skipped with a clear reason
- * instead of sending "your call on  at ".
- */
-async function callVars(leadId: string, stage: LeadStage): Promise<Record<string, string>> {
-  const journey = await prisma.outreachJourney.findUnique({
-    where: { leadId },
-    select: {
-      sssAt: true,
-      zoomLink: true,
-      booking: { select: { status: true, slot: { select: { startsAt: true } } } },
-    },
-  });
-  // Only a LIVE booking: a no-show or cancelled call would put an old date in a new message.
-  let disco = journey?.booking?.status === "BOOKED" ? (journey.booking.slot?.startsAt ?? null) : null;
-  if (!disco) {
-    const latest = await prisma.bookingRequest.findFirst({
-      where: { leadId, status: "BOOKED", slot: { isNot: null } },
-      orderBy: { createdAt: "desc" },
-      select: { slot: { select: { startsAt: true } } },
-    });
-    disco = latest?.slot?.startsAt ?? null;
-  }
-  const when = stage.startsWith("SSS_") ? (journey?.sssAt ?? disco) : (disco ?? journey?.sssAt ?? null);
-
-  const vars: Record<string, string> = { sss_url: "https://optin.b2consultants.de/sss" };
-  if (when) {
-    const formatted = formatDateTimeInZone(when, "Asia/Kolkata");
-    const i = formatted.lastIndexOf(", ");
-    vars.slot_time = formatted;
-    vars.date = i === -1 ? formatted : formatted.slice(0, i);
-    if (i !== -1) vars.time = formatted.slice(i + 2);
-  }
-  if (journey?.zoomLink) vars.zoom_link = journey.zoomLink;
-  return vars;
 }

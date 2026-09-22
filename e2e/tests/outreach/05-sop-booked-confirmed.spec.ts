@@ -100,11 +100,14 @@ test("the booking stops the chase: pending chase steps superseded, BANT closed, 
   expect(s.FINAL_CHECK.status).toBe("SUPERSEDED");
   expect(s.BANT_QUALIFICATION.status).toBe("SENT");
   expect(s.BANT_QUALIFICATION.outcome).toBe("YES");
-  expect(s.KEY_METRICS_TRANSFER?.status).toBe("DUE");
+  // Step 12 is bookkeeping the booking already did, so the system closes it (OUT-09 fix) and the
+  // journey moves straight on to the confirmation phase.
+  expect(s.KEY_METRICS_TRANSFER?.status).toBe("SENT");
+  expect(s.KEY_METRICS_TRANSFER?.outcome).toBe("AUTO_COMPLETED");
   expect(s.DISCO_WELCOME?.status).toBe("DUE");
   const delay = new Date(s.DISCO_WELCOME.dueAt).getTime() - new Date(s.BANT_QUALIFICATION.actedAt!).getTime();
   expect(delay).toBe(5 * MIN);
-  expect((await journeyFor(leadId)).phase).toBe("QUALIFICATION");
+  expect((await journeyFor(leadId)).phase).toBe("DISCO_CONFIRMATION");
   // Time passes far beyond every chase window: still no chase message.
   await timeTravel(journeyId, 6 / 60);
   await tick(request);
@@ -122,29 +125,27 @@ test("Key Metrics tab shows the booked prospect with BANT 5.0, Qualified YES", a
   await expect(row).toContainText(slot.dayLabel.slice(0, 5).split("/").join("/")); // appointment date (Berlin)
 });
 
-test("OUT-09: Step 12 (Key Metrics transfer) can be completed from the queue", async ({ page }) => {
-  // OUT-09 - every SYSTEM step renders a single "Run the booking check" button (QueueList.tsx:236-244),
-  // which calls checkBookingNow and never touches KEY_METRICS_TRANSFER. The only way past Step 12 is
-  // "Skip". Because it is the earliest-due step it pins the card's "next" slot, hiding Step 13 until skipped,
-  // and phase DISCO_CONFIRMATION (which the WhatsApp YES webhook requires) is gated on it.
+test("OUT-09: Step 12 (Key Metrics transfer) completes itself and never blocks the queue card", async ({ page }) => {
+  // OUT-09 (fixed 22/09/2026) - Step 12 used to sit DUE until someone clicked Skip ("Run the booking
+  // check" never closed it), pinning the card on it, hiding Step 13 and gating DISCO_CONFIRMATION.
+  // It is now closed by the system with a reason, so nobody has to find the Skip button.
+  const s = await stepMap(journeyId);
+  expect(s.KEY_METRICS_TRANSFER.status).toBe("SENT");
+  expect(s.KEY_METRICS_TRANSFER.outcome).toBe("AUTO_COMPLETED");
+  expect(s.KEY_METRICS_TRANSFER.actedById, "closed by the system, not a person").toBeNull();
   await page.goto("/outreach");
   const card = queueCard(page, P.phone);
-  await expect(card).toContainText("Step 12: Key Metrics transfer");
-  await expect(card.getByRole("button", { name: "Run the booking check" })).toBeVisible();
-  const posted = page.waitForResponse((r) => r.request().method() === "POST");
-  await card.getByRole("button", { name: "Run the booking check" }).click();
-  await posted;
-  test.fail(true, "OUT-09");
-  await expect.poll(async () => (await stepMap(journeyId)).KEY_METRICS_TRANSFER.status, { timeout: 5000 }).toBe("SENT");
+  await expect(card).not.toContainText("Step 12: Key Metrics transfer");
+  await expect(card).toContainText("Step 13");
 });
 
-test("specialist skips Step 12, sends Step 13 welcome (template SOP_DISCO_WELCOME attempted)", async ({ page }) => {
+test("specialist sends Step 13 welcome (template SOP_DISCO_WELCOME attempted)", async ({ page }) => {
+  // No Step 12 to skip any more: it is closed by the system (OUT-09 fix).
   const handled = await workQueue(page, P.phone, [
-    [/^Step 12: /, "Skip"],
     [/^Step 13: Disco welcome$/, "Mark sent"],
     [/^Step 13b: /, "Mark sent"],
   ]);
-  expect(handled.length).toBeGreaterThanOrEqual(3);
+  expect(handled.length).toBeGreaterThanOrEqual(2);
   const s = await stepMap(journeyId);
   expect(s.DISCO_WELCOME.status).toBe("SENT");
   expect(s.DISCO_WELCOME.renderedBody).toMatch(/booked a Personalized Discovery Call with our team on \*.+\* at \*.+\* IST/);

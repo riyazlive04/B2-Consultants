@@ -64,7 +64,7 @@ test.describe("A. booked straight after opt-in, BANT 2.0, never confirms → can
   });
 
   test("ladder: Step 13 → Step 14 (36h) → Step 15 (24h) → two unanswered Step 16 calls", async ({ request, page }) => {
-    await workQueue(page, P.phone, [[/^Step 12: /, "Skip"]]);
+    // Step 12 is closed by the system now (OUT-09 fix), so the ladder starts without a Skip.
     await timeTravel(journeyId, 6 / 60);
     await tick(request);
     await workQueue(page, P.phone, [[/^Step 13: Disco welcome$/, "Mark sent"], [/^Step 13b: /, "Mark sent"]]);

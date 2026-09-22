@@ -96,9 +96,9 @@ export async function liveLead(phone: string) {
 export async function journeyFor(leadId: string) {
   return one<any>(`select * from outreach_journey where "leadId"=$1`, [leadId]);
 }
-export type StepRow = { id: string; step: string; status: string; channel: string; dueAt: Date; actedAt: Date | null; outcome: string | null; renderedBody: string | null };
+export type StepRow = { id: string; step: string; status: string; channel: string; dueAt: Date; actedAt: Date | null; actedById: string | null; outcome: string | null; renderedBody: string | null };
 export async function stepsFor(journeyId: string): Promise<StepRow[]> {
-  return q<StepRow>(`select id, step::text, status::text, channel::text, "dueAt", "actedAt", outcome, "renderedBody"
+  return q<StepRow>(`select id, step::text, status::text, channel::text, "dueAt", "actedAt", "actedById", outcome, "renderedBody"
                        from outreach_step_log where "journeyId"=$1 order by "createdAt", step`, [journeyId]);
 }
 export async function stepMap(journeyId: string) {

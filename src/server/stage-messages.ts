@@ -1,5 +1,5 @@
 import "server-only";
-import { Prisma } from "@prisma/client";
+import { Prisma, type LeadStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   coerceStageMessages,
@@ -27,23 +27,16 @@ import { sendWhatsApp } from "@/server/whatsapp";
  * Rows younger than SETTLE_MS are left for the next tick: `changedAt` is the writer's transaction
  * start, so a row can commit slightly after a later-stamped one, and passing it would lose it.
  *
- * ── Who is NOT messaged (the "no doubles" rules) ────────────────────────────
- * - The lead has already moved on to another stage (a mis-drag corrected within the minute, or a
- *   chain of automatic moves): only the stage they are actually in is announced.
- * - Archived leads.
- * - SYSTEM moves (changedById null) that another message already covers:
- *   · fromStage null - a brand-new opt-in; the SOP intro owns first contact.
- *   · into WHATSAPP_SENT - the move exists BECAUSE a WhatsApp just went out.
- *   · the lead received any outbound WhatsApp/email in the last RECENT_SEND_MS - the move was the
- *     side effect of a booking confirmation, a cancellation notice, a chase close-out etc.
- *   A human move always sends: that is the explicit ask.
+ * ── Who is messaged ─────────────────────────────────────────────────────────
+ * Every stage entry, manual or automatic, including a brand-new opt-in and the move to
+ * WHATSAPP_SENT, even if the lead has already moved on or was messaged a moment ago. Each
+ * history row is announced for the stage it records. Only archived leads are skipped.
  */
 
 const CURSOR_KEY = "stageMessagesCursor";
 const LOCK_KEY = 732_604_119; // arbitrary, unique to this engine
 const BATCH = 100;
 const SETTLE_MS = 20_000;
-const RECENT_SEND_MS = 15 * 60_000;
 
 type Cursor = { at: string; id: string };
 
@@ -114,11 +107,7 @@ export async function runStageMessages() {
   const result = { claimed: claim.rows.length, emails: 0, whatsapps: 0, skipped: 0, disabled: !cfg.enabled };
   if (!cfg.enabled || claim.rows.length === 0) return result;
 
-  // Several moves of one lead in one batch: only the latest can match their current stage anyway.
-  const latest = new Map<string, Claimed>();
-  for (const r of claim.rows) latest.set(r.leadId, r);
-
-  for (const r of latest.values()) {
+  for (const r of claim.rows) {
     const sent = await sendForRow(r, cfg).catch(() => null);
     if (!sent) {
       result.skipped++;
@@ -133,26 +122,13 @@ export async function runStageMessages() {
 async function sendForRow(r: Claimed, cfg: StageMessagesConfig): Promise<{ email: boolean; whatsapp: boolean } | null> {
   const lead = await prisma.lead.findUnique({
     where: { id: r.leadId },
-    select: { id: true, name: true, email: true, phone: true, stage: true, deletedAt: true },
+    select: { id: true, name: true, email: true, phone: true, deletedAt: true },
   });
-  if (!lead || lead.deletedAt || lead.stage !== r.toStage) return null;
+  if (!lead || lead.deletedAt) return null;
 
-  const msg = cfg.stages[lead.stage];
+  const stage = r.toStage as LeadStage;
+  const msg = cfg.stages[stage];
   if (!msg || (!msg.email && !msg.whatsapp)) return null;
-
-  if (!r.changedById) {
-    if (r.fromStage === null || r.toStage === "WHATSAPP_SENT") return null;
-    const since = new Date(Date.now() - RECENT_SEND_MS);
-    const [wa, em] = await Promise.all([
-      prisma.whatsAppMessage.count({
-        where: { leadId: lead.id, direction: "OUTBOUND", status: { not: "SKIPPED" }, createdAt: { gte: since } },
-      }),
-      prisma.message.count({
-        where: { leadId: lead.id, direction: "OUTBOUND", status: "SENT", createdAt: { gte: since } },
-      }),
-    ]);
-    if (wa + em > 0) return null;
-  }
 
   let email = false;
   let whatsapp = false;
@@ -170,12 +146,12 @@ async function sendForRow(r: Claimed, cfg: StageMessagesConfig): Promise<{ email
   if (msg.whatsapp && lead.phone) {
     const firstName = (lead.name ?? "").trim().split(/\s+/)[0] || "there";
     const out = await sendWhatsApp({
-      kind: stageWhatsAppKind(lead.stage),
+      kind: stageWhatsAppKind(stage),
       to: lead.phone,
       vars: { name: firstName },
       leadId: lead.id,
       sentById: r.changedById,
-      bodySummary: `Stage message · ${lead.stage}`,
+      bodySummary: `Stage message · ${stage}`,
       // Engine caller: stay silent while WhatsApp is off, and log an unbound template once, not per move.
       logSkips: false,
     });

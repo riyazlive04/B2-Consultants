@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import { formatDate, formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import {
+  WHATSAPP_AVAILABLE_VARS,
   WHATSAPP_KIND_LABELS,
   domainAllows,
   redirectedBodyPrefix,
@@ -207,9 +208,20 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
     else if (knownStatus && knownStatus !== "APPROVED") {
       dataSkip = `Template "${template.name}" is ${knownStatus} in WATI - pick an APPROVED template in WhatsApp → Settings.`;
     } else if (built && !built.ok) {
-      dataSkip =
-        `Template "${template.name}" expects ${built.missing.map((m) => `{{${m}}}`).join(", ")}, ` +
-        `which "${label}" cannot supply. Fix the variable list in WhatsApp → Settings.`;
+      // Two different problems, and only one of them is a Settings mistake. A variable the
+      // touchpoint offers but has no value for THIS recipient (a lead with no live booked call has
+      // no {{date}}) is a fact about the lead; blaming the variable list sent people to fix config
+      // that was already right.
+      const offered = new Set(WHATSAPP_AVAILABLE_VARS[kind]);
+      const unsupported = built.missing.filter((m) => !offered.has(m));
+      const noValue = built.missing.filter((m) => offered.has(m));
+      const list = (xs: string[]) => xs.map((m) => `{{${m}}}`).join(", ");
+      dataSkip = unsupported.length
+        ? `Template "${template.name}" expects ${list(unsupported)}, which "${label}" cannot supply. Fix the variable list in WhatsApp → Settings.`
+        : `Template "${template.name}" needs ${list(noValue)}, and this contact has no value for ${noValue.length > 1 ? "them" : "it"}` +
+          (noValue.some((m) => ["date", "time", "slot_time"].includes(m))
+            ? " - they have no live booked call (book one first; a past or no-show call is never quoted)."
+            : ".");
     } else if (await isOptedOut(number)) dataSkip = "Recipient has opted out of WhatsApp";
     else {
       /**

@@ -984,13 +984,57 @@ export async function sendStudentNudgeFor(
  * Realistic sample values for every variable a touchpoint can supply - so a test send exercises
  * the exact template, with the exact parameter count, that production will use.
  */
-function sampleVars(): Record<string, string> {
+async function sampleVars(): Promise<Record<string, string>> {
   const tomorrow = new Date(Date.now() + 24 * HR);
+  const slotTime = formatDateTimeInZone(tomorrow, "Asia/Kolkata");
+  // Split exactly as the SOP sender does ("Mon 21 Sept, 06:00 pm" -> date + time), so a test
+  // renders the date/time the way a real reminder will.
+  const cut = slotTime.lastIndexOf(", ");
+  const [date, time] = cut === -1 ? [slotTime, ""] : [slotTime.slice(0, cut), slotTime.slice(cut + 2)];
+  const base = (process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "");
+
+  // The real sender name is the one the SOP engine falls back to, so a test shows what a lead
+  // would actually read. Imported lazily: outreach.ts imports this module, and a top-level import
+  // back would be a load-time cycle.
+  let sender = "B2 Consultants";
+  try {
+    const { readOutreachConfig } = await import("./outreach");
+    sender = (await readOutreachConfig()).defaultSpecialistName?.trim() || sender;
+  } catch {
+    // A test send must never fail because the outreach settings could not be read.
+  }
+
+  /**
+   * One value per variable in WHATSAPP_AVAILABLE_VARS, across every touchpoint. It used to hold
+   * only name/booking_url/slot_time/amount, so "Send test" on any SOP template that declares
+   * {{sender}}, {{date}}, {{time}} or {{zoom_link}} was skipped with "expects {{sender}}, which
+   * ... cannot supply" - blaming the variable list for a gap in the TEST data. Real sends were
+   * never affected: the SOP engine supplies those itself.
+   */
   return {
     name: "there",
+    sender,
+    date,
+    time,
+    slot_time: slotTime,
+    due_date: formatDate(tomorrow),
     booking_url: bookingUrl(),
-    slot_time: formatDateTimeInZone(tomorrow, "Asia/Kolkata"),
+    sss_url: `${base}/sss`,
+    zoom_link: "https://zoom.us/j/0000000000",
     amount: formatInrMinor(2_500_000), // ₹25,000 in paise
+    total: formatInrMinor(7_500_000),
+    seq: "2",
+    code: "123456",
+    document_no: "TEST-0001",
+    sign_url: `${base}/agreement/test`,
+    sign_token: "test-token",
+    copy_url: `${base}/agreement/test/copy`,
+    publisher_name: "there",
+    order_ref: "TEST-ORDER",
+    level: "A1",
+    student_name: "Test Student",
+    ship_to: "Test address",
+    ship_phone: "+910000000000",
   };
 }
 
@@ -1062,6 +1106,6 @@ export async function sendTestMessage(
   return sendWhatsApp({
     kind, to: toRaw, sentById,
     bodySummary: `Test send - ${WHATSAPP_KIND_LABELS[kind]}`,
-    vars: sampleVars(),
+    vars: await sampleVars(),
   });
 }

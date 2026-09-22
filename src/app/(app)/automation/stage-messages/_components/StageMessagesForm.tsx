@@ -59,7 +59,7 @@ export default function StageMessagesForm({
       <Hint>
         Every time a lead enters a stage, manually or automatically and however old the lead is, it gets that
         stage&apos;s email and WhatsApp, including new opt-ins and moves that happen alongside another
-        message. WhatsApp needs an approved WATI template
+        message. A manual move undone or changed again within 20 seconds (a mis-drag) sends nothing. WhatsApp needs an approved WATI template
         bound to the stage&apos;s &quot;Stage · …&quot; touchpoint in WhatsApp → Settings, with {"{{name}}"} as
         its only variable. Email tokens: {"{{first_name}}"}, {"{{name}}"}, {"{{email}}"}, {"{{phone}}"}.
       </Hint>

@@ -29,14 +29,19 @@ import { sendWhatsApp } from "@/server/whatsapp";
  *
  * ── Who is messaged ─────────────────────────────────────────────────────────
  * Every stage entry, manual or automatic, including a brand-new opt-in and the move to
- * WHATSAPP_SENT, even if the lead has already moved on or was messaged a moment ago. Each
- * history row is announced for the stage it records. Only archived leads are skipped.
+ * WHATSAPP_SENT, even if the lead was messaged a moment ago. Each history row is announced for
+ * the stage it records. Skipped: archived leads, and a MANUAL move that the same lead's next
+ * move replaced within MISDRAG_MS (a mis-drag corrected on the spot). Automatic moves are never
+ * treated as mis-drags: a new opt-in moves on to WhatsApp Sent within seconds and must still get
+ * its New Lead message.
  */
 
 const CURSOR_KEY = "stageMessagesCursor";
 const LOCK_KEY = 732_604_119; // arbitrary, unique to this engine
 const BATCH = 100;
-const SETTLE_MS = 20_000;
+const MISDRAG_MS = 20_000;
+// Longer than MISDRAG_MS, so the correcting move has been written by the time a row is judged.
+const SETTLE_MS = MISDRAG_MS + 10_000;
 
 type Cursor = { at: string; id: string };
 
@@ -60,6 +65,7 @@ type Claimed = {
   fromStage: string | null;
   toStage: string;
   changedById: string | null;
+  changedAt: Date;
 };
 
 /**
@@ -125,6 +131,21 @@ async function sendForRow(r: Claimed, cfg: StageMessagesConfig): Promise<{ email
     select: { id: true, name: true, email: true, phone: true, deletedAt: true },
   });
   if (!lead || lead.deletedAt) return null;
+
+  if (r.changedById) {
+    // Any later move of this lead within the window means this one was a mis-drag.
+    const correctedBy = await prisma.leadStageHistory.findFirst({
+      where: {
+        leadId: r.leadId,
+        OR: [
+          { changedAt: { gt: r.changedAt, lte: new Date(r.changedAt.getTime() + MISDRAG_MS) } },
+          { changedAt: r.changedAt, id: { gt: r.id } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (correctedBy) return null;
+  }
 
   const stage = r.toStage as LeadStage;
   const msg = cfg.stages[stage];

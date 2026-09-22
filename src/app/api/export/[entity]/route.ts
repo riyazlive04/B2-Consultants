@@ -115,7 +115,7 @@ const EXPORTS: Record<string, ExportDef> = {
           l.assignedTo?.name ?? "",
           l.createdAt, l.contactedAt,
           // "" not 0 - an unscored lead is one nobody asked, not one that scored zero.
-          l.bantAvg ?? "", l.bantVerdict ?? "",
+          l.bantAvg != null ? l.bantAvg : "", l.bantVerdict ?? "",
           l.notes,
         ],
       );

@@ -155,7 +155,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
           <CheckboxField name="bantTimeline" label="Timeline" defaultChecked={call.bant?.timeline} />
           {call.bant && (
             <p className="col-span-2 text-caption text-muted">
-              Pre-filled from their intake answers ({call.bant.avg.toFixed(1)}/5{" "}
+              Pre-filled from their intake answers ({call.bant.avg.toFixed(1)}/4{" "}
               {BANT_ORIGIN_LABELS[call.bant.origin]}). Correct anything the call changed.
             </p>
           )}
@@ -227,8 +227,8 @@ function CallPrep({ call }: { call: L2Call }) {
                     <span
                       title={
                         a.counted
-                          ? `Scored ${a.score} out of 5`
-                          : `Scored ${a.score} out of 5, but this question no longer divides the average`
+                          ? `Scored ${a.score} out of 4`
+                          : `Scored ${a.score} out of 4, but this question no longer divides the average`
                       }
                       className={`tnum flex-none rounded px-1.5 py-0.5 font-semibold ${
                         !a.counted
@@ -240,7 +240,7 @@ function CallPrep({ call }: { call: L2Call }) {
                               : "bg-risk-soft text-risk"
                       }`}
                     >
-                      {a.score}/5
+                      {a.score}/4
                     </span>
                   )}
                 </div>

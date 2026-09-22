@@ -25,6 +25,7 @@ import {
 } from "@/server/opportunities-actions";
 import { COLUMN_OWNING_STAGES, LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
 import { SYNAMATE_STAGES } from "@/lib/pipeline-stages";
+import { BANT_DOUBT_FROM } from "@/lib/booking-intake";
 import { OpportunityDialog } from "./OpportunityDialog";
 import { SpeedToLeadReport } from "./SpeedToLeadReport";
 import { DialButton } from "@/components/calls/DialButton";
@@ -32,13 +33,13 @@ import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
 import { firstCallVerdict, firstCallLabel, type FirstCallState } from "@/lib/speed-to-lead";
 
 /**
- * Band score at or above which a booked prospect reads green, on the 0-5 scale.
+ * Band score at or above which a booked prospect reads green, on the 0-4 scale.
  *
- * 2 is the founder's line ("red below 2, green above"), and it sits at the boundary rather than
- * above it: a prospect who scores exactly 2 has met the bar, and rounding them into the red would
+ * 1.6 is the founder's line ("red below 2, green above", set when BANT ran 0-5 and rescaled with
+ * it), and it sits at the boundary rather than above it: a prospect who scores exactly 1.6 has met the bar, and rounding them into the red would
  * punish the one case the rule is least sure about.
  */
-const BANT_PASS = 2;
+const BANT_PASS = BANT_DOUBT_FROM;
 
 // Options for mapping a stage back to a lead-lifecycle stage (the bridge that syncs a card move to
 // Lead.stage). "" = no sync; the board stays a standalone process - offered on custom pipelines
@@ -781,7 +782,7 @@ function OppCard({
 
         Replaces the speed chip rather than joining it: two chips on a card this size is how a
         board stops being scannable, and once the call is booked the five-minute verdict has
-        stopped being actionable. The number is spoken as "3.2/5" and not left to colour alone,
+        stopped being actionable. The number is spoken as "2.6/4" and not left to colour alone,
         so it survives colour-blindness and a monochrome print - the same rule the speed chip
         follows.
 
@@ -801,11 +802,11 @@ function OppCard({
           title={
             card.bantAvg === null
               ? "Nobody has scored this prospect's budget, authority, need or timeline yet"
-              : `BANT ${card.bantAvg.toFixed(1)} out of 5 - ${card.bantAvg >= BANT_PASS ? "worth the call" : "weak, qualify before spending the slot"}`
+              : `BANT ${card.bantAvg.toFixed(1)} out of 4 - ${card.bantAvg >= BANT_PASS ? "worth the call" : "weak, qualify before spending the slot"}`
           }
         >
           <Gauge size={11} aria-hidden />{" "}
-          {card.bantAvg === null ? "BANT not scored" : `BANT ${card.bantAvg.toFixed(1)}/5`}
+          {card.bantAvg === null ? "BANT not scored" : `BANT ${card.bantAvg.toFixed(1)}/4`}
         </span>
       ) : verdict ? (
         <span

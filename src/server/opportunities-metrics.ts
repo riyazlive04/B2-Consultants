@@ -39,7 +39,7 @@ export type BoardCard = {
   optInAt: string;
   firstCallAt: string | null;
   /**
-   * The band score to show once the prospect has a call booked, 0-5, or null when nobody has
+   * The band score to show once the prospect has a call booked, 0-4, or null when nobody has
    * scored them.
    *
    * Resolved server-side through `resolveBant` - the one rule for "which stored score do I show"

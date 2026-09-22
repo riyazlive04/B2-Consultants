@@ -125,8 +125,8 @@ describe("qualification - EXHAUSTIVE agreement with the shipped scorer", () => {
 
 describe("qualification - the rules that are easy to get wrong", () => {
   test("a dimension takes the MAX of its questions, never the sum", () => {
-    // Budget has two questions. Lukewarm invest (need_clarity = 2.5) + top salary (gt_1l = 5)
-    // must score 5, not 7.5 and not 2.5.
+    // Budget has two questions. Lukewarm invest (need_clarity = 2) + top salary (gt_1l = 4)
+    // must score 4, not 6 and not 2.
     const r = scoreFromAnswers(
       { readyToInvest: "need_clarity", currentIncome: "gt_1l" },
       CATALOGUE,
@@ -134,16 +134,16 @@ describe("qualification - the rules that are easy to get wrong", () => {
     // The BOOLEAN still takes the best evidence for the dimension - that is what the pipeline
     // ranking reads, and it is unchanged.
     assert.equal(r.bantBudget, true);
-    // The AVERAGE is over the five scored QUESTIONS: (2.5 + 5 + three unanswered) / 5 = 1.5.
-    assert.equal(r.bantAvg, 1.5);
+    // The AVERAGE is over the five scored QUESTIONS: (2 + 4 + three unanswered) / 5 = 1.2.
+    assert.equal(r.bantAvg, 1.2);
   });
 
   test("the average is per QUESTION, so a two-question dimension carries twice the weight", () => {
     // This is what separates the current rule from the old one. Both Budget questions answered at
-    // the top, nothing else: per-question gives (5 + 5) / 5 = 2.0, per-dimension would give
-    // 5 / 4 = 1.3. Budget's two votes are the founders' own hand-weighting, made explicit.
+    // the top, nothing else: per-question gives (4 + 4) / 5 = 1.6, per-dimension would give
+    // 4 / 4 = 1.0. Budget's two votes are the founders' own hand-weighting, made explicit.
     const r = scoreFromAnswers({ readyToInvest: "ready_now", currentIncome: "gt_1l" }, CATALOGUE);
-    assert.equal(r.bantAvg, 2);
+    assert.equal(r.bantAvg, 1.6);
   });
 
   test("an unanswered scored question stays in the denominator", () => {
@@ -151,21 +151,21 @@ describe("qualification - the rules that are easy to get wrong", () => {
     // why a scored question the form never asks costs EVERY prospect a share of their score.
     const budgetOnly = CATALOGUE.filter((q) => q.dimension === "BUDGET");
     const r = scoreFromAnswers({ readyToInvest: "ready_now" }, budgetOnly);
-    assert.equal(r.bantAvg, 2.5); // 5 / 2 budget questions, NOT 5 and NOT 5/4
+    assert.equal(r.bantAvg, 2); // 4 / 2 budget questions, NOT 4 and NOT 4/4
     assert.equal(SCORED_DIMENSIONS.length, 4);
   });
 
   test("weight 1 is the identity - which is what makes the derived catalogue exact", () => {
     const q = CATALOGUE.find((x) => x.key === "readyToInvest")!;
     assert.equal(q.weight, 1);
-    assert.equal(optionScore(q, "ready_now"), 5);
+    assert.equal(optionScore(q, "ready_now"), 4);
   });
 
-  test("weight scales but clamps into 0–5 so the verdict thresholds stay meaningful", () => {
+  test("weight scales but clamps into 0–4 so the verdict thresholds stay meaningful", () => {
     const base = CATALOGUE.find((x) => x.key === "readyToInvest")!;
     const heavy: QuestionSpec = { ...base, weight: 3 };
-    assert.equal(optionScore(heavy, "need_clarity"), 5); // 3 × 2.5 = 7.5, clamped to 5
+    assert.equal(optionScore(heavy, "need_clarity"), 4); // 3 × 2 = 6, clamped to 4
     const half: QuestionSpec = { ...base, weight: 0.5 };
-    assert.equal(optionScore(half, "ready_now"), 2.5);
+    assert.equal(optionScore(half, "ready_now"), 2);
   });
 });

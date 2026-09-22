@@ -432,7 +432,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
           // Naming the SOURCE matters in the founder's feed: "scored 2.8 from the landing page"
           // and "scored 2.8 from the booking form" are different amounts of evidence, and the
           // person reviewing a borderline verdict needs to know which one they are looking at.
-          summary: `Scored ${row.lead.name} ${QUALIFIED_LABELS[verdict]} from a BANT average of ${scored.avg.toFixed(1)} (${scored.from === "opt-in" ? "landing page" : "booking form"})`,
+          summary: `Scored ${row.lead.name} ${QUALIFIED_LABELS[verdict]} from a BANT average of ${scored.avg.toFixed(1)}/4 (${scored.from === "opt-in" ? "landing page" : "booking form"})`,
           meta: { verdict, bantAvg: scored.avg, bantFrom: scored.from },
         });
       }

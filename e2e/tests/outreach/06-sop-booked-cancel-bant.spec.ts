@@ -8,7 +8,7 @@ import {
 import { one } from "../../helpers/db";
 
 /**
- * SOP: booked (before any chase step) → BANT exactly 2.0 (SOP: "<2 cancel / >2 continue", 2 undefined)
+ * SOP: booked (before any chase step) → BANT exactly 1.6/4, i.e. 2.0/5 (SOP: "<2 cancel / >2 continue", 2 undefined)
  * → Step 13 → 36h Step 14 → 24h Step 15 → 12h call → NOT confirmed → cancel the disco call (Step 17) → End.
  * Plus: a call confirmed on the Bookings page, and a BANT < 2 booking.
  */
@@ -45,11 +45,11 @@ test.beforeAll(async () => {
   await ensureLocalOutreachConfig();
 });
 
-test.describe("A. booked straight after opt-in, BANT 2.0, never confirms → cancelled", () => {
-  test("BANT exactly 2.0 is scored 'Cannot judge' (MAYBE) and CONTINUES down the disco ladder", async ({ browser, request }) => {
+test.describe("A. booked straight after opt-in, BANT 1.6, never confirms → cancelled", () => {
+  test("BANT exactly 1.6 is scored 'Cannot judge' (MAYBE) and CONTINUES down the disco ladder", async ({ browser, request }) => {
     await freshOptInAndBook(browser, request, BANT_TWO, "06A bant-2 cancel");
     const b = await eventually(async () => (await bookingsFor(leadId))[0], "booking");
-    expect(b.bantAvg).toBe(2);
+    expect(b.bantAvg).toBe(1.6);
     expect(b.bantVerdict).toBe("DOUBT");
     expect(b.status).toBe("BOOKED");
     const j = await journeyFor(leadId);
@@ -183,7 +183,7 @@ test.describe("B. call confirmed on the Bookings page", () => {
   });
 });
 
-test.describe("C. BANT below 2 on the booking form", () => {
+test.describe("C. BANT below 1.6 on the booking form", () => {
   test("BANT 0.9 → call is NOT held: booking recorded CANCELLED without a slot, lead LOST, journey closed as NOT qualified", async ({ browser, request }) => {
     const admin = await browser.newContext({ storageState: authFile("admin") });
     const adminPage = await admin.newPage();
@@ -202,7 +202,7 @@ test.describe("C. BANT below 2 on the booking form", () => {
     await ctx.close();
 
     const b = await eventually(async () => (await bookingsFor(leadId))[0], "booking");
-    expect(b.bantAvg).toBe(0.9);
+    expect(b.bantAvg).toBe(0.7);
     expect(b.bantVerdict).toBe("CANCEL");
     expect(b.status).toBe("CANCELLED");
     expect(b.slotId).toBeNull();

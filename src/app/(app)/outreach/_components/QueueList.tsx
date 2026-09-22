@@ -266,7 +266,7 @@ function ProspectCard({ row }: { row: QueueRow }) {
             {row.qualified && (
               <span className="rounded-full bg-accent-soft px-2 py-0.5 text-caption font-semibold text-accent">
                 {QUALIFIED_LABELS[row.qualified]}
-                {row.bantAvg !== null && ` · BANT ${row.bantAvg.toFixed(1)}`}
+                {row.bantAvg !== null && ` · BANT ${row.bantAvg.toFixed(1)}/4`}
               </span>
             )}
           </div>

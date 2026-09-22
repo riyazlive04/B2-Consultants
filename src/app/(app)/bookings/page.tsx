@@ -12,7 +12,7 @@ import {
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/kit";
 import { Tabs } from "@/components/ui/Tabs";
-import { resolveBant } from "@/lib/bant-view";
+import { bantSignal, resolveBant } from "@/lib/bant-view";
 import { istToday, istWeekRange, istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { BOOKING_STATUS_LABELS, slotTypeLabel } from "@/lib/labels";
@@ -49,12 +49,12 @@ const slotStyle = (s: WeekSlot) => {
  * One prospect's score as a calendar chip.
  *
  * "Not scored" is a first-class result and is NEVER rendered as 0. An unscored prospect is one
- * nobody has evidence about; showing them as 0.0/5 beside genuinely poor prospects is how a good
+ * nobody has evidence about; showing them as 0.0/4 beside genuinely poor prospects is how a good
  * lead gets deprioritised for never having been asked. (`lib/bant-view.ts` states the same rule
  * for every other surface - this page was the one rendering the raw column instead.)
  */
 function bantLabel(bant: { avg: number; origin: string } | null): string {
-  return bant ? `BANT ${bant.avg.toFixed(1)}/5` : "Not scored";
+  return bant ? `BANT ${bant.avg.toFixed(1)}/4` : "Not scored";
 }
 
 export default async function BookingsPage({ searchParams }: { searchParams: { week?: string } }) {
@@ -205,13 +205,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
         <MetricCard
           label="Avg BANT score"
           value={kpis.avgWeighted !== null ? kpis.avgWeighted.toFixed(1) : kpis.avgBant.toFixed(1)}
-          secondary={kpis.avgWeighted !== null ? "Weighted, out of 5 - this month" : "Out of 4 - this month"}
-          tooltip="Weighted average of the four BANT dimension scores. Above 3 = confirm the call, 2-3 = go but doubtful, below 2 = cancel recommended."
+          secondary={kpis.avgWeighted !== null ? "Weighted, out of 4 - this month" : "Out of 4 - this month"}
+          tooltip="Weighted average of the four BANT dimension scores. Above 2.4 = confirm the call, 1.6-2.4 = go but doubtful, below 1.6 = cancel recommended."
           signal={
             kpis.bookedThisMonth === 0
               ? undefined
               : kpis.avgWeighted !== null
-                ? kpis.avgWeighted > 3 ? "ok" : kpis.avgWeighted >= 2 ? "watch" : "risk"
+                ? bantSignal(kpis.avgWeighted)
                 : kpis.avgBant >= 3 ? "ok" : kpis.avgBant >= 2 ? "watch" : "risk"
           }
           icon={<Target size={18} />}

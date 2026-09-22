@@ -403,10 +403,10 @@ export async function createSlotUi(page: Page, date: string, hhmm: string) {
 export type BantAnswers = {
   readyToInvest: string; currentIncome: string; decisionMaking: string; alreadyApplied: string; whenStartGermany: string;
 };
-export const BANT_HIGH: BantAnswers = { readyToInvest: "Ready to invest", currentIncome: "More than ₹1,00,000", decisionMaking: "I make the final decision myself", alreadyApplied: "I got some interviews, but no offer", whenStartGermany: "in next 6 months." }; // 5.0
-/** 0 + 2 + 3.5 + 4 + 0.5 = 10 / 5 = exactly 2.0 - the SOP's undefined boundary. */
+export const BANT_HIGH: BantAnswers = { readyToInvest: "Ready to invest", currentIncome: "More than ₹1,00,000", decisionMaking: "I make the final decision myself", alreadyApplied: "I got some interviews, but no offer", whenStartGermany: "in next 6 months." }; // 4.0
+/** 0 + 1.6 + 2.8 + 3.2 + 0.4 = 8 / 5 = exactly 1.6 - the SOP's undefined boundary (2.0 on the old 0-5 scale). */
 export const BANT_TWO: BantAnswers = { readyToInvest: "Not ready at the moment", currentIncome: "₹30,000 - ₹50,000", decisionMaking: "I make decisions, but consult others", alreadyApplied: "I've applied, but no responses", whenStartGermany: "No fixed timeline, just exploring for now." };
-/** 0 + 1 + 1 + 2 + 0.5 = 4.5 / 5 = 0.9 → auto-disqualify. */
+/** 0 + 0.8 + 0.8 + 1.6 + 0.4 = 3.6 / 5 = 0.72 → 0.7 → auto-disqualify. */
 export const BANT_LOW: BantAnswers = { readyToInvest: "Not ready at the moment", currentIncome: "Less than ₹30,000", decisionMaking: "Someone else makes the final decision", alreadyApplied: "No, I haven't started applying.", whenStartGermany: "No fixed timeline, just exploring for now." };
 
 /**

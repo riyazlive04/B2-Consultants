@@ -428,7 +428,7 @@ function Opps({ contact }: { contact: ContactDetail }) {
 }
 
 /**
- * One answer's contribution: which BANT dimension it speaks to, and the 0-5 it scored.
+ * One answer's contribution: which BANT dimension it speaks to, and the 0-4 it scored.
  *
  * A question that scores nothing renders as a dash rather than a 0. They are different facts -
  * "we asked and they answered badly" versus "this was context, it was never worth marks" - and
@@ -454,8 +454,8 @@ function AnswerScore({ line }: { line: ContactDetail["answers"][number] }) {
         <span
           title={
             line.counted
-              ? `Scored ${line.score} out of 5${line.derived ? " by the current scoring table" : ""}`
-              : `Scored ${line.score} out of 5, but this question no longer divides the average`
+              ? `Scored ${line.score} out of 4${line.derived ? " by the current scoring table" : ""}`
+              : `Scored ${line.score} out of 4, but this question no longer divides the average`
           }
           className={`tnum rounded px-1.5 py-0.5 text-caption font-semibold ${
             !line.counted
@@ -467,7 +467,7 @@ function AnswerScore({ line }: { line: ContactDetail["answers"][number] }) {
                   : "bg-risk-soft text-risk"
           }`}
         >
-          {line.score}/5
+          {line.score}/4
         </span>
       )}
     </span>
@@ -484,7 +484,7 @@ function AnswerScore({ line }: { line: ContactDetail["answers"][number] }) {
  * landing page had been collecting these answers the whole time.
  *
  * ── The rule this card exists to honour ─────────────────────────────────────────
- * NOT SCORED IS NOT ZERO. An unscored prospect is one nobody has asked; showing them as 0.0/5
+ * NOT SCORED IS NOT ZERO. An unscored prospect is one nobody has asked; showing them as 0.0/4
  * would rank them alongside someone who answered badly, and the good lead loses. The empty state
  * says which of the two it is, and why.
  */
@@ -515,7 +515,7 @@ function BantCard({ contact }: { contact: ContactDetail }) {
     <Card title="Qualification">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-display text-3xl font-bold tabular-nums text-ink">{b.avg.toFixed(1)}</span>
-        <span className="text-sm text-ink-3">/ 5</span>
+        <span className="text-sm text-ink-3">/ 4</span>
         <Pill tone={tone}>{BANT_VERDICT_LABELS[b.verdict] ?? b.verdict}</Pill>
       </div>
       <p className="mt-1 text-caption text-ink-3">

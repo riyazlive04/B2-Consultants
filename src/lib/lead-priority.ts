@@ -7,7 +7,7 @@
  *   • `/pipeline`'s "Call these first" - stage weight + BANT×10 + highly-qualified 15 +
  *     new-this-week 10 − idle penalty.
  *   • The L1 desk - sorted each bucket by ARRIVAL TIME only. So the BANT score shown on every
- *     row changed nothing about the order a caller worked in. A 4.6/5 lead and a 0.5/5 lead that
+ *     row changed nothing about the order a caller worked in. A 3.7/4 lead and a 0.4/4 lead that
  *     arrived the same morning were rung in the order they landed.
  *
  * Two rankings is one too many: the founder tunes what "worth calling" means in one place

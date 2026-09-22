@@ -23,10 +23,10 @@
  */
 
 import type { BantDimension, QuestionKind } from "@prisma/client";
-import { INTAKE_OPTIONS, BANT_ANSWER_SCORES, bantVerdictFor, type BantResult } from "./booking-intake";
+import { INTAKE_OPTIONS, BANT_ANSWER_SCORES, BANT_MAX, DIMENSION_MET_AT, bantVerdictFor, type BantResult } from "./booking-intake";
 
 /**
- * One option on a SELECT-style question. `score` is the 0–5 weighted layer.
+ * One option on a SELECT-style question. `score` is the 0–4 weighted layer.
  *
  * `aliases` are additional ANSWER TEXTS an external form may send for this option - the landing
  * page posts its own wording, not our slug. Optional so every option written before inbound
@@ -54,16 +54,13 @@ export type QuestionSpec = {
 /** The four scored dimensions, in the order the average is taken over. */
 export const SCORED_DIMENSIONS = ["BUDGET", "AUTHORITY", "NEED", "TIMELINE"] as const;
 
-/** A dimension counts as "met" at ≥3/5 - the same constant `computeBant` uses. */
-const DIMENSION_MET_AT = 3;
-
 /** Answers keyed by question `key`, exactly as the form posts them. */
 export type AnswerMap = Record<string, string | null | undefined>;
 
 /**
- * The 0–5 score one answer contributes.
+ * The 0–4 score one answer contributes.
  *
- * `weight` multiplies and the result is clamped back into 0–5, so the average stays on the
+ * `weight` multiplies and the result is clamped back into 0–4, so the average stays on the
  * same scale the verdict thresholds are expressed in. A weight of 1 - what the seed uses
  * everywhere - is the identity, which is what makes the derived catalogue reproduce
  * `computeBant` exactly.
@@ -72,7 +69,7 @@ export function optionScore(q: QuestionSpec, value: string | null | undefined): 
   if (!value) return 0;
   const opt = q.options.find((o) => o.value === value);
   if (!opt) return 0;
-  return Math.min(5, Math.max(0, opt.score * q.weight));
+  return Math.min(BANT_MAX, Math.max(0, opt.score * q.weight));
 }
 
 /**

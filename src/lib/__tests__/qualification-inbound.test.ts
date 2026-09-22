@@ -221,23 +221,23 @@ describe("end to end - a landing-page submission becomes a band score", () => {
     assert.ok(mapping.scorable);
 
     const bant = scoreFromAnswers(mapping.answers, questions);
-    // Every question the form asks, answered at its maximum, reaches a clean 5. It could not
-    // while `commitment` was scored but unasked - that blank capped a perfect submission at 4.2.
-    assert.equal(bant.bantAvg, 5, "every question the form asks, answered at its maximum");
+    // Every question the form asks, answered at its maximum, reaches a clean 4. It could not
+    // while `commitment` was scored but unasked - that blank capped a perfect submission short of the top.
+    assert.equal(bant.bantAvg, 4, "every question the form asks, answered at its maximum");
     assert.equal(bant.bantScore, 4, "all four dimensions still met");
     assert.equal(bant.bantVerdict, "CONFIRM");
   });
 
   test("an unanswered question drags the average down rather than being excluded", () => {
     // Three of the six scored questions answered at the top; the other three score 0 and STILL
-    // divide. Excluding them would report this partial submission as a perfect 5.
+    // divide. Excluding them would report this partial submission as a perfect 4.
     const mapping = mapInboundAnswers(
       { readyToInvest: "ready_now", alreadyApplied: "interviews_no_offer", whenStartGermany: "6_months" },
       CATALOGUE,
     );
     const bant = scoreFromAnswers(mapping.answers, CATALOGUE);
     assert.equal(bant.bantAuthority, false);
-    assert.equal(bant.bantAvg, 3, "(5 + 0 + 0 + 5 + 5) / 5");
+    assert.equal(bant.bantAvg, 2.4, "(4 + 0 + 0 + 4 + 4) / 5");
     assert.equal(bant.bantScore, 3, "the dimension booleans still read the best evidence");
   });
 });

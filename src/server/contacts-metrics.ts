@@ -280,7 +280,7 @@ export type ContactDetail = {
    * The resolved band score, or null for "not scored".
    *
    * NULL IS NOT ZERO. An unscored prospect is one nobody has evidence about; rendering them as
-   * 0.0/5 beside genuinely poor prospects is how a good lead gets deprioritised for never having
+   * 0.0/4 beside genuinely poor prospects is how a good lead gets deprioritised for never having
    * been asked. See lib/bant-view.ts.
    */
   bant: BantSnapshot | null;

@@ -68,7 +68,7 @@ export async function getBookingsOverview() {
       : 0;
   const highBant = monthBookings.filter((b) => b.bantScore >= 3).length;
   const noShows = monthBookings.filter((b) => b.status === "NO_SHOW").length;
-  // Weighted layer (client thresholds: >3 confirm · 2-3 doubt · <2 cancel).
+  // Weighted layer (client thresholds on 0-4: >2.4 confirm · 1.6-2.4 doubt · <1.6 cancel).
   // Legacy rows booked before the weighted scorer have no bantAvg - excluded from the mean.
   const scored = monthBookings.filter((b) => b.bantAvg !== null);
   const avgWeighted = scored.length

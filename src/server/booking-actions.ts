@@ -365,7 +365,7 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
         select: { stage: true, notes: true },
       });
       if (fresh && fresh.stage !== "LOST") {
-        const reason = `Auto-disqualified at intake - BANT ${bant.bantAvg.toFixed(1)}/5`;
+        const reason = `Auto-disqualified at intake - BANT ${bant.bantAvg.toFixed(1)}/4`;
         await tx.lead.update({
           where: { id: lead.id },
           data: { stage: "LOST", notes: fresh.notes ? `${fresh.notes} · ${reason}` : reason },

@@ -254,7 +254,7 @@ export function parseRewardTrigger(value: unknown): RewardTrigger | null {
  * advance window).
  */
 /**
- * Auto-disqualify: a BANT "CANCEL" verdict at intake (weighted avg < 2) blocks the booking and
+ * Auto-disqualify: a BANT "CANCEL" verdict at intake (weighted avg < 1.6 out of 4) blocks the booking and
  * emails the prospect this template. Founder-editable; {{name}} / {{first_name}} tokens resolve
  * against the lead (see messaging.renderTokens).
  */

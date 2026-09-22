@@ -271,18 +271,19 @@ describe("Booking check - booked at any of the 3 checkpoints diverts to Step 11"
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Step 11 - Qualified derives from BANT", () => {
-  test("avg > 3 → YES", () => assert.equal(qualifiedFromBant(3.1), "YES"));
-  test("avg exactly 3 → MAYBE (the boundary belongs to 'cannot judge')", () =>
-    assert.equal(qualifiedFromBant(3), "MAYBE"));
-  test("avg exactly 2 → MAYBE", () => assert.equal(qualifiedFromBant(2), "MAYBE"));
-  test("avg just under 2 → NO", () => assert.equal(qualifiedFromBant(1.99), "NO"));
+  // BANT runs 0-4 (was 0-5 until 22/09/2026; every threshold was multiplied by 0.8).
+  test("avg > 2.4 → YES", () => assert.equal(qualifiedFromBant(2.5), "YES"));
+  test("avg exactly 2.4 → MAYBE (the boundary belongs to 'cannot judge')", () =>
+    assert.equal(qualifiedFromBant(2.4), "MAYBE"));
+  test("avg exactly 1.6 → MAYBE", () => assert.equal(qualifiedFromBant(1.6), "MAYBE"));
+  test("avg just under 1.6 → NO", () => assert.equal(qualifiedFromBant(1.59), "NO"));
   test("no score → no verdict (never guess)", () => {
     assert.equal(qualifiedFromBant(null), null);
     assert.equal(qualifiedFromBant(undefined), null);
     assert.equal(qualifiedFromBant(NaN), null);
   });
-  test("the SOP's worked example: 2.3 → MAYBE ('Hemalatha C got 2.3 and resulted in Maybe')", () => {
-    assert.equal(qualifiedFromBant(2.3), "MAYBE");
+  test("the SOP's worked example: 2.3/5 = 1.8/4 → MAYBE ('Hemalatha C got 2.3 and resulted in Maybe')", () => {
+    assert.equal(qualifiedFromBant(1.8), "MAYBE");
   });
   test("YES and MAYBE continue to Step 13; NO does not", () => {
     assert.equal(qualifiedContinues("YES"), true);

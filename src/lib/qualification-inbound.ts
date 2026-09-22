@@ -75,7 +75,7 @@ export type MappedAnswer = {
   rawValue: string;
   /** Our option value, once resolved. Null when the text matched no option. */
   value: string | null;
-  /** The 0–5 the resolved option carries. Null when unresolved - NOT zero. */
+  /** The 0–4 the resolved option carries. Null when unresolved - NOT zero. */
   score: number | null;
 };
 
@@ -157,7 +157,7 @@ export function mapInboundAnswers(
       inboundKey: hit.key,
       rawValue: hit.value,
       value: option?.value ?? null,
-      // The stored score is the option's raw 0–5. `weight` is applied by the scorer, not here,
+      // The stored score is the option's raw 0–4. `weight` is applied by the scorer, not here,
       // so re-weighting a question does not require re-reading every payload.
       score: option ? option.score : null,
     };

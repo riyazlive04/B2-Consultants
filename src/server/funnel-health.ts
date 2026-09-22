@@ -17,7 +17,7 @@ import { buildFunnelHealth, emptyCounts, type FunnelHealth, type StageCounts } f
  *
  *   Leads                   Lead.dateIn                         (@db.Date - day boundaries)
  *   Booked discovery calls  LeadStageHistory → DISCO_BOOKED
- *   BANT qualified          BookingRequest.bantVerdict = CONFIRM (Ameen's >3 threshold)
+ *   BANT qualified          BookingRequest.bantVerdict = CONFIRM (Ameen's >2.4/4 threshold)
  *   Confirmed               BookingRequest.confirmedAt           (WhatsApp "yes" or manual)
  *   Showed                  LeadStageHistory → DISCO_COMPLETED
  *   Qualified to L3         OutreachJourney.qualified = YES      (the Discovery Specialist verdict)

@@ -114,7 +114,7 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
       <div className="mt-5 border-t border-line pt-4">
         <h4 className="font-display text-base font-semibold">Turn away unqualified applicants</h4>
         <p className="mt-0.5 text-xs text-muted">
-          A band score below <span className="font-medium">2.0 out of 5</span> is a
+          A band score below <span className="font-medium">1.6 out of 4</span> is a
           &ldquo;cancel&rdquo; verdict. The applicant never takes a slot - it stays open for
           someone who qualifies - their card moves to{" "}
           <span className="font-medium">Cancelled/Unqualified</span>, and they get the note below.
@@ -122,7 +122,7 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
         <div className="mt-3">
           <CheckboxField
             name="autoDisqualify"
-            label="Turn away applicants who score below 2.0"
+            label="Turn away applicants who score below 1.6"
             defaultChecked={rules.autoDisqualify}
             hint="Off means every applicant keeps their slot whatever they score, and no rejection is sent. The score is still recorded either way."
           />

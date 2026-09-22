@@ -20,6 +20,7 @@
  */
 
 import type { OutreachStep, OutreachChannel, QualifiedVerdict } from "@prisma/client";
+import { BANT_CONFIRM_ABOVE, BANT_DOUBT_FROM } from "./booking-intake";
 
 // ─────────────────────────────── Variables ───────────────────────────────
 
@@ -1056,14 +1057,14 @@ export function isInstantIntroSource(source: string): boolean {
  *   Not Qualified  → "NO"
  *
  * The thresholds are Ameen's, already implemented for `BantVerdict` in `src/lib/booking-intake.ts`
- * (>3 confirm · 2–3 doubt · <2 cancel). We reuse those exact boundaries rather than inventing a
+ * (>2.4 confirm · 1.6–2.4 doubt · <1.6 cancel, on the 0-4 scale). We reuse those exact boundaries rather than inventing a
  * second scale, so "Qualified" and "BANT verdict" can never disagree - they are the same decision
  * under the SOP's names and the CRM's names.
  */
 export function qualifiedFromBant(bantAvg: number | null | undefined): QualifiedVerdict | null {
   if (bantAvg == null || !Number.isFinite(bantAvg)) return null;
-  if (bantAvg > 3) return "YES";
-  if (bantAvg >= 2) return "MAYBE";
+  if (bantAvg > BANT_CONFIRM_ABOVE) return "YES";
+  if (bantAvg >= BANT_DOUBT_FROM) return "MAYBE";
   return "NO";
 }
 

@@ -14,6 +14,7 @@
 import { PrismaClient, type OutreachStep } from "@prisma/client";
 import { planJourney, type JourneyState } from "../src/lib/outreach-engine";
 import { DEFAULT_SLA, qualifiedFromBant } from "../src/lib/outreach-sop";
+import { bantVerdictFor } from "../src/lib/booking-intake";
 
 const prisma = new PrismaClient();
 const RUN_TAG = `sop-verify-${Date.now()}`;
@@ -137,7 +138,7 @@ async function makeBooking(leadId: string, email: string, phone: string, startsA
       phone,
       bantAvg,
       bantScore: Math.round(bantAvg),
-      bantVerdict: bantAvg > 3 ? "CONFIRM" : bantAvg >= 2 ? "DOUBT" : "CANCEL",
+      bantVerdict: bantVerdictFor(bantAvg),
       externalRef: `${RUN_TAG}-b-${phone}`,
     },
   });
@@ -159,16 +160,16 @@ async function scenarioGoldenPath() {
 
   // Books before check 1 would even fire.
   const discoAt = new Date(t0.getTime() + 100 * HR);
-  const booking = await makeBooking(lead.id, "GOLDEN@Example.com ", "+919000000001", discoAt, 4.2);
+  const booking = await makeBooking(lead.id, "GOLDEN@Example.com ", "+919000000001", discoAt, 3.4);
   await prisma.outreachJourney.update({ where: { id: jid }, data: { bookingId: booking.id } });
 
   await tick(jid, new Date(t0.getTime() + 10 * MIN));
   check("phase → QUALIFICATION on booking", (await phaseOf(jid)) === "QUALIFICATION");
   check("BANT step materialised", (await stepStatus(jid, "BANT_QUALIFICATION")) === "DUE");
 
-  const verdict = qualifiedFromBant(4.2);
-  check("BANT 4.2 → Qualified YES", verdict === "YES");
-  await prisma.outreachJourney.update({ where: { id: jid }, data: { qualified: verdict, bantScoreAtQual: 4.2 } });
+  const verdict = qualifiedFromBant(3.4);
+  check("BANT 3.4 → Qualified YES", verdict === "YES");
+  await prisma.outreachJourney.update({ where: { id: jid }, data: { qualified: verdict, bantScoreAtQual: 3.4 } });
   await act(jid, "BANT_QUALIFICATION", new Date(t0.getTime() + 11 * MIN));
   await tick(jid, new Date(t0.getTime() + 12 * MIN));
   await act(jid, "KEY_METRICS_TRANSFER", new Date(t0.getTime() + 12 * MIN));
@@ -325,9 +326,9 @@ async function scenarioNotQualified() {
   const jid = journey.id;
   const discoAt = new Date(t0.getTime() + 100 * HR);
 
-  const booking = await makeBooking(lead.id, "nq@example.com", "+919000000004", discoAt, 1.2);
-  const verdict = qualifiedFromBant(1.2);
-  check("BANT 1.2 → Qualified NO", verdict === "NO");
+  const booking = await makeBooking(lead.id, "nq@example.com", "+919000000004", discoAt, 1);
+  const verdict = qualifiedFromBant(1);
+  check("BANT 1.0 → Qualified NO", verdict === "NO");
 
   await prisma.outreachJourney.update({ where: { id: jid }, data: { bookingId: booking.id, qualified: verdict } });
   await tick(jid, t0);

@@ -9,7 +9,7 @@ import { DIMENSION_BY_KEY, QUESTION_TEXT } from "./qualification";
  * What the prospect answered, and what each answer was worth.
  *
  * ── Why this module exists ──────────────────────────────────────────────────────
- * The verdict was visible everywhere and its REASONS nowhere. A specialist could see "2.6 / 5 -
+ * The verdict was visible everywhere and its REASONS nowhere. A specialist could see "2.1 / 4 -
  * Doubt" and had no way to learn which answer cost the prospect the marks, which is the only
  * form of the number that is any use on a call. Worse, the two places that did show answers
  * disagreed about which answers they were: the contact record listed only the LANDING PAGE's
@@ -35,7 +35,7 @@ export type BantAnswerLine = {
   /** Their answer, as a human label rather than a stored slug. */
   answer: string;
   dimension: BantDimension;
-  /** 0-5. Null when the question scores nothing (context questions) or the score was not kept. */
+  /** 0-4. Null when the question scores nothing (context questions) or the score was not kept. */
   score: number | null;
   /**
    * Whether this answer divides the average. `commitment` is the case this exists for: the form

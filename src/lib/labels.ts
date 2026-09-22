@@ -221,7 +221,7 @@ export const PAYMENT_PLAN_LABELS: Record<string, string> = {
   FULL_PAY: "Full pay",
 };
 
-// Weighted BANT recommendation (client thresholds: >3 confirm · 2-3 doubt · <2 cancel)
+// Weighted BANT recommendation (client thresholds on the 0-4 scale: >2.4 confirm · 1.6-2.4 doubt · <1.6 cancel)
 export const BANT_VERDICT_LABELS: Record<string, string> = {
   CONFIRM: "Confirm call",
   DOUBT: "Go - conversion doubtful",

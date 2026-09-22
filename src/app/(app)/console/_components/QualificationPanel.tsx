@@ -6,6 +6,7 @@ import { Card, Hint } from "@/components/ui/kit";
 import { SelectMenu } from "@/components/ui/SelectMenu";
 import { toast } from "@/components/ui/feedback";
 import { DIMENSION_LABELS, type QuestionOption } from "@/lib/qualification";
+import { BANT_MAX } from "@/lib/booking-intake";
 import type { IntakeMappingReport } from "@/server/intake-inspection";
 import type { BantDimension, QuestionKind } from "@prisma/client";
 import {
@@ -464,8 +465,8 @@ function toServerForm(fd: FormData, previous: QuestionOption[]): string | null {
     let { prev } = parsed[i];
     if (!label) return `Line ${i + 1} has no answer text`;
     const score = tail === null || tail === "" ? 0 : Number(tail);
-    if (!Number.isFinite(score) || score < 0 || score > 5) {
-      return `"${label}": the score after | must be a number from 0 to 5`;
+    if (!Number.isFinite(score) || score < 0 || score > BANT_MAX) {
+      return `"${label}": the score after | must be a number from 0 to ${BANT_MAX}`;
     }
     // Second pass: a reworded answer on the same line as an unmatched old one is that answer.
     if (!prev && previous[i] && !matched.has(previous[i].value)) {
@@ -576,7 +577,7 @@ function QuestionForm({
       </div>
 
       <label className="text-caption uppercase text-ink-3">
-        Answers - one per line: answer text | score (0-5)
+        Answers - one per line: answer text | score (0-4)
         <textarea
           name="options"
           rows={Math.max(4, (question?.options.length ?? 0) + 1)}

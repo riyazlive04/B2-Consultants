@@ -59,13 +59,13 @@ test("prospect books on the public /book page (BANT 5.0) → booking linked to t
 
   const b = await eventually(async () => (await bookingsFor(leadId))[0], "booking row");
   expect(b.status).toBe("BOOKED");
-  expect(b.bantAvg).toBe(5);
+  expect(b.bantAvg).toBe(4);
   expect(b.bantVerdict).toBe("CONFIRM");
   expect(b.slotStatus).toBe("BOOKED");
   const j = await journeyFor(leadId);
   expect(j.bookingId).toBe(b.id);
   expect(j.qualified).toBe("YES");
-  expect(j.bantScoreAtQual).toBe(5);
+  expect(j.bantScoreAtQual).toBe(4);
   expect((await liveLead(P.phone)).stage).toBe("STRATEGY_CALL_BOOKED");
   expect((await stageHistory(leadId)).map((h) => h.toStage)).toEqual(["NEW_LEAD", "WHATSAPP_SENT", "STRATEGY_CALL_BOOKED"]);
 });

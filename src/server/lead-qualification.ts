@@ -256,11 +256,11 @@ async function writeScore(
 }
 
 /**
- * `LeadAnswer.score` is an Int, but option scores are 0–5 with halves (`unsure: 1.5`).
- * Rounded rather than truncated so 1.5 → 2 not 1, and never below zero.
+ * Option scores are 0–4 with decimals (`unsure: 1.2`), so `LeadAnswer.score` is a Float. Rounded
+ * to one decimal so a weight multiplication cannot leave float noise, and never below zero.
  */
 function roundScore(score: number | null): number | null {
-  return score === null ? null : Math.max(0, Math.round(score));
+  return score === null ? null : Math.max(0, Math.round(score * 10) / 10);
 }
 
 /**

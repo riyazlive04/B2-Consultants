@@ -33,7 +33,7 @@ const VERDICT_STYLE: Record<string, string> = {
  * "which stored score do I show" once, for every surface.
  */
 function BantChips({ r }: { r: BookingRow }) {
-  // Null is "nobody has scored them", NOT zero. Rendering 0.0/5 would rank a prospect nobody
+  // Null is "nobody has scored them", NOT zero. Rendering 0.0/4 would rank a prospect nobody
   // asked alongside one who answered badly - see lib/bant-view.ts.
   if (!r.bant) {
     return (
@@ -49,12 +49,12 @@ function BantChips({ r }: { r: BookingRow }) {
   return (
     <span className="inline-flex items-center gap-1">
       <span
-        title={`Weighted average ${b.avg.toFixed(1)}/5 · ${BANT_ORIGIN_LABELS[b.origin]}`}
+        title={`Weighted average ${b.avg.toFixed(1)}/4 · ${BANT_ORIGIN_LABELS[b.origin]}`}
         className={`tnum rounded-full px-1.5 py-0.5 text-caption font-semibold ${
           b.avg > 3 ? "bg-ok-soft text-ok" : b.avg >= 2 ? "bg-watch-soft text-watch" : "bg-risk-soft text-risk"
         }`}
       >
-        {b.avg.toFixed(1)}/5
+        {b.avg.toFixed(1)}/4
       </span>
       <span className="hidden gap-0.5 sm:inline-flex">
         {dims.map(([k, on]) => (

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
 import { normalizeLevelCode } from "@/lib/levels";
 import type { QuestionOption } from "@/lib/qualification";
+import { BANT_MAX } from "@/lib/booking-intake";
 import { logActivity } from "./activity-log";
 import { QUALIFICATION_CACHE_TAG, shadowAgreement } from "./qualification";
 import { getQualificationConfig, writeQualificationConfig } from "./founder-config";
@@ -36,7 +37,7 @@ function firstError(e: z.ZodError): string {
 const optionSchema = z.object({
   value: z.string().trim().min(1),
   label: z.string().trim().min(1),
-  score: z.coerce.number().min(0).max(5),
+  score: z.coerce.number().min(0).max(BANT_MAX),
 });
 
 const questionSchema = z.object({

@@ -139,7 +139,7 @@ export async function seedBooking(opts: {
     [
       id, opts.slotId, opts.lead.id, opts.lead.name, assertFenced(FENCE.primary.email), opts.lead.phone,
       opts.status ?? "BOOKED", opts.confirmed ? iso(new Date()) : null,
-      opts.bantAvg ?? 3.6, 4, (opts.bantAvg ?? 3.6) > 3 ? "CONFIRM" : "DOUBT", iso(monthStart),
+      opts.bantAvg ?? 2.9, 4, (opts.bantAvg ?? 2.9) > 2.4 ? "CONFIRM" : "DOUBT", iso(monthStart),
     ],
   );
   recordCreated("discovery", { kind: "BookingRequest", id, label: opts.lead.name, cleanup: "cancel booking via Bookings UI" });

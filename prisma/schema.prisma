@@ -1665,7 +1665,7 @@ enum BantSource {
   MANUAL // set by a specialist in the back office
 }
 
-// Weighted-BANT recommendation (avg of the four 0–5 dimension scores).
+// Weighted-BANT recommendation (avg of the 0–4 answer scores).
 enum BantVerdict {
   CONFIRM // avg > 3 - confirm the call
   DOUBT // avg 2–3 - go ahead, but doubt they'll convert
@@ -1763,7 +1763,7 @@ model BookingRequest {
   howKnowUs              String?
 
   // BANT - derived on submit; bantScore is 0–4 (count of the four dimensions met).
-  // Weighted layer (client notes): every answer carries a 0–5 score; bantAvg is the
+  // Weighted layer (client notes): every answer carries a 0–4 score; bantAvg is the
   // mean of the four dimension scores and bantVerdict applies Ameen's thresholds
   // (>3 confirm · 2–3 doubt · <2 cancel). Recommendation only - no automated action.
   bantBudget    Boolean      @default(false)
@@ -4169,7 +4169,7 @@ model QualificationQuestion {
   text     String // the wording shown on the form - this IS the evidence
   helpText String?
   kind     QuestionKind  @default(SELECT)
-  /// [{ value, label, score }] - score is the 0–5 weighted layer the BANT average is taken
+  /// [{ value, label, score }] - score is the 0–4 weighted layer the BANT average is taken
   /// over. Null for free-text kinds, which score nothing.
   options  Json?
   /// ── INBOUND MAPPING ─────────────────────────────────────────────────────────────────
@@ -4221,9 +4221,9 @@ model LeadAnswer {
   question   QualificationQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
 
   answerRaw String
-  /// 0–5, resolved from `options` AT SUBMIT TIME. Stored rather than re-derived so a later
+  /// 0–4, resolved from `options` AT SUBMIT TIME. Stored rather than re-derived so a later
   /// reweight cannot retroactively change what this answer was worth.
-  score     Int?
+  score     Float?
   createdAt DateTime @default(now())
 
   @@unique([bookingRequestId, questionId])

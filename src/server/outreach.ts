@@ -19,7 +19,9 @@ import {
   isActionable,
   isTerminal,
   type JourneyState,
+  type Plan,
 } from "@/lib/outreach-engine";
+import { callTimeNotice, CALL_TIME_KINDS, mayRetryAutoSend } from "@/lib/call-notice";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { sendWhatsApp } from "./whatsapp";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
@@ -453,6 +455,10 @@ export async function runDueOutreach(): Promise<OutreachRun> {
       }
     }
 
+    // ── Close the bookkeeping steps the engine owns (Step 12). After materialise, so a row
+    // created in this pass is closed in the same pass rather than showing DUE for one tick.
+    await applyCompletions(id, plan.complete, now);
+
     // ── Supersede what events overtook.
     if (plan.supersede.length) {
       const res = await prisma.outreachStepLog.updateMany({
@@ -557,14 +563,41 @@ export async function runDueOutreach(): Promise<OutreachRun> {
       },
     });
     const staleSlot = stale?.booking?.slot?.startsAt;
-    if (
+    const sweepCandidate =
       stale &&
       !stale.whatsappConfirmed &&
       !stale.booking?.confirmedAt &&
       stale.booking?.status === "BOOKED" &&
       staleSlot &&
-      staleSlot < sweepBefore
-    ) {
+      staleSlot < sweepBefore;
+    /**
+     * ...and only if they were actually TOLD this time.
+     *
+     * "Never confirmed" is only evidence of a no-show when the prospect knew when to turn up. On
+     * 18/09/2026 a call moved to a new time, the reschedule notice and every reminder FAILED on
+     * Meta's per-user cap, and this sweep wrote her off two hours after a slot nobody had managed
+     * to tell her about. So: if nothing naming the CURRENT slot ever delivered, or the latest
+     * message naming it did not, the booking is left BOOKED, the lead is not moved, and a human is
+     * asked to look - the row goes RED on the queue and in Key Metrics, and an open task lands on
+     * the owner's contact card. Fail closed: a write-off that waits for a person costs a few hours;
+     * a wrong one tells a prospect we gave up on them.
+     */
+    const notice =
+      sweepCandidate && stale.booking
+        ? callTimeNotice(
+            await prisma.whatsAppMessage.findMany({
+              where: { bookingRequestId: stale.booking.id, direction: "OUTBOUND", kind: { in: [...CALL_TIME_KINDS] } },
+              select: { kind: true, status: true, params: true, createdAt: true },
+              orderBy: { createdAt: "desc" },
+              take: 50,
+            }),
+            formatDateTimeInZone(staleSlot!, "Asia/Kolkata"),
+          )
+        : null;
+    if (sweepCandidate && notice && !notice.told) {
+      await flagUntoldNoShow(id, leadId, lead.name, staleSlot!, notice.reason);
+    }
+    if (sweepCandidate && notice?.told && stale.booking) {
       const freedSlotId = stale.booking.slotId;
       await prisma.$transaction(async (tx) => {
         // NO_SHOW rather than CANCELLED: the slot was consumed - nobody else could book it - and
@@ -636,7 +669,27 @@ async function autoSendDue(
     }
 
     const isEmail = STEP_BY_KEY[s.step]?.channel === "EMAIL";
-    if (!isEmail && !mapToWhatsAppKind(s.step)) continue; // not a WhatsApp step - nothing to auto-send
+    const waKind = isEmail ? null : mapToWhatsAppKind(s.step);
+    if (!isEmail && !waKind) continue; // not a WhatsApp step - nothing to auto-send
+
+    /**
+     * Stop re-sending a step the provider keeps refusing. See `mayRetryAutoSend`: a FAILED send
+     * left the row DUE, and a DUE row is picked up again on the very next tick - under Meta's
+     * per-user marketing cap that is a fresh rejection every run, each one making the cap worse.
+     * Scoped to attempts since THIS step row was raised, so a returning prospect's new cycle is
+     * not held back by a failure from an old one.
+     */
+    if (waKind) {
+      const failures = await prisma.whatsAppMessage.findMany({
+        where: { kind: waKind, leadId: row.leadId, direction: "OUTBOUND", status: "FAILED", createdAt: { gte: s.createdAt } },
+        select: { error: true },
+        take: 5,
+      });
+      if (!mayRetryAutoSend(failures)) {
+        out.notes.push(`${row.lead.name} · ${s.step}: WhatsApp refused it (${failures[0]?.error ?? "send failed"}) - not retried automatically, left for manual send.`);
+        continue;
+      }
+    }
 
     // Shared with the instant-intro path. See `sopWhatsAppSend` for why this is one function.
     const res = isEmail
@@ -696,6 +749,71 @@ export async function sopWhatsAppSend(
     vars: whatsappVarsFor(row, step, specialistName),
     bodySummary: body,
     logSkips: false,
+  });
+}
+
+/** The task title the untold-no-show guard raises. Also its idempotency key - see below. */
+const UNTOLD_NOSHOW_TASK = "Discovery call time passed, but the prospect may never have been told it";
+
+/**
+ * The human hand-off for a no-show the sweep refused to write off (see the sweep in
+ * `runDueOutreach`). Reuses the two "needs attention" mechanisms the app already has rather than
+ * inventing a third: the journey's red flag, which the outreach queue card and the Key Metrics row
+ * already render with its reason, and an open ContactTask on the lead, which is what a specialist
+ * ticks off once they have spoken to the prospect or recorded the outcome.
+ *
+ * Idempotent across ticks - the sweep re-evaluates this booking every run until someone records
+ * what happened. The task is keyed on its title and "raised after this slot started", so one slot
+ * gets one task, and a later reschedule that also goes unheard gets its own. The flag is only
+ * raised when the row is not already red, so a reason a human or Step 16 wrote is never
+ * overwritten.
+ */
+async function flagUntoldNoShow(
+  journeyId: string,
+  leadId: string,
+  leadName: string,
+  slotAt: Date,
+  reason: "never-told" | "last-notice-undelivered",
+): Promise<void> {
+  const existing = await prisma.contactTask.findFirst({
+    where: { leadId, title: UNTOLD_NOSHOW_TASK, createdAt: { gte: slotAt } },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const when = formatDateTimeInZone(slotAt, "Asia/Kolkata");
+  const why =
+    reason === "never-told"
+      ? `no WhatsApp naming ${when} IST was ever delivered to them`
+      : `the latest WhatsApp naming ${when} IST did not deliver`;
+  const j = await prisma.outreachJourney.findUnique({
+    where: { id: journeyId },
+    select: { respDiscoId: true, respTouchpointId: true, lead: { select: { assignedToId: true } } },
+  });
+  await prisma.contactTask.create({
+    data: {
+      leadId,
+      title: UNTOLD_NOSHOW_TASK,
+      body:
+        `The call was at ${when} IST and was not confirmed, but ${why}. ` +
+        "It has NOT been marked a no-show. Reach the prospect, then record the outcome on the Bookings page (or rebook them).",
+      dueAt: new Date(),
+      // The disco owner first: they were meant to be on the call. Then whoever runs the SOP
+      // touchpoints, then the lead's owner - the first person who would plausibly act on it.
+      assignedToId: j?.respDiscoId ?? j?.respTouchpointId ?? j?.lead.assignedToId ?? null,
+    },
+  });
+  await prisma.outreachJourney.updateMany({
+    where: { id: journeyId, redFlag: false },
+    data: { redFlag: true, redFlagReason: `Call time passed, prospect may not have been told (${when} IST) - check before marking no-show` },
+  });
+  await logSystemActivity(SYSTEM_ACTORS.outreach, {
+    action: "outreach.disco.flag",
+    section: "outreach",
+    entityType: "OutreachJourney",
+    entityId: journeyId,
+    summary: `${leadName}'s call time passed but ${why} - left for a human instead of marking a no-show`,
+    meta: { slotAt: slotAt.toISOString(), reason },
   });
 }
 
@@ -951,6 +1069,22 @@ export async function journeyForBooking(bookingId: string, leadId: string | null
 }
 
 /**
+ * Write the engine's own completions (see `Plan.complete`).
+ *
+ * DUE-guarded, so it can never overwrite a step a human already skipped or ticked, and a second
+ * run is a no-op. `actedById` stays null - the app's convention for "the system did this" - and
+ * the note carries the reason, so the step log reads as done, by whom and why.
+ */
+async function applyCompletions(journeyId: string, complete: Plan["complete"], now: Date): Promise<void> {
+  for (const c of complete) {
+    await prisma.outreachStepLog.updateMany({
+      where: { journeyId, step: c.step, status: "DUE" },
+      data: { status: "SENT", actedAt: now, actedById: null, outcome: c.outcome, note: c.note },
+    });
+  }
+}
+
+/**
  * Re-plan a single journey right now - used after a human action so the next step appears
  * immediately instead of waiting for the cron tick. Same engine, same idempotency.
  */
@@ -971,6 +1105,7 @@ export async function refreshJourney(journeyId: string): Promise<void> {
       /* unique - already there */
     }
   }
+  await applyCompletions(journeyId, plan.complete, now);
   if (plan.supersede.length) {
     await prisma.outreachStepLog.updateMany({
       where: { journeyId, step: { in: plan.supersede }, status: "DUE" },

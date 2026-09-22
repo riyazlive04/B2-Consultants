@@ -2,6 +2,8 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { istWallToUtc } from "@/lib/dates";
 import { activityStamp } from "@/lib/activity-actions";
+import { formatDateTimeInZone } from "@/lib/format";
+import { callTimeNotice } from "@/lib/call-notice";
 import { getBookingRulesConfig } from "./founder-config";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import {
@@ -209,6 +211,22 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
       if (!b || b.status !== "BOOKED" || b.confirmedAt || !b.slotId || !b.slot) continue;
       if (b.slot.startsAt.getTime() <= now || b.slot.startsAt.getTime() > now + rules.autoCancelHours * HR) continue;
       if (!b.confirmSentAt || b.confirmSentAt.getTime() > now - REPLY_GRACE_MS) continue;
+      /**
+       * Silence is only a "no" if we actually asked. `confirmSentAt` is stamped BEFORE the send
+       * (so a failure cannot re-ask every tick), which means it proves an attempt, not a delivery:
+       * a request Meta refused, or one that named an older time, left a prospect who never saw the
+       * question to be cancelled for not answering it. Only a delivered request naming the
+       * CURRENT slot counts; otherwise the booking stays BOOKED for a human, and the post-call
+       * sweep will hand it to one rather than write it off.
+       */
+      const asked = callTimeNotice(
+        await prisma.whatsAppMessage.findMany({
+          where: { bookingRequestId: b.id, direction: "OUTBOUND", kind: "BOOKING_CONFIRM_REQUEST" },
+          select: { kind: true, status: true, params: true, createdAt: true },
+        }),
+        formatDateTimeInZone(b.slot.startsAt, "Asia/Kolkata"),
+      );
+      if (!asked.told) continue;
 
       const freedSlotId = b.slot.id;
       await prisma.$transaction(async (tx) => {

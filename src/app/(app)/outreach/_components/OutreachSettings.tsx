@@ -42,7 +42,7 @@ const SLA_FIELDS: {
   // "check back in 15 minutes" is a thing the founder wants to say, and a whole-hours box cannot
   // say it. `field` is the form key the action reads; the stored config keeps hours, and
   // `fromHours`/`toField` are the one conversion, applied here and nowhere else.
-  { key: "check1Hours", field: "check1Minutes", label: "Check 1 wait", hint: "Step 5 - minutes after the intro message", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
+  { key: "check1Hours", field: "check1Minutes", label: "Check 1 wait", hint: "Step 5 - minutes after OPT-IN (not after the intro); Step 6 never goes out before this", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
   { key: "check2Hours", field: "check2Minutes", label: "Check 2 wait", hint: "Step 7 - minutes after OPT-IN, not after the follow-up", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
   { key: "check3Hours", field: "check3Minutes", label: "Check 3 wait", hint: "Step 7c - minutes after OPT-IN; the telecaller is raised after this", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },
   { key: "finalCheckHours", field: "finalCheckMinutes", label: "Final check wait", hint: "Step 9 - minutes after OPT-IN; not booked moves the card to Lost", unit: "min", max: SLA_MINUTES_MAX, inMinutes: true },

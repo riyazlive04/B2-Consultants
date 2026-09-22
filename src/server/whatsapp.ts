@@ -11,6 +11,9 @@ import {
   type WatiTemplateConfig,
 } from "@/lib/whatsapp";
 import { normalizeWhatsappNumber } from "@/lib/phone";
+import { CALL_TIME_KINDS, dueReminderRung } from "@/lib/call-notice";
+import { sopOwnsCallReminders } from "@/lib/outreach-engine";
+import { coerceOutreachConfig } from "@/lib/outreach-sop";
 import type { SectionKey } from "@/lib/sections";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import {
@@ -639,15 +642,62 @@ export async function runDueReminders(): Promise<ReminderRun> {
   if (budget > 0 && cadence.bookingReminderEnabled && hasTemplate("BOOKING_REMINDER")) {
     const leadHours = cadence.bookingReminderLeadHours;
     const maxLead = Math.max(...leadHours);
-    const minLead = Math.min(...leadHours);
     const bookings = await prisma.bookingRequest.findMany({
       where: { status: "BOOKED", slot: { startsAt: { gt: new Date(now), lte: new Date(now + maxLead * HR) } } },
-      include: { slot: { select: { startsAt: true } } },
+      include: {
+        slot: { select: { startsAt: true } },
+        outreachJourney: { select: { phase: true, optInAt: true, qualified: true } },
+      },
       take: Math.min(budget * 2 + 50, 500),
     });
+    // Read directly rather than through server/outreach, which imports this module.
+    const sopCfg = coerceOutreachConfig(
+      (await prisma.appSetting.findUnique({ where: { key: "outreachConfig" } }))?.value ?? null,
+    );
+    // Numbers already reminded in THIS run: two live bookings on one phone must not both fire.
+    const remindedThisRun = new Set<string>();
     for (const b of bookings) {
       if (budget <= 0) break;
-      if (!(await throttleOk("BOOKING_REMINDER", { bookingRequestId: b.id }, { minSpacingMs: minLead * HR, maxCount: leadHours.length }))) continue;
+      if (!b.slot) continue;
+      /**
+       * One reminder system per call. When the SOP ladder will remind this prospect itself
+       * (Steps 14/15), this one stands down - see `sopOwnsCallReminders` for exactly when, and
+       * why every booking WITHOUT a live SOP journey keeps its reminders unchanged.
+       */
+      if (sopOwnsCallReminders(b.outreachJourney, sopCfg, new Date(now))) continue;
+
+      const number = normalizeWhatsappNumber(b.whatsapp || b.phone, runtime.settings.defaultCountry);
+      if (number && remindedThisRun.has(number)) continue;
+      /**
+       * Every earlier attempt that counts against this rung: anything that named this booking's
+       * time (the confirmation, a reschedule notice, earlier reminders - whatever their status),
+       * plus any reminder that already went to the same NUMBER for a different booking. The last
+       * part is the one that stops the 15-30 minute pairs of 17-18/09/2026: that number held two
+       * live bookings, each with its own reminder clock, so every reminder went out twice.
+       */
+      const prior = await prisma.whatsAppMessage.findMany({
+        where: {
+          direction: "OUTBOUND",
+          createdAt: { gte: new Date(b.slot.startsAt.getTime() - maxLead * HR) },
+          OR: [
+            { bookingRequestId: b.id, kind: { in: [...CALL_TIME_KINDS] } },
+            ...(number ? [{ kind: "BOOKING_REMINDER" as const, toNumber: number }] : []),
+          ],
+        },
+        select: { createdAt: true },
+      });
+      const remindersSoFar = await prisma.whatsAppMessage.count({
+        where: { bookingRequestId: b.id, kind: "BOOKING_REMINDER", direction: "OUTBOUND" },
+      });
+      const rung = dueReminderRung(
+        b.slot.startsAt,
+        leadHours,
+        new Date(now),
+        prior.map((p) => p.createdAt),
+        remindersSoFar,
+      );
+      if (rung === null) continue;
+      if (number) remindedThisRun.add(number);
       await record("BOOKING_REMINDER", await sendWhatsApp({
         kind: "BOOKING_REMINDER", to: b.whatsapp || b.phone, bookingRequestId: b.id, leadId: b.leadId ?? undefined, runtime,
         vars: {

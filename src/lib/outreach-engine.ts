@@ -64,9 +64,33 @@ export type Plan = {
   materialise: PlannedStep[];
   /** Rows overtaken by events - e.g. a reminder still DUE after the prospect confirmed. */
   supersede: OutreachStep[];
+  /**
+   * Internal bookkeeping steps the engine closes itself: DUE (or about to be materialised) and
+   * carrying no message, so there is nothing for a human to do but press a button. The shell
+   * writes them SENT with no `actedById`, this outcome and this note, so the audit trail says
+   * "done, by the system, and why" rather than the row silently disappearing.
+   */
+  complete: AutoCompletion[];
   /** The phase the journey should now be in. */
   phase: OutreachPhase;
 };
+
+export type AutoCompletion = { step: OutreachStep; outcome: string; note: string };
+
+/** The outcome stamped on a step the engine completed itself. */
+export const AUTO_COMPLETED = "AUTO_COMPLETED";
+
+/**
+ * Why Step 12 closes itself.
+ *
+ * OUT-09: Step 12 had no message and no working button - "Run the booking check" never touched
+ * it, only "Skip" did - and while it sat DUE it pinned the queue card's next slot, hiding Step 13,
+ * and held the journey out of DISCO_CONFIRMATION. Everything it "transfers" (appointment, BANT,
+ * Qualified, owners) is already on the booking and the journey, and the Key Metrics tab reads it
+ * from there, so the step is bookkeeping and nothing is lost by the system ticking it.
+ */
+export const KEY_METRICS_AUTO_NOTE =
+  "Completed by the system: the booking already records the Key Metrics fields, which the Key Metrics tab reads directly.";
 
 // ─────────────────────────────── Step 2: reaction time ───────────────────────────────
 
@@ -184,6 +208,11 @@ function plus(anchor: Date, hours: number): Date {
   return new Date(anchor.getTime() + hours * HR);
 }
 
+/** The later of a due time and a floor it must never precede. */
+function notBefore(due: Date, floor: Date): Date {
+  return due.getTime() >= floor.getTime() ? due : floor;
+}
+
 /** The same, for the one window the SOP expresses in minutes rather than hours. */
 function plusMinutes(anchor: Date, minutes: number): Date {
   return new Date(anchor.getTime() + minutes * 60_000);
@@ -193,6 +222,25 @@ function plusMinutes(anchor: Date, minutes: number): Date {
 export function isActionable(s: StepState, now: Date): boolean {
   return s.status === "DUE" && now.getTime() >= s.dueAt.getTime();
 }
+
+/**
+ * Every disco-ladder step that is about an UPCOMING call: the welcome, the confirmations, the
+ * confirmation calls, the cancellation notice and the release itself. Once the call time has
+ * passed none of them means anything, which is what `planJourney` uses this list for.
+ */
+const PRE_CALL_DISCO_STEPS: OutreachStep[] = [
+  "DISCO_WELCOME",
+  "DISCO_WELCOME_EMAIL",
+  "DISCO_REJECT_MSG",
+  "DISCO_REJECT_EMAIL",
+  "DISCO_CONFIRM_1",
+  "DISCO_CONFIRM_2",
+  "DISCO_CONFIRM_CALL_1",
+  "DISCO_CONFIRM_CALL_2",
+  "DISCO_CANCEL_MSG",
+  "DISCO_CANCEL_EMAIL",
+  "DISCO_CANCEL",
+];
 
 // ─────────────────────────────── Terminal phases ───────────────────────────────
 
@@ -224,12 +272,13 @@ export function planJourney(
   const firstCallMode = opts.firstCallMode ?? "immediate";
   const materialise: PlannedStep[] = [];
   const supersede: OutreachStep[] = [];
+  const complete: AutoCompletion[] = [];
   const add = (step: OutreachStep, dueAt: Date) => {
     if (!exists(state, step)) materialise.push({ step, dueAt });
   };
 
   if (isTerminal(state.phase)) {
-    return { materialise, supersede: pendingReminders(state), phase: state.phase };
+    return { materialise, supersede: pendingReminders(state), complete, phase: state.phase };
   }
 
   const reaction = reactionState(state, now, sla);
@@ -278,7 +327,19 @@ export function planJourney(
       add("CHECK_1", now);
     }
 
-    // Step 6 - only once Check 1 has actually run and come back "not booked".
+    /**
+     * Step 6 - only once Check 1 has actually run and come back "not booked", AND never before
+     * Check 1's own deadline.
+     *
+     * The floor is the fix for a Step 6 that went out five minutes after the intro (17/09/2026).
+     * Its due time was simply "whenever Check 1 was acted", and Check 1 can be acted EARLY: the
+     * queue card offers "Skip" on a check that is not due yet (it falls back to the first
+     * upcoming step when nothing is actionable), and a skipped check counts as acted. One press
+     * pulled "you haven't booked yet" forward by nearly two hours, onto someone who had been
+     * messaged minutes before. Pinning Step 6 to opt-in + `check1Hours` means no human action
+     * can make it earlier than the window the settings screen shows.
+     */
+    const followupFloor = plus(state.optInAt, sla.check1Hours);
     if (acted(state, "CHECK_1")) {
       if (firstCallMode === "after_check" && checkFoundNoBooking(state, "CHECK_1")) {
         /**
@@ -292,12 +353,12 @@ export function planJourney(
         // Step 6 waits behind that call rather than racing it. Messaging someone in the same pass
         // as ringing them reads as pestering, and the SOP's own order is call, then follow-up.
         if (acted(state, "FIRST_CALL")) {
-          add("FOLLOWUP_WHATSAPP", actedAt(state, "FIRST_CALL") ?? now);
-          add("FOLLOWUP_EMAIL", actedAt(state, "FIRST_CALL") ?? now);
+          add("FOLLOWUP_WHATSAPP", notBefore(actedAt(state, "FIRST_CALL") ?? now, followupFloor));
+          add("FOLLOWUP_EMAIL", notBefore(actedAt(state, "FIRST_CALL") ?? now, followupFloor));
         }
       } else {
-        add("FOLLOWUP_WHATSAPP", actedAt(state, "CHECK_1") ?? now);
-        add("FOLLOWUP_EMAIL", actedAt(state, "CHECK_1") ?? now);
+        add("FOLLOWUP_WHATSAPP", notBefore(actedAt(state, "CHECK_1") ?? now, followupFloor));
+        add("FOLLOWUP_EMAIL", notBefore(actedAt(state, "CHECK_1") ?? now, followupFloor));
       }
     }
 
@@ -321,9 +382,11 @@ export function planJourney(
     if (a6) add("CHECK_2", plus(state.optInAt, sla.check2Hours));
 
     // Step 7b - the SECOND WhatsApp chase, once Check 2 has come back with no booking. A human
-    // is not spent yet; the message gets one more turn first.
+    // is not spent yet; the message gets one more turn first. Floored on Check 2's deadline for
+    // the same reason Step 6 is floored on Check 1's: a check skipped early must not drag the
+    // message forward with it.
     if (acted(state, "CHECK_2")) {
-      add("FOLLOWUP_WHATSAPP_2", actedAt(state, "CHECK_2") ?? now);
+      add("FOLLOWUP_WHATSAPP_2", notBefore(actedAt(state, "CHECK_2") ?? now, plus(state.optInAt, sla.check2Hours)));
     }
 
     // Step 7c - Check 3, again from opt-in.
@@ -368,6 +431,22 @@ export function planJourney(
     add("BANT_QUALIFICATION", now);
     if (acted(state, "BANT_QUALIFICATION")) {
       add("KEY_METRICS_TRANSFER", actedAt(state, "BANT_QUALIFICATION") ?? now);
+      /**
+       * Step 12 completes itself (OUT-09) - see `KEY_METRICS_AUTO_NOTE`.
+       *
+       * Both a row about to be materialised in this pass AND one already sitting DUE are closed,
+       * so journeys stranded on Step 12 before this change are released on their next tick, not
+       * only new ones. A row a human already Skipped or ticked is left exactly as they left it.
+       *
+       * Releasing it cannot trigger a burst of confirmations for a call that is over: nothing in
+       * the disco ladder was ever gated on Step 12 (see the note above `callUpcoming`), every
+       * rung is gated on the call still being ahead, and any pre-call rung still DUE once the
+       * call time passes is superseded below.
+       */
+      const km = st(state, "KEY_METRICS_TRANSFER");
+      if (!km || km.status === "DUE") {
+        complete.push({ step: "KEY_METRICS_TRANSFER", outcome: AUTO_COMPLETED, note: KEY_METRICS_AUTO_NOTE });
+      }
     }
   }
 
@@ -385,13 +464,27 @@ export function planJourney(
    */
   const callUpcoming = state.discoAt !== null && state.discoAt.getTime() > now.getTime();
   /**
+   * ...and nothing already materialised for it may fire once it is over, either.
+   *
+   * `callUpcoming` only stops NEW rungs. A rung raised earlier keeps its original due time, and
+   * that time is not moved when the call is rescheduled: a Step 14 set for T-36h of a Monday call
+   * stays due on Sunday morning even after the call is pulled forward to Friday. Once the call
+   * time has passed, every pre-call rung still DUE is moot - "please confirm your call on
+   * [DATE]" for a date that is gone - so it is superseded here, before the auto-sender or a
+   * specialist on the queue card can reach it. `DISCO_CANCEL` goes with them: releasing the
+   * calendar for a call that already happened is the post-call sweep's decision, not this one's.
+   */
+  if (state.booked && state.discoAt !== null && !callUpcoming) {
+    supersede.push(...PRE_CALL_DISCO_STEPS.filter((s) => st(state, s)?.status === "DUE"));
+  }
+  /**
    * Gated on the QUALIFICATION VERDICT, not on Step 12.
    *
    * Step 12 (Key Metrics transfer + assign owners) is a human data-entry task into a sheet this
    * app has no integration with, so it can only ever be ticked by hand. Hanging every
    * customer-facing message off it meant the whole ladder waited on admin - which is exactly how
-   * two booked, qualified prospects reached their call time with nothing sent. Step 12 remains a
-   * to-do in the queue; it just no longer gates what the prospect receives.
+   * two booked, qualified prospects reached their call time with nothing sent. Step 12 no longer
+   * gates what the prospect receives, and since OUT-09 it completes itself (see above).
    */
   if (state.booked && callUpcoming && q && qualifiedContinues(q) && acted(state, "BANT_QUALIFICATION")) {
     /**
@@ -541,13 +634,16 @@ export function planJourney(
     return {
       materialise: [],
       supersede: [...new Set([...supersede, ...stillDue, ...materialise.map((m) => m.step)])],
+      // Nothing is completed on a journey that is ending: the row is superseded with the rest.
+      complete: [],
       phase,
     };
   }
 
   return {
     materialise: materialise.slice(),
-    supersede: supersede.concat(pendingReminders(state)),
+    supersede: Array.from(new Set(supersede.concat(pendingReminders(state)))),
+    complete,
     phase,
   };
 }
@@ -631,7 +727,14 @@ export function nextPhase(state: JourneyState, now: Date, sla: OutreachSla): Out
     if (state.qualified === "NO") return acted(state, "DISCO_CANCEL") ? "CANCELLED" : "QUALIFICATION";
     if (acted(state, "DISCO_CANCEL")) return "CANCELLED";
     if (state.whatsappConfirmed) return "AWAITING_DISCO";
-    if (state.qualified && qualifiedContinues(state.qualified) && acted(state, "KEY_METRICS_TRANSFER")) {
+    /**
+     * Gated on Step 11, not Step 12 (OUT-09). Step 12 used to be the gate, and as a step only a
+     * "Skip" could close it held journeys in QUALIFICATION indefinitely - and the WhatsApp YES
+     * handler only accepts a confirmation in DISCO_CONFIRMATION. Step 12 now completes itself,
+     * so it is acted whenever Step 11 is; reading Step 11 directly means the phase follows in the
+     * same pass rather than one tick later.
+     */
+    if (state.qualified && qualifiedContinues(state.qualified) && acted(state, "BANT_QUALIFICATION")) {
       return "DISCO_CONFIRMATION";
     }
     return "QUALIFICATION";
@@ -682,4 +785,46 @@ export function stepLabel(step: OutreachStep): string {
 
 export function stepSop(step: OutreachStep): string {
   return STEP_BY_KEY[step]?.sopStep ?? "";
+}
+
+// ─────────────────────────────── Who reminds about the call ───────────────────────────────
+
+export type ReminderOwnerJourney = {
+  phase: OutreachPhase;
+  optInAt: Date;
+  qualified: QualifiedVerdict | null;
+};
+
+/**
+ * Does the SOP ladder own the reminders for this booking, so the Bookings pre-call reminder
+ * (`BOOKING_REMINDER`, the WhatsApp cron) must stand down?
+ *
+ * Two systems used to remind about the same call: Steps 14/15 at T-36h/T-24h and the booking
+ * reminders at their own offsets, each unaware of the other. The SOP ladder is the founder's
+ * documented process and carries the confirm-or-cancel logic, so it wins wherever it is actually
+ * going to run. The booking reminder stays the reminder for every booking the SOP is NOT going to
+ * handle, so this is true only when ALL of these hold:
+ *   · the engine is armed and this journey is inside its `maxAgeDays` scan window - otherwise the
+ *     ladder never advances it and nothing would remind them at all,
+ *   · the journey is live (not terminal),
+ *   · and either the verdict is NO - the SOP is releasing this call, and "see you at 6 pm" would
+ *     contradict the notice telling them it is cancelled - or the verdict continues AND at least
+ *     one confirmation rung auto-sends. A ladder that only raises queue tasks for a human is not
+ *     an automatic reminder, and silencing the one that is would leave the prospect with none.
+ * No verdict yet (Step 11 open) keeps the booking reminder: nothing on the SOP side is due.
+ *
+ * Once the prospect confirms, the ladder stops by design and this stays true: the SOP's process
+ * ends there, and restarting a second system's reminders is exactly the doubling this removes.
+ */
+export function sopOwnsCallReminders(
+  journey: ReminderOwnerJourney | null,
+  cfg: Pick<OutreachConfig, "enabled" | "maxAgeDays" | "autoSend">,
+  now: Date,
+): boolean {
+  if (!journey || !cfg.enabled) return false;
+  if (isTerminal(journey.phase)) return false;
+  if (journey.optInAt.getTime() < now.getTime() - cfg.maxAgeDays * 24 * HR) return false;
+  if (journey.qualified === "NO") return true;
+  if (!journey.qualified || !qualifiedContinues(journey.qualified)) return false;
+  return cfg.autoSend.DISCO_CONFIRM_1 === true || cfg.autoSend.DISCO_CONFIRM_2 === true;
 }

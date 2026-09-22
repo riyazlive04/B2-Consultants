@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
-import { LeadSource, type LeadStage } from "@prisma/client";
+import { LeadSource, type LeadStage, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { qualifiedFromBant } from "@/lib/outreach-sop";
+import { ALREADY_BOOKED_MESSAGE, findLiveBookingForPerson } from "@/lib/booking-identity";
+import { normalizeWhatsappNumber } from "@/lib/phone";
 import { markDiscoveryConfirmed } from "./lead-stage-auto";
 import { journeyForBooking, markSopDiscoConfirmed } from "./outreach";
 import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/consent";
@@ -178,6 +180,31 @@ function clean(v: string | undefined): string | null {
   return v && v.trim() ? v.trim() : null;
 }
 
+/**
+ * The live discovery booking this person already holds, if any - see `findLiveBookingForPerson`.
+ *
+ * "Live" is BOOKED with the slot still ahead. A call whose time has passed without anyone
+ * recording an outcome is not live: it must not stop that person booking again.
+ *
+ * The candidate set is small by construction (upcoming booked calls only), so the phone
+ * comparison runs in JS, where libphonenumber can normalise both sides - SQL cannot.
+ */
+async function liveBookingFor(
+  db: Pick<Prisma.TransactionClient, "bookingRequest">,
+  person: { phone: string; whatsapp?: string | null; email: string },
+) {
+  const live = await db.bookingRequest.findMany({
+    where: { status: "BOOKED", slot: { is: { startsAt: { gt: new Date() } } } },
+    select: { id: true, phone: true, whatsapp: true, email: true },
+    take: 1000,
+  });
+  return findLiveBookingForPerson(
+    live,
+    { phone: person.phone, whatsapp: person.whatsapp ?? null, email: person.email },
+    (raw) => normalizeWhatsappNumber(raw),
+  );
+}
+
 export async function submitBooking(form: FormData): Promise<ActionResult> {
   // Public endpoint, and the most expensive one here: a submission consumes a finite calendar
   // slot AND fires a WATI confirmation. Two dimensions, charged atomically:
@@ -216,6 +243,26 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   // posts no consent and is refused - the safe direction for a rule about not storing people.
   if (d.consent !== CONSENT_VALUE) {
     return { ok: false, error: "Please tick the consent box so we can store your details and contact you." };
+  }
+
+  /**
+   * ── One live discovery call per person ────────────────────────────────────────
+   * On 17/09/2026 one number held two live bookings, and every confirmation and reminder went
+   * out twice - each booking ran its own clock, and nothing could say which call was real.
+   *
+   * A second submission is REFUSED, not treated as a reschedule. Both were considered; refusing
+   * wins on every count the founder cares about here: it sends nothing (a reschedule sends a
+   * "your call moved" notice), it never moves an existing appointment on the strength of a form
+   * that might have been filled by someone else sharing the number, and the one booking that
+   * exists stays the single source of truth. Moving a call stays a deliberate act by the team,
+   * who can see both the booking and the message this returns.
+   *
+   * Checked HERE, before anything is written: the auto-disqualify branch below would otherwise
+   * move a live booker's lead to LOST and close their journey on the strength of a duplicate
+   * form. Re-checked inside the claiming transaction for the race between two open tabs.
+   */
+  if (await liveBookingFor(prisma, d)) {
+    return { ok: false, error: ALREADY_BOOKED_MESSAGE };
   }
 
   const rules = await getBookingRulesConfig();
@@ -396,6 +443,12 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   let bookingId: string;
   try {
     bookingId = await prisma.$transaction(async (tx) => {
+      // The same person-level rule as above, re-read at the last moment before the claim. It
+      // closes the gap of a second tab submitted while this one was scoring and upserting; two
+      // submissions committing in the same few milliseconds could still both pass (there is no
+      // per-person lock), and would then show as a visible pair on the Bookings page.
+      if (await liveBookingFor(tx, d)) throw new Error("ALREADY_BOOKED");
+
       const claim = await tx.appointmentSlot.updateMany({
         where: { id: slot.id, status: "OPEN" },
         data: { status: "BOOKED" },
@@ -474,6 +527,9 @@ export async function submitBooking(form: FormData): Promise<ActionResult> {
   } catch (e) {
     if (e instanceof Error && e.message === "SLOT_TAKEN") {
       return { ok: false, error: "That time was just taken - please pick another slot." };
+    }
+    if (e instanceof Error && e.message === "ALREADY_BOOKED") {
+      return { ok: false, error: ALREADY_BOOKED_MESSAGE };
     }
     throw e;
   }

@@ -18,9 +18,21 @@ import {
   nextPhase,
   normalizeEmail,
   emailsMatch,
+  sopOwnsCallReminders,
+  AUTO_COMPLETED,
+  KEY_METRICS_AUTO_NOTE,
   type JourneyState,
   type StepState,
 } from "../outreach-engine";
+import {
+  callTimeNotice,
+  dueReminderRung,
+  mayRetryAutoSend,
+  namedCallTime,
+  type NoticeRow,
+} from "../call-notice";
+import { findLiveBookingForPerson } from "../booking-identity";
+import { formatDateTimeInZone } from "../format";
 import {
   DEFAULT_SLA,
   qualifiedFromBant,
@@ -923,5 +935,382 @@ describe("instant intro - the config fails closed", () => {
       assert.equal(coerceOutreachConfig({ firstCallMode: v }).firstCallMode, "immediate");
     }
     assert.equal(coerceOutreachConfig({ firstCallMode: "after_check" }).firstCallMode, "after_check");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// OUT-09 - Step 12 completes itself; nothing stale fires for a call that is over
+// ═══════════════════════════════════════════════════════════════════
+
+/** Steps that put a message in front of the prospect. */
+function isMessageStep(s: OutreachStep): boolean {
+  return OUTREACH_STEPS.some((d) => d.step === s && (d.channel === "WHATSAPP" || d.channel === "EMAIL"));
+}
+
+describe("Step 12 (Key Metrics transfer) auto-completes", () => {
+  const discoAt = at(100 * HR);
+  const qualifiedNoStep12 = (q: "YES" | "MAYBE" | "NO" = "YES") =>
+    done(base({ phase: "QUALIFICATION", booked: true, qualified: q, discoAt }), "BANT_QUALIFICATION", T0);
+  const withDueStep12 = (s: JourneyState): JourneyState => ({
+    ...s,
+    steps: { ...s.steps, KEY_METRICS_TRANSFER: step({ status: "DUE", dueAt: T0, actedAt: null }) },
+  });
+
+  test("a freshly qualified booking materialises Step 12 AND completes it in the same pass", () => {
+    const p = planJourney(qualifiedNoStep12(), at(1 * MIN), DEFAULT_SLA);
+    assert.ok(p.materialise.find((m) => m.step === "KEY_METRICS_TRANSFER"), "the row still exists, as the audit trail");
+    const c = p.complete.find((x) => x.step === "KEY_METRICS_TRANSFER");
+    assert.ok(c, "and the engine closes it itself");
+    assert.equal(c.outcome, AUTO_COMPLETED);
+    assert.equal(c.note, KEY_METRICS_AUTO_NOTE);
+  });
+
+  test("a journey already stuck on a DUE Step 12 is released on its next tick", () => {
+    const p = planJourney(withDueStep12(qualifiedNoStep12()), at(3 * 24 * HR), DEFAULT_SLA);
+    assert.ok(p.complete.some((x) => x.step === "KEY_METRICS_TRANSFER"));
+    assert.equal(p.materialise.find((m) => m.step === "KEY_METRICS_TRANSFER"), undefined, "never a second row");
+  });
+
+  test("a Step 12 a human already Skipped or ticked is left exactly as they left it", () => {
+    for (const status of ["SKIPPED", "SENT"] as const) {
+      const s: JourneyState = {
+        ...qualifiedNoStep12(),
+        steps: { ...qualifiedNoStep12().steps, KEY_METRICS_TRANSFER: step({ status }) },
+      };
+      assert.deepEqual(planJourney(s, at(1 * MIN), DEFAULT_SLA).complete, [], `${status} is not rewritten`);
+    }
+  });
+
+  test("Step 12 is not raised or completed before Step 11 has been acted", () => {
+    const s = base({ phase: "QUALIFICATION", booked: true, qualified: null, discoAt });
+    const p = planJourney(s, at(1 * MIN), DEFAULT_SLA);
+    assert.deepEqual(p.complete, []);
+    assert.equal(p.materialise.find((m) => m.step === "KEY_METRICS_TRANSFER"), undefined);
+  });
+
+  test("the phase reaches DISCO_CONFIRMATION without anyone touching Step 12", () => {
+    assert.equal(nextPhase(withDueStep12(qualifiedNoStep12("MAYBE")), at(1 * MIN), DEFAULT_SLA), "DISCO_CONFIRMATION");
+    // Qualified = NO still waits in QUALIFICATION for the release, exactly as before.
+    assert.equal(nextPhase(qualifiedNoStep12("NO"), at(1 * MIN), DEFAULT_SLA), "QUALIFICATION");
+  });
+
+  test("a terminal journey completes nothing", () => {
+    const s: JourneyState = { ...withDueStep12(qualifiedNoStep12()), phase: "CANCELLED" };
+    assert.deepEqual(planJourney(s, at(1 * MIN), DEFAULT_SLA).complete, []);
+  });
+
+  /**
+   * The production case (17-22/09/2026): welcome sent, Step 12 stuck DUE, a Step 14 still DUE
+   * whose due time was set for the ORIGINAL Monday slot, and the call itself pulled forward to
+   * Friday and now over. Releasing Step 12 must not send her anything.
+   */
+  test("releasing a stuck Step 12 after the call has passed plans no message and kills the stale rung", () => {
+    const friday = at(60 * HR);
+    let s = done(base({ phase: "QUALIFICATION", booked: true, qualified: "YES", discoAt: friday }), "BANT_QUALIFICATION", T0);
+    s = done(s, "DISCO_WELCOME", at(5 * MIN));
+    s = done(s, "DISCO_WELCOME_EMAIL", at(5 * MIN));
+    s = {
+      ...withDueStep12(s),
+      steps: {
+        ...withDueStep12(s).steps,
+        // T-36h of the old Monday slot, i.e. AFTER the Friday call.
+        DISCO_CONFIRM_1: step({ status: "DUE", dueAt: at(80 * HR), actedAt: null }),
+      },
+    };
+    const p = planJourney(s, at(120 * HR), DEFAULT_SLA);
+    assert.ok(p.complete.some((x) => x.step === "KEY_METRICS_TRANSFER"), "Step 12 is released");
+    assert.deepEqual(p.materialise.filter((m) => isMessageStep(m.step)), [], "nothing is planned for a call that is over");
+    assert.ok(p.supersede.includes("DISCO_CONFIRM_1"), "the stale Step 14 can no longer be sent by anyone");
+  });
+});
+
+describe("pre-call rungs are superseded once the call time passes", () => {
+  const discoAt = at(100 * HR);
+  const withDue = (st: OutreachStep): JourneyState => {
+    let s = done(base({ phase: "DISCO_CONFIRMATION", booked: true, qualified: "YES", discoAt }), "BANT_QUALIFICATION", T0);
+    s = done(s, "KEY_METRICS_TRANSFER", T0);
+    s = done(s, "DISCO_WELCOME", T0);
+    s = done(s, "DISCO_CONFIRM_1", at(64 * HR));
+    return { ...s, steps: { ...s.steps, [st]: step({ status: "DUE", dueAt: at(76 * HR), actedAt: null }) } };
+  };
+
+  test("still live one minute before the call", () => {
+    const p = planJourney(withDue("DISCO_CONFIRM_2"), new Date(discoAt.getTime() - MIN), DEFAULT_SLA);
+    assert.ok(!p.supersede.includes("DISCO_CONFIRM_2"));
+  });
+
+  test("superseded at the call time and after", () => {
+    for (const now of [discoAt, new Date(discoAt.getTime() + MIN), at(200 * HR)]) {
+      assert.ok(planJourney(withDue("DISCO_CONFIRM_2"), now, DEFAULT_SLA).supersede.includes("DISCO_CONFIRM_2"));
+    }
+  });
+
+  test("the release itself goes too - releasing a past call is the post-call sweep's decision", () => {
+    assert.ok(planJourney(withDue("DISCO_CANCEL"), at(101 * HR), DEFAULT_SLA).supersede.includes("DISCO_CANCEL"));
+  });
+
+  test("the Level 2 no-show chase is NOT touched - it only exists after the call", () => {
+    const s: JourneyState = { ...withDue("DISCO_NOSHOW_CALL_1"), discoNoShow: true };
+    assert.ok(!planJourney(s, at(101 * HR), DEFAULT_SLA).supersede.includes("DISCO_NOSHOW_CALL_1"));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Step 6 is never due before opt-in + Check 1's window
+// ═══════════════════════════════════════════════════════════════════
+
+describe("Step 6 never goes out before opt-in + check1Hours (2h by default)", () => {
+  const introAt = at(1 * MIN);
+  const chased = () => done(done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", introAt), "FIRST_CALL", at(4 * MIN), "YES");
+  const skipped = (s: JourneyState, st: OutreachStep, when: Date): JourneyState => ({
+    ...s,
+    steps: { ...s.steps, [st]: step({ status: "SKIPPED", dueAt: at(2 * HR), actedAt: when }) },
+  });
+  const due = (p: ReturnType<typeof planJourney>, st: OutreachStep) => p.materialise.find((m) => m.step === st)!.dueAt.getTime();
+
+  test("Check 1 skipped five minutes after the intro: Step 6 still waits for opt-in + 2h", () => {
+    const p = planJourney(skipped(chased(), "CHECK_1", at(6 * MIN)), at(6 * MIN), DEFAULT_SLA);
+    assert.equal(due(p, "FOLLOWUP_WHATSAPP"), at(2 * HR).getTime());
+    assert.equal(due(p, "FOLLOWUP_EMAIL"), at(2 * HR).getTime(), "the email twin is held to the same floor");
+    const wa = new Date(due(p, "FOLLOWUP_WHATSAPP"));
+    assert.equal(isActionable(step({ status: "DUE", dueAt: wa }), at(2 * HR - MIN)), false, "not a minute early");
+    assert.equal(isActionable(step({ status: "DUE", dueAt: wa }), at(2 * HR)), true, "due exactly on the floor");
+  });
+
+  test("a check that ran on time keeps its own time - the floor never delays the SOP", () => {
+    const s = done(chased(), "CHECK_1", at(2 * HR + 3 * MIN), "NOT_BOOKED");
+    assert.equal(due(planJourney(s, at(2 * HR + 3 * MIN), DEFAULT_SLA), "FOLLOWUP_WHATSAPP"), at(2 * HR + 3 * MIN).getTime());
+  });
+
+  test("the floor follows the configured window, not a hard-coded 2h", () => {
+    const p = planJourney(skipped(chased(), "CHECK_1", at(6 * MIN)), at(6 * MIN), { ...DEFAULT_SLA, check1Hours: 3 });
+    assert.equal(due(p, "FOLLOWUP_WHATSAPP"), at(3 * HR).getTime());
+  });
+
+  test("after_check mode: an early-skipped check cannot pull Step 6 forward either", () => {
+    const s = skipped(done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", introAt), "CHECK_1", at(6 * MIN));
+    const p = planJourney(s, at(6 * MIN), DEFAULT_SLA, { firstCallMode: "after_check" });
+    assert.equal(due(p, "FOLLOWUP_WHATSAPP"), at(2 * HR).getTime());
+  });
+
+  test("after_check mode: a call logged minutes after an early check does not release Step 6 early", () => {
+    let s = done(done(base({ phase: "BOOKING_CHASE" }), "INTRO_WHATSAPP", introAt), "CHECK_1", at(6 * MIN), "NOT_BOOKED");
+    s = done(s, "FIRST_CALL", at(8 * MIN), "YES");
+    const p = planJourney(s, at(8 * MIN), DEFAULT_SLA, { firstCallMode: "after_check" });
+    assert.equal(due(p, "FOLLOWUP_WHATSAPP"), at(2 * HR).getTime());
+  });
+
+  test("the late-contact branch: the immediate booking check no longer drags Step 6 to minute 30", () => {
+    const s = done(base({ phase: "BOOKING_CHASE" }), "CHECK_1", at(30 * MIN), "NOT_BOOKED");
+    assert.equal(due(planJourney(s, at(30 * MIN), DEFAULT_SLA), "FOLLOWUP_WHATSAPP"), at(2 * HR).getTime());
+  });
+
+  test("Step 7b is floored on Check 2's window the same way", () => {
+    let s = done(chased(), "CHECK_1", at(2 * HR), "NOT_BOOKED");
+    s = done(s, "FOLLOWUP_WHATSAPP", at(2 * HR));
+    s = skipped(s, "CHECK_2", at(2 * HR + 5 * MIN));
+    const p = planJourney(s, at(2 * HR + 5 * MIN), DEFAULT_SLA);
+    assert.equal(due(p, "FOLLOWUP_WHATSAPP_2"), at(DEFAULT_SLA.check2Hours * HR).getTime());
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// One reminder system per call
+// ═══════════════════════════════════════════════════════════════════
+
+describe("sopOwnsCallReminders - when the booking pre-call reminder stands down", () => {
+  const armed = { enabled: true, maxAgeDays: 30, autoSend: { DISCO_CONFIRM_1: true } };
+  const live = { phase: "DISCO_CONFIRMATION" as const, optInAt: T0, qualified: "YES" as const };
+  const now = at(24 * HR);
+
+  test("a live, qualified journey whose confirmations auto-send owns the reminders", () => {
+    assert.equal(sopOwnsCallReminders(live, armed, now), true);
+    assert.equal(sopOwnsCallReminders({ ...live, qualified: "MAYBE" }, armed, now), true);
+    assert.equal(sopOwnsCallReminders(live, { ...armed, autoSend: { DISCO_CONFIRM_2: true } }, now), true);
+  });
+
+  test("a confirmed journey keeps ownership - the ladder stopping is the SOP's decision", () => {
+    assert.equal(sopOwnsCallReminders({ ...live, phase: "AWAITING_DISCO" }, armed, now), true);
+  });
+
+  test("Qualified = NO owns it regardless: the call is being released", () => {
+    assert.equal(sopOwnsCallReminders({ ...live, qualified: "NO", phase: "QUALIFICATION" }, { ...armed, autoSend: {} }, now), true);
+  });
+
+  test("the booking reminder keeps working wherever the SOP will not remind", () => {
+    assert.equal(sopOwnsCallReminders(null, armed, now), false, "no journey at all");
+    assert.equal(sopOwnsCallReminders(live, { ...armed, enabled: false }, now), false, "engine off");
+    assert.equal(sopOwnsCallReminders({ ...live, phase: "CANCELLED" }, armed, now), false, "journey over");
+    assert.equal(sopOwnsCallReminders({ ...live, qualified: null, phase: "QUALIFICATION" }, armed, now), false, "no verdict yet");
+    assert.equal(sopOwnsCallReminders(live, { ...armed, autoSend: {} }, now), false, "confirmations are manual only");
+    assert.equal(sopOwnsCallReminders(live, armed, at(31 * 24 * HR)), false, "outside the engine's scan window");
+  });
+});
+
+describe("dueReminderRung - one reminder per rung, never a retry", () => {
+  const slot = at(48 * HR);
+  const lead = [24, 2];
+  const t = (hoursBefore: number) => new Date(slot.getTime() - hoursBefore * HR);
+
+  test("nothing before the widest rung opens, the rung itself exactly when it does", () => {
+    assert.equal(dueReminderRung(slot, lead, new Date(t(24).getTime() - MIN), []), null);
+    assert.equal(dueReminderRung(slot, lead, t(24), []), 24);
+  });
+
+  test("a rung that was attempted - even FAILED - is not retried on later runs", () => {
+    const failedAt = new Date(t(24).getTime() + 15 * MIN);
+    for (const h of [23, 16, 8, 3]) {
+      assert.equal(dueReminderRung(slot, lead, t(h), [failedAt]), null, `no retry at T-${h}h`);
+    }
+  });
+
+  test("the next rung fires at its own offset, not min(leadHours) after the previous one", () => {
+    const first = t(24);
+    assert.equal(dueReminderRung(slot, lead, t(22), [first]), null, "the old cadence re-sent here, at T-22h");
+    assert.equal(dueReminderRung(slot, lead, t(2), [first]), 2);
+    assert.equal(dueReminderRung(slot, lead, t(1), [first, t(2)]), null, "and only once");
+  });
+
+  test("booked inside a rung: the booking confirmation covers it", () => {
+    const confirmation = t(20);
+    assert.equal(dueReminderRung(slot, lead, t(19.75), [confirmation]), null);
+    assert.equal(dueReminderRung(slot, lead, t(2), [confirmation]), 2);
+  });
+
+  test("never more reminders in total than configured offsets (bookings reminded under the old cadence)", () => {
+    // Old cadence: T-24h and T-22h already went out. The T-2h rung must not add a third.
+    assert.equal(dueReminderRung(slot, lead, t(2), [t(24), t(22)], 2), null);
+    assert.equal(dueReminderRung(slot, lead, t(2), [t(24)], 1), 2);
+  });
+
+  test("no reminder once the call has started, and nonsense offsets are ignored", () => {
+    assert.equal(dueReminderRung(slot, lead, slot, []), null);
+    assert.equal(dueReminderRung(slot, [0, Number.NaN, -3], t(1), []), null);
+  });
+
+  test("a reminder already sent to the same number for a twin booking closes the rung", () => {
+    // Two live bookings on one phone (17/09/2026) each ran their own clock; the caller passes the
+    // number's reminders as attempts, so the second booking stays quiet.
+    const twinReminder = new Date(t(24).getTime() + 5 * MIN);
+    assert.equal(dueReminderRung(slot, lead, new Date(t(24).getTime() + 20 * MIN), [twinReminder]), null);
+  });
+});
+
+describe("mayRetryAutoSend - a refused SOP send is not hammered", () => {
+  test("first attempt, and one retry after a blip", () => {
+    assert.equal(mayRetryAutoSend([]), true);
+    assert.equal(mayRetryAutoSend([{ error: "WATI 502" }]), true);
+  });
+  test("two failures and the step is left for a human", () => {
+    assert.equal(mayRetryAutoSend([{ error: "WATI 502" }, { error: "timeout" }]), false);
+  });
+  test("Meta's marketing cap is never retried automatically", () => {
+    const cap = "Message undeliverable as Meta has restricted it for higher quality messaging";
+    assert.equal(mayRetryAutoSend([{ error: cap }]), false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// The no-show sweep only writes off someone who was told the time
+// ═══════════════════════════════════════════════════════════════════
+
+describe("callTimeNotice - was the CURRENT call time delivered?", () => {
+  const friday = new Date("2026-09-18T13:15:00.000Z"); // 6:45 pm IST
+  const monday = new Date("2026-09-21T12:30:00.000Z"); // 6:00 pm IST
+  const label = formatDateTimeInZone(friday, "Asia/Kolkata");
+  const old = formatDateTimeInZone(monday, "Asia/Kolkata");
+  const split = (l: string) => ({ date: l.slice(0, l.lastIndexOf(", ")), time: l.slice(l.lastIndexOf(", ") + 2) });
+  const row = (kind: NoticeRow["kind"], status: NoticeRow["status"], vars: Record<string, string> | null, h: number): NoticeRow => ({
+    kind,
+    status,
+    params: vars ? { template: "t", vars } : null,
+    createdAt: at(h * HR),
+  });
+
+  test("the SOP's date + time rejoin to exactly the formatter's label", () => {
+    assert.equal(namedCallTime({ vars: split(label) }), label);
+    assert.equal(namedCallTime({ vars: { slot_time: label } }), label);
+    assert.equal(namedCallTime(null), null);
+  });
+
+  test("the production case: told the OLD time, the reschedule and every reminder FAILED -> not told", () => {
+    const rows = [
+      row("BOOKING_CONFIRMATION", "READ", { slot_time: old }, 0),
+      row("SOP_DISCO_WELCOME", "DELIVERED", split(old), 1),
+      row("BOOKING_RESCHEDULED", "FAILED", { slot_time: label }, 2),
+      row("BOOKING_REMINDER", "FAILED", { slot_time: label }, 3),
+      row("BOOKING_REMINDER", "FAILED", { slot_time: label }, 11),
+    ];
+    assert.deepEqual(callTimeNotice(rows, label), { told: false, reason: "never-told" });
+  });
+
+  test("delivered once, but the latest word about this time bounced -> a human looks first", () => {
+    const rows = [
+      row("BOOKING_RESCHEDULED", "DELIVERED", { slot_time: label }, 2),
+      row("BOOKING_REMINDER", "FAILED", { slot_time: label }, 11),
+    ];
+    assert.deepEqual(callTimeNotice(rows, label), { told: false, reason: "last-notice-undelivered" });
+  });
+
+  test("the latest message naming this time was delivered -> told, the sweep may proceed", () => {
+    const rows = [row("BOOKING_REMINDER", "FAILED", { slot_time: label }, 3), row("SOP_DISCO_CONFIRM_2", "SENT", split(label), 5)];
+    assert.deepEqual(callTimeNotice(rows, label), { told: true });
+  });
+
+  test("QUEUED and SKIPPED are not deliveries; rows with no params never count", () => {
+    assert.equal(callTimeNotice([row("BOOKING_CONFIRMATION", "QUEUED", { slot_time: label }, 0)], label).told, false);
+    assert.equal(callTimeNotice([row("BOOKING_CONFIRMATION", "SKIPPED", { slot_time: label }, 0)], label).told, false);
+    assert.equal(callTimeNotice([row("BOOKING_CONFIRMATION", "READ", null, 0)], label).told, false);
+    assert.equal(callTimeNotice([], label).told, false);
+  });
+
+  test("a kind that does not name the call time is ignored", () => {
+    assert.equal(callTimeNotice([row("SOP_FOLLOWUP", "READ", { slot_time: label }, 0)], label).told, false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// One live discovery booking per person
+// ═══════════════════════════════════════════════════════════════════
+
+describe("findLiveBookingForPerson", () => {
+  /**
+   * A stand-in for libphonenumber, whose metadata bundle does not load under this runner: digits
+   * only, a leading 0 or a bare 10-digit number read as Indian. Enough to prove the MATCHING rule;
+   * the real normaliser is what the server passes in.
+   */
+  const norm = (raw: string | null): string | null => {
+    const d = (raw ?? "").replace(/\D/g, "");
+    if (!d) return null;
+    if (d.length === 11 && d.startsWith("0")) return `91${d.slice(1)}`;
+    if (d.length === 10) return `91${d}`;
+    return d;
+  };
+  const find = (person: Parameters<typeof findLiveBookingForPerson>[1]) => findLiveBookingForPerson(live, person, norm);
+  const live = [
+    { id: "a", phone: "+91 72049 11304", whatsapp: null, email: "ameen@example.com" },
+    { id: "b", phone: "+49 1512 3456789", whatsapp: "+91 98765 43210", email: "other@example.com" },
+  ];
+
+  test("the same number in another format is the same person", () => {
+    assert.equal(find({ phone: "917204911304", email: "new@example.com" })?.id, "a");
+    assert.equal(find({ phone: "07204911304", email: "new@example.com" })?.id, "a");
+  });
+
+  test("a WhatsApp number on either side counts", () => {
+    assert.equal(find({ phone: "+91 98765 43210", email: "x@example.com" })?.id, "b");
+    assert.equal(
+      find({ phone: "+44 20 7946 0958", whatsapp: "+91 72049 11304", email: "x@example.com" })?.id,
+      "a",
+    );
+  });
+
+  test("the same email, whatever its case or spacing, is the same person", () => {
+    assert.equal(find({ phone: "+44 20 7946 0958", email: "  AMEEN@example.com " })?.id, "a");
+  });
+
+  test("a different person books freely", () => {
+    assert.equal(find({ phone: "+44 20 7946 0958", email: "someone@example.com" }), null);
+    assert.equal(findLiveBookingForPerson([], { phone: "917204911304", email: "ameen@example.com" }, norm), null);
   });
 });

@@ -9,6 +9,7 @@
  */
 
 import type { WhatsAppKind, WhatsAppStatus } from "@prisma/client";
+import { STAGE_KIND_HINTS, STAGE_KIND_LABELS, STAGE_KIND_VARS, STAGE_WHATSAPP_KINDS } from "./stage-messages";
 
 // ── Touchpoints (mirror the Prisma WhatsAppKind enum, in display order) ──
 export const WHATSAPP_KINDS = [
@@ -43,6 +44,8 @@ export const WHATSAPP_KINDS = [
   "BOOKING_AUTO_CANCELLED",
   "SSS_RESCHEDULED",
   "BOOK_ORDER",
+  // One per pipeline stage - see lib/stage-messages.ts.
+  ...STAGE_WHATSAPP_KINDS,
 ] as const satisfies readonly WhatsAppKind[];
 
 export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
@@ -77,6 +80,7 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   BOOKING_AUTO_CANCELLED: "Booking · auto-cancelled",
   SSS_RESCHEDULED: "SSS · rescheduled notice",
   BOOK_ORDER: "Book order to publisher",
+  ...STAGE_KIND_LABELS,
 };
 
 /** One-line description of when each touchpoint fires - shown in the settings UI. */
@@ -113,6 +117,7 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   BOOKING_AUTO_CANCELLED: "Bookings confirmation loop - no confirmation before the cut-off, so the slot was released; invites them to rebook.",
   SSS_RESCHEDULED: "SSS calendar - the Success Strategy Session was moved to a new time (founder blocked the slot/day, or a manual/drag reschedule).",
   BOOK_ORDER: "Sent to the book PUBLISHER, not the student - the order for a student's level books. Triggered by hand from Students → Book orders.",
+  ...STAGE_KIND_HINTS,
 };
 
 /**
@@ -183,6 +188,7 @@ export const WHATSAPP_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = 
   // vendor, so `publisher_name` addresses them and `student_name` is the subject of the order.
   // Kept equal to BOOK_ORDER_VARS in lib/book-order-message.ts - a test asserts it.
   BOOK_ORDER: ["publisher_name", "order_ref", "level", "student_name", "ship_to", "ship_phone"],
+  ...STAGE_KIND_VARS,
 };
 
 export const WHATSAPP_STATUS_LABELS: Record<WhatsAppStatus, string> = {

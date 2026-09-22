@@ -3170,6 +3170,25 @@ enum WhatsAppKind {
   // this one goes to the VENDOR's number. That is why its variables carry the student's name and
   // ship-to rather than addressing the recipient as the subject.
   BOOK_ORDER // order for a student's level books, sent to the publisher/vendor
+
+  // ── Stage messages: one per LeadStage, sent every time a lead enters it (lib/stage-messages.ts).
+  STAGE_NEW_LEAD
+  STAGE_WHATSAPP_SENT
+  STAGE_STRATEGY_CALL_BOOKED
+  STAGE_DISCO_BOOKED
+  STAGE_DISCO_NOT_BOOKED
+  STAGE_DISCO_COMPLETED
+  STAGE_SSS_BOOKED
+  STAGE_SSS_COMPLETED
+  STAGE_PROPOSAL_SENT
+  STAGE_SENT_TO_WORKSHOP
+  STAGE_WORKSHOP_FOLLOWUP
+  STAGE_OFFER_FOLLOWUP
+  STAGE_DEPOSIT_FOLLOWUP
+  STAGE_DEPOSIT_PAID
+  STAGE_WON
+  STAGE_LOST
+  STAGE_NO_SHOW
 }
 
 enum WhatsAppStatus {

@@ -1,5 +1,6 @@
 import { runDueOutreach } from "@/server/outreach";
 import { runCallbackChase } from "@/server/callback-chase";
+import { runStageMessages } from "@/server/stage-messages";
 import { cronRoute } from "@/server/cron-route";
 import { RATE_RULES } from "@/lib/rate-limit";
 
@@ -45,7 +46,12 @@ async function runOutreachTick() {
   const callbackChase = await runCallbackChase().catch((e) => ({
     error: e instanceof Error ? e.message : String(e),
   }));
-  return { sop, callbackChase };
+  // Stage messages last: they read the stage the two engines above may just have moved, and they
+  // skip a system move the SOP has just messaged about (server/stage-messages.ts).
+  const stageMessages = await runStageMessages().catch((e) => ({
+    error: e instanceof Error ? e.message : String(e),
+  }));
+  return { sop, callbackChase, stageMessages };
 }
 
 export const { GET, POST } = cronRoute("outreach", runOutreachTick, RATE_RULES.cronFrequent);

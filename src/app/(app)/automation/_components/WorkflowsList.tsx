@@ -195,6 +195,11 @@ export default function WorkflowsList({
             <Settings size={14} /> Global Workflow Settings
           </Link>
         )}
+        {isAdmin && (
+          <Link href="/automation/stage-messages" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink-2 hover:bg-surface-2">
+            <Settings size={14} /> Stage messages
+          </Link>
+        )}
       </div>
 
       {openFolder && (

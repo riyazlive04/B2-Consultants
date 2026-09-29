@@ -8,7 +8,7 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import type { ActivityFilterOptions } from "@/server/activity-metrics";
 
 /**
- * The filter bar. A plain GET <form> — every control writes a search param, so the result is
+ * The filter bar. A plain GET <form> - every control writes a search param, so the result is
  * a URL the founder can bookmark or send to someone ("here's exactly what I'm looking at").
  * No client state holds the filters; the server already has them.
  *

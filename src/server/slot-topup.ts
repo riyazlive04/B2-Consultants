@@ -8,7 +8,7 @@ import { getBookingCalendars, getBookingRulesConfig } from "./founder-config";
  * Keep every named booking calendar stocked to a rolling horizon.
  *
  * THE PROBLEM THIS SOLVES: appointment slots were only ever created by the founder's one-off
- * "generate for this range" form. On 23 Jul 2026 the newest slot in production was 15 Jul — the
+ * "generate for this range" form. On 23 Jul 2026 the newest slot in production was 15 Jul - the
  * booking page had been offering an empty calendar for eight days, at the very top of the funnel,
  * and nothing surfaced it. A batch that has to be re-run by hand cannot fail safe.
  *
@@ -16,7 +16,7 @@ import { getBookingCalendars, getBookingRulesConfig } from "./founder-config";
  *  · it never updates or deletes, so a BOOKED or BLOCKED slot is untouchable by construction;
  *  · dedupe is by exact `startsAt`, using the same `slotStartsForRange` the manual form uses, so
  *    hand-made and auto-made slots collide rather than accumulating near-duplicate pairs;
- *  · it is idempotent — a second tick in the same hour creates nothing.
+ *  · it is idempotent - a second tick in the same hour creates nothing.
  *
  * It is therefore safe to run hourly, and it does, from `runDailyMaintenance`. There is no
  * "already ran today" guard on purpose: a top-up that only fires once a day would leave the
@@ -48,7 +48,7 @@ export async function ensureBookingSlots(): Promise<SlotTopUpResult> {
    * Dedupe used to be on `startsAt` alone, which was correct while one pattern owned the whole
    * calendar. With a calendar per person it silently breaks: Asma already holding 18:00 would
    * mark 18:00 "taken" for Ameen too, so the second calendar could never generate a slot at any
-   * time the first one already ran — and the failure looks exactly like the pattern not working.
+   * time the first one already ran - and the failure looks exactly like the pattern not working.
    * Two people being free at once is the normal case, not a collision.
    */
   const horizonAll = new Date(today);
@@ -132,7 +132,7 @@ export async function ensureBookingSlots(): Promise<SlotTopUpResult> {
 }
 
 /**
- * How many bookable OPEN slots remain in the future — the number that was 0 for eight days.
+ * How many bookable OPEN slots remain in the future - the number that was 0 for eight days.
  * Read by the home-page attention list so an empty calendar announces itself instead of being
  * discovered by a prospect.
  */

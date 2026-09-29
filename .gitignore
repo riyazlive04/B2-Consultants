@@ -81,3 +81,6 @@ e2e-*.png
 # the same values are live on the hosted database. Committing it publishes working admin
 # credentials. Keep it on the machine that needs it and nowhere else.
 scripts/set-local-passwords.mjs
+
+# Pre-launch data reset exports - contain lead PII and message bodies. Never commit.
+prelaunch-reset-backup-*.json

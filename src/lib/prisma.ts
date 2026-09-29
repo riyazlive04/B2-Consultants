@@ -6,7 +6,7 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
  * `PRISMA_LOG_QUERIES=true` prints every statement.
  *
  * The one number that predicts how a page feels on the pooled Supabase connection is its ROUND
- * TRIP COUNT — at ~204ms RTT, twenty queries is four seconds no matter how fast each one is, and
+ * TRIP COUNT - at ~204ms RTT, twenty queries is four seconds no matter how fast each one is, and
  * a local timing (sub-millisecond RTT) hides that completely. This makes the count observable
  * before a change ships rather than after someone reports the page is slow.
  *

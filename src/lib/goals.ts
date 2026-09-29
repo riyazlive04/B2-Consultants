@@ -1,5 +1,5 @@
 /**
- * Goals — PURE. What the founder is steering the team towards.
+ * Goals - PURE. What the founder is steering the team towards.
  *
  * A goal is (metric, target, window, who). Progress is DERIVED from the same
  * append-only history the Arena scores, so a goal can never disagree with the
@@ -42,7 +42,7 @@ export type Goal = {
   userId: string | null;
   teamProfileId: string | null;
   period: GoalPeriod;
-  /** YYYY-MM-DD — the first day of the period */
+  /** YYYY-MM-DD - the first day of the period */
   periodStart: string;
   targetValue: number;
   active: boolean;

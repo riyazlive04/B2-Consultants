@@ -19,7 +19,7 @@ import {
   type CallNoteExtraction,
 } from "@/lib/call-note-extract";
 
-/** Every field the form owns, as strings — the shape we re-seed defaults from. */
+/** Every field the form owns, as strings - the shape we re-seed defaults from. */
 type Seed = {
   leadId: string;
   callDate: string;
@@ -56,7 +56,7 @@ function readForm(form: HTMLFormElement): Seed {
  * Fold a suggestion into what's on screen. Three rules, and they're all about not
  * overwriting a human:
  *   - BANT ticks are only ever ADDED. If the specialist ticked Budget and the note doesn't
- *     mention money, that's their call — they were on the phone, the extractor wasn't.
+ *     mention money, that's their call - they were on the phone, the extractor wasn't.
  *   - the date only lands in "SSS date" when the outcome is actually a booked strategy
  *     session, and only when that field is still empty. A follow-up date is not an SSS date.
  *   - `notes` and `highlyQualified` are never touched: one is what the human typed, the
@@ -93,7 +93,7 @@ export function OutcomeSection({
   // Extraction re-seeds the form's defaults and remounts it (see `formKey`). The fields are a
   // mix of plain inputs and stateful popovers (SelectMenu, DatePicker), so writing to the DOM
   // would update the value a form submits while leaving the visible control showing the old
-  // one — remounting from new defaults is the only way all three field kinds agree.
+  // one - remounting from new defaults is the only way all three field kinds agree.
   const [seed, setSeed] = useState<Seed | null>(null);
   const [seedNo, setSeedNo] = useState(0);
   const [suggestion, setSuggestion] = useState<{ extraction: CallNoteExtraction; fallbackReason: string | null } | null>(null);
@@ -264,7 +264,7 @@ export function OutcomeSection({
 }
 
 /**
- * What the extractor did, and why. Every tick is shown with the phrase it came from — a
+ * What the extractor did, and why. Every tick is shown with the phrase it came from - a
  * suggestion you can't check is one you have to either trust blindly or redo by hand, and
  * these fields feed commission.
  */
@@ -277,7 +277,7 @@ function SuggestionPanel({
   const ticks = (Object.keys(x.bant) as (keyof BantFlags)[]).filter((k) => x.bant[k]);
   const weak = x.confidence < LOW_CONFIDENCE;
   // The AI is asked to quote the note verbatim, so its evidence gets quote marks. The rules
-  // pass reports which RULE fired ("affordability mentioned") — quoting that would imply the
+  // pass reports which RULE fired ("affordability mentioned") - quoting that would imply the
   // specialist wrote those words, which is exactly the kind of small lie this panel exists
   // to avoid.
   const cite = (phrase: string) => (x.source === "ai" ? `“${phrase}”` : phrase);
@@ -287,7 +287,7 @@ function SuggestionPanel({
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="text-label font-semibold uppercase text-ink-3">From the note</span>
         <Pill tone={x.source === "ai" ? "primary" : "neutral"}>{x.source === "ai" ? "AI" : "Rules"}</Pill>
-        {weak && <Pill tone="warn">Low confidence — read it yourself</Pill>}
+        {weak && <Pill tone="warn">Low confidence - read it yourself</Pill>}
       </div>
 
       <p className="text-sm text-ink">{summariseExtraction(x)}</p>
@@ -296,18 +296,18 @@ function SuggestionPanel({
         <ul className="mt-2 space-y-1 text-caption text-ink-2">
           {x.evidence.outcome && (
             <li>
-              · Outcome — <span className="italic">{cite(x.evidence.outcome)}</span>
+              · Outcome - <span className="italic">{cite(x.evidence.outcome)}</span>
             </li>
           )}
           {ticks.map((k) => (
             <li key={k}>
-              · {BANT_LABELS[k]} — <span className="italic">{cite(x.evidence[k] ?? "—")}</span>
+              · {BANT_LABELS[k]} - <span className="italic">{cite(x.evidence[k] ?? "-")}</span>
             </li>
           ))}
           {x.evidence.followUpDate && (
             <li>
-              · Follow-up {x.followUpDate} — <span className="italic">{cite(x.evidence.followUpDate)}</span>
-              {x.outcome !== "QUALIFIED_FOR_SSS" && " (not filled in — that's the SSS date field)"}
+              · Follow-up {x.followUpDate} - <span className="italic">{cite(x.evidence.followUpDate)}</span>
+              {x.outcome !== "QUALIFIED_FOR_SSS" && " (not filled in - that's the SSS date field)"}
             </li>
           )}
         </ul>
@@ -322,7 +322,7 @@ function SuggestionPanel({
       {x.highlyQualified && (
         // Read-only on purpose: highlyQualified is capability-guarded and drives commission.
         <p className="mt-1 text-caption text-ink-2">
-          Reads as <span className="font-semibold text-ink">highly qualified</span> — tick it yourself if you agree.
+          Reads as <span className="font-semibold text-ink">highly qualified</span> - tick it yourself if you agree.
         </p>
       )}
       {result.fallbackReason && <p className="mt-2 text-caption text-ink-3">{result.fallbackReason}</p>}

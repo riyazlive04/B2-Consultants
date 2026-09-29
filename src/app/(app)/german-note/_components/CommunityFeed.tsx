@@ -34,7 +34,7 @@ const CATEGORIES: { key: GnPostCategoryKey; label: string; fg: string; bg: strin
 ];
 const categoryOf = (key: GnPostCategoryKey) => CATEGORIES.find((c) => c.key === key) ?? CATEGORIES[0];
 
-/** Resize an image to a max 1200px longest side JPEG data URL — keeps posts light. */
+/** Resize an image to a max 1200px longest side JPEG data URL - keeps posts light. */
 function resizeImage(file: File, maxDim = 1200): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -88,7 +88,7 @@ function Avatar({ name, image, level }: { name: string | null; image: string | n
       )}
       {level !== undefined && (
         <span
-          title={`Level ${level} — earn levels when your posts and comments get likes`}
+          title={`Level ${level} - earn levels when your posts and comments get likes`}
           className="absolute -bottom-1 -right-1 grid h-[18px] w-[18px] place-items-center rounded-full bg-primary text-caption font-bold leading-none text-on-accent ring-2 ring-[var(--surface)]"
         >
           {level}
@@ -147,7 +147,7 @@ function CommentRow({
         <button
           type="button"
           disabled={!canPost}
-          // the count vanishes at 0, leaving an icon-only control — name it explicitly
+          // the count vanishes at 0, leaving an icon-only control - name it explicitly
           aria-label={c.likedByMe ? "Unlike comment" : "Like comment"}
           aria-pressed={c.likedByMe}
           className={`mt-1 inline-flex min-h-10 items-center gap-1 text-xs font-medium ${
@@ -269,7 +269,7 @@ export function CommunityFeed({
             <Select name="category" aria-label="Category" options={CATEGORIES.map((c) => ({ value: c.key, label: c.label }))} />
           </div>
           <div className="mt-3">
-            <MentionTextArea name="body" candidates={candidates} rows={3} placeholder={`${placeholder} — use @ to mention`} required maxLength={5000} />
+            <MentionTextArea name="body" candidates={candidates} rows={3} placeholder={`${placeholder} - use @ to mention`} required maxLength={5000} />
           </div>
           {image && (
             <div className="relative mt-3 inline-block">
@@ -321,7 +321,7 @@ export function CommunityFeed({
 
       {posts.length === 0 && (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          No posts yet — be the first to say hallo! 👋
+          No posts yet - be the first to say hallo! 👋
         </p>
       )}
       {posts.length > 0 && visible.length === 0 && (

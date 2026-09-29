@@ -3,25 +3,29 @@ import type { OutreachPhase, OutreachStep, QualifiedVerdict } from "@prisma/clie
 import { prisma } from "@/lib/prisma";
 import { formatDateTimeInZone } from "@/lib/format";
 import { reactionState, isActionable, type JourneyState } from "@/lib/outreach-engine";
-import { STEP_BY_KEY, CALL_SCRIPTS } from "@/lib/outreach-sop";
-import { readOutreachConfig, projectJourney, renderStep, type JourneyRow } from "./outreach";
+import {
+  STEP_BY_KEY,
+  CALL_SCRIPTS,
+  DEFAULT_SLA,
+  type OutreachSla,
+} from "@/lib/outreach-sop";
+import { readOutreachConfig, projectJourney, renderStep, JOURNEY_INCLUDE, type JourneyRow } from "./outreach";
 
 /**
- * Outreach SOP — reads for the queue and the Key Metrics sheet.
+ * Outreach SOP - reads for the queue and the Key Metrics sheet.
  *
  * Two surfaces, one source: the queue is "what do I do next", Key Metrics is
  * "Key Metrics Sales B2_2026.xlsx" as the SOP knows it. Both project the same journey rows.
  */
 
-const INCLUDE = {
-  steps: true,
-  // `bantAvg` rides along so a prospect scored on the LANDING PAGE — rather than on our booking
-  // form — still shows a Key Metrics score instead of an em dash.
-  lead: { select: { id: true, name: true, phone: true, email: true, bantAvg: true } },
-  booking: { include: { slot: { select: { startsAt: true } } } },
-  respTouchpoint: { select: { id: true, name: true } },
-  respDisco: { select: { id: true, name: true } },
-} as const;
+// The include lives in `outreach.ts` and is imported, NOT restated here.
+//
+// It was restated here once, and the copy fell behind: `projectJourney` grew
+// `discoNoShow: row.lead.outcomes.length` for the Level 2 no-show chase while this copy still
+// selected `lead` without `outcomes`. The `as JourneyRow` cast below hid the mismatch from the
+// compiler, so both /outreach and /my-desk threw "Cannot read properties of undefined" in
+// production. Sharing the one include means the next field added to the projection is a build
+// error here rather than a 500 on two pages.
 
 // ─────────────────────────────── The due queue ───────────────────────────────
 
@@ -30,13 +34,13 @@ export type QueueStep = {
   step: OutreachStep;
   sopStep: string;
   label: string;
-  channel: "WHATSAPP" | "CALL" | "SYSTEM";
+  channel: "WHATSAPP" | "CALL" | "EMAIL" | "SYSTEM";
   dueAt: string;
   /** Actionable right now (materialised, DUE, and past its due time). */
   actionable: boolean;
   /** Rendered message, variables resolved. Null for CALL/SYSTEM steps. */
   body: string | null;
-  /** SOP variables that could not be resolved — blocks the send until fixed. */
+  /** SOP variables that could not be resolved - blocks the send until fixed. */
   unresolved: string[];
   script: (typeof CALL_SCRIPTS)[OutreachStep] | null;
 };
@@ -45,7 +49,7 @@ export type QueueRow = {
   journeyId: string;
   leadId: string;
   name: string;
-  /** Null since the Synamate import. Shown on the card only — the ladder's own sends go through
+  /** Null since the Synamate import. Shown on the card only - the ladder's own sends go through
    *  sendWhatsApp(), which refuses a missing number and logs a SKIPPED row. */
   phone: string | null;
   email: string | null;
@@ -123,7 +127,7 @@ function toQueueRow(row: JourneyRow, now: Date, sla: ReturnType<typeof defaultSl
     whatsappConfirmed: row.whatsappConfirmed,
     salesCallConfirmed: row.salesCallConfirmed,
     highlyQualified: row.highlyQualified,
-    // Booking first, then the lead's opt-in score — the same precedence `bantForQualification`
+    // Booking first, then the lead's opt-in score - the same precedence `bantForQualification`
     // applies when the engine takes the Step 11 verdict, so the queue shows the number the
     // verdict was (or will be) based on rather than a different one.
     bantAvg: row.booking?.bantAvg ?? row.lead.bantAvg ?? null,
@@ -132,26 +136,23 @@ function toQueueRow(row: JourneyRow, now: Date, sla: ReturnType<typeof defaultSl
   };
 }
 
-function defaultSla() {
-  return {
-    reactionMinutes: 5,
-    check1Hours: 2,
-    check2Hours: 1,
-    finalCheckHours: 2,
-    discoConfirm1LeadHours: 36,
-    discoConfirm2LeadHours: 24,
-    discoCancelLeadHours: 12,
-    sssConfirm1LeadHours: 24,
-    sssConfirm2LeadHours: 12,
-    sssCancelLeadHours: 10,
-  };
+/**
+ * The fallback windows used when no config row has been saved yet.
+ *
+ * This WAS a hand-written copy of DEFAULT_SLA, and it had already drifted - it still said
+ * `check2Hours: 1` after the real default moved to 3, so a queue rendered before the founder
+ * ever opened Settings measured its reaction state against numbers the engine no longer used.
+ * Returning the single source of truth is the fix; a second copy would only drift again.
+ */
+function defaultSla(): OutreachSla {
+  return { ...DEFAULT_SLA };
 }
 
 export type OutreachQueue = {
   enabled: boolean;
-  /** Actionable now — the specialist's actual to-do list. */
+  /** Actionable now - the specialist's actual to-do list. */
   due: QueueRow[];
-  /** Materialised but not yet due — visible so nothing is a surprise. */
+  /** Materialised but not yet due - visible so nothing is a surprise. */
   upcoming: QueueRow[];
   /** Live journeys with nothing outstanding (waiting on the prospect or another role). */
   waiting: QueueRow[];
@@ -164,12 +165,12 @@ export async function getOutreachQueue(): Promise<OutreachQueue> {
 
   const rows = await prisma.outreachJourney.findMany({
     where: { phase: { notIn: ["IGNORED", "CANCELLED", "CLOSED_NOT_HQ", "COMPLETED"] } },
-    include: INCLUDE,
+    include: JOURNEY_INCLUDE,
     orderBy: { optInAt: "desc" },
     take: 300,
   });
 
-  const mapped = rows.map((r) => toQueueRow(r as JourneyRow, now, cfg.sla, cfg.defaultSpecialistName));
+  const mapped = rows.map((r) => toQueueRow(r, now, cfg.sla, cfg.defaultSpecialistName));
 
   const due = mapped.filter((r) => r.next !== null);
   const upcoming = mapped.filter((r) => r.next === null && r.steps.length > 0);
@@ -203,7 +204,7 @@ export async function getOutreachQueue(): Promise<OutreachQueue> {
  * "Key Metrics Sales B2_2026.xlsx", as the SOP knows it.
  *
  * The six Step-12 transfer fields plus every column the later steps write. Note `apptTimeCet` is a
- * real conversion of the stored UTC instant, not a copy of the IST string — checklist §L asks for
+ * real conversion of the stored UTC instant, not a copy of the IST string - checklist §L asks for
  * exactly that ("Timezone conversion (booking time → CET) is correct, not just copied raw").
  *
  * The zone LABEL is computed rather than hardcoded: Europe/Berlin is CEST (UTC+2) from late March
@@ -217,7 +218,7 @@ export type KeyMetricsRow = {
   cetLabel: string | null;
   name: string;
   email: string | null;
-  /** Null since the Synamate import — this is a sheet column, not a send target. */
+  /** Null since the Synamate import - this is a sheet column, not a send target. */
   phone: string | null;
   bantScore: number | null;
   qualified: QualifiedVerdict | null;
@@ -233,7 +234,7 @@ export type KeyMetricsRow = {
   redReason: string | null;
 };
 
-/** "CET" or "CEST" for a given instant — the real abbreviation, not an assumption. */
+/** "CET" or "CEST" for a given instant - the real abbreviation, not an assumption. */
 function berlinLabel(d: Date): string {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Berlin",
@@ -245,7 +246,7 @@ function berlinLabel(d: Date): string {
 export async function getKeyMetrics(): Promise<KeyMetricsRow[]> {
   const rows = await prisma.outreachJourney.findMany({
     where: { bookingId: { not: null } },
-    include: INCLUDE,
+    include: JOURNEY_INCLUDE,
     orderBy: { optInAt: "desc" },
     take: 500,
   });
@@ -275,7 +276,7 @@ export async function getKeyMetrics(): Promise<KeyMetricsRow[]> {
       email: row.lead.email,
       phone: row.lead.phone,
       // `bantScoreAtQual` first: it is the score the verdict was actually taken on and survives a
-      // later re-tune. Then the booking's, then the LEAD's — the landing page's own answers, for
+      // later re-tune. Then the booking's, then the LEAD's - the landing page's own answers, for
       // a prospect whose booking carries no score of its own.
       bantScore: row.bantScoreAtQual ?? row.booking?.bantAvg ?? row.lead.bantAvg ?? null,
       qualified: row.qualified,
@@ -301,11 +302,11 @@ export async function getAssignableUsers() {
   });
 }
 
-/** Dormant / closed journeys — Step 9's IGNORE bucket. Kept in records, never deleted (§I). */
+/** Dormant / closed journeys - Step 9's IGNORE bucket. Kept in records, never deleted (§I). */
 export async function getClosedJourneys() {
   const rows = await prisma.outreachJourney.findMany({
     where: { phase: { in: ["IGNORED", "CANCELLED", "CLOSED_NOT_HQ", "COMPLETED"] } },
-    include: INCLUDE,
+    include: JOURNEY_INCLUDE,
     orderBy: { updatedAt: "desc" },
     take: 200,
   });

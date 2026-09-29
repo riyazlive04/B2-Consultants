@@ -1,13 +1,13 @@
 /**
- * Funnel health — the executive dashboard's Row 5 (rebuild spec §4).
+ * Funnel health - the executive dashboard's Row 5 (rebuild spec §4).
  *
  * NOT the same funnel as `/funnel`. That screen is the PRD's five-stage weekly SNAPSHOT, typed in
  * by an admin (Awareness → Lead captured → Discovery call → Proposal sent → Enrolled). Row 5 is the
- * nine-stage OUTREACH funnel, measured from what actually happened — lead stage history, booking
+ * nine-stage OUTREACH funnel, measured from what actually happened - lead stage history, booking
  * confirmations and the discovery verdict. Two different questions; keeping them separate is
  * deliberate, because a hand-typed snapshot cannot answer "where are we leaking".
  *
- * The row exists to answer one question — WHERE IS THE FUNNEL LOSING THE MOST — so the headline is
+ * The row exists to answer one question - WHERE IS THE FUNNEL LOSING THE MOST - so the headline is
  * a single leak, not nine percentages. The spec's own example is the discovery-call show rate: the
  * JD sets 80%, the six-month actual is 62%, and that gap is worth more than every other stage
  * combined.
@@ -33,10 +33,10 @@ export type StageDef = {
   readonly key: StageKey;
   readonly label: string;
   readonly owner: StageOwner;
-  /** The spec's published six-month benchmark count (§4 Row 5) — the fallback when the app has too little history of its own. */
+  /** The spec's published six-month benchmark count (§4 Row 5) - the fallback when the app has too little history of its own. */
   readonly specCount: number;
   /**
-   * A rate this stage is HELD to, independent of history — currently only the discovery-call
+   * A rate this stage is HELD to, independent of history - currently only the discovery-call
    * show rate, which the JD fixes at 80%. A benchmark says "this is what we did"; a target says
    * "this is what we agreed to do". Missing the target matters even when history agrees with it.
    */
@@ -58,7 +58,7 @@ export const FUNNEL_STAGES: readonly StageDef[] = [
 
 export type StageCounts = Record<StageKey, number>;
 
-/** Build a StageCounts by mapping each stage to a value — one place, no per-key spread. */
+/** Build a StageCounts by mapping each stage to a value - one place, no per-key spread. */
 function countsFrom(valueOf: (s: StageDef) => number): StageCounts {
   return Object.fromEntries(FUNNEL_STAGES.map((s) => [s.key, valueOf(s)])) as StageCounts;
 }
@@ -67,14 +67,14 @@ export function emptyCounts(): StageCounts {
   return countsFrom(() => 0);
 }
 
-/** The spec's published benchmark, as counts — used when the app has too little history of its own. */
+/** The spec's published benchmark, as counts - used when the app has too little history of its own. */
 export function specCounts(): StageCounts {
   return countsFrom((s) => s.specCount);
 }
 
 /**
  * Conversion into a stage, from the stage above it. `null` for the first stage (nothing feeds it)
- * and whenever the stage above is zero — a rate out of nothing is not 0%, it is unanswerable, and
+ * and whenever the stage above is zero - a rate out of nothing is not 0%, it is unanswerable, and
  * showing 0% would read as a catastrophic leak on a quiet month.
  */
 export function rateOf(counts: StageCounts, index: number): number | null {
@@ -118,7 +118,7 @@ export function buildStageRows(current: StageCounts, benchmark: StageCounts): St
     // this is what makes the ranking meaningful.
     const lostVsBenchmark =
       rate !== null && benchmarkRate !== null && benchmarkRate > rate ? (benchmarkRate - rate) * prev : 0;
-    // Split once on "does this stage carry a target?" — a stage with no target has no target-shortfall
+    // Split once on "does this stage carry a target?" - a stage with no target has no target-shortfall
     // (null), one that has a target reports how many it lost against it (0 when meeting or beating it).
     const lostVsTarget =
       stage.targetRate === undefined
@@ -177,7 +177,7 @@ export type FunnelHealth = {
 
 /**
  * Assemble the row. When there is too little history to average, the spec's published benchmark
- * stands in and `benchmarkSource` says so — the alternative is comparing this month against one
+ * stands in and `benchmarkSource` says so - the alternative is comparing this month against one
  * other month and calling it a trend.
  */
 export function buildFunnelHealth(
@@ -196,7 +196,7 @@ export function buildFunnelHealth(
   };
 }
 
-/** Mean count per stage across the given months. Fractional on purpose — it is an average, not a tally. */
+/** Mean count per stage across the given months. Fractional on purpose - it is an average, not a tally. */
 export function averageCounts(months: StageCounts[]): StageCounts {
   if (months.length === 0) return emptyCounts();
   return countsFrom((s) => months.reduce((sum, m) => sum + m[s.key], 0) / months.length);

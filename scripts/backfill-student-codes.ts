@@ -32,7 +32,7 @@ async function main() {
   console.log(`starting at: ${formatStudentCode(next)}`);
   console.log("");
 
-  // Duplicate names are the entire reason this exists — surface them so the founder can
+  // Duplicate names are the entire reason this exists - surface them so the founder can
   // confirm the numbering lands the way they expect.
   const byName = new Map<string, number>();
   for (const s of students) {
@@ -51,7 +51,7 @@ async function main() {
   if (plan.length > 15) console.log(`  … and ${plan.length - 15} more`);
 
   if (!COMMIT) {
-    console.log("\nDRY RUN — nothing written. Re-run with --commit to apply.");
+    console.log("\nDRY RUN - nothing written. Re-run with --commit to apply.");
     return;
   }
 

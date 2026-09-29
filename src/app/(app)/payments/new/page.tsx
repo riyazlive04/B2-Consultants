@@ -2,7 +2,7 @@ import nextDynamic from "next/dynamic";
 import { requireSection } from "@/lib/rbac";
 import { getInvoicePickers } from "@/server/payments-metrics";
 
-// Heavy form editor — code-split out of this route's bundle (BUILD_CHECKLIST.md §12). Aliased to
+// Heavy form editor - code-split out of this route's bundle (BUILD_CHECKLIST.md §12). Aliased to
 // `nextDynamic`: this file already exports the Next.js route-segment config `dynamic`, and `import
 // dynamic from "next/dynamic"` would silently shadow it (the exact bug found in ProfileClient.tsx).
 const InvoiceEditor = nextDynamic(() => import("../_components/InvoiceEditor"));

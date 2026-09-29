@@ -8,7 +8,7 @@ import { hashInviteToken } from "@/lib/invite-token";
 import { normalizePassword } from "@/lib/credentials";
 
 /**
- * Redeeming an invite. PUBLIC by necessity — the invitee has no session yet — so the
+ * Redeeming an invite. PUBLIC by necessity - the invitee has no session yet - so the
  * token is the only credential and every failure mode is checked here:
  * unknown, already used, expired, or the account was suspended/deleted meanwhile.
  *
@@ -106,7 +106,7 @@ export async function acceptInvite(form: FormData): Promise<AcceptInviteResult> 
       headers: await Promise.resolve(headers()),
     });
   } catch {
-    // The password IS set — they can simply sign in normally.
+    // The password IS set - they can simply sign in normally.
     return { ok: false, error: "Password set. Please sign in with your new password." };
   }
   return { ok: true };

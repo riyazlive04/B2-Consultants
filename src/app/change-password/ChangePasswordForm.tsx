@@ -8,7 +8,7 @@ import { BrandLogo } from "@/components/shell/BrandLogo";
 import { changeOwnPassword } from "@/server/account-actions";
 
 /**
- * Same two-pane shell as ResetPasswordForm — but this user IS signed in (with a password an admin
+ * Same two-pane shell as ResetPasswordForm - but this user IS signed in (with a password an admin
  * set), so it asks for the current password too and posts to a server action that changes it and
  * clears the forced-change flag in one step (O4).
  */
@@ -61,7 +61,7 @@ export default function ChangePasswordForm() {
             One quick step.
           </h1>
           <p className="mt-3.5 text-[15px] leading-relaxed text-ink-2">
-            Your password was set for you. Choose your own now — only you will know it.
+            Your password was set for you. Choose your own now - only you will know it.
           </p>
         </div>
 

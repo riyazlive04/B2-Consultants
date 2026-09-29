@@ -11,7 +11,7 @@ import { formatInrMinor, majorStringToMinor, minorToMajorString } from "@/lib/fo
 import { createAgreement, updateAgreement } from "@/server/agreement-actions";
 
 /**
- * The founder's field form. Everything the master document leaves variable, and nothing else —
+ * The founder's field form. Everything the master document leaves variable, and nothing else -
  * clause text lives in the renderer, not in a database column a typo can reach.
  *
  * The instalment total is checked here AND in `agreementDataSchema` on the server. The client
@@ -21,11 +21,11 @@ import { createAgreement, updateAgreement } from "@/server/agreement-actions";
 
 type Mode = { kind: "create"; leadId: string | null; studentId: string | null } | { kind: "edit"; id: string };
 
-/** Rupees in the inputs, minor units in the payload — the same split the ledger uses. */
+/** Rupees in the inputs, minor units in the payload - the same split the ledger uses. */
 const toMajor = (minor: string) => minorToMajorString(BigInt(minor)).replace(/\.00$/, "");
 const toMinor = (major: string) => majorStringToMinor(major).toString();
 
-/** Must mirror `agreementDataSchema`'s instalment bounds — the server re-checks these. */
+/** Must mirror `agreementDataSchema`'s instalment bounds - the server re-checks these. */
 const MIN_INSTALMENTS = 2;
 const MAX_INSTALMENTS = 6;
 
@@ -50,7 +50,7 @@ export function AgreementForm({
   initial: AgreementData;
   mode: Mode;
   notes?: string[];
-  /** Fields the CRM had no answer for — the founder must type these. */
+  /** Fields the CRM had no answer for - the founder must type these. */
   missing?: string[];
   /** Field keys filled from the CRM, so we can say so instead of making them re-check everything. */
   filled?: string[];
@@ -84,7 +84,7 @@ export function AgreementForm({
    * Divide the total into equal instalments (German Note's stated rule, Error Log N3).
    *
    * Integer paise, remainder onto the FIRST instalment. ₹69,999 over 6 is not a whole number,
-   * so a naive divide loses paise and trips the sum check the moment it is used — which would
+   * so a naive divide loses paise and trips the sum check the moment it is used - which would
    * make the button worse than useless.
    */
   const splitEqually = () => {
@@ -148,7 +148,7 @@ export function AgreementForm({
   return (
     <form onSubmit={submit} className="space-y-6">
       {/* What the CRM answered, and what it couldn't. The founder should re-type only the second
-          list — everything else is already on the record and re-asking for it is the bug this
+          list - everything else is already on the record and re-asking for it is the bug this
           redesign exists to kill. */}
       {(filledLabels.length > 0 || (missing && missing.length > 0)) && (
         <div className="space-y-1.5 rounded-card border border-line bg-surface-2 px-4 py-3 text-sm">
@@ -230,8 +230,8 @@ export function AgreementForm({
               value={option}
               onChange={(e) => setOption(e.target.value as "FULL" | "INSTALMENT")}
               options={[
-                { value: "FULL", label: "Option A — Full payment" },
-                { value: "INSTALMENT", label: "Option B — Instalment plan (2–6)" },
+                { value: "FULL", label: "Option A - Full payment" },
+                { value: "INSTALMENT", label: "Option B - Instalment plan (2–6)" },
               ]}
             />
           </Field>
@@ -267,7 +267,7 @@ export function AgreementForm({
                 </Field>
               </div>
             ))}
-            {/* N3: the plan is 2–6 instalments, because that is what the business sells — 4 EMI
+            {/* N3: the plan is 2–6 instalments, because that is what the business sells - 4 EMI
                 on a bundle, 6 across three courses, and German Note runs up to 6 equal ones.
                 N4: every amount and milestone stays editable, because offers are negotiated
                 per student rather than picked from a fixed menu. */}
@@ -322,7 +322,7 @@ export function AgreementForm({
           {pending && <Loader2 size={15} className="animate-spin" />}
           {mode.kind === "create" ? "Create draft" : "Save draft"}
         </button>
-        <p className="text-xs text-muted">Nothing is sent yet — you countersign and issue on the next screen.</p>
+        <p className="text-xs text-muted">Nothing is sent yet - you countersign and issue on the next screen.</p>
       </div>
     </form>
   );

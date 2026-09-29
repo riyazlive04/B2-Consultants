@@ -6,8 +6,8 @@ import { loadSignedAgreementByToken, recordAgreementEvent } from "@/server/agree
  * The student's countersigned copy. PUBLIC, gated only by the token.
  *
  * This is the other half of the promise the signing screen makes ("we'll send your countersigned
- * copy"). It serves the SEALED bytes — the exact ones that were hashed into `pdfSha256` at signing
- * — and never re-renders: PDFKit stamps a fresh creation date and document id, so a re-render
+ * copy"). It serves the SEALED bytes - the exact ones that were hashed into `pdfSha256` at signing
+ * - and never re-renders: PDFKit stamps a fresh creation date and document id, so a re-render
  * would produce a different file that no longer matches the hash on record.
  *
  * The sibling `[token]/pdf` route renders the UNSIGNED document for someone about to sign, and its

@@ -11,7 +11,7 @@ import { levelKinds } from "./levels";
  *
  * The dashboard could only ever look one month back: there was a 30-day trend and a single
  * year-to-date number, but nothing that showed Jan→Dec, nothing comparing target to achieved
- * across months, and no forward projection — so "are we going to make the year?" could not be
+ * across months, and no forward projection - so "are we going to make the year?" could not be
  * answered from the screen at all.
  *
  * Everything here is CUMULATIVE, because that is the question being asked: a good March does
@@ -20,7 +20,7 @@ import { levelKinds } from "./levels";
  * of actuals would report a catastrophe every January).
  */
 
-const DEFAULT_MONTHLY_TARGET_MINOR = 80000000; // ₹8,00,000 — same default as the month hero
+const DEFAULT_MONTHLY_TARGET_MINOR = 80000000; // ₹8,00,000 - same default as the month hero
 
 export type AnnualMonth = {
   month: number; // 0-11
@@ -29,7 +29,7 @@ export type AnnualMonth = {
   targetInr: number;
   cumAchievedInr: number;
   cumTargetInr: number;
-  /** Cumulative path including the projected tail — drawn dashed beyond today. */
+  /** Cumulative path including the projected tail - drawn dashed beyond today. */
   cumProjectedInr: number;
   isFuture: boolean;
   isCurrent: boolean;
@@ -52,7 +52,7 @@ export type AnnualPerformance = {
  * Clients gained vs lost, month by month (§3.4).
  *
  * Recurring-revenue movement was invisible: the dashboard showed how much money came in but
- * never whether the client base underneath it was growing or shrinking — a flat revenue month
+ * never whether the client base underneath it was growing or shrinking - a flat revenue month
  * that quietly lost four students and won four more is a very different business from a stable
  * one. Additions are counted from `enrollmentDate`; losses only from a DROPPED status change,
  * because a COMPLETED programme is a success finishing, not churn, and lumping the two together
@@ -63,7 +63,7 @@ export type ClientMovementMonth = {
   label: string;
   gained: number;
   lost: number;
-  /** Net active enrolments at the end of this month — the baseline the bars move. */
+  /** Net active enrolments at the end of this month - the baseline the bars move. */
   activeEnd: number;
   isFuture: boolean;
 };
@@ -77,7 +77,7 @@ export async function getClientMovement(): Promise<ClientMovementMonth[]> {
     prisma.enrollment.findMany({
       select: { enrollmentDate: true, status: true, statusChangedAt: true },
     }),
-    // Everything that started before this year and hadn't dropped by then — the opening balance.
+    // Everything that started before this year and hadn't dropped by then - the opening balance.
     prisma.enrollment.count({
       where: {
         enrollmentDate: { lt: year.start },
@@ -171,10 +171,10 @@ export async function getAnnualPerformance(line: BusinessLine | null = null): Pr
       label: new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(
         new Date(Date.UTC(today.getUTCFullYear(), m, 1)),
       ),
-      // A future month has achieved NOTHING YET — which is not the same as having achieved
+      // A future month has achieved NOTHING YET - which is not the same as having achieved
       // zero, and Error Log F4 is explicit that future periods must never render as a zero
       // (or as the source spreadsheet's `#WERT!`). The 0 here is a placeholder, and
-      // `isFuture` is the flag every consumer MUST branch on before displaying these two —
+      // `isFuture` is the flag every consumer MUST branch on before displaying these two -
       // AnnualChart already does (no data point, and the tooltip says "projected" instead of
       // "achieved"). Read them without that guard and you will print a zero the client
       // specifically asked never to see.

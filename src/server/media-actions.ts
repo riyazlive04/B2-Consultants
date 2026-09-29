@@ -68,7 +68,7 @@ export async function updateMediaAlt(id: string, alt: string): Promise<ActionRes
  * Soft delete, and the stored object is deliberately LEFT IN PLACE.
  *
  * A page that still references the URL would otherwise show a broken image the moment someone
- * tidies the library — and there is no reference count to consult, because image URLs live inside
+ * tidies the library - and there is no reference count to consult, because image URLs live inside
  * a JSON blob rather than a foreign key. Removing the row hides it from the picker, which is what
  * "delete" means to the person clicking it; reclaiming bytes is a separate, deliberate sweep that
  * can check every page first.
@@ -117,7 +117,7 @@ export async function purgeMedia(id: string): Promise<ActionResult> {
   const gone = await deleteObject(cfg, asset.storageKey);
   // The row goes only if the object did. A row deleted while its bytes survive is an orphan
   // nothing can ever find again, let alone clean up.
-  if (!gone) return { ok: false, error: "Could not delete the stored file — the record was kept" };
+  if (!gone) return { ok: false, error: "Could not delete the stored file - the record was kept" };
 
   await prisma.mediaAsset.delete({ where: { id } });
   await logActivity(session, {
@@ -131,7 +131,7 @@ export async function purgeMedia(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Whether uploading is available at all — drives the library's empty state. */
+/** Whether uploading is available at all - drives the library's empty state. */
 export async function mediaStorageReady(): Promise<boolean> {
   await requireSection("sites");
   return storageConfig() !== null;

@@ -6,14 +6,14 @@ import { requireSession } from "@/lib/rbac";
 import type { ActionResult } from "./finance-actions";
 
 /**
- * Per-user theme (spec Part 2 §13: "dark and light per user" — the founder prefers dark,
+ * Per-user theme (spec Part 2 §13: "dark and light per user" - the founder prefers dark,
  * others may prefer light).
  *
  * Stored on the User row rather than in localStorage so the choice follows the person across
  * machines, and so a server-rendered page can emit the right theme on the FIRST paint instead
  * of flashing the wrong one while client JS boots.
  *
- * Anyone may set their OWN theme — this is deliberately not gated by section access. It
+ * Anyone may set their OWN theme - this is deliberately not gated by section access. It
  * writes to the session's own user id and cannot be pointed at anyone else's row.
  */
 

@@ -12,7 +12,7 @@ import type { ActionResult } from "./finance-actions";
 
 /**
  * Level catalogue admin (Admin-only). The founders add/edit German levels (C1, C2, …) and bundles
- * here; coaching tiers (SOLO/GUIDED/ELITE) and OTHER are seeded `locked` — label + GL account are
+ * here; coaching tiers (SOLO/GUIDED/ELITE) and OTHER are seeded `locked` - label + GL account are
  * editable but they cannot be renamed by code, re-kinded, deactivated or deleted.
  *
  * See docs/CONFIGURABLE_LEVELS_PLAN.md. `code` is an immutable natural key stored on every level
@@ -145,7 +145,7 @@ export async function updateLevel(id: string, form: FormData): Promise<ActionRes
     entityType: "Level",
     entityId: id,
     summary: `Updated the level "${after.label}" (${after.code})`,
-    // Hand-built meta (never diffFields on this row — its BigInt cost columns would throw).
+    // Hand-built meta (never diffFields on this row - its BigInt cost columns would throw).
     meta: { code: after.code, kind: after.kind, active: after.active, incomeAccountCode: after.incomeAccountCode },
   });
   revalidatePath("/german-note/manage");
@@ -153,7 +153,7 @@ export async function updateLevel(id: string, form: FormData): Promise<ActionRes
   return { ok: true };
 }
 
-/** How many live records reference a level code — the guard against deleting a level in use. */
+/** How many live records reference a level code - the guard against deleting a level in use. */
 async function levelUsageCount(code: string): Promise<number> {
   const [income, pending, leads, enrol, batches, joiners, orders] = await Promise.all([
     prisma.income.count({ where: { programLevel: code } }),
@@ -196,14 +196,14 @@ export async function deleteLevel(id: string): Promise<ActionResult> {
 
   const used = await levelUsageCount(level.code);
   if (used > 0) {
-    return { ok: false, error: `"${level.label}" is used by ${used} record${used === 1 ? "" : "s"} — deactivate it instead of deleting.` };
+    return { ok: false, error: `"${level.label}" is used by ${used} record${used === 1 ? "" : "s"} - deactivate it instead of deleting.` };
   }
   const inBundle = await prisma.level.findFirst({
     where: { bundleMembers: { has: level.code } },
     select: { label: true },
   });
   if (inBundle) {
-    return { ok: false, error: `"${level.label}" is a member of the bundle "${inBundle.label}" — remove it there first.` };
+    return { ok: false, error: `"${level.label}" is a member of the bundle "${inBundle.label}" - remove it there first.` };
   }
 
   await prisma.level.delete({ where: { id } });

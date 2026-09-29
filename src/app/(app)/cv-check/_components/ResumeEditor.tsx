@@ -17,7 +17,7 @@ import type {
 } from "@/lib/resume-types";
 
 /**
- * The structured CV editor. It edits a ResumeData object through a single onChange —
+ * The structured CV editor. It edits a ResumeData object through a single onChange -
  * every keystroke produces a new immutable copy so the live preview and the exporters
  * always see the same shape the DB stores. All template sections are editable here;
  * whether a section actually PRINTS is the founder's template call, applied at render.
@@ -38,8 +38,8 @@ export function ResumeEditor({ data, onChange }: Props) {
       <EditorSection title="Contact & header">
         <div className="grid gap-3 sm:grid-cols-2">
           {/* Only the four identity fields below carry a `kind`. Everything else in this editor
-              is the candidate's own CV copy — a headline reads "Engineer II", a skill is "C++",
-              a date is "05/2021" — and a character filter there would silently eat real content.
+              is the candidate's own CV copy - a headline reads "Engineer II", a skill is "C++",
+              a date is "05/2021" - and a character filter there would silently eat real content.
               A person's name, their email, their phone and their links are the only inputs whose
               alphabet is genuinely fixed. */}
           <Field label="Full name">
@@ -77,7 +77,7 @@ export function ResumeEditor({ data, onChange }: Props) {
       </EditorSection>
 
       {/* ── Highlights ── */}
-      <EditorSection title="What I have to offer (highlights)" hint="6–7 crisp bullets — the recruiter's 10-second scan.">
+      <EditorSection title="What I have to offer (highlights)" hint="6–7 crisp bullets - the recruiter's 10-second scan.">
         <StringList items={data.highlights} onChange={(highlights) => patch({ highlights })} placeholder="e.g. 5 years designing HVAC systems" addLabel="Add highlight" />
       </EditorSection>
 
@@ -330,7 +330,7 @@ function PhotoField({ value, onChange }: { value: string; onChange: (v: string) 
     <div className="mt-3 flex items-center gap-3">
       {value ? (
         // `value` is always a data: URL from the FileReader above (embedded straight into the
-        // PDF) — next/image auto-treats data:/blob: sources as unoptimized, so no
+        // PDF) - next/image auto-treats data:/blob: sources as unoptimized, so no
         // remotePatterns config is needed, but the prop is explicit for clarity.
         <Image
           src={value}

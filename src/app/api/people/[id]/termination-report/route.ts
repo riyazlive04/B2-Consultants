@@ -7,12 +7,12 @@ import { renderTerminationReportPdf } from "@/documents/termination-report";
 /**
  * The offboarding record as a PDF.
  *
- * Gated on `users.manage` — the same capability that can actually terminate someone. A section
+ * Gated on `users.manage` - the same capability that can actually terminate someone. A section
  * check would not be enough: `people` is Admin-only today, but the capability is delegable, and
  * this document carries one person's pay and performance. Whoever may offboard them may read it;
  * nobody else may.
  *
- * `no-store` because the content is personal and the document is generated on demand — a cached
+ * `no-store` because the content is personal and the document is generated on demand - a cached
  * copy sitting in a shared proxy is exactly what should not happen to this.
  */
 

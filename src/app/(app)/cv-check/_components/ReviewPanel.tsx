@@ -17,7 +17,7 @@ import { runReview, deleteReview } from "@/server/resume-actions";
 
 /**
  * The JD-driven ATS review. Paste the target job description, run it against the
- * selected CV, and get a scored, coached result — from Claude when the seam is armed,
+ * selected CV, and get a scored, coached result - from Claude when the seam is armed,
  * otherwise from the offline analyser. Every run is kept so the coach can re-run it
  * "unlimited" times as the CV improves and watch the score climb.
  */
@@ -47,7 +47,7 @@ export function ReviewPanel({
     return (
       <Card>
         <p className="text-sm text-muted">
-          Pick or create a CV in the <span className="font-semibold text-ink">Builder</span> tab first — the AI review
+          Pick or create a CV in the <span className="font-semibold text-ink">Builder</span> tab first - the AI review
           scores a saved CV against a job description.
         </p>
       </Card>
@@ -80,14 +80,14 @@ export function ReviewPanel({
           {aiStatus.enabled ? (
             <>Claude review is <strong>live</strong> ({aiStatus.settings.model}), enforcing <strong>{activeRules}</strong> ATS rule{activeRules === 1 ? "" : "s"}{targetKw > 0 ? <> + <strong>{targetKw}</strong> target keyword{targetKw === 1 ? "" : "s"}</> : null} the founder configured.</>
           ) : (
-            <>Claude review is <strong>off</strong> — you’ll get the offline analysis (still scored against <strong>{activeRules}</strong> ATS rule{activeRules === 1 ? "" : "s"}). An admin can enable Claude in the <strong>Template &amp; AI</strong> tab (add an Anthropic key + flip the flag).</>
+            <>Claude review is <strong>off</strong> - you’ll get the offline analysis (still scored against <strong>{activeRules}</strong> ATS rule{activeRules === 1 ? "" : "s"}). An admin can enable Claude in the <strong>Template &amp; AI</strong> tab (add an Anthropic key + flip the flag).</>
           )}
         </p>
       </div>
 
       <Card
         title={<span className="flex items-center gap-2 font-display text-h3 text-ink"><Target size={18} className="text-primary" /> Review “{resume.title}” against a JD</span>}
-        subtitle="Paste the full target job description — the more complete, the sharper the match."
+        subtitle="Paste the full target job description - the more complete, the sharper the match."
       >
         <TextArea rows={7} value={jd} onChange={(e) => setJd(e.target.value)} placeholder="Paste the German job description here…" />
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -178,7 +178,7 @@ function ReviewResult({ result, activeRules }: { result: AiReviewResult; activeR
           detail={{
             note:
               result.findings.length > 0
-                ? `${result.findings.length} finding${result.findings.length === 1 ? "" : "s"} from this review may affect parseability — see Findings below.`
+                ? `${result.findings.length} finding${result.findings.length === 1 ? "" : "s"} from this review may affect parseability - see Findings below.`
                 : "No findings flagged in this review.",
           }}
         />
@@ -192,7 +192,7 @@ function ReviewResult({ result, activeRules }: { result: AiReviewResult; activeR
       )}
 
       {result.missingKeywords.length > 0 && (
-        <Card title="Missing keywords" subtitle="JD terms the CV doesn’t mirror — weave in where genuinely true, never stuff.">
+        <Card title="Missing keywords" subtitle="JD terms the CV doesn’t mirror - weave in where genuinely true, never stuff.">
           <div className="flex flex-wrap gap-1.5">
             {result.missingKeywords.map((k) => <Pill key={k} tone="warn">{k}</Pill>)}
           </div>
@@ -216,7 +216,7 @@ function ReviewResult({ result, activeRules }: { result: AiReviewResult; activeR
       )}
 
       {result.rewriteSuggestions.length > 0 && (
-        <Card title="Suggested rewrites" subtitle="Concrete before → after. The student does the writing — this shows the shape.">
+        <Card title="Suggested rewrites" subtitle="Concrete before → after. The student does the writing - this shows the shape.">
           <div className="space-y-3">
             {result.rewriteSuggestions.map((r, i) => (
               <div key={i} className="rounded-field border border-line bg-surface-2 p-3.5">

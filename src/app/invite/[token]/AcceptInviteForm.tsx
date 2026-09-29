@@ -16,7 +16,7 @@ export function AcceptInviteForm({ token }: { token: string }) {
         const res = await acceptInvite(form);
         if (!res.ok) return setError(res.error);
         // acceptInvite signed us in, so go straight to the dashboard. ?onboarding=1
-        // triggers the one-time role-scoped walkthrough (OnboardingWalkthrough) —
+        // triggers the one-time role-scoped walkthrough (OnboardingWalkthrough) -
         // whichever landing page this role lands on reads and forwards it.
         router.push("/?onboarding=1");
         router.refresh();

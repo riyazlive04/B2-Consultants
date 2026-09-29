@@ -60,11 +60,11 @@ export function SprintTracker({
     "h-9 w-full rounded-field border border-line bg-surface px-2 text-xs outline-none focus:border-accent";
 
   // Dense raw <input>s (they submit via `form=`, not the form kit). Target/actual/note are all
-  // prose — "15 applications", "Why missed" — so `text` is the right kind: cap only, no filtering.
+  // prose - "15 applications", "Why missed" - so `text` is the right kind: cap only, no filtering.
   // fieldKindProps is not a hook, so one instance shared across every row is fine.
   const freeText = fieldKindProps<HTMLInputElement>("text", undefined);
 
-  // Fixed-order week-by-week plan — sortable: false throughout so DataTable's
+  // Fixed-order week-by-week plan - sortable: false throughout so DataTable's
   // per-column click-sort can't scramble the sprint's natural sequence.
   const columns: Column<SprintWeekRow>[] = [
     {

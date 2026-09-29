@@ -22,7 +22,7 @@ function counts(over: Partial<StageCounts>): StageCounts {
 
 describe("stage rates", () => {
   test("the spec's published numbers reproduce the spec's published percentages", () => {
-    // 213/650 = 32%, 145/213 = 68%, 68/108 = 63%, 25/68 = 37% — the document's own figures.
+    // 213/650 = 32%, 145/213 = 68%, 68/108 = 63%, 25/68 = 37% - the document's own figures.
     const pct = (i: number) => Math.round((rateOf(SPEC, i) ?? 0) * 100);
     assert.equal(pct(1), 33); // "32%" in the doc, rounded from 32.8
     assert.equal(pct(2), 68);
@@ -30,7 +30,7 @@ describe("stage rates", () => {
     assert.equal(pct(5), 37); // "38%" in the doc
   });
 
-  test("the first stage has no rate — nothing feeds it", () => {
+  test("the first stage has no rate - nothing feeds it", () => {
     assert.equal(rateOf(SPEC, 0), null);
   });
 
@@ -55,7 +55,7 @@ describe("the headline leak", () => {
 
   test("a target shortfall outranks a larger history shortfall", () => {
     // Booked-discovery collapses (a big gap vs history) while show rate is only slightly under
-    // its agreed 80%. The commitment still wins — that is the rule the spec asks for.
+    // its agreed 80%. The commitment still wins - that is the rule the spec asks for.
     const current = counts({ leads: 650, bookedDiscovery: 20, bantQualified: 14, confirmed: 10, showed: 7 });
     const leak = biggestLeak(buildStageRows(current, SPEC));
     assert.ok(leak);
@@ -99,7 +99,7 @@ describe("benchmarks on sparse data", () => {
     assert.equal(h.rows[0].benchmarkCount, 650);
   });
 
-  test("one month is not an average — still the spec benchmark", () => {
+  test("one month is not an average - still the spec benchmark", () => {
     const h = buildFunnelHealth(counts({ leads: 10 }), [counts({ leads: 900 })]);
     assert.equal(h.benchmarkSource, "spec");
     assert.equal(h.rows[0].benchmarkCount, 650);

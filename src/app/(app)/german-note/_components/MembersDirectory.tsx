@@ -79,7 +79,7 @@ export function MembersDirectory({ members }: { members: GnMemberRow[] }) {
               <LevelAvatar name={m.name} image={m.image} level={m.level} />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
-                  <span className="truncate text-sm font-semibold">{m.name}</span>
+                  <span className="truncate text-sm font-semibold" title={m.name}>{m.name}</span>
                   <span className="rounded-full px-1.5 py-0.5 text-caption font-semibold" style={{ color: chip.fg, background: chip.bg }}>
                     {chip.label}
                   </span>
@@ -144,7 +144,7 @@ export function MembersDirectory({ members }: { members: GnMemberRow[] }) {
                 <ul className="space-y-1.5">
                   {profile.recentPosts.map((p) => (
                     <li key={p.id} className="flex items-center gap-2 rounded-field bg-surface-2 px-3 py-2 text-sm">
-                      <span className="truncate">{p.title ?? "(untitled post)"}</span>
+                      <span className="truncate" title={p.title ?? "(untitled post)"}>{p.title ?? "(untitled post)"}</span>
                       <span className="ml-auto flex flex-none items-center gap-2 text-xs text-muted">
                         {p.batchName && <span className="hidden sm:inline">{p.batchName}</span>}
                         <span className="inline-flex items-center gap-0.5"><Heart size={11} /> {p.likeCount}</span>

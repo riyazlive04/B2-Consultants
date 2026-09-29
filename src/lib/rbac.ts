@@ -43,23 +43,22 @@ export async function visibleSections(role: AppRole, overrides: SectionOverrides
 /**
  * Server-side session fetch. Redirects to /login when unauthenticated.
  * Wrapped in React.cache so the layout + page + any actions in a single request
- * share ONE getSession + one user.findUnique instead of repeating both 2-3×.
+ * share ONE getSession instead of repeating it 2-3×.
  */
 export const requireSession = cache(async () => {
   const session = await auth.api.getSession({ headers: await Promise.resolve(headers()) });
   if (!session) redirect("/login");
   const role = (session.user as { role?: string }).role as AppRole;
-  // overrides live on the user row so Admin changes take effect on next request
-  const row = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      sectionAccess: true,
-      capabilities: true,
-      status: true,
-      themePreference: true,
-      mustChangePassword: true,
-    },
-  });
+  // The guard fields come back on session.user (additionalFields in auth.ts), read from the user
+  // row in getSession's own query. There is no cookie cache, so Admin changes still take effect
+  // on the next request.
+  const row = session.user as {
+    sectionAccess?: unknown;
+    capabilities?: unknown;
+    status?: string | null;
+    themePreference?: "LIGHT" | "DARK" | "SYSTEM" | null;
+    mustChangePassword?: boolean | null;
+  };
 
   // Suspension takes effect on the very next request. Suspending already deletes the
   // person's sessions; this closes the race where a request is in flight, and covers a
@@ -69,7 +68,7 @@ export const requireSession = cache(async () => {
     redirect("/login?error=suspended");
   }
 
-  // O4 — an admin set this person's password, so they must replace it before anything else
+  // O4 - an admin set this person's password, so they must replace it before anything else
   // renders. /change-password fetches the session directly (not through this guard), so it is
   // the one authenticated page that does NOT loop here. Cleared the moment they change it.
   if (row?.mustChangePassword) {
@@ -130,7 +129,7 @@ export async function capabilityCheck(key: CapabilityKey): Promise<{
   return { allowed, denied: { ok: false, error: capabilityDeniedMessage(key) }, session };
 }
 
-/** The capability guard for PAGES — no page to stay on, so bounce home. */
+/** The capability guard for PAGES - no page to stay on, so bounce home. */
 export async function requireCapability(key: CapabilityKey) {
   const session = await requireSession();
   if (!hasCapability(session.role, session.capabilities, key)) {

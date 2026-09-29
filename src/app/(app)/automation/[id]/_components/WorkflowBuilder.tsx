@@ -44,7 +44,7 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
   const [addType, setAddType] = useState<WorkflowActionType>("SEND_EMAIL");
   const [saving, setSaving] = useState(false);
   const isDeleted = workflow.deletedAt !== null;
-  // The dry run previews what's on screen, but Publish arms what's SAVED — so the panel needs to
+  // The dry run previews what's on screen, but Publish arms what's SAVED - so the panel needs to
   // know when those have drifted apart. Comparing the serialised definition is enough: these are
   // plain JSON values built in a stable key order by the same setters.
   const dirty =
@@ -66,7 +66,7 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
   function addAction() {
     const a: WorkflowAction = { id: newId(), type: addType };
     if (addType === "WAIT") a.waitMinutes = 1440;
-    // Default both branches to "just continue to the next step" — the safest default, since a
+    // Default both branches to "just continue to the next step" - the safest default, since a
     // branch pointing at itself (or an earlier step) can cycle (guarded server-side, but still
     // worth not defaulting into).
     if (addType === "IF_TAG") { a.thenStep = actions.length + 1; a.elseStep = actions.length + 1; }
@@ -84,7 +84,7 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
     const res = await togglePublishWorkflow(workflow.id);
     if (!res.ok) return toast(res.error, "error");
     setPublished((p) => !p);
-    toast(published ? "Unpublished" : "Published — now live");
+    toast(published ? "Unpublished" : "Published - now live");
     router.refresh();
   }
   async function restore() {
@@ -97,7 +97,7 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
     <div className="space-y-5">
       <Link href="/automation" className="inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-primary"><ArrowLeft size={16} /> Automation</Link>
 
-      {/* A deleted workflow stays viewable but is inert — the server rejects save/publish on
+      {/* A deleted workflow stays viewable but is inert - the server rejects save/publish on
           it, so the UI says why and offers the one action that does work. */}
       {isDeleted && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-field border border-risk bg-risk-soft px-4 py-3">
@@ -170,7 +170,7 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
         </div>
       }>
         <div className="space-y-3">
-          {actions.length === 0 && <p className="text-sm text-ink-3">No actions yet — add the first step.</p>}
+          {actions.length === 0 && <p className="text-sm text-ink-3">No actions yet - add the first step.</p>}
           {actions.map((a, i) => (
             <div key={a.id} className="rounded-field border border-line p-3">
               <div className="mb-2 flex items-center justify-between">
@@ -188,7 +188,7 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
         </div>
       </Card>
 
-      {/* Dry run — sits between the definition and the live enrollments, which is the order the
+      {/* Dry run - sits between the definition and the live enrollments, which is the order the
           work happens in: build it, check it against real history, then arm it. */}
       <WorkflowDryRun
         triggerType={triggerType}
@@ -255,18 +255,18 @@ function ActionFields({ a, i, stepCount, update, pickers }: { a: WorkflowAction;
       return (
         <div className="space-y-1.5">
           <Select
-            placeholder="— pick a WhatsApp template —"
+            placeholder="- pick a WhatsApp template -"
             value={a.whatsappKind ?? ""}
             onChange={(e) => update(i, { whatsappKind: e.target.value })}
             options={WHATSAPP_KINDS.map((k) => ({ value: k, label: WHATSAPP_KIND_LABELS[k] }))}
           />
           {/* Says plainly what this step can and cannot fill in. A template wanting a per-booking
               value (a slot time) has nothing to read it from at workflow time, and the send is
-              skipped rather than half-built — better stated here than discovered in the log. */}
+              skipped rather than half-built - better stated here than discovered in the log. */}
           <p className="text-caption text-ink-3">
             Sends the WATI template mapped to this slot in WhatsApp → Settings. Only{" "}
             <code className="font-mono">name</code> and <code className="font-mono">booking_url</code> can be
-            supplied from a workflow — a template needing anything else (a slot time, an amount) is skipped
+            supplied from a workflow - a template needing anything else (a slot time, an amount) is skipped
             with the missing variable named.
           </p>
         </div>
@@ -281,7 +281,7 @@ function ActionFields({ a, i, stepCount, update, pickers }: { a: WorkflowAction;
       );
     case "MOVE_STAGE":
       return (
-        <Select placeholder="— pick a stage —" value={a.stage ?? ""} onChange={(e) => update(i, { stage: e.target.value })} options={LEAD_STAGE_OPTIONS.map((s) => ({ value: s.value, label: s.label }))} />
+        <Select placeholder="- pick a stage -" value={a.stage ?? ""} onChange={(e) => update(i, { stage: e.target.value })} options={LEAD_STAGE_OPTIONS.map((s) => ({ value: s.value, label: s.label }))} />
       );
     case "CREATE_TASK":
       return (

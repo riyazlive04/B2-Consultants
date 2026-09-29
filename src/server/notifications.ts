@@ -22,7 +22,7 @@ import { MILESTONE_LABELS } from "@/lib/labels";
  * IN-APP notification centre. Server-computed on load + light polling - the same
  * "live badge" model the PRDs allow. This centre stays in-app only (no email here).
  * Outbound WhatsApp lives in a separate, opt-in WATI layer (Wave-2: src/server/whatsapp.ts),
- * not here — these items are stateless status alerts that appear while a condition holds
+ * not here - these items are stateless status alerts that appear while a condition holds
  * and disappear when it's resolved.
  */
 
@@ -30,7 +30,7 @@ export type Notification = {
   id: string;
   severity: "risk" | "watch" | "info" | "win";
   /**
-   * A person deliberately raised this for the founder — a head coach red-flagging a student
+   * A person deliberately raised this for the founder - a head coach red-flagging a student
    * with a note, not a threshold the system tripped on its own (§2.8). Escalations sort ABOVE
    * everything else, because a human asking for attention outranks any automated alert.
    */
@@ -39,13 +39,13 @@ export type Notification = {
   body: string;
   href: string;
   /**
-   * Amounts referenced from `title`/`body` as `{m0}`, `{m1}`… — money is NOT baked into the
+   * Amounts referenced from `title`/`body` as `{m0}`, `{m1}`… - money is NOT baked into the
    * string here.
    *
    * These lines are read on a page with a ₹/€ toggle, and a notification that said "₹3,25,500"
    * while every figure beside it said euros was simply wrong. Formatting cannot happen on the
    * server (it has no access to the reader's currency), so the amount travels as both aggregates
-   * and `renderNotificationText` (lib/notification-text — isomorphic, because both readers of a
+   * and `renderNotificationText` (lib/notification-text - isomorphic, because both readers of a
    * notification are client components) substitutes it at render time.
    */
   amounts?: NotificationAmount[];
@@ -61,7 +61,7 @@ function istHourNow(): number {
 /**
  * German Note community engagement (Skool-style): recent replies, likes and
  * @mentions on the viewer's own posts/comments. Derived like every other
- * notification here — surfaces while it's "recent" (last 3 days), no read-state.
+ * notification here - surfaces while it's "recent" (last 3 days), no read-state.
  */
 async function gnEngagementNotifications(userId: string, today: Date): Promise<Notification[]> {
   const since = new Date(today.getTime() - 3 * 86400000);
@@ -79,7 +79,7 @@ async function gnEngagementNotifications(userId: string, today: Date): Promise<N
       id: "gn-mention",
       severity: "info",
       title: `You were mentioned ${mentions} time${mentions > 1 ? "s" : ""} in the community`,
-      body: "Someone tagged you in German Note — jump in and reply.",
+      body: "Someone tagged you in German Note - jump in and reply.",
       href: "/german-note",
     });
   }
@@ -98,7 +98,7 @@ async function gnEngagementNotifications(userId: string, today: Date): Promise<N
       id: "gn-likes",
       severity: "win",
       title: `${likes} new like${likes > 1 ? "s" : ""} in the community`,
-      body: "People are liking your German Note posts — that's community points toward your level.",
+      body: "People are liking your German Note posts - that's community points toward your level.",
       href: "/german-note",
     });
   }
@@ -111,7 +111,7 @@ async function gnEngagementNotifications(userId: string, today: Date): Promise<N
  * have that column; ContactNote doesn't and the schema is frozen this round, so this re-parses
  * each recent note's body against the same @Name matcher `contacts-actions.ts` uses at write
  * time. Same recency window (3 days), same in-app-only, never-persisted delivery as
- * gnEngagementNotifications — the note author gets no push, the mentioned person sees it purely
+ * gnEngagementNotifications - the note author gets no push, the mentioned person sees it purely
  * because THEIR OWN next bell load/poll happens to re-run this query and find their name.
  */
 async function contactNoteMentionNotifications(userId: string, today: Date): Promise<Notification[]> {
@@ -131,7 +131,7 @@ async function contactNoteMentionNotifications(userId: string, today: Date): Pro
       id: "contact-note-mention",
       severity: "info",
       title: `You were mentioned ${mentions.length} time${mentions.length > 1 ? "s" : ""} in a contact note`,
-      body: "Someone tagged you in a CRM note — open the contact to see it.",
+      body: "Someone tagged you in a CRM note - open the contact to see it.",
       href: mentions.length === 1 ? `/contacts/${mentions[0].leadId}` : "/contacts",
     },
   ];
@@ -167,11 +167,11 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   const items: Notification[] = [];
   const today = istToday();
 
-  // ── STUDENT portal: their own journey only — nothing about the business ──
+  // ── STUDENT portal: their own journey only - nothing about the business ──
   if (role === "STUDENT") {
     const portal = await getMyStudentPortal(userId);
     const e = portal?.primary;
-    // German Note learners have no B2 enrollment — still get community engagement.
+    // German Note learners have no B2 enrollment - still get community engagement.
     if (!e) {
       items.push(...(await gnEngagementNotifications(userId, today)));
       const order = { risk: 0, watch: 1, win: 2, info: 3 };
@@ -189,7 +189,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
         id: "milestone-reached",
         severity: "win",
         title: big
-          ? `${MILESTONE_LABELS[recent.newMilestone]} — congratulations! 🎉`
+          ? `${MILESTONE_LABELS[recent.newMilestone]} - congratulations! 🎉`
           : `Milestone reached: ${MILESTONE_LABELS[recent.newMilestone]}`,
         body: "Your journey bar just moved - see what this stage unlocks.",
         href: "/my-journey",
@@ -240,7 +240,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
     );
   }
 
-  // ── TUTOR: German Note only — community engagement, no business notifications ──
+  // ── TUTOR: German Note only - community engagement, no business notifications ──
   if (role === "TUTOR") {
     items.push(...(await gnEngagementNotifications(userId, today)));
     const order = { risk: 0, watch: 1, win: 2, info: 3 };
@@ -250,7 +250,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   }
 
   // ── ADMIN/HEAD/USER: CRM @mentions on contact notes. Coarse role gate, matching every other
-  // check in this function (own-log, badges, radar, …) — none of them thread the founder's
+  // check in this function (own-log, badges, radar, …) - none of them thread the founder's
   // per-user section-override JSON in here either, so a HEAD granted Contacts access via an
   // override still sees this the same as everyone else at this role tier. ──
   items.push(...(await contactNoteMentionNotifications(userId, today)));
@@ -280,8 +280,8 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
               : "Daily log not submitted yet",
           body: pastCutoff
             ? eod.autoSave
-              ? `The ${cutoffLabel} cutoff has passed. Your numbers will be auto-saved from your activity — amend them to add what activity can't see.`
-              : `The ${cutoffLabel} cutoff has passed — today's log is closed. Contact Admin to make changes.`
+              ? `The ${cutoffLabel} cutoff has passed. Your numbers will be auto-saved from your activity - amend them to add what activity can't see.`
+              : `The ${cutoffLabel} cutoff has passed - today's log is closed. Contact Admin to make changes.`
             : `Log today's numbers before the ${cutoffLabel} cutoff.`,
           href: "/daily-log",
         });
@@ -363,7 +363,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
     /**
      * Prospects the intake auto-disqualified in the last 24h (Error Log L8).
      *
-     * A BANT "CANCEL" at submission cancels the booking and emails the prospect a rejection —
+     * A BANT "CANCEL" at submission cancels the booking and emails the prospect a rejection -
      * but NOBODY internally was told. A caller who had been working that prospect found out
      * when the prospect asked why, which is the "awkward" the client reported. The spec's own
      * remedy is "notify the caller before the cancellation fires"; the cancellation is
@@ -427,7 +427,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       });
     }
 
-    // §2.8 — head-coach escalations to the very top. A red signal WITH a written note is a
+    // §2.8 - head-coach escalations to the very top. A red signal WITH a written note is a
     // coach deliberately raising a case for the founder, not just a threshold tripping; each
     // gets its own row that sorts above every automated alert. Capped so a bad week can't bury
     // the rest of the band; the "+N more" pointer and the tracker carry the tail.
@@ -444,7 +444,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
         severity: "risk",
         escalated: true,
         title: `Coach flagged ${e.student.fullName}${e.student.code ? ` (${e.student.code})` : ""}`,
-        body: note.length > 90 ? `${note.slice(0, 90)}…` : note || "A coach marked this student red — review the note.",
+        body: note.length > 90 ? `${note.slice(0, 90)}…` : note || "A coach marked this student red - review the note.",
         href: `/students/${e.studentId}`,
       });
     }
@@ -468,7 +468,22 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   const fx = await getTodayInrPerEur();
   const fxRate = Number(fx.rate);
   const inrOnlyPair = (inr: number) => ({ inr, eur: fxRate > 0 ? inr / fxRate : 0 });
-  const [pendingRows, runway, missingLoggers, monthIncomes, target, payablesDueSoon, weekSnapshot] =
+  /**
+   * The follow-up window for a scheduled instalment: 10 days before it falls due, OR from the
+   * first of the month it falls in, whichever arrives first. The two rules exist for different
+   * habits - a rolling 10 days catches a date wherever it lands, and "everything due this month"
+   * is the one planning sweep on the 1st - so the horizon is simply the later of the two edges,
+   * and an instalment enters the list the moment either rule starts pointing at it.
+   */
+  const upcomingHorizon = new Date(
+    Math.max(
+      today.getTime() + 10 * 86_400_000,
+      // `month.end` is exclusive, so step back a day to land on the last of this month.
+      month.end.getTime() - 86_400_000,
+    ),
+  );
+
+  const [pendingRows, runway, missingLoggers, monthIncomes, target, payablesDueSoon, weekSnapshot, instalmentsDueSoon] =
     await Promise.all([
       getPendingRows(),
       getRunwaySnapshot(),
@@ -490,7 +505,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
         return {
           // Nobody logged AND the job didn't cover them (auto-save off, or cron not ticking).
           missing: profiles.filter((p) => !sourceByUser.has(p.userId!)).map((p) => p.fullName),
-          // Covered by the job — a row exists, but no human stood behind these numbers yet.
+          // Covered by the job - a row exists, but no human stood behind these numbers yet.
           auto: profiles.filter((p) => sourceByUser.get(p.userId!) === "EOD_AUTO").map((p) => p.fullName),
           cutoffLabel: formatIstMinutes(eod.cutoffMinutes),
           enabled: eod.enabled,
@@ -510,11 +525,30 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       prisma.weeklyFunnelSnapshot.findFirst({
         where: { weekStart: { gte: new Date(today.getTime() - 7 * 86400000) } },
       }),
+      // Instalments still to come. `gte: today` deliberately excludes anything already past due -
+      // those are the overdue receivable's business, and a date cannot be both "follow this up
+      // before it lands" and "this one got away".
+      prisma.instalment.findMany({
+        where: {
+          status: { in: ["DUE", "OVERDUE"] },
+          dueDate: { gte: today, lte: upcomingHorizon },
+          pendingPayment: { ...ACTIVE, status: { in: ["ACTIVE", "OVERDUE"] } },
+        },
+        select: {
+          dueDate: true,
+          amountInrMinor: true,
+          amountEurMinor: true,
+          fxRateUsed: true,
+          pendingPayment: { select: { studentName: true } },
+        },
+        orderBy: { dueDate: "asc" },
+        take: 100,
+      }),
     ]);
 
   const overdue = pendingRows.filter((p) => p.overdue && p.balance.inr > 0);
   if (overdue.length > 0) {
-    // Both aggregates — every receivable already carries its EUR balance from its own stamped
+    // Both aggregates - every receivable already carries its EUR balance from its own stamped
     // rate, so this figure is exact in either currency rather than converted on read.
     const total = overdue.reduce(
       (a, p) => ({ inr: a.inr + p.balance.inr, eur: a.eur + p.balance.eur }),
@@ -525,6 +559,36 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       severity: "risk",
       title: `${overdue.length} overdue payment${overdue.length > 1 ? "s" : ""} - {m0}`,
       body: `${overdue[0].studentName}${overdue.length > 1 ? ` and ${overdue.length - 1} more` : ""} past the due date.`,
+      href: "/finance",
+      amounts: [total],
+    });
+  }
+
+  /**
+   * Instalments worth chasing BEFORE they are missed - the whole point of writing the due dates
+   * down on the income entry. `watch`, not `risk`: nothing has gone wrong yet, and colouring an
+   * on-time plan red is how a founder learns to ignore the band.
+   *
+   * Each instalment carries its own EUR figure from the rate stamped when the plan was agreed,
+   * so this total is exact in both currencies rather than converted at read time.
+   */
+  if (instalmentsDueSoon.length > 0) {
+    const total = instalmentsDueSoon.reduce(
+      (a, i) => ({
+        inr: a.inr + Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
+        eur: a.eur + Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
+      }),
+      { inr: 0, eur: 0 },
+    );
+    const first = instalmentsDueSoon[0];
+    const others = instalmentsDueSoon.length - 1;
+    items.push({
+      id: "instalments-due-soon",
+      severity: "watch",
+      title: `${instalmentsDueSoon.length} instalment${instalmentsDueSoon.length > 1 ? "s" : ""} due soon - {m0}`,
+      body: `${first.pendingPayment.studentName} on ${formatDate(first.dueDate)}${
+        others > 0 ? ` and ${others} more` : ""
+      }. Follow up before the date, not after it.`,
       href: "/finance",
       amounts: [total],
     });
@@ -570,7 +634,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       id: "auto-saved-logs",
       severity: "info",
       title: `Auto-saved at cutoff: ${missingLoggers.auto.join(", ")}`,
-      body: "Derived from activity because no log was submitted — incomplete until they amend it. Don't judge pay on these yet.",
+      body: "Derived from activity because no log was submitted - incomplete until they amend it. Don't judge pay on these yet.",
       href: "/people",
     });
   }
@@ -614,7 +678,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       title: `${payablesDueSoon.length} payable${payablesDueSoon.length > 1 ? "s" : ""} due within 7 days`,
       body: `{m0} committed - ${payablesDueSoon.map((p) => p.name).join(", ")}.`,
       href: "/cash",
-      // Payables are recorded in rupees only — euro side at today's rate.
+      // Payables are recorded in rupees only - euro side at today's rate.
       amounts: [inrOnlyPair(total)],
     });
   }
@@ -644,7 +708,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   }
 
   // ── Agreements: the founder should never have to remember who is waiting on a contract.
-  // Every one of these is derived (see lib/agreement-state.ts) — it appears while the condition
+  // Every one of these is derived (see lib/agreement-state.ts) - it appears while the condition
   // holds and disappears the moment it's acted on, exactly like the rest of this feed.
   const agreements = await getAgreementTaskCounts();
   if (agreements.readyToSend > 0) {
@@ -652,7 +716,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       id: "agreements-ready",
       severity: "watch",
       title: `${agreements.readyToSend} agreement${agreements.readyToSend > 1 ? "s" : ""} ready to send`,
-      body: "These clients are past the point where the agreement should go out — generate and send.",
+      body: "These clients are past the point where the agreement should go out - generate and send.",
       href: "/agreements/new",
     });
   }
@@ -679,7 +743,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       id: "agreements-awaiting",
       severity: "info",
       title: `${agreements.awaitingSignature} agreement${agreements.awaitingSignature > 1 ? "s" : ""} awaiting signature`,
-      body: "Issued and still unsigned — a reminder is one click away.",
+      body: "Issued and still unsigned - a reminder is one click away.",
       href: "/agreements",
     });
   }

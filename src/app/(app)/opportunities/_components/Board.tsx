@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Plus, Settings2, GripVertical, Trash2, ChevronUp, ChevronDown, Pin,
-  ChevronLeft, ChevronRight, Phone, MessageCircle, StickyNote, User,
+  ChevronLeft, ChevronRight, Phone, MessageCircle, StickyNote, User, Timer, Gauge,
 } from "lucide-react";
 import type { BoardData } from "@/server/opportunities-metrics";
 import { Btn, IconButton } from "@/components/ui/controls";
@@ -23,26 +23,49 @@ import {
   getOpportunityNotes, createOpportunityNote, toggleOpportunityNotePin, deleteOpportunityNote,
   type OpportunityNote,
 } from "@/server/opportunities-actions";
-import { LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
+import { COLUMN_OWNING_STAGES, LEAD_STAGE_LABELS, PAYMENT_PLAN_LABELS } from "@/lib/labels";
 import { SYNAMATE_STAGES } from "@/lib/pipeline-stages";
+import { BANT_DOUBT_FROM } from "@/lib/booking-intake";
+import { OpportunityDialog } from "./OpportunityDialog";
+import { SpeedToLeadReport } from "./SpeedToLeadReport";
+import { DialButton } from "@/components/calls/DialButton";
+import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
+import { firstCallVerdict, firstCallLabel, type FirstCallState } from "@/lib/speed-to-lead";
+
+/**
+ * Band score at or above which a booked prospect reads green, on the 0-4 scale.
+ *
+ * 1.6 is the founder's line ("red below 2, green above", set when BANT ran 0-5 and rescaled with
+ * it), and it sits at the boundary rather than above it: a prospect who scores exactly 1.6 has met the bar, and rounding them into the red would
+ * punish the one case the rule is least sure about.
+ */
+const BANT_PASS = BANT_DOUBT_FROM;
 
 // Options for mapping a stage back to a lead-lifecycle stage (the bridge that syncs a card move to
-// Lead.stage). "" = no sync; the board stays a standalone process — offered on custom pipelines
+// Lead.stage). "" = no sync; the board stays a standalone process - offered on custom pipelines
 // only, since an unmapped column on the default board swallows deals (opportunities-actions).
+/**
+ * Only stages that can actually OWN a column.
+ *
+ * This offered all seventeen, and three of them were dead choices: `DISCO_NOT_BOOKED`,
+ * `DISCO_COMPLETED` and `PROPOSAL_SENT` fold into another stage's column, so `boardColumnFor`
+ * sends their leads elsewhere and a column mapped to one of them never receives a card. The
+ * mapping saved, the toast said it worked, and the column stayed empty forever.
+ */
 const LIFECYCLE_OPTS = [
-  { value: "", label: "— No lead-stage sync —" },
-  ...Object.entries(LEAD_STAGE_LABELS).map(([value, label]) => ({ value, label })),
+  { value: "", label: "- No lead-stage sync -" },
+  ...COLUMN_OWNING_STAGES.map((value) => ({ value, label: LEAD_STAGE_LABELS[value] ?? value })),
 ];
 const LIFECYCLE_OPTS_REQUIRED = LIFECYCLE_OPTS.slice(1);
 
 // Which of Synamate's two won columns a WON-mapped column is. Shown only for WON.
 const PLAN_OPTS = [
-  { value: "", label: "— either —" },
+  { value: "", label: "- either -" },
   ...Object.entries(PAYMENT_PLAN_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 const SOURCE_OPTS = [
-  { value: "", label: "— source —" },
+  { value: "", label: "- source -" },
   { value: "INSTAGRAM", label: "Instagram" }, { value: "YOUTUBE", label: "YouTube" },
   { value: "LINKEDIN", label: "LinkedIn" }, { value: "WHATSAPP", label: "WhatsApp" },
   { value: "REFERRAL", label: "Referral" }, { value: "SUMMIT", label: "Summit" },
@@ -66,7 +89,7 @@ export default function Board({
   /**
    * The founder's `pipelineConfig.mode`, HONOURED HERE AT LAST.
    *
-   * The setting has existed since Part 2 §9 and was read by exactly one screen — `/pipeline`.
+   * The setting has existed since Part 2 §9 and was read by exactly one screen - `/pipeline`.
    * This board ignored it entirely and was always drag-and-drop, so the two boards over the same
    * data disagreed about who is allowed to move a card, and switching to "rules-driven" locked
    * one board while leaving the other wide open.
@@ -95,6 +118,19 @@ export default function Board({
   const [editCard, setEditCard] = useState<Card | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  // A dial from a card: who was called and when the button was pressed. Opens the outcome form.
+  const [callLog, setCallLog] = useState<{ lead: { id: string; name: string; phone: string | null }; calledAt: Date } | null>(null);
+  // Wall clock for the cards' five-minute verdicts. Null on first paint ON PURPOSE: this component
+  // is server-rendered too, and seeding Date.now() there makes the server and the browser disagree
+  // on "2:40 left" by a second - a hydration mismatch that re-renders the whole board. The chips
+  // appear after mount and then tick every 15 s.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, []);
   const [createFirstOpen, setCreateFirstOpen] = useState(false);
   const [mobileStageId, setMobileStageId] = useState<string>(board.stages[0]?.id ?? "");
 
@@ -103,21 +139,21 @@ export default function Board({
   }, [stages, mobileStageId]);
 
   // Auto-scroll while dragging a card. Native HTML5 drag doesn't scroll the board's overflow
-  // container (or the page), so a card can't be dropped onto a stage that's scrolled off-screen —
+  // container (or the page), so a card can't be dropped onto a stage that's scrolled off-screen -
   // you'd drag to the edge and get stuck. While a card is in flight we watch the pointer: near the
   // board's left/right edge we scroll the board horizontally (to reach an off-screen stage); near
   // the viewport's top/bottom we scroll the window (to reach cards low in a tall column). A rAF
   // loop keeps scrolling using the last-seen speed, so it continues even while the cursor is held
   // still at an edge (dragover stops firing when stationary). Listeners are wired only while
   // dragId is set and torn down (with the loop) the moment the drag ends.
-  // The scrollable strip now belongs to HScroll, which hands it back through this handle — the
+  // The scrollable strip now belongs to HScroll, which hands it back through this handle - the
   // auto-scroll below drives exactly the same element it always did.
   /**
    * Columns the viewer has folded away, kept per pipeline in localStorage.
    *
    * Client-only on purpose: which columns you have out of the way is a preference about YOUR
    * screen, not a property of the board, so it must not follow you onto someone else's. Read in an
-   * effect rather than in the initialiser because this component server-renders — reading
+   * effect rather than in the initialiser because this component server-renders - reading
    * localStorage during render is a hydration mismatch.
    */
   const collapseKey = `b2.board.collapsed.${board.activePipelineId ?? "none"}`;
@@ -138,7 +174,7 @@ export default function Board({
       try {
         window.localStorage.setItem(collapseKey, JSON.stringify([...next]));
       } catch {
-        /* private mode / storage full — folding still works for this visit */
+        /* private mode / storage full - folding still works for this visit */
       }
       return next;
     });
@@ -228,7 +264,7 @@ export default function Board({
     // Dropping a card straight onto the Won column records it as a won deal (and, on the sales
     // pipeline, marks the underlying contact Won). That's easy to trigger with a stray drag, so a
     // direct-to-Won drop must be explicitly verified first. Only when the card is actually MOVING
-    // into Won — reordering a card already in Won doesn't nag.
+    // into Won - reordering a card already in Won doesn't nag.
     const target = stages.find((s) => s.id === toStageId);
     const card = stages.flatMap((s) => s.cards).find((c) => c.id === id);
     const movingIntoWon = target?.legacyStage === "WON" && card?.stageId !== toStageId;
@@ -238,7 +274,7 @@ export default function Board({
         body: "You dropped this card directly into Won. That records it as a won deal and moves the contact to the Won stage. Move the card back to undo.",
         confirmLabel: "Mark as Won",
       });
-      if (!ok) return; // declined — leave the board exactly as it was, no move
+      if (!ok) return; // declined - leave the board exactly as it was, no move
     }
 
     const prev = stages;
@@ -290,12 +326,12 @@ export default function Board({
 
   // Deleting the last card a lead has also archives the LEAD, so it leaves the callers' desks
   // and the Pipeline list too (`deleteOpportunity`). The confirm says so, because "delete" here
-  // now reaches further than the board — and both halves come back together from Archived.
+  // now reaches further than the board - and both halves come back together from Archived.
   async function removeOpp() {
     if (!editCard) return;
     const ok = await askConfirm({
       title: `Delete "${editCard.name}"?`,
-      body: "The card and the lead behind it are archived together — the lead leaves the Pipeline list and its owner's desk. Restore both from the Archived tab.",
+      body: "The card and the lead behind it are archived together - the lead leaves the Pipeline list and its owner's desk. Restore both from the Archived tab.",
       danger: true,
     });
     if (!ok) return;
@@ -341,7 +377,18 @@ export default function Board({
   }
 
   const stageOpts = stages.map((s) => ({ value: s.id, label: s.name }));
-  const ownerOpts = [{ value: "", label: "— unassigned —" }, ...board.owners.map((o) => ({ value: o.id, label: o.name }))];
+  /**
+   * The column where a call becomes booked, as a board POSITION rather than a name.
+   *
+   * From here rightwards the card shows the band score instead of the five-minute verdict: once
+   * the call is in the diary, "did we ring them fast enough" is a settled fact about the past,
+   * and the live question is whether this prospect is worth the call. Keyed on `legacyStage`
+   * because column names are editable, and derived from board order so a stage inserted later
+   * needs no code change here.
+   */
+  const bookedIdx = stages.findIndex((s) => s.legacyStage === "STRATEGY_CALL_BOOKED");
+  const pastBooking = (i: number) => bookedIdx >= 0 && i >= bookedIdx;
+  const ownerOpts = [{ value: "", label: "- unassigned -" }, ...board.owners.map((o) => ({ value: o.id, label: o.name }))];
   const mobileStage = stages.find((s) => s.id === mobileStageId) ?? stages[0];
 
   return (
@@ -375,6 +422,9 @@ export default function Board({
               Manage board
             </Btn>
           )}
+          <Btn variant="ghost" icon={<Timer size={16} />} onClick={() => setReportOpen(true)} title="Time from opt-in to first call, per setter">
+            Speed to lead
+          </Btn>
           <Btn icon={<Plus size={16} />} onClick={() => { setAddError(null); setAddOpen(true); }}>
             Add opportunity
           </Btn>
@@ -382,7 +432,7 @@ export default function Board({
       </div>
 
       {/* Mobile: single-column, stage picker instead of a horizontal-scrolling board. Also the
-          non-drag path for touch devices — cards move via the edit modal's Stage field. */}
+          non-drag path for touch devices - cards move via the edit modal's Stage field. */}
       <div className="md:hidden">
         <Select
           aria-label="Stage"
@@ -397,8 +447,11 @@ export default function Board({
               <OppCard
                 key={card.id}
                 card={card}
+                showBant={pastBooking(stages.findIndex((s) => s.id === mobileStage.id))}
                 draggable={false}
                 dragActive={false}
+                now={now}
+                onDial={(lead, at) => setCallLog({ lead, calledAt: at })}
                 onOpen={() => { setEditError(null); setEditCard(card); }}
               />
             ))}
@@ -410,8 +463,8 @@ export default function Board({
       </div>
 
       {/* Desktop / tablet: full drag-and-drop board.
-          HScroll adds the affordance this was missing — edge fades, paging arrows and an
-          always-visible scrollbar — so stages off the right edge announce themselves instead of
+          HScroll adds the affordance this was missing - edge fades, paging arrows and an
+          always-visible scrollbar - so stages off the right edge announce themselves instead of
           looking like the end of the board. It exposes the same scroll element the drag
           auto-scroll below already drives. */}
       <HScroll ref={boardScroll} label="Pipeline stages" className="hidden pb-1 md:block">
@@ -424,7 +477,7 @@ export default function Board({
             className={`flex flex-none flex-col rounded-card border bg-surface-2 ${collapsed.has(stage.id) ? "w-12" : "w-72"} ${dropStage === stage.id ? "border-primary" : "border-line"}`}
           >
             {collapsed.has(stage.id) ? (
-              /* Collapsed rail. Still a drop target — the wrapper's handlers are unchanged — so a
+              /* Collapsed rail. Still a drop target - the wrapper's handlers are unchanged - so a
                  card can be parked in a column you have folded away. */
               <button
                 type="button"
@@ -441,14 +494,14 @@ export default function Board({
               <>
                 <div className="border-b border-line px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-ink">{stage.name}</span>
+                    <span className="truncate text-sm font-semibold text-ink" title={stage.name}>{stage.name}</span>
                     {/* A column with no lead stage mapped is a ONE-WAY DOOR: a card dropped in it
                         stops writing through to Lead.stage, and the stage sync can never move it
                         back out because it only targets mapped columns. Production had two such
                         columns on the default board with nothing anywhere saying so. */}
                     {!stage.legacyStage && (
                       <span
-                        title="This column isn't mapped to a lead stage — a card moved here stops updating the lead's stage, and won't be moved back automatically."
+                        title="This column isn't mapped to a lead stage - a card moved here stops updating the lead's stage, and won't be moved back automatically."
                         className="flex-none rounded-full bg-warn-soft px-1.5 py-0.5 text-caption font-semibold text-warn"
                       >
                         Unmapped
@@ -464,7 +517,7 @@ export default function Board({
                       <ChevronLeft size={14} />
                     </button>
                   </div>
-                  {/* Count and money on one line under the name — the two figures anyone scanning
+                  {/* Count and money on one line under the name - the two figures anyone scanning
                       the board is actually comparing between columns. */}
                   <div className="mt-0.5 flex items-baseline gap-2 text-caption text-ink-3">
                     <span>{stage.count.toLocaleString("en-IN")} {stage.count === 1 ? "opportunity" : "opportunities"}</span>
@@ -481,11 +534,14 @@ export default function Board({
                 <OppCard
                   key={card.id}
                   card={card}
+                  showBant={pastBooking(stages.indexOf(stage))}
                   draggable={dragEnabled}
                   dragActive={dragId === card.id}
                   onDragStart={() => setDragId(card.id)}
                   onDragEnd={() => setDragId(null)}
                   onDropOn={dragEnabled ? (e) => { e.stopPropagation(); onDrop(stage.id, i); } : undefined}
+                  now={now}
+                  onDial={(lead, at) => setCallLog({ lead, calledAt: at })}
                   onOpen={() => { setEditError(null); setEditCard(card); }}
                 />
               ))}
@@ -496,7 +552,7 @@ export default function Board({
                   this message asks for. It previously pointed at a control that did not exist. */}
               {stage.hasMore && (
                 <p className="rounded-field border border-dashed border-line px-2 py-3 text-center text-caption text-ink-3">
-                  Only the first 300 cards in this column are shown — use the search and filters
+                  Only the first 300 cards in this column are shown - use the search and filters
                   above to narrow it down.
                 </p>
               )}
@@ -521,7 +577,7 @@ export default function Board({
           </div>
           {addMode === "existing" ? (
             <Field label="Contact">
-              <Select name="leadId" options={[{ value: "", label: "— pick a contact —" }, ...contacts.map((c) => ({ value: c.id, label: `${c.name} · ${c.phone ?? "no phone"}` }))]} defaultValue="" />
+              <Select name="leadId" options={[{ value: "", label: "- pick a contact -" }, ...contacts.map((c) => ({ value: c.id, label: `${c.name} · ${c.phone ?? "no phone"}` }))]} defaultValue="" />
             </Field>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -532,7 +588,7 @@ export default function Board({
           <div className="grid grid-cols-2 gap-3">
             <Field label="Stage"><Select name="stageId" options={stageOpts} defaultValue={stageOpts[0]?.value} /></Field>
             <Field label="Value (₹)"><TextInput kind="money" name="valueInr" placeholder="150000" /></Field>
-            {/* Deal name is free text, not kind="name": "Level 2 — Q3 renewal" is a real deal. */}
+            {/* Deal name is free text, not kind="name": "Level 2 - Q3 renewal" is a real deal. */}
             <Field label="Deal name"><TextInput kind="text" name="name" placeholder="Defaults to contact name" /></Field>
             <Field label="Source"><Select name="source" options={SOURCE_OPTS} defaultValue="" /></Field>
             <Field label="Owner"><Select name="assignedToId" options={ownerOpts} defaultValue="" /></Field>
@@ -545,51 +601,37 @@ export default function Board({
         </form>
       </Modal>
 
-      {/* Edit opportunity — Details (the existing form, untouched) + Notes (BUILD_CHECKLIST.md
-          §3: Opportunity gets its own notes via ContactNote.opportunityId, not just the parent
-          Lead's). Two tabs rather than one long scroll, and the note form has to be a sibling of
-          the Details form (not nested inside it) since HTML forms can't nest — Tabs only ever
-          mounts one panel at a time, so that's naturally satisfied here. */}
-      <Modal open={!!editCard} onClose={() => setEditCard(null)} title="Edit opportunity" size="md">
-        {editCard && (
-          <Tabs
-            tabs={[
-              {
-                label: "Details",
-                content: (
-                  <form action={saveOpp} key={editCard.id} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <Field label="Deal name"><TextInput kind="text" name="name" required defaultValue={editCard.name} /></Field>
-                      <Field label="Value (₹)"><TextInput kind="money" name="valueInr" defaultValue={editCard.valueInr.replace(/[^\d.]/g, "")} /></Field>
-                      <Field label="Stage">
-                        <Select name="stageId" options={stageOpts} defaultValue={editCard.stageId} />
-                      </Field>
-                      <Field label="Source"><Select name="source" options={SOURCE_OPTS} defaultValue={editCard.source ?? ""} /></Field>
-                      <Field label="Status"><Select name="status" options={[{ value: "OPEN", label: "Open" }, { value: "WON", label: "Won" }, { value: "LOST", label: "Lost" }, { value: "ABANDONED", label: "Abandoned" }]} defaultValue={editCard.status} /></Field>
-                      <Field label="Owner"><Select name="assignedToId" options={ownerOpts} defaultValue={editCard.ownerId ?? ""} /></Field>
-                    </div>
-                    <FormError message={editError} />
-                    <div className="flex items-center justify-between pt-1">
-                      <Btn variant="danger" type="button" icon={<Trash2 size={15} />} onClick={removeOpp}>Delete</Btn>
-                      <div className="flex gap-2">
-                        <Btn variant="ghost" type="button" onClick={() => setEditCard(null)}>Cancel</Btn>
-                        <SubmitButton>Save</SubmitButton>
-                      </div>
-                    </div>
-                  </form>
-                ),
-              },
-              {
-                label: "Notes",
-                content: <OpportunityNotesPanel key={editCard.id} opportunityId={editCard.id} />,
-              },
-            ]}
-          />
-        )}
-      </Modal>
+      {/* Edit opportunity - contact details first, then the deal, plus appointments, tasks and
+          notes (BUILD_CHECKLIST.md §3: Opportunity gets its own notes via ContactNote.opportunityId).
+          The deal save and delete stay here because they also drive the board's optimistic state. */}
+      <OpportunityDialog
+        card={editCard}
+        stageOpts={stageOpts}
+        ownerOpts={ownerOpts}
+        sourceOpts={SOURCE_OPTS}
+        error={editError}
+        onSave={saveOpp}
+        onDelete={removeOpp}
+        onClose={() => setEditCard(null)}
+        notesPanel={editCard ? <OpportunityNotesPanel key={editCard.id} opportunityId={editCard.id} /> : null}
+      />
 
       {/* Manage board */}
       {canConfigure && <ManageBoard board={board} open={manageOpen} onClose={() => setManageOpen(false)} />}
+
+      {/* Speed to lead - the report behind the toolbar button */}
+      <SpeedToLeadReport open={reportOpen} onClose={() => setReportOpen(false)} />
+
+      {/* Outcome form, opened by a card's Call button a moment after the dial, stamped with the
+          dial instant. Online-only here (the desks carry the offline queue; the board is where
+          managers call from). Refresh on close so the card's colour reflects the call. */}
+      {callLog && (
+        <LogOutcomeModal
+          lead={callLog.lead}
+          calledAt={callLog.calledAt}
+          onClose={() => { setCallLog(null); router.refresh(); }}
+        />
+      )}
     </div>
   );
 }
@@ -605,27 +647,56 @@ function StageTotals({ stage }: { stage: Stage }) {
   );
 }
 
+/** Card accent + chip colours for the first-call verdict. Closed cards keep the chip, lose the accent. */
+const VERDICT_STYLE: Record<FirstCallState, { fg: string; bg: string }> = {
+  HIT: { fg: "var(--good)", bg: "var(--good-bg)" },
+  LATE: { fg: "var(--bad)", bg: "var(--bad-bg)" },
+  OVERDUE: { fg: "var(--bad)", bg: "var(--bad-bg)" },
+  DUE: { fg: "var(--warn)", bg: "var(--warn-bg)" },
+};
+
 function OppCard({
   card,
+  showBant,
   draggable,
   dragActive,
   onDragStart,
   onDragEnd,
   onDropOn,
   onOpen,
+  now,
+  onDial,
 }: {
   card: Card;
+  /** True from the "Discovery Call Booked" column rightwards - swaps the speed chip for BANT. */
+  showBant: boolean;
   draggable: boolean;
   dragActive: boolean;
   onDragStart?: () => void;
   onDragEnd?: () => void;
   onDropOn?: (e: React.DragEvent) => void;
   onOpen: () => void;
+  /** Wall clock for the five-minute verdict; null before mount (no chip yet). */
+  now: number | null;
+  /** The card's Call button was pressed - open the outcome form for this lead, stamped. */
+  onDial: (lead: { id: string; name: string; phone: string | null }, calledAt: Date) => void;
 }) {
+  // First-call verdict: green inside five minutes, red late or overdue, amber while the clock
+  // runs. Only OPEN cards wear the coloured accent - a won or lost deal's first-call time is
+  // history worth a chip, not a border that shouts across a closed column.
+  const verdict = now === null
+    ? null
+    : firstCallVerdict(new Date(card.optInAt), card.firstCallAt ? new Date(card.firstCallAt) : null, new Date(now));
+  const accent = verdict && card.status === "OPEN" ? VERDICT_STYLE[verdict.state] : null;
+  // Only from the booked column onwards, and only when a booking actually names someone - a card
+  // dragged there by hand has no booking behind it, and inventing an owner would be a worse
+  // answer than falling back to the lead's assignee.
+  const bookedWith =
+    showBant && card.bookedWithName ? { name: card.bookedWithName, image: card.bookedWithImage } : null;
   /**
    * A drag MUST put something on the dataTransfer to start.
    *
-   * Chrome tolerates an empty payload; Firefox does not — it cancels the drag outright, so the
+   * Chrome tolerates an empty payload; Firefox does not - it cancels the drag outright, so the
    * board looked permanently un-draggable there even with drag mode on. The id we write is not
    * read back (the dragged card is tracked in React state), but setting it is what makes the
    * gesture legal, and `effectAllowed` is what shows a move cursor instead of the "no entry" one.
@@ -635,7 +706,7 @@ function OppCard({
       e.dataTransfer.setData("text/plain", card.id);
       e.dataTransfer.effectAllowed = "move";
     } catch {
-      /* a browser that refuses the write can still drag — state carries the card */
+      /* a browser that refuses the write can still drag - state carries the card */
     }
     onDragStart?.();
   };
@@ -653,13 +724,36 @@ function OppCard({
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); }
       }}
       className={`cursor-pointer rounded-field border border-line bg-surface p-3 shadow-card transition-shadow hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ${dragActive ? "opacity-40" : ""}`}
+      // The accent is a coloured left edge rather than a full border: it reads at a glance down a
+      // column, and leaves the hover / focus ring alone.
+      style={accent ? { boxShadow: `inset 3px 0 0 ${accent.fg}` } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{card.name}</p>
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink" title={card.name}>{card.name}</p>
         {/* The owner rides as an avatar in the corner rather than a labelled row at the bottom:
             it is the one field people scan across a whole column, and a name repeated on every
             card costs a line each without ever being read in full. */}
-        {card.ownerName ? (
+        {/*
+          From the booked column onwards the corner shows WHOSE CALL IT IS, not who chased the
+          opt-in. Two different people doing two different jobs, and once a call is in the diary
+          the second one is what the board is being read for.
+
+          The name rides alongside the picture whenever that person has no profile photo, because
+          initials cannot carry this: "Ameen" and "Asma" both reduce to "A". A card that says "A"
+          answers the question with the wrong half of the alphabet. Once they upload a photo at
+          /profile the label drops away and the corner goes back to being just a face.
+        */}
+        {bookedWith ? (
+          <span
+            className="flex flex-none items-center gap-1"
+            title={`Discovery call with ${bookedWith.name}`}
+          >
+            {!bookedWith.image && (
+              <span className="text-caption font-medium text-ink-3">{bookedWith.name.split(" ")[0]}</span>
+            )}
+            <Avatar name={bookedWith.name} image={bookedWith.image} size={22} />
+          </span>
+        ) : card.ownerName ? (
           <span className="flex-none" title={`Owner: ${card.ownerName}`}>
             <Avatar name={card.ownerName} size={22} />
           </span>
@@ -668,30 +762,78 @@ function OppCard({
         )}
       </div>
 
-      {/* Labelled rows. The label carries the meaning — a bare "Social media" above a bare
+      {/* Labelled rows. The label carries the meaning - a bare "Social media" above a bare
           "₹1,500" reads as two unrelated facts. */}
       <dl className="mt-2 space-y-0.5 text-caption">
         <div className="flex gap-2">
           <dt className="w-12 flex-none text-ink-3">Source</dt>
           <dd className="min-w-0 truncate text-ink-2">
-            {card.source ? card.source.replaceAll("_", " ").toLowerCase() : "—"}
+            {card.source ? card.source.replaceAll("_", " ").toLowerCase() : "-"}
           </dd>
         </div>
         <div className="flex gap-2">
           <dt className="w-12 flex-none text-ink-3">Value</dt>
-          <dd className="min-w-0 truncate font-semibold text-ink">{card.valueInr}</dd>
+          <dd className="min-w-0 truncate font-semibold text-ink" title={card.valueInr}>{card.valueInr}</dd>
         </div>
       </dl>
 
-      {/* Quick actions. Every icon here does something real — a decorative icon row on a card
+      {/*
+        Band score, from the booked column onwards.
+
+        Replaces the speed chip rather than joining it: two chips on a card this size is how a
+        board stops being scannable, and once the call is booked the five-minute verdict has
+        stopped being actionable. The number is spoken as "2.6/4" and not left to colour alone,
+        so it survives colour-blindness and a monochrome print - the same rule the speed chip
+        follows.
+
+        A prospect nobody has scored gets "Not scored", never 0.0: null means no evidence, and
+        drawing that as a red zero would condemn a lead for a question we never asked.
+      */}
+      {showBant ? (
+        <span
+          className="tnum mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold"
+          style={
+            card.bantAvg === null
+              ? { background: "var(--surface-2)", color: "var(--ink-3)" }
+              : card.bantAvg >= BANT_PASS
+                ? { background: "var(--good-bg)", color: "var(--good)" }
+                : { background: "var(--bad-bg)", color: "var(--bad)" }
+          }
+          title={
+            card.bantAvg === null
+              ? "Nobody has scored this prospect's budget, authority, need or timeline yet"
+              : `BANT ${card.bantAvg.toFixed(1)} out of 4 - ${card.bantAvg >= BANT_PASS ? "worth the call" : "weak, qualify before spending the slot"}`
+          }
+        >
+          <Gauge size={11} aria-hidden />{" "}
+          {card.bantAvg === null ? "BANT not scored" : `BANT ${card.bantAvg.toFixed(1)}/4`}
+        </span>
+      ) : verdict ? (
+        <span
+          className="tnum mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold"
+          style={{ background: VERDICT_STYLE[verdict.state].bg, color: VERDICT_STYLE[verdict.state].fg }}
+          title={card.firstCallAt ? `First call logged ${new Date(card.firstCallAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}` : "No call logged yet"}
+        >
+          <Timer size={11} aria-hidden /> {firstCallLabel(verdict)}
+        </span>
+      ) : null}
+
+      {/* Quick actions. Every icon here does something real - a decorative icon row on a card
           people click all day is worse than none. `stopPropagation` so acting on a card does not
           also open its edit modal. */}
       <div className="mt-2 flex items-center gap-1 border-t border-line pt-2">
         {card.contactPhone && (
           <>
-            <CardAction href={`tel:${card.contactPhone}`} label={`Call ${card.contactName}`}>
+            {/* Dials AND, a moment later, opens the outcome form stamped with the dial time -
+                see DialButton. That stamp is what the chip above is measured from. */}
+            <DialButton
+              phone={card.contactPhone}
+              name={card.contactName}
+              variant="icon"
+              onDial={(at) => onDial({ id: card.contactId, name: card.contactName, phone: card.contactPhone }, at)}
+            >
               <Phone size={13} />
-            </CardAction>
+            </DialButton>
             <CardAction
               href={`https://wa.me/${card.contactPhone.replace(/[^0-9]/g, "")}`}
               external
@@ -717,7 +859,7 @@ function OppCard({
   );
 }
 
-/** One quick action on a card. A link, not a button — these all navigate or hand off to the OS. */
+/** One quick action on a card. A link, not a button - these all navigate or hand off to the OS. */
 function CardAction({
   href, label, external = false, children,
 }: {
@@ -809,7 +951,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
                       <Trash2 size={15} />
                     </IconButton>
                   </div>
-                  {/* Every column says which lifecycle stage it means — that bridge is what syncs a
+                  {/* Every column says which lifecycle stage it means - that bridge is what syncs a
                       card move to the contact's stage (funnel/reminders stay correct). Editable on
                       the default board too, so this pipeline can be shaped by hand; the one thing
                       refused there is clearing it, which is why the option list differs. */}
@@ -857,7 +999,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
                 size="sm"
                 value={newStageLegacy}
                 aria-label="Lead lifecycle stage for the new column"
-                options={activeIsDefault ? [{ value: "", label: "— pick a lead stage —" }, ...LIFECYCLE_OPTS_REQUIRED] : LIFECYCLE_OPTS}
+                options={activeIsDefault ? [{ value: "", label: "- pick a lead stage -" }, ...LIFECYCLE_OPTS_REQUIRED] : LIFECYCLE_OPTS}
                 onChange={(e) => setNewStageLegacy(e.target.value)}
               />
               <Btn
@@ -877,7 +1019,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
 
           {/* The safety net that makes the editing above safe to offer: whatever has been renamed,
               re-mapped, added or removed, this puts the twelve live Synamate columns back and
-              re-files every card. Nothing is dropped — a column that still holds cards is refused
+              re-files every card. Nothing is dropped - a column that still holds cards is refused
               rather than emptied (server/pipeline-reshape.ts). */}
           {activeIsDefault && board.activePipelineId && (
             <div className="mt-4 rounded-field border border-dashed border-line p-3">
@@ -932,7 +1074,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
 /**
  * Notes tab of the opportunity edit modal (BUILD_CHECKLIST.md §3). Mirrors ContactRecord.tsx's
  * `Notes()` component almost exactly, but fetches on demand via a server action instead of
- * reading server-supplied props — the board only ever loads BoardCard data (no notes) for every
+ * reading server-supplied props - the board only ever loads BoardCard data (no notes) for every
  * card up front, so pulling a deal's notes into this component would mean fetching notes for
  * every open/won/lost card on every board load. Fetching per-opportunity, only when its edit
  * modal actually opens, keeps the board query exactly as bounded as §4 already made it.
@@ -959,7 +1101,7 @@ function OpportunityNotesPanel({ opportunityId }: { opportunityId: string }) {
     setAddError(null);
     const res = await createOpportunityNote(opportunityId, fd);
     if (!res.ok) return setAddError(res.error);
-    toast(res.mentionedCount ? `Note added — mentioned ${res.mentionedCount}` : "Note added");
+    toast(res.mentionedCount ? `Note added - mentioned ${res.mentionedCount}` : "Note added");
     formRef.current?.reset();
     setNotes(await getOpportunityNotes(opportunityId));
   }
@@ -995,7 +1137,7 @@ function OpportunityNotesPanel({ opportunityId }: { opportunityId: string }) {
             <p className="whitespace-pre-wrap text-sm text-ink">{n.body}</p>
             <div className="mt-2 flex items-center justify-between">
               <span className="text-caption text-ink-3">
-                {n.authorName ?? "—"} · <DateText date={n.createdAt} />
+                {n.authorName ?? "-"} · <DateText date={n.createdAt} />
               </span>
               <div className="flex items-center gap-1">
                 {n.pinned && <Pill tone="warn">Pinned</Pill>}

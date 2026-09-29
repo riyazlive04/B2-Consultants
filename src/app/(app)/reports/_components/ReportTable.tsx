@@ -9,14 +9,14 @@ import { formatInrMinor, formatPct } from "@/lib/format";
 import { groupByLabel, objectLabel, type ReportObject, type ReportResult, type ReportRow } from "@/lib/reports";
 
 /**
- * The full result, every row and every measure — the chart's evidence.
+ * The full result, every row and every measure - the chart's evidence.
  *
  * The chart shows ONE measure and at most twelve bars; this shows all of them, sorted, filterable
  * and exportable. That division is the point: the picture answers "which and how much", the table
  * answers "exactly, and what else is in here". Neither replaces the other, and rolling the long
  * tail into "Other" on the chart is only defensible because nothing is missing from here.
  *
- * Deltas render as a chip inside their measure's own cell rather than as separate Δ columns —
+ * Deltas render as a chip inside their measure's own cell rather than as separate Δ columns -
  * six columns of alternating figure/percentage is a table nobody scans. `value` is set on every
  * column so sorting and the CSV export use the raw number, not the rendered string.
  */
@@ -54,7 +54,7 @@ export default function ReportTable({
               aria-hidden
               className="text-ink-3 transition-transform group-hover:-translate-y-0.5 group-hover:text-primary"
             />
-            <span className="sr-only">— open the filtered list</span>
+            <span className="sr-only">- open the filtered list</span>
           </Link>
         ) : (
           <span className="font-medium text-ink">{r.label}</span>
@@ -96,7 +96,7 @@ export default function ReportTable({
             align: "right" as const,
             cell: (r: ReportRow) => (
               <Cell
-                figure={r.winRatePct != null ? formatPct(r.winRatePct) : "—"}
+                figure={r.winRatePct != null ? formatPct(r.winRatePct) : "-"}
                 current={r.winRatePct ?? 0}
                 previous={r.prevWinRatePct}
                 show={hasCompare}
@@ -118,7 +118,7 @@ export default function ReportTable({
       subtitle={
         hasCompare
           ? `Each figure carries its change ${compareLabel}. Export includes the raw numbers.`
-          : "All time — no previous period to compare against."
+          : "All time - no previous period to compare against."
       }
       flush
     >
@@ -164,8 +164,8 @@ function Cell({
       {show &&
         (delta === null ? (
           // "new" and "0%" are different facts. A group with no previous records did not hold
-          // steady — it did not exist.
-          <span className="text-caption text-ink-3">{previous ? "—" : "new"}</span>
+          // steady - it did not exist.
+          <span className="text-caption text-ink-3">{previous ? "-" : "new"}</span>
         ) : (
           <span className={`text-caption font-semibold ${delta >= 0 ? "text-ok" : "text-risk"}`}>
             <span aria-hidden>{delta >= 0 ? "▲" : "▼"}</span>

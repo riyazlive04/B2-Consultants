@@ -4,7 +4,7 @@
  *
  * The founders' complaint is specific: a student ticks "watched", but only viewed 40%. The
  * tick is a claim; the tracked percentage is the evidence. So wherever both exist, this
- * module answers with the evidence — that is the entire point of the rule.
+ * module answers with the evidence - that is the entire point of the rule.
  *
  * Pure: pass the row's fields in.
  */
@@ -23,9 +23,9 @@ export type WatchTruth = {
   /** The percentage to display and store. */
   pct: number;
   complete: boolean;
-  /** Where the number came from — the UI says so, so a student can't be confused by it. */
+  /** Where the number came from - the UI says so, so a student can't be confused by it. */
   basis: "tracked" | "self_reported" | "none";
-  /** True when the tick and the tracking disagree — the case the founders want surfaced. */
+  /** True when the tick and the tracking disagree - the case the founders want surfaced. */
   disputed: boolean;
   explain: string;
 };
@@ -33,7 +33,7 @@ export type WatchTruth = {
 /**
  * Resolve what a student actually watched.
  *
- * When tracking exists it wins outright, even if it contradicts the tick — including when it
+ * When tracking exists it wins outright, even if it contradicts the tick - including when it
  * says 40% and the student says done. An untracked tick still counts (legacy rows, and hosts
  * that report no progress), because treating those as 0% would erase real history the moment
  * this feature shipped.
@@ -51,7 +51,7 @@ export function resolveWatchTruth(row: WatchRow): WatchTruth {
       basis: "tracked",
       disputed,
       explain: disputed
-        ? `Marked watched, but tracked at ${pct}% — tracking is the source of truth.`
+        ? `Marked watched, but tracked at ${pct}% - tracking is the source of truth.`
         : `Tracked at ${pct}%.`,
     };
   }

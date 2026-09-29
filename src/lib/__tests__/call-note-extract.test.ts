@@ -1,16 +1,16 @@
 /**
- * Call note extraction — parsing, coercion and date bounds.
+ * Call note extraction - parsing, coercion and date bounds.
  *
  * Two things are being defended here, and they are different jobs:
  *
  *  1. `heuristicExtract` must be CONSERVATIVE. The dangerous failure is not a missed tick,
- *    it's a confident wrong one — "wants it but father decides" ticking Authority would put
+ *    it's a confident wrong one - "wants it but father decides" ticking Authority would put
  *    an unqualified lead into the SSS ladder. Every BANT dimension therefore gets a
  *    negative-veto case here, not just a positive one.
  *
  *  2. `coerceExtraction` must treat the model as hostile. It writes into fields that drive
  *    commission, so an unknown enum, a past date, a confidence of 7, or a tick with no
- *    evidence has to be dropped at this boundary — there is no second check downstream.
+ *    evidence has to be dropped at this boundary - there is no second check downstream.
  *
  * Dates are passed in explicitly (no `new Date()`), so relative-date cases are exact.
  *
@@ -30,7 +30,7 @@ import {
   toDateKey,
 } from "../call-note-extract";
 
-// 2026-07-15 is a Wednesday — every weekday case below is anchored to it.
+// 2026-07-15 is a Wednesday - every weekday case below is anchored to it.
 const TODAY = "2026-07-15";
 
 describe("date helpers", () => {
@@ -50,7 +50,7 @@ describe("date helpers", () => {
     const wed = fromDateKey(TODAY)!;
     assert.equal(toDateKey(nextWeekday(wed, 0)), "2026-07-19", "Sunday");
     assert.equal(toDateKey(nextWeekday(wed, 4)), "2026-07-16", "Thursday is tomorrow");
-    // Said on a Wednesday, "Wednesday" means next week — today's call already happened.
+    // Said on a Wednesday, "Wednesday" means next week - today's call already happened.
     assert.equal(toDateKey(nextWeekday(wed, 3)), "2026-07-22", "same weekday rolls a week");
   });
 });
@@ -61,7 +61,7 @@ describe("boundFollowUp", () => {
     assert.equal(boundFollowUp(TODAY, TODAY), TODAY, "same day is allowed");
   });
 
-  test("drops a date before the call — the expensive mis-parse", () => {
+  test("drops a date before the call - the expensive mis-parse", () => {
     assert.equal(boundFollowUp("2026-07-14", TODAY), null);
     assert.equal(boundFollowUp("2019-01-01", TODAY), null);
   });
@@ -117,7 +117,7 @@ describe("parseRelativeDate", () => {
   });
 });
 
-describe("heuristicExtract — BANT", () => {
+describe("heuristicExtract - BANT", () => {
   const bant = (note: string) => heuristicExtract(note, TODAY).bant;
 
   test("ticks what the note actually says", () => {
@@ -160,7 +160,7 @@ describe("heuristicExtract — BANT", () => {
   });
 });
 
-describe("heuristicExtract — outcome and objection", () => {
+describe("heuristicExtract - outcome and objection", () => {
   const outcome = (note: string) => heuristicExtract(note, TODAY).outcome;
 
   test("reads the unambiguous outcomes", () => {
@@ -171,7 +171,7 @@ describe("heuristicExtract — outcome and objection", () => {
     assert.equal(outcome("will think about it, call back"), "FOLLOW_UP_NEEDED");
   });
 
-  test("no-show wins over a follow-up mention — it describes the appointment", () => {
+  test("no-show wins over a follow-up mention - it describes the appointment", () => {
     assert.equal(outcome("no show, will call back later"), "NO_SHOW");
   });
 
@@ -185,7 +185,7 @@ describe("heuristicExtract — outcome and objection", () => {
   });
 });
 
-describe("heuristicExtract — the whole note", () => {
+describe("heuristicExtract - the whole note", () => {
   test("the shorthand case end to end", () => {
     const x = heuristicExtract("wants it but father decides, call Sun", TODAY);
     assert.equal(x.source, "rules");
@@ -212,7 +212,7 @@ describe("heuristicExtract — the whole note", () => {
   });
 });
 
-describe("coerceExtraction — the model is not trusted", () => {
+describe("coerceExtraction - the model is not trusted", () => {
   const ev = { outcome: "q", budget: "b", authority: "a", need: "n", timeline: "t" };
 
   test("accepts a well-formed payload", () => {
@@ -242,7 +242,7 @@ describe("coerceExtraction — the model is not trusted", () => {
     assert.equal(coerceExtraction({ outcome: 7 }, TODAY).outcome, null);
   });
 
-  test("a tick with no evidence is dropped — the prompt requires the quote", () => {
+  test("a tick with no evidence is dropped - the prompt requires the quote", () => {
     const x = coerceExtraction({ bant: { budget: true, need: true }, evidence: { need: "keen" } }, TODAY);
     assert.equal(x.bant.budget, false, "unsupported tick dropped");
     assert.equal(x.bant.need, true, "supported tick kept");
@@ -283,7 +283,7 @@ describe("coerceExtraction — the model is not trusted", () => {
   });
 
   test("highlyQualified is carried as a suggestion", () => {
-    // It is deliberately never auto-applied by the UI — see the field's doc comment.
+    // It is deliberately never auto-applied by the UI - see the field's doc comment.
     assert.equal(coerceExtraction({ highlyQualified: true }, TODAY).highlyQualified, true);
     assert.equal(coerceExtraction({ highlyQualified: "true" }, TODAY).highlyQualified, false);
   });

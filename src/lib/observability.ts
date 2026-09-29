@@ -1,13 +1,13 @@
 /**
- * Error tracking — the Sentry seam.
+ * Error tracking - the Sentry seam.
  *
  * WHY THIS EXISTS: until now a production error reached the founders only when a client emailed.
  * Every `catch` in this codebase either swallows the error or writes it into a JSON blob nobody
- * reads (`daily-maintenance.safe()` is the clearest example — a failed sub-job stores its message
+ * reads (`daily-maintenance.safe()` is the clearest example - a failed sub-job stores its message
  * in the cron response and that response goes nowhere).
  *
  * WHY NOT `@sentry/nextjs`: this file follows the seam already established by lib/anthropic.ts and
- * lib/email.ts — raw HTTP to the vendor, keys-off by default, never throws into a request path. The
+ * lib/email.ts - raw HTTP to the vendor, keys-off by default, never throws into a request path. The
  * SDK would add a webpack plugin and an auto-instrumentation layer that rewrites the Next build, to
  * do a job that is one POST of one JSON envelope. The envelope endpoint is a stable, documented
  * HTTP API; the build risk of the SDK is not worth taking on an app that is already fragile to
@@ -15,7 +15,7 @@
  *
  * DELIBERATELY NOT `server-only`: `app/(app)/error.tsx` is a client component, and the local ring
  * buffer / DSN-armed check are useful on both sides. The *send* path is guarded by `isServer`
- * anyway — a browser POST to Sentry would need a different (public) DSN and CORS setup, so client
+ * anyway - a browser POST to Sentry would need a different (public) DSN and CORS setup, so client
  * errors travel over `/api/observability/client-error` instead and are captured server-side.
  */
 
@@ -27,7 +27,7 @@ export type ParsedDsn = { origin: string; projectId: string; publicKey: string }
  * Sentry DSNs look like `https://<publicKey>@o123.ingest.sentry.io/<projectId>`.
  *
  * Returns null rather than throwing for ANY malformed value. A typo'd DSN must degrade to
- * "error tracking is off", never to a boot failure — the whole point of this module is to be the
+ * "error tracking is off", never to a boot failure - the whole point of this module is to be the
  * thing that still works when other things are broken.
  */
 export function parseDsn(raw: string | undefined | null): ParsedDsn | null {
@@ -58,7 +58,7 @@ const DENY_KEY_PARTS = [
 /**
  * Value patterns scrubbed out of free text (messages, stack frames, breadcrumb strings).
  *
- * This is not paranoia. This app puts connection strings into error messages by default — a Prisma
+ * This is not paranoia. This app puts connection strings into error messages by default - a Prisma
  * connection failure embeds the full `postgres://user:password@host/db`, and that error is exactly
  * the kind most worth reporting. Shipping the production database password to a third-party SaaS in
  * order to find out the database was unreachable would be a strictly worse outcome than the
@@ -69,7 +69,7 @@ const VALUE_PATTERNS: { re: RegExp; with: string }[] = [
   { re: /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, with: "Bearer [redacted]" },
   { re: /\b(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}/g, with: "[redacted-key]" },
   { re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, with: "[redacted-jwt]" },
-  // Long opaque runs — WATI tokens, Resend keys, raw hex secrets. 32+ chars of unbroken
+  // Long opaque runs - WATI tokens, Resend keys, raw hex secrets. 32+ chars of unbroken
   // key-shaped text in an error message is far more likely a credential than a sentence.
   { re: /\b[A-Fa-f0-9]{32,}\b/g, with: "[redacted-hex]" },
 ];
@@ -193,7 +193,7 @@ export function observabilityRuntime(): ObservabilityRuntime {
 }
 
 export type CaptureContext = {
-  /** Where this came from — "cron:daily", "webhook:wati", "action:submitBooking". */
+  /** Where this came from - "cron:daily", "webhook:wati", "action:submitBooking". */
   where?: string;
   level?: "error" | "warning";
   /** Free-form extras. Scrubbed before send; credential-shaped keys are dropped entirely. */
@@ -238,7 +238,7 @@ function eventPayload(
   };
 }
 
-/** 32 hex chars — Sentry's event_id format. Uses Web Crypto, present in both runtimes. */
+/** 32 hex chars - Sentry's event_id format. Uses Web Crypto, present in both runtimes. */
 function cryptoRandomHex(): string {
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
@@ -246,7 +246,7 @@ function cryptoRandomHex(): string {
 }
 
 /**
- * Coarse stack parse — enough for Sentry to render a readable trace without pulling in a
+ * Coarse stack parse - enough for Sentry to render a readable trace without pulling in a
  * source-map library. Frames arrive innermost-first from V8 and Sentry wants outermost-first.
  */
 function parseStack(stack: string): { filename: string; function: string; lineno?: number }[] {
@@ -266,8 +266,8 @@ function parseStack(stack: string): { filename: string; function: string; lineno
 }
 
 /**
- * Sends one event to Sentry's envelope endpoint. Resolves `false` for every failure mode —
- * unarmed, rate-limited, network error, non-2xx — and NEVER throws.
+ * Sends one event to Sentry's envelope endpoint. Resolves `false` for every failure mode -
+ * unarmed, rate-limited, network error, non-2xx - and NEVER throws.
  *
  * Not exported: callers use `captureException`, which also handles the local mirror.
  */
@@ -298,7 +298,7 @@ async function sendEnvelope(event: Record<string, unknown>, dsn: ParsedDsn): Pro
 /**
  * THE entry point. Records locally always; ships to Sentry when armed.
  *
- * Returns a promise you are welcome to ignore — and mostly should. Callers in request paths should
+ * Returns a promise you are welcome to ignore - and mostly should. Callers in request paths should
  * NOT await this: the user's response must not wait on a third-party POST. Callers in cron jobs may
  * await it, because there is nobody waiting and losing the report to process exit would be worse.
  */
@@ -318,7 +318,7 @@ export async function captureException(err: unknown, ctx: CaptureContext = {}): 
   });
 
   // Console remains the ground truth in `docker compose logs`. Sentry is an addition to it,
-  // never a replacement — a log line costs nothing and survives an unreachable Sentry.
+  // never a replacement - a log line costs nothing and survives an unreachable Sentry.
   // eslint-disable-next-line no-console
   console.error(`[${ctx.where ?? "app"}]`, scrubText(message));
 

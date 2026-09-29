@@ -8,7 +8,7 @@ import { AcceptInviteForm } from "./AcceptInviteForm";
 export const dynamic = "force-dynamic";
 
 /**
- * Redeem an invite. Public (the invitee has no session yet) — the token in the URL is
+ * Redeem an invite. Public (the invitee has no session yet) - the token in the URL is
  * the whole credential, and it is single-use. Someone who is already signed in has no
  * business here, so they go home.
  */
@@ -20,7 +20,7 @@ const REASONS: Record<string, { title: string; body: string }> = {
   },
   used: {
     title: "This invite has already been used",
-    body: "Your password is set — sign in with it. If that wasn't you, tell your admin straight away.",
+    body: "Your password is set - sign in with it. If that wasn't you, tell your admin straight away.",
   },
   expired: {
     title: "This invite has expired",
@@ -58,8 +58,8 @@ export default async function InvitePage({ params }: { params: { token: string }
     <Shell>
       <h1 className="font-display text-2xl font-bold tracking-tight">Welcome, {invite.name.split(" ")[0]}</h1>
       <p className="mt-2 text-sm text-muted">
-        Set a password for <b className="text-ink">{invite.email}</b> and you&apos;re in. Nobody else — not
-        even your admin — will ever see it.
+        Set a password for <b className="text-ink">{invite.email}</b> and you&apos;re in. Nobody else - not
+        even your admin - will ever see it.
       </p>
       <div className="mt-6">
         <AcceptInviteForm token={params.token} />

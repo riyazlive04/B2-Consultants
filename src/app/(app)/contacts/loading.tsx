@@ -1,6 +1,6 @@
 import { SkeletonBlock, SkeletonTable } from "@/components/ui/Skeleton";
 
-/** Contacts: Synamate-parity list page — edge-to-edge header bar, then the table. */
+/** Contacts: Synamate-parity list page - edge-to-edge header bar, then the table. */
 export default function Loading() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading contacts">

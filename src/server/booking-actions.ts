@@ -3,13 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
-import { LeadSource, type LeadStage } from "@prisma/client";
+import { LeadSource, type LeadStage, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
-import { computeBant, INTAKE_OPTIONS } from "@/lib/booking-intake";
+import { INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { qualifiedFromBant } from "@/lib/outreach-sop";
+import { ALREADY_BOOKED_MESSAGE, findLiveBookingForPerson } from "@/lib/booking-identity";
+import { normalizeWhatsappNumber } from "@/lib/phone";
+import { markDiscoveryConfirmed } from "./lead-stage-auto";
+import { journeyForBooking, markSopDiscoConfirmed } from "./outreach";
 import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/consent";
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
 import { optionalRule, rule } from "@/lib/field-rules";
@@ -19,12 +23,14 @@ import { BOOKING_RULES_KEY, getBookingRulesConfig, writeBookingRulesConfig } fro
 import { logActivity, diffFields } from "./activity-log";
 import { emitTrigger } from "./automation";
 import { upsertIntakeLead } from "./lead-intake";
+import { syncDefaultOpportunity } from "./opportunity-sync";
 import { observedOriginDomain } from "./request-origin";
 import { mirrorBookingScoreToLead } from "./lead-qualification";
-import { shadowScore } from "./qualification";
+import { scoreSubmission } from "./qualification";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
 import { promoteIntoFreedSlot, runBookingConfirmations } from "./booking-automation";
 import { sendEmailMessage } from "./messaging";
+import { afterResponse } from "./after-response";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -50,7 +56,7 @@ const HOW_TO_CHANNEL: Record<string, LeadSource> = {
   /**
    * `LeadSource` has no FACEBOOK or GOOGLE member, so both coarsen to OTHER here. Nothing is
    * lost: the precise answer is stored verbatim on `BookingRequest.howKnowUs`, which is what
-   * the closer reads — only the roll-up enum blurs. FACEBOOK is deliberately NOT mapped to
+   * the closer reads - only the roll-up enum blurs. FACEBOOK is deliberately NOT mapped to
    * META_ADS: that value means "arrived via the Meta Lead Ads webhook", and using it for
    * someone who typed a form would corrupt paid-channel attribution.
    *
@@ -65,7 +71,7 @@ const HOW_TO_CHANNEL: Record<string, LeadSource> = {
 };
 
 /**
- * Stages a booking must NOT drag a lead out of — they are already at, or past, the booked-call
+ * Stages a booking must NOT drag a lead out of - they are already at, or past, the booked-call
  * column. Everything else advances (see the note at the update itself).
  *
  * `STRATEGY_CALL_BOOKED` is here because it is the destination: rebooking would otherwise write
@@ -95,7 +101,7 @@ const requiredChoice = (field: keyof typeof INTAKE_OPTIONS, message: string) =>
 const bookingSchema = z.object({
   slotId: z.string().min(1, "Please choose an available time").max(64),
   // Character rules come from lib/field-rules so the browser filter and this parse can't drift.
-  // These are the PUBLIC form's fields — the filter is unreachable for a crafted POST, so the
+  // These are the PUBLIC form's fields - the filter is unreachable for a crafted POST, so the
   // schema is the only real gate here.
   name: rule("name"),
   // The email rule folds to lowercase (not just trims): this address is the key the SOP's Step 10
@@ -107,7 +113,7 @@ const bookingSchema = z.object({
    * ── Required, because the form marks them required ────────────────────────────
    * The public questionnaire now stars every one of these. Leaving the schema permissive would
    * mean the browser is the only thing enforcing them, and a crafted POST could bank a booked
-   * slot with no LinkedIn, no salary band and no BANT answers at all — which is precisely the
+   * slot with no LinkedIn, no salary band and no BANT answers at all - which is precisely the
    * submission the auto-disqualify gate cannot judge.
    *
    * Everything BELOW this block stays optional: those fields were removed from the form, and
@@ -141,7 +147,7 @@ const bookingSchema = z.object({
   commitment: optional("commitment"),
   // GDPR consent (spec §15). Optional in the SCHEMA but mandatory in the ACTION: an unticked
   // checkbox posts nothing at all, and a bare z.literal would fail with "Invalid literal
-  // value" — useless to a prospect. Parsed loosely, then refused explicitly below.
+  // value" - useless to a prospect. Parsed loosely, then refused explicitly below.
   consent: z.string().optional(),
   // spam honeypot - real users never fill this hidden field
   company_website: z.string().optional(),
@@ -175,6 +181,31 @@ function clean(v: string | undefined): string | null {
 }
 
 /**
+ * The live discovery booking this person already holds, if any - see `findLiveBookingForPerson`.
+ *
+ * "Live" is BOOKED with the slot still ahead. A call whose time has passed without anyone
+ * recording an outcome is not live: it must not stop that person booking again.
+ *
+ * The candidate set is small by construction (upcoming booked calls only), so the phone
+ * comparison runs in JS, where libphonenumber can normalise both sides - SQL cannot.
+ */
+async function liveBookingFor(
+  db: Pick<Prisma.TransactionClient, "bookingRequest">,
+  person: { phone: string; whatsapp?: string | null; email: string },
+) {
+  const live = await db.bookingRequest.findMany({
+    where: { status: "BOOKED", slot: { is: { startsAt: { gt: new Date() } } } },
+    select: { id: true, phone: true, whatsapp: true, email: true },
+    take: 1000,
+  });
+  return findLiveBookingForPerson(
+    live,
+    { phone: person.phone, whatsapp: person.whatsapp ?? null, email: person.email },
+    (raw) => normalizeWhatsappNumber(raw),
+  );
+}
+
+/**
  * `declined` marks the auto-disqualify path: the intake was stored, but NO slot was claimed.
  * The prospect-facing page needs to know, because "we saved your answers" and "you have a call
  * on Wednesday" are different sentences and only one of them is true here.
@@ -185,9 +216,9 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
   // Public endpoint, and the most expensive one here: a submission consumes a finite calendar
   // slot AND fires a WATI confirmation. Two dimensions, charged atomically:
   //
-  //   per-IP    5 burst then 5 / 10 min — generous for a human correcting form errors, and
+  //   per-IP    5 burst then 5 / 10 min - generous for a human correcting form errors, and
   //             tight enough that one client can't exhaust the open slots.
-  //   global    40 burst then 40 / 10 min — the per-IP rule does nothing against a hundred
+  //   global    40 burst then 40 / 10 min - the per-IP rule does nothing against a hundred
   //             IPs each politely taking their allowance until the calendar is empty. The
   //             booking diary is a shared resource, so it needs a shared ceiling.
   //
@@ -210,20 +241,47 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
   if (d.company_website) return { ok: true }; // honeypot tripped - silently drop
 
   // ── Consent gate (spec §15, §19.1-C1) ────────────────────────────────────────
-  // "No lead/student data is stored without explicit consent" — GDPR, and our prospects are
+  // "No lead/student data is stored without explicit consent" - GDPR, and our prospects are
   // in Germany and India. This sits ABOVE every write below: both the auto-disqualify branch
   // and the booked branch call upsertIntakeLead, so refusing here is what makes "no consent,
   // no row" true of the whole action rather than of one path.
   //
   // Fails CLOSED. A tampered POST, or a stale page cached from before this field existed,
-  // posts no consent and is refused — the safe direction for a rule about not storing people.
+  // posts no consent and is refused - the safe direction for a rule about not storing people.
   if (d.consent !== CONSENT_VALUE) {
     return { ok: false, error: "Please tick the consent box so we can store your details and contact you." };
   }
 
+  /**
+   * ── One live discovery call per person ────────────────────────────────────────
+   * On 17/09/2026 one number held two live bookings, and every confirmation and reminder went
+   * out twice - each booking ran its own clock, and nothing could say which call was real.
+   *
+   * A second submission is REFUSED, not treated as a reschedule. Both were considered; refusing
+   * wins on every count the founder cares about here: it sends nothing (a reschedule sends a
+   * "your call moved" notice), it never moves an existing appointment on the strength of a form
+   * that might have been filled by someone else sharing the number, and the one booking that
+   * exists stays the single source of truth. Moving a call stays a deliberate act by the team,
+   * who can see both the booking and the message this returns.
+   *
+   * Checked HERE, before anything is written: the auto-disqualify branch below would otherwise
+   * move a live booker's lead to LOST and close their journey on the strength of a duplicate
+   * form. Re-checked inside the claiming transaction for the race between two open tabs.
+   */
+  if (await liveBookingFor(prisma, d)) {
+    return { ok: false, error: ALREADY_BOOKED_MESSAGE };
+  }
+
   const rules = await getBookingRulesConfig();
-  const bant = computeBant(d);
-  const shadow = await shadowScore(d);
+  /**
+   * The verdict, from whichever scorer the founder has selected (Console → Qualification).
+   *
+   * Was `computeBant(d)` with the catalogue running alongside it and being ignored. Now one call
+   * decides and reports which scorer answered - and falls back to the shipped tables on any
+   * failure, because the alternative on this path is rejecting a prospect over a config error.
+   */
+  const scored = await scoreSubmission(d);
+  const bant = scored.result;
   const utm = d.utm ? sanitizeUtm(d.utm) : null;
 
   // The evidence half of the gate above. Written inside whichever transaction ends up
@@ -231,7 +289,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
   // proof and the data it authorises land together or not at all.
   //
   // `region` stays null deliberately. Spec §15 asks for it, but the form has no country
-  // field and `city` is free text — deriving "DE" from a typed city name would be a guess
+  // field and `city` is free text - deriving "DE" from a typed city name would be a guess
   // recorded as a fact, which is worse than an honest blank. Needs a country field to fill.
   const consentFor = (leadId: string) => ({
     leadId,
@@ -255,7 +313,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
     utm,
     notes: clean(d.reasonForCall),
     // Observed from this request, so a prospect who books through the funnel carries the host
-    // they booked on. Only fills a blank — see `acceptReturningOptIn`.
+    // they booked on. Only fills a blank - see `acceptReturningOptIn`.
     originDomain: await observedOriginDomain(),
   };
 
@@ -286,14 +344,14 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
     commitment: clean(d.commitment),
     howKnowUs: clean(d.howKnowUs),
     ...bant,
-    // ER v2 Track D — SHADOW ONLY. What the configurable question catalogue would have
+    // ER v2 Track D - SHADOW ONLY. What the configurable question catalogue would have
     // scored this submission. Recorded beside the live verdict and read by nothing: the
     // decision below still comes from `bant`, exactly as it did before the catalogue
-    // existed. `shadowScore` swallows its own errors and returns nulls, because a
-    // measurement that could break a prospect's booking is worse than no measurement.
-    // The flip is gated on prisma/replay-bant.ts reporting zero disagreements.
-    bantShadowAvg: shadow.shadowAvg,
-    bantConfigVersion: shadow.configVersion,
+    // existed. `scoreSubmission` swallows its own errors and falls back to the shipped
+    // tables, because a scoring failure that could reject a prospect is worse than an
+    // unrecorded measurement. Which scorer is live is set in Console → Qualification.
+    bantShadowAvg: scored.shadowAvg,
+    bantConfigVersion: scored.configVersion,
   };
 
   // ── Auto-disqualify ──────────────────────────────────────────────────────────
@@ -301,7 +359,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
   // sales rule, don't hold a call: record the intake as a CANCELLED booking WITHOUT claiming a
   // slot (it stays OPEN for a qualified prospect), move the lead to LOST with an audited reason,
   // and send the polite rejection template. Founder-gated (default on). The email is still
-  // behind the Resend seam, so with email off it's logged SKIPPED — never sent unconfigured.
+  // behind the Resend seam, so with email off it's logged SKIPPED - never sent unconfigured.
   if (rules.autoDisqualify && bant.bantVerdict === "CANCEL") {
     const { lead } = await upsertIntakeLead(leadInput);
     await prisma.$transaction(async (tx) => {
@@ -314,7 +372,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
         select: { stage: true, notes: true },
       });
       if (fresh && fresh.stage !== "LOST") {
-        const reason = `Auto-disqualified at intake — BANT ${bant.bantAvg.toFixed(1)}/5`;
+        const reason = `Auto-disqualified at intake - BANT ${bant.bantAvg.toFixed(1)}/4`;
         await tx.lead.update({
           where: { id: lead.id },
           data: { stage: "LOST", notes: fresh.notes ? `${fresh.notes} · ${reason}` : reason },
@@ -322,13 +380,14 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
         await tx.leadStageHistory.create({
           data: { leadId: lead.id, fromStage: fresh.stage, toStage: "LOST" },
         });
+        await syncDefaultOpportunity(tx, lead.id, "LOST");
       }
 
-      // Close the SOP journey too (Step 17 — NO → terminal). A BANT CANCEL is a "Not Qualified"
+      // Close the SOP journey too (Step 17 - NO → terminal). A BANT CANCEL is a "Not Qualified"
       // verdict, so record it and move the journey to IGNORED; otherwise a disqualified prospect
       // would sit in the active outreach queue being chased forever. The CANCELLED booking is
       // deliberately NOT linked (bookingId stays null): the engine's cross-check excludes CANCELLED
-      // bookings, and Key Metrics is a booked-prospects surface — a LOST lead doesn't belong there.
+      // bookings, and Key Metrics is a booked-prospects surface - a LOST lead doesn't belong there.
       const journey = await tx.outreachJourney.findUnique({
         where: { leadId: lead.id },
         select: { id: true, qualified: true, phase: true },
@@ -347,7 +406,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
       }
     });
 
-    // Application Logic §4.3 stage 2 — the booking form's verdict supersedes whatever the
+    // Application Logic §4.3 stage 2 - the booking form's verdict supersedes whatever the
     // landing page scored at opt-in. Mirrored even on the disqualify path: "why was this lead
     // closed" is answered by the score that closed it, and reading it off the Lead is what every
     // pipeline surface does.
@@ -366,7 +425,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
     return { ok: true, declined: true };
   }
 
-  // ── Qualified / doubt / confirm — book the slot ───────────────────────────────
+  // ── Qualified / doubt / confirm - book the slot ───────────────────────────────
   // Slot must exist, be OPEN, and sit inside the founder's booking window (min notice from
   // now, max advance out) - same rules the public page used to filter its slot list, checked
   // again here in case the page was left open a while or the config changed since it loaded.
@@ -391,6 +450,12 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
   let bookingId: string;
   try {
     bookingId = await prisma.$transaction(async (tx) => {
+      // The same person-level rule as above, re-read at the last moment before the claim. It
+      // closes the gap of a second tab submitted while this one was scoring and upserting; two
+      // submissions committing in the same few milliseconds could still both pass (there is no
+      // per-person lock), and would then show as a visible pair on the Bookings page.
+      if (await liveBookingFor(tx, d)) throw new Error("ALREADY_BOOKED");
+
       const claim = await tx.appointmentSlot.updateMany({
         where: { id: slot.id, status: "OPEN" },
         data: { status: "BOOKED" },
@@ -408,12 +473,12 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
        * A booked call = STRATEGY_CALL_BOOKED, the board's "Discovery Call Booked" column.
        *
        * This used to jump straight to DISCO_BOOKED ("Pre-Qualified & Confirmed"), which claimed
-       * the prospect had been qualified AND their call confirmed the instant they picked a slot —
+       * the prospect had been qualified AND their call confirmed the instant they picked a slot -
        * neither of which has happened yet. Qualification moves them on from here.
        *
        * The guard is a HOLD list rather than an allow list. It used to advance only NEW_LEAD and
        * WHATSAPP_SENT, so a prospect who already existed in any OTHER stage booked a call and the
-       * board did not move at all — the 8,086 leads sitting in Cancelled/Unqualified could each
+       * board did not move at all - the 8,086 leads sitting in Cancelled/Unqualified could each
        * book a discovery call and stay filed as written off. Someone who was given up on and comes
        * back to book is the single most valuable card on the board, and it was invisible.
        *
@@ -427,17 +492,27 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
         await tx.leadStageHistory.create({
           data: { leadId: lead.id, fromStage: fresh.stage, toStage: "STRATEGY_CALL_BOOKED" },
         });
+        /**
+         * ...and carry the board card with it.
+         *
+         * Every other path that moves a lead's stage calls this (call logs, discovery routing,
+         * automation, the auto-stage rules); booking was the one that did not, so a confirmed
+         * discovery call left its card sitting in "WhatsApp Sent". The lead record said booked
+         * and the board said not booked, and the team works from the board - observed on a real
+         * booking on 20 Aug 2026.
+         */
+        await syncDefaultOpportunity(tx, lead.id, "STRATEGY_CALL_BOOKED");
       }
 
       // SOP Steps 10–11, synchronously. A prospect who books directly on the public form would
-      // otherwise stay unlinked from their booking — the ONLY thing that links the two is the
+      // otherwise stay unlinked from their booking - the ONLY thing that links the two is the
       // async engine's Step 10 cross-check, and that engine is off by default. So without this,
       // a booked prospect's BANT score never reaches the Qualified verdict (Step 11) or Key
       // Metrics (Step 12): the outreach tab shows them as "not booked" while /bookings shows them
-      // booked. Link the journey here and derive Qualified from BANT — the same pure function the
+      // booked. Link the journey here and derive Qualified from BANT - the same pure function the
       // engine uses, so the two paths can never disagree. Guarded so it can't clobber a link or a
       // human's prior verdict; a lead created outside intake (manual back-office entry) may have no
-      // journey, which is fine — updateMany-style tolerance via the null check.
+      // journey, which is fine - updateMany-style tolerance via the null check.
       const journey = await tx.outreachJourney.findUnique({
         where: { leadId: lead.id },
         select: { id: true, bookingId: true, qualified: true },
@@ -460,23 +535,45 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
     if (e instanceof Error && e.message === "SLOT_TAKEN") {
       return { ok: false, error: "That time was just taken - please pick another slot." };
     }
+    if (e instanceof Error && e.message === "ALREADY_BOOKED") {
+      return { ok: false, error: ALREADY_BOOKED_MESSAGE };
+    }
     throw e;
   }
 
-  // Application Logic §4.3 stage 2 — the fuller booking intake supersedes the landing page's
-  // opt-in score on the Lead. Outside the transaction: the authoritative copy is already
-  // committed on `BookingRequest`, so this is a convenience mirror for the pipeline surfaces and
-  // must not be able to roll a confirmed booking back.
-  await mirrorBookingScoreToLead(lead.id, bant);
+  /**
+   * The booking is COMMITTED at this point. Everything below is downstream of it, and used to be
+   * charged to the person who had just picked a slot: a score mirror, the automation engine run
+   * inline (every send step of every BOOKING_CREATED workflow), and a WhatsApp confirmation with
+   * a 12-second ceiling of its own. At ~310ms per cross-region round trip (see
+   * `after-response.ts`) that turned "your call is booked" into a long, blank wait for a
+   * decision that had already been made.
+   *
+   * Deferred as ONE sequential block, in the original order - the confirmation message reads
+   * fields the mirror may have just written, and the two must not race each other onto the Lead.
+   *
+   * Safe to lose to a restart in exactly the way the old comments already describe: the mirror is
+   * a convenience copy of what `BookingRequest` authoritatively holds, an enrollment keeps its
+   * `nextRunAt` for `runDueWorkflows()`, and an unsent confirmation is re-attempted by the
+   * booking automation tick.
+   */
+  const bookedLeadId = lead.id;
+  afterResponse(`booking:${bookingId}`, async () => {
+    // Application Logic §4.3 stage 2 - the fuller booking intake supersedes the landing page's
+    // opt-in score on the Lead. Outside the transaction: the authoritative copy is already
+    // committed on `BookingRequest`, so this is a convenience mirror for the pipeline surfaces
+    // and must not be able to roll a confirmed booking back.
+    await mirrorBookingScoreToLead(bookedLeadId, bant);
 
-  // Tell the automation engine a booking happened, the same way moveOpportunity fires
-  // STAGE_CHANGED after its own transaction commits. Previously nothing called this for a
-  // booking, so BOOKING_CREATED workflows could never enroll a single contact.
-  await emitTrigger("BOOKING_CREATED", { leadId: lead.id });
+    // Tell the automation engine a booking happened, the same way moveOpportunity fires
+    // STAGE_CHANGED after its own transaction commits. Previously nothing called this for a
+    // booking, so BOOKING_CREATED workflows could never enroll a single contact.
+    await emitTrigger("BOOKING_CREATED", { leadId: bookedLeadId });
 
-  // Wave-2: fire the WhatsApp booking confirmation. No-op (and writes no row) unless WATI is
-  // configured + enabled; it never throws, so it can't affect the booking result.
-  await sendBookingConfirmation(bookingId);
+    // Wave-2: fire the WhatsApp booking confirmation. No-op (and writes no row) unless WATI is
+    // configured + enabled; it never throws, so it can't affect the booking result.
+    await sendBookingConfirmation(bookingId);
+  });
 
   revalidatePath("/bookings");
   revalidatePath("/book");
@@ -559,7 +656,7 @@ export async function generateSlots(form: FormData): Promise<ActionResult> {
       })),
     });
     // createMany returns no ids and a re-run is idempotent, so the batch itself is the
-    // entity here — "batch" can never collide with a real slot's cuid.
+    // entity here - "batch" can never collide with a real slot's cuid.
     await logActivity(session, {
       action: "slot.create",
       section: "bookings",
@@ -588,10 +685,14 @@ const bookingRulesFormSchema = z.object({
   bufferMinutes: z.coerce.number().int().min(0).max(240),
   minNoticeHours: z.coerce.number().int().min(0).max(240),
   maxAdvanceDays: z.coerce.number().int().min(1).max(365),
-  // Confirmation loop (Module E) — the two window fields; the toggles are read separately below
+  // Confirmation loop (Module E) - the two window fields; the toggles are read separately below
   // because an unchecked HTML checkbox submits nothing at all.
   confirmRequestLeadHours: z.coerce.number().int().min(0).max(240),
   autoCancelHours: z.coerce.number().int().min(0).max(240),
+  // The rejection template. Bounds mirror `bookingRulesConfigSchema` so the form cannot store a
+  // value the config would later refuse and coerce away.
+  rejectionSubject: z.string().trim().min(1).max(200),
+  rejectionBody: z.string().trim().min(1).max(4000),
 });
 
 /** Admin edits the slot window + the confirmation-loop cadence/toggles (AppSetting). */
@@ -599,16 +700,19 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
   const session = await requireSection("bookings");
   const parsed = bookingRulesFormSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  // Merge over the current config so saving never resets the auto-disqualify toggle or the
-  // rejection template (which this form doesn't carry).
+  // Merged over the current config so a key this form does not carry is preserved rather than
+  // reset to its shipped default.
   const current = await getBookingRulesConfig();
   const next = {
     ...current,
     ...parsed.data,
     autoCancelEnabled: form.get("autoCancelEnabled") === "on",
     promoteNext: form.get("promoteNext") === "on",
+    // Read separately for the same reason as the two above: an unchecked HTML checkbox submits
+    // nothing at all, so `?? current` would keep it stuck on forever once enabled.
+    autoDisqualify: form.get("autoDisqualify") === "on",
   };
-  // Validate the full merged config — including the "ask lead > cancel window" refinement — before
+  // Validate the full merged config - including the "ask lead > cancel window" refinement - before
   // persisting; an invalid combo would otherwise coerce back to defaults on the next read.
   const valid = bookingRulesConfigSchema.safeParse(next);
   if (!valid.success) return { ok: false, error: firstError(valid.error) };
@@ -620,7 +724,7 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
       section: "bookings",
       entityType: "AppSetting",
       entityId: BOOKING_RULES_KEY,
-      summary: `Updated the booking rules — changed ${diff.changed.join(", ")}`,
+      summary: `Updated the booking rules - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -652,7 +756,7 @@ const BOOKING_STATUSES = ["BOOKED", "RESCHEDULED", "CANCELLED", "COMPLETED", "NO
 
 /**
  * Admin sets a booking's outcome. CANCELLED / NO_SHOW free the slot back to OPEN AND detach the
- * booking from it (nulling the unique slotId) so the slot is cleanly re-bookable — leaving the old
+ * booking from it (nulling the unique slotId) so the slot is cleanly re-bookable - leaving the old
  * booking attached would collide the next time that slot is booked. NO_SHOW also moves the lead to
  * NO_SHOW for the pipeline's deal-risk view. On a CANCELLED, the freed slot is offered to the next
  * same-caller/same-day call (promote-next), if that toggle is on.
@@ -662,7 +766,7 @@ const BOOKING_STATUSES = ["BOOKED", "RESCHEDULED", "CANCELLED", "COMPLETED", "NO
  *
  * OPEN only when someone could actually book it. The public form refuses anything inside
  * `minNoticeHours`, so releasing a slot that starts within the hour publishes capacity that
- * does not exist — the calendar shows a free slot the booking page will reject. Inside the
+ * does not exist - the calendar shows a free slot the booking page will reject. Inside the
  * window it is BLOCKED instead: still not sold, but honestly unusable.
  *
  * Shared by cancel/no-show and by reschedule, because both hand a slot back and both had the
@@ -695,13 +799,13 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
    * M2: a freed slot only returns to availability if someone could actually take it.
    *
    * The public booking form refuses anything inside `minNoticeHours`, so releasing a slot that
-   * starts in one hour used to publish a slot nobody can book — the calendar showed capacity
+   * starts in one hour used to publish a slot nobody can book - the calendar showed capacity
    * that did not exist, and the founder had no way to tell the difference. Inside the notice
    * window the slot is BLOCKED instead: still not sold, but honestly marked as unusable.
    *
    * The cancellation itself is never refused. Spec §M2 frames this as "require cancellation
    * 12–24 hours before", but blocking a late cancel would force a call that is not happening to
-   * stay marked BOOKED — which corrupts the show-rate the L2 desk reports on. Recording reality
+   * stay marked BOOKED - which corrupts the show-rate the L2 desk reports on. Recording reality
    * beats enforcing a policy the calendar cannot undo.
    */
   const rules = await getBookingRulesConfig();
@@ -726,6 +830,8 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
         await tx.leadStageHistory.create({
           data: { leadId: booking.leadId, fromStage: lead.stage, toStage: "NO_SHOW" },
         });
+        // Same reason as the booked path - the board must not keep claiming they are coming.
+        await syncDefaultOpportunity(tx, booking.leadId, "NO_SHOW");
       }
     }
   });
@@ -762,13 +868,13 @@ export async function setSlotBlocked(id: string, blocked: boolean): Promise<Acti
   if (!slot) return { ok: false, error: "Slot not found" };
   if (slot.status === "BOOKED") return { ok: false, error: "Cancel the booking before blocking this slot" };
   const next = blocked ? "BLOCKED" : "OPEN";
-  if (slot.status === next) return { ok: true }; // already there — no-op
+  if (slot.status === next) return { ok: true }; // already there - no-op
   // Guard the transition so we never blindly flip a slot that changed under us.
   const res = await prisma.appointmentSlot.updateMany({
     where: { id, status: blocked ? "OPEN" : "BLOCKED" },
     data: { status: next },
   });
-  if (res.count === 0) return { ok: false, error: "Slot changed — refresh and try again" };
+  if (res.count === 0) return { ok: false, error: "Slot changed - refresh and try again" };
   await logActivity(session, {
     action: blocked ? "slot.block" : "slot.unblock",
     section: "bookings",
@@ -793,12 +899,12 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
     select: { slotId: true, status: true, name: true, slot: { select: { startsAt: true } } },
   });
   if (!booking) return { ok: false, error: "Booking not found" };
-  if (booking.status === "CANCELLED") return { ok: false, error: "This booking is cancelled — it can't be moved" };
+  if (booking.status === "CANCELLED") return { ok: false, error: "This booking is cancelled - it can't be moved" };
   if (booking.slotId === newSlotId) return { ok: false, error: "That's already this booking's slot" };
 
   const target = await prisma.appointmentSlot.findUnique({ where: { id: newSlotId }, select: { status: true, startsAt: true } });
   if (!target) return { ok: false, error: "That slot no longer exists" };
-  if (target.status !== "OPEN") return { ok: false, error: "That slot isn't open — pick another time" };
+  if (target.status !== "OPEN") return { ok: false, error: "That slot isn't open - pick another time" };
   if (target.startsAt.getTime() <= Date.now()) return { ok: false, error: "Pick a slot in the future" };
 
   try {
@@ -813,7 +919,7 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
         where: { id: bookingId },
         data: { slotId: newSlotId, status: "BOOKED", confirmedAt: null, confirmSentAt: null },
       });
-      // …then release the old slot — OPEN only if it is still far enough out to be re-booked.
+      // …then release the old slot - OPEN only if it is still far enough out to be re-booked.
       if (booking.slotId) {
         const rules = await getBookingRulesConfig();
         await tx.appointmentSlot.update({
@@ -824,7 +930,7 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
     });
   } catch (e) {
     if (e instanceof Error && e.message === "SLOT_TAKEN") {
-      return { ok: false, error: "That time was just taken — pick another slot." };
+      return { ok: false, error: "That time was just taken - pick another slot." };
     }
     throw e;
   }
@@ -847,12 +953,42 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
 /** Manually mark a booking confirmed (or clear it). The auto-cancel engine reads confirmedAt. */
 export async function setBookingConfirmed(id: string, confirmed: boolean): Promise<ActionResult> {
   const session = await requireSection("bookings");
-  const booking = await prisma.bookingRequest.findUnique({ where: { id }, select: { id: true, name: true } });
+  // `leadId` so the confirmation can move the card as well as stop the auto-cancel engine.
+  const booking = await prisma.bookingRequest.findUnique({
+    where: { id },
+    select: { id: true, name: true, leadId: true },
+  });
   if (!booking) return { ok: false, error: "Booking not found" };
   await prisma.bookingRequest.update({
     where: { id },
     data: { confirmedAt: confirmed ? new Date() : null },
   });
+  /**
+   * The board follows the confirmation.
+   *
+   * `confirmedAt` used to do one job - stop the auto-cancel engine releasing the slot - and the
+   * card stayed in "Discovery Call Booked" whatever the prospect said. But a confirmed booking IS
+   * the definition of Pre-Qualified & Confirmed: BANT pre-qualified them, and this is the human
+   * saying yes.
+   *
+   * Only on the way IN. Clearing a confirmation does not rewind the lead: `confirmed: false` is
+   * used to correct a mis-click and to re-arm the chase, and dragging the card backwards on a
+   * correction would rewrite the stage history for something that never happened.
+   */
+  if (confirmed && booking.leadId) {
+    await markDiscoveryConfirmed(booking.leadId, "manual").catch(() => undefined);
+  }
+  /**
+   * …and so does the SOP. Same reason, one layer down: the outreach engine reads the JOURNEY's
+   * confirmation flag, so a call confirmed here kept getting the 36h and 24h reminders and was
+   * then written off as a no-show by the post-call sweep. Nothing is rewound on `confirmed:
+   * false` - re-arming a chase ladder from a mis-click correction would send real messages, and
+   * the safe failure here is the queue asking a human to chase rather than the engine sending.
+   */
+  if (confirmed) {
+    const journeyId = await journeyForBooking(id, booking.leadId);
+    if (journeyId) await markSopDiscoConfirmed(journeyId).catch(() => undefined);
+  }
   await logActivity(session, {
     action: "booking.confirm",
     section: "bookings",

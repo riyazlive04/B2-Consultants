@@ -24,7 +24,7 @@ import { AccessDialog, type Actor } from "./AccessDialog";
 /**
  * Team & access.
  *
- * A scannable table — who, what role, what they can open, whether they're active —
+ * A scannable table - who, what role, what they can open, whether they're active -
  * with every change made in a modal so the list never leaves the screen. The two
  * destructive actions (suspend, delete) both confirm, and both are refused by the
  * server if they'd leave the business without an Admin.
@@ -57,7 +57,7 @@ export function UsersPanel({
   users: ListedUser[];
   currentUserId: string;
   accessRequests?: AccessRequest[];
-  /** the founder's live section layout — labels, order and on/off all come from here */
+  /** the founder's live section layout - labels, order and on/off all come from here */
   sections: ResolvedSection[];
   /** whoever is looking at this screen; decides what they're allowed to hand out */
   actor: Actor;
@@ -224,7 +224,7 @@ export function UsersPanel({
                   onClick={async () => {
                     const ok = await askConfirm({
                       title: `Decline ${r.name}'s request?`,
-                      body: "They won't be notified — the request is simply removed.",
+                      body: "They won't be notified - the request is simply removed.",
                       confirmLabel: "Decline",
                     });
                     if (!ok) return;
@@ -251,7 +251,7 @@ export function UsersPanel({
       />
 
       <Hint>
-        {users.length} account{users.length === 1 ? "" : "s"}. Public sign-up is disabled — every account is created
+        {users.length} account{users.length === 1 ? "" : "s"}. Public sign-up is disabled - every account is created
         here, and everyone sets their own password from a single-use invite link.
       </Hint>
 
@@ -274,13 +274,13 @@ export function UsersPanel({
 
       {invite && <InviteLinkDialog invite={invite} onClose={() => setInvite(null)} />}
 
-      {/* Reset password — the fallback for someone who can't use their link */}
+      {/* Reset password - the fallback for someone who can't use their link */}
       {pwFor && (
         <Modal
           open
           onClose={() => setPwFor(null)}
           title={`Reset password for ${pwFor.name}`}
-          subtitle="Share it securely — then ask them to change it."
+          subtitle="Share it securely - then ask them to change it."
           size="sm"
         >
           <form
@@ -310,7 +310,7 @@ export function UsersPanel({
   );
 }
 
-/** The link is shown exactly once — it isn't recoverable, only re-mintable. */
+/** The link is shown exactly once - it isn't recoverable, only re-mintable. */
 function InviteLinkDialog({
   invite,
   onClose,
@@ -323,14 +323,14 @@ function InviteLinkDialog({
       open
       onClose={onClose}
       title="Invite link ready"
-      subtitle="Send this to them yourself — the app has no mailer."
+      subtitle="Send this to them yourself - the app has no mailer."
       size="md"
     >
       <div className="space-y-4">
         <CopyField value={invite.url} label="Invite link" />
         <ul className="space-y-1 text-xs text-muted">
           <li>· Single use, and it expires in {invite.expiresInDays} days.</li>
-          <li>· They set their own password — you will never see it.</li>
+          <li>· They set their own password - you will never see it.</li>
           <li>· Minting a new link for the same person immediately invalidates this one.</li>
         </ul>
         <div className="flex justify-end">

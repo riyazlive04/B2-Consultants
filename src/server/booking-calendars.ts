@@ -11,7 +11,7 @@ import type { CalendarSlot } from "@/components/booking/BookingCalendar";
  * ── Why per-owner, and why that is new ──────────────────────────────────────────
  * `AppointmentSlot.assignedToId` has existed since the slot table did, but `/book` never used it:
  * it queried every OPEN slot, so one shared pool was shown to everyone. The funnel needs the
- * opposite — Asma's page must offer Asma's times and Ameen's must offer Ameen's, or the
+ * opposite - Asma's page must offer Asma's times and Ameen's must offer Ameen's, or the
  * "Personalized Discovery Call with X" heading is a lie and prospects book a call with whoever
  * happens to be free.
  *
@@ -42,7 +42,7 @@ export function collectBookingOwnerIds(list: Block[]): string[] {
  *
  * Returns a map keyed the same way `collectBookingOwnerIds` reports, so the renderer can look up
  * a block's slots without knowing anything about how they were fetched. An owner with no open
- * slots gets an empty array rather than being absent — the widget renders "no times are open"
+ * slots gets an empty array rather than being absent - the widget renders "no times are open"
  * rather than disappearing, which is the honest thing to show.
  */
 export async function getStepCalendars(keys: string[]): Promise<StepCalendars> {

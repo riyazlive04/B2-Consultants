@@ -7,12 +7,12 @@ import type { StudentInstalment, StudentPayments } from "@/server/student-paymen
  * The student's own payment plan and receipts (rebuild spec §10).
  *
  * Tone matters here more than on an internal screen: this is someone looking at what they owe for
- * a programme they are part-way through. So it states the position plainly — paid, outstanding,
- * next due — without dunning language, badges or red-by-default. An overdue instalment is marked
+ * a programme they are part-way through. So it states the position plainly - paid, outstanding,
+ * next due - without dunning language, badges or red-by-default. An overdue instalment is marked
  * once, factually, and nothing else on the card shouts.
  *
  * Shows ONLY their own figures. Nothing here reveals margin, commission, LTV or what any other
- * student paid — see the header of `student-payments.ts` for exactly where that line sits.
+ * student paid - see the header of `student-payments.ts` for exactly where that line sits.
  */
 
 function InstalmentRow({ i }: { i: StudentInstalment }) {
@@ -46,7 +46,7 @@ export function MyPayments({ payments }: { payments: StudentPayments }) {
         <Card
           key={`${p.programLevel}-${idx}`}
           title="Your payment plan"
-          subtitle={p.outstandingInrMinor === 0 ? "Fully paid — nothing outstanding." : undefined}
+          subtitle={p.outstandingInrMinor === 0 ? "Fully paid - nothing outstanding." : undefined}
         >
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
@@ -70,7 +70,7 @@ export function MyPayments({ payments }: { payments: StudentPayments }) {
             <div>
               <p className="text-caption text-muted">Next due</p>
               <p className="font-display text-xl font-bold text-ink">
-                {p.nextDueDate ? formatDate(p.nextDueDate) : "—"}
+                {p.nextDueDate ? formatDate(p.nextDueDate) : "-"}
               </p>
               {p.nextDueAmountInrMinor !== null && (
                 <p className="tnum text-caption text-muted">

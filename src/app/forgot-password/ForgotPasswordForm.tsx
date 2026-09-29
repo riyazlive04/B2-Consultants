@@ -10,8 +10,8 @@ import { BrandLogo } from "@/components/shell/BrandLogo";
 import { fieldKindProps } from "@/components/ui/field-base";
 
 /**
- * Same two-pane shell as LoginForm (src/app/login/LoginForm.tsx) — same brand
- * panel, same field styling, same button treatment — just one field instead of
+ * Same two-pane shell as LoginForm (src/app/login/LoginForm.tsx) - same brand
+ * panel, same field styling, same button treatment - just one field instead of
  * the sign-in/sign-up tab switcher.
  */
 
@@ -32,7 +32,7 @@ export default function ForgotPasswordForm() {
     setError(null);
     const { error } = await authClient.requestPasswordReset({
       // Folded exactly as the sign-in form folds it. `User.email` is a lowercase `@unique`
-      // column, so a capitalised address here would quietly match no account — and Better Auth
+      // column, so a capitalised address here would quietly match no account - and Better Auth
       // reports success either way, so the person would wait for an email that was never sent.
       email: normalizeEmail(email),
       redirectTo: "/reset-password",
@@ -49,7 +49,7 @@ export default function ForgotPasswordForm() {
 
   return (
     <div className="flex min-h-screen items-stretch bg-surface">
-      {/* brand panel — the one allowed gradient (hero-sky) */}
+      {/* brand panel - the one allowed gradient (hero-sky) */}
       <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -97,7 +97,7 @@ export default function ForgotPasswordForm() {
           {sent ? (
             <div className="mt-5 flex flex-col gap-4">
               <p role="status" className="rounded-field bg-good-soft px-3 py-2.5 text-xs font-medium text-good">
-                If that email has an account, a reset link is on its way — check your inbox (and spam folder).
+                If that email has an account, a reset link is on its way - check your inbox (and spam folder).
               </p>
               <Link
                 href="/login"

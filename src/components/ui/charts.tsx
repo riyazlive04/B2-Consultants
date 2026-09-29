@@ -19,7 +19,7 @@ export function BarRows({
         const pct = Math.round((it.value / total) * 100);
         return (
           <div key={it.label} className="flex items-center gap-3" title={`${it.label}: ${it.display} (${pct}%)`}>
-            <span className="w-20 flex-none truncate text-xs font-medium text-muted sm:w-28 sm:text-sm">
+            <span className="w-20 flex-none truncate text-xs font-medium text-muted sm:w-28 sm:text-sm" title={it.label}>
               {it.label}
             </span>
             <div className="h-5 flex-1 overflow-hidden rounded bg-surface-2">
@@ -170,7 +170,7 @@ export function Donut({
               onMouseLeave={() => setActive(null)}
             >
               <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: s.color }} />
-              <span className="min-w-0 flex-1 truncate text-xs text-muted sm:text-[13px]">{s.label}</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-muted sm:text-[13px]" title={s.label}>{s.label}</span>
               <span className="flex-none text-xs font-semibold tnum">{s.display}</span>
               <span className="w-9 flex-none text-right text-xs text-muted tnum">
                 {Math.round((s.value / total) * 100)}%

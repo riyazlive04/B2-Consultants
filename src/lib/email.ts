@@ -1,13 +1,14 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { checkRecipient } from "@/lib/outbound-allowlist";
 
 /**
- * Email channel — Resend HTTP client + config. Mirrors the WATI seam:
+ * Email channel - Resend HTTP client + config. Mirrors the WATI seam:
  *  - SECRETS in env, read inline, fail-closed when unset:
  *      EMAIL_ENABLED     "true" to arm sending (default off)
  *      RESEND_API_KEY    Resend API key (Bearer)
  *  - NON-SECRET config in AppSetting("emailConfig"): paused toggle, from name/email.
- * Never throws into a request path — send() always resolves a result object.
+ * Never throws into a request path - send() always resolves a result object.
  */
 
 const SETTINGS_KEY = "emailConfig";
@@ -67,7 +68,7 @@ export async function getEmailRuntime(): Promise<EmailRuntime> {
 /**
  * Brand header for transactional emails. Deliberately CSS-drawn, not an <img>:
  * this app has no public asset host to serve a logo file from, and most email
- * clients strip inline SVG — a bordered serif "B²" (the "²" via &sup2;) renders
+ * clients strip inline SVG - a bordered serif "B²" (the "²" via &sup2;) renders
  * the mark reliably everywhere. Colour matches the app's --brand-indigo token.
  */
 export function brandEmailHeader(): string {
@@ -89,9 +90,14 @@ export async function sendResendEmail(opts: {
   subject: string;
   html: string;
   /** Resend's raw HTTP API takes base64-encoded content per file (Node SDK's Buffer
-   *  support doesn't apply here — this is a plain fetch, not the SDK). */
+   *  support doesn't apply here - this is a plain fetch, not the SDK). */
   attachments?: { filename: string; content: string }[];
 }): Promise<SendResult> {
+  // Last gate before the wire - every outbound email in the app (password resets, invoices,
+  // dunning, digests, the SOP opt-in alert) funnels through this one function.
+  const gate = checkRecipient(opts.to, "email");
+  if (!gate.allowed) return { ok: false, error: gate.reason };
+
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 12_000);
   try {

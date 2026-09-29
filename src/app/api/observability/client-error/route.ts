@@ -6,8 +6,8 @@ import { clientIpFrom, takeToken, tooManyRequests } from "@/lib/rate-limit";
  * Where browser-side errors go.
  *
  * A React render error inside the app shell hits `app/(app)/error.tsx`, which until now showed the
- * user a message and told nobody. That is exactly the class of bug a client emails about — "the
- * students page is blank" — with no server-side trace to look at, because nothing threw on the
+ * user a message and told nobody. That is exactly the class of bug a client emails about - "the
+ * students page is blank" - with no server-side trace to look at, because nothing threw on the
  * server.
  *
  * NOT PUBLIC. Deliberately absent from middleware's PUBLIC_PREFIXES, so only a logged-in session
@@ -22,7 +22,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  // A render loop can fire an error handler dozens of times a second. Cheap and generous —
+  // A render loop can fire an error handler dozens of times a second. Cheap and generous -
   // enough to catch a real burst, not enough to be a useful amplifier.
   const gate = takeToken(`client-error:${clientIpFrom(req.headers)}`, {
     capacity: 20,
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const digest = typeof b.digest === "string" ? b.digest : null;
   const path = typeof b.path === "string" ? b.path : null;
 
-  // Rebuild an Error so the stack Sentry shows is the BROWSER's, not this route's — a trace
+  // Rebuild an Error so the stack Sentry shows is the BROWSER's, not this route's - a trace
   // pointing at the reporting endpoint would be worse than no trace.
   const err = new Error(message);
   err.name = "ClientError";
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   await captureException(err, {
     where: "client",
     extra: { path, digest, userAgent: req.headers.get("user-agent") },
-    // Next's `digest` is its own stable hash of the error — a far better grouping key than a
+    // Next's `digest` is its own stable hash of the error - a far better grouping key than a
     // minified browser stack, which differs per build.
     fingerprint: digest ? ["client", digest] : undefined,
   });

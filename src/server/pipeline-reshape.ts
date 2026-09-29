@@ -9,11 +9,11 @@ import { statusForLegacyStage } from "@/lib/opportunity-status";
  * ── Why this exists as a function and not a one-off script ──────────────────────
  * Three callers need exactly the same behaviour and must not drift: the seed (`db:crm`) on a
  * fresh database, the CLI (`db:pipeline-sync`) on an existing one, and the Admin "Restore the
- * Synamate columns" button on the board — which is what makes the manual column editing safe to
+ * Synamate columns" button on the board - which is what makes the manual column editing safe to
  * hand over, since a board someone has taken apart can always be put back.
  *
  * ── Idempotent, and safe to run on a live board ─────────────────────────────────
- * Columns are matched to their target by (legacyStage, paymentPlan) — never by name — so a column
+ * Columns are matched to their target by (legacyStage, paymentPlan) - never by name - so a column
  * that has been renamed is RENAMED BACK rather than duplicated, and re-running changes nothing.
  * A second run is a no-op that still reports what it found.
  *
@@ -33,7 +33,7 @@ export type ReshapeReport = {
   pipelineName: string;
   renamed: { from: string; to: string }[];
   created: string[];
-  /** Columns that are not part of the twelve — emptied, then soft-deleted. */
+  /** Columns that are not part of the twelve - emptied, then soft-deleted. */
   removed: string[];
   /** Cards that changed column. */
   refiled: number;
@@ -89,7 +89,7 @@ export async function applySynamateStages(db: Db, pipelineId: string): Promise<R
   for (let i = 0; i < SYNAMATE_STAGES.length; i++) {
     const def = SYNAMATE_STAGES[i]!;
     const free = (s: (typeof existing)[number]) => !claimed.has(s.id);
-    // Exact bridge match, then name, then a same-stage column that has no plan yet — the last one
+    // Exact bridge match, then name, then a same-stage column that has no plan yet - the last one
     // is what turns the pre-existing single "Won" column into "Split Pay" instead of orphaning it.
     const match =
       existing.find((s) => free(s) && s.legacyStage === def.legacyStage && s.paymentPlan === def.paymentPlan) ??
@@ -156,7 +156,7 @@ export async function applySynamateStages(db: Db, pipelineId: string): Promise<R
     if (left > 0) {
       // Belt and braces: refuse rather than strand cards in an invisible column.
       throw new Error(
-        `Refusing to remove the "${s.name}" column — ${left} card(s) are still in it. ` +
+        `Refusing to remove the "${s.name}" column - ${left} card(s) are still in it. ` +
           `That means a lead stage has no column to be re-filed into; fix the mapping in lib/pipeline-stages.ts first.`,
       );
     }

@@ -15,7 +15,7 @@ import type { ActionResult } from "./finance-actions";
  */
 
 const checkInSchema = z.object({
-  // Prose, so `text` (cap only) — the min(1) keeps the empty-box message the student sees.
+  // Prose, so `text` (cap only) - the min(1) keeps the empty-box message the student sees.
   actual: rule("text").pipe(z.string().min(1, "Tell us what you got done this week")),
   note: optionalRule("text"),
 });

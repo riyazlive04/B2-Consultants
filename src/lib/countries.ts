@@ -1,12 +1,12 @@
 /**
- * Dialling data for the phone-number country picker (issue 4.3), isomorphic (no libphonenumber —
+ * Dialling data for the phone-number country picker (issue 4.3), isomorphic (no libphonenumber -
  * that 150kB of metadata stays server-only in lib/phone.ts, which remains the AUTHORITATIVE
  * validator). The `min`/`max` national-digit ranges here drive the picker's per-country length
  * limit + a soft client-side check; they're deliberately generous mobile ranges, not exhaustive
  * plans. The country list mirrors lib/whatsapp.ts COUNTRY_OPTIONS.
  */
 export type CountryDial = {
-  iso: string; // ISO-3166 alpha-2 — the value phone.ts / WATI settings expect
+  iso: string; // ISO-3166 alpha-2 - the value phone.ts / WATI settings expect
   name: string;
   dial: string; // country calling code, no "+"
   min: number; // min national digits (leading trunk 0 excluded)
@@ -39,7 +39,7 @@ export const COUNTRY_DIAL_OPTIONS = COUNTRY_DIALS.map((c) => ({
 /**
  * Best-effort split of a stored/E.164 number back into { iso, national } so an edit form can
  * pre-fill the picker. Matches the LONGEST dial prefix (so +1 doesn't shadow +91). Falls back to
- * the default country with the raw digits when nothing matches — the server still re-validates.
+ * the default country with the raw digits when nothing matches - the server still re-validates.
  */
 export function splitE164(raw: string | null | undefined): { iso: string; national: string } {
   const digits = (raw ?? "").replace(/[^\d+]/g, "");

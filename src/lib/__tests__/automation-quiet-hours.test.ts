@@ -1,8 +1,8 @@
 /**
- * Automation quiet hours — window boundary tests.
+ * Automation quiet hours - window boundary tests.
  *
  * The window maths is pure and takes `now` explicitly, so every boundary is checked exactly
- * (at the edge and one minute either side) with no fake timers and no DB — same approach as
+ * (at the edge and one minute either side) with no fake timers and no DB - same approach as
  * outreach-engine.test.ts.
  *
  * The wrapping window (21:00 → 09:00) is the default shape and the easy one to get wrong, so
@@ -20,14 +20,14 @@ function ist(hour: number, minute = 0): Date {
   return new Date(Date.UTC(2026, 6, 15, hour, minute) - 5.5 * 3600_000);
 }
 
-describe("inQuietWindow — wrapping window (21:00 → 09:00)", () => {
+describe("inQuietWindow - wrapping window (21:00 → 09:00)", () => {
   const START = 21;
   const END = 9;
   const quiet = (d: Date) => inQuietWindow(d, START, END);
 
   test("is quiet through the night", () => {
     assert.equal(quiet(ist(22)), true);
-    assert.equal(quiet(ist(0)), true); // midnight — the wrap point itself
+    assert.equal(quiet(ist(0)), true); // midnight - the wrap point itself
     assert.equal(quiet(ist(3, 30)), true);
     assert.equal(quiet(ist(8, 59)), true);
   });
@@ -46,7 +46,7 @@ describe("inQuietWindow — wrapping window (21:00 → 09:00)", () => {
   });
 });
 
-describe("inQuietWindow — non-wrapping window (09:00 → 17:00)", () => {
+describe("inQuietWindow - non-wrapping window (09:00 → 17:00)", () => {
   const quiet = (d: Date) => inQuietWindow(d, 9, 17);
 
   test("is quiet only inside the window", () => {
@@ -60,7 +60,7 @@ describe("inQuietWindow — non-wrapping window (09:00 → 17:00)", () => {
   });
 });
 
-describe("inQuietWindow — zero-width window", () => {
+describe("inQuietWindow - zero-width window", () => {
   test("holds nothing rather than everything", () => {
     // The dangerous misreading: start === end could mean "always quiet", which would freeze
     // every send forever. It must mean "never quiet".
@@ -116,7 +116,7 @@ describe("describeQuietWindow", () => {
     assert.doesNotMatch(describeQuietWindow(9, 17), /overnight/);
   });
 
-  test("says nothing is held when the window is zero-width — matching inQuietWindow", () => {
+  test("says nothing is held when the window is zero-width - matching inQuietWindow", () => {
     assert.match(describeQuietWindow(12, 12), /nothing is held/);
     assert.equal(inQuietWindow(ist(12), 12, 12), false);
   });

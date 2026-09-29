@@ -9,12 +9,13 @@ import { istMinutesOfDay, istToday } from "@/lib/dates";
 import { formatIstMinutes } from "@/lib/config-schema";
 import { activityDate } from "@/lib/activity-actions";
 import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
+import { teamStatusClosesLogin } from "@/lib/termination-policy";
 import { getDailyLogEod } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
 import { LOG_FIELD_UNIT } from "@/lib/labels";
 import type { ActionResult } from "./finance-actions";
 
-/** The numeric daily-log field keys — the allowed values for the auto-captured record. */
+/** The numeric daily-log field keys - the allowed values for the auto-captured record. */
 const LOG_NUMERIC_KEYS = new Set(Object.keys(LOG_FIELD_UNIT));
 
 /** People section (PRD2 §3). Profiles/OKR-setting/org order = Admin.
@@ -40,7 +41,7 @@ const profileSchema = z.object({
   // First-call rotation (client notes: 80/20 split, Asma off Saturdays)
   firstCallSharePct: blankToUndefined(intInRange(0, 100, "Share must be")),
   worksSaturdays: z.string().optional(), // checkbox
-  // How many calls a day this person is expected to make — drives the My Desk bar and the
+  // How many calls a day this person is expected to make - drives the My Desk bar and the
   // once-a-day greeting. Blank/0 = no target, which hides the bar rather than showing 0/0.
   dailyCallTarget: blankToUndefined(intInRange(0, 999, "Daily call target must be")),
 });
@@ -66,9 +67,68 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
     dailyCallTarget: Math.min(999, d.dailyCallTarget?.trim() ? parseInt(d.dailyCallTarget, 10) : 0),
   };
 
+  /**
+   * WHO LOSES THEIR LOGIN WHEN THIS SAVES.
+   *
+   * "Inactive" is the status an Admin picks on this form when someone has LEFT - but nothing at
+   * the door reads `TeamProfile.status`: sign-in (`lib/auth.ts`) and `requireSession`
+   * (`lib/rbac.ts`) read `User.status` alone. So retiring the card used to leave the leaver with
+   * FULL access - a fresh sign-in worked, the browser they already had open kept working, the
+   * APIs answered and a copied cookie still worked. It happened: someone who had left the
+   * company could still sign in and work.
+   *
+   * So the two writes `suspendUser` makes ride along here, in the SAME transaction as the
+   * profile row: the two statuses can never end up disagreeing, and the person is evicted
+   * before the button settles instead of keeping the session they are holding.
+   * `teamStatusClosesLogin` is what says "Inactive" means gone and "On leave" does not.
+   *
+   * THE REVERSE IS DELIBERATELY NOT DONE. Setting a profile back to "Active" does not reopen
+   * the login. Nothing records WHY a login was suspended, so this path cannot tell its own
+   * suspension apart from one an Admin made for another reason (a security hold, an unreturned
+   * laptop), and blanket reactivation would silently undo that. Distinguishing them would need
+   * a new column; until then reopening access stays one explicit step in Users & access >
+   * Reactivate, which brings the team profile back with it.
+   */
+  const profileUserId = id
+    ? (await prisma.teamProfile.findUnique({ where: { id }, select: { userId: true } }))?.userId ?? null
+    : null;
+  // `TeamProfile.userId` is the link, with the email as the fallback this action already uses
+  // everywhere else: a profile added BEFORE its invite was accepted carries a null `userId`, and
+  // that person's login has to close too - otherwise the original bug survives for exactly the
+  // people whose card was made first.
+  const linkedUserId =
+    profileUserId ?? (await prisma.user.findUnique({ where: { email: d.email }, select: { id: true } }))?.id ?? null;
+  const closingUserId = linkedUserId && teamStatusClosesLogin(d.status) ? linkedUserId : null;
+
+  if (closingUserId) {
+    /**
+     * The rails `suspendUser` has, checked BEFORE anything is written so a refusal leaves the
+     * profile exactly as it was rather than half-saved: this save can take an Admin's access
+     * away, and an Admin who locks themselves - or the last Admin - out has no way back in.
+     */
+    if (closingUserId === session.user.id) {
+      return { ok: false, error: "You cannot mark your own profile inactive - it would close your own login" };
+    }
+    const target = await prisma.user.findUnique({ where: { id: closingUserId }, select: { role: true } });
+    if (target?.role === "ADMIN") {
+      const otherAdmins = await prisma.user.count({
+        where: { role: "ADMIN", status: "ACTIVE", id: { not: closingUserId } },
+      });
+      if (otherAdmins === 0) return { ok: false, error: "At least one active Admin must remain." };
+    }
+  }
+
+  // Suspend and evict, the same pair `suspendUser` and `terminateTeamMember` write.
+  const closeLogin = closingUserId
+    ? [
+        prisma.user.update({ where: { id: closingUserId }, data: { status: "SUSPENDED" } }),
+        prisma.session.deleteMany({ where: { userId: closingUserId } }),
+      ]
+    : [];
+
   if (id) {
     const before = await prisma.teamProfile.findUnique({ where: { id } });
-    await prisma.teamProfile.update({ where: { id }, data });
+    await prisma.$transaction([prisma.teamProfile.update({ where: { id }, data }), ...closeLogin]);
     const diff = before
       ? diffFields<Record<string, unknown>>(before, data)
       : { changed: [], before: {}, after: {} };
@@ -78,24 +138,45 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
         section: "people",
         entityType: "TeamProfile",
         entityId: id,
-        summary: `Updated ${d.fullName}'s team profile — changed ${diff.changed.join(", ")}`,
+        summary: `Updated ${d.fullName}'s team profile - changed ${diff.changed.join(", ")}`,
         meta: { changed: diff.changed, before: diff.before, after: diff.after },
       });
     }
   } else {
     const max = await prisma.teamProfile.aggregate({ _max: { orderIndex: true } });
-    // link to the login user with the same email, if one exists
-    const user = await prisma.user.findUnique({ where: { email: d.email } });
-    const created = await prisma.teamProfile.create({
-      data: { ...data, orderIndex: (max._max.orderIndex ?? 0) + 1, userId: user?.id ?? null },
+    // `linkedUserId` above is the login user with the same email, if one exists.
+    // Interactive form here only because the new row's id is needed for the activity entry -
+    // an array transaction cannot hand it back once the login writes are spread in.
+    const created = await prisma.$transaction(async (tx) => {
+      const row = await tx.teamProfile.create({
+        data: { ...data, orderIndex: (max._max.orderIndex ?? 0) + 1, userId: linkedUserId },
+      });
+      if (closingUserId) {
+        await tx.user.update({ where: { id: closingUserId }, data: { status: "SUSPENDED" } });
+        await tx.session.deleteMany({ where: { userId: closingUserId } });
+      }
+      return row;
     });
     await logActivity(session, {
       action: "profile.create",
       section: "people",
       entityType: "TeamProfile",
       entityId: created.id,
-      summary: `Added ${d.fullName} to the team — ${d.roleTitle}`,
-      meta: { roleTitle: d.roleTitle, dashboardRole: d.dashboardRole, email: d.email, linked: !!user },
+      summary: `Added ${d.fullName} to the team - ${d.roleTitle}`,
+      meta: { roleTitle: d.roleTitle, dashboardRole: d.dashboardRole, email: d.email, linked: linkedUserId !== null },
+    });
+  }
+  if (closingUserId) {
+    // A `profile.update` row listing "status" among its changed fields does not answer the
+    // question the founder actually asks the Activity Log - "why did their login stop working".
+    // Logged the way `suspendUser` logs it, against the User, so both entries read together.
+    await logActivity(session, {
+      action: "user.suspend",
+      section: "people",
+      entityType: "User",
+      entityId: closingUserId,
+      summary: `Suspended ${d.fullName}'s login - their team profile was marked inactive`,
+      meta: { via: "team profile status", teamStatus: d.status },
     });
   }
   // keep the login role in sync when the profile is linked to a user
@@ -135,7 +216,7 @@ export async function moveProfile(id: string, direction: "up" | "down"): Promise
 const okrSchema = z.object({
   teamProfileId: z.string().min(1),
   month: z.string().regex(/^\d{4}-\d{2}$/, "Pick a month"),
-  // title / targetValue / currentProgress stay free text — "Increase show-up rate to 80%",
+  // title / targetValue / currentProgress stay free text - "Increase show-up rate to 80%",
   // "50 calls", "3 students" are all legitimate values.
   title: z.string().trim().min(1, "OKR title is required"),
   targetValue: z.string().trim().min(1, "Target value is required"),
@@ -198,7 +279,7 @@ export async function saveOkr(id: string | null, form: FormData): Promise<Action
         section: "people",
         entityType: "OKR",
         entityId: id,
-        summary: `Updated ${who}'s OKR "${d.title}" — changed ${diff.changed.join(", ")}`,
+        summary: `Updated ${who}'s OKR "${d.title}" - changed ${diff.changed.join(", ")}`,
         meta: { changed: diff.changed, before: diff.before, after: diff.after },
       });
     }
@@ -209,7 +290,7 @@ export async function saveOkr(id: string | null, form: FormData): Promise<Action
       section: "people",
       entityType: "OKR",
       entityId: okr.id,
-      summary: `Set a new OKR for ${who} — "${d.title}", target ${d.targetValue}`,
+      summary: `Set a new OKR for ${who} - "${d.title}", target ${d.targetValue}`,
       meta: { month: d.month, title: d.title, targetValue: d.targetValue },
     });
   }
@@ -253,7 +334,7 @@ export async function updateOwnOkrProgress(id: string, form: FormData): Promise<
       section: "people",
       entityType: "OKR",
       entityId: id,
-      summary: `Updated ${okr.teamProfile.fullName}'s progress on "${okr.title}" — now ${progress || "blank"}`,
+      summary: `Updated ${okr.teamProfile.fullName}'s progress on "${okr.title}" - now ${progress || "blank"}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -285,7 +366,7 @@ const logSchema = z.object({
   studentsCheckedInOn: num.optional(),
   assignmentsReviewed: num.optional(),
   studentsFlaggedAtRisk: num.optional(),
-  // Free text (a blocker can read however the person needs it to), but capped — this
+  // Free text (a blocker can read however the person needs it to), but capped - this
   // field was previously unbounded, so the 2000-char client maxLength was the only limit.
   notes: optionalRule("text"),
 });
@@ -299,7 +380,7 @@ function daysOld(logDate: Date, today: Date): number {
 }
 
 export async function submitDailyLog(form: FormData): Promise<ActionResult> {
-  // Same guard as the /daily-log page (HEAD/USER + overrides) — requireSession
+  // Same guard as the /daily-log page (HEAD/USER + overrides) - requireSession
   // alone would let a STUDENT account write daily-log rows.
   const session = await requireSection("daily-log");
   const parsed = logSchema.safeParse(Object.fromEntries(form));
@@ -309,7 +390,7 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
   const today = istToday(); // date auto-filled as today; future dates impossible (PRD2 §3.3)
   const eod = await getDailyLogEod();
 
-  // Which fields the UI pre-filled from real activity — recorded so the timeline can badge
+  // Which fields the UI pre-filled from real activity - recorded so the timeline can badge
   // this entry as auto-captured later (today's auto-capture is recomputed live; history isn't).
   let autoKeys: string[] = [];
   try {
@@ -341,12 +422,12 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
 
   // ── Amend path: replacing an EOD_AUTO row with the real numbers ──
   // `logId` is only ever sent by the form when it is showing an auto-saved row. Every
-  // condition is re-checked here from the DB — the id arrives from the client.
+  // condition is re-checked here from the DB - the id arrives from the client.
   const logId = String(form.get("logId") ?? "").trim();
   if (logId) {
     const existing = await prisma.dailyLog.findUnique({ where: { id: logId } });
     if (!existing || existing.userId !== session.user.id) {
-      // Same message for "not found" and "not yours" — don't confirm other people's log ids.
+      // Same message for "not found" and "not yours" - don't confirm other people's log ids.
       return { ok: false, error: "That log entry isn't yours to edit." };
     }
     if (existing.source !== "EOD_AUTO") {
@@ -369,7 +450,7 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
       where: { id: existing.id },
       data: {
         ...values,
-        // The member has now put their name to these numbers — it stops being a machine
+        // The member has now put their name to these numbers - it stops being a machine
         // guess, and re-locks under the normal one-shot rule.
         source: "HUMAN",
         autoCapturedKeys: autoKeys.length ? autoKeys : Prisma.DbNull,
@@ -402,7 +483,7 @@ export async function submitDailyLog(form: FormData): Promise<ActionResult> {
   if (eod.enabled && istMinutesOfDay(new Date()) >= eod.cutoffMinutes) {
     return {
       ok: false,
-      error: `Today's ${formatIstMinutes(eod.cutoffMinutes)} cutoff has passed — today's log is closed. Contact Admin to make changes.`,
+      error: `Today's ${formatIstMinutes(eod.cutoffMinutes)} cutoff has passed - today's log is closed. Contact Admin to make changes.`,
     };
   }
 

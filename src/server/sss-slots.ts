@@ -6,23 +6,23 @@ import { getSssConfig } from "./founder-config";
 import { sendSssRescheduled } from "./whatsapp";
 
 /**
- * SSS (Success Strategy Session) slot engine — the founder-run sales call calendar.
+ * SSS (Success Strategy Session) slot engine - the founder-run sales call calendar.
  *
  * Mirrors the discovery booking-automation engine, adapted to SssSlot (which links an
  * OutreachJourney rather than a public BookingRequest). Three ideas:
  *
- *   - GENERATE / BOOK — the founder lays out OPEN slots; a prospect's journey is booked into one,
+ *   - GENERATE / BOOK - the founder lays out OPEN slots; a prospect's journey is booked into one,
  *     which sets `slot.status = BOOKED`, `slot.journeyId`, and mirrors `journey.sssAt = startsAt`
  *     so the SSS confirmation ladder (SOP steps 19–21, anchored on sssAt) keeps working.
- *   - BLOCK / UNBLOCK — the founder marks a slot (or a whole IST day) unavailable. Blocking a
+ *   - BLOCK / UNBLOCK - the founder marks a slot (or a whole IST day) unavailable. Blocking a
  *     BOOKED slot first RELOCATES its prospect to the next OPEN same-owner slot within the config
  *     window, resets the SSS confirmation, and WhatsApps the new time. No open slot in range →
  *     the prospect is detached and surfaces on the "needs an SSS time" list for manual rebooking.
- *   - MOVE — a manual/drag reschedule of a booked prospect onto a chosen OPEN slot.
+ *   - MOVE - a manual/drag reschedule of a booked prospect onto a chosen OPEN slot.
  *
  * SAFE BY DESIGN: every claim/free is a guarded updateMany inside a transaction, so a concurrent
  * book/move can't be clobbered; the WhatsApp wrapper never throws; a moved prospect always has to
- * re-confirm (salesCallConfirmed reset). There is no autonomous clock — blocks are founder actions.
+ * re-confirm (salesCallConfirmed reset). There is no autonomous clock - blocks are founder actions.
  */
 
 const HR = 3_600_000;
@@ -85,7 +85,7 @@ export async function listSssSlots(from: Date, to: Date): Promise<SssSlotView[]>
   }));
 }
 
-/** HQ prospects who have no SSS slot booked — includes anyone bumped off a blocked slot. */
+/** HQ prospects who have no SSS slot booked - includes anyone bumped off a blocked slot. */
 export async function listSssNeedsScheduling(): Promise<
   { journeyId: string; leadId: string; name: string; sssAtIst: string | null }[]
 > {
@@ -98,7 +98,7 @@ export async function listSssNeedsScheduling(): Promise<
   return rows.map((r) => ({
     journeyId: r.id,
     leadId: r.leadId,
-    name: r.lead?.name ?? "—",
+    name: r.lead?.name ?? "-",
     sssAtIst: r.sssAt ? formatDateTimeInZone(r.sssAt, "Asia/Kolkata") : null,
   }));
 }
@@ -149,7 +149,7 @@ export async function bookJourneyIntoSlot(journeyId: string, slotId: string): Pr
 
   const ok = await prisma
     .$transaction(async (tx) => {
-      // Vacate any slot this journey already sits in FIRST — journeyId is unique, so the target
+      // Vacate any slot this journey already sits in FIRST - journeyId is unique, so the target
       // can't take it until it's free. Throw (not return) on a lost race so the vacate rolls back.
       await tx.sssSlot.updateMany({ where: { journeyId }, data: { status: "OPEN", journeyId: null } });
       const claim = await tx.sssSlot.updateMany({
@@ -164,7 +164,7 @@ export async function bookJourneyIntoSlot(journeyId: string, slotId: string): Pr
       return true;
     })
     .catch(() => false);
-  return ok ? { ok: true } : { ok: false, error: "That slot was just taken — pick another" };
+  return ok ? { ok: true } : { ok: false, error: "That slot was just taken - pick another" };
 }
 
 /**
@@ -219,7 +219,7 @@ async function findNextOpenSlot(ownerId: string | null, withinDays: number, excl
  */
 export async function moveJourneyToSlot(journeyId: string, toSlotId: string, sentById?: string | null): Promise<SssActionResult> {
   const res = await relocate(journeyId, toSlotId, "OPEN");
-  if (!res.ok) return { ok: false, error: "That slot was just taken — pick another" };
+  if (!res.ok) return { ok: false, error: "That slot was just taken - pick another" };
   await sendSssRescheduled(journeyId, sentById);
   return { ok: true };
 }
@@ -289,7 +289,7 @@ export async function unblockSssSlot(slotId: string): Promise<SssActionResult> {
 export type BlockDayResult = { ok: true; blocked: number; moved: number; orphaned: number } | { ok: false; error: string };
 
 /**
- * Block a whole IST day for one owner — the "I'm out on Thursday" fast path. Blocks every OPEN slot
+ * Block a whole IST day for one owner - the "I'm out on Thursday" fast path. Blocks every OPEN slot
  * and reschedules every BOOKED one, reporting how many moved vs. couldn't be placed.
  */
 export async function blockSssDay(ownerId: string, dayKey: string, sentById?: string | null): Promise<BlockDayResult> {

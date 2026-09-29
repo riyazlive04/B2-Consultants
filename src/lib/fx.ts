@@ -33,8 +33,20 @@ export async function getTodayInrPerEur(): Promise<FxResult> {
   }
 
   try {
+    /**
+     * Bounded, because this sits on a path a person waits on.
+     *
+     * An opportunity card stamps the day's rate at creation, and a card can be created by a
+     * public form submission - so an unresponsive frankfurter.app used to hold that submission
+     * open for as long as the OS would keep the socket alive. Four seconds is far longer than
+     * the API's normal reply and far shorter than anyone's patience, and the timeout lands in
+     * the same `catch` as an HTTP error: newest cached rate, else the flagged-stale fallback.
+     * The first caller of each UTC day is the only one who can ever pay it, and the daily
+     * `prewarmTodayFx` cron exists so that caller is a cron rather than a customer.
+     */
     const res = await fetch(`${FX_API_URL}/latest?from=EUR&to=INR`, {
       next: { revalidate: 0 },
+      signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) throw new Error(`FX API ${res.status}`);
     const data = (await res.json()) as { rates: { INR: number }; date: string };

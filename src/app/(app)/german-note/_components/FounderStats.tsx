@@ -6,13 +6,13 @@ import { signedColor } from "@/lib/signals";
 import { inr, pct } from "./workshopFormat";
 
 /**
- * The German Note business, for Admin/Head only — the money the community page
+ * The German Note business, for Admin/Head only - the money the community page
  * never showed. Everything here already existed inside the workshop P&L engine;
  * it was just three clicks away and never aggregated across workshops.
  *
  * CASH is the headline, quoted sits beside it, and outstanding is the bridge
  * between the two (docs F1 / §6.7: the quoted basis overstates profit on money
- * that has not arrived — May's net profit falls ~78% on the cash basis).
+ * that has not arrived - May's net profit falls ~78% on the cash basis).
  */
 export function FounderStats({ stats }: { stats: GnFounderStats }) {
   const r = stats.totals;
@@ -24,7 +24,7 @@ export function FounderStats({ stats }: { stats: GnFounderStats }) {
         <h2 className="font-display text-xl font-semibold">The business</h2>
         <p className="text-xs text-muted">
           Every workshop intake combined · {stats.workshops} workshop{stats.workshops === 1 ? "" : "s"} ·{" "}
-          <span className="text-ink-2">cash basis</span> — quoted shown beside it
+          <span className="text-ink-2">cash basis</span> - quoted shown beside it
         </p>
       </div>
 
@@ -56,7 +56,7 @@ export function FounderStats({ stats }: { stats: GnFounderStats }) {
         />
       </div>
 
-      {/* Outstanding payments — this existed per-conversion but was aggregated nowhere. */}
+      {/* Outstanding payments - this existed per-conversion but was aggregated nowhere. */}
       <div className="rounded-card border border-line bg-surface shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold">
@@ -70,7 +70,7 @@ export function FounderStats({ stats }: { stats: GnFounderStats }) {
 
         {dues.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted">
-            Nobody owes money — every conversion is paid in full.
+            Nobody owes money - every conversion is paid in full.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -105,7 +105,7 @@ export function FounderStats({ stats }: { stats: GnFounderStats }) {
                       {inr(d.paid)} / {inr(d.final)}
                     </td>
                     <td className="px-4 py-2.5 text-muted">
-                      {d.nextDueDate ? formatDate(d.nextDueDate) : "—"}
+                      {d.nextDueDate ? formatDate(d.nextDueDate) : "-"}
                       {d.paymentMethod ? ` · ${d.paymentMethod}` : ""}
                     </td>
                   </tr>
@@ -131,7 +131,7 @@ function Tile({
   value: string;
   sub?: string;
   /**
-   * Pass the raw number when its SIGN is a verdict — a net profit, a margin, a balance.
+   * Pass the raw number when its SIGN is a verdict - a net profit, a margin, a balance.
    * Omit it for always-positive figures like cash collected or a headcount: if every
    * number on the row is green the colour stops carrying information, which is the
    * cognitive-load problem the rule was meant to solve (Error Log D1).
@@ -144,7 +144,7 @@ function Tile({
       <p className="flex items-center gap-1.5 text-caption font-medium text-muted">
         <span className="text-[var(--lvl-gn)]">{icon}</span> {label}
       </p>
-      {/* The colour goes on the DIGITS, not the card — a red card with a black number is
+      {/* The colour goes on the DIGITS, not the card - a red card with a black number is
           the exact signal that was being missed. */}
       <p className="mt-1 font-display text-2xl font-bold tnum" style={tone ? { color: tone } : undefined}>
         {value}

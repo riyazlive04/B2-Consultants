@@ -7,7 +7,7 @@ import {
 
 /**
  * My Desk had no loading state at all, while pipeline, outreach, contacts, cash and finance all
- * did — so it was the one screen that showed a blank page until every query resolved. On the
+ * did - so it was the one screen that showed a blank page until every query resolved. On the
  * pooled Supabase connection that is the whole difference between "loading" and "broken" to the
  * person waiting, and it is the screen a caller opens most.
  *
@@ -19,7 +19,7 @@ export default function Loading() {
     <div className="w-full space-y-8" aria-busy="true" aria-label="Loading your desk">
       <SkeletonPageHeader />
 
-      {/* The priority queue — two buckets' worth of rows. */}
+      {/* The priority queue - two buckets' worth of rows. */}
       <section className="space-y-4">
         <SkeletonBlock className="h-5 w-44" />
         {[0, 1].map((card) => (

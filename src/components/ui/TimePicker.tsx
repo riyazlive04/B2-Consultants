@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import type { InputHTMLAttributes } from "react";
 import { Clock } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
+import { useFormReset } from "./use-form-reset";
 
 /**
- * App-styled time picker — the third native popup replaced (see {@link MonthPicker}).
+ * App-styled time picker - the third native popup replaced (see {@link MonthPicker}).
  *
  * Two columns of buttons rather than a spinner or a free-text field: every time this app asks
  * for is a slot boundary or a cutoff ("15:00", "21:00"), so a list of real choices is both
@@ -71,6 +72,12 @@ export function TimePicker({
   const [open, setOpen] = useState(false);
 
   const [uncontrolled, setUncontrolled] = useState<string>((defaultValue as string) ?? "");
+
+  // A successful save calls form.reset(), which restores the hidden input and would otherwise
+  // leave this trigger showing the previous entry - see `useFormReset`.
+  useFormReset(inputRef, () => {
+    if (!controlled) setUncontrolled(inputRef.current?.value ?? "");
+  });
   const current = controlled ? ((value as string) ?? "") : uncontrolled;
   const parsed = parseHm(current);
 
@@ -86,7 +93,7 @@ export function TimePicker({
   const minutes = Array.from({ length: Math.ceil(60 / stepMins) }, (_, i) => (i * stepMins) % 60);
   const hours = Array.from({ length: 24 }, (_, h) => h);
 
-  // Scroll the chosen hour/minute into view when the panel opens — with 24 hours in a scroller,
+  // Scroll the chosen hour/minute into view when the panel opens - with 24 hours in a scroller,
   // opening at the top would hide the current selection more often than not.
   const hourColRef = useRef<HTMLDivElement>(null);
   const minColRef = useRef<HTMLDivElement>(null);

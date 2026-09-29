@@ -3,7 +3,7 @@
  *
  * The frequencies were a label with two different behaviours attached and no definition of
  * either: break-even divided by them, and the due date ignored them entirely. Set a payable to
- * MONTHLY and its "Next due" stayed on whatever date was typed in — three months later it still
+ * MONTHLY and its "Next due" stayed on whatever date was typed in - three months later it still
  * read that date, in the past, forever. You picked monthly and nothing monthly happened.
  *
  * Both rules live here, pure, so they can be stated once and tested rather than re-derived.
@@ -11,7 +11,7 @@
 
 export type PayableFrequency = "MONTHLY" | "QUARTERLY" | "ANNUAL" | "ONE_TIME";
 
-/** Months between occurrences. ONE_TIME has no period — it never recurs. */
+/** Months between occurrences. ONE_TIME has no period - it never recurs. */
 const PERIOD_MONTHS: Record<PayableFrequency, number | null> = {
   MONTHLY: 1,
   QUARTERLY: 3,
@@ -24,7 +24,7 @@ const PERIOD_MONTHS: Record<PayableFrequency, number | null> = {
  *
  * ONE_TIME contributes ZERO, deliberately. A one-off cost is not a standing commitment, and
  * folding it in would raise the break-even line for every future month on the strength of
- * something that happens once — quietly making the business look permanently less viable than
+ * something that happens once - quietly making the business look permanently less viable than
  * it is. It still appears in expenses; it just isn't part of the recurring base.
  */
 export function monthlyEquivalentMinor(amountMinor: number | bigint, frequency: string): number {
@@ -78,7 +78,7 @@ function buildDate(anchor: Date, monthIndex: number, day: number): Date {
   );
 }
 
-/** Whether this frequency recurs at all — the one-time branch several screens need. */
+/** Whether this frequency recurs at all - the one-time branch several screens need. */
 export function isRecurring(frequency: string): boolean {
   return PERIOD_MONTHS[frequency as PayableFrequency] !== null;
 }

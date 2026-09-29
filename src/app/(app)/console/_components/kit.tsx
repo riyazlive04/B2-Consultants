@@ -2,13 +2,13 @@
 
 /**
  * Console-only editor controls. Everything generic (Card, Btn, Toggle, SaveBar, Hint)
- * lives in the shared kit — this file keeps the dense inputs the rules editors need
+ * lives in the shared kit - this file keeps the dense inputs the rules editors need
  * (a NaN-proof number box, a bare text box, a select) and the column grid that gives
  * those inputs a name.
  *
  * On the column grid: these editors are lists of records with identical fields, and
  * the founder is the only reader. So the fields stay compact and unlabelled *in the
- * row* — the label is printed once, in a header above the list, and every row aligns
+ * row* - the label is printed once, in a header above the list, and every row aligns
  * to the same track. Previously each row was a `flex-wrap` sentence ("At [7] days,
  * pay [50] XP"), which read fine at full width and fell apart the moment it wrapped.
  */
@@ -25,7 +25,7 @@ export { Btn, Card, Hint, SaveBar };
 /**
  * One field surface for the console.
  *
- * `h-10` is §5.5's mandated 40px — the same height `form.tsx` has always used. The
+ * `h-10` is §5.5's mandated 40px - the same height `form.tsx` has always used. The
  * console had been sitting at ~32px (`py-1.5`), which is what read as cramped: it
  * was the only screen in the app off that spec.
  *
@@ -95,7 +95,7 @@ export function TextIn({
 }
 
 /**
- * A wall-clock time box (HH:MM), on the app's own {@link TimePicker} — the native popup this
+ * A wall-clock time box (HH:MM), on the app's own {@link TimePicker} - the native popup this
  * used to open was drawn by the browser in the platform's font, which read as a different product
  * next to the console's own fields. Value is still the 24h "21:00" encoding the EOD cutoff rules
  * parse (`parseIstMinutes`), because the picker wraps a real `<input type="time">`.
@@ -152,7 +152,7 @@ export function Picker<T extends string>({
 
 /**
  * A checkbox with a label. The console's rule editors have dozens of these in a row,
- * where the shared `Switch` would be far too heavy — a switch is for a capability,
+ * where the shared `Switch` would be far too heavy - a switch is for a capability,
  * a checkbox is for a row in a list.
  */
 export function Toggle({
@@ -169,13 +169,13 @@ export function Toggle({
   label: string;
   disabled?: boolean;
   title?: string;
-  /** Sink the label to `sr-only` — for a grid of role columns where the header already names it. */
+  /** Sink the label to `sr-only` - for a grid of role columns where the header already names it. */
   hideLabel?: boolean;
   className?: string;
 }) {
   return (
     <label
-      /* `relative` is not decoration — see the note on the input below. It also gives the
+      /* `relative` is not decoration - see the note on the input below. It also gives the
          hidden-label span below a containing block, so an `hideLabel` checkbox in a cramped
          grid cell can't join the document's scrollable width the way the sr-only INPUT below
          once did (see the note on it). */
@@ -184,12 +184,12 @@ export function Toggle({
       } ${className}`}
       title={title ?? (hideLabel ? label : undefined)}
     >
-      {/* The real control, hidden but not removed — sr-only keeps it focusable and
+      {/* The real control, hidden but not removed - sr-only keeps it focusable and
           in the tab order, which `display:none` would not. Everything visible below
           is driven off its :checked / :focus-visible state.
 
           `sr-only` is `position: absolute` with no offsets, so the box lands at its STATIC
-          position — and with no positioned ancestor its containing block is the page, which means
+          position - and with no positioned ancestor its containing block is the page, which means
           it is NOT clipped by anything and its position joins the document's scrollable width.
           Inside a horizontally scrolled editor that static position is hundreds of pixels right of
           the viewport, so 85 invisible 1px checkboxes were making the console scroll sideways.
@@ -202,7 +202,7 @@ export function Toggle({
         className="peer sr-only"
       />
       {/* The tick is a DESCENDANT of this span, not a sibling of the input, so it
-          can't use `peer-checked:` on its own — that compiles to `.peer:checked ~ x`.
+          can't use `peer-checked:` on its own - that compiles to `.peer:checked ~ x`.
           The arbitrary child selector reaches it from here instead. */}
       <span
         aria-hidden
@@ -234,7 +234,7 @@ export type Cols = string;
  *
  * Derived from the same string the grid uses, never restated: a hand-written min-width is a second
  * source of truth that drifts the first time a column is added, and the drift is invisible until
- * someone opens the console on a small screen. `1fr`, `auto` and `%` contribute nothing — they are
+ * someone opens the console on a small screen. `1fr`, `auto` and `%` contribute nothing - they are
  * free to collapse; a `minmax()` contributes its floor, which is exactly the width being protected.
  */
 export function colsMinWidth(cols: Cols, gapRem = 0.5): string {
@@ -253,12 +253,12 @@ export function colsMinWidth(cols: Cols, gapRem = 0.5): string {
 /**
  * The horizontal scroller a list editor lives in.
  *
- * These editors are grids of rem-sized tracks — Sections needs 36rem, Quests 43rem — so on a phone
+ * These editors are grids of rem-sized tracks - Sections needs 36rem, Quests 43rem - so on a phone
  * or a narrow tablet the tracks are simply wider than the card. They used to spill, which made the
  * whole page scroll sideways; now that `main` clips (see AppShell), spilling would instead HIDE the
  * controls, so they need a scroller of their own.
  *
- * The header and the rows must share ONE scroller — give each its own and the columns desynchronise
+ * The header and the rows must share ONE scroller - give each its own and the columns desynchronise
  * the moment anyone scrolls one of them, which is worse than not scrolling at all. That is why the
  * width is not set here: `ColHead` and `ColRow` each derive the same `minWidth` from the same `cols`
  * string, so they stay aligned inside whatever scroller contains them, and a new editor gets this
@@ -284,7 +284,7 @@ export function ColHead({
 }: {
   cols: Cols;
   labels: ReadonlyArray<string>;
-  /** Full text for a column whose header had to be abbreviated to fit its track — shown on hover. */
+  /** Full text for a column whose header had to be abbreviated to fit its track - shown on hover. */
   titles?: ReadonlyArray<string | undefined>;
 }) {
   return (
@@ -303,7 +303,7 @@ export function ColHead({
 }
 
 /**
- * One record. `sub` is the full-width line under the main track — descriptions are
+ * One record. `sub` is the full-width line under the main track - descriptions are
  * long and would blow out any column they were given.
  */
 export function ColRow({
@@ -317,7 +317,7 @@ export function ColRow({
   children: ReactNode;
   sub?: ReactNode;
   dim?: boolean;
-  /** Position in the list — drives the entry stagger (§6). */
+  /** Position in the list - drives the entry stagger (§6). */
   index?: number;
 }) {
   return (
@@ -326,7 +326,7 @@ export function ColRow({
         dim ? "opacity-60" : ""
       }`}
       // --i is the stagger index; the delay is computed in CSS so the cap lives in one place.
-      // minWidth matches ColHead's, so header and row scroll as one inside the shared ColScroll —
+      // minWidth matches ColHead's, so header and row scroll as one inside the shared ColScroll -
       // and it sits on the BORDERED box, not the inner grid, or the row's border and background
       // would stop at the viewport edge while its columns carried on past it.
       style={{
@@ -344,7 +344,7 @@ export function ColRow({
 
 /**
  * The remove affordance, sized to sit in a grid cell without stretching the track.
- * Stays quiet until the pointer is in the row — a column of red X's would shout
+ * Stays quiet until the pointer is in the row - a column of red X's would shout
  * "delete" louder than anything else on a screen that is mostly about editing.
  */
 export function RemoveCell({ onClick, label = "Remove" }: { onClick: () => void; label?: string }) {
@@ -361,7 +361,7 @@ export function RemoveCell({ onClick, label = "Remove" }: { onClick: () => void;
   );
 }
 
-/** A static cell — the row's own label, in the same voice as the column header. */
+/** A static cell - the row's own label, in the same voice as the column header. */
 export function NameCell({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <span className={`truncate text-sm text-ink-2 ${className}`}>{children}</span>;
 }
@@ -369,7 +369,7 @@ export function NameCell({ children, className = "" }: { children: ReactNode; cl
 /**
  * Wraps a list editor: heading, hint, the labelled list, and its add button.
  *
- * The list is the scroller (see {@link ColScroll}) — every editor built on ColHead/ColRow is wider
+ * The list is the scroller (see {@link ColScroll}) - every editor built on ColHead/ColRow is wider
  * than a phone, so putting it here means each one is reachable on a small screen by construction
  * rather than by each panel remembering to wrap itself.
  */

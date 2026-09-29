@@ -3,7 +3,7 @@ import { KPI_RANGE_OPTIONS, type KpiRangeKey } from "@/lib/dates";
 
 /**
  * Home KPI grid's date-range control (This Month / Last Month / QTD, BUILD_CHECKLIST §2).
- * Plain `<Link>`s to `?range=…`, not client state — the choice is a URL search param that
+ * Plain `<Link>`s to `?range=…`, not client state - the choice is a URL search param that
  * the home page (a server component) reads and re-renders with, so this needs no JS at all.
  * Visually mirrors `SegmentedControl` (controls.tsx) for consistency with the rest of the kit.
  */

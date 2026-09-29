@@ -1,8 +1,8 @@
 /**
- * Video completion — spec §10.3 / §17: "Tracked watch % overrides self-reported 'watched'".
+ * Video completion - spec §10.3 / §17: "Tracked watch % overrides self-reported 'watched'".
  *
  * The founders' actual complaint is the first test here: a student ticks "watched" having
- * seen 40%. If the tick wins, the whole feature is decorative — so `trackedBeatsTheTick` is
+ * seen 40%. If the tick wins, the whole feature is decorative - so `trackedBeatsTheTick` is
  * the test this module exists to pass.
  *
  * `mergeWatchProgress` guards the subtler bug: progress is a HIGH-WATER MARK. Storing the
@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { test, describe } from "node:test";
 import { resolveWatchTruth, mergeWatchProgress, COMPLETION_THRESHOLD_PCT } from "../video-progress";
 
-describe("watch truth — tracking is the source of truth", () => {
+describe("watch truth - tracking is the source of truth", () => {
   test("tracked % beats a self-reported tick (LMS-004)", () => {
     // The exact scenario in the spec: claims watched, actually saw 40%.
     const t = resolveWatchTruth({ watchedPct: 40, selfReported: true });
@@ -50,7 +50,7 @@ describe("watch truth — tracking is the source of truth", () => {
   });
 });
 
-describe("watch truth — no tracking available", () => {
+describe("watch truth - no tracking available", () => {
   test("an untracked tick still counts (legacy rows must not be erased)", () => {
     // Before tracking existed, a tick was all we had. Treating those as 0% would rewrite
     // every student's history the day this shipped.
@@ -68,13 +68,13 @@ describe("watch truth — no tracking available", () => {
   });
 
   test("0% tracked and untracked are different claims", () => {
-    // "watched none of it" vs "we have no idea" — the nullable column exists for this.
+    // "watched none of it" vs "we have no idea" - the nullable column exists for this.
     assert.equal(resolveWatchTruth({ watchedPct: 0, selfReported: false }).basis, "tracked");
     assert.equal(resolveWatchTruth({ watchedPct: null, selfReported: false }).basis, "none");
   });
 });
 
-describe("watch progress — high-water mark", () => {
+describe("watch progress - high-water mark", () => {
   test("rewatching the intro does not undo completion", () => {
     assert.equal(mergeWatchProgress(100, 5, 600), 100);
   });

@@ -13,7 +13,7 @@ import { Btn, Card, Hint } from "./kit";
 
 /**
  * Goals: what the team is steering towards. Progress is derived from the same history
- * the Arena scores, so a goal can never disagree with the leaderboard — and one set
+ * the Arena scores, so a goal can never disagree with the leaderboard - and one set
  * today for last quarter immediately shows how that quarter actually went.
  */
 
@@ -37,7 +37,7 @@ const fmt = (n: number) =>
 const showMetricValue = (metric: GoalProgress["goal"]["metric"], n: number) =>
   metric === "revenueInr" ? formatInrMinor(Math.round(n * 100)) : fmt(n);
 
-/** met / missed / running — the pill that says where a goal stands at a glance. */
+/** met / missed / running - the pill that says where a goal stands at a glance. */
 function GoalStatus({ g }: { g: GoalProgress }) {
   if (g.met) return <Pill tone="good">✓ Met{g.metOn ? ` ${formatDate(g.metOn)}` : ""}</Pill>;
   if (!g.open) return <Pill tone="bad">Missed</Pill>;
@@ -95,7 +95,7 @@ export function GoalsPanel({ goals, people }: { goals: GoalProgress[]; people: G
         <EmptyState
           icon={<Target size={26} />}
           title="No goals yet"
-          body="Set one and it starts tracking immediately — including backwards, over history that's already recorded."
+          body="Set one and it starts tracking immediately - including backwards, over history that's already recorded."
           action={<Btn variant="primary" onClick={() => open(null)}>+ New goal</Btn>}
         />
       ) : (
@@ -152,7 +152,7 @@ export function GoalsPanel({ goals, people }: { goals: GoalProgress[]; people: G
         open={creating || editing !== null}
         onClose={close}
         title={current ? "Edit goal" : "New goal"}
-        subtitle="Progress is measured from work already recorded — nothing to enter."
+        subtitle="Progress is measured from work already recorded - nothing to enter."
       >
         <form action={submit} className="space-y-4">
           {current && <input type="hidden" name="id" value={current.id} />}

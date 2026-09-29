@@ -74,7 +74,7 @@ test("the plans the business actually sells are now recordable (N3)", () => {
     },
   });
 
-  // 2 EMI (as before), 4 EMI (bundle) and 6 EMI (three courses) — all previously rejected
+  // 2 EMI (as before), 4 EMI (bundle) and 6 EMI (three courses) - all previously rejected
   // except the first, which is what made a real 4- or 6-EMI offer impossible to record.
   for (const n of [2, 4, 6]) {
     assert.equal(agreementDataSchema.safeParse(plan(n)).success, true, `${n} instalments must be valid`);
@@ -102,7 +102,7 @@ test("the plan is still bounded at both ends", () => {
 
 test("instalments must still add up to the total, at every plan length", () => {
   // The invariant a founder editing a form at 11pm will break. Widening the cap must not
-  // weaken it — a 6-EMI plan that does not sum is exactly as wrong as a 2-EMI one.
+  // weaken it - a 6-EMI plan that does not sum is exactly as wrong as a 2-EMI one.
   const bad = {
     ...LEGACY,
     payment: {
@@ -129,7 +129,7 @@ test("add-ons are itemised and bounded (N5)", () => {
   };
   assert.equal(agreementDataSchema.safeParse(withAddOns).success, true);
 
-  // Present add-ons DO enter the hash — a signed contract must commit to its own line items.
+  // Present add-ons DO enter the hash - a signed contract must commit to its own line items.
   const payload = canonicalPayload(agreementDataSchema.parse(withAddOns), "v1");
   assert.ok(payload.includes("addOns"), "an add-on that exists must be part of what was signed");
   assert.ok(payload.includes("Course books"));

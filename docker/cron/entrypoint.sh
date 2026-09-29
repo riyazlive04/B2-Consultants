@@ -24,7 +24,9 @@ fi
 # Cadences come from the route files' own CADENCE comments:
 #   outreach   — every minute   (tightest; the SOP ladder has a 5-minute SLA)
 #   workflows  — every 5 min    (automation enrollments due-check)
-#   whatsapp   — every 15 min   (also drives booking confirmations)
+#   whatsapp   — every minute   (also drives booking confirmations; minute-level pre-call
+#                                reminders need it; a tick takes ~2s and every touchpoint
+#                                keeps its own spacing, so a tight tick sends no more often)
 #   daily-log  — every 15 min   (idempotent EOD auto-save; no-op before the cutoff)
 #   alerts     — every 5 min    (speed-to-lead; a 15-minute SLA cannot be policed hourly, and
 #                                the engine's own cooldown decides how often anything is SENT —
@@ -36,7 +38,7 @@ fi
 cat > /etc/crontabs/root <<'EOF'
 * * * * * /usr/local/bin/tick.sh outreach
 */5 * * * * /usr/local/bin/tick.sh workflows
-*/15 * * * * /usr/local/bin/tick.sh whatsapp
+* * * * * /usr/local/bin/tick.sh whatsapp
 */15 * * * * /usr/local/bin/tick.sh daily-log
 */5 * * * * /usr/local/bin/tick.sh alerts
 0 3 * * * /usr/local/bin/tick.sh retention
@@ -44,7 +46,7 @@ cat > /etc/crontabs/root <<'EOF'
 EOF
 chmod 600 /etc/crontabs/root
 
-echo "cron: TZ=${TZ:-UTC} target=${APP_URL:-http://app:3000} — outreach 1m, workflows/alerts 5m, whatsapp/daily-log 15m, retention daily, daily 1h"
+echo "cron: TZ=${TZ:-UTC} target=${APP_URL:-http://app:3000} — outreach/whatsapp 1m, workflows/alerts 5m, daily-log 15m, retention daily, daily 1h"
 
 # -f foreground (PID 1), -d 8 logs each job to stderr so `docker compose logs cron` works.
 exec crond -f -d 8

@@ -5,7 +5,7 @@ import { createHash, randomBytes } from "crypto";
  * One-time invite tokens.
  *
  * The token itself is only ever seen once, in the link the Admin copies. What lands
- * in the database is its SHA-256, so a leaked `user_invite` row cannot be redeemed —
+ * in the database is its SHA-256, so a leaked `user_invite` row cannot be redeemed -
  * the same reason you never store a password.
  *
  * 32 random bytes is 256 bits of entropy; a hash lookup on the (unique, indexed)
@@ -29,7 +29,7 @@ export function hashInviteToken(token: string): string {
 }
 
 /** The password a freshly-invited account is parked on until the invitee sets their own.
- *  Never shown to anyone, never reused — it exists only because better-auth needs one. */
+ *  Never shown to anyone, never reused - it exists only because better-auth needs one. */
 export function unguessablePlaceholderPassword(): string {
   return randomBytes(24).toString("base64url");
 }

@@ -6,7 +6,7 @@ import { LOG_FIELD_SHORT } from "@/lib/labels";
 
 /**
  * Telecaller Pay board (Admin-only). Lists the telecallers (USER-role team members
- * who make calls — appointment setters + discovery specialists), each with this
+ * who make calls - appointment setters + discovery specialists), each with this
  * month's call activity pulled from their daily logs as context for the reward,
  * plus every bonus/commission Ameen has assigned for the month.
  *

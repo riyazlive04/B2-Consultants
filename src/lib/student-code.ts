@@ -1,5 +1,5 @@
 /**
- * Human-readable student numbers (§6.1) — "B2-0001".
+ * Human-readable student numbers (§6.1) - "B2-0001".
  *
  * Duplicate names are the problem this solves: the roster already holds two "Anna Smith"
  * and two "Karthik", and a payment has been credited to the wrong one. A cuid cannot be
@@ -34,6 +34,21 @@ export function nextStudentNumber(existing: Array<string | null | undefined>): n
     if (n !== null && n > max) max = n;
   }
   return max + 1;
+}
+
+/**
+ * Tidy a hand-typed student number into the one form the rest of the app compares against.
+ *
+ * The code is read aloud on calls and typed into a search box, so "b2-7 " and "B2-7" have to be
+ * the same student. Upper-cased and stripped of whitespace for that reason; NOT reformatted into
+ * `B2-0007`, because the founder may deliberately want a code from another system, and silently
+ * rewriting what someone typed is how an identifier stops matching the paperwork it came from.
+ *
+ * Blank becomes null, which is the "no code" the column already models.
+ */
+export function normalizeStudentCode(raw: string | null | undefined): string | null {
+  const v = (raw ?? "").trim().toUpperCase().replace(/\s+/g, "");
+  return v || null;
 }
 
 /** Name + code for display: "Anna Smith · B2-0001". Falls back cleanly pre-backfill. */

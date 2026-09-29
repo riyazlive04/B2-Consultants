@@ -8,7 +8,7 @@
  *
  * ── The rule ─────────────────────────────────────────────────────────────────────
  * The public booking form is NOT switched to the catalogue until this reports
- * ZERO disagreements. Not "few", not "only on old rows" — zero.
+ * ZERO disagreements. Not "few", not "only on old rows" - zero.
  *
  * A disagreement here is a SEEDING BUG, never a rounding artefact: `catalogueFromIntake()`
  * derives its scores from the same tables `computeBant()` reads, so they cannot legitimately
@@ -49,7 +49,7 @@ async function main() {
     helpText: r.helpText,
     kind: r.kind,
     options: (r.options as QuestionOption[] | null) ?? [],
-    // The replay scores HISTORICAL booking-form submissions, which post our own option values —
+    // The replay scores HISTORICAL booking-form submissions, which post our own option values -
     // it never reads an external payload, so the inbound mapping is irrelevant here and is
     // deliberately not merged in. Passing the real aliases would not change a single verdict;
     // passing them would just imply this path exercises them.
@@ -122,7 +122,7 @@ async function main() {
 
   console.log(
     checked === 0
-      ? "\nNo bookings to replay yet — the gate is vacuous until real submissions exist.\n"
+      ? "\nNo bookings to replay yet - the gate is vacuous until real submissions exist.\n"
       : "\nGATE PASSED: the catalogue reproduces every historical verdict exactly.\n",
   );
 }

@@ -57,7 +57,7 @@ describe("storageConfig", () => {
     process.env.SUPABASE_STORAGE_BUCKET = saved.SUPABASE_STORAGE_BUCKET;
   };
 
-  test("returns null when unconfigured — the fail-closed contract", () => {
+  test("returns null when unconfigured - the fail-closed contract", () => {
     // Callers must be able to answer 503 with a clear message rather than throw. A blank key is
     // the state this ships in.
     delete process.env.SUPABASE_URL;

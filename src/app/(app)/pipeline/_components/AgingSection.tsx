@@ -1,7 +1,7 @@
 import type { StageAging } from "@/server/pipeline-metrics";
 
 /**
- * Pipeline "by time duration" view (issue 1.7) — how long open leads have sat in each stage.
+ * Pipeline "by time duration" view (issue 1.7) - how long open leads have sat in each stage.
  * Pure display, so it stays a server component (no client JS). Complements StageChart's
  * by-stage/by-value view: together they are the two pipeline views the doc asks for.
  */
@@ -9,7 +9,7 @@ export function AgingSection({ rows }: { rows: StageAging[] }) {
   if (!rows.length) {
     return (
       <div className="rounded-card border border-line bg-surface p-6 text-sm text-ink-2">
-        No open leads to age yet — every lead is either brand new or already closed.
+        No open leads to age yet - every lead is either brand new or already closed.
       </div>
     );
   }
@@ -18,7 +18,7 @@ export function AgingSection({ rows }: { rows: StageAging[] }) {
     <div className="space-y-3">
       <p className="text-caption text-ink-3">
         Days each open lead has spent in its current stage. A high “oldest” is a lead going cold in
-        the follow-up gap — work those first.
+        the follow-up gap - work those first.
       </p>
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
         <table className="w-full min-w-[640px] text-sm">
@@ -63,7 +63,7 @@ export function AgingSection({ rows }: { rows: StageAging[] }) {
 }
 
 // Colours come straight from the design tokens (globals.css) via inline CSS vars so a partial
-// opacity ("stale") renders reliably — Tailwind's `/opacity` modifier is unreliable on
+// opacity ("stale") renders reliably - Tailwind's `/opacity` modifier is unreliable on
 // var()-backed colours.
 function AgeBar({ r }: { r: StageAging }) {
   const segments = [

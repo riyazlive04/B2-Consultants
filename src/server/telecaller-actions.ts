@@ -82,7 +82,7 @@ type PayoutAmounts = {
   status: string;
 };
 
-/** "bonus ₹5,000, commission €120" — what was actually paid, for the feed sentence. */
+/** "bonus ₹5,000, commission €120" - what was actually paid, for the feed sentence. */
 function amountPhrase(p: PayoutAmounts): string {
   const money = (inr: bigint, eur: bigint) =>
     [inr ? formatInrMinor(inr) : null, eur ? formatEurMinor(eur) : null].filter(Boolean).join(" + ");
@@ -91,7 +91,7 @@ function amountPhrase(p: PayoutAmounts): string {
   return [bonus ? `bonus ${bonus}` : null, comm ? `commission ${comm}` : null].filter(Boolean).join(", ");
 }
 
-/** BigInt and Date have no JSON representation — the diff and meta compare plain strings instead. */
+/** BigInt and Date have no JSON representation - the diff and meta compare plain strings instead. */
 function payoutShape(p: PayoutAmounts) {
   return {
     teamProfileId: p.teamProfileId,
@@ -148,7 +148,7 @@ export async function createPayout(form: FormData): Promise<ActionResult> {
     section: "telecaller",
     entityType: "TelecallerPayout",
     entityId: row.id,
-    summary: `Recorded a ${PAYOUT_STATUS_LABELS[d.status].toLowerCase()} ${formatMonth(row.month)} payout for ${profile.fullName} — ${amountPhrase(row)}`,
+    summary: `Recorded a ${PAYOUT_STATUS_LABELS[d.status].toLowerCase()} ${formatMonth(row.month)} payout for ${profile.fullName} - ${amountPhrase(row)}`,
     meta: { ...payoutShape(row), teamProfile: profile.fullName, fxRateUsed: String(fx.rate) },
   });
 
@@ -201,7 +201,7 @@ export async function updatePayout(id: string, form: FormData): Promise<ActionRe
       section: "telecaller",
       entityType: "TelecallerPayout",
       entityId: id,
-      summary: `Edited ${existing.teamProfile.fullName}'s ${formatMonth(existing.month)} payout — changed ${fieldList(diff.changed)}`,
+      summary: `Edited ${existing.teamProfile.fullName}'s ${formatMonth(existing.month)} payout - changed ${fieldList(diff.changed)}`,
       meta: diff,
     });
   }
@@ -260,7 +260,7 @@ export async function deletePayout(id: string): Promise<ActionResult> {
     section: "telecaller",
     entityType: "TelecallerPayout",
     entityId: row.id,
-    summary: `Deleted ${row.teamProfile.fullName}'s ${formatMonth(row.month)} payout — ${amountPhrase(row)}`,
+    summary: `Deleted ${row.teamProfile.fullName}'s ${formatMonth(row.month)} payout - ${amountPhrase(row)}`,
     meta: payoutShape(row),
   });
   revalidatePath("/telecaller");

@@ -1,4 +1,4 @@
-# B2 — daily-maintenance tick.
+# B2 - daily-maintenance tick.
 #
 # The app has no clock of its own (see automation-queue.ts). This script IS the scheduler for the
 # once-a-day housekeeping: Windows Task Scheduler runs it hourly, it pokes /api/cron/daily, and the
@@ -6,7 +6,7 @@
 # sweep (once/day) and the scheduled founder digest. Every sub-job is idempotent and flag-gated, so
 # an hourly tick is safe and most ticks are near-no-ops.
 #
-# The secret is read from .env at run time and sent as a header — never baked into the task
+# The secret is read from .env at run time and sent as a header - never baked into the task
 # definition, never echoed, so it can't leak into Task Scheduler's UI or the log below.
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\run-cron-daily.ps1
@@ -41,7 +41,7 @@ try {
   $jobs = ($res.run.jobs.PSObject.Properties | ForEach-Object { $_.Name }) -join ","
   Write-Log ("ok    ran={0}" -f $jobs)
 } catch {
-  # A stopped dev server is the normal case on a laptop — log it and move on, never throw.
+  # A stopped dev server is the normal case on a laptop - log it and move on, never throw.
   Write-Log ("FAIL  {0}" -f $_.Exception.Message)
   exit 1
 }

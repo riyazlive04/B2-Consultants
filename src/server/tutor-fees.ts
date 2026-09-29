@@ -12,7 +12,7 @@ import type { TutorFeeStatus } from "@prisma/client";
 /**
  * Tutor fee reads (ER v2 Track C). Writes live in `tutor-fee-actions.ts`.
  *
- * Everything downstream reads `payableInrMinor`, never `amountInrMinor` — an override that
+ * Everything downstream reads `payableInrMinor`, never `amountInrMinor` - an override that
  * shows on screen but is ignored by the money is the kind of bug only an accountant finds.
  */
 
@@ -29,7 +29,7 @@ export type TutorFeeRow = {
   amountInrMinor: number;
   overrideAmountInrMinor: number | null;
   overrideReason: string | null;
-  /** What is actually owed — override when set, computed otherwise. */
+  /** What is actually owed - override when set, computed otherwise. */
   payableInrMinor: number;
   status: TutorFeeStatus;
   statusLabel: string;
@@ -44,14 +44,14 @@ export type TutorFeeRow = {
    * Average students actually PRESENT across this batch's marked classes, or null when no
    * register has been taken.
    *
-   * REPORTED, NEVER APPLIED. `headcount` above is the roster, and the fee is priced off it —
+   * REPORTED, NEVER APPLIED. `headcount` above is the roster, and the fee is priced off it -
    * that is the founders' rule (spec Part 2 §5) and this column does not change it. It exists
    * because the gap between the two was previously invisible: the business has been paying per
    * head enrolled with no record at all of heads present. Whether the fee basis should move is
    * a pricing decision, and this is the number needed to have that conversation.
    */
   attendedAverage: number | null;
-  /** How many of this batch's classes have had a register taken — the confidence in the above. */
+  /** How many of this batch's classes have had a register taken - the confidence in the above. */
   markedSessions: number;
 };
 
@@ -69,7 +69,7 @@ export const listTutorFees = cache(async (status?: TutorFeeStatus): Promise<Tuto
           name: true,
           code: true,
           _count: { select: { members: true, enrollments: true } },
-          // Only the statuses, and only for sessions that HAVE a register — enough to average
+          // Only the statuses, and only for sessions that HAVE a register - enough to average
           // heads present without pulling a row per student per class into a finance list.
           events: { select: { attendance: { select: { status: true } } } },
         },
@@ -111,7 +111,7 @@ export const listTutorFees = cache(async (status?: TutorFeeStatus): Promise<Tuto
       approvedAt: f.approvedAt,
       paidAt: f.paidAt,
       postedEntryId: f.postedEntryId,
-      // Only a DRAFT can be stale in any actionable sense — an APPROVED fee is frozen BY
+      // Only a DRAFT can be stale in any actionable sense - an APPROVED fee is frozen BY
       // DESIGN, so flagging it as out of date would read as an error rather than the intent.
       stale: f.status === "DRAFT" && currentHeadcount !== f.headcount,
       currentHeadcount,
@@ -122,7 +122,7 @@ export const listTutorFees = cache(async (status?: TutorFeeStatus): Promise<Tuto
 });
 
 /**
- * Batch P&L — a LEDGER SLICE, not a stored FINANCE_RECORD.
+ * Batch P&L - a LEDGER SLICE, not a stored FINANCE_RECORD.
  *
  * The diagram wants `BATCH ||--o| FINANCE_RECORD`. Storing that row would be a second source
  * of truth that drifts from the ledger the first time an income is edited. Instead:
@@ -181,7 +181,7 @@ export const batchPnl = cache(async (batchId: string) => {
   };
 });
 
-/** Batches that would produce a tutor fee — i.e. German levels with a fee band. */
+/** Batches that would produce a tutor fee - i.e. German levels with a fee band. */
 export const feeEligibleBatches = cache(async () => {
   const rows = await prisma.batch.findMany({
     where: { status: "ACTIVE" },

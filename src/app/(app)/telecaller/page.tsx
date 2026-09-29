@@ -22,11 +22,11 @@ export default async function TelecallerPage({
 
   return (
     <div className="w-full space-y-6">
-      {/* Month picker — plain GET form, works without client JS */}
+      {/* Month picker - plain GET form, works without client JS */}
       <PageHeader
         icon={<PhoneCall size={20} />}
         title="Telecaller Pay"
-        subtitle="Assign a bonus and/or commission to each telecaller — based on their calls or any other criteria."
+        subtitle="Assign a bonus and/or commission to each telecaller - based on their calls or any other criteria."
         actions={
           <form method="get" className="flex items-center gap-2">
             {/* type="month" keeps a native (now theme-corrected via color-scheme) popup;

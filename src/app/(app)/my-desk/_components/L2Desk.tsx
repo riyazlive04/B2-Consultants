@@ -22,11 +22,12 @@ import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/feedback";
 import { NewLeadWatcher } from "./NewLeadWatcher";
 import { TargetAttainment } from "./TargetAttainment";
-import { LogOutcomeModal } from "./LogOutcomeModal";
+import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
+import { DialButton } from "@/components/calls/DialButton";
 import { useOfflineCalls } from "./useOfflineCalls";
 
 /**
- * Level 2 — Discovery Specialist desk (rebuild spec §7).
+ * Level 2 - Discovery Specialist desk (rebuild spec §7).
  *
  * Opens to today's calendar. The routing panel is the only way a call leaves this list, so
  * the outcome, the stage and the booking status can never drift apart.
@@ -40,15 +41,12 @@ function timeIst(iso: string): string {
   });
 }
 
-function DialLink({ phone, name }: { phone: string; name: string }) {
+/** Click-to-dial. `onDial` fires with the dial instant so the outcome form can carry it. */
+function DialLink({ phone, name, onDial }: { phone: string; name: string; onDial?: (at: Date) => void }) {
   return (
-    <a
-      href={`tel:${phone.replace(/[^\d+]/g, "")}`}
-      aria-label={`Call ${name} on ${phone}`}
-      className="inline-flex items-center gap-1.5 rounded-btn bg-primary px-3 py-1.5 text-sm font-semibold text-on-accent hover:bg-primary-strong"
-    >
+    <DialButton phone={phone} name={name} onDial={onDial ?? (() => undefined)}>
       <PhoneCall size={14} /> Call
-    </a>
+    </DialButton>
   );
 }
 
@@ -56,7 +54,7 @@ function DialLink({ phone, name }: { phone: string; name: string }) {
  * The routing panel. Three destinations, each stating its own follow-up, plus the two
  * outcomes that are not routes at all (follow-up, no-show).
  *
- * BANT sits on the same form because the specialist has just finished the conversation —
+ * BANT sits on the same form because the specialist has just finished the conversation -
  * asking them to reopen the lead afterwards is how it ends up never being filled in.
  */
 function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
@@ -64,7 +62,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
   const [outcome, setOutcome] = useState<string>("QUALIFIED_FOR_SSS");
 
   return (
-    <Modal open onClose={onClose} title={`Record outcome — ${call.name}`} subtitle={`${timeIst(call.startsAt)} IST`}>
+    <Modal open onClose={onClose} title={`Record outcome - ${call.name}`} subtitle={`${timeIst(call.startsAt)} IST`}>
       <form
         action={async (form) => {
           setError(null);
@@ -103,7 +101,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
           ))}
         </fieldset>
 
-        {/* Not routes — the call didn't reach a decision. Kept visually apart so they can't
+        {/* Not routes - the call didn't reach a decision. Kept visually apart so they can't
             be picked by accident while scanning the three real destinations. */}
         <div className="flex flex-wrap gap-2 border-t border-line pt-3">
           <Btn
@@ -124,6 +122,19 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
           </Btn>
         </div>
 
+        {/* SOP: "Book sales call before closing the discovery call". Shown only on the Level 3
+            route, because it is the only one that has a sales call to book. Optional: without a
+            time the prospect still lands on the SSS calendar's "Needs an SSS time" list for the
+            closer to place, and no reminder goes out naming a date nobody agreed. */}
+        {outcome === "QUALIFIED_FOR_SSS" && (
+          <Field
+            label="Success Strategy Session (IST)"
+            hint="The time you agreed on the call. Leave blank and the closer will book it."
+          >
+            <TextInput type="datetime-local" name="sssAt" />
+          </Field>
+        )}
+
         {outcome === "NO_SHOW" && (
           <p className="rounded-card bg-warn-soft p-3 text-caption text-warn">
             Only mark a no-show once you have rung them directly. Per the JD a missed call is not
@@ -133,7 +144,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
 
         {/* Pre-ticked from what the prospect answered at intake, so this is a CONFIRMATION of
             evidence we already hold rather than a blank form to fill from memory after a
-            20-minute call. The specialist still owns the verdict — every box is editable, and
+            20-minute call. The specialist still owns the verdict - every box is editable, and
             what they submit is what is stored. The note says where the ticks came from, because
             a pre-ticked box with no explanation is worse than an empty one. */}
         <fieldset className="grid grid-cols-2 gap-2 border-t border-line pt-3">
@@ -144,7 +155,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
           <CheckboxField name="bantTimeline" label="Timeline" defaultChecked={call.bant?.timeline} />
           {call.bant && (
             <p className="col-span-2 text-caption text-muted">
-              Pre-filled from their intake answers ({call.bant.avg.toFixed(1)}/5{" "}
+              Pre-filled from their intake answers ({call.bant.avg.toFixed(1)}/4{" "}
               {BANT_ORIGIN_LABELS[call.bant.origin]}). Correct anything the call changed.
             </p>
           )}
@@ -198,15 +209,40 @@ function CallPrep({ call }: { call: L2Call }) {
           )}
           {call.answers.length === 0 ? (
             <p className="text-caption text-muted">
-              A score was recorded but the individual answers were not — this prospect was scored
+              A score was recorded but the individual answers were not - this prospect was scored
               before their answers were being kept.
             </p>
           ) : (
-            <dl className="space-y-1.5">
+            <dl className="divide-y divide-line">
               {call.answers.map((a, i) => (
-                <div key={`${a.question}-${i}`} className="text-caption">
-                  <dt className="text-muted">{a.question}</dt>
-                  <dd className="font-medium text-ink">{a.answer}</dd>
+                <div key={`${a.question}-${i}`} className="flex items-start justify-between gap-3 py-1.5 text-caption">
+                  <div className="min-w-0 flex-1">
+                    <dt className="text-muted" title={a.question}>{a.question}</dt>
+                    <dd className="font-medium text-ink">{a.answer}</dd>
+                  </div>
+                  {/* The mark this answer earned. A specialist opening this card is deciding what
+                      to press on in the next ten minutes, and the weak answer is the thing to
+                      press on - it was the one number this screen never showed. */}
+                  {a.score !== null && (
+                    <span
+                      title={
+                        a.counted
+                          ? `Scored ${a.score} out of 4`
+                          : `Scored ${a.score} out of 4, but this question no longer divides the average`
+                      }
+                      className={`tnum flex-none rounded px-1.5 py-0.5 font-semibold ${
+                        !a.counted
+                          ? "bg-surface-2 text-muted"
+                          : a.score >= 3
+                            ? "bg-ok-soft text-ok"
+                            : a.score >= 2
+                              ? "bg-warn-soft text-warn"
+                              : "bg-risk-soft text-risk"
+                      }`}
+                    >
+                      {a.score}/4
+                    </span>
+                  )}
                 </div>
               ))}
             </dl>
@@ -224,11 +260,11 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           {call.leadId ? (
-            <Link href={`/pipeline?lead=${call.leadId}`} className="truncate font-medium text-ink hover:underline">
+            <Link href={`/contacts/${call.leadId}`} className="truncate font-medium text-ink hover:underline" title={call.name}>
               {call.name}
             </Link>
           ) : (
-            <span className="truncate font-medium text-ink">{call.name}</span>
+            <span className="truncate font-medium text-ink" title={call.name}>{call.name}</span>
           )}
           {/* Before the status pill: on this screen the score is what decides how the call is
               prepared, and the confirmation state is what decides whether it happens at all. */}
@@ -236,14 +272,14 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
           {call.recorded ? (
             <Pill tone="good">Recorded</Pill>
           ) : call.needsChase ? (
-            <Pill tone="bad">Chase — no outcome yet</Pill>
+            <Pill tone="bad">Chase - no outcome yet</Pill>
           ) : call.confirmed ? (
             <Pill tone="good">Confirmed</Pill>
           ) : (
             <Pill tone="warn">Unconfirmed</Pill>
           )}
         </div>
-        <p className="mt-0.5 truncate text-caption text-muted">{call.phone}</p>
+        <p className="mt-0.5 truncate text-caption text-muted" title={call.phone}>{call.phone}</p>
         <CallPrep call={call} />
       </div>
       <div className="flex flex-none items-center gap-2">
@@ -267,12 +303,12 @@ function CallRow({ call, onRoute }: { call: L2Call; onRoute: (c: L2Call) => void
   );
 }
 
-function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead) => void }) {
+function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead, calledAt?: Date) => void }) {
   return (
     <li className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/pipeline?lead=${lead.id}`} className="truncate font-medium text-ink hover:underline">
+          <Link href={`/contacts/${lead.id}`} className="truncate font-medium text-ink hover:underline" title={lead.name}>
             {lead.name}
           </Link>
           <Pill tone={lead.stage === "DISCO_NOT_BOOKED" ? "warn" : "neutral"}>
@@ -284,12 +320,12 @@ function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead) => void }) 
         </p>
       </div>
       {/* Two clearly distinct actions, matching L1's row exactly (Error Log L3): "Call" dials,
-          "Log outcome" records. This row used to offer only the dial link — so a discovery
+          "Log outcome" records. This row used to offer only the dial link - so a discovery
           specialist could ring one of her own leads and had nowhere to write down what happened.
           Shown even without a phone number: a call can be returned on WhatsApp or the number can
           be wrong, and "wrong number" is itself an outcome worth recording. */}
       <div className="flex flex-none items-center gap-2">
-        {lead.phone && <DialLink phone={lead.phone} name={lead.name} />}
+        {lead.phone && <DialLink phone={lead.phone} name={lead.name} onDial={(at) => onLog(lead, at)} />}
         <Btn variant="soft" size="sm" onClick={() => onLog(lead)}>Log outcome</Btn>
       </div>
     </li>
@@ -299,8 +335,8 @@ function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead) => void }) 
 export function L2Desk({ desk }: { desk: L2DeskData }) {
   const router = useRouter();
   const [routing, setRouting] = useState<L2Call | null>(null);
-  /** A lead being logged against from "Your leads" — the chase form, not the routing form. */
-  const [logging, setLogging] = useState<L2Lead | null>(null);
+  /** A lead being logged against from "Your leads" - the chase form, not the routing form. */
+  const [logging, setLogging] = useState<{ lead: L2Lead; calledAt?: Date } | null>(null);
 
   /**
    * The same offline queue L1 uses. A discovery specialist makes the same phone calls from the
@@ -314,7 +350,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
 
   return (
     <div className="space-y-8">
-      {/* Polls every 30s and pops any lead newly assigned to me — including one with no
+      {/* Polls every 30s and pops any lead newly assigned to me - including one with no
           booked slot yet, which otherwise has no live signal on this desk at all. */}
       <NewLeadWatcher onSeen={() => router.refresh()} />
 
@@ -347,7 +383,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
         {chase.length > 0 && (
           <p className="rounded-card bg-warn-soft p-3 text-caption text-warn">
             {chase.length} call{chase.length === 1 ? " has" : "s have"} passed without an outcome. Ring the
-            prospect directly before recording a no-show — a missed call is not a no-show until you have tried.
+            prospect directly before recording a no-show - a missed call is not a no-show until you have tried.
           </p>
         )}
       </section>
@@ -366,13 +402,13 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
         {desk.myLeads.length === 0 ? (
           <EmptyState
             title="No leads to book"
-            body="Leads assigned to you — from the first-call rotation or a manual reassign — appear here until a discovery call is booked for them."
+            body="Leads assigned to you - from the first-call rotation or a manual reassign - appear here until a discovery call is booked for them."
           />
         ) : (
           <Card>
             <ul className="-mx-4 -mb-2">
               {desk.myLeads.map((l) => (
-                <LeadRow key={l.id} lead={l} onLog={setLogging} />
+                <LeadRow key={l.id} lead={l} onLog={(lead, calledAt) => setLogging({ lead, calledAt })} />
               ))}
             </ul>
           </Card>
@@ -383,7 +419,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
         <SectionHeading
           icon={<Target size={18} />}
           title="Your targets"
-          description="This month against the Level 2 job description — furthest behind first"
+          description="This month against the Level 2 job description - furthest behind first"
         />
         <Card>
           <TargetAttainment
@@ -397,7 +433,8 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
       {routing && <RouteModal call={routing} onClose={() => setRouting(null)} />}
       {logging && (
         <LogOutcomeModal
-          lead={{ id: logging.id, name: logging.name, phone: logging.phone }}
+          lead={{ id: logging.lead.id, name: logging.lead.name, phone: logging.lead.phone }}
+          calledAt={logging.calledAt}
           online={online}
           queueCall={queueCall}
           onClose={() => {

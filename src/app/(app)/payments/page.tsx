@@ -62,7 +62,7 @@ export default async function PaymentsPage({
           detail={{
             rows: invoices.filter((i) => i.status === "DRAFT").length
               ? invoices.filter((i) => i.status === "DRAFT").slice(0, 5).map((i) => ({ label: i.customerName, value: i.totalDisplay }))
-              : [{ label: "No draft invoices", value: "—" }],
+              : [{ label: "No draft invoices", value: "-" }],
             note: overview.counts.draft > 5 ? `Showing 5 of ${overview.counts.draft}.` : undefined,
           }}
         />
@@ -76,7 +76,7 @@ export default async function PaymentsPage({
                   .filter((i) => i.status !== "DRAFT" && i.status !== "PAID" && i.status !== "VOID")
                   .slice(0, 5)
                   .map((i) => ({ label: i.customerName, value: i.balanceDisplay }))
-              : [{ label: "Nothing due", value: "—" }],
+              : [{ label: "Nothing due", value: "-" }],
             note: overview.counts.sent > 5 ? `Showing 5 of ${overview.counts.sent}.` : undefined,
           }}
         />
@@ -87,7 +87,7 @@ export default async function PaymentsPage({
           detail={{
             rows: overview.receivedByMethod.length
               ? overview.receivedByMethod.map((m) => ({ label: m.method, value: m.amountInr }))
-              : [{ label: "No payments received yet", value: "—" }],
+              : [{ label: "No payments received yet", value: "-" }],
             note: "By payment method.",
           }}
         />
@@ -101,7 +101,7 @@ export default async function PaymentsPage({
                   .filter((i) => i.status !== "DRAFT" && i.status !== "PAID" && i.status !== "VOID" && i.dueDate && i.dueDate < new Date())
                   .slice(0, 5)
                   .map((i) => ({ label: i.customerName, value: i.balanceDisplay }))
-              : [{ label: "Nothing overdue", value: "—" }],
+              : [{ label: "Nothing overdue", value: "-" }],
             note: overview.counts.overdue > 5 ? `Showing 5 of ${overview.counts.overdue}.` : undefined,
           }}
         />

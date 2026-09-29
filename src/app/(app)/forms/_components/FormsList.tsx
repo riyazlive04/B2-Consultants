@@ -35,7 +35,7 @@ export default function FormsList({ forms, canDelete }: { forms: FormListRow[]; 
     toast("Public link copied");
   }
 
-  // Height is a reasonable fixed default — an admin embedding a long form on their own site may
+  // Height is a reasonable fixed default - an admin embedding a long form on their own site may
   // need to tune it by hand; dynamic iframe-resizing is out of scope (BUILD_CHECKLIST.md §6).
   async function copyEmbed(slug: string) {
     const url = `${window.location.origin}/f/${slug}`;

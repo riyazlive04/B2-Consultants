@@ -29,7 +29,7 @@ import { Btn, Card, Hint, NumInput, Picker, Toggle } from "./kit";
  * Reward rules and the grants they produce.
  *
  * A rule says "when X, pay Y". Scanning re-derives every qualification in history and
- * inserts the new ones as PENDING — it's idempotent, so scan as often as you like:
+ * inserts the new ones as PENDING - it's idempotent, so scan as often as you like:
  * nobody is ever paid twice, and a grant you declined never comes back.
  */
 
@@ -75,7 +75,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   ADMIN: "Admin", HEAD: "Head coach", USER: "Telecaller", STUDENT: "Student", TUTOR: "Tutor",
 };
 
-/** §1.2 — the four meanings, straight from the shared tone scale. */
+/** §1.2 - the four meanings, straight from the shared tone scale. */
 const STATUS_TONE: Record<GrantView["status"], Tone> = {
   PENDING: "warn",
   APPROVED: "primary",
@@ -124,7 +124,7 @@ export function RewardsPanel({
   return (
     <Card
       title="Rewards & incentives"
-      subtitle="Rules that decide who has earned a bonus, commission or perk — detected automatically."
+      subtitle="Rules that decide who has earned a bonus, commission or perk - detected automatically."
       actions={<ScanButton />}
     >
       {/* underline: this strip is a child of the page's pill tabs (see Tabs' variant note). */}
@@ -138,7 +138,7 @@ export function RewardsPanel({
           { label: `Rules (${rules.length})`, content: <RulesTab rules={rules} badges={badges} quests={quests} goals={goals} /> },
           {
             label: "Ledger",
-            content: <GrantsTable grants={grants} empty="No grants yet — create a rule, then scan." />,
+            content: <GrantsTable grants={grants} empty="No grants yet - create a rule, then scan." />,
           },
         ]}
       />
@@ -158,8 +158,8 @@ function ScanButton() {
         if (!res.ok) return toast(res.error, "error");
         toast(
           res.created === 0
-            ? "Scan complete — no new qualifiers"
-            : `Scan complete — ${res.created} new ${res.created === 1 ? "grant" : "grants"} waiting for you`,
+            ? "Scan complete - no new qualifiers"
+            : `Scan complete - ${res.created} new ${res.created === 1 ? "grant" : "grants"} waiting for you`,
         );
       }}
     >
@@ -303,7 +303,7 @@ function RulesTab({
                     {!r.active && <Pill tone="neutral">Paused</Pill>}
                     {!r.trigger && (
                       <Pill tone="bad">
-                        <AlertTriangle size={12} /> Broken trigger — edit to fix
+                        <AlertTriangle size={12} /> Broken trigger - edit to fix
                       </Pill>
                     )}
                   </p>
@@ -329,7 +329,7 @@ function RulesTab({
           </div>
 
           <Hint>
-            Editing a rule doesn&apos;t re-price grants it already produced — amounts are stamped when a
+            Editing a rule doesn&apos;t re-price grants it already produced - amounts are stamped when a
             grant is created. Scan again after editing to pick up anyone who now qualifies.
           </Hint>
         </>
@@ -377,7 +377,7 @@ function RuleForm({
     form.set("roles", roles.join(","));
     const res = await saveRewardRule(form);
     if (!res.ok) return setError(res.error);
-    toast(rule ? "Rule updated — scan to find new qualifiers" : "Rule created — scan to find qualifiers");
+    toast(rule ? "Rule updated - scan to find new qualifiers" : "Rule created - scan to find qualifiers");
     onClose();
   };
 
@@ -404,7 +404,7 @@ function RuleForm({
           </Field>
           {kind === "PERK" ? (
             <div className="sm:col-span-2">
-              <Field label="The perk" hint="No money changes hands — it's recorded, approved and tracked all the same.">
+              <Field label="The perk" hint="No money changes hands - it's recorded, approved and tracked all the same.">
                 <TextInput name="perkLabel" defaultValue={rule?.perkLabel ?? ""} placeholder="e.g. An extra day off" />
               </Field>
             </div>
@@ -432,7 +432,7 @@ function RuleForm({
               />
             ))}
           </div>
-          <p className="mt-1 text-xs text-muted">{roles.length === 0 ? "Nothing ticked — everyone can earn it." : ""}</p>
+          <p className="mt-1 text-xs text-muted">{roles.length === 0 ? "Nothing ticked - everyone can earn it." : ""}</p>
         </div>
 
         <label className="flex items-center gap-2.5 text-sm font-medium">
@@ -466,7 +466,7 @@ function TriggerBuilder({
   quests: QuestOption[];
   goals: GoalOption[];
 }) {
-  // These were hand-rolled 32px natives — the one corner of the console still on the
+  // These were hand-rolled 32px natives - the one corner of the console still on the
   // old chrome. They defer to the kit now, so the modal matches the grid behind it.
   const num = (v: number, set: (n: number) => void, label: string, min = 1) => (
     <span className="w-28 flex-none">
@@ -499,16 +499,16 @@ function TriggerBuilder({
 
       {trigger.kind === "BADGE_EARNED" && (
         badges.length === 0
-          ? <span className="text-sm text-risk">No badges defined — add one in Gamification first.</span>
+          ? <span className="text-sm text-risk">No badges defined - add one in Gamification first.</span>
           : pick(trigger.badgeKey, (badgeKey) => onChange({ ...trigger, badgeKey }), badges.map((b) => ({ value: b.key, label: `${b.icon} ${b.name}` })), "Badge")
       )}
 
       {trigger.kind === "QUEST_COMPLETED" && (
         quests.length === 0
-          ? <span className="text-sm text-risk">No quests defined — add one in Gamification first.</span>
+          ? <span className="text-sm text-risk">No quests defined - add one in Gamification first.</span>
           : <>
               {pick(trigger.questKey, (questKey) => onChange({ ...trigger, questKey }), quests.map((q) => ({ value: q.key, label: `${q.icon} ${q.title}` })), "Quest")}
-              <span className="text-sm text-ink-2">— pays once per week completed.</span>
+              <span className="text-sm text-ink-2">- pays once per week completed.</span>
             </>
       )}
 
@@ -531,7 +531,7 @@ function TriggerBuilder({
 
       {trigger.kind === "GOAL_MET" && (
         goals.length === 0
-          ? <span className="text-sm text-risk">No goals yet — create one in the Goals tab first.</span>
+          ? <span className="text-sm text-risk">No goals yet - create one in the Goals tab first.</span>
           : pick(trigger.goalId, (goalId) => onChange({ ...trigger, goalId }), goals.map((g) => ({ value: g.id, label: g.name })), "Goal")
       )}
     </div>

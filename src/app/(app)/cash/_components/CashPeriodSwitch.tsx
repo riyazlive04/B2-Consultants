@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CASH_PERIOD_OPTIONS, type CashPeriodKey } from "@/lib/dates";
 
 /**
- * Window control for the cash chart (Error Log F6) — the chart was fixed at 12 weeks, so
+ * Window control for the cash chart (Error Log F6) - the chart was fixed at 12 weeks, so
  * "how has cash moved this year" had no answer on this page.
  *
  * Plain `<Link>`s to `?period=…`, mirroring `KpiRangeSwitch`: the choice is a URL search param

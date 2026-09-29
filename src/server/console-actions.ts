@@ -74,7 +74,7 @@ import { logActivity, diffFields } from "./activity-log";
 import { syncRewardGrants } from "./rewards";
 
 /**
- * The Founder Console writes. Everything here is Admin-only and re-checks — a page
+ * The Founder Console writes. Everything here is Admin-only and re-checks - a page
  * guard doesn't protect a server action.
  *
  * The two config documents arrive as a JSON string from a client editor that manages
@@ -126,8 +126,8 @@ const sectionsByKey = (c: SectionsConfig): Record<string, unknown> =>
 const rulesetsById = (c: GamificationConfig): Record<string, unknown> =>
   Object.fromEntries(c.rulesets.map((r) => [r.id, r]));
 
-/** Amounts are BigInt paise, and JSON.stringify — which diffFields and the log's Json column
- *  both run on — throws on those. */
+/** Amounts are BigInt paise, and JSON.stringify - which diffFields and the log's Json column
+ *  both run on - throws on those. */
 function ruleSnapshot(r: {
   name: string;
   description: string;
@@ -190,7 +190,7 @@ export async function saveCommissionRules(input: unknown): Promise<ActionResult>
  * ── Why one action writes two different places ───────────────────────────────────
  * The rules live in `AppSetting("callDistribution")`; each individual's share lives on their
  * `TeamProfile`, because it belongs to them and follows them through the org chart. From the
- * founder's side that distinction is invisible and uninteresting — they are looking at one screen
+ * founder's side that distinction is invisible and uninteresting - they are looking at one screen
  * called "who gets what", and a Save that persisted half of it would be indefensible.
  *
  * The shares are written in one transaction so a partial apply cannot leave the rotation in a
@@ -199,7 +199,7 @@ export async function saveCommissionRules(input: unknown): Promise<ActionResult>
  */
 const shareRowSchema = z.object({
   profileId: z.string().min(1),
-  // Same bounds the team-profile form enforces, re-checked here — this is a second door onto the
+  // Same bounds the team-profile form enforces, re-checked here - this is a second door onto the
   // same column and a client can post whatever it likes.
   sharePct: z.number().int().min(0).max(100),
 });
@@ -249,7 +249,7 @@ export async function saveCallDistribution(input: unknown): Promise<ActionResult
       entityType: "AppSetting",
       entityId: CALL_DISTRIBUTION_KEY,
       summary: changedShares.length
-        ? `Changed call distribution — ${shareSummary}`
+        ? `Changed call distribution - ${shareSummary}`
         : "Changed the call distribution rules",
       meta: { changed: diff.changed, before: diff.before, after: diff.after, shares: changedShares },
     });
@@ -371,7 +371,7 @@ export async function saveSectionsConfig(form: FormData): Promise<ActionResult> 
       section: "console",
       entityType: "AppSetting",
       entityId: SECTIONS_KEY,
-      summary: `Changed the sidebar navigation — ${diff.changed.join(", ")}`,
+      summary: `Changed the sidebar navigation - ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -379,7 +379,7 @@ export async function saveSectionsConfig(form: FormData): Promise<ActionResult> 
   return { ok: true };
 }
 
-/** Drop the row entirely — `resolveSections(null)` is exactly the shipped defaults. */
+/** Drop the row entirely - `resolveSections(null)` is exactly the shipped defaults. */
 export async function resetSectionsConfig(): Promise<ActionResult> {
   const session = await requireAdmin();
   const { count } = await prisma.appSetting.deleteMany({ where: { key: "sectionsConfig" } });
@@ -427,7 +427,7 @@ export async function saveGamificationConfig(form: FormData): Promise<ActionResu
 export async function resetGamificationConfig(): Promise<ActionResult> {
   const session = await requireAdmin();
   const { count } = await prisma.appSetting.deleteMany({ where: { key: "gamificationRulesets" } });
-  // Same as the sections reset above — a raw delete has no write helper to invalidate for it.
+  // Same as the sections reset above - a raw delete has no write helper to invalidate for it.
   revalidateFounderConfig();
   if (count > 0) {
     await logActivity(session, {
@@ -702,7 +702,7 @@ export async function deleteRewardRule(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Re-derive every qualification. Safe to run repeatedly — see server/rewards.ts. */
+/** Re-derive every qualification. Safe to run repeatedly - see server/rewards.ts. */
 export async function scanRewards(): Promise<{ ok: true; created: number } | { ok: false; error: string }> {
   const session = await requireAdmin();
   const created = await syncRewardGrants();
@@ -714,7 +714,7 @@ export async function scanRewards(): Promise<{ ok: true; created: number } | { o
       // A scan mints many rows at once and syncRewardGrants only hands back a count, so there
       // is no one grant to point at; the fixed id keeps every scan under one entity history.
       entityId: "scan",
-      summary: `Ran a reward scan — ${created} new reward${created === 1 ? "" : "s"} granted`,
+      summary: `Ran a reward scan - ${created} new reward${created === 1 ? "" : "s"} granted`,
       meta: { created },
     });
   }
@@ -796,7 +796,7 @@ export async function saveTutorFee(input: unknown): Promise<ActionResult> {
  * extra, and how many days apart the instalments fall by default.
  *
  * Existing plans are NOT re-priced. Each receivable snapshots its surcharge when its schedule is
- * generated, so a change here only affects plans built after it — the same discipline as
+ * generated, so a change here only affects plans built after it - the same discipline as
  * TutorFee.ratePerHead. Finance revalidates so the EMI generator offers the new numbers at once.
  */
 export async function saveInstalmentPlanConfig(input: unknown): Promise<ActionResult> {
@@ -875,7 +875,7 @@ export async function savePipelineConfig(input: unknown): Promise<ActionResult> 
 /**
  * Standing weekly availability for the public /book calendar.
  *
- * THIS ACTION IS THE POINT. `ensureBookingSlots()` — a correct, idempotent, hourly job — had no
+ * THIS ACTION IS THE POINT. `ensureBookingSlots()` - a correct, idempotent, hourly job - had no
  * writer anywhere in the codebase: `SLOT_PATTERN_KEY` was read in two places and written in
  * none, so the config sat on its `enabled: false, weekdays: []` default forever and the job
  * returned `{ran: false, reason: "slot pattern disabled"}` on every tick. The fix for the empty
@@ -888,13 +888,13 @@ export async function saveBookingCalendars(input: unknown): Promise<ActionResult
 
   const list = parsed.data.calendars;
   // A pattern with no weekday generates nothing, so "on" with an empty week is a trap, not a
-  // valid state — refuse it here rather than letting the job silently no-op like the default did.
+  // valid state - refuse it here rather than letting the job silently no-op like the default did.
   const toothless = list.find((c) => c.enabled && c.weekdays.length === 0);
   if (toothless) {
     return { ok: false, error: `"${toothless.name}" is on but has no weekday selected. Pick one, or switch it off.` };
   }
   // Ids address a calendar across a rename, so a duplicate would make two rows fight over one
-  // identity — the second silently winning every read.
+  // identity - the second silently winning every read.
   const ids = new Set<string>();
   for (const c of list) {
     if (ids.has(c.id)) return { ok: false, error: `Two calendars share the id "${c.id}".` };
@@ -902,7 +902,7 @@ export async function saveBookingCalendars(input: unknown): Promise<ActionResult
   }
   /**
    * Two live calendars on one person would generate one set of slots (the per-owner dedupe in
-   * `ensureBookingSlots` collapses them) while the console showed two — the sort of disagreement
+   * `ensureBookingSlots` collapses them) while the console showed two - the sort of disagreement
    * that gets diagnosed as "the second calendar doesn't work".
    */
   const owners = new Set<string>();
@@ -917,7 +917,7 @@ export async function saveBookingCalendars(input: unknown): Promise<ActionResult
   await writeBookingCalendars(list);
 
   const summarise = (cs: typeof list) =>
-    cs.map((c) => `${c.name}${c.enabled ? ` (${c.weekdays.join("/")} ${c.startTime}–${c.endTime})` : " — off"}`).join("; ");
+    cs.map((c) => `${c.name}${c.enabled ? ` (${c.weekdays.join("/")} ${c.startTime}–${c.endTime})` : " - off"}`).join("; ");
   const beforeText = summarise(before.calendars);
   const afterText = summarise(list);
   if (beforeText !== afterText) {
@@ -927,7 +927,7 @@ export async function saveBookingCalendars(input: unknown): Promise<ActionResult
       entityType: "AppSetting",
       entityId: SLOT_PATTERN_KEY,
       summary: list.some((c) => c.enabled)
-        ? `Booking calendars — ${afterText}`
+        ? `Booking calendars - ${afterText}`
         : "Switched off all booking availability",
       meta: { before: beforeText, after: afterText, count: list.length },
     });
@@ -937,7 +937,7 @@ export async function saveBookingCalendars(input: unknown): Promise<ActionResult
   return { ok: true };
 }
 
-/** The same, for the founder's SSS (sales) diary — see `sss-topup.ts`. */
+/** The same, for the founder's SSS (sales) diary - see `sss-topup.ts`. */
 export async function saveSssPatternConfig(input: unknown): Promise<ActionResult> {
   const session = await requireAdmin();
   const parsed = slotPatternConfigSchema.safeParse(input);
@@ -958,7 +958,7 @@ export async function saveSssPatternConfig(input: unknown): Promise<ActionResult
       entityType: "AppSetting",
       entityId: SSS_PATTERN_KEY,
       summary: parsed.data.enabled
-        ? `Set standing SSS availability — ${parsed.data.weekdays.join(", ")} ${parsed.data.startTime}–${parsed.data.endTime}`
+        ? `Set standing SSS availability - ${parsed.data.weekdays.join(", ")} ${parsed.data.startTime}–${parsed.data.endTime}`
         : "Switched off standing SSS availability",
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });

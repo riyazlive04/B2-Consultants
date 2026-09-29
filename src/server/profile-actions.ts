@@ -22,7 +22,7 @@ import type { ActionResult } from "./finance-actions";
 const MAX_IMAGE_CHARS = 250_000;
 
 const schema = z.object({
-  // The person's own name, so `rule("name")` — it carries the "required" floor. The 80 cap is
+  // The person's own name, so `rule("name")` - it carries the "required" floor. The 80 cap is
   // this form's own (the shared kind allows 160) and matches the input's maxLength.
   name: rule("name").pipe(z.string().max(80, "Name is too long")),
   image: z
@@ -82,7 +82,7 @@ export async function updateMyProfile(form: FormData): Promise<ActionResult> {
 
   const d = diffFields(
     { name: before?.name ?? null, image: before?.image ?? null },
-    // `image` absent means the form left the photo alone — diffFields only compares keys it is
+    // `image` absent means the form left the photo alone - diffFields only compares keys it is
     // given, so omitting it is what keeps an untouched photo out of the diff.
     { name, ...(image === undefined ? {} : { image: image || null }) },
   );

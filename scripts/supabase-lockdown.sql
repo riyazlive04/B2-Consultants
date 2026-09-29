@@ -1,4 +1,4 @@
---- Supabase lockdown — deny the Data API everything. RE-RUNNABLE BY DESIGN.
+--- Supabase lockdown - deny the Data API everything. RE-RUNNABLE BY DESIGN.
 ---
 --- Run:  npm run db:lockdown          (after EVERY `prisma migrate deploy` on Supabase)
 --- migrate-to-supabase.mjs runs it automatically as its final step.
@@ -16,15 +16,15 @@
 ---
 --- Supabase auto-exposes `public` over PostgREST and grants `anon` + `authenticated`
 --- on tables created by `postgres` via ALTER DEFAULT PRIVILEGES. Prisma creates every
---- table as `postgres`. Without this, a project's anon key — which ships in browser
---- bundles and is not a secret — reads `lead` (PII), `student`, `agreement`
+--- table as `postgres`. Without this, a project's anon key - which ships in browser
+--- bundles and is not a secret - reads `lead` (PII), `student`, `agreement`
 --- (home addresses, IBANs) and the whole `journal_line` ledger.
 ---
 --- Two independent layers, because either alone is one mistake from open:
----   1. REVOKE + ALTER DEFAULT PRIVILEGES — the roles hold no privilege on anything in
+---   1. REVOKE + ALTER DEFAULT PRIVILEGES - the roles hold no privilege on anything in
 ---      `public`, now or on tables created later. This layer alone protects a new table
 ---      even before anyone remembers to re-run the script.
----   2. RLS with zero policies — if a GRANT ever reappears (a dashboard click, a
+---   2. RLS with zero policies - if a GRANT ever reappears (a dashboard click, a
 ---      restored default privilege, a hand-run script), deny-all still stands.
 ---
 --- Prisma is unaffected: it connects as `postgres`, which OWNS these tables, and an
@@ -43,7 +43,7 @@ DECLARE
 BEGIN
   FOREACH r IN ARRAY ARRAY['anon', 'authenticated'] LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
-      RAISE NOTICE 'role % absent (not Supabase) — skipping revoke', r;
+      RAISE NOTICE 'role % absent (not Supabase) - skipping revoke', r;
       CONTINUE;
     END IF;
 
@@ -68,7 +68,7 @@ END $$;
 --- ─────────────────── 2. RLS deny-all on every table ───────────────────
 
 --- No CREATE POLICY anywhere: RLS enabled with zero policies denies every row to every
---- non-owner role. That is the point — nothing legitimate talks to this database except
+--- non-owner role. That is the point - nothing legitimate talks to this database except
 --- the app's own server-side Prisma connection, which owns the tables.
 DO $$
 DECLARE
@@ -106,7 +106,7 @@ BEGIN
     AND relname <> '_prisma_migrations';
 
   IF gaps IS NOT NULL THEN
-    RAISE EXCEPTION 'lockdown incomplete — tables without RLS: %', gaps;
+    RAISE EXCEPTION 'lockdown incomplete - tables without RLS: %', gaps;
   END IF;
 
   RAISE NOTICE 'verified: every table in public has RLS enabled';

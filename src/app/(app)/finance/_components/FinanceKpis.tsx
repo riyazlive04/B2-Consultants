@@ -45,7 +45,7 @@ export type Kpi = {
   valueText?: string;
   signal?: SignalLevel;
   /**
-   * When set, the headline digits are coloured by THIS value's sign (§5.1) — green
+   * When set, the headline digits are coloured by THIS value's sign (§5.1) - green
    * above zero, red below. Only passed for figures where the sign is a verdict (net
    * profit, gross profit, margin); revenue-style always-positive cards leave it unset
    * so the grid doesn't turn uniformly green.
@@ -62,7 +62,7 @@ function money(inrMinor: number | undefined, eurMinor: number | undefined, ccy: 
   const eur = eurMinor !== undefined ? formatEurMinor(eurMinor, { compact }) : null;
   const primary = ccy === "INR" ? inr : eur;
   const secondary = ccy === "INR" ? eur : inr;
-  return { primary: primary ?? secondary ?? "—", secondary: primary && secondary ? secondary : null };
+  return { primary: primary ?? secondary ?? "-", secondary: primary && secondary ? secondary : null };
 }
 
 export function FinanceKpis({ kpis }: { kpis: Kpi[] }) {
@@ -86,7 +86,7 @@ export function FinanceKpis({ kpis }: { kpis: Kpi[] }) {
               key={k.key}
               label={k.label}
               value={
-                <span style={tone ? { color: tone } : undefined}>{k.valueText ?? m?.primary ?? "—"}</span>
+                <span style={tone ? { color: tone } : undefined}>{k.valueText ?? m?.primary ?? "-"}</span>
               }
               secondary={k.valueText ? undefined : m?.secondary ?? undefined}
               signal={k.signal}

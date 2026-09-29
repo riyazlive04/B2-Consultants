@@ -2,7 +2,7 @@
  * The stage-movement rules the app already applies, stated in ONE readable place.
  *
  * ── Why this file exists ────────────────────────────────────────────────────────
- * "Automatic move mode" was reported as missing. It is not missing — the app has moved leads
+ * "Automatic move mode" was reported as missing. It is not missing - the app has moved leads
  * automatically all along:
  *
  *   · a call outcome of "not interested" closes the lead        (lib/call-outcome.stageAfterCall)
@@ -13,12 +13,12 @@
  *
  * What was missing was any way to SEE that. The rules lived in five files as `switch` statements
  * and inline conditionals, and there was a founder toggle
- * (`pipelineConfig.mode: "rules" | "drag_drop"`) that claimed to choose between them — read by
+ * (`pipelineConfig.mode: "rules" | "drag_drop"`) that claimed to choose between them - read by
  * exactly one screen and ignored by the Opportunities board, which was always drag-and-drop.
  *
  * So this is DOCUMENTATION THAT THE APP RENDERS, not a second engine. Each entry names a rule
  * that real code already enforces, and points at the file that enforces it. It cannot drift into
- * being wrong without someone editing a rule and not this list — which is exactly the review
+ * being wrong without someone editing a rule and not this list - which is exactly the review
  * this file is meant to force.
  *
  * Isomorphic and dependency-free: the Console panel and the board both read it.
@@ -29,7 +29,7 @@ export type StageRule = {
   trigger: string;
   /** Where the lead ends up. */
   result: string;
-  /** The module that actually does it — so a reader can check this list against the code. */
+  /** The module that actually does it - so a reader can check this list against the code. */
   enforcedIn: string;
   /**
    * True when the move happens with no human involved at all. False = the app OFFERS the move
@@ -90,7 +90,7 @@ export const STAGE_RULES: readonly StageRule[] = [
   },
   {
     trigger: "A card is moved into a column with no lead stage mapped",
-    result: "NOTHING is written back — the card and the lead stop agreeing",
+    result: "NOTHING is written back - the card and the lead stop agreeing",
     enforcedIn: "server/opportunities-actions.ts · moveOpportunity (legacyStage null)",
     automatic: false,
   },
@@ -101,5 +101,5 @@ export const PIPELINE_MODE_EFFECT: Record<"rules" | "drag_drop", string> = {
   rules:
     "Cards are positioned by the rules above and cannot be dragged. The board can never disagree with the underlying record.",
   drag_drop:
-    "Cards can also be dragged by hand. A card moved manually stays where it was put, and still writes its new stage back to the lead — but the rules stop correcting it afterwards.",
+    "Cards can also be dragged by hand. A card moved manually stays where it was put, and still writes its new stage back to the lead - but the rules stop correcting it afterwards.",
 };

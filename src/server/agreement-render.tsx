@@ -13,7 +13,7 @@ import {
  * The ONLY place data becomes bytes. Preview and sealed artifact call the same function, so
  * "what the student read" and "what got signed" cannot drift apart.
  *
- * Node runtime only — @react-pdf/renderer is externalized in next.config.mjs.
+ * Node runtime only - @react-pdf/renderer is externalized in next.config.mjs.
  */
 
 /** SHA-256 of the canonical (terms + template version). Deterministic; printed on every page. */
@@ -51,14 +51,14 @@ export type RenderInput = {
  *
  * The bytes are NOT reproducible: PDFKit stamps a creation date and a document id, so calling
  * this twice with identical input yields two different buffers. That is fine for preview and
- * fatal for verification — which is why `sealAgreementPdf` hashes once and the hash is stored,
+ * fatal for verification - which is why `sealAgreementPdf` hashes once and the hash is stored,
  * and why nothing in this codebase ever re-renders to check a hash.
  */
 export async function renderAgreementPdf(input: RenderInput): Promise<Buffer> {
   const templateVersion = input.templateVersion ?? AGREEMENT_TEMPLATE_VERSION;
   if (templateVersion !== AGREEMENT_TEMPLATE_VERSION) {
     // A signed agreement must keep rendering the clauses it was signed on. When the terms change,
-    // add agreement-guided-v4.tsx and dispatch here — never edit v3 in place.
+    // add agreement-guided-v4.tsx and dispatch here - never edit v3 in place.
     throw new Error(
       `No renderer for template version "${templateVersion}". Signed agreements must render their own clause set.`,
     );
@@ -81,6 +81,6 @@ export async function renderAgreementPdf(input: RenderInput): Promise<Buffer> {
 /** Render once, hash the exact bytes that will be stored. Called only from the signing path. */
 export async function sealAgreementPdf(input: RenderInput) {
   const buf = await renderAgreementPdf(input);
-  // Hash the Buffer; store standalone bytes — Prisma's `Bytes` will not take a pooled Buffer.
+  // Hash the Buffer; store standalone bytes - Prisma's `Bytes` will not take a pooled Buffer.
   return { bytes: toOwnedBytes(buf), sha256: sha256Hex(buf), size: buf.length };
 }

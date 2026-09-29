@@ -14,7 +14,7 @@ import { ensureSssSlots } from "./sss-topup";
 
 /**
  * The once-a-day housekeeping orchestrator (audit §C #18/#19/#21/#22/#24), ticked by
- * /api/cron/daily. The app has no clock of its own, so — like every other engine here — none of
+ * /api/cron/daily. The app has no clock of its own, so - like every other engine here - none of
  * this runs unless an external scheduler lands an HTTP request on that route.
  *
  * Every sub-job is idempotent and independently flag-gated, and each is wrapped so one failing
@@ -47,7 +47,7 @@ export async function runDailyMaintenance(): Promise<DailyMaintenanceRun> {
       jobs[name] = await fn();
     } catch (e) {
       jobs[name] = { error: e instanceof Error ? e.message : String(e) };
-      // The isolation above is the point of this wrapper — one failing sub-job must not stop the
+      // The isolation above is the point of this wrapper - one failing sub-job must not stop the
       // others. But storing the message in a response body that goes nowhere is how a broken job
       // stayed broken silently. Reporting it costs nothing and keeps the isolation intact.
       await captureException(e, { where: `maintenance:${name}`, fingerprint: ["maintenance", name] });
@@ -72,13 +72,13 @@ export async function runDailyMaintenance(): Promise<DailyMaintenanceRun> {
   // (postEntryOnce short-circuits already-posted), so it can run every tick.
   await safe("invoiceIssuanceBackfill", () => backfillInvoiceIssuance());
 
-  // Destructive growth-table pruning (aged WhatsApp messages + expired invites) — once per IST day
+  // Destructive growth-table pruning (aged WhatsApp messages + expired invites) - once per IST day
   // only. Archived-record purging is handled separately by /api/cron/retention.
   if (cfg.retention.enabled && !(await alreadyRanToday("maintenance.retention.lastRun"))) {
     await safe("retentionSweep", runRetentionSweep);
   }
 
-  // The three-stage dunning ladder (§8.3). Once per IST day — not because the engine is unsafe
+  // The three-stage dunning ladder (§8.3). Once per IST day - not because the engine is unsafe
   // to run more often (a stage can only ever fire once, enforced by a unique key), but because
   // the per-run cap is a DAILY drip. Running hourly would drain the backlog 24× faster than
   // intended and undo the point of capping it.

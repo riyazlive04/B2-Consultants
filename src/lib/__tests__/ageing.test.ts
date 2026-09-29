@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { AGE_BUCKETS, ageBucket, bucketForDaysOverdue } from "../ageing";
 
 /**
- * The boundaries are the whole point of this module — the old 1–30/31–60 buckets put every
+ * The boundaries are the whole point of this module - the old 1–30/31–60 buckets put every
  * real receivable in one column, so where the lines fall is exactly what was wrong.
  */
 

@@ -20,7 +20,7 @@ export default async function GnMembersPage() {
         back={{ href: "/german-note", label: "German Note" }}
         icon={<Users size={20} />}
         title="Members"
-        subtitle={`Everyone in the German Note community — ${members.length} member${members.length === 1 ? "" : "s"}. Tap anyone to see their level and activity.`}
+        subtitle={`Everyone in the German Note community - ${members.length} member${members.length === 1 ? "" : "s"}. Tap anyone to see their level and activity.`}
       />
       <MembersDirectory members={members} />
     </div>

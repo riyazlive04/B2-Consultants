@@ -12,7 +12,7 @@ import {
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/kit";
 import { Tabs } from "@/components/ui/Tabs";
-import { resolveBant } from "@/lib/bant-view";
+import { bantSignal, resolveBant } from "@/lib/bant-view";
 import { istToday, istWeekRange, istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { BOOKING_STATUS_LABELS, slotTypeLabel } from "@/lib/labels";
@@ -31,7 +31,7 @@ export const dynamic = "force-dynamic";
  * Event-card tint per slot state (calendar design: pastel card + solid left edge).
  *
  * Mixed against `--surface`, NOT against the literal `white`. Hardcoding white produced a
- * light-blue chip on a dark card in dark mode — which is a large part of why this page "felt
+ * light-blue chip on a dark card in dark mode - which is a large part of why this page "felt
  * broken": every booked and open slot on the week grid rendered as a bright rectangle nothing
  * else on the screen matched. `--surface` follows the theme, so the same 10% mix reads as a
  * subtle tint in both. (Design system §: never hardcode `white`; use the token.)
@@ -49,12 +49,12 @@ const slotStyle = (s: WeekSlot) => {
  * One prospect's score as a calendar chip.
  *
  * "Not scored" is a first-class result and is NEVER rendered as 0. An unscored prospect is one
- * nobody has evidence about; showing them as 0.0/5 beside genuinely poor prospects is how a good
+ * nobody has evidence about; showing them as 0.0/4 beside genuinely poor prospects is how a good
  * lead gets deprioritised for never having been asked. (`lib/bant-view.ts` states the same rule
- * for every other surface — this page was the one rendering the raw column instead.)
+ * for every other surface - this page was the one rendering the raw column instead.)
  */
 function bantLabel(bant: { avg: number; origin: string } | null): string {
-  return bant ? `BANT ${bant.avg.toFixed(1)}/5` : "Not scored";
+  return bant ? `BANT ${bant.avg.toFixed(1)}/4` : "Not scored";
 }
 
 export default async function BookingsPage({ searchParams }: { searchParams: { week?: string } }) {
@@ -76,12 +76,12 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       listSssSlots(weekStartUtc, weekEndUtc),
       listSssNeedsScheduling(),
       getSssConfig(),
-      // Read so the page can EXPLAIN an empty calendar instead of just showing one — see the
+      // Read so the page can EXPLAIN an empty calendar instead of just showing one - see the
       // availability banner below.
       getBookingCalendars(),
     ]);
   /**
-   * Depends on `bookings`, so it cannot join the batch above — but it must not be a bare
+   * Depends on `bookings`, so it cannot join the batch above - but it must not be a bare
    * sequential `await` either. Against Supabase in Singapore every round trip costs ~205ms, and
    * this one was paying that on every single load for a lookup that is empty whenever there are
    * no bookings. Skipped entirely in that case.
@@ -96,12 +96,12 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
    * configured, so the hourly top-up job short-circuits, no slots exist, `/book` offers a
    * prospect an empty calendar, and every figure here reads zero with no explanation.
    *
-   * Calendars ship as an empty list, and production ran that way — 0 slots, 0 bookings,
-   * 23,545 leads — because nothing on any screen said so.
+   * Calendars ship as an empty list, and production ran that way - 0 slots, 0 bookings,
+   * 23,545 leads - because nothing on any screen said so.
    */
   const liveCalendars = slotPattern.filter((c) => c.enabled && c.weekdays.length > 0);
   const availabilityOff = liveCalendars.length === 0;
-  /** Switched on but toothless — the trap the banner below has to name specifically. */
+  /** Switched on but toothless - the trap the banner below has to name specifically. */
   const enabledButEmpty = slotPattern.some((c) => c.enabled && c.weekdays.length === 0);
 
   const todayKey = toDateInputValue(istToday());
@@ -137,12 +137,12 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
   return (
     <div className="w-full space-y-6">
       {/* The shared header, not a bespoke strip. This page used to hand-roll its own icon chip,
-          type scale and action slot — one of five pages that did, which is what made the app's
+          type scale and action slot - one of five pages that did, which is what made the app's
           dashboards look like five different products. */}
       <PageHeader
         icon={<CalendarCheck size={20} />}
         title="Bookings"
-        subtitle="Discovery-call bookings and availability — in-house, replacing Synamate."
+        subtitle="Discovery-call bookings and availability - in-house, replacing Synamate."
         actions={
           <a
             href="/book"
@@ -157,11 +157,11 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       {/* ── Why the calendar is empty ────────────────────────────────────────────────────
           Named cause, named cure, one click away. Without this the page shows four zeroes and
           an empty week, which reads as "the booking system is broken" rather than "nobody has
-          set the working hours yet" — and the prospect on /book sees the same empty calendar. */}
+          set the working hours yet" - and the prospect on /book sees the same empty calendar. */}
       {availabilityOff && (
         <div role="status" className="rounded-card border border-warn bg-warn-soft p-4">
           <p className="text-sm font-semibold text-warn-ink">
-            No booking calendar is live — so no slots exist and nobody can book a call.
+            No booking calendar is live - so no slots exist and nobody can book a call.
           </p>
           <p className="mt-1 text-caption text-warn-ink">
             {enabledButEmpty
@@ -205,13 +205,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
         <MetricCard
           label="Avg BANT score"
           value={kpis.avgWeighted !== null ? kpis.avgWeighted.toFixed(1) : kpis.avgBant.toFixed(1)}
-          secondary={kpis.avgWeighted !== null ? "Weighted, out of 5 - this month" : "Out of 4 - this month"}
-          tooltip="Weighted average of the four BANT dimension scores. Above 3 = confirm the call, 2-3 = go but doubtful, below 2 = cancel recommended."
+          secondary={kpis.avgWeighted !== null ? "Weighted, out of 4 - this month" : "Out of 4 - this month"}
+          tooltip="Weighted average of the four BANT dimension scores. Above 2.4 = confirm the call, 1.6-2.4 = go but doubtful, below 1.6 = cancel recommended."
           signal={
             kpis.bookedThisMonth === 0
               ? undefined
               : kpis.avgWeighted !== null
-                ? kpis.avgWeighted > 3 ? "ok" : kpis.avgWeighted >= 2 ? "watch" : "risk"
+                ? bantSignal(kpis.avgWeighted)
                 : kpis.avgBant >= 3 ? "ok" : kpis.avgBant >= 2 ? "watch" : "risk"
           }
           icon={<Target size={18} />}
@@ -368,7 +368,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                               </p>
                             ) : (
                               s.assignedToName && (
-                                <p className="mt-0.5 truncate text-caption text-muted">{s.assignedToName}</p>
+                                <p className="mt-0.5 truncate text-caption text-muted" title={s.assignedToName}>{s.assignedToName}</p>
                               )
                             )}
                           </div>
@@ -382,14 +382,14 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
               <p className="py-10 text-center text-sm text-muted">
                 {availabilityOff ? (
                   <>
-                    No slots exist at all — no availability pattern is configured. Set one at{" "}
+                    No slots exist at all - no availability pattern is configured. Set one at{" "}
                     <Link href="/console" className="font-semibold text-accent underline">
                       Console → Availability
                     </Link>
                     .
                   </>
                 ) : (
-                  <>No slots this week — generate availability under &ldquo;Manage availability&rdquo; above.</>
+                  <>No slots this week - generate availability under &ldquo;Manage availability&rdquo; above.</>
                 )}
               </p>
             )}
@@ -400,12 +400,12 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       {/* ── Two tabs, not three ──────────────────────────────────────────────────────────
           "Bookings" inside a page called "Bookings", sitting under a calendar that also shows
           bookings, read as the same thing three times. It is not: the calendar shows SLOTS
-          (including empty and blocked ones), this shows BOOKING REQUESTS — the prospect's form,
+          (including empty and blocked ones), this shows BOOKING REQUESTS - the prospect's form,
           their BANT answers, their WhatsApp confirmation state and the confirm/postpone/cancel
           actions. Renaming it says so.
 
-          "Availability" left the strip entirely. It is a SETUP screen — generate slots for a
-          date range — not something anyone opens daily, and giving it equal billing with the two
+          "Availability" left the strip entirely. It is a SETUP screen - generate slots for a
+          date range - not something anyone opens daily, and giving it equal billing with the two
           working views is what made this page feel like a pile of panels. It now lives behind
           "Manage availability" beside the week navigation. */}
       <Tabs

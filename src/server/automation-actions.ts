@@ -85,7 +85,7 @@ export async function saveWorkflow(
     },
   });
   // The step builder saves every action on each save; `actions` and `triggerConfig` are compared
-  // but never copied in — the founder needs to know the steps moved, not read the whole ladder.
+  // but never copied in - the founder needs to know the steps moved, not read the whole ladder.
   const d = diffFields(
     { name: current.name, triggerType: current.triggerType, folderId: current.folderId },
     { name: payload.name.trim(), triggerType: payload.triggerType, folderId: payload.folderId },
@@ -135,7 +135,7 @@ export async function togglePublishWorkflow(id: string): Promise<ActionResult> {
 // ─────────────────────────────── delete / restore ───────────────────────────────
 
 /**
- * Soft delete — moves the workflow to the Deleted tab. It stops triggering immediately
+ * Soft delete - moves the workflow to the Deleted tab. It stops triggering immediately
  * (emitTrigger filters `deletedAt: null`) and its in-flight enrollments freeze rather than
  * being destroyed, so `restoreWorkflow` genuinely undoes this. Enrollment history is kept.
  */
@@ -173,7 +173,7 @@ export async function restoreWorkflow(id: string): Promise<ActionResult> {
 }
 
 /**
- * Hard delete — irreversible, and cascades every enrollment row for this workflow. Only
+ * Hard delete - irreversible, and cascades every enrollment row for this workflow. Only
  * reachable from the Deleted tab, so it always takes two deliberate steps.
  */
 export async function destroyWorkflow(id: string): Promise<ActionResult> {
@@ -239,7 +239,7 @@ export async function renameFolder(id: string, name: string): Promise<ActionResu
 }
 
 /**
- * Delete a folder. The workflows inside are NOT deleted — the FK is `onDelete: SetNull`, so
+ * Delete a folder. The workflows inside are NOT deleted - the FK is `onDelete: SetNull`, so
  * they fall back to the root listing. Deleting a folder is never a way to lose a workflow.
  */
 export async function deleteFolder(id: string): Promise<ActionResult> {
@@ -251,7 +251,7 @@ export async function deleteFolder(id: string): Promise<ActionResult> {
     section: "automation",
     entityType: "WorkflowFolder",
     entityId: id,
-    summary: `Deleted the workflow folder "${row.name}" — its workflows moved to Home`,
+    summary: `Deleted the workflow folder "${row.name}" - its workflows moved to Home`,
   });
   revalidatePath("/automation");
   return { ok: true };
@@ -330,11 +330,11 @@ export async function bulkRestoreWorkflows(ids: string[]): Promise<ActionResult>
 
 /**
  * Bulk publish/unpublish. Publishing enforces the same "must have an action" rule as the single
- * toggle — actions live in a JSON column so this filters in JS, then writes the survivors in one
+ * toggle - actions live in a JSON column so this filters in JS, then writes the survivors in one
  * statement.
  *
  * Partial success is the normal case here (select 5, one has no actions), which ActionResult's
- * ok/error union can't express — hence the counts: the caller reports exactly what happened
+ * ok/error union can't express - hence the counts: the caller reports exactly what happened
  * instead of showing an error for what was mostly a success.
  */
 export type BulkPublishResult =
@@ -358,7 +358,7 @@ export async function bulkSetPublish(ids: string[], publish: boolean): Promise<B
     where: { id: { in: eligible } },
     data: { status: publish ? "PUBLISHED" : "DRAFT" },
   });
-  // Only the survivors — the skipped ones weren't published, so logging them would be a lie.
+  // Only the survivors - the skipped ones weren't published, so logging them would be a lie.
   for (const w of rows.filter((r) => eligible.includes(r.id))) {
     await logActivity(session, {
       action: publish ? "workflow.publish" : "workflow.unpublish",
@@ -412,11 +412,11 @@ export async function saveWorkflowSettings(settings: WorkflowSettings): Promise<
 
 /**
  * Preview: replay this definition over the last `windowDays` days of real history and report what
- * it WOULD have done. Read-only — no enrollment, no send, no row touched, and deliberately no
+ * it WOULD have done. Read-only - no enrollment, no send, no row touched, and deliberately no
  * activity-feed entry either (a preview isn't a thing the workflow did).
  *
  * The definition comes from the client, not the database, so the builder can preview unsaved
- * edits — the whole value of the feature is checking before you commit. It is validated here all
+ * edits - the whole value of the feature is checking before you commit. It is validated here all
  * the same: this is a server action, so "the UI only sends valid shapes" is not a guarantee.
  */
 export async function previewWorkflow(payload: {
@@ -428,7 +428,7 @@ export async function previewWorkflow(payload: {
   await requireSection("automation");
   if (!TRIGGER_TYPES.includes(payload.triggerType)) return { ok: false, error: "Invalid trigger" };
   if (!Array.isArray(payload.actions)) return { ok: false, error: "Invalid workflow" };
-  if (payload.actions.length === 0) return { ok: false, error: "Add an action first — there's nothing to preview yet" };
+  if (payload.actions.length === 0) return { ok: false, error: "Add an action first - there's nothing to preview yet" };
   if (payload.actions.length > 200) return { ok: false, error: "That's too many steps to preview" };
   if (!DRY_RUN_WINDOWS.includes(payload.windowDays as (typeof DRY_RUN_WINDOWS)[number])) {
     return { ok: false, error: "Pick one of the offered windows" };
@@ -444,7 +444,7 @@ export async function previewWorkflow(payload: {
   return { ok: true, report };
 }
 
-/** Admin "Run now" — resume every due enrollment immediately (also what the cron calls). */
+/** Admin "Run now" - resume every due enrollment immediately (also what the cron calls). */
 export async function runWorkflowsNow(): Promise<{ ok: true; processed: number; disabled: boolean }> {
   await requireAdmin();
   const run = await runDueWorkflows();

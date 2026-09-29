@@ -8,7 +8,7 @@ import { OUTREACH_PHASE_LABELS, QUALIFIED_LABELS } from "@/lib/outreach-sop";
 import { assignResponsibilities } from "@/server/outreach-actions";
 
 /**
- * "Key Metrics Sales B2_2026.xlsx" — the SOP's Step 12 sheet, in-app.
+ * "Key Metrics Sales B2_2026.xlsx" - the SOP's Step 12 sheet, in-app.
  *
  * Every column the SOP writes is here, and every one of them EXPORTS. That is the point: the
  * existing bookings CSV renders CET on screen but drops it from the file (and omits email and
@@ -56,14 +56,14 @@ function AssignSelect({
         const f = new FormData();
         f.set("journeyId", row.journeyId);
         f.set(field, e.target.value);
-        // The action writes BOTH assignment columns, so carry the other one through unchanged —
+        // The action writes BOTH assignment columns, so carry the other one through unchanged -
         // otherwise picking a Touchpoint owner would silently clear the Disco owner.
         f.set(otherField, idOf(otherName));
         start(async () => void (await assignResponsibilities(f)));
       }}
       className="w-full"
       aria-label={field === "respTouchpointId" ? "Responsible for touchpoint" : "Responsible for disco"}
-      options={[{ value: "", label: "—" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+      options={[{ value: "", label: "-" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
     />
   );
 }
@@ -79,7 +79,7 @@ export function KeyMetricsTable({
     <DataTable
       rows={rows}
       csvName="key-metrics"
-      emptyMessage="No booked prospects yet — Key Metrics fills in once a lead books a discovery call."
+      emptyMessage="No booked prospects yet - Key Metrics fills in once a lead books a discovery call."
       filterPlaceholder="Filter by name, email, owner…"
       // The SOP's "mark the entire row in RED colour text" (Steps 16/18/21/23).
       rowClassName={(r) => (r.red ? "text-[color:var(--risk)]" : undefined)}
@@ -89,7 +89,7 @@ export function KeyMetricsTable({
           header: "Appointment date",
           sortable: true,
           value: (r) => r.apptDate ?? "",
-          cell: (r) => <span className="tnum">{r.apptDate ?? "—"}</span>,
+          cell: (r) => <span className="tnum">{r.apptDate ?? "-"}</span>,
         },
         {
           key: "apptTime",
@@ -104,19 +104,19 @@ export function KeyMetricsTable({
                 {r.apptTimeCet} <span className="text-caption text-muted">{r.cetLabel}</span>
               </span>
             ) : (
-              <span className="text-muted">—</span>
+              <span className="text-muted">-</span>
             ),
         },
         { key: "name", header: "Name", sortable: true, value: (r) => r.name, cell: (r) => r.name },
-        { key: "email", header: "Email", value: (r) => r.email ?? "", cell: (r) => r.email ?? "—" },
-        { key: "phone", header: "Phone", value: (r) => r.phone ?? "", cell: (r) => r.phone ? <span className="tnum">{r.phone}</span> : <span className="text-muted">—</span> },
+        { key: "email", header: "Email", value: (r) => r.email ?? "", cell: (r) => r.email ?? "-" },
+        { key: "phone", header: "Phone", value: (r) => r.phone ?? "", cell: (r) => r.phone ? <span className="tnum">{r.phone}</span> : <span className="text-muted">-</span> },
         {
           key: "bant",
           header: "BANT score",
           sortable: true,
           align: "right",
           value: (r) => r.bantScore ?? "",
-          cell: (r) => <span className="tnum">{r.bantScore !== null ? r.bantScore.toFixed(1) : "—"}</span>,
+          cell: (r) => <span className="tnum">{r.bantScore !== null ? r.bantScore.toFixed(1) : "-"}</span>,
         },
         {
           key: "qualified",
@@ -129,7 +129,7 @@ export function KeyMetricsTable({
                 {r.qualified}
               </span>
             ) : (
-              <span className="text-muted">—</span>
+              <span className="text-muted">-</span>
             ),
         },
         {

@@ -5,7 +5,7 @@ import { WHATSAPP_STATUS_LABELS, WHATSAPP_KIND_LABELS, whatsappStatusTone } from
  * Small pill showing the last WhatsApp status for a row (pipeline lead, booking, payment,
  * student). Reuses the app's semantic tones so colour means the same as everywhere else:
  * Read/Replied = green, Sent/Delivered = amber, Failed = red, Skipped/Queued = muted.
- * Server+client safe (no "use client") — imported by both server pages and client tables.
+ * Server+client safe (no "use client") - imported by both server pages and client tables.
  */
 
 const TONE: Record<"good" | "warn" | "bad", { color: string; soft: string }> = {

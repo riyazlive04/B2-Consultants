@@ -77,7 +77,7 @@ export const getGoalsWithProgress = cache(async (): Promise<GoalProgress[]> => {
       targetValue: Number(row.targetValue),
       active: row.active,
     };
-    // A user-scoped goal whose person has no login can never be measured — it reads as 0.
+    // A user-scoped goal whose person has no login can never be measured - it reads as 0.
     const players =
       goal.scope === "USER" ? game.players.filter((p) => p.userId === goal.userId) : game.players;
     const { actual, metOn } = computeGoalActual(seriesFor(goal.metric, players, revenue), goal);
@@ -85,7 +85,7 @@ export const getGoalsWithProgress = cache(async (): Promise<GoalProgress[]> => {
   });
 });
 
-/** Active goals only — what the reward engine and the home dashboard care about. */
+/** Active goals only - what the reward engine and the home dashboard care about. */
 export async function getActiveGoals(): Promise<GoalProgress[]> {
   return (await getGoalsWithProgress()).filter((g) => g.goal.active);
 }

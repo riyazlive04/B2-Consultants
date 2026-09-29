@@ -15,23 +15,23 @@ import { useFinanceCcy } from "./FinanceCurrency";
  * drawing inside a 170px box, costing another ~13px of plot top and bottom.
  *
  * `ChartFrame` (via TimeSeriesChart) hands the plot a real PIXEL box instead of a scaled unit box,
- * which is the whole reason it exists — so 12px axis text is 12px. The hover readout comes with it
+ * which is the whole reason it exists - so 12px axis text is 12px. The hover readout comes with it
  * as an HTML tooltip, replacing the 132×50 SVG box whose four lines of 8.5px text rendered at ~5.5px.
  *
  * COLUMNS, not the area chart this once was: a day's takings are discrete events, and joining the
  * 12th to the 14th with a line asserts a revenue *rate* flowing between them that does not exist.
- * Every elapsed day gets a slot, so a dead week reads as a dead week rather than being skipped —
+ * Every elapsed day gets a slot, so a dead week reads as a dead week rather than being skipped -
  * a month with income on the 2nd, 9th and 20th used to produce a 3-point chart that pretended
  * those days were adjacent.
  *
- * The running month total is deliberately NOT plotted — beside daily bars it would tower over them
- * and flatten the thing being read — but it IS the number being chased, so it rides in the tooltip
+ * The running month total is deliberately NOT plotted - beside daily bars it would tower over them
+ * and flatten the thing being read - but it IS the number being chased, so it rides in the tooltip
  * (`extraTooltipRows`, which the chart layer carries for exactly this case).
  *
  * Follows the page's ₹/€ toggle (B3). The EUR figures are summed server-side from each record's OWN
  * stamped rate, so the closing month-to-date here equals the revenue KPI above it exactly;
  * re-converting an INR total at today's rate would put two different EUR numbers for the same month
- * on one screen. The annual charts deliberately stay INR — they carry a target, and `MonthlyTarget`
+ * on one screen. The annual charts deliberately stay INR - they carry a target, and `MonthlyTarget`
  * has no EUR column, so a converted target would drift with the ECB.
  */
 
@@ -42,7 +42,7 @@ export type RevenuePoint = {
   cumulativeInr: number;
   eur: number;
   cumulativeEur: number;
-  /** Receipts that made up the day — 0 on a day with no collections. */
+  /** Receipts that made up the day - 0 on a day with no collections. */
   count: number;
 };
 
@@ -65,7 +65,7 @@ export function RevenueChart({ points, height = 200 }: { points: RevenuePoint[];
   const { ccy } = useFinanceCcy();
   const isInr = ccy === "INR";
 
-  /** Axis: compact, read peripherally. Tooltip: the full grouped figure — that read is deliberate. */
+  /** Axis: compact, read peripherally. Tooltip: the full grouped figure - that read is deliberate. */
   const axis = (v: number) =>
     isInr ? formatInrMinor(v, { compact: true }) : formatEurMinor(v, { compact: true });
   const full = (v: number) => (isInr ? formatInrMinor(v) : formatEurMinor(v));

@@ -20,11 +20,11 @@ import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
  * THREE CHANGES FROM THE ORIGINAL:
  *
  *  1. DELTAS. Every headline row now carries the same figure for the previous period. A number
- *     with no comparison is not a signal — "₹4,20,000" tells a founder nothing they can act on,
+ *     with no comparison is not a signal - "₹4,20,000" tells a founder nothing they can act on,
  *     while "₹4,20,000, ▼ 18%" is the whole message.
  *
  *  2. SPEED TO LEAD REPLACES EXPENSES in the headline set. Expenses were already implied by Net,
- *     and the number that actually needs moving is how many leads went uncontacted — the same
+ *     and the number that actually needs moving is how many leads went uncontacted - the same
  *     number the week-one alerting exists to attack. It belongs in the thing founders read.
  *
  *  3. WHATSAPP, alongside email rather than instead of it. See the config's note on why this is
@@ -72,7 +72,7 @@ const sumRows = (rows: { amountInrMinor: bigint; amountEurMinor: bigint; fxRateU
 /**
  * The figures for one window.
  *
- * Run TWICE — once for this period and once for the one before it — so every headline number can
+ * Run TWICE - once for this period and once for the one before it - so every headline number can
  * be shown against its own history rather than in isolation. Two passes of the same query is the
  * cost of that, and it runs once a week.
  */
@@ -110,7 +110,7 @@ async function windowTotals(since: Date, until: Date): Promise<WindowTotals> {
   const incomeMinor = sumRows(incomes);
   const netMinor = incomeMinor - sumRows(expenses);
 
-  // The SLA verdict is REUSED rather than re-derived here — the digest and the L1 desk must
+  // The SLA verdict is REUSED rather than re-derived here - the digest and the L1 desk must
   // never disagree about what "connected within five minutes" means.
   const report = speedToLeadReport(
     leadRows.map((l) => ({
@@ -143,7 +143,7 @@ type Digest = {
   windowDays: number;
   now: WindowTotals;
   prev: WindowTotals;
-  /** Point-in-time figures — no meaningful "previous" value, so shown without a delta. */
+  /** Point-in-time figures - no meaningful "previous" value, so shown without a delta. */
   receivableMinor: bigint;
   overdueInstalments: number;
   uncontactedTotal: number;
@@ -248,7 +248,7 @@ function digestText(d: Digest, cadence: string): string {
     `${label}: ${value}${change?.text ? ` (${change.text})` : ""}`;
 
   return [
-    `*B2 ${cadence.toLowerCase()} numbers* — last ${d.windowDays} days`,
+    `*B2 ${cadence.toLowerCase()} numbers* - last ${d.windowDays} days`,
     "",
     line("New leads", String(d.now.newLeads), delta(d.now.newLeads, d.prev.newLeads, true)),
     line("Income", formatInrMinor(d.now.incomeMinor), delta(Number(d.now.incomeMinor), Number(d.prev.incomeMinor), true)),
@@ -318,7 +318,7 @@ export async function runScheduledReport(): Promise<ScheduledReportRun> {
   if (cfg.whatsappRecipients.length) {
     const text = digestText(digest, cfg.cadence);
     for (const number of cfg.whatsappRecipients) {
-      // Session message — lands only inside a 24-hour window opened by the recipient messaging
+      // Session message - lands only inside a 24-hour window opened by the recipient messaging
       // the business. A SKIPPED result is expected and is NOT treated as a failure; email stays
       // the reliable path, which is why this never replaces it.
       const res = await sendFreeFormMessage(number, text, null);

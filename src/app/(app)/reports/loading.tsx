@@ -10,7 +10,7 @@ import {
  * Reports streams a shell immediately instead of painting blank: the report query is a
  * full-table aggregate over two windows and stalls a beat on a 23k-row CRM.
  *
- * The shape MUST track the real page or the skeleton stops being free — it starts costing
+ * The shape MUST track the real page or the skeleton stops being free - it starts costing
  * layout shift. Updated with the workbench rebuild: the controls card is now a four-field
  * grid rather than a single strip, there is a chart between the KPI row and the table, and
  * the summary is a four-up MetricCard row, not three bare stat panels.

@@ -39,7 +39,7 @@ export function MembersPanel({
   if (batches.length === 0) {
     return (
       <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-        Create a batch first — then assign students to it here.
+        Create a batch first - then assign students to it here.
       </p>
     );
   }
@@ -49,7 +49,7 @@ export function MembersPanel({
       <div>
         <h3 className="font-display text-h2 font-semibold">Batch members</h3>
         <p className="text-xs text-muted">
-          Pick a batch, then add students — existing ones from anywhere in the system, or quick-create a new
+          Pick a batch, then add students - existing ones from anywhere in the system, or quick-create a new
           German Note learner (no B2 enrolment needed).
         </p>
       </div>
@@ -95,7 +95,7 @@ export function MembersPanel({
                     onClick={async () => {
                       const ok = await askConfirm({
                         title: `Remove ${m.fullName}'s portal login?`,
-                        body: "They stay in the batch — they just can't sign in anymore.",
+                        body: "They stay in the batch - they just can't sign in anymore.",
                         confirmLabel: "Revoke login",
                         danger: true,
                       });
@@ -125,7 +125,7 @@ export function MembersPanel({
                   onClick={async () => {
                     const ok = await askConfirm({
                       title: `Remove ${m.fullName} from ${batch.name}?`,
-                      body: "The student record and any login stay, but they LOSE lifetime access to this batch's recordings. Membership is what grants it — don't remove finished students; archive the batch instead.",
+                      body: "The student record and any login stay, but they LOSE lifetime access to this batch's recordings. Membership is what grants it - don't remove finished students; archive the batch instead.",
                       confirmLabel: "Remove",
                       danger: true,
                     });
@@ -157,7 +157,7 @@ export function MembersPanel({
               <h4 className="mb-3 flex items-center gap-2 font-display text-[15px] font-semibold">
                 <UserPlus size={15} /> Add existing student
               </h4>
-              <Field label="Student" hint="Includes B2 students — one person can be in both worlds.">
+              <Field label="Student" hint="Includes B2 students - one person can be in both worlds.">
                 <Select
                   name="studentId"
                   options={[
@@ -209,7 +209,7 @@ export function MembersPanel({
         </>
       )}
 
-      {/* portal login provisioning — same flow as B2 student logins */}
+      {/* portal login provisioning - same flow as B2 student logins */}
       <Modal
         open={loginFor !== null}
         onClose={() => setLoginFor(null)}
@@ -232,7 +232,7 @@ export function MembersPanel({
             <Field label="Login email">
               <TextInput kind="email" name="email" required defaultValue={loginFor.email ?? ""} />
             </Field>
-            <Field label="Password" hint="At least 8 characters — share it with the student privately.">
+            <Field label="Password" hint="At least 8 characters - share it with the student privately.">
               <TextInput name="password" type="password" required minLength={8} />
             </Field>
             <div className="flex items-center justify-between gap-3">

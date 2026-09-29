@@ -14,7 +14,7 @@ const TEST = "917806966124";
 
 describe("off by default", () => {
   test("a fresh install messages real recipients", () => {
-    // The opposite default would be worse in a different way — nobody would ever receive
+    // The opposite default would be worse in a different way - nobody would ever receive
     // anything, and it would take a support ticket to find out why.
     assert.equal(DEFAULT_WATI_SETTINGS.testRecipient, null);
   });

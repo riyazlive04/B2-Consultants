@@ -11,7 +11,7 @@ import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
- * German Note — Workshop management (Admin-only). Workshops, their conversions
+ * German Note - Workshop management (Admin-only). Workshops, their conversions
  * and their ad-sets. Every guard is re-checked here; hiding a button is never
  * the fence. Mirrors german-note-actions.ts conventions.
  */
@@ -45,7 +45,7 @@ const optionalText = optionalRule("text");
 
 /**
  * Paise are BigInt, and every money field on a conversion or ad-set is one. Both diffFields
- * and the activity log's Json column go through JSON.stringify, which throws on a BigInt —
+ * and the activity log's Json column go through JSON.stringify, which throws on a BigInt -
  * and diffFields runs at the call site, outside logActivity's catch, so an unconverted
  * amount would take the whole action down rather than just lose a log row.
  */
@@ -58,7 +58,7 @@ function jsonSafe(row: Record<string, unknown>): Record<string, unknown> {
 /**
  * `workshopId` is nullable, not merely optional, since ER v2 Track F generalised
  * `GnWorkshopAdSet` into `AdSpend`: spend can now belong to a MarketingSource campaign with
- * no workshop behind it. Those rows have no workshop page to revalidate — the manage page is
+ * no workshop behind it. Those rows have no workshop page to revalidate - the manage page is
  * still refreshed, which is all there is to refresh.
  */
 function revalidateWorkshop(workshopId?: string | null) {
@@ -146,7 +146,7 @@ export async function updateWorkshop(workshopId: string, form: FormData): Promis
   return { ok: true };
 }
 
-/** Hard delete — cascades the workshop's conversions and ad-sets. */
+/** Hard delete - cascades the workshop's conversions and ad-sets. */
 export async function deleteWorkshop(workshopId: string): Promise<ActionResult> {
   const session = await requireAdmin();
   const workshop = await prisma.workshop.delete({ where: { id: workshopId } });
@@ -297,7 +297,7 @@ export async function deleteConversion(conversionId: string): Promise<ActionResu
 // ── Ad-sets ────────────────────────────────────────────────────
 
 const adSetSchema = z.object({
-  // Free text: an ad-set label is a campaign name ("Set A", "Reel 2") — digits belong in it.
+  // Free text: an ad-set label is a campaign name ("Set A", "Reel 2") - digits belong in it.
   label: z.string().trim().max(60).optional(),
   adSpend: optionalRule("money"),
   reach: optionalRule("int"),

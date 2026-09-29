@@ -7,7 +7,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 
 /**
  * Personal work-time widget pair: an automatic Time Tracker feeding a weekly
- * Progress bar chart. No start button — accrual is handled app-wide by the
+ * Progress bar chart. No start button - accrual is handled app-wide by the
  * headless <WorkTimeTracker /> in the (app) layout.
  *
  * THIS COMPONENT NO LONGER OWNS THE CLOCK. It used to run the setInterval AND
@@ -79,7 +79,7 @@ export function WorkTracker({ byDay, weekKeys, today }: WorkTrackerProps) {
 
   const todaySec = Math.max(display, base.sec);
 
-  /** Clears today's stored total. Confirmed first — it deletes real recorded time. */
+  /** Clears today's stored total. Confirmed first - it deletes real recorded time. */
   const reset = async () => {
     const ok = await askConfirm({
       title: "Reset today's time?",
@@ -104,7 +104,7 @@ export function WorkTracker({ byDay, weekKeys, today }: WorkTrackerProps) {
   const C = 2 * Math.PI * R;
   const frac = Math.min(1, todaySec / DAILY_GOAL_SEC);
 
-  // weekly bars — today reads live, past days come straight from the server
+  // weekly bars - today reads live, past days come straight from the server
   const weekSecs = weekKeys.map((k) => (k === today ? todaySec : days[k] ?? 0));
   const weekTotal = weekSecs.reduce((a, b) => a + b, 0);
   const maxSec = Math.max(1, ...weekSecs);
@@ -112,7 +112,7 @@ export function WorkTracker({ byDay, weekKeys, today }: WorkTrackerProps) {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      {/* Progress: weekly bar chart (spans 2 columns on desktop) — sky hero */}
+      {/* Progress: weekly bar chart (spans 2 columns on desktop) - sky hero */}
       <div className="hero-sky rise-in relative overflow-hidden rounded-hero p-6 lg:col-span-2">
         <div className="relative flex items-start justify-between">
           <div>

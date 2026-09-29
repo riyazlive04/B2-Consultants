@@ -18,7 +18,7 @@ import { SprintCheckIn } from "./_components/SprintCheckIn";
 export const dynamic = "force-dynamic";
 
 /**
- * Student portal home — the student's own gamified scoreboard. Shows ONLY what
+ * Student portal home - the student's own gamified scoreboard. Shows ONLY what
  * student-portal.ts exposes (journey, badges, milestones, next steps); money,
  * signals and internal notes never reach this page.
  */
@@ -50,7 +50,7 @@ export default async function MyJourneyPage({
         <PageHeader icon={<Rocket size={20} />} title="My Journey" />
         <Card>
           <p className="text-sm text-muted">
-            Your login isn&apos;t linked to a student record yet — ask your coach to connect it.
+            Your login isn&apos;t linked to a student record yet - ask your coach to connect it.
           </p>
         </Card>
       </div>
@@ -71,7 +71,7 @@ export default async function MyJourneyPage({
         subtitle={
           <>
             {portal.fullName}
-            {portal.targetRole ? ` · aiming for ${portal.targetRole} in Germany` : " · your road to Germany"} —
+            {portal.targetRole ? ` · aiming for ${portal.targetRole} in Germany` : " · your road to Germany"} -
             every session, application and interview moves the bar.
           </>
         }
@@ -81,7 +81,7 @@ export default async function MyJourneyPage({
         <EnrollmentJourney key={e.id} e={e} lead={idx === 0} />
       ))}
 
-      {/* Spec §10: the student's own agreement — view, download, signature status. Until now the
+      {/* Spec §10: the student's own agreement - view, download, signature status. Until now the
           only route to their contract was the WhatsApp token link; signing in was no way back. */}
       {agreements.length > 0 && (
         <Card title="Your agreement">
@@ -124,11 +124,11 @@ export default async function MyJourneyPage({
         </Card>
       )}
 
-      {/* Spec §10: the student's own payment plan, balance and receipts. Own records only —
+      {/* Spec §10: the student's own payment plan, balance and receipts. Own records only -
           scoped to this login server-side; no margin, LTV or other students' figures. */}
       <MyPayments payments={payments} />
 
-      {/* CV diagnostic — the self-serve tool students can use any time */}
+      {/* CV diagnostic - the self-serve tool students can use any time */}
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -136,7 +136,7 @@ export default async function MyJourneyPage({
               <FileSearch size={18} /> CV Diagnostic
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Paste your CV and a real German job description — get your match score, missing
+              Paste your CV and a real German job description - get your match score, missing
               keywords and weak bullets in seconds. Nothing is stored.
             </p>
           </div>
@@ -152,7 +152,7 @@ export default async function MyJourneyPage({
   );
 }
 
-/** The 7-milestone path as a stepper — student-facing twin of the team's view. */
+/** The 7-milestone path as a stepper - student-facing twin of the team's view. */
 function MilestonePath({ current }: { current: string }) {
   const idx = MILESTONE_ORDER.indexOf(current as (typeof MILESTONE_ORDER)[number]);
   return (
@@ -251,7 +251,7 @@ function EnrollmentJourney({ e, lead }: { e: PortalEnrollment; lead: boolean }) 
         ))}
       </div>
 
-      {/* stage focus — the student's current quests */}
+      {/* stage focus - the student's current quests */}
       {e.nextSteps && e.status === "ACTIVE" && (
         <div className="mt-5 rounded-card border border-line bg-accent-soft/60 p-4" style={{ background: "var(--accent-soft)" }}>
           <p className="flex items-center gap-2 text-sm font-semibold text-accent">
@@ -295,7 +295,7 @@ function EnrollmentJourney({ e, lead }: { e: PortalEnrollment; lead: boolean }) 
           <ul className="mt-2 space-y-1 text-sm text-muted">
             {[...e.milestoneTimeline].reverse().map((l) => (
               <li key={l.id} className="tnum">
-                {formatDate(l.date)} — reached{" "}
+                {formatDate(l.date)} - reached{" "}
                 <span className="font-semibold text-ink">{MILESTONE_LABELS[l.newMilestone]}</span>
                 {l.newMilestone === "OFFER_RECEIVED" ? " 🏆" : l.newMilestone === "COMPLETED" ? " 🎓" : ""}
               </li>

@@ -8,7 +8,7 @@ import { Select } from "@/components/ui/form";
 /**
  * Search and filter for the Opportunities board.
  *
- * The board had none — while its own overflow message told the reader to "filter or split this
+ * The board had none - while its own overflow message told the reader to "filter or split this
  * pipeline" at 300+ cards in a stage. That advice pointed at a control that did not exist, which
  * only went unnoticed because production held a single opportunity.
  *
@@ -54,7 +54,7 @@ export function BoardFilterBar({
     router.push(`${pathname}?${params.toString()}`);
   };
 
-  // Debounced into the URL 400ms after typing stops — a server round-trip per keystroke against
+  // Debounced into the URL 400ms after typing stops - a server round-trip per keystroke against
   // Supabase (~205ms each) would make the box feel broken.
   useEffect(() => {
     if (q === urlQ) return;

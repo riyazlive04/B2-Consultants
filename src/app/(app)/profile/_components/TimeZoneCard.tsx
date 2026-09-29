@@ -4,13 +4,13 @@ import { Clock, Globe } from "lucide-react";
 import { dateIn, timeIn, useDualClock, ZONES, type Zone } from "@/lib/use-dual-clock";
 
 /**
- * Time-zone preference (profile). Two zones the business actually spans — India (IST) and
- * Germany (CET/CEST) — with a live clock for each. It AUTO-SELECTS from the browser's own
+ * Time-zone preference (profile). Two zones the business actually spans - India (IST) and
+ * Germany (CET/CEST) - with a live clock for each. It AUTO-SELECTS from the browser's own
  * time zone (Intl): open it in India and it lands on Indian time, open it in Germany and it
  * lands on German time. The choice is remembered in localStorage so a manual override sticks.
  *
  * This is where the preference is CHANGED. The top bar's `NavClock` reads the same hook and
- * updates the moment a choice is made here — they share `lib/use-dual-clock`, so the zones, the
+ * updates the moment a choice is made here - they share `lib/use-dual-clock`, so the zones, the
  * detection rule and the storage key cannot drift between the two surfaces.
  *
  * Seconds tick here (1s) and not in the nav (60s): this card is the one people watch.
@@ -25,7 +25,7 @@ export function TimeZoneCard() {
       </h2>
       <p className="mt-1 text-sm text-muted">
         Auto-selected from your location{" "}
-        <span className="font-medium text-ink-2">({ZONES[detected].flag} {ZONES[detected].label})</span> —
+        <span className="font-medium text-ink-2">({ZONES[detected].flag} {ZONES[detected].label})</span> -
         switch it any time. Your choice is remembered on this device and shows in the top bar.
       </p>
 
@@ -59,7 +59,7 @@ export function TimeZoneCard() {
                 </span>
                 <span className="mt-1 flex items-baseline gap-2">
                   <span className="font-display text-2xl font-bold tabular-nums text-ink">
-                    {now ? timeIn(meta.tz, now, true) : "—"}
+                    {now ? timeIn(meta.tz, now, true) : "-"}
                   </span>
                 </span>
                 <span className="mt-0.5 block text-caption text-muted">

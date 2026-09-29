@@ -14,7 +14,7 @@ import { getTeamGame } from "./gamification";
  * themselves, one per (rule, person, period).
  *
  * `syncRewardGrants` re-derives EVERY qualification in history on every call and
- * inserts what's missing. That is safe — and the reason the design works — because
+ * inserts what's missing. That is safe - and the reason the design works - because
  * `@@unique([ruleId, teamProfileId, periodKey])` turns a re-insert into a no-op:
  *   · editing a rule and rescanning never double-pays,
  *   · a grant the founder DECLINED is never resurrected as PENDING,
@@ -38,7 +38,7 @@ export async function listRewardRules() {
 
 /**
  * Re-derive every qualification and insert the new ones as PENDING.
- * Returns how many grants were created. Idempotent — call it as often as you like.
+ * Returns how many grants were created. Idempotent - call it as often as you like.
  */
 export async function syncRewardGrants(): Promise<number> {
   const [rules, game, goals] = await Promise.all([listRewardRules(), getTeamGame(), getActiveGoals()]);

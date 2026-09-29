@@ -12,7 +12,7 @@ import type { ActionResult } from "./finance-actions";
  * Per-application placement tracking (spec Module I). Richer than the aggregate
  * applicationsSubmitted / interviewsReceived counters on Enrollment (which stay as the
  * tracker headline): one row per real application moving applied → interview →
- * selected/rejected. Same access as the 90/120 tracker — Admin OR Head (Karthick).
+ * selected/rejected. Same access as the 90/120 tracker - Admin OR Head (Karthick).
  */
 
 async function requireAdminOrHead() {

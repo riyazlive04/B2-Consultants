@@ -13,7 +13,7 @@ import {
 import { getAttendanceConfig } from "./founder-config";
 
 /**
- * Attendance — the reads and writes.
+ * Attendance - the reads and writes.
  *
  * All of the judgement lives in lib/attendance.ts (pure, unit-tested). This file only fetches,
  * materialises and persists, which is the same division as tutor-fees.ts ↔ lib/tutor-fee.ts.
@@ -23,7 +23,7 @@ export type AttendanceSheetRow = {
   studentId: string;
   studentName: string;
   studentCode: string | null;
-  /** Null when this student has no row yet — i.e. the register hasn't been taken. */
+  /** Null when this student has no row yet - i.e. the register hasn't been taken. */
   status: AttendanceStatus | null;
   note: string | null;
   markedByName: string | null;
@@ -81,7 +81,7 @@ export async function getAttendanceSheet(sessionId: string): Promise<AttendanceS
   });
   if (!session) return null;
 
-  // A batch can be populated through EITHER seam — German Note seats arrive as BatchMember,
+  // A batch can be populated through EITHER seam - German Note seats arrive as BatchMember,
   // B2 coaching seats as Enrollment.batchId (see the Batch model's note). Both are "on the
   // roster", so both are expected in the room; deduped because nothing forbids being in both.
   const roster = new Map<string, { id: string; fullName: string; code: string | null }>();
@@ -126,7 +126,7 @@ export async function getAttendanceSheet(sessionId: string): Promise<AttendanceS
  *
  * Upsert per student on the `(sessionId, studentId)` unique key, so this is idempotent: a
  * double-submit, a retry, or a tutor correcting one row all converge on the same register. A
- * null status DELETES the row rather than storing an "unmarked" value — "we never took the
+ * null status DELETES the row rather than storing an "unmarked" value - "we never took the
  * register" and "we took it and they were absent" must stay distinguishable, and only the
  * absence of a row can say the first.
  */
@@ -178,7 +178,7 @@ export type StudentAttendanceView = {
 };
 
 /**
- * Per-student attendance across a batch — the drop-risk read.
+ * Per-student attendance across a batch - the drop-risk read.
  *
  * Scoped to ONE batch on purpose. A student repeating A1 after a strong A2 would otherwise have
  * the two averaged into a single number that describes neither, and it is the current cohort
@@ -234,7 +234,7 @@ export async function getBatchAttendance(batchId: string): Promise<StudentAttend
       };
     })
     .sort((a, b) => {
-      // Worst first — this list exists to be acted on from the top, not browsed alphabetically.
+      // Worst first - this list exists to be acted on from the top, not browsed alphabetically.
       const rank = { RED: 0, AMBER: 1, UNKNOWN: 2, GREEN: 3 } as const;
       const d = rank[a.signal] - rank[b.signal];
       return d !== 0 ? d : a.studentName.localeCompare(b.studentName);
@@ -246,7 +246,7 @@ export async function getBatchAttendance(batchId: string): Promise<StudentAttend
  *
  * Held BESIDE `TutorFee.headcount` (which is roster size) rather than replacing it. The two
  * being different is the fact the founders need in order to decide whether the fee basis should
- * change — that is a pricing decision and theirs, not a side effect of recording attendance.
+ * change - that is a pricing decision and theirs, not a side effect of recording attendance.
  */
 export async function getBatchAttendanceSummary(batchId: string): Promise<{
   markedSessions: number;

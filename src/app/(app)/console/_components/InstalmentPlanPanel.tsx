@@ -20,21 +20,21 @@ import { Btn, Card, ColHead, ColRow, ColScroll, Hint, NameCell, NumInput, Remove
  * Instalment plan pricing (Founder Console → Instalment Plans).
  *
  * Two rules live here and nowhere else:
- *   1. what a plan of N instalments COSTS EXTRA — a flat amount added once to the agreed fee,
+ *   1. what a plan of N instalments COSTS EXTRA - a flat amount added once to the agreed fee,
  *      so "3 → ₹600" means ₹1,50,000 becomes ₹1,50,600, not ₹1,800 of surcharge;
  *   2. how many days apart the instalments fall by default.
  *
  * Both feed the EMI generator on Finance → Pending payments. A length with no row costs
- * nothing, which is why the shipped table lists the common lengths at ₹0 — a surcharge should
+ * nothing, which is why the shipped table lists the common lengths at ₹0 - a surcharge should
  * only ever exist because somebody typed it.
  *
  * The preview is the point of the screen. A surcharge and a split are abstract until you see
  * the schedule they produce, and the boundary this rule is easiest to get wrong on is the
- * remainder — so the preview walks a real fee and shows every instalment, including the last
+ * remainder - so the preview walks a real fee and shows every instalment, including the last
  * one that absorbs the rounding.
  */
 
-/** The fee the preview splits. Not configurable — it exists to make the arithmetic legible. */
+/** The fee the preview splits. Not configurable - it exists to make the arithmetic legible. */
 const PREVIEW_FEE_INR_MINOR = BigInt(15_000_000); // ₹1,50,000, the Guided fee
 const PREVIEW_FIRST_DUE = new Date(Date.UTC(2026, 7, 15)); // a fixed date: this is an example
 
@@ -102,7 +102,7 @@ export function InstalmentPlanPanel({ config }: { config: InstalmentPlanConfig }
     <div className="space-y-5">
       <Hint>
         What it <strong>costs</strong> to pay in instalments, and how far apart they fall. The extra is
-        added <strong>once</strong> to the agreed fee — so a 3-part plan at ₹600 turns a ₹1,50,000 fee
+        added <strong>once</strong> to the agreed fee - so a 3-part plan at ₹600 turns a ₹1,50,000 fee
         into ₹1,50,600, split three ways. A plan length that isn&apos;t listed here adds nothing.
       </Hint>
 
@@ -126,7 +126,7 @@ export function InstalmentPlanPanel({ config }: { config: InstalmentPlanConfig }
           <section>
             <p className="text-caption font-semibold uppercase text-ink-3">Extra amount per plan length</p>
             <p className="mt-0.5 max-w-2xl text-sm text-muted">
-              Minor units are handled for you — type <strong>600</strong> for ₹600. Both currencies are
+              Minor units are handled for you - type <strong>600</strong> for ₹600. Both currencies are
               here because a €-billed student&apos;s plan must not inherit a rupee surcharge.
             </p>
             <ColScroll>
@@ -134,7 +134,7 @@ export function InstalmentPlanPanel({ config }: { config: InstalmentPlanConfig }
               <ColHead cols={COLS} labels={["Instalments", "Extra (₹)", "Extra (€)", ""]} />
               {draft.tiers.length === 0 ? (
                 <p className="rounded-field border border-dashed border-line px-3 py-4 text-center text-sm text-muted">
-                  No plan lengths priced — every instalment plan will add nothing extra.
+                  No plan lengths priced - every instalment plan will add nothing extra.
                 </p>
               ) : (
                 draft.tiers.map((t, i) => (
@@ -172,7 +172,7 @@ export function InstalmentPlanPanel({ config }: { config: InstalmentPlanConfig }
 
           {/*
             The schedule these numbers produce, on a real fee. Rendered from lib/instalment-plan,
-            i.e. the exact functions generateInstalmentPlan calls — so what is previewed here and
+            i.e. the exact functions generateInstalmentPlan calls - so what is previewed here and
             what gets written cannot disagree.
           */}
           <div className="overflow-x-auto rounded-field border border-line bg-surface-2 px-4 py-3">

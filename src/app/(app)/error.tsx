@@ -12,7 +12,7 @@ import { Btn } from "@/components/ui/controls";
  * the rest of the app (card on --bg-surface, r-lg, e-1).
  *
  * It also REPORTS. Until now this boundary logged to the browser console and told nobody, so a
- * broken screen reached the founders only when a client emailed about it — the exact gap the
+ * broken screen reached the founders only when a client emailed about it - the exact gap the
  * observability work exists to close.
  */
 export default function AppError({
@@ -49,7 +49,7 @@ export default function AppError({
           </span>
           <h1 className="font-display text-xl font-bold tracking-tight text-ink">Something went wrong</h1>
           <p className="max-w-sm text-sm text-muted">
-            This screen ran into an unexpected problem. Nothing you were viewing was changed — try again, and
+            This screen ran into an unexpected problem. Nothing you were viewing was changed - try again, and
             if it keeps happening, refresh the page.
           </p>
           {process.env.NODE_ENV === "development" && error?.message && (

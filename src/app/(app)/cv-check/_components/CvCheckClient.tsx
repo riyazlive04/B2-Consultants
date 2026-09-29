@@ -126,7 +126,7 @@ export function CvCheckClient() {
             />
           </div>
 
-          {/* Un-edited template text — the manual's #1 rule: "edit all red marked text". */}
+          {/* Un-edited template text - the manual's #1 rule: "edit all red marked text". */}
           {result.placeholders.length > 0 && (
             <div className="rounded-card border border-risk bg-risk-soft p-4">
               <p className="flex items-center gap-2 text-sm font-semibold text-risk">
@@ -146,7 +146,7 @@ export function CvCheckClient() {
             </div>
           )}
 
-          {/* Generated suggestions — the coaching to-do list, risk-first. */}
+          {/* Generated suggestions - the coaching to-do list, risk-first. */}
           <Card
             title={
               <span className="flex items-center gap-2 font-display text-h3 text-ink">
@@ -192,7 +192,7 @@ export function CvCheckClient() {
             </Card>
           )}
 
-          {/* B2 template conformance — graded against the "How to edit the resume" manual. */}
+          {/* B2 template conformance - graded against the "How to edit the resume" manual. */}
           <Card
             title="B2 resume-template conformance"
             subtitle="Checked against the B2 “How to edit the resume” manual - the cover page and section spine every student is handed."

@@ -2,7 +2,7 @@
 
 /**
  * The ₹/€ preference moved to `components/ui/CurrencyToggle` when the home dashboard needed the
- * same toggle — one provider and one storage key, or the two pages drift apart.
+ * same toggle - one provider and one storage key, or the two pages drift apart.
  *
  * This file stays as the Finance-local alias so the page and its cards keep their existing
  * import, and so `useFinanceCcy` still reads naturally at those call sites.
@@ -16,8 +16,8 @@ export type { Ccy } from "@/lib/money-display";
 /**
  * A pass-through, deliberately.
  *
- * The real provider moved to the (app) layout so the notification bell — which sits in the shell,
- * outside every page — shares the reader's currency. Mounting a SECOND provider here would give
+ * The real provider moved to the (app) layout so the notification bell - which sits in the shell,
+ * outside every page - shares the reader's currency. Mounting a SECOND provider here would give
  * Finance its own isolated state: same localStorage key, but flipping the toggle on this page
  * would leave the bell above it on the previous currency until a reload.
  *

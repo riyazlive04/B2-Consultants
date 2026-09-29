@@ -88,7 +88,7 @@ export function CashPositionSection({
 /**
  * Frequency + the due date that only some frequencies have (Error Log H3).
  *
- * A ONE-TIME payable has no NEXT due date — there is no next one. The field was shown and
+ * A ONE-TIME payable has no NEXT due date - there is no next one. The field was shown and
  * required-looking regardless, so a one-off invoice could not be recorded without inventing a
  * recurrence date that then drove the "due this month" figures.
  *
@@ -119,10 +119,10 @@ function PayableSchedule({
       </Field>
       {/* Distinct keys: without them React reconciles these two inputs as the SAME element
           (same type, same position) and the switch flips it controlled↔uncontrolled, which it
-          warns about. Keyed, each branch mounts fresh — which is also what guarantees the
+          warns about. Keyed, each branch mounts fresh - which is also what guarantees the
           placeholder carries no stale date. */}
       {oneTime ? (
-        <Field key="one-time" label="Next due date" hint="Not scheduled — a one-time payable recurs only once.">
+        <Field key="one-time" label="Next due date" hint="Not scheduled - a one-time payable recurs only once.">
           <TextInput type="date" disabled defaultValue="" />
         </Field>
       ) : (
@@ -231,7 +231,7 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
         csvName="payables"
         rowClassName={(r) => (r.dueSoonUnderfunded ? "bg-risk-soft" : undefined)}
         emptyMessage="No payables yet - add fixed costs to compute break-even."
-        // The query already returns these by nextDueDate ascending (cash-metrics.ts) — this
+        // The query already returns these by nextDueDate ascending (cash-metrics.ts) - this
         // makes the table SAY so. The list read as arbitrary (Error Log H1) because no header
         // carried a sort arrow, so soonest-first looked like insertion order.
         defaultSort="due"
@@ -254,7 +254,7 @@ export function GrowthOverrideForm({ overridePct }: { overridePct: number | null
     >
       <label className="text-xs text-muted" htmlFor="growthPct">Growth % override</label>
       {/* NOT kind="rate": setGrowthOverride accepts -50…200, and `rate` both strips the leading
-          "-" as you type and caps at 100 — it would silently make a shrinking forecast unenterable.
+          "-" as you type and caps at 100 - it would silently make a shrinking forecast unenterable.
           Left as a plain decimal input; the -50…200 bound is enforced server-side. */}
       <input
         id="growthPct"

@@ -19,7 +19,7 @@ import { Card, Hint, NumInput, SaveBar } from "./kit";
  *
  * The rule is a size band, not a level price: a batch at or above the threshold earns the
  * tutor the lower per-head rate. Rates are per-level because §5 says they "can differ per
- * level", but they ship flat at the only two numbers the founders actually stated — §18.2
+ * level", but they ship flat at the only two numbers the founders actually stated - §18.2
  * left the full per-level table open, so the console is where that gets answered, not the code.
  */
 
@@ -58,14 +58,14 @@ export function TutorFeePanel({ config }: { config: TutorFeeConfig }) {
     <div className="space-y-5">
       <Hint>
         What a tutor earns for running a batch. The rate is driven by <strong>how many students
-        are in the batch</strong>, not by which level it is — a thin batch pays more per head.
+        are in the batch</strong>, not by which level it is - a thin batch pays more per head.
         Charged per student, per level, so a 5-student batch at ₹7,000 costs ₹35,000.
       </Hint>
 
       <Card>
         <div className="space-y-5">
           <Field
-            label="Threshold — students needed for the lower rate"
+            label="Threshold - students needed for the lower rate"
             hint="At or above this count, the batch pays the 'at or above' rate. Below it, the higher one."
           >
             <div className="max-w-[12rem]">
@@ -108,7 +108,7 @@ export function TutorFeePanel({ config }: { config: TutorFeeConfig }) {
 
           {/*
             The bands are abstract until you see the money. This walks real batch sizes across
-            the threshold so the founder can see the step before saving — the boundary is where
+            the threshold so the founder can see the step before saving - the boundary is where
             this rule is easiest to get wrong.
           */}
           <div className="overflow-x-auto rounded-field border border-line bg-surface-2 px-4 py-3">

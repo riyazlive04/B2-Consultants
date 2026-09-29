@@ -5,7 +5,7 @@
  *
  * Idempotent, and safe to re-run on production: it matches on (name, scope, builtIn) and updates
  * the blocks in place, so re-running ships corrected copy without duplicating an entry or
- * touching a single thing the team has saved themselves. Nothing is ever deleted here — a
+ * touching a single thing the team has saved themselves. Nothing is ever deleted here - a
  * built-in that is retired from the code stays in the database, because a page somewhere was
  * probably built from it and its author does not need it vanishing mid-edit.
  */
@@ -16,8 +16,8 @@ import { BUILT_IN_SNIPPETS } from "../src/lib/snippet-blocks";
 const prisma = new PrismaClient();
 
 /**
- * `.env` currently points DATABASE_URL at the Supabase PRODUCTION pooler — the localhost line is
- * commented out — so "just run the seed" writes to the live database. This seeder only ever adds
+ * `.env` currently points DATABASE_URL at the Supabase PRODUCTION pooler - the localhost line is
+ * commented out - so "just run the seed" writes to the live database. This seeder only ever adds
  * built-in library rows, which is about as benign as a write gets, but the team should still be
  * the ones deciding that it happens there. Same guard, same flag as `prisma/demo-data.ts`.
  */
@@ -40,8 +40,8 @@ async function main() {
 
   for (const s of BUILT_IN_SNIPPETS) {
     const blocks = s.blocks as unknown as object;
-    // No unique index on (name, scope) — the team can name their own snippet anything, including
-    // the same thing — so this finds the BUILT-IN with that name rather than upserting blindly.
+    // No unique index on (name, scope) - the team can name their own snippet anything, including
+    // the same thing - so this finds the BUILT-IN with that name rather than upserting blindly.
     const existing = await prisma.sectionSnippet.findFirst({
       where: { name: s.name, scope: s.scope as SnippetScope, builtIn: true },
       select: { id: true },

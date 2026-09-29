@@ -14,7 +14,7 @@ import { sendWhatsApp } from "./whatsapp";
  * These live OUTSIDE `agreement-actions.ts` and `agreement-sign.ts` on purpose: those files carry
  * a "use server" directive, which turns every export into a callable RPC endpoint. An exported
  * `recordAgreementEvent` would let anyone on the internet forge entries in the audit trail that
- * the certificate reproduces — and the trail is the only thing making an in-house signature worth
+ * the certificate reproduces - and the trail is the only thing making an in-house signature worth
  * anything. Keep this file free of "use server".
  */
 
@@ -74,7 +74,7 @@ export async function recordAgreementEvent(
 export type SignatureSource = { source: "drawn" } | { source: "saved"; savedAt: string | null };
 
 /**
- * Countersign and send — the body shared by BOTH issue paths (draw-now and reuse-saved).
+ * Countersign and send - the body shared by BOTH issue paths (draw-now and reuse-saved).
  *
  * It lives here, without "use server", precisely so it is NOT an RPC endpoint: the two exported
  * actions in agreement-actions.ts each run their own capability check and then call this. If this
@@ -82,7 +82,7 @@ export type SignatureSource = { source: "drawn" } | { source: "saved"; savedAt: 
  *
  * THE HONESTY RULE for a reused signature: only the *ink* is reused. `founderDevice.observed` (the
  * IP and User-Agent our server saw) is captured fresh on every issue, and the ISSUED event records
- * which source was used — so the certificate can never imply a live draw that didn't happen.
+ * which source was used - so the certificate can never imply a live draw that didn't happen.
  *
  * No PDF is rendered here. The student reads a live render, and the one authoritative render
  * happens at the moment they sign.
@@ -144,7 +144,7 @@ export async function issueAgreementCore(input: {
       document_no: row.documentNo,
     },
     sentById: session.user.id,
-    bodySummary: `Agreement ${row.documentNo} — signing link`,
+    bodySummary: `Agreement ${row.documentNo} - signing link`,
     agreementId: id,
     leadId: row.leadId,
     studentId: row.studentId,
@@ -158,7 +158,7 @@ export async function issueAgreementCore(input: {
   revalidatePath(`${AGREEMENTS_PATH}/${id}`);
 
   // The link comes back WHATEVER happened to the WhatsApp send. With WATI off, the number opted
-  // out, or the template unmapped, this response is the only place this token will ever exist —
+  // out, or the template unmapped, this response is the only place this token will ever exist -
   // the database holds nothing but its hash.
   return {
     ok: true,
@@ -214,7 +214,7 @@ export function signingUrl(token: string): string {
 }
 
 /**
- * Where the student fetches their executed copy. Same token as the signing link — signing burns the
+ * Where the student fetches their executed copy. Same token as the signing link - signing burns the
  * OTP and the ceremony, but never `tokenHash`, so the link already in their chat keeps working for
  * the one thing they still need it for.
  */
@@ -227,13 +227,13 @@ export function firstName(full: string): string {
 }
 
 /**
- * Reveal the signing OTP in the UI instead of sending it — so the ceremony can be exercised on a
+ * Reveal the signing OTP in the UI instead of sending it - so the ceremony can be exercised on a
  * developer's machine without an approved WATI template, and without firing a real WhatsApp
  * message at a real student.
  *
  * FAIL-CLOSED, and deliberately requires TWO independent signals:
- *   1. AGREEMENT_OTP_DEV_ECHO="true" — an explicit opt-in, absent from .env.example's live block.
- *   2. BETTER_AUTH_URL points at localhost — a real deployment has a public https origin, so a
+ *   1. AGREEMENT_OTP_DEV_ECHO="true" - an explicit opt-in, absent from .env.example's live block.
+ *   2. BETTER_AUTH_URL points at localhost - a real deployment has a public https origin, so a
  *      leaked env var alone can never arm this in production.
  *
  * If you are tempted to relax either condition: the OTP is the ONLY thing binding a signature to
@@ -253,7 +253,7 @@ export function otpDevEchoEnabled(): boolean {
  *
  * The client half is a CLAIM and is treated as one: parsed through a clamped schema, and stored
  * under `reported` so nothing downstream can mistake it for fact. `observed` is filled in here,
- * from the request — never from the payload — because the IP and the User-Agent header are the
+ * from the request - never from the payload - because the IP and the User-Agent header are the
  * only parts of this record a signer cannot choose.
  *
  * Returns null when the payload is unusable. A signature must never fail because a browser
@@ -282,14 +282,14 @@ export function readStoredDevice(raw: unknown): StoredDevice | null {
 }
 
 /**
- * "+91 ••••• 3210" — enough for the student to recognise their own number, useless to anyone else.
+ * "+91 ••••• 3210" - enough for the student to recognise their own number, useless to anyone else.
  *
  * The last FOUR digits are shown, and callers rely on that: the signing page says "ending
  * {maskedPhone.slice(-4)}". Don't shorten it to three.
  */
 export function maskPhone(raw: string | null | undefined): string {
   const normalized = normalizeWhatsappNumber(raw);
-  if (!normalized) return "—";
+  if (!normalized) return "-";
   const cc = displayWhatsappNumber(normalized).split(" ")[0] ?? "";
   return `${cc} ••••• ${normalized.slice(-4)}`;
 }
@@ -320,7 +320,7 @@ const TOKEN_SELECT = {
 export type TokenRow = Prisma.AgreementGetPayload<{ select: typeof TOKEN_SELECT }>;
 
 /**
- * Resolve a raw signing token. Never reveals anything on failure beyond the reason — an
+ * Resolve a raw signing token. Never reveals anything on failure beyond the reason - an
  * enumeration oracle on document numbers or student names would be a gift to a scraper.
  *
  * Order matters: `signedAt` is checked before `expiresAt`, so someone who signed on the last day
@@ -344,16 +344,16 @@ export async function loadAgreementByToken(
 }
 
 /**
- * Resolve a token for SIGNED-COPY DOWNLOAD ONLY — the mirror image of `loadAgreementByToken`.
+ * Resolve a token for SIGNED-COPY DOWNLOAD ONLY - the mirror image of `loadAgreementByToken`.
  *
  * That one refuses a signed row ("used"), and must: its job is to guard the signing ceremony, and a
  * burnt token can never re-open it. But the student still has to be able to fetch the contract they
- * signed, and `signAgreement` clears only `otpHash` — `tokenHash` survives — so the link already in
+ * signed, and `signAgreement` clears only `otpHash` - `tokenHash` survives - so the link already in
  * their chat is the natural credential for it.
  *
  * The checks are inverted on purpose: signedAt + sealed bytes are REQUIRED, and `expiresAt` is
  * ignored, because a contract you have executed does not stop being yours after fourteen days.
- * Voided/declined rows can never reach here — both paths null out `tokenHash`.
+ * Voided/declined rows can never reach here - both paths null out `tokenHash`.
  *
  * This is one of the two places `pdfBytes` may be selected. Never widen it to a list query.
  */

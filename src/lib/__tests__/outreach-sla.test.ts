@@ -19,11 +19,11 @@ import {
  * fail on the server.
  */
 
-/** 2026-07-20 14:00 UTC = 19:30 IST — a daytime lead, 30 min before the night window. */
+/** 2026-07-20 14:00 UTC = 19:30 IST - a daytime lead, 30 min before the night window. */
 const DAY_LEAD = new Date("2026-07-20T14:00:00Z");
-/** 2026-07-20 14:30 UTC = 20:00 IST — the first instant of the night window. */
+/** 2026-07-20 14:30 UTC = 20:00 IST - the first instant of the night window. */
 const NIGHT_LEAD = new Date("2026-07-20T14:30:00Z");
-/** 2026-07-20 20:00 UTC = 2026-07-21 01:30 IST — early hours of the NEXT IST day. */
+/** 2026-07-20 20:00 UTC = 2026-07-21 01:30 IST - early hours of the NEXT IST day. */
 const EARLY_LEAD = new Date("2026-07-20T20:00:00Z");
 
 test("windowFor splits the day at the JD's 09:00 and 20:00 IST boundaries", () => {
@@ -80,7 +80,7 @@ test("daytime leads are owed the SAME day", () => {
 });
 
 test("an early-hours lead is owed the IST day it arrived in, not the UTC one", () => {
-  // 20 July 20:00 UTC is already 21 July 01:30 IST — the deadline must be the end of
+  // 20 July 20:00 UTC is already 21 July 01:30 IST - the deadline must be the end of
   // 21 July IST. Anchoring on the UTC date would give 20 July and mark it overdue on sight.
   const v = slaFor(EARLY_LEAD, null, new Date(EARLY_LEAD.getTime() + 60 * 60_000));
   assert.equal(v.window, "EARLY");
@@ -109,7 +109,7 @@ test("connection is graded against the FIRST connection, on both clocks", () => 
 test("never connected and past the deadline is OVERDUE, and stays on the queue", () => {
   const v = slaFor(DAY_LEAD, null, new Date(DAY_LEAD.getTime() + 2 * DAY_MS()));
   assert.equal(v.state, "OVERDUE");
-  // Still bucketed — an overdue lead is the one most needing a call, so it must not vanish.
+  // Still bucketed - an overdue lead is the one most needing a call, so it must not vanish.
   assert.equal(bucketForLead(v), "DAY_DUE");
 });
 

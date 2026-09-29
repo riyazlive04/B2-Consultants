@@ -22,11 +22,11 @@ import type { ActionResult } from "./finance-actions";
  * Book orders with the publisher (spec §9.2, Part 2 §4):
  *   token advance → confirm the level → vendor quotation → pay → courier.
  *
- * Per LEVEL, not per contract — the founders re-quote before each level rather than ordering
+ * Per LEVEL, not per contract - the founders re-quote before each level rather than ordering
  * a 3-level set up front (§19.3: "A1 first, fresh quote for A2").
  */
 
-// A book order is for a single level (never a bundle) — validated against the live catalogue.
+// A book order is for a single level (never a bundle) - validated against the live catalogue.
 const BOOK_ORDER_LEVEL_KINDS = ["GERMAN_LEVEL", "COACHING_TIER", "OTHER"] as const;
 const STATUSES = ["DEFERRED", "QUOTE_REQUESTED", "QUOTED", "ORDERED", "PAID", "COURIERED", "CANCELLED"] as const;
 
@@ -91,7 +91,7 @@ const orderSchema = z.object({
 /**
  * Open a book order for a level, letting the payment history decide whether it ships now.
  *
- * The trigger reads CASH ACTUALLY COLLECTED, not the sale price and not "is on EMI" — an EMI
+ * The trigger reads CASH ACTUALLY COLLECTED, not the sale price and not "is on EMI" - an EMI
  * student who has genuinely paid past the threshold has earned their books, and keying off
  * the plan rather than the payments would strand exactly the customer who has been paying
  * reliably. Cash is summed from Income, the same source commission and P&L use, so the three
@@ -138,7 +138,7 @@ export async function createBookOrder(form: FormData): Promise<ActionResult> {
       section: "students",
       entityType: "BookOrder",
       entityId: order.id,
-      summary: `Opened a ${d.level} book order for ${student.fullName} — ${status === "DEFERRED" ? "deferred" : "ready to quote"}`,
+      summary: `Opened a ${d.level} book order for ${student.fullName} - ${status === "DEFERRED" ? "deferred" : "ready to quote"}`,
       meta: { level: d.level, status, reason: decision.reason, shortfallInrMinor: decision.shortfallInrMinor },
     });
   } catch (e) {
@@ -208,7 +208,7 @@ export async function advanceBookOrder(orderId: string, form: FormData): Promise
       orderedAt: d.status === "ORDERED" ? now : undefined,
       paidAt: d.status === "PAID" ? now : undefined,
       courieredAt: d.status === "COURIERED" ? now : undefined,
-      // Leaving DEFERRED clears the hold note — it would otherwise linger and misread.
+      // Leaving DEFERRED clears the hold note - it would otherwise linger and misread.
       deferReason: d.status === "DEFERRED" ? undefined : null,
     },
   });
@@ -250,7 +250,7 @@ async function ensureOrderRef(orderId: string, current: string | null): Promise<
   );
 
   for (let attempt = 0; attempt < 5; attempt++) {
-    // Only this year's refs matter to the allocator, but the column holds every year — filtering
+    // Only this year's refs matter to the allocator, but the column holds every year - filtering
     // in SQL keeps the read small as the table grows.
     const rows = await prisma.bookOrder.findMany({
       where: { orderRef: { startsWith: `BO-${year}-` } },
@@ -279,7 +279,7 @@ async function ensureOrderRef(orderId: string, current: string | null): Promise<
  * A human presses this.
  *
  * The recipient is the VENDOR's number. Every other WhatsApp touchpoint in the app sends to the
- * person the record is about, so this is the one place that inversion has to be got right — see
+ * person the record is about, so this is the one place that inversion has to be got right - see
  * lib/book-order-message.ts.
  */
 export async function messagePublisher(orderId: string, opts?: { dryRun?: boolean }): Promise<ActionResult> {
@@ -302,11 +302,11 @@ export async function messagePublisher(orderId: string, opts?: { dryRun?: boolea
   if (!order) return { ok: false, error: "Order not found" };
   if (!order.vendor) return { ok: false, error: "Set the vendor on this order before messaging them" };
   if (!order.vendor.phone?.trim()) {
-    return { ok: false, error: `${order.vendor.name} has no phone number — add one on the vendor record` };
+    return { ok: false, error: `${order.vendor.name} has no phone number - add one on the vendor record` };
   }
 
   const labels = await levelLabels();
-  // Allocated BEFORE the variable check so `order_ref` is never the thing reported missing —
+  // Allocated BEFORE the variable check so `order_ref` is never the thing reported missing -
   // it is ours to produce, not something the user could go and fill in.
   const orderRef = await ensureOrderRef(order.id, order.orderRef);
 
@@ -341,7 +341,7 @@ export async function messagePublisher(orderId: string, opts?: { dryRun?: boolea
     entityId: order.id,
     summary: outcome.sent
       ? `Sent ${order.vendor.name} the ${orderRef} book order for ${order.student.fullName}`
-      : `Book order message to ${order.vendor.name} was not sent — ${outcome.error ?? "skipped"}`,
+      : `Book order message to ${order.vendor.name} was not sent - ${outcome.error ?? "skipped"}`,
     meta: { orderRef, status: outcome.status, level: order.level, dryRun: opts?.dryRun ?? false },
   });
 

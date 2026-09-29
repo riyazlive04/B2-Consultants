@@ -66,7 +66,7 @@ function SeatMini({ seats }: { seats: GnWorkshopSummary["seats"] }) {
 
 /** `canManage` is false for a read-only viewer (HEAD): they see every workshop and
  *  its numbers, but no create/edit/delete. Every action behind these controls is
- *  `requireAdmin()` server-side anyway — this just stops us rendering buttons that
+ *  `requireAdmin()` server-side anyway - this just stops us rendering buttons that
  *  would only fail. */
 export function WorkshopsPanel({
   workshops,
@@ -122,7 +122,7 @@ export function WorkshopsPanel({
 
       {workshops.length === 0 && !creating && (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          {canManage ? "No workshops yet — create the first intake above." : "No workshops yet."}
+          {canManage ? "No workshops yet - create the first intake above." : "No workshops yet."}
         </p>
       )}
 

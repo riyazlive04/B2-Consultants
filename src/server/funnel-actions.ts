@@ -13,7 +13,7 @@ import type { ActionResult } from "./finance-actions";
 
 // Deliberately NOT rule("int") from lib/field-rules: this one also has to turn an untouched box
 // into 0 and hand the column a number, which that (string) schema doesn't do. The character rule
-// it enforces is the same — the matching inputs carry kind="int" plus maxLength={7}.
+// it enforces is the same - the matching inputs carry kind="int" plus maxLength={7}.
 const intField = z
   .string()
   .trim()

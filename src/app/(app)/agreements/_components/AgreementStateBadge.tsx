@@ -8,7 +8,7 @@ import {
 
 /**
  * The 8-state pill. Same shape and tone vocabulary as StatusBadge (which shows the raw DB status on
- * the agreement row itself) — this one shows the DERIVED workflow state of a client.
+ * the agreement row itself) - this one shows the DERIVED workflow state of a client.
  *
  * The dot is never the only carrier of meaning: the word is always there too (§7 / WCAG 1.4.1).
  */

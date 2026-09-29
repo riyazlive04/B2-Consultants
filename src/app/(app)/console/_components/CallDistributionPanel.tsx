@@ -14,7 +14,7 @@ import { saveCallDistribution } from "@/server/console-actions";
  * ── Why this screen exists ───────────────────────────────────────────────────────
  * Both dials existed but neither was usable. Shares were editable one person at a time, buried
  * in a twelve-field profile form on another page, with no way to see the roster together and no
- * check that they added up — and because the engine normalises them, a founder who typed 5 and 2
+ * check that they added up - and because the engine normalises them, a founder who typed 5 and 2
  * got 71/29 while the Pipeline card cheerfully printed "5% target". The ranking weights were not
  * editable at all; they were two divergent hardcoded formulas.
  *
@@ -53,7 +53,7 @@ export function CallDistributionPanel({
 
   const inRotation = roster.filter((r) => (shares[r.profileId] ?? 0) > 0);
   const shareTotal = inRotation.reduce((s, r) => s + (shares[r.profileId] ?? 0), 0);
-  // The same call `assignLeadBatch` makes — so this cannot drift from what runs.
+  // The same call `assignLeadBatch` makes - so this cannot drift from what runs.
   const preview = previewSplit(
     inRotation.map((r) => ({ userId: r.profileId, name: r.name, sharePct: shares[r.profileId] ?? 0 })),
   );
@@ -83,9 +83,56 @@ export function CallDistributionPanel({
     <div className="space-y-5">
       <Hint>
         Who receives the calls, and which lead rises to the top of their queue. Shares are
-        <strong> relative weights</strong> — they need not total 100, and the engine normalises
+        <strong> relative weights</strong> - they need not total 100, and the engine normalises
         them. The preview below is computed exactly the way the hand-out computes it.
       </Hint>
+
+      {/* ── How much is auto-assigned at all ────────────────────────────────────── */}
+      <Card>
+        <p className="text-caption font-semibold uppercase text-ink-3">
+          How many new leads the system assigns by itself
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-4">
+          <label className="text-caption uppercase text-ink-3">
+            Auto-assigned share (%)
+            <span className="mt-1 block">
+              <NumInput
+                value={draft.autoAssignPct}
+                min={0}
+                max={100}
+                onChange={(v) => setDraft((d) => ({ ...d, autoAssignPct: v }))}
+              />
+            </span>
+          </label>
+          <p className="min-w-0 flex-1 text-caption text-ink-3">
+            {draft.autoAssignPct >= 100 ? (
+              <>
+                Every new lead is given an owner the moment it arrives. The shares below decide
+                who.
+              </>
+            ) : draft.autoAssignPct <= 0 ? (
+              <>
+                <strong className="text-ink">Nothing is auto-assigned.</strong> Every lead arrives
+                unowned and waits for someone to hand it out from Pipeline → Leads → Hand out
+                leads. The shares below still govern that hand-out.
+              </>
+            ) : (
+              <>
+                Roughly <strong className="text-ink">{draft.autoAssignPct} of every 100</strong> new
+                leads are given an owner on arrival; the other{" "}
+                <strong className="text-ink">{100 - draft.autoAssignPct}</strong> wait in the
+                unassigned pool to be handed out deliberately.
+              </>
+            )}
+          </p>
+        </div>
+        <p className="mt-3 rounded-field bg-surface-2 px-3 py-2 text-caption text-ink-3">
+          This is a rate the engine <strong>converges on</strong>, not a coin toss: it compares
+          what has actually been auto-assigned over the fairness window against this target, so a
+          quiet spell is caught up rather than lost. Held-back leads are never dropped - they sit
+          in the unassigned pile, visible to whoever hands work out.
+        </p>
+      </Card>
 
       {/* ── Shares ──────────────────────────────────────────────────────────────── */}
       <Card>
@@ -146,15 +193,15 @@ export function CallDistributionPanel({
                 needs to know the numbers they typed are not the numbers that will run. */}
             {shareTotal !== 100 && inRotation.length > 0 && (
               <p className="mt-3 rounded-field bg-surface-2 px-3 py-2 text-caption text-ink-3">
-                Your shares add up to <strong>{shareTotal}</strong>, not 100. That is allowed —
-                they are relative weights — but it means the split that actually runs is the one
+                Your shares add up to <strong>{shareTotal}</strong>, not 100. That is allowed -
+                they are relative weights - but it means the split that actually runs is the one
                 shown on the right, not the numbers you typed.
               </p>
             )}
             {inRotation.length === 0 && roster.length > 0 && (
               <p className="mt-3 rounded-field border border-warn bg-warn-soft px-3 py-2 text-caption text-warn-ink">
                 Nobody has a share above 0, so <strong>no new lead will be auto-assigned to
-                anyone</strong> — they will arrive unowned and sit in the unassigned pile.
+                anyone</strong> - they will arrive unowned and sit in the unassigned pile.
               </p>
             )}
           </>
@@ -206,10 +253,120 @@ export function CallDistributionPanel({
             label="Hand out leads by share, not to one person"
           />
           <p className="mt-1 text-caption text-ink-3">
-            The backlog is where the volume is — far more than daily intake — so with this off your
+            The backlog is where the volume is - far more than daily intake - so with this off your
             shares govern only a trickle. On, &ldquo;Hand out leads&rdquo; splits each batch across
             the rotation in the proportions above.
           </p>
+        </div>
+      </Card>
+
+      {/* ── The call-back chase ─────────────────────────────────────────────────── */}
+      <Card>
+        <p className="text-caption font-semibold uppercase text-ink-3">
+          Call-backs after you&apos;ve spoken to someone
+        </p>
+        <p className="mt-1 text-caption text-ink-3">
+          A prospect the team has spoken to who hasn&apos;t booked comes back onto the caller&apos;s
+          desk under <strong>&ldquo;Called, not booked - call back&rdquo;</strong>. This is how long
+          they rest between attempts and how many attempts they get before the team stops chasing.
+          It is separate from the rest window below, which governs cold work measured in days.
+        </p>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="text-caption uppercase text-ink-3">
+            Wait between call-backs (hours)
+            <span className="mt-1 block">
+              <NumInput
+                value={draft.callbackChase.gapHours}
+                min={1}
+                max={168}
+                onChange={(v) =>
+                  setDraft((d) => ({ ...d, callbackChase: { ...d.callbackChase, gapHours: v } }))
+                }
+              />
+            </span>
+            <span className="mt-1 block normal-case text-ink-3">
+              After every call the prospect drops off the list for this long, then reappears. Any
+              call restarts it - including one that rang out, because the caller still did the work.
+            </span>
+          </label>
+
+          <label className="text-caption uppercase text-ink-3">
+            How many call-backs before giving up
+            <span className="mt-1 block">
+              <NumInput
+                value={draft.callbackChase.maxCallbacks}
+                min={1}
+                max={20}
+                onChange={(v) =>
+                  setDraft((d) => ({ ...d, callbackChase: { ...d.callbackChase, maxCallbacks: v } }))
+                }
+              />
+            </span>
+            <span className="mt-1 block normal-case text-ink-3">
+              How many times the desk asks for a call-back. The first conversation isn&apos;t one of
+              them - it&apos;s the call being called back from.
+            </span>
+          </label>
+        </div>
+
+        {/* Says what the numbers above will actually do, on a clock. Two integers do not tell a
+            founder that they have just set the team to give up on a prospect inside a working day,
+            and that is exactly the mistake this box exists to make visible before it is saved. */}
+        <p className="mt-3 rounded-field bg-surface-2 px-3 py-2 text-caption text-ink-3">
+          As set: you speak to someone, and if they haven&apos;t booked they come back{" "}
+          <strong className="text-ink">{draft.callbackChase.gapHours} hours</strong> later,{" "}
+          <strong className="text-ink">{draft.callbackChase.maxCallbacks} time
+          {draft.callbackChase.maxCallbacks === 1 ? "" : "s"}</strong> in all. If they still
+          haven&apos;t booked{" "}
+          {draft.callbackChase.gapHours * (draft.callbackChase.maxCallbacks + 1) >= 24
+            ? `about ${Math.round((draft.callbackChase.gapHours * (draft.callbackChase.maxCallbacks + 1)) / 24)} day${Math.round((draft.callbackChase.gapHours * (draft.callbackChase.maxCallbacks + 1)) / 24) === 1 ? "" : "s"}`
+            : `${draft.callbackChase.gapHours * (draft.callbackChase.maxCallbacks + 1)} hours`}{" "}
+          after that first conversation, the chase ends.
+        </p>
+
+        <div className="mt-4 space-y-3 border-t border-line pt-4">
+          <div>
+            <Toggle
+              checked={draft.callbackChase.closeWhenExhausted}
+              onChange={(v) =>
+                setDraft((d) => ({ ...d, callbackChase: { ...d.callbackChase, closeWhenExhausted: v } }))
+              }
+              label="Move the card to Cancelled/Unqualified when the chase ends"
+            />
+            <p className="mt-1 text-caption text-ink-3">
+              {draft.callbackChase.closeWhenExhausted ? (
+                <>
+                  The card leaves the caller&apos;s desk and is filed under Cancelled/Unqualified,
+                  with the reason written into the lead&apos;s history. Off, the chase still stops
+                  but the card sits in its current column until somebody moves it.
+                </>
+              ) : (
+                <>
+                  <strong className="text-ink">Nothing is filed.</strong> The prospect stops
+                  appearing for call-backs, but the card stays where it is, so the board will
+                  gradually fill with leads nobody is chasing any more.
+                </>
+              )}
+            </p>
+          </div>
+
+          <div>
+            <Toggle
+              checked={draft.callbackChase.notifyOnClose}
+              onChange={(v) =>
+                setDraft((d) => ({ ...d, callbackChase: { ...d.callbackChase, notifyOnClose: v } }))
+              }
+              label="Send the prospect a WhatsApp when the chase ends"
+            />
+            <p className="mt-1 text-caption text-ink-3">
+              Sent automatically, with no one pressing send. It currently uses the{" "}
+              <strong>SOP 7b &ldquo;still not booked&rdquo;</strong> template - so bind an approved
+              template to that touchpoint in WhatsApp → Settings, or nothing goes out and the reason
+              is written on the message row. Someone who said &ldquo;not interested&rdquo; or gave a
+              wrong number is never messaged: that ends the chase on the spot.
+            </p>
+          </div>
         </div>
       </Card>
 
@@ -218,11 +375,42 @@ export function CallDistributionPanel({
         <p className="text-caption font-semibold uppercase text-ink-3">Which lead comes first</p>
         <p className="mt-1 text-caption text-ink-3">
           Applied to both the caller&apos;s own queue and the pipeline&apos;s &ldquo;call these
-          first&rdquo; list — one ranking, not two. The shipped values reproduce the behaviour the
+          first&rdquo; list - one ranking, not two. The shipped values reproduce the behaviour the
           app had before these were adjustable.
         </p>
 
-        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 border-t border-line pt-4">
+          <label className="text-caption uppercase text-ink-3">
+            Rest a lead after a call (hours)
+            <span className="mt-1 block">
+              <NumInput
+                value={draft.followUpRestHours}
+                min={0}
+                max={720}
+                onChange={(v) => setDraft((d) => ({ ...d, followUpRestHours: v }))}
+              />
+            </span>
+            <span className="mt-1 block normal-case text-ink-3">
+              {draft.followUpRestHours === 0 ? (
+                <>
+                  <strong className="text-ink">Leads never rest.</strong> A lead reappears on
+                  &ldquo;Who to call now&rdquo; the instant its outcome is logged, which reads to
+                  the caller as the app having lost the call.
+                </>
+              ) : (
+                <>
+                  Once an outcome is logged, the lead drops off &ldquo;Opted in, not yet
+                  booked&rdquo;, &ldquo;Old leads&rdquo; and workshop follow-up for{" "}
+                  {draft.followUpRestHours} hour{draft.followUpRestHours === 1 ? "" : "s"}, then
+                  returns. Leads still inside their own connection deadline are not rested - that
+                  clock is a same-day commitment.
+                </>
+              )}
+            </span>
+          </label>
+        </div>
+
+        <div className="mt-4 grid gap-4 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-3">
           <Weight
             label="Points per BANT dimension"
             hint="A 4/4 lead gains four times this. Raise it to let a strongly-qualified older lead outrank a fresh unqualified one."
@@ -267,7 +455,7 @@ export function CallDistributionPanel({
           />
           <Weight
             label="Most a lead can be penalised"
-            hint="Caps the idle penalty. Without a ceiling an old lead sinks so far it can never resurface — which is abandoning it, not deprioritising it."
+            hint="Caps the idle penalty. Without a ceiling an old lead sinks so far it can never resurface - which is abandoning it, not deprioritising it."
             value={draft.priority.idlePenaltyMax}
             max={200}
             onChange={(v) => setWeight("idlePenaltyMax", v)}

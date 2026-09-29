@@ -24,7 +24,7 @@ function firstError(e: z.ZodError): string {
 // ─────────────────────────── WhatsApp send (Composer) ───────────────────────────
 // `sendWhatsApp` returns { messageId, status, sent, skipped, error } (see server/whatsapp.ts);
 // the Composer wants the same { ok, status, message } shape the Email/SMS actions return, so this
-// adapts it — `ok` only true when the message actually left (mirrors whatsapp-actions.ts's toResult,
+// adapts it - `ok` only true when the message actually left (mirrors whatsapp-actions.ts's toResult,
 // which the rest of the app's "Send WhatsApp" buttons already rely on for honest skip/fail feedback).
 export type WhatsAppActionResult = { ok: boolean; message: string; status?: WhatsAppStatus };
 
@@ -34,7 +34,7 @@ function toWaResult(o: WaSendOutcome, successMsg: string): WhatsAppActionResult 
 }
 
 /**
- * Free-form (session) WhatsApp reply — only lands inside the 24h window opened by the contact
+ * Free-form (session) WhatsApp reply - only lands inside the 24h window opened by the contact
  * messaging first (see server/whatsapp.ts's sendFreeFormMessage doc comment). This is the mode a
  * human replying inside an open Conversations thread actually wants; business-initiated sends
  * outside that window must use sendWhatsAppTemplateAction below instead.
@@ -62,10 +62,10 @@ export async function sendWhatsAppFreeTextAction(leadId: string, form: FormData)
 }
 
 /**
- * Template WhatsApp send — the only way to message a contact outside the 24h session window.
+ * Template WhatsApp send - the only way to message a contact outside the 24h session window.
  * `kind` picks one of the touchpoints an Admin has mapped to a real WATI template (WhatsApp →
  * Settings); `param_0..param_n` are that template's OWN variables, in the order it was approved
- * with (never trust the client for the mapping — the param NAMES are re-read from the server-side
+ * with (never trust the client for the mapping - the param NAMES are re-read from the server-side
  * template config, only the values come from the form).
  */
 export async function sendWhatsAppTemplateAction(leadId: string, form: FormData): Promise<WhatsAppActionResult> {
@@ -105,7 +105,7 @@ export async function sendWhatsAppTemplateAction(leadId: string, form: FormData)
 
 // ─────────────────────────── Thread read-state + assignment (§0 schema) ───────────────────────────
 
-/** Mark every unread INBOUND Message for this lead read — called when a thread is opened. */
+/** Mark every unread INBOUND Message for this lead read - called when a thread is opened. */
 export async function markThreadRead(leadId: string): Promise<ActionResult> {
   await requireSection("conversations");
   await prisma.message.updateMany({ where: { leadId, direction: "INBOUND", read: false }, data: { read: true } });
@@ -113,7 +113,7 @@ export async function markThreadRead(leadId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Assign (or unassign) a whole thread — writes assignedToId onto every Message row for the lead,
+/** Assign (or unassign) a whole thread - writes assignedToId onto every Message row for the lead,
  *  so any row (and therefore getInboxThreads' "latest row" read) agrees on who owns it. */
 export async function assignThread(leadId: string, form: FormData): Promise<ActionResult> {
   const session = await requireSection("conversations");
@@ -155,7 +155,7 @@ export async function sendEmailAction(leadId: string, form: FormData): Promise<S
       section: "conversations",
       entityType: "Lead",
       entityId: leadId,
-      summary: `Emailed ${lead?.name ?? "a contact"} — "${subject}"`,
+      summary: `Emailed ${lead?.name ?? "a contact"} - "${subject}"`,
       meta: { channel: "EMAIL", subject, body: body.slice(0, 200) },
     });
   }
@@ -188,7 +188,7 @@ export async function sendSmsAction(leadId: string, form: FormData): Promise<Sen
 // ─────────────────────────── Templates ───────────────────────────
 
 // Bounded, but NOT character-filtered: a template name is a label the team invents
-// ("Follow-up 2"), and the subject/body are message copy — every character, emoji and
+// ("Follow-up 2"), and the subject/body are message copy - every character, emoji and
 // {{token}} is legitimate. The caps only stop an unbounded string reaching the DB.
 const templateSchema = z.object({
   channel: z.enum(["EMAIL", "SMS"]),
@@ -245,7 +245,7 @@ export async function updateTemplate(id: string, form: FormData): Promise<Action
         section: "conversations",
         entityType: "MessageTemplate",
         entityId: id,
-        summary: `Updated the ${d.channel} template "${d.name}" — changed ${diff.changed.join(", ")}`,
+        summary: `Updated the ${d.channel} template "${d.name}" - changed ${diff.changed.join(", ")}`,
         meta: { changed: diff.changed, before: diff.before, after: diff.after },
       });
     }
@@ -277,7 +277,7 @@ export async function deleteTemplate(id: string): Promise<ActionResult> {
 // ─────────────────────────── Channel settings (admin) ───────────────────────────
 
 // Both senders are optional: a channel can be saved half-configured (paused, no address yet),
-// so blank stays blank — but a NON-blank value must be a real address/number, or the first
+// so blank stays blank - but a NON-blank value must be a real address/number, or the first
 // send fails at the provider with an opaque error instead of here with a fixable one.
 // `fromName` is deliberately NOT kind="name": it's a brand, and "B2 Consultants" has a digit.
 const emailSettingsSchema = z.object({
@@ -310,7 +310,7 @@ export async function saveEmailSettings(form: FormData): Promise<ActionResult> {
       section: "conversations",
       entityType: "AppSetting",
       entityId: "emailConfig",
-      summary: `Updated the email channel settings — changed ${diff.changed.join(", ")}`,
+      summary: `Updated the email channel settings - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -335,7 +335,7 @@ export async function saveSmsSettings(form: FormData): Promise<ActionResult> {
       section: "conversations",
       entityType: "AppSetting",
       entityId: "smsConfig",
-      summary: `Updated the SMS channel settings — changed ${diff.changed.join(", ")}`,
+      summary: `Updated the SMS channel settings - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }

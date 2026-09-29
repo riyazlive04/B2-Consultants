@@ -52,7 +52,7 @@ type FeeIncomeRow = {
 
 /**
  * Average program fee per level from real income history. Sum per STUDENT
- * first — a fee paid in 4 instalments is one fee, not four small ones —
+ * first - a fee paid in 4 instalments is one fee, not four small ones -
  * then average those per-student totals within each level.
  */
 type AvgFeeByLevel = { SOLO: number | null; GUIDED: number | null; ELITE: number | null };
@@ -111,7 +111,7 @@ type EffectiveFee = {
 /**
  * The average program fee, resolved once and shared.
  *
- * This used to be `income.findMany()` with NO where clause — a full scan of every
+ * This used to be `income.findMany()` with NO where clause - a full scan of every
  * income row ever, run TWICE per page view (home snapshot + pipeline overview),
  * purely to average a handful of deals. Now it is:
  *   - filtered to B2 levels + a 24-month window, so it rides the [programLevel, date] index,
@@ -150,7 +150,7 @@ const getEffectiveAvgFee = cache(async (): Promise<EffectiveFee> => {
 /**
  * Drop the cross-request fee memo. Income writes can ride out the 60s TTL (the fee
  * is an estimate), but when the founder explicitly SETS the fallback fee they must
- * see it take effect on the very next render — so that action busts this directly.
+ * see it take effect on the very next render - so that action busts this directly.
  */
 export function invalidateAvgFeeCache(): void {
   feeMemo = null;
@@ -159,10 +159,10 @@ export function invalidateAvgFeeCache(): void {
 /**
  * Light founder-home snapshot: what the open pipeline is worth and how the month
  * is converting. Same INTERESTED_STAGES + avg-fee logic as getPipelineOverview,
- * but none of that function's table payloads (500 leads/outcomes) — cheap enough
+ * but none of that function's table payloads (500 leads/outcomes) - cheap enough
  * for the home page on every load.
  *
- * `range` (default "this-month") drives the home page's KPI date-range control —
+ * `range` (default "this-month") drives the home page's KPI date-range control -
  * wins/completed-calls are counted within the selected window. `interestedLeads` and
  * `pipelineValueInr` are a point-in-time snapshot of currently-open deals and are not
  * range-scoped (there's no such thing as "open deals as of last month"). Every caller
@@ -229,7 +229,7 @@ export const getPipelineSnapshot = cache(async (range: KpiRangeKey = "this-month
 
 /**
  * @param period Which window the "this month" figures cover. Defaults to the current calendar
- *   month — the behaviour before this took an argument — so existing callers are unchanged.
+ *   month - the behaviour before this took an argument - so existing callers are unchanged.
  *   The page previously rendered a `<Pill>This month</Pill>` that looked like a control and was
  *   not one; this is what makes it real.
  */
@@ -251,7 +251,7 @@ export async function getPipelineOverview(
    * Derived from the window's own boundaries rather than from `today`, so a custom or past
    * window shifts its instant range with it. `istMonthInstantRange(today)` would have silently
    * kept every stage-history figure pinned to the current month while the date-column figures
-   * moved — the two halves of the same page disagreeing.
+   * moved - the two halves of the same page disagreeing.
    */
   const ts = { start: istBoundaryToInstant(mStart), end: istBoundaryToInstant(mEnd) };
 
@@ -263,8 +263,8 @@ export async function getPipelineOverview(
    * "Own" is `assignedToId` OR `enteredById`, for the reason spelled out at `leadWhere` further
    * down: `enteredById` alone is only ever set by the hand-entry form, so on live it identifies
    * 1 lead out of 23,551 and every automated capture is invisible under it. Scoping the KPIs
-   * that way made a telecaller's whole Pipeline read zero — leads this week, leads this month,
-   * pipeline value, the call-first list, all of it — while they owned a hundred live leads.
+   * that way made a telecaller's whole Pipeline read zero - leads this week, leads this month,
+   * pipeline value, the call-first list, all of it - while they owned a hundred live leads.
    */
   const ownScope: Prisma.LeadWhereInput | undefined = isAdmin
     ? undefined
@@ -356,12 +356,12 @@ export async function getPipelineOverview(
   };
 
   // Open leads first (lean select), then history/outcomes scoped to just those
-  // ids — the unscoped groupBy walked the entire stage history on every render.
+  // ids - the unscoped groupBy walked the entire stage history on every render.
   const openLeads = await prisma.lead.findMany({
     where: { ...ACTIVE, stage: { in: OPEN_STAGES as unknown as never[] }, ...ownLeadWhere },
     select: {
       id: true, name: true, phone: true, email: true, stage: true, dateIn: true, createdAt: true,
-      // The intake score, for leads with no discovery call yet — see the ranking below.
+      // The intake score, for leads with no discovery call yet - see the ranking below.
       bantScore: true, bantAvg: true,
     },
   });
@@ -399,7 +399,7 @@ export async function getPipelineOverview(
      * That precedence is the opposite of `resolveBant`'s, and deliberately so. This is not a
      * display of "what do we know about them" but an input to "who should be rung next", and a
      * specialist who has spoken to the prospect for twenty minutes outranks any form. The intake
-     * score only fills the gap BEFORE that call happens — which, on a "call these first" list, is
+     * score only fills the gap BEFORE that call happens - which, on a "call these first" list, is
      * most of it. Until now that gap read as BANT 0 for every lead, so the ranking was driven
      * almost entirely by stage weight and age.
      */
@@ -422,7 +422,7 @@ export async function getPipelineOverview(
       now,
     );
     if (bantFromIntake && bant != null && bant > 0) {
-      // Say WHERE the score came from — a form the prospect filled in themselves is weaker
+      // Say WHERE the score came from - a form the prospect filled in themselves is weaker
       // evidence than a specialist's verdict, and the reader should be able to tell them apart.
       const i = reasons.indexOf(`BANT ${bant}/4`);
       if (i !== -1) reasons[i] = `BANT ${bant}/4 at intake`;
@@ -448,28 +448,28 @@ export async function getPipelineOverview(
   const riskDeals = scored.filter((s) => s.risk).sort((a, b) => b.idleDays - a.idleDays).slice(0, 8);
 
   /**
-   * Tables — Admin sees all; a member sees the leads that are THEIRS.
+   * Tables - Admin sees all; a member sees the leads that are THEIRS.
    *
    * ── Why this is an OR and not `enteredById` alone ────────────────────────────
-   * "Theirs" was read as `enteredById` — the user who typed the lead in by hand. That field is
+   * "Theirs" was read as `enteredById` - the user who typed the lead in by hand. That field is
    * only ever set when a human uses the New-lead form. Every lead that arrives through the Pabbly
    * relay, the Meta webhook, a native form or the Synamate import is created with no session, so
    * `enteredById` is NULL: on live it is set on 1 lead out of 23,551.
    *
-   * The result was a Pipeline that showed a telecaller ZERO leads while they owned a hundred —
+   * The result was a Pipeline that showed a telecaller ZERO leads while they owned a hundred -
    * "0 records / No records yet" on a table sitting on top of 15,457 open leads. Nothing was
    * missing and nothing had failed; the one column the filter used is the one column automated
    * capture cannot fill.
    *
    * Ownership is `assignedToId`. It is what the auto-assign rotation writes, what My Desk reads,
    * and what commission is paid on. `enteredById` is kept in the OR so someone who hand-enters a
-   * lead still sees it before the rotation gets to it — which is exactly the rule the outcome
+   * lead still sees it before the rotation gets to it - which is exactly the rule the outcome
    * form's own lead picker, twenty lines below, has always used. The two disagreed inside a
    * single function.
    */
   const leadWhere = isAdmin ? {} : { OR: [{ enteredById: viewerId }, { assignedToId: viewerId }] };
   // Outcomes stay on `enteredById`: a discovery outcome is a record of a call SOMEONE LOGGED, and
-  // there the field is genuinely populated — it is written by a signed-in specialist, never by a
+  // there the field is genuinely populated - it is written by a signed-in specialist, never by a
   // webhook. Same-looking rule, different question, so it deliberately does not change.
   const outcomeWhere = isAdmin ? {} : { enteredById: viewerId };
   const [leads, outcomes, leadOptions, assigneeRows] = await Promise.all([
@@ -485,7 +485,7 @@ export async function getPipelineOverview(
       take: 500,
       include: { lead: { select: { name: true } }, enteredBy: { select: { name: true } } },
     }),
-    // Outcome-form lead picker: non-admins only see leads they entered or own —
+    // Outcome-form lead picker: non-admins only see leads they entered or own -
     // matches the write rules in pipeline-actions and keeps the full lead book
     // (names + phones) out of a member's serialized page props.
     prisma.lead.findMany({
@@ -494,7 +494,7 @@ export async function getPipelineOverview(
       take: 500,
       select: { id: true, name: true, phone: true },
     }),
-    // Setters a lead can be assigned to — the assign control is Admin-only, so
+    // Setters a lead can be assigned to - the assign control is Admin-only, so
     // only Admin gets the roster (and never student portal accounts).
     isAdmin
       ? prisma.user.findMany({
@@ -575,7 +575,7 @@ export type OutcomeRow = PipelineOverview["outcomes"][number];
  * Leads as kanban cards, for the drag-and-drop pipeline (Part 2 §9).
  *
  * Bounded deliberately: this board renders every card at once, and the lead table holds
- * 23k+ rows. Open/live stages only, most recent first, hard-capped — a board that tried to
+ * 23k+ rows. Open/live stages only, most recent first, hard-capped - a board that tried to
  * paint the full history would hang the browser and tell nobody anything useful. WON and LOST
  * are excluded because they're outcomes, not stages you drag work through.
  */
@@ -615,7 +615,7 @@ export async function getKanbanLeads(role: string, userId: string) {
     ownerName: l.assignedTo?.name ?? null,
     valueLabel: null as string | null,
     // Mirror the server's ownership rule so the UI doesn't offer a drag that will be refused.
-    // The action re-checks regardless — this only stops the board from lying.
+    // The action re-checks regardless - this only stops the board from lying.
     canMove: role === "ADMIN" || l.enteredById === userId,
   }));
 }
@@ -635,10 +635,10 @@ export type StageAging = {
 
 /**
  * Aging analysis (issue 1.7): for every OPEN lead, how long it has sat in its CURRENT stage.
- * Time-in-stage = now − the latest LeadStageHistory.changedAt — the history is append-only, so a
+ * Time-in-stage = now − the latest LeadStageHistory.changedAt - the history is append-only, so a
  * lead's newest row is when it entered the stage it's in now (that table is indexed on
  * [toStage, changedAt]). Terminal stages (Won/Lost/No-show) don't age, so they're excluded via
- * KANBAN_STAGES. Complements the existing by-stage view — the two together are the doc's ask.
+ * KANBAN_STAGES. Complements the existing by-stage view - the two together are the doc's ask.
  */
 export async function getPipelineAging(): Promise<StageAging[]> {
   const leads = await prisma.lead.findMany({
@@ -658,7 +658,7 @@ export async function getPipelineAging(): Promise<StageAging[]> {
   const daysByStage = new Map<string, number[]>();
   for (const l of leads) {
     const at = enteredAt.get(l.id);
-    if (!at) continue; // no history row (shouldn't happen) — can't age it, skip
+    if (!at) continue; // no history row (shouldn't happen) - can't age it, skip
     const days = Math.max(0, Math.floor((now - at.getTime()) / 86_400_000));
     const arr = daysByStage.get(l.stage) ?? [];
     arr.push(days);

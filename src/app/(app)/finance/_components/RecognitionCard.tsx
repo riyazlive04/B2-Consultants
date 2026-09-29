@@ -5,14 +5,14 @@ import { formatInrMinor } from "@/lib/format";
 /**
  * Cash collected vs revenue earned, for the current month.
  *
- * WHY THIS CARD EXISTS: every other figure on this page is CASH — `Income.date` is the day money
+ * WHY THIS CARD EXISTS: every other figure on this page is CASH - `Income.date` is the day money
  * arrived. So a 120-day Elite program paid up front books its whole fee in month one, and the
  * margin shown for that month is overstated by roughly four months of delivery cost that hasn't
  * been incurred yet. The founders notice in month four, when the cash stops and the costs don't.
  *
  * IT ADDS, IT DOES NOT REPLACE. Cash is shown first and given equal weight. Both numbers are true
  * and they answer different questions; a page that quietly swapped one for the other would be the
- * same error in the opposite direction, and would also disagree with the founders' bank balance —
+ * same error in the opposite direction, and would also disagree with the founders' bank balance -
  * which is how a finance screen loses its reader for good.
  *
  * INR ONLY, deliberately. This sits outside the ₹/€ toggle because recognition is computed over a
@@ -36,7 +36,7 @@ export function RecognitionCard({
 
   return (
     <Card>
-      <CardTitle icon={<CalendarClock size={16} />}>Earned vs collected — {monthLabel}</CardTitle>
+      <CardTitle icon={<CalendarClock size={16} />}>Earned vs collected - {monthLabel}</CardTitle>
 
       <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
@@ -69,11 +69,11 @@ export function RecognitionCard({
           {variance < 0 ? (
             <>
               You collected <strong>{formatInrMinor(-variance)}</strong> more than you earned this
-              month — that difference is delivery you still owe.
+              month - that difference is delivery you still owe.
             </>
           ) : (
             <>
-              You earned <strong>{formatInrMinor(variance)}</strong> more than you collected —
+              You earned <strong>{formatInrMinor(variance)}</strong> more than you collected -
               revenue from programs sold in earlier months.
             </>
           )}

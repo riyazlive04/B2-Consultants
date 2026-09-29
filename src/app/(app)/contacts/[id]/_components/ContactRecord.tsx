@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Pencil, Plus, X, StickyNote, GitBranch, MessageCircle, PhoneCall,
+  ArrowLeft, Pencil, Plus, X, StickyNote, GitBranch, MessageCircle, PhoneCall, PhoneOutgoing,
   CalendarCheck, CheckCircle2, Pin, Trash2, Clock, GraduationCap,
 } from "lucide-react";
 import type { CustomFieldDefinition } from "@prisma/client";
@@ -42,7 +42,10 @@ const TONE_TEXT: Record<Tone, string> = {
 
 const KIND_ICON = {
   NOTE: StickyNote, STAGE_CHANGE: GitBranch, WHATSAPP: MessageCircle,
-  OUTCOME: PhoneCall, BOOKING: CalendarCheck, TASK: CheckCircle2,
+  // OUTCOME is a DISCOVERY call graded by the specialist; CALL is one dial by a telecaller. Two
+  // different events that both involve a phone, so they get two different phone icons rather than
+  // one - a timeline where the give-up is preceded by three identical rows explains nothing.
+  OUTCOME: PhoneCall, CALL: PhoneOutgoing, BOOKING: CalendarCheck, TASK: CheckCircle2,
 } as const;
 
 function prettyStage(s: string) {
@@ -126,7 +129,7 @@ export default function ContactRecord({
               <div className="min-w-0 flex-1">
                 <h1 className="font-display text-h2 text-ink">{contact.name}</h1>
                 <p className="text-sm text-ink-2">{contact.phone ?? "No phone"}</p>
-                {contact.email && <p className="truncate text-sm text-ink-3">{contact.email}</p>}
+                {contact.email && <p className="truncate text-sm text-ink-3" title={contact.email}>{contact.email}</p>}
               </div>
               <Link href={`/conversations?contact=${contact.id}`}>
                 <IconButton label="Message contact"><MessageCircle size={16} /></IconButton>
@@ -152,9 +155,9 @@ export default function ContactRecord({
                   options={ownerOpts}
                 />
               </Row>
-              <Row label="Company">{contact.companyName ?? <span className="text-ink-3">—</span>}</Row>
-              <Row label="City">{contact.city ?? <span className="text-ink-3">—</span>}</Row>
-              <Row label="Industry">{contact.industry ?? <span className="text-ink-3">—</span>}</Row>
+              <Row label="Company">{contact.companyName ?? <span className="text-ink-3">-</span>}</Row>
+              <Row label="City">{contact.city ?? <span className="text-ink-3">-</span>}</Row>
+              <Row label="Industry">{contact.industry ?? <span className="text-ink-3">-</span>}</Row>
               <Row label="Created"><DateText date={contact.createdAt} /></Row>
             </div>
 
@@ -167,10 +170,10 @@ export default function ContactRecord({
             )}
           </Card>
 
-          {/* Agreement — the next action on this contract, wherever it currently stands. */}
+          {/* Agreement - the next action on this contract, wherever it currently stands. */}
           <AgreementTaskCard summary={agreement} />
 
-          {/* How they qualified — the landing page's own answers. */}
+          {/* How they qualified - the landing page's own answers. */}
           <BantCard contact={contact} />
 
           {/* Tags */}
@@ -216,7 +219,7 @@ export default function ContactRecord({
                             aria-label={f.name}
                             value={cfValues[f.key] ?? ""}
                             onChange={(e) => setCfValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                            options={[{ value: "", label: "—" }, ...(f.options as string[]).map((o) => ({ value: o, label: o }))]}
+                            options={[{ value: "", label: "-" }, ...(f.options as string[]).map((o) => ({ value: o, label: o }))]}
                           />
                         </div>
                       ) : (
@@ -263,7 +266,7 @@ export default function ContactRecord({
             <Field label="City"><TextInput kind="city" name="city" defaultValue={contact.city ?? ""} /></Field>
             <Field label="Industry"><TextInput name="industry" defaultValue={contact.industry ?? ""} /></Field>
             <Field label="Company">
-              <Select name="companyId" options={[{ value: "", label: "— none —" }, ...companies.map((c) => ({ value: c.id, label: c.name }))]} defaultValue={contact.companyId ?? ""} />
+              <Select name="companyId" options={[{ value: "", label: "- none -" }, ...companies.map((c) => ({ value: c.id, label: c.name }))]} defaultValue={contact.companyId ?? ""} />
             </Field>
           </div>
           <FormError message={editError} />
@@ -321,7 +324,7 @@ function Notes({ contact }: { contact: ContactDetail }) {
     setError(null);
     const res = await createNote(contact.id, fd);
     if (!res.ok) return setError(res.error);
-    toast(res.mentionedCount ? `Note added — mentioned ${res.mentionedCount}` : "Note added");
+    toast(res.mentionedCount ? `Note added - mentioned ${res.mentionedCount}` : "Note added");
     ref.current?.reset();
   }
   return (
@@ -338,7 +341,7 @@ function Notes({ contact }: { contact: ContactDetail }) {
             <p className="whitespace-pre-wrap text-sm text-ink">{n.body}</p>
             <div className="mt-2 flex items-center justify-between">
               <span className="text-caption text-ink-3">
-                {n.authorName ?? "—"} · <DateText date={n.createdAt} />
+                {n.authorName ?? "-"} · <DateText date={n.createdAt} />
               </span>
               <div className="flex items-center gap-1">
                 {n.pinned && <Pill tone="warn">Pinned</Pill>}
@@ -360,7 +363,7 @@ function Notes({ contact }: { contact: ContactDetail }) {
 function ContactTasks({ contact, owners }: { contact: ContactDetail; owners: { id: string; name: string }[] }) {
   const ref = useRef<HTMLFormElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const ownerOpts = [{ value: "", label: "— unassigned —" }, ...owners.map((o) => ({ value: o.id, label: o.name }))];
+  const ownerOpts = [{ value: "", label: "- unassigned -" }, ...owners.map((o) => ({ value: o.id, label: o.name }))];
   async function add(fd: FormData) {
     setError(null);
     fd.set("leadId", contact.id);
@@ -425,7 +428,54 @@ function Opps({ contact }: { contact: ContactDetail }) {
 }
 
 /**
- * How this person qualified — the band score and the answers behind it.
+ * One answer's contribution: which BANT dimension it speaks to, and the 0-4 it scored.
+ *
+ * A question that scores nothing renders as a dash rather than a 0. They are different facts -
+ * "we asked and they answered badly" versus "this was context, it was never worth marks" - and
+ * a 0 against a context question is the fastest way to make a specialist distrust the whole card.
+ */
+function AnswerScore({ line }: { line: ContactDetail["answers"][number] }) {
+  const letter = line.dimension === "NONE" ? null : line.dimension[0];
+  return (
+    <span className="flex flex-none items-center gap-1.5">
+      {letter && (
+        <span
+          title={`Counts towards ${line.dimension.toLowerCase()}`}
+          className="grid h-5 w-5 place-items-center rounded bg-surface-2 text-caption font-bold text-ink-3"
+        >
+          {letter}
+        </span>
+      )}
+      {line.score === null ? (
+        <span className="text-caption text-ink-3" title="Context only - this question scores nothing">
+          -
+        </span>
+      ) : (
+        <span
+          title={
+            line.counted
+              ? `Scored ${line.score} out of 4${line.derived ? " by the current scoring table" : ""}`
+              : `Scored ${line.score} out of 4, but this question no longer divides the average`
+          }
+          className={`tnum rounded px-1.5 py-0.5 text-caption font-semibold ${
+            !line.counted
+              ? "bg-surface-2 text-muted"
+              : line.score >= 3
+                ? "bg-ok-soft text-ok"
+                : line.score >= 2
+                  ? "bg-warn-soft text-warn"
+                  : "bg-risk-soft text-risk"
+          }`}
+        >
+          {line.score}/4
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * How this person qualified - the band score and the answers behind it.
  *
  * ── Why this card exists ────────────────────────────────────────────────────────
  * The contact record showed NO score at all. `resolveBant` was consumed by Bookings, My Desk and
@@ -434,7 +484,7 @@ function Opps({ contact }: { contact: ContactDetail }) {
  * landing page had been collecting these answers the whole time.
  *
  * ── The rule this card exists to honour ─────────────────────────────────────────
- * NOT SCORED IS NOT ZERO. An unscored prospect is one nobody has asked; showing them as 0.0/5
+ * NOT SCORED IS NOT ZERO. An unscored prospect is one nobody has asked; showing them as 0.0/4
  * would rank them alongside someone who answered badly, and the good lead loses. The empty state
  * says which of the two it is, and why.
  */
@@ -446,7 +496,7 @@ function BantCard({ contact }: { contact: ContactDetail }) {
       <Card title="Qualification">
         <p className="text-sm text-ink-3">
           <span className="font-semibold text-ink-2">Not scored.</span> Nobody has asked this
-          prospect the qualification questions — or the landing page&apos;s answers did not reach
+          prospect the qualification questions - or the landing page&apos;s answers did not reach
           us. This is <em>not</em> a low score; it is no evidence either way.
         </p>
       </Card>
@@ -465,7 +515,7 @@ function BantCard({ contact }: { contact: ContactDetail }) {
     <Card title="Qualification">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-display text-3xl font-bold tabular-nums text-ink">{b.avg.toFixed(1)}</span>
-        <span className="text-sm text-ink-3">/ 5</span>
+        <span className="text-sm text-ink-3">/ 4</span>
         <Pill tone={tone}>{BANT_VERDICT_LABELS[b.verdict] ?? b.verdict}</Pill>
       </div>
       <p className="mt-1 text-caption text-ink-3">
@@ -491,17 +541,26 @@ function BantCard({ contact }: { contact: ContactDetail }) {
       </div>
 
       {contact.answers.length > 0 ? (
-        <dl className="mt-4 space-y-2 border-t border-line pt-3">
-          {contact.answers.map((a, i) => (
-            <div key={`${a.question}-${i}`}>
-              <dt className="text-caption text-ink-3">{a.question}</dt>
-              <dd className="text-sm font-medium text-ink">{a.answer}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className="mt-4 border-t border-line pt-3">
+          <p className="text-caption text-ink-3">
+            What they answered, and what each answer scored. A greyed score is one that no longer
+            divides the average - the form stopped asking it.
+          </p>
+          <dl className="mt-2 divide-y divide-line">
+            {contact.answers.map((a, i) => (
+              <div key={`${a.question}-${i}`} className="flex items-start justify-between gap-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <dt className="text-caption text-ink-3" title={a.question}>{a.question}</dt>
+                  <dd className="text-sm font-medium text-ink">{a.answer}</dd>
+                </div>
+                <AnswerScore line={a} />
+              </div>
+            ))}
+          </dl>
+        </div>
       ) : (
         <p className="mt-3 border-t border-line pt-3 text-caption text-ink-3">
-          A score was recorded but the individual answers were not kept — this prospect was scored
+          A score was recorded but the individual answers were not kept - this prospect was scored
           before answers were being stored.
         </p>
       )}

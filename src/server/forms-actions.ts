@@ -14,6 +14,7 @@ import { upsertIntakeLead } from "./lead-intake";
 import { observedOriginDomain } from "./request-origin";
 import { ensureDefaultOpportunity } from "./opportunity-sync";
 import { emitTrigger } from "./automation";
+import { afterResponse } from "./after-response";
 import { logActivity, diffFields } from "./activity-log";
 import {
   defaultFormFields, defaultFormSettings, slugify, CONTACT_FIELD_KEYS,
@@ -26,7 +27,7 @@ import type { ActionResult } from "./finance-actions";
 
 /**
  * Native Forms (Synamate "Forms"). Admin CRUD is gated to the `forms` section; `submitPublicForm`
- * is PUBLIC (no session) — rate-limited + honeypot-guarded — and routes captures through the same
+ * is PUBLIC (no session) - rate-limited + honeypot-guarded - and routes captures through the same
  * idempotent lead-intake the webhooks use, so submissions land straight in the CRM.
  */
 
@@ -80,8 +81,8 @@ export async function createForm(form: FormData): Promise<ActionResult> {
 /**
  * The two settings the app later consumes as DATA rather than rendering as copy:
  *
- *   redirectUrl         — handed to `window.location.href` by PublicForm after a submit.
- *   opportunityValueInr — parsed into paise by `majorStringToMinor` on the public submit path.
+ *   redirectUrl         - handed to `window.location.href` by PublicForm after a submit.
+ *   opportunityValueInr - parsed into paise by `majorStringToMinor` on the public submit path.
  *
  * Re-checked here because `saveForm` takes a typed payload rather than FormData: TypeScript is not
  * a runtime gate, so the builder's character filter is UX only and this is the real one. The rest of
@@ -91,13 +92,13 @@ export async function createForm(form: FormData): Promise<ActionResult> {
  * A SITE-RELATIVE redirect target: "/p/vsl-funnel/vsl".
  *
  * The `url` rule below adds a missing scheme, which is right for a lead typing
- * "linkedin.com/in/x" and wrong here — it turns "/p/vsl-funnel/vsl" into the
+ * "linkedin.com/in/x" and wrong here - it turns "/p/vsl-funnel/vsl" into the
  * nonsense host "https://p/vsl-funnel/vsl". Funnel steps redirect WITHIN this app,
  * so pinning the host would hardcode localhost into data that also has to work on
  * the live domain. `window.location.href = "/p/..."` already resolves against the
  * current origin, so the relative form is the portable one.
  *
- * A single leading slash only. "//evil.com" is protocol-relative — it LOOKS like a
+ * A single leading slash only. "//evil.com" is protocol-relative - it LOOKS like a
  * path and navigates off-site, which is the open-redirect this guards against.
  */
 const sitePathSchema = z
@@ -111,7 +112,7 @@ const formValueSettingsSchema = z.object({
 });
 
 /**
- * Structural checks on the item list that `normaliseItems` cannot make on its own — it sanitises
+ * Structural checks on the item list that `normaliseItems` cannot make on its own - it sanitises
  * each item in isolation, whereas these are all statements about the list as a whole.
  *
  * Returns the first problem in the author's words, or null.
@@ -166,7 +167,7 @@ export async function saveForm(
   const session = await requireSection("forms");
   if (!payload.name.trim()) return { ok: false, error: "Form name is required" };
 
-  // A server action's argument is wire data, not a typed object — the TypeScript signature above
+  // A server action's argument is wire data, not a typed object - the TypeScript signature above
   // is a claim about the intended caller, not a guarantee about the actual one. Normalising here
   // is what makes the length caps and the type whitelist real rather than advisory.
   const fields = normaliseItems(payload.fields);
@@ -180,7 +181,7 @@ export async function saveForm(
   if (!values.success) {
     return { ok: false, error: values.error.issues[0]?.message ?? "Check the form settings" };
   }
-  // Store the NORMALISED values — `url` adds a missing scheme, so what the public page redirects to
+  // Store the NORMALISED values - `url` adds a missing scheme, so what the public page redirects to
   // is the parsed link, not the raw typing.
   const settings: FormSettings = { ...normaliseSettings(payload.settings), ...values.data };
 
@@ -194,7 +195,7 @@ export async function saveForm(
     },
   });
   // The builder PUTs the whole form on every save, so the JSON columns are compared but never
-  // copied into the log — the founder wants "the fields changed", not a diff of every question.
+  // copied into the log - the founder wants "the fields changed", not a diff of every question.
   const named = diffFields({ name: before?.name ?? "" }, { name: payload.name.trim() });
   const changed = [
     ...named.changed,
@@ -264,13 +265,13 @@ export type SubmitResult =
 /**
  * Read one answer per question out of the posted FormData.
  *
- * Multi-select posts the same name several times, so it needs `getAll` — `get` would keep the
+ * Multi-select posts the same name several times, so it needs `getAll` - `get` would keep the
  * first box ticked and silently discard the rest, which is the sort of loss nobody notices until
  * they compare a response against what the person says they chose.
  *
  * "Other" arrives as two controls: the option itself posts a sentinel, and the free text posts
- * under a companion name. They are folded into one answer here so that everything downstream —
- * validation, storage, the summary charts, the CSV — sees a plain string.
+ * under a companion name. They are folded into one answer here so that everything downstream -
+ * validation, storage, the summary charts, the CSV - sees a plain string.
  */
 function collectAnswers(items: readonly FormItem[], form: FormData): FormAnswers {
   const out: FormAnswers = {};
@@ -299,7 +300,7 @@ function collectAnswers(items: readonly FormItem[], form: FormData): FormAnswers
 
 export async function submitPublicForm(slug: string, form: FormData): Promise<SubmitResult> {
   // Per-IP plus a whole-site ceiling, charged atomically. A form submission costs a row, a
-  // possible automation enrolment and (through that) possible outbound sends — cheaper than a
+  // possible automation enrolment and (through that) possible outbound sends - cheaper than a
   // booking, hence the looser numbers, but still not free.
   //
   // Keyed on the SLUG as well as the IP: the per-form bucket means someone hammering one funnel
@@ -312,7 +313,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
   if (!gate.ok) {
     return { ok: false, error: "Too many submissions. Please try again in a few minutes." };
   }
-  // Honeypot — bots fill hidden fields; humans never see them.
+  // Honeypot - bots fill hidden fields; humans never see them.
   if (String(form.get("company_website") ?? "").trim()) {
     return { ok: true, message: "Thanks!" };
   }
@@ -333,7 +334,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
    *
    * The honeypot above catches anything that fills every input it finds; this catches the ones
    * that don't, by timing. A form that comes back in under a second and a half was not read. The
-   * stamp is client-supplied and therefore forgeable — which is fine, because this sits behind a
+   * stamp is client-supplied and therefore forgeable - which is fine, because this sits behind a
    * per-IP rate limit and in front of nothing valuable: the cost of a false negative is one junk
    * lead, and the cost of a false POSITIVE is a real person being told their enquiry failed. So
    * it silently accepts-and-drops rather than erroring, exactly like the honeypot.
@@ -354,7 +355,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
    * Enforce `required` against the questions this respondent was actually SHOWN.
    *
    * With branching, some sections are skipped by design. Validating every declared question would
-   * make a form with a branch permanently unsubmittable for whoever took the short path — and only
+   * make a form with a branch permanently unsubmittable for whoever took the short path - and only
    * for them, so it presents as "some people can't submit", which is about the hardest bug shape
    * there is to reproduce from a support message.
    */
@@ -384,7 +385,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
   /**
    * The score, stamped in as an ordinary answer.
    *
-   * Computed here from the items and the answers, never read off the post — see `computeScore`.
+   * Computed here from the items and the answers, never read off the post - see `computeScore`.
    * It lands in `data` before the custom-fields blob is built, so it reaches the contact record
    * with no special handling anywhere downstream.
    */
@@ -399,7 +400,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
    * The contact's name.
    *
    * The palette offers "Full Name" AND a First/Last pair, because Synamate's does and the live
-   * opt-in uses the split. A lead needs one name, and `upsertIntakeLead` refuses without it — so
+   * opt-in uses the split. A lead needs one name, and `upsertIntakeLead` refuses without it - so
    * a form built the split way would capture nothing at all into the pipeline while looking like
    * it worked. Full name wins when present; otherwise the two halves are joined.
    */
@@ -407,6 +408,8 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
   const phone = text("phone");
 
   let leadId: string | null = null;
+  /** Set only when a lead was captured; run after the response - see where it is assigned. */
+  let deferredSideEffects: (() => Promise<void>) | null = null;
   if (name && phone) {
     const { lead } = await upsertIntakeLead({
       name,
@@ -419,7 +422,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
       externalRef: null,
       utm: Object.keys(utm).length ? utm : null,
       originDomain: await observedOriginDomain(),
-    });
+    }, { announceReturning: true });
     leadId = lead.id;
 
     // Custom answers (non-contact keys) → the contact's customFields blob.
@@ -427,64 +430,105 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
     for (const [k, v] of Object.entries(data)) {
       if (!(CONTACT_FIELD_KEYS as readonly string[]).includes(k)) extra[k] = answerToText(v);
     }
-    if (Object.keys(extra).length) {
-      const cur = (await prisma.lead.findUnique({ where: { id: leadId }, select: { customFields: true } }))?.customFields as Record<string, string> | null;
-      await prisma.lead.update({
-        where: { id: leadId },
-        data: { customFields: { ...(cur ?? {}), ...extra } as Prisma.InputJsonObject },
-      });
-    }
-
-    if (settings.tag) {
-      const tagName = settings.tag.trim().toLowerCase();
-      const tag = await prisma.tag.upsert({ where: { name: tagName }, update: {}, create: { name: tagName } });
-      await prisma.lead.update({ where: { id: leadId }, data: { tags: { connect: { id: tag.id } } } });
-    }
-
-    if (settings.createOpportunity && settings.pipelineId && settings.stageId) {
-      /**
-       * `deletedAt: null` on the stage AND its pipeline — the guard this lookup used to be missing.
-       *
-       * A form's `stageId` is frozen at configuration time, but a column can be soft-deleted long
-       * afterwards, and `deleteStage` only refuses when the column ALREADY holds cards — nothing
-       * stopped new ones being written into a deleted one. The board renders live columns only
-       * (opportunities-metrics), so such a card is created, counted in every total, and invisible
-       * on the board. Seen in production on 06/08/2026: the "Free Consultation" form still pointed
-       * at a "New Lead" column deleted the day before, so its captures silently went nowhere.
-       */
-      const stage = await prisma.pipelineStage.findFirst({
-        where: {
-          id: settings.stageId,
-          pipelineId: settings.pipelineId,
-          deletedAt: null,
-          pipeline: { deletedAt: null },
-        },
-        select: { pipelineId: true },
-      });
-      if (!stage) {
-        // The configured column is gone. File the lead onto the default board instead of dropping
-        // it — a card in the wrong column is recoverable, a capture nobody can see is not. Costs
-        // the form's own name/value settings, which is the right trade against losing the lead.
-        await ensureDefaultOpportunity(prisma, leadId);
-      } else {
-        const fx = await getTodayInrPerEur();
-        const inr = settings.opportunityValueInr?.trim() ? majorStringToMinor(settings.opportunityValueInr) : 0n;
-        const max = await prisma.opportunity.aggregate({ where: { stageId: settings.stageId }, _max: { position: true } });
-        await prisma.opportunity.create({
-          data: {
-            leadId,
-            pipelineId: settings.pipelineId,
-            stageId: settings.stageId,
-            name,
-            valueInrMinor: inr,
-            valueEurMinor: inrMinorToEurMinor(inr, fx.rate),
-            fxRateUsed: fx.rate,
-            source: toLeadSource(settings.leadSource),
-            position: (max._max.position ?? -1) + 1,
-          },
+    /**
+     * Everything from here on happens AFTER this person is told "Thanks!".
+     *
+     * The lead row and the submission row are still written inside the request - those ARE the
+     * capture, and losing one is the only failure this path cannot recover from. What used to
+     * follow them, and no longer does, is a queue of work the submitter has no stake in and was
+     * being charged for anyway, at ~310ms per cross-region round trip (see `after-response.ts`):
+     * the custom-answers blob, the tag, the opportunity card (which pulls a live FX rate over
+     * HTTP), and then `emitTrigger`, which runs the automation engine INLINE - executing every
+     * send step of every matching workflow, each an outbound WATI call, until one of them
+     * happens to hit a WAIT. A form with a three-message welcome sequence made the visitor wait
+     * for all three to be delivered before their own browser was allowed to say "Thanks!".
+     *
+     * Kept as ONE sequential block rather than several, because the order inside it is load
+     * bearing: a workflow can branch on a tag (`IF_TAG`), so the tag must be written before
+     * `emitTrigger` looks at it - exactly the order these ran in before.
+     */
+    const capturedLeadId = lead.id;
+    deferredSideEffects = async () => {
+      const leadId = capturedLeadId;
+      if (Object.keys(extra).length) {
+        const cur = (await prisma.lead.findUnique({ where: { id: leadId }, select: { customFields: true } }))?.customFields as Record<string, string> | null;
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: { customFields: { ...(cur ?? {}), ...extra } as Prisma.InputJsonObject },
         });
       }
-    }
+
+      if (settings.tag) {
+        const tagName = settings.tag.trim().toLowerCase();
+        const tag = await prisma.tag.upsert({ where: { name: tagName }, update: {}, create: { name: tagName } });
+        await prisma.lead.update({ where: { id: leadId }, data: { tags: { connect: { id: tag.id } } } });
+      }
+
+      if (settings.createOpportunity && settings.pipelineId && settings.stageId) {
+        /**
+         * `deletedAt: null` on the stage AND its pipeline - the guard this lookup used to be missing.
+         *
+         * A form's `stageId` is frozen at configuration time, but a column can be soft-deleted long
+         * afterwards, and `deleteStage` only refuses when the column ALREADY holds cards - nothing
+         * stopped new ones being written into a deleted one. The board renders live columns only
+         * (opportunities-metrics), so such a card is created, counted in every total, and invisible
+         * on the board. Seen in production on 06/08/2026: the "Free Consultation" form still pointed
+         * at a "New Lead" column deleted the day before, so its captures silently went nowhere.
+         */
+        const stage = await prisma.pipelineStage.findFirst({
+          where: {
+            id: settings.stageId,
+            pipelineId: settings.pipelineId,
+            deletedAt: null,
+            pipeline: { deletedAt: null },
+          },
+          select: { pipelineId: true },
+        });
+        if (!stage) {
+          // The configured column is gone. File the lead onto the default board instead of dropping
+          // it - a card in the wrong column is recoverable, a capture nobody can see is not. Costs
+          // the form's own name/value settings, which is the right trade against losing the lead.
+          await ensureDefaultOpportunity(prisma, leadId);
+        } else {
+          /**
+           * One card per person per pipeline. The submission is deduped onto an existing LEAD
+           * above, but this used to create a fresh card every time regardless - so someone who
+           * filled the form twice (or came back after their card was deleted) showed up on the
+           * board as two identical "Mohamed Riyaz" cards. If a live card already exists on this
+           * pipeline the submission is recorded and the existing card stands where it is.
+           */
+          const alreadyOnBoard = await prisma.opportunity.findFirst({
+            where: { leadId, pipelineId: settings.pipelineId, deletedAt: null },
+            select: { id: true },
+          });
+          if (!alreadyOnBoard) {
+            const fx = await getTodayInrPerEur();
+            const inr = settings.opportunityValueInr?.trim() ? majorStringToMinor(settings.opportunityValueInr) : 0n;
+            const max = await prisma.opportunity.aggregate({ where: { stageId: settings.stageId }, _max: { position: true } });
+            // The card is born with the lead's owner, so the rotation's choice is visible on the
+            // board from the first paint rather than only on the desk.
+            const owner = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+            await prisma.opportunity.create({
+              data: {
+                leadId,
+                pipelineId: settings.pipelineId,
+                stageId: settings.stageId,
+                name,
+                valueInrMinor: inr,
+                valueEurMinor: inrMinorToEurMinor(inr, fx.rate),
+                fxRateUsed: fx.rate,
+                source: toLeadSource(settings.leadSource),
+                assignedToId: owner?.assignedToId ?? null,
+                position: (max._max.position ?? -1) + 1,
+              },
+            });
+          }
+        }
+      }
+      // Enrol into any workflow watching this form. Runs the engine, so it is the single
+      // slowest thing here and the one that most needed to stop blocking a response.
+      await emitTrigger("FORM_SUBMITTED", { leadId, formId: dbForm.id });
+    };
   }
 
   await prisma.$transaction([
@@ -510,7 +554,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
     });
   }
 
-  if (leadId) await emitTrigger("FORM_SUBMITTED", { leadId, formId: dbForm.id });
+  if (deferredSideEffects) afterResponse(`form-submit:${dbForm.slug}`, deferredSideEffects);
 
   revalidatePath("/contacts");
   revalidatePath(`/forms/${dbForm.id}`);

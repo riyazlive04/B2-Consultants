@@ -9,7 +9,7 @@ import type { AgreementData } from "@/lib/agreement";
  *
  * Rendered live from the same component the sealed copy will use, so "what they read" and "what
  * they signed" cannot differ. It carries an UNSIGNED watermark and no student signature, and the
- * content hash in its header is the same one that will appear on the executed copy — which is how
+ * content hash in its header is the same one that will appear on the executed copy - which is how
  * the student can tell the two are the same terms.
  */
 
@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: { token: string } }) {
   const ip = clientIpFrom(new Headers(req.headers));
-  // A token is unguessable, but rendering is CPU-bound — don't let a leaked link become a lever.
+  // A token is unguessable, but rendering is CPU-bound - don't let a leaked link become a lever.
   if (!rateLimitOk(`agr:pdf:ip:${ip}`, 60, 60 * 60_000)) {
     return new NextResponse("Too many requests", { status: 429 });
   }

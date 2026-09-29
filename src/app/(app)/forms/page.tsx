@@ -13,7 +13,7 @@ export default async function FormsPage() {
 
   return (
     <div className="w-full space-y-4">
-      <ListHeader title="Forms" count={forms.length} subtitle="capture forms — submissions land straight in Contacts" />
+      <ListHeader title="Forms" count={forms.length} subtitle="capture forms - submissions land straight in Contacts" />
       <FormsList forms={forms} canDelete={canDelete} />
     </div>
   );

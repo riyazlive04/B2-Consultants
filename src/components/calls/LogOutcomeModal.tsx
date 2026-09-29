@@ -9,22 +9,22 @@ import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/feedback";
 
 /**
- * "Log outcome" — the one modal BOTH specialist desks use to record a call.
+ * "Log outcome" - the one modal BOTH specialist desks use to record a call.
  *
  * ── Why this is shared, and why that was the bug ─────────────────────────────────
  * This lived inside `L1Desk.tsx`. `L2Desk` had no equivalent: its only outcome control was
  * `RouteModal`, attached to today's BOOKED calls. So a Level 2 specialist could record the
  * outcome of a scheduled discovery call and had NO WAY AT ALL to record an ordinary call to one
- * of her own leads — the "Your leads" rows offered a dial button and nothing else.
+ * of her own leads - the "Your leads" rows offered a dial button and nothing else.
  *
  * That is not a cosmetic gap. On 4 Aug 2026 production held 23,545 leads, zero appointment slots
  * and zero bookings, which meant `desk.today` was empty for every discovery specialist on every
  * day: Asma's desk contained no outcome control under any circumstance, and the whole app had
- * logged one call. The affordance existed the entire time — on the other desk.
+ * logged one call. The affordance existed the entire time - on the other desk.
  *
  * ── Two vocabularies, one modal ──────────────────────────────────────────────────
- * A call to a lead with no booking is a CHASE — "did I reach them, and where did that leave
- * them" — which is L1's outcome set and L1's next-stage list. A booked discovery call that has
+ * A call to a lead with no booking is a CHASE - "did I reach them, and where did that leave
+ * them" - which is L1's outcome set and L1's next-stage list. A booked discovery call that has
  * happened is a ROUTING decision, which is `RouteModal`'s job and stays there. So this component
  * is the chase form, used by both desks, and `RouteModal` remains the post-call form used by one.
  * Forking a third variant is what let them drift apart in the first place.
@@ -32,7 +32,7 @@ import { toast } from "@/components/ui/feedback";
  * ── Offline ──────────────────────────────────────────────────────────────────────
  * `queueCall` is optional. When supplied (L1, and now L2) a failed send is stored in IndexedDB
  * and replayed with its ORIGINAL time; when omitted the modal is online-only. Passing it is
- * strongly preferred — these are phone calls, made on phones, often with one bar of signal.
+ * strongly preferred - these are phone calls, made on phones, often with one bar of signal.
  */
 
 const OUTCOME_OPTIONS = [
@@ -44,22 +44,33 @@ const OUTCOME_OPTIONS = [
   { value: "NOT_INTERESTED", label: "Not interested" },
 ];
 
-/** The outcomes that close the lead by themselves — see `stageAfterCall`. */
+/** The outcomes that close the lead by themselves - see `stageAfterCall`. */
 const AUTO_CLOSING = new Set(["NOT_INTERESTED", "WRONG_NUMBER"]);
 
 export type LogOutcomeTarget = { id: string; name: string; phone: string | null };
+
+const IST_TIME = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Kolkata",
+});
 
 export function LogOutcomeModal({
   lead,
   onClose,
   queueCall,
   online = true,
+  calledAt,
 }: {
   lead: LogOutcomeTarget;
   onClose: () => void;
   /** Offline fallback. Omit for an online-only desk; supplying it is strongly preferred. */
   queueCall?: (leadId: string, outcome: string, notes: string, nextStage?: string) => Promise<boolean>;
   online?: boolean;
+  /**
+   * When the Call button was pressed. Set by `DialButton`, which opens this modal as the call
+   * ends; the instant travels with the outcome so the logged call time is the dial, not the
+   * moment the notes were finished. Absent when opened from a plain "Log outcome" button.
+   */
+  calledAt?: Date;
 }) {
   const [error, setError] = useState<string | null>(null);
   // Mirrors the form's own default so the stage control's visibility tracks the select.
@@ -67,7 +78,12 @@ export function LogOutcomeModal({
   const autoCloses = AUTO_CLOSING.has(outcome);
 
   return (
-    <Modal open onClose={onClose} title={`Log outcome — ${lead.name}`} subtitle={lead.phone ?? undefined}>
+    <Modal
+      open
+      onClose={onClose}
+      title={`Log outcome - ${lead.name}`}
+      subtitle={[lead.phone, calledAt ? `call started ${IST_TIME.format(calledAt)} IST` : null].filter(Boolean).join(" · ") || undefined}
+    >
       <form
         action={async (form) => {
           setError(null);
@@ -78,7 +94,7 @@ export function LogOutcomeModal({
           const nextStage = String(form.get("nextStage") ?? "");
 
           /**
-           * The online action stays the primary path — it is the one that has been exercised,
+           * The online action stays the primary path - it is the one that has been exercised,
            * and it keeps working in browsers where IndexedDB is unavailable (private mode,
            * some embedded webviews). The queue is the FALLBACK, entered either because the
            * device already knows it is offline or because the call actually failed to travel.
@@ -94,7 +110,7 @@ export function LogOutcomeModal({
                 "No connection, and this device cannot store the call offline. Please note it down and log it when you are back online.",
               );
             }
-            toast(`Saved on this device — ${reason}. It will sync when you are back online.`);
+            toast(`Saved on this device - ${reason}. It will sync when you are back online.`);
             onClose();
           };
 
@@ -102,7 +118,7 @@ export function LogOutcomeModal({
 
           try {
             const res = await logCall(lead.id, form);
-            // A rejection from the server is a real answer (bad input, missing lead) — the
+            // A rejection from the server is a real answer (bad input, missing lead) - the
             // request travelled, so queueing it would just fail again later.
             if (!res.ok) return setError(res.error);
             toast("Outcome logged");
@@ -113,6 +129,8 @@ export function LogOutcomeModal({
         }}
         className="space-y-4"
       >
+        {/* The dial instant rides along with the outcome. See `calledAt` above. */}
+        {calledAt && <input type="hidden" name="calledAt" value={calledAt.toISOString()} />}
         <Field label="What happened?">
           <Select
             name="outcome"
@@ -124,7 +142,7 @@ export function LogOutcomeModal({
 
         {/* ── Where the conversation left them ──────────────────────────────────────────
             The JD scores this person on "pipeline updated before end of day: 100%", and until
-            now the only control that could move a card lived on the Pipeline screen — so the
+            now the only control that could move a card lived on the Pipeline screen - so the
             desk measured something it did not let them do. This is that control, on the form
             they are already filling in.
 
@@ -153,7 +171,7 @@ export function LogOutcomeModal({
         </Field>
         <p className="text-caption text-muted">
           {autoCloses
-            ? "This closes the lead automatically — no stage to set."
+            ? "This closes the lead automatically - no stage to set."
             : "Setting a stage here moves the card on the pipeline too, so you don't have to do it twice."}
         </p>
         <div className="flex items-center justify-between gap-3">

@@ -6,7 +6,7 @@ import { PipelinesTable } from "../_components/PipelinesTable";
 export const dynamic = "force-dynamic";
 
 /**
- * Pipelines — the management list behind the board.
+ * Pipelines - the management list behind the board.
  *
  * Gated on the same section as the board (`opportunities`), but every mutation on it additionally
  * needs the `pipeline.configure` capability, which is checked inside each server action. So a

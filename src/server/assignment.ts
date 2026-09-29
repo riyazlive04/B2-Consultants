@@ -33,7 +33,7 @@ export type RotationMember = {
   /**
    * Leads assigned inside the configured lookback window.
    *
-   * Was `assigned30d`, which stopped being true the moment the window became founder-editable —
+   * Was `assigned30d`, which stopped being true the moment the window became founder-editable -
    * a field name that quietly lies is worse than a vague one.
    */
   assignedInWindow: number;
@@ -41,7 +41,7 @@ export type RotationMember = {
   actualPct: number;
   /** Excluded right now by the Saturday rule. */
   offToday: boolean;
-  /** Auto-assigned so far in the current IST day — measured against the daily cap. */
+  /** Auto-assigned so far in the current IST day - measured against the daily cap. */
   assignedToday: number;
   /** At or past the configured daily ceiling, so the rotation will skip them. */
   atDailyCap: boolean;
@@ -66,7 +66,7 @@ async function loadRotation(now: Date): Promise<RotationMember[]> {
       where: { ...ACTIVE, assignedToId: { in: userIds }, createdAt: { gte: since } },
       _count: { _all: true },
     }),
-    // Only queried when a cap is actually set — otherwise it is a round trip on the lead-capture
+    // Only queried when a cap is actually set - otherwise it is a round trip on the lead-capture
     // path that can never change the answer.
     cfg.dailyCapPerPerson > 0
       ? prisma.lead.groupBy({
@@ -99,8 +99,46 @@ async function loadRotation(now: Date): Promise<RotationMember[]> {
   });
 }
 
-/** The userId a fresh lead should go to right now, or null when no rotation is configured. */
+/**
+ * Has the rotation already auto-assigned its configured share of recent intake?
+ *
+ * ── Why this is measured, not rolled ─────────────────────────────────────────────────
+ * "Auto-assign 60% of leads" has two possible implementations. A coin flip per lead is one line
+ * and wrong for this app: it is non-deterministic, so the same lead assigned or not cannot be
+ * explained after the fact, and over the ten or twenty leads a real day brings it misses the
+ * target badly - a 60% dial that hands out 9 of 10 one day and 2 of 10 the next is not a dial.
+ *
+ * So the rate CONVERGES instead, exactly the way the per-person shares already do a few lines
+ * below: look at what actually happened over the fairness window and assign whenever the realised
+ * rate is under target. Deterministic, self-correcting after a burst, and the founder can check it
+ * by counting rows.
+ *
+ * The window counts leads by `createdAt`, so the 23,000-lead backlog and any manual hand-out of it
+ * stay out of the arithmetic - this measures live intake, which is what the dial is about.
+ */
+async function autoAssignQuotaMet(pct: number, lookbackDays: number, now: Date): Promise<boolean> {
+  if (pct >= 100) return false;
+  if (pct <= 0) return true;
+
+  const since = new Date(now.getTime() - lookbackDays * 86400000);
+  const [recent, assigned] = await Promise.all([
+    prisma.lead.count({ where: { ...ACTIVE, createdAt: { gte: since } } }),
+    prisma.lead.count({ where: { ...ACTIVE, createdAt: { gte: since }, assignedToId: { not: null } } }),
+  ]);
+  // No history yet - assign, so a fresh install does not sit on its hands until some other
+  // process happens to create a lead.
+  if (recent === 0) return false;
+  return (assigned / recent) * 100 >= pct;
+}
+
+/**
+ * The userId a fresh lead should go to right now, or null when no rotation is configured -
+ * or when the founder's auto-assign rate says this one waits in the unassigned pool.
+ */
 export async function pickFirstCaller(now = new Date()): Promise<string | null> {
+  const cfg = await getCallDistribution();
+  if (await autoAssignQuotaMet(cfg.autoAssignPct, cfg.lookbackDays, now)) return null;
+
   const all = await loadRotation(now);
   // Available = working today AND not already at their ceiling. A capped person is skipped, so
   // the lead goes to the next eligible caller rather than piling onto a queue they cannot work.
@@ -110,7 +148,7 @@ export async function pickFirstCaller(now = new Date()): Promise<string | null> 
     // saying so: the leads still arrive, they just arrive unassigned, and silence would make that
     // look like a rotation misconfiguration.
     if (all.some((m) => m.atDailyCap)) {
-      console.warn("[assignment] every eligible caller is at their daily cap — leads will arrive unassigned");
+      console.warn("[assignment] every eligible caller is at their daily cap - leads will arrive unassigned");
     }
     return null;
   }
@@ -133,7 +171,7 @@ export async function pickFirstCaller(now = new Date()): Promise<string | null> 
 /**
  * Target-vs-actual split, for the Pipeline card and the Console panel's live preview.
  *
- * `share` is the NORMALISED figure — what the engine will actually do — not the raw
+ * `share` is the NORMALISED figure - what the engine will actually do - not the raw
  * `firstCallSharePct`. The two differ whenever the shares don't total 100, and the Pipeline card
  * used to print the raw number: with 5 and 2 configured it read "5% target / 2% target" while the
  * engine ran 71/29. Showing the founder a number the engine does not use is how a setting gets
@@ -146,8 +184,10 @@ export async function getFirstCallSplit(now = new Date()) {
   return {
     lookbackDays: cfg.lookbackDays,
     dailyCapPerPerson: cfg.dailyCapPerPerson,
+    /** The founder's auto-assign rate. Below 100 the rest of intake waits to be handed out. */
+    autoAssignPct: cfg.autoAssignPct,
     isSaturday: istWeekday(now) === "Sat",
-    /** True when the raw shares don't total 100 — the card explains rather than blocks. */
+    /** True when the raw shares don't total 100 - the card explains rather than blocks. */
     sharesNormalised: shareTotal > 0 && shareTotal !== 100,
     members: rotation
       .map((m) => ({ ...m, effectivePct: shareTotal > 0 ? (m.sharePct / shareTotal) * 100 : 0 }))

@@ -7,7 +7,7 @@ import ChangePasswordForm from "./ChangePasswordForm";
  * The forced password-change destination (Error Log O4). An admin who sets someone's password
  * flags them, and `requireSession` bounces them here before any app route renders.
  *
- * Session is fetched DIRECTLY here — not via `requireSession` — so this one authenticated page
+ * Session is fetched DIRECTLY here - not via `requireSession` - so this one authenticated page
  * does not trip the same guard that sends people to it, which would loop. A visitor with no
  * session is sent to sign in (they cannot change a password they are not holding).
  */

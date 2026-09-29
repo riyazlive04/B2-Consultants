@@ -1,14 +1,14 @@
 /**
- * Commission rates — the founder's standing rule: "it must be flexible from the admin".
+ * Commission rates - the founder's standing rule: "it must be flexible from the admin".
  *
  * Part 2 §7.2 states the business consequence outright: a rate change must never need a code
  * change, because "a code change would be a blocker". These tests defend that property rather
- * than any particular number — the spec's 3/5/8 and the shipped 5/3/4 are both just starting
+ * than any particular number - the spec's 3/5/8 and the shipped 5/3/4 are both just starting
  * positions the founder is free to overwrite.
  *
  * `everyRateSurvivesARoundTrip` is the one that matters. The console posts its whole draft
  * object, so a rate the panel doesn't render would be silently reset to its schema default on
- * every unrelated save — the founder would set 25%, edit something else, and quietly get 20%
+ * every unrelated save - the founder would set 25%, edit something else, and quietly get 20%
  * back with no error to explain it.
  *
  * Run: npm test
@@ -22,7 +22,7 @@ import {
   commissionRulesConfigSchema,
 } from "../config-schema";
 
-describe("commission rates — founder-editable, never hardcoded", () => {
+describe("commission rates - founder-editable, never hardcoded", () => {
   test("every rate in the config round-trips through a save", () => {
     // Simulates the console posting a fully-edited draft.
     const edited = {
@@ -37,14 +37,14 @@ describe("commission rates — founder-editable, never hardcoded", () => {
   });
 
   test("the schema has no rate the panel cannot reach", () => {
-    // If this fails, someone added a rate to the schema without an input in CommissionPanel —
+    // If this fails, someone added a rate to the schema without an input in CommissionPanel -
     // which makes it un-editable, i.e. hardcoded in everything but name.
     const known = ["bothCallsPct", "splitPct", "closerPct", "substitutePct"].sort();
     assert.deepEqual(Object.keys(DEFAULT_COMMISSION_RULES_CONFIG).sort(), known);
   });
 
   test("decimal rates are allowed", () => {
-    // The founders said "slightly tuned" — 2.5% must not be rounded away.
+    // The founders said "slightly tuned" - 2.5% must not be rounded away.
     const parsed = coerceCommissionRulesConfig({ bothCallsPct: 2.5, splitPct: 1.25, closerPct: 3.75, substitutePct: 12.5 });
     assert.equal(parsed.bothCallsPct, 2.5);
     assert.equal(parsed.splitPct, 1.25);
@@ -71,7 +71,7 @@ describe("commission rates — founder-editable, never hardcoded", () => {
   });
 });
 
-describe("substitute split — arithmetic the payout report must agree with", () => {
+describe("substitute split - arithmetic the payout report must agree with", () => {
   /** Mirrors commission-metrics: round the substitute, give the owner the remainder. */
   const split = (legInrMinor: number, substitutePct: number) => {
     const substitute = Math.round((legInrMinor * substitutePct) / 100);
@@ -88,7 +88,7 @@ describe("substitute split — arithmetic the payout report must agree with", ()
     }
   });
 
-  test("the split divides the leg — it never adds to the payroll", () => {
+  test("the split divides the leg - it never adds to the payroll", () => {
     const leg = 30_000;
     const { substitute, owner } = split(leg, 20);
     assert.equal(substitute, 6_000);

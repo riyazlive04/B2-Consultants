@@ -4,9 +4,11 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { InputHTMLAttributes } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
+import { useFormReset } from "./use-form-reset";
+import { entryTodayYmd } from "@/lib/dates";
 
 /**
- * App-styled date picker (§5.5, "fully custom popover" — the calendar grid is ours, not
+ * App-styled date picker (§5.5, "fully custom popover" - the calendar grid is ours, not
  * the OS one). It wraps a REAL hidden `<input type="date">`:
  *   - that input carries `name`/`value`/`required`, so the 60 server-action forms that
  *     submit dates keep working unchanged, and native constraint validation still fires;
@@ -15,7 +17,7 @@ import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-b
  * real change event whose `target.value` is the YYYY-MM-DD string, exactly as before.
  *
  * Only `type="date"` is fully custom. `time` / `month` / `datetime-local` fall back to a
- * theme-corrected native input (TextInput handles that branch) — those are 3 call sites,
+ * theme-corrected native input (TextInput handles that branch) - those are 3 call sites,
  * not worth a bespoke clock/month-grid, and color-scheme now themes their native popups.
  */
 
@@ -27,7 +29,7 @@ const MONTHS = [
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const toYmd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-// Parse YYYY-MM-DD as a LOCAL calendar date — never `new Date(str)`, which is UTC and
+// Parse YYYY-MM-DD as a LOCAL calendar date - never `new Date(str)`, which is UTC and
 // would shift the day across a timezone. A pure calendar date has no zone.
 function fromYmd(s: string | undefined | null): Date | null {
   if (!s) return null;
@@ -51,7 +53,18 @@ function setNativeValue(el: HTMLInputElement, value: string) {
 }
 
 // Omit the native `size` (a number) so our variant name wins.
-type Props = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & { size?: ControlSize };
+type Props = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
+  size?: ControlSize;
+  /**
+   * Pre-fill today (FIN-02). The page still renders `defaultValue` so the first paint is never
+   * blank and nothing depends on JS having run, but on mount the browser replaces it with the
+   * SAME day this picker rings as today - see `entryDateFor` in lib/dates.
+   *
+   * Only for "when did this happen" fields on a NEW record. A field being EDITED must keep the
+   * date already stored, and a due date is not a today field at all.
+   */
+  defaultToday?: boolean;
+};
 
 export function DatePicker({
   size = "md",
@@ -65,6 +78,7 @@ export function DatePicker({
   required,
   name,
   id,
+  defaultToday,
   placeholder = "DD/MM/YYYY",
   "aria-label": ariaLabel,
   ...rest
@@ -75,21 +89,60 @@ export function DatePicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const gridId = useId();
+  // The one "today" this control knows: the ring, the Today button, the month it opens on and
+  // `defaultToday` all read it, so the day the calendar highlights is always the day the form
+  // would save. It is the browser's day, never India's - see `entryDateFor` in lib/dates.
+  const today = fromYmd(entryTodayYmd()) ?? new Date();
 
   // Display value: from the controlled prop, else mirror the uncontrolled input.
   const [uncontrolled, setUncontrolled] = useState<string>((defaultValue as string) ?? "");
+
+  /**
+   * Write today into the real input, so the form submits it and the trigger shows it. The
+   * server-rendered `defaultValue` (India's date) is only ever a first-paint placeholder:
+   * leaving it in place is what used to save tomorrow's date for the founder in Germany.
+   */
+  const fillToday = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    const ymd = entryTodayYmd();
+    if (el.value === ymd) return;
+    setUncontrolled(ymd);
+    setNativeValue(el, ymd); // keeps React's value tracker honest, fires the form's onChange
+  };
+
+  // A successful save calls form.reset(), which restores the hidden input and would otherwise
+  // leave this trigger showing the previous entry - see `useFormReset`. "Keep open to add
+  // another" resets mid-session, so a today field has to be re-filled with today, not with
+  // whatever date the page was rendered on.
+  useFormReset(inputRef, () => {
+    if (controlled) return;
+    setUncontrolled(inputRef.current?.value ?? "");
+    if (defaultToday) fillToday();
+  });
+
+  useEffect(() => {
+    if (defaultToday && !controlled) fillToday();
+    // Once, on mount: after this the field belongs to whoever is typing in it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const current = controlled ? ((value as string) ?? "") : uncontrolled;
 
   // Which month the grid is showing; seeds from the value, else today.
-  const [view, setView] = useState<Date>(() => fromYmd((value as string) ?? (defaultValue as string)) ?? new Date());
+  const [view, setView] = useState<Date>(() => fromYmd((value as string) ?? (defaultValue as string)) ?? today);
+  // Keyboard focus target within the grid.
+  const [focusDay, setFocusDay] = useState<Date>(() => fromYmd(current) ?? today);
+  const focusRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (open) setView(fromYmd(current) ?? new Date());
+    if (!open) return;
+    // Both follow the value the field actually holds, which `defaultToday` may have changed
+    // after mount - opening on last month with the keyboard landing on another day would be
+    // the same "shows one date, means another" confusion this control exists to avoid.
+    setView(fromYmd(current) ?? today);
+    setFocusDay(fromYmd(current) ?? today);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  // Keyboard focus target within the grid.
-  const [focusDay, setFocusDay] = useState<Date>(() => fromYmd(current) ?? new Date());
-  const focusRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (open) focusRef.current?.focus();
   }, [open, focusDay]);
@@ -122,7 +175,6 @@ export function DatePicker({
     );
   }, [view]);
 
-  const today = new Date();
   const selected = fromYmd(current);
 
   function onGridKey(e: React.KeyboardEvent) {
@@ -249,7 +301,7 @@ export function DatePicker({
         <div className="flex justify-between border-t border-line px-1 pt-2">
           <button
             type="button"
-            onClick={() => commit(new Date())}
+            onClick={() => commit(today)}
             className="rounded-btn px-2 py-1 text-caption font-medium text-primary hover:bg-primary-soft"
           >
             Today

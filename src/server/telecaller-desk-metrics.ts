@@ -7,15 +7,15 @@ import type { GoalProgress } from "@/lib/goals";
 import { getGoalsWithProgress } from "./goals";
 
 /**
- * The telecaller's OWN desk — what Nilofer/Asma see about themselves.
+ * The telecaller's OWN desk - what Nilofer/Asma see about themselves.
  *
  * Distinct from `telecaller-metrics.ts`, which is Ameen's Admin-only payout board and counts
  * calls from self-reported DailyLog numbers. This reads CallLog: one row per real dial. The two
- * will not always agree, and that is the point — this one cannot be typed in.
+ * will not always agree, and that is the point - this one cannot be typed in.
  *
  * "Converted" here is the person's OWN stage win: a lead THEY are assigned that reached WON.
  * Deliberately a third definition, chosen over the two that already exist:
- *   • gamification `wins` credits whoever CLICKED the stage — Ameen closing Nilofer's lead
+ *   • gamification `wins` credits whoever CLICKED the stage - Ameen closing Nilofer's lead
  *     would credit Ameen, which is wrong on a page titled "my numbers";
  *   • commission credits on PAYMENT, which lags the call by weeks and would leave the
  *     dashboard reading zero for most of the month.
@@ -24,7 +24,7 @@ import { getGoalsWithProgress } from "./goals";
 
 const DAY_MS = 86_400_000;
 
-/** A lead as it appears on the desk — enough to decide who to ring next, and to ring them. */
+/** A lead as it appears on the desk - enough to decide who to ring next, and to ring them. */
 export type DeskLead = {
   id: string;
   name: string;
@@ -35,7 +35,7 @@ export type DeskLead = {
   /** ISO, or null when nobody has ever logged a call against this lead. */
   lastCalledAt: string | null;
   callCount: number;
-  /** ISO — when the lead landed. Drives the "new today" grouping. */
+  /** ISO - when the lead landed. Drives the "new today" grouping. */
   createdAt: string;
 };
 
@@ -50,16 +50,16 @@ export type DeskToday = {
 
 export type DeskMonth = {
   calls: number;
-  /** Distinct leads I actually TALKED to (outcome SPOKE) — not dials. */
+  /** Distinct leads I actually TALKED to (outcome SPOKE) - not dials. */
   spokenTo: number;
   /** My assigned leads that reached WON this month. */
   converted: number;
-  /** converted ÷ spokenTo. Null when I've spoken to nobody — 0% would be a lie. */
+  /** converted ÷ spokenTo. Null when I've spoken to nobody - 0% would be a lie. */
   conversionPct: number | null;
 };
 
 /**
- * The variants that make someone a telecaller. Same predicate telecaller-metrics.ts uses —
+ * The variants that make someone a telecaller. Same predicate telecaller-metrics.ts uses -
  * "telecaller" is a TeamProfile.logVariant, never a Role, so this is the only honest test.
  */
 export const TELECALLER_VARIANTS = ["APPOINTMENT_SETTER", "DISCOVERY_SPECIALIST"] as const;
@@ -73,7 +73,7 @@ export type TelecallerDesk = {
   isTelecaller: boolean;
   today: DeskToday;
   month: DeskMonth;
-  /** This person's own active goals — the "goal to reach the incentive" bar. */
+  /** This person's own active goals - the "goal to reach the incentive" bar. */
   goals: GoalProgress[];
   /** Who to ring today, never-called first. */
   worklist: DeskLead[];
@@ -89,10 +89,10 @@ export type TelecallerDesk = {
  *
  * Two callers were paying that price for a single enum:
  *
- *   • `(app)/layout.tsx` — on EVERY page in the app, to decide whether to render a greeting.
+ *   • `(app)/layout.tsx` - on EVERY page in the app, to decide whether to render a greeting.
  *     Suspense kept it off first paint, but it still competed for the connection with the page's
  *     own queries on every navigation.
- *   • `my-desk/page.tsx` — to pick which desk to render, and then it built the L1 or L2 desk on
+ *   • `my-desk/page.tsx` - to pick which desk to render, and then it built the L1 or L2 desk on
  *     top. A specialist paid for the generic desk they were never shown.
  *
  * This is one indexed lookup on a table with one row per team member. `getTelecallerDesk` still
@@ -121,7 +121,7 @@ export const getDeskIdentity = cache(async (userId: string): Promise<DeskIdentit
   };
 });
 
-/** The IST day as real UTC instants — calledAt is a timestamp, so boundaries must be instants. */
+/** The IST day as real UTC instants - calledAt is a timestamp, so boundaries must be instants. */
 function istTodayInstantRange(): { start: Date; end: Date } {
   const today = istToday();
   return {
@@ -143,7 +143,7 @@ const OPEN_STAGES = [
  * Everything one telecaller's desk needs, for the given user.
  *
  * `cache`d per request so the page, the login popup and the header can each ask without
- * re-querying — the same trick getPendingRows uses.
+ * re-querying - the same trick getPendingRows uses.
  */
 export const getTelecallerDesk = cache(async (userId: string): Promise<TelecallerDesk | null> => {
   const profile = await prisma.teamProfile.findUnique({
@@ -164,7 +164,7 @@ export const getTelecallerDesk = cache(async (userId: string): Promise<Telecalle
       where: { userId, calledAt: { gte: month.start, lt: month.end } },
       select: { outcome: true, leadId: true },
     }),
-    // My leads that hit WON this month — attributed by lead ownership, NOT by who clicked.
+    // My leads that hit WON this month - attributed by lead ownership, NOT by who clicked.
     prisma.leadStageHistory.findMany({
       where: {
         toStage: "WON",
@@ -176,7 +176,7 @@ export const getTelecallerDesk = cache(async (userId: string): Promise<Telecalle
     }),
     prisma.lead.findMany({
       // `phone` is nullable since the Synamate import. A lead with no number cannot be rung, so it
-      // has no place on a dial list — excluded here rather than downstream, so the take:500 cap is
+      // has no place on a dial list - excluded here rather than downstream, so the take:500 cap is
       // spent on leads that are actually callable.
       where: { ...ACTIVE, assignedToId: userId, stage: { in: [...OPEN_STAGES] }, phone: { not: null } },
       select: {
@@ -199,10 +199,10 @@ export const getTelecallerDesk = cache(async (userId: string): Promise<Telecalle
   const converted = wonThisMonth.length;
 
   // Worklist = open + not yet called TODAY. A lead called yesterday is due again; a lead
-  // already rung today is done, whatever the outcome — re-dialling within the day is the
+  // already rung today is done, whatever the outcome - re-dialling within the day is the
   // telecaller's judgement call, not a task the board should keep nagging about.
   const worklist: DeskLead[] = openLeads
-    // Narrowing only — the `phone: { not: null }` filter above already did the excluding.
+    // Narrowing only - the `phone: { not: null }` filter above already did the excluding.
     .filter((l): l is typeof l & { phone: string } => l.phone !== null)
     .map((l) => ({
       id: l.id,
@@ -256,15 +256,15 @@ export const getTelecallerDesk = cache(async (userId: string): Promise<Telecalle
 /**
  * Just the number, as ONE count.
  *
- * Was `getTelecallerDesk(userId).today.toCall`, which built the entire desk — 500 lead rows with
- * a nested last-call lookup and a call count each, plus a month of CallLog rows and every goal —
+ * Was `getTelecallerDesk(userId).today.toCall`, which built the entire desk - 500 lead rows with
+ * a nested last-call lookup and a call count each, plus a month of CallLog rows and every goal -
  * to end up returning `worklist.length`. The shell renders this on every page, so that cost was
  * paid on every navigation.
  *
  * `callLogs: { none: ... }` is exactly the worklist's own predicate: the worklist keeps a lead
  * whose LAST call is before today, and a lead's last call is before today precisely when it has
  * no call today. Expressing it as a NOT EXISTS lets Postgres answer it without materialising a
- * single lead row — and, incidentally, fixes an old cap: the worklist stopped at 500 leads, so a
+ * single lead row - and, incidentally, fixes an old cap: the worklist stopped at 500 leads, so a
  * caller owed more than that was told they were owed exactly 500.
  */
 export async function getCallsDueToday(userId: string): Promise<number> {

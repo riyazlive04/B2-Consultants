@@ -1,5 +1,5 @@
 /**
- * Automation folders + soft delete — end-to-end verification.
+ * Automation folders + soft delete - end-to-end verification.
  *
  * Proves the wiring the unit tests can't: that a workflow's folder/deleted state in Postgres
  * actually changes what the rendered Automation screen shows, and that the FK rules behave as
@@ -31,13 +31,13 @@ function check(name: string, cond: boolean, detail = "") {
     console.log(`  ✓ ${name}`);
   } else {
     failed++;
-    console.log(`  ✗ ${name}${detail ? ` — ${detail}` : ""}`);
+    console.log(`  ✗ ${name}${detail ? ` - ${detail}` : ""}`);
   }
 }
 
 /**
  * better-auth sets its session cookie on the sign-in response; reuse it for page fetches.
- * `Origin` is required — better-auth rejects a cross-origin-looking POST without it (403
+ * `Origin` is required - better-auth rejects a cross-origin-looking POST without it (403
  * MISSING_OR_NULL_ORIGIN), and bare fetch, unlike a browser, sends none.
  */
 async function login(): Promise<string> {
@@ -84,13 +84,13 @@ async function main() {
       const inside = await getPage(`/automation?folder=${folder.id}`, cookie);
       check("workflow appears inside its folder", inside.includes(`${RUN_TAG}-workflow`));
 
-      // An unknown folder must hit notFound() rather than silently rendering an empty list —
+      // An unknown folder must hit notFound() rather than silently rendering an empty list -
       // an empty list would read as "this folder is empty", which is a different fact.
       //
       // Asserted on the rendered body, not the status: these pages are force-dynamic, so Next
       // flushes 200 headers before notFound() throws and the status stays 200. That's app-wide
       // pre-existing behaviour (/automation/[id] and /contacts/[id] do the same), not something
-      // this feature introduced — so the body is the honest signal here.
+      // this feature introduced - so the body is the honest signal here.
       const missing = await getPage("/automation?folder=does-not-exist", cookie);
       check("unknown folder renders not-found", /not found|404/i.test(missing));
       check("unknown folder does not render a workflow list", !missing.includes("New workflow"));
@@ -117,7 +117,7 @@ async function main() {
 
     console.log("\nTrigger scan ignores deleted workflows");
     {
-      // emitTrigger filters `deletedAt: null` — assert against the same query it runs, since a
+      // emitTrigger filters `deletedAt: null` - assert against the same query it runs, since a
       // deleted workflow that still enrolled contacts would be a silent, contact-visible bug.
       await prisma.workflow.update({ where: { id: wf.id }, data: { status: "PUBLISHED", deletedAt: new Date() } });
       const scanned = await prisma.workflow.findMany({

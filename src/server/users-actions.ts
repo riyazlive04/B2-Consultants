@@ -22,14 +22,14 @@ import { INVITE_TTL_DAYS, mintInviteToken, unguessablePlaceholderPassword } from
 import { normalizePassword } from "@/lib/credentials";
 import { rule } from "@/lib/field-rules";
 import { consumeAccessRequest } from "./access-requests";
-import { getOwnershipInventory, migrateOwnership } from "./termination";
+import { getOwnershipInventory, migrateOwnership, type LeadDestination } from "./termination";
 import { getTerminationReport, type TerminationReport } from "./termination-report";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
  * Team & access. Guarded by the `users.manage` capability rather than a bare Admin
- * check, so the founder can delegate seat management — but see `privilegeError`:
+ * check, so the founder can delegate seat management - but see `privilegeError`:
  * a delegate can never mint an Admin, edit an Admin, or hand out a capability they
  * don't hold themselves. Privilege can be delegated; it cannot be manufactured.
  *
@@ -108,7 +108,7 @@ function privilegeError(
   nextCaps: CapabilityOverrides,
 ): string | null {
   if (actor.role === "ADMIN") return null;
-  if (target?.id === actor.user.id) return "You cannot edit your own access — ask an Admin.";
+  if (target?.id === actor.user.id) return "You cannot edit your own access - ask an Admin.";
   if (target?.role === "ADMIN") return "Only an Admin can edit another Admin.";
   if (nextRole === "ADMIN") return "Only an Admin can grant the Admin role.";
 
@@ -119,13 +119,13 @@ function privilegeError(
   for (const c of CAPABILITIES) {
     const granting = nextCaps[c.key] === true && !held.has(c.key);
     if (granting && !hasCapability(actor.role, actor.capabilities, c.key)) {
-      return `You can only grant capabilities you hold yourself — you don't have "${c.name}".`;
+      return `You can only grant capabilities you hold yourself - you don't have "${c.name}".`;
     }
   }
   return null;
 }
 
-/** The founder must never be able to lock themselves — or the last Admin — out. */
+/** The founder must never be able to lock themselves - or the last Admin - out. */
 async function lastAdminError(userId: string, nextRole: AppRole | null): Promise<string | null> {
   if (nextRole === "ADMIN") return null;
   const others = await prisma.user.count({
@@ -210,7 +210,7 @@ export async function inviteUser(form: FormData): Promise<InviteResult> {
   return { ok: true, inviteUrl, expiresInDays: INVITE_TTL_DAYS };
 }
 
-/** Mint a fresh link — the old one stops working immediately. */
+/** Mint a fresh link - the old one stops working immediately. */
 export async function resendInvite(userId: string): Promise<InviteResult> {
   const { allowed, denied, session } = await capabilityCheck("users.manage");
   if (!allowed) return denied;
@@ -229,7 +229,7 @@ export async function resendInvite(userId: string): Promise<InviteResult> {
     section: "people",
     entityType: "User",
     entityId: userId,
-    summary: `Re-issued the invite link for ${target.name} — any earlier link stopped working`,
+    summary: `Re-issued the invite link for ${target.name} - any earlier link stopped working`,
     meta: { email: target.email, role: target.role, resend: true },
   });
   revalidatePath("/people");
@@ -290,7 +290,7 @@ export async function updateUserAccess(userId: string, form: FormData): Promise<
       section: "people",
       entityType: "User",
       entityId: userId,
-      summary: `Updated ${target.name}'s access — changed ${diff.changed.join(", ")}`,
+      summary: `Updated ${target.name}'s access - changed ${diff.changed.join(", ")}`,
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
@@ -341,7 +341,7 @@ export async function resetUserAccess(userId: string): Promise<ActionResult> {
  * Load the offboarding review for the dialog.
  *
  * A server action rather than a page-level fetch because the report walks a dozen tables per
- * person, and the People page lists everyone — computing it up front would mean paying for a
+ * person, and the People page lists everyone - computing it up front would mean paying for a
  * report nobody opens on every render.
  */
 export async function loadTerminationReport(
@@ -358,12 +358,12 @@ export async function loadTerminationReport(
  * Offboard a team member: hand their open work to a successor, then close the account.
  *
  * ── Why this is not just "suspend + reassign" ────────────────────────────────────
- * Suspending stops them signing in and does nothing else — their leads, their future calls and
+ * Suspending stops them signing in and does nothing else - their leads, their future calls and
  * their outreach threads stay pointed at an account nobody is behind. That is the actual failure:
  * work silently owned by someone who has left, invisible on every desk because it is on THEIR
  * desk. So the reassignment is part of the same act, not a follow-up someone might forget.
  *
- * What moves and what does not is decided in `server/termination.ts` — the short version is that
+ * What moves and what does not is decided in `server/termination.ts` - the short version is that
  * open work moves and history never does, because commission is derived from historical
  * attribution at read time.
  *
@@ -374,6 +374,8 @@ export async function terminateUser(input: {
   profileId: string;
   successorProfileId: string | null;
   reason: string;
+  /** Where their open leads go. Defaults to the successor - the behaviour before the choice existed. */
+  leadDestination?: LeadDestination;
 }): Promise<ActionResult & { migrated?: Record<string, number> }> {
   const { allowed, denied, session } = await capabilityCheck("users.manage");
   if (!allowed) return denied;
@@ -388,7 +390,7 @@ export async function terminateUser(input: {
     return { ok: false, error: "You cannot terminate your own account" };
   }
 
-  // The same privilege rails suspension uses — a delegate must not be able to offboard an Admin,
+  // The same privilege rails suspension uses - a delegate must not be able to offboard an Admin,
   // and the last active Admin must never be removable.
   if (profile.userId) {
     const target = await prisma.user.findUnique({
@@ -409,6 +411,19 @@ export async function terminateUser(input: {
     ? await getOwnershipInventory(profile.userId)
     : { categories: [], total: 0 };
 
+  /**
+   * What still needs a NAMED owner, which is not the same as what they hold.
+   *
+   * Releasing leads to the pool is a destination, not an omission, so when that is chosen the
+   * leads stop counting towards "you must pick a successor". Someone whose only open work is
+   * leads can then be offboarded without naming one - which is the common case for a departing
+   * setter, and previously forced the founder to park thousands of leads on a colleague purely
+   * to satisfy the guard.
+   */
+  const leadDestination: LeadDestination = input.leadDestination ?? "successor";
+  const leadHolds = holds.categories.find((c) => c.key === "leads")?.count ?? 0;
+  const holdsNeedingOwner = leadDestination === "pool" ? holds.total - leadHolds : holds.total;
+
   let successorUserId: string | null = null;
   let successorName = "";
   if (input.successorProfileId) {
@@ -427,21 +442,30 @@ export async function terminateUser(input: {
     }
     successorUserId = successor.userId;
     successorName = successor.fullName;
-  } else if (holds.total > 0) {
+  } else if (holdsNeedingOwner > 0) {
     return {
       ok: false,
-      error: `${profile.fullName} still holds ${holds.total} open item${holds.total === 1 ? "" : "s"} — choose who takes them over.`,
+      error: `${profile.fullName} still holds ${holdsNeedingOwner} open item${holdsNeedingOwner === 1 ? "" : "s"} that need a named owner - choose who takes them over.`,
     };
   }
 
+  /**
+   * Releasing leads to the pool needs no successor, so this runs on either condition.
+   *
+   * `successorUserId` is still passed through and is simply unused by the lead branch when the
+   * destination is the pool - `migrateOwnership` reads it for the six categories that always
+   * require a person, and those are empty in the no-successor case by the guard above.
+   */
   const migrated =
-    successorUserId && profile.userId ? await migrateOwnership(profile.userId, successorUserId) : {};
+    profile.userId && (successorUserId || (leadDestination === "pool" && leadHolds > 0))
+      ? await migrateOwnership(profile.userId, successorUserId, leadDestination)
+      : {};
 
   /**
    * Close the account and stamp the record together.
    *
    * `User.status` and `TeamProfile.status` are written in the SAME transaction because nothing
-   * else in the app keeps them in sync, and different modules filter on different ones — the pay
+   * else in the app keeps them in sync, and different modules filter on different ones - the pay
    * board reads TeamStatus, every assignee dropdown reads UserStatus. Setting one without the
    * other is how a departed person keeps appearing in half the pickers.
    */
@@ -477,8 +501,8 @@ export async function terminateUser(input: {
     // The full manifest in the summary, not just the meta: this is the entry someone reads months
     // later asking "where did all of Nilofer's leads go".
     summary: moved.length
-      ? `Offboarded ${profile.fullName} — ${moved.map(([k, n]) => `${n} ${k}`).join(", ")} moved to ${successorName}`
-      : `Offboarded ${profile.fullName} — nothing outstanding to hand over`,
+      ? `Offboarded ${profile.fullName} - ${moved.map(([k, n]) => `${n} ${k}`).join(", ")} moved to ${successorName}`
+      : `Offboarded ${profile.fullName} - nothing outstanding to hand over`,
     meta: { migrated, successorProfileId: input.successorProfileId, reason: input.reason || null },
   });
 
@@ -491,7 +515,7 @@ export async function terminateUser(input: {
 
 /**
  * Bring a former team member back. Their history was never touched, so this is genuinely a
- * reversal — but the work that moved to a successor stays there, because it has been being
+ * reversal - but the work that moved to a successor stays there, because it has been being
  * worked in the meantime.
  */
 export async function reinstateTeamMember(profileId: string): Promise<ActionResult> {
@@ -512,6 +536,12 @@ export async function reinstateTeamMember(profileId: string): Promise<ActionResu
       // erasing them would make the gap in their history unexplained.
       data: { status: "ACTIVE", terminatedAt: null, terminatedById: null },
     }),
+    // The login comes back ACTIVE whatever it was before. Nothing records WHY a login was
+    // suspended, so this cannot tell "suspended by the offboard" apart from "suspended weeks
+    // earlier over a security hold, then offboarded" - and refusing to reopen it would leave a
+    // reinstated member sitting on the org chart with no way in. Recording a suspension reason
+    // needs a schema change; until then an Admin who had a separate hold on this account
+    // re-applies it in Users & access > Suspend.
     ...(profile.userId
       ? [prisma.user.update({ where: { id: profile.userId }, data: { status: "ACTIVE" as never } })]
       : []),
@@ -522,7 +552,7 @@ export async function reinstateTeamMember(profileId: string): Promise<ActionResu
     section: "people",
     entityType: "TeamProfile",
     entityId: profile.id,
-    summary: `Brought ${profile.fullName} back — their share and open work are not restored automatically`,
+    summary: `Brought ${profile.fullName} back - their share and open work are not restored automatically`,
     meta: {},
   });
   revalidatePath("/people");
@@ -544,18 +574,41 @@ export async function suspendUser(userId: string): Promise<ActionResult> {
   const err = await lastAdminError(userId, null);
   if (target.role === "ADMIN" && err) return { ok: false, error: err };
 
+  /**
+   * THE TEAM PROFILE GOES WITH THE LOGIN.
+   *
+   * `User.status` and `TeamProfile.status` are kept in sync by nothing else, and different
+   * modules filter on different ones - the pay board and the first-call rotation read
+   * TeamStatus, every assignee dropdown reads UserStatus. A suspended person who still reads
+   * ACTIVE on the org chart keeps being offered work they cannot sign in to do.
+   *
+   * Only an ACTIVE profile is touched. "On leave" is a separate, deliberate statement about the
+   * same person, and overwriting it would lose it - `reactivateUser` would then have nothing to
+   * put back. `terminatedAt` is NOT stamped either: this is a reversible hold, not a departure,
+   * and stamping it would move them to "former team members" as if they had left.
+   */
+  const profile = await prisma.teamProfile.findFirst({
+    where: { userId, status: "ACTIVE" },
+    select: { id: true },
+  });
+
   // Suspend and evict in one transaction: they are logged out before the button settles.
   await prisma.$transaction([
     prisma.user.update({ where: { id: userId }, data: { status: "SUSPENDED" } }),
     prisma.session.deleteMany({ where: { userId } }),
+    ...(profile
+      ? [prisma.teamProfile.update({ where: { id: profile.id }, data: { status: "INACTIVE" } })]
+      : []),
   ]);
   await logActivity(session, {
     action: "user.suspend",
     section: "people",
     entityType: "User",
     entityId: userId,
-    summary: `Suspended ${target.name}`,
-    meta: { role: target.role },
+    summary: profile
+      ? `Suspended ${target.name} - their team profile is now inactive too`
+      : `Suspended ${target.name}`,
+    meta: { role: target.role, teamProfileDeactivated: Boolean(profile) },
   });
   revalidatePath("/people");
   return { ok: true };
@@ -573,14 +626,45 @@ export async function reactivateUser(userId: string): Promise<ActionResult> {
   const rail = privilegeError(session, target, target.role, {});
   if (rail) return { ok: false, error: rail };
 
-  await prisma.user.update({ where: { id: userId }, data: { status: "ACTIVE" } });
+  /**
+   * THE TEAM PROFILE COMES BACK WITH THE LOGIN.
+   *
+   * Offboarding and suspension both close the login and retire the profile together, so
+   * reopening one half on its own left the org chart listing a former member - terminated,
+   * successor recorded - who could sign in and work again. Reversing both is the same
+   * restoration `reinstateTeamMember` performs, and for the same reasons: the termination
+   * reason and successor are KEPT, because they explain a period this person was gone, and the
+   * work that moved to a successor stays there because it has been worked in the meantime.
+   *
+   * An ON_LEAVE profile is left alone: it was never what closed the login, so it is not this
+   * button's to undo.
+   */
+  const profile = await prisma.teamProfile.findFirst({
+    where: { userId },
+    select: { id: true, status: true, terminatedAt: true },
+  });
+  const returning = profile ? profile.status === "INACTIVE" || profile.terminatedAt !== null : false;
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { status: "ACTIVE" } }),
+    ...(profile && returning
+      ? [
+          prisma.teamProfile.update({
+            where: { id: profile.id },
+            data: { status: "ACTIVE", terminatedAt: null, terminatedById: null },
+          }),
+        ]
+      : []),
+  ]);
   await logActivity(session, {
     action: "user.reinstate",
     section: "people",
     entityType: "User",
     entityId: userId,
-    summary: `Reinstated ${target.name}`,
-    meta: { role: target.role },
+    summary: returning
+      ? `Reinstated ${target.name} and returned them to the team - their share and open work are not restored automatically`
+      : `Reinstated ${target.name}`,
+    meta: { role: target.role, teamProfileRestored: returning },
   });
   revalidatePath("/people");
   return { ok: true };
@@ -603,16 +687,64 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
     if (err) return { ok: false, error: err };
   }
 
-  // Sessions, accounts and the invite cascade. The team profile and student record
-  // survive with a null userId — their history is not this person's login.
-  await prisma.user.delete({ where: { id: userId } });
+  /**
+   * RETIRE THE EMPLOYMENT RECORD IN THE SAME BREATH AS THE LOGIN.
+   *
+   * Deleting the User cascades sessions, accounts and the invite, and `TeamProfile.userId` is
+   * `onDelete: SetNull` - so the profile survives, which is correct: a person's employment record
+   * has to keep resolving on every call, commission and audit row they ever produced, and the
+   * schema is explicit that it must never be purged.
+   *
+   * What was missing is that nothing marked it retired. The profile kept `status: ACTIVE` and a
+   * null `terminatedAt`, and OrgChart splits current from former team members on exactly that
+   * field - so a deleted person stayed on the org chart as current staff, with their name, role
+   * and email still on screen. Reported live: "Nilofer was deleted but I saw her details".
+   *
+   * The stamp below is the same one `terminateTeamMember` writes, for the same reason it writes
+   * it: `User.status` and `TeamProfile.status` are never kept in sync by anything else, and
+   * different modules filter on different ones. Deleting the User removes the UserStatus half
+   * entirely, which makes stamping the TeamProfile half the only way the two can agree.
+   *
+   * NOT a delete of the profile. Terminating preserves the history; deleting would orphan every
+   * row that names this person.
+   */
+  const profile = await prisma.teamProfile.findFirst({
+    where: { userId },
+    select: { id: true, fullName: true, terminatedAt: true },
+  });
+
+  await prisma.$transaction([
+    // Already terminated (they were retired properly and are only now losing their login):
+    // leave the original date, reason and successor alone rather than overwriting the record
+    // of what actually happened.
+    ...(profile && !profile.terminatedAt
+      ? [
+          prisma.teamProfile.update({
+            where: { id: profile.id },
+            data: {
+              status: "INACTIVE" as never,
+              terminatedAt: new Date(),
+              terminatedById: session.user.id,
+              terminationReason: "Account deleted",
+              // Out of the first-call rotation. `pickFirstCaller` already skips a profile with
+              // no user, but a share left behind makes the Console roster read wrong.
+              firstCallSharePct: 0,
+            },
+          }),
+        ]
+      : []),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
+
   await logActivity(session, {
     action: "user.delete",
     section: "people",
     entityType: "User",
     entityId: userId,
-    summary: `Deleted ${target.name}'s account (${target.email})`,
-    meta: { email: target.email, role: target.role },
+    summary: profile && !profile.terminatedAt
+      ? `Deleted ${target.name}'s account (${target.email}) and retired their team profile`
+      : `Deleted ${target.name}'s account (${target.email})`,
+    meta: { email: target.email, role: target.role, teamProfileRetired: Boolean(profile && !profile.terminatedAt) },
   });
   revalidatePath("/people");
   return { ok: true };
@@ -635,7 +767,7 @@ export async function setUserPassword(userId: string, form: FormData): Promise<A
    * Trimmed at the SOURCE of the problem.
    *
    * This is where an admin types the temporary password they are about to send someone over
-   * WhatsApp. If it is stored with an edge space, no amount of trimming at sign-in helps —
+   * WhatsApp. If it is stored with an edge space, no amount of trimming at sign-in helps -
    * the stored secret itself contains a character nobody will ever type back. Trimming here and
    * at sign-in means both ends agree on the same string.
    */
@@ -648,12 +780,12 @@ export async function setUserPassword(userId: string, form: FormData): Promise<A
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not update password" };
   }
-  // O4 — the admin chose this password, so the owner must replace it on next sign-in. Sessions
+  // O4 - the admin chose this password, so the owner must replace it on next sign-in. Sessions
   // are also cleared so the change takes effect immediately (they re-authenticate with the
   // temporary password, then hit /change-password before any app route).
   await prisma.user.update({ where: { id: userId }, data: { mustChangePassword: true } });
   await prisma.session.deleteMany({ where: { userId } });
-  // That it happened and who did it — never the password or its hash.
+  // That it happened and who did it - never the password or its hash.
   await logActivity(session, {
     action: "user.password.update",
     section: "people",
@@ -712,7 +844,7 @@ export async function listUsers(): Promise<ListedUser[]> {
 
 
 /**
- * Flip ONE capability on ONE person — the per-person matrix's write path.
+ * Flip ONE capability on ONE person - the per-person matrix's write path.
  *
  * Deliberately narrow. `updateUserAccess` above takes a whole form and rewrites name, role,
  * sections and every capability at once, which is right for a dialog and wrong for a grid: a
@@ -722,7 +854,7 @@ export async function listUsers(): Promise<ListedUser[]> {
  * Enforces the same rails as the dialog:
  *   · only ADMIN may reach it (`requireCapability("users.manage")`);
  *   · you cannot grant a capability you do not hold yourself (`privilegeError`);
- *   · an ADMIN target is refused outright — admins hold everything by definition, and writing
+ *   · an ADMIN target is refused outright - admins hold everything by definition, and writing
  *     an override onto one would be a no-op that reads on screen as a real setting.
  */
 export async function setUserCapability(
@@ -741,7 +873,7 @@ export async function setUserCapability(
   });
   if (!target) return { ok: false, error: "That user no longer exists" };
   if (target.role === "ADMIN") {
-    return { ok: false, error: "Admins hold every capability — there is nothing to change." };
+    return { ok: false, error: "Admins hold every capability - there is nothing to change." };
   }
 
   const before = (target.capabilities as CapabilityOverrides | null) ?? {};

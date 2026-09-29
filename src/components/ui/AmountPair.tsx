@@ -8,11 +8,11 @@ import { formatDate, formatInrMinor } from "@/lib/format";
  * The ₹ / € amount boxes shared by every money form (income, expense, pending fee).
  *
  * TYPE IN ONE, SEE THE OTHER. Enter ₹75,000 and the € box fills in with the converted amount,
- * and vice versa — the conversion is visible in the field itself rather than as a hint the eye
+ * and vice versa - the conversion is visible in the field itself rather than as a hint the eye
  * skips.
  *
  * ONLY THE ENTERED CURRENCY IS STORED, and that is not a detail. A record's aggregate is
- * `INR part + EUR part converted` (lib/money.ts `aggInrMinor`) — the two columns ADD. So a
+ * `INR part + EUR part converted` (lib/money.ts `aggInrMinor`) - the two columns ADD. So a
  * mirrored value left in the sibling box would post ₹75,000 AND its own €818 back as another
  * ₹75,000, silently doubling every amount entered. The derived box is therefore `disabled`,
  * which is what keeps it out of the submitted FormData; the currency the money actually
@@ -20,7 +20,7 @@ import { formatDate, formatInrMinor } from "@/lib/format";
  *
  * SPLIT PAYMENTS still work. A payment genuinely part-INR and part-EUR was the reason these
  * were two independent boxes to begin with, so "Enter each currency separately" unlocks them
- * and turns the mirroring off — at which point both figures are real and both are stored.
+ * and turns the mirroring off - at which point both figures are real and both are stored.
  */
 
 /**
@@ -34,7 +34,7 @@ function parseMajor(value: string): number | null {
 }
 
 const toMinor = (major: number) => Math.round(major * 100);
-/** Plain major-unit string for an input box — no grouping, so it round-trips through parseMajor. */
+/** Plain major-unit string for an input box - no grouping, so it round-trips through parseMajor. */
 const toInput = (major: number) => (Math.round(major * 100) / 100).toFixed(2);
 
 type Source = "INR" | "EUR" | null;
@@ -54,7 +54,7 @@ export function AmountPair({
   /** INR per EUR, as the server will stamp it. */
   fxRate: number;
   fxStale?: boolean;
-  /** ISO date the rate was published — shown so the number is auditable (§4.2). */
+  /** ISO date the rate was published - shown so the number is auditable (§4.2). */
   fxDate?: string;
   inrName: string;
   eurName: string;
@@ -74,7 +74,7 @@ export function AmountPair({
   const [source, setSource] = useState<Source>(() => {
     const hasInr = parseMajor(defaultInr) !== null;
     const hasEur = parseMajor(defaultEur) !== null;
-    if (hasInr && hasEur) return null; // stored split — leave both editable
+    if (hasInr && hasEur) return null; // stored split - leave both editable
     if (hasInr) return "INR";
     if (hasEur) return "EUR";
     return null;
@@ -108,7 +108,7 @@ export function AmountPair({
     if (!mirroring) return;
     const amount = parseMajor(raw);
     if (amount === null) {
-      // Emptied — release the pairing so the other currency can be used instead.
+      // Emptied - release the pairing so the other currency can be used instead.
       if (source === "INR") { setSource(null); setEur(""); }
       return;
     }
@@ -139,7 +139,7 @@ export function AmountPair({
   const derived = (side: "INR" | "EUR") => mirroring && source !== null && source !== side;
   const inrDerived = derived("INR");
   const eurDerived = derived("EUR");
-  const convertedHint = `Converted ${rateNote} — not stored separately`;
+  const convertedHint = `Converted ${rateNote} - not stored separately`;
 
   return (
     <>
@@ -193,7 +193,7 @@ export function AmountPair({
             </>
           ) : (
             <>
-              Stored in {source === "EUR" ? "EUR" : "INR"} — the other box is the converted
+              Stored in {source === "EUR" ? "EUR" : "INR"} - the other box is the converted
               equivalent.{" "}
               <button
                 type="button"

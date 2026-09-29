@@ -6,9 +6,9 @@ import { SIGNAL_META, signalForStudent } from "@/lib/signals";
 import type { AtRiskStudent, HeadCoachSnapshot } from "@/server/head-coach-snapshot";
 
 /**
- * The Head Coach's students row (rebuild spec §5) — "which students need me?"
+ * The Head Coach's students row (rebuild spec §5) - "which students need me?"
  *
- * Replaces a static "Students — Open board" tile that carried no number at all: the head opened
+ * Replaces a static "Students - Open board" tile that carried no number at all: the head opened
  * their dashboard and learned nothing about the people they coach.
  *
  * The at-risk list is the point of the section, so it is a LIST, not a count. A tile reading "7 at
@@ -16,14 +16,14 @@ import type { AtRiskStudent, HeadCoachSnapshot } from "@/server/head-coach-snaps
  * name are the ones the radar already derives (days since a session, overdue check-in, missed
  * sprint target, guarantee window closing).
  *
- * No financial figures anywhere — §5 is explicit about that.
+ * No financial figures anywhere - §5 is explicit about that.
  */
 
-/** How many to name before deferring to the full board — enough to act on, short enough to read. */
+/** How many to name before deferring to the full board - enough to act on, short enough to read. */
 const NAMED_LIMIT = 6;
 
 /** The signal dot's colour, via the canonical palette. Unset (no coach signal yet) reads as muted,
- *  which is not the same as green — an un-assessed student is not a healthy one. */
+ *  which is not the same as green - an un-assessed student is not a healthy one. */
 function signalDotColour(colour: string | null): string {
   if (!colour) return "var(--ink-3)";
   return SIGNAL_META[signalForStudent(colour as "GREEN" | "AMBER" | "RED")].color;

@@ -15,21 +15,21 @@ const FOCUSABLE =
  * and focus returns to the trigger on close.
  *
  * PORTALLED TO <body>, and it must stay that way. `position: fixed` is only relative
- * to the viewport while no ancestor has a transform/filter/perspective/will-change —
+ * to the viewport while no ancestor has a transform/filter/perspective/will-change -
  * any one of those makes that ancestor the containing block instead (CSS Position §4).
  * Rendered in place, this dialog sat under `main > *`'s page-enter animation and
  * centred itself inside the page root, hanging off the bottom of short windows with
  * the submit button unreachable. The fill-modes that caused it are fixed in
  * globals.css, but a modal should not depend on every ancestor staying untransformed
- * forever — one `hover:scale` added upstream years from now would break it again.
+ * forever - one `hover:scale` added upstream years from now would break it again.
  */
 /*
- * Scroll locking goes through the SHARED counter in lib/scroll-lock — not a private one here.
+ * Scroll locking goes through the SHARED counter in lib/scroll-lock - not a private one here.
  * A counter local to Modal fixed modal-over-modal (the greeting + new-lead pair on My Desk)
  * but still stranded the lock whenever a NON-modal overlay interleaved: the Ctrl-K palette,
  * askConfirm and the nav drawer each kept their own save/restore copy, and a palette opened
  * over a modal then closed after it wrote `overflow: hidden` back onto an empty page. One
- * counter, five callers, no ordering problem — see lib/scroll-lock.ts.
+ * counter, five callers, no ordering problem - see lib/scroll-lock.ts.
  */
 
 export function Modal({
@@ -57,7 +57,7 @@ export function Modal({
    * Open/close lifecycle: scroll lock, initial focus, and handing focus back on close.
    *
    * Deliberately keyed on `open` ALONE. Callers pass an inline `onClose` (`() => setX(null)`),
-   * whose identity changes on every parent render — folding these into the keydown effect
+   * whose identity changes on every parent render - folding these into the keydown effect
    * below meant they were torn down and re-run on renders where nothing opened or closed,
    * which churned the scroll lock and yanked focus back to the trigger mid-typing.
    */

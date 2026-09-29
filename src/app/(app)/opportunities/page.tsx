@@ -26,14 +26,14 @@ export default async function OpportunitiesPage({
   const canPurge = session.role === "ADMIN";
 
   const [board, contactsPage, archivedOpps, pipelineConfig] = await Promise.all([
-    // Filters run in SQL — see getBoard. The board is card-capped per stage, so a client-side
+    // Filters run in SQL - see getBoard. The board is card-capped per stage, so a client-side
     // filter would only ever search the visible slice.
     getBoard(searchParams.pipeline, {
       search: searchParams.q,
       ownerId: searchParams.owner,
       status: searchParams.status,
     }),
-    // Flat "pick a contact" dropdown, not the paginated Contacts screen — 500 is generous
+    // Flat "pick a contact" dropdown, not the paginated Contacts screen - 500 is generous
     // for a manual <select>, matching the command palette's per-type cap.
     getContactsList({ take: 500 }),
     getArchivedOpportunities(),
@@ -66,8 +66,8 @@ export default async function OpportunitiesPage({
         canConfigure={canConfigure}
         mode={pipelineConfig.mode}
       />
-      {/* The rules that move a card without anyone touching it. They have always been enforced —
-          in five different files — and were visible nowhere. */}
+      {/* The rules that move a card without anyone touching it. They have always been enforced -
+          in five different files - and were visible nowhere. */}
       <StageRulesCard mode={pipelineConfig.mode} canConfigure={canConfigure} />
       {archivedOpps.length > 0 && (
         <Card title={`Archived opportunities (${archivedOpps.length})`}>

@@ -47,7 +47,7 @@ export default async function ContactsPage({
   /**
    * Quick week/month shortcuts INTO the from/to filter this page already has.
    *
-   * `writes="dates"` on purpose — Contacts owns a `from`/`to` date filter in its filter bar, and
+   * `writes="dates"` on purpose - Contacts owns a `from`/`to` date filter in its filter bar, and
    * adding a `?period=` alongside it would put two competing date mechanisms on one screen. This
    * way the bar and the filter bar are the same filter, reached two ways.
    */

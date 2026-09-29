@@ -4,7 +4,7 @@
  *
  * Money is stored as INR paise. Per-conversion book/tutor costs use the sheet's
  * standard per-level rates (books ₹1,300/level; tutor A1 ₹7,000, A2 ₹8,000,
- * B1 ₹12,000) — the founder can fine-tune any row in the app. Ad spend is
+ * B1 ₹12,000) - the founder can fine-tune any row in the app. Ad spend is
  * allocated evenly across the ad-driven (page-2) conversions, exactly as the
  * workbook does; page-3 (organic / referral / carry-over) rows carry no ad cost.
  *
@@ -19,7 +19,7 @@ const R = (rupees: number) => BigInt(Math.round(rupees * 100)); // → paise
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
 // The seed carries only genuine INPUTS. Delivery costs are derived from the level
-// cost model and ad spend is allocated at read time — see lib/gn-workshop-pricing
+// cost model and ad spend is allocated at read time - see lib/gn-workshop-pricing
 // and server/german-note-workshops. Nothing computed is stored here.
 
 type Slot = [batch: string, time: string];
@@ -43,7 +43,7 @@ type Spec = {
 };
 
 // ── March 2026 ─────────────────────────────────────────────────
-// Page 2 — ad-driven workshop conversions.
+// Page 2 - ad-driven workshop conversions.
 const MARCH_ADS: Spec[] = [
   { name: "Vignesh Kumar", email: "vigneshkumar241@gmail.com", product: "A1_A2", day: "WEEKEND", a1: ["B21", "7:00 AM"], a2: ["B20", "10:00 AM"], final: 31999, paid: 31999, method: "UPI", ad: true },
   { name: "Rajesh", email: "krishrajesh257@gmail.com", product: "A1", day: "WEEKEND", a1: ["B21", "7:00 AM"], final: 16999, paid: 16999, method: "UPI", ad: true },
@@ -66,20 +66,20 @@ const MARCH_ADS: Spec[] = [
   { name: "Balamurali S", email: "balamurali1393@gmail.com", product: "A1", a1: ["B24", "7:00 PM"], final: 16999, paid: 16999, method: "UPI", ad: true },
   { name: "Akshitaa Vijayakumar", email: "akshitaavijayakumar@gmail.com", product: "A1", a1: ["B24", "7:00 PM"], final: 16999, paid: 16999, method: "UPI", ad: true },
 ];
-// Page 3 — organic / referral / carry-over conversions (no ad cost).
+// Page 3 - organic / referral / carry-over conversions (no ad cost).
 const MARCH_ORGANIC: Spec[] = [
-  { name: "Manish Sam", email: "manish.sam02@gmail.com", phone: "7402026507", product: "A1_A2", day: "WEEKEND", a1: ["B21", "7:00 AM"], a2: ["B19", "8:30 PM"], final: 0, paid: 0, free: true, notes: "B2 Client — free seat" },
+  { name: "Manish Sam", email: "manish.sam02@gmail.com", phone: "7402026507", product: "A1_A2", day: "WEEKEND", a1: ["B21", "7:00 AM"], a2: ["B19", "8:30 PM"], final: 0, paid: 0, free: true, notes: "B2 Client - free seat" },
   { name: "Haribabu A", email: "harithaman26@gmail.com", phone: "9360317891", product: "A1_A2", a1: ["B23", "7:00 AM"], final: 30999, paid: 13997, method: "UPI", notes: "From Oct batch" },
   { name: "Arvind Raj", email: "arvindraj.0905@gmail.com", phone: "9739275610", product: "A2_B1", a2: ["Crash Course", "6:00 PM"], b1: ["B07", "6:00 PM"], final: 43035, paid: 43035, method: "German Bank", notes: "B1 normal batch from March" },
   { name: "Abhinaya", email: "abhinayaa316@gmail.com", phone: "9841731897", product: "A1", a1: ["B24", "7:00 PM"], final: 16149, paid: 16149, method: "UPI" },
   { name: "Sony Balajisingh", email: "sonybalajisingh3@gmail.com", phone: "9789907035", product: "A1_A2", day: "WEEKEND", a1: ["B21", "7:00 AM"], a2: ["B20", "10:00 AM"], final: 30598, paid: 30598, method: "UPI" },
   { name: "Kruthiga Santhanam", email: "riyalaster@gmail.com", phone: "7339133100", product: "A1_A2_B1", day: "WEEKEND", a1: ["B22", "6:00 PM"], a2: ["B20", "10:00 AM"], final: 49999, paid: 49999, method: "UPI" },
   { name: "Aadarsh RN", email: "aadhu97@gmail.com", phone: "8122031001", product: "A1_A2", a1: ["B23", "7:00 AM"], a2: ["B20", "10:00 AM"], final: 30598, paid: 30598, method: "UPI" },
-  { name: "Naveenraj P", email: "naveenrajp1995@gmail.com", phone: "8124702599", product: "A1", a1: ["B23", "7:00 AM"], final: 0, paid: 0, free: true, notes: "B2 Client — free seat" },
+  { name: "Naveenraj P", email: "naveenrajp1995@gmail.com", phone: "8124702599", product: "A1", a1: ["B23", "7:00 AM"], final: 0, paid: 0, free: true, notes: "B2 Client - free seat" },
   { name: "Dhashna Moorthy D", email: "dhashnamoorthy98@gmail.com", phone: "8870624406", product: "A1_A2_B1", a1: ["B23", "7:00 AM"], a2: ["B20", "10:00 AM"], final: 48968, paid: 48968, method: "UPI" },
   { name: "Arul Dinesh", email: "adaruldhinesh346@gmail.com", phone: "9659897789", product: "A2", a2: ["B17", "8:30 PM"], final: 17099, paid: 17099, method: "UPI" },
   { name: "Sowmya Kumaresan", email: "sowmya.k19@gmail.com", phone: "9487310554", product: "B1", day: "WEEKEND", b1: ["B09", "8:00 PM"], final: 21000, paid: 21000, method: "UPI" },
-  { name: "Kamalesh C", email: "chandran.kamalesh@gmail.com", phone: "8508654652", product: "A2_B1", day: "WEEKEND", b1: ["B09", "8:00 PM"], final: 37798, paid: 28347, method: "UPI", notes: "Jeffrin from Oct batch — free repetition" },
+  { name: "Kamalesh C", email: "chandran.kamalesh@gmail.com", phone: "8508654652", product: "A2_B1", day: "WEEKEND", b1: ["B09", "8:00 PM"], final: 37798, paid: 28347, method: "UPI", notes: "Jeffrin from Oct batch - free repetition" },
 ];
 
 // ── May 2026 ───────────────────────────────────────────────────

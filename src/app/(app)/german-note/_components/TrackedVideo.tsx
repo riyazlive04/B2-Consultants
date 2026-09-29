@@ -9,13 +9,13 @@ import { recordWatchProgress } from "@/server/german-note-actions";
  *
  * ONLY YOUTUBE IS TRACKABLE, and that is a real limit rather than an oversight. These are
  * cross-origin embeds: a page cannot see inside another origin's player, so progress is only
- * knowable when that provider exposes an API. YouTube does (the IFrame API). Fathom — which
- * the comments call the primary provider — does not, and neither does Drive.
+ * knowable when that provider exposes an API. YouTube does (the IFrame API). Fathom - which
+ * the comments call the primary provider - does not, and neither does Drive.
  *
  * For an untrackable provider this renders a plain iframe and reports nothing, leaving
  * watchedPct null. That is deliberate: resolveWatchTruth reads null as "no tracking" and
- * falls back to the student's tick. The alternative — inferring progress from how long the
- * iframe sat on screen — would put a fabricated number in the one column the founders asked
+ * falls back to the student's tick. The alternative - inferring progress from how long the
+ * iframe sat on screen - would put a fabricated number in the one column the founders asked
  * us to trust, which is worse than no number at all.
  *
  * Every live recording is YouTube today, so this covers the whole library in practice. If
@@ -116,7 +116,7 @@ export function TrackedVideo({
       if (!Number.isFinite(dur) || dur <= 0) return;
       const pct = Math.round((pos / dur) * 100);
       // Only report forward movement. Scrubbing back isn't progress, and the server's
-      // high-water mark would discard it anyway — no reason to spend the round-trip.
+      // high-water mark would discard it anyway - no reason to spend the round-trip.
       if (pct <= lastSentPct.current) return;
       lastSentPct.current = pct;
       void recordWatchProgress(recordingId, Math.floor(pos), Math.floor(dur)).catch(() => {
@@ -126,7 +126,7 @@ export function TrackedVideo({
 
     void loadYouTubeApi().then(() => {
       if (dead || !window.YT?.Player) return;
-      // Attach to the EXISTING iframe rather than creating another element — YouTube's API
+      // Attach to the EXISTING iframe rather than creating another element - YouTube's API
       // adopts an iframe that already carries enablejsapi.
       player = new window.YT.Player(iframe, {
         events: {

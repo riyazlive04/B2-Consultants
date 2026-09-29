@@ -12,8 +12,8 @@ import { allocateStudentCode } from "./student-code";
  * Student import (spec Part 2 §9). Admin-only.
  *
  * Two steps on purpose: `previewStudentImport` writes NOTHING and returns the plan, and only
- * `commitStudentImport` touches the database. The founder sees exactly what will happen —
- * how many created, how many updated, and every row that will be skipped and why — before
+ * `commitStudentImport` touches the database. The founder sees exactly what will happen -
+ * how many created, how many updated, and every row that will be skipped and why - before
  * anything is irreversible. This is a bulk write into a live roster of real people; a
  * one-click "import" that reports afterwards is how a bad paste becomes a cleanup job.
  */
@@ -37,7 +37,7 @@ export async function previewStudentImport(
   const parsed = parseStudentCsv(csv);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   if (parsed.rows.length > MAX_ROWS) {
-    return { ok: false, error: `${parsed.rows.length} rows is over the ${MAX_ROWS}-row limit — split the file.` };
+    return { ok: false, error: `${parsed.rows.length} rows is over the ${MAX_ROWS}-row limit - split the file.` };
   }
 
   const plan = planStudentImport(parsed.rows, await loadExisting(), parsed.skipped);
@@ -59,7 +59,7 @@ export async function commitStudentImport(csv: string): Promise<ActionResult & {
   const parsed = parseStudentCsv(csv);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   if (parsed.rows.length > MAX_ROWS) {
-    return { ok: false, error: `${parsed.rows.length} rows is over the ${MAX_ROWS}-row limit — split the file.` };
+    return { ok: false, error: `${parsed.rows.length} rows is over the ${MAX_ROWS}-row limit - split the file.` };
   }
   const plan = planStudentImport(parsed.rows, await loadExisting(), parsed.skipped);
 
@@ -82,7 +82,7 @@ export async function commitStudentImport(csv: string): Promise<ActionResult & {
         where: { id: p.studentId },
         data: {
           // `undefined` = leave alone. A blank cell in the sheet means "no data here", not
-          // "delete what's on file" — an import is usually a partial export.
+          // "delete what's on file" - an import is usually a partial export.
           fullName: p.row.fullName || undefined,
           phone: p.row.phone ?? undefined,
           address: p.row.address ?? undefined,

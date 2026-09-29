@@ -25,7 +25,7 @@ type DualCurrencyRow = {
 };
 
 /**
- * The row's value in base currency (INR paise), at the rate stamped on the row itself —
+ * The row's value in base currency (INR paise), at the rate stamped on the row itself -
  * never today's rate, or history would shift every time the euro moved.
  */
 export function baseTotalMinor(row: DualCurrencyRow): bigint {
@@ -37,7 +37,7 @@ export function baseTotalMinor(row: DualCurrencyRow): bigint {
  *
  * A row names ONE payment method but may carry both an INR and a EUR amount, so each
  * amount is its own line on its own account at its own rate. Their base values sum to
- * exactly `baseTotalMinor` — the same `eurMinorToInrMinor` rounding on both sides — which
+ * exactly `baseTotalMinor` - the same `eurMinorToInrMinor` rounding on both sides - which
  * is why the entry balances to the paise rather than to within a paisa.
  */
 function assetLines(row: DualCurrencyRow, method: PaymentMethod, side: "debit" | "credit"): DraftLine[] {
@@ -77,12 +77,12 @@ export type IncomeForPosting = DualCurrencyRow & {
  *
  * `incomeAccounts` (code → GL account, from server/levels.ts `levelIncomeAccounts()`) honours a
  * per-level account override. Omit it and posting falls back to the prefix rule in
- * incomeAccountFor — correct for the seeded defaults, so the seed script needs no map.
+ * incomeAccountFor - correct for the seeded defaults, so the seed script needs no map.
  */
 export function incomeEntryDraft(i: IncomeForPosting, incomeAccounts?: Map<string, string>): DraftEntry {
   return {
     date: i.date,
-    narration: `Income — ${i.studentName} (${i.programLevel})`,
+    narration: `Income - ${i.studentName} (${i.programLevel})`,
     sourceType: "INCOME",
     sourceId: i.id,
     postedById: i.enteredById,
@@ -119,7 +119,7 @@ export type ExpenseForPosting = DualCurrencyRow & {
 export function expenseEntryDraft(e: ExpenseForPosting): DraftEntry {
   return {
     date: e.date,
-    narration: `Expense — ${e.vendor} (${e.category})`,
+    narration: `Expense - ${e.vendor} (${e.category})`,
     sourceType: "EXPENSE",
     sourceId: e.id,
     postedById: e.enteredById,
@@ -144,14 +144,14 @@ export type TutorFeeForPosting = {
   batchName: string;
   level: string;
   trainerName: string | null;
-  /** Already resolved through `payableAmountInrMinor` — the override wins over the computed
+  /** Already resolved through `payableAmountInrMinor` - the override wins over the computed
    *  figure, and the ledger must agree with what the founder approved on screen. */
   payableInrMinor: bigint;
   approvedById: string | null;
 };
 
 /**
- * Dr COGS — Direct delivery · Cr Accounts payable, when a tutor fee is APPROVED
+ * Dr COGS - Direct delivery · Cr Accounts payable, when a tutor fee is APPROVED
  * (ER v2 Track C, behind `financePosting.tutorFeeAccrual`).
  *
  * AN ACCRUAL, NOT A PAYMENT. This asserts "we owe the trainer this", which is true the
@@ -162,17 +162,17 @@ export type TutorFeeForPosting = {
  * Those two postings hit DIFFERENT accounts on the debit side (5000 COGS here vs the
  * Expense row's category account), which is the one thing standing between this feature and
  * double-counting the fee. If the founders start tagging the trainer's payment expense as
- * COGS_DIRECT_DELIVERY as well, gross margin will be understated by exactly the fee — so
+ * COGS_DIRECT_DELIVERY as well, gross margin will be understated by exactly the fee - so
  * `verify-ledger.ts` asserts payable is drawn down rather than re-debited.
  *
  * INR only: `TutorFee.amountInrMinor` is a single-currency figure by construction (the band
  * rates are rupee amounts), so there is no EUR leg and no FX rate to stamp.
  */
 export function tutorFeeAccrualDraft(f: TutorFeeForPosting): DraftEntry {
-  const who = f.trainerName ? ` — ${f.trainerName}` : "";
+  const who = f.trainerName ? ` - ${f.trainerName}` : "";
   return {
     date: f.approvedAt,
-    narration: `Tutor fee owed — ${f.batchName} (${f.level})${who}`,
+    narration: `Tutor fee owed - ${f.batchName} (${f.level})${who}`,
     sourceType: "TUTOR_FEE",
     sourceId: f.id,
     postedById: f.approvedById,
@@ -201,7 +201,7 @@ export type PaymentForPosting = {
   paidAt: Date;
   amountInrMinor: bigint;
   /** `InvoicePayment.method` is free text, not the `PaymentMethod` enum (BUILD_CHECKLIST
-   *  §7 — no processor wired yet, see the model comment on InvoicePayment). Mapped below. */
+   *  §7 - no processor wired yet, see the model comment on InvoicePayment). Mapped below. */
   method: string;
   invoiceNumber: string;
   customerName: string;
@@ -211,7 +211,7 @@ export type PaymentForPosting = {
 /** Map the Payments module's free-text method onto the closest `PaymentMethod` enum value
  *  so it can resolve a real asset account via `assetAccountFor`. Unrecognised text (a
  *  future processor name, a typo) falls back to the gateway-clearing account rather than
- *  failing to post — the money still lands somewhere real, just not itemised by rail. */
+ *  failing to post - the money still lands somewhere real, just not itemised by rail. */
 function paymentAssetMethod(method: string): PaymentMethod {
   switch (method.trim().toLowerCase()) {
     case "cash":
@@ -243,9 +243,9 @@ function paymentAssetMethod(method: string): PaymentMethod {
  *
  * Credits AR rather than an income account because that is the accounting-correct target
  * for "cash came in against an invoice", and the chart of accounts already has one (see
- * `ACCOUNT.RECEIVABLE` in chart-of-accounts.ts) — no new account was invented for this.
+ * `ACCOUNT.RECEIVABLE` in chart-of-accounts.ts) - no new account was invented for this.
  * This pass intentionally does NOT post Invoice issuance itself (Dr AR / Cr Income), only
- * the payment against it (BUILD_CHECKLIST §7 scopes just the payment side) — so today AR
+ * the payment against it (BUILD_CHECKLIST §7 scopes just the payment side) - so today AR
  * only ever receives credits here and will trend negative over time until a follow-up
  * posts the issuance side too. That is a known, flagged gap, not a bug in this function.
  */
@@ -255,7 +255,7 @@ export type InvoiceForIssuance = {
   totalInrMinor: bigint;
   number: string;
   customerName: string;
-  /** the level of the linked won lead, when there is one — else revenue lands in "Other". */
+  /** the level of the linked won lead, when there is one - else revenue lands in "Other". */
   programLevel?: string | null;
   issuedById?: string | null;
 };
@@ -270,13 +270,13 @@ export type InvoiceForIssuance = {
  * booked once, at issue, exactly like a hand-keyed Income row.
  *
  * Income account: an invoice has line items, not a program level, so it credits the linked won
- * lead's level when there is one and "Income — Other" (4090) otherwise — never undefined, so the
+ * lead's level when there is one and "Income - Other" (4090) otherwise - never undefined, so the
  * entry always balances. INR-only, like the payment side (invoices carry no EUR split).
  */
 export function invoiceIssuanceEntryDraft(inv: InvoiceForIssuance): DraftEntry {
   return {
     date: inv.issueDate,
-    narration: `Invoice issued — ${inv.customerName} (${inv.number})`,
+    narration: `Invoice issued - ${inv.customerName} (${inv.number})`,
     sourceType: "INVOICE",
     sourceId: inv.id,
     postedById: inv.issuedById ?? null,
@@ -302,7 +302,7 @@ export function invoiceIssuanceEntryDraft(inv: InvoiceForIssuance): DraftEntry {
 export function paymentEntryDraft(p: PaymentForPosting): DraftEntry {
   return {
     date: p.paidAt,
-    narration: `Payment — ${p.customerName} (${p.invoiceNumber})`,
+    narration: `Payment - ${p.customerName} (${p.invoiceNumber})`,
     sourceType: "PAYMENT",
     sourceId: p.id,
     postedById: p.recordedById,

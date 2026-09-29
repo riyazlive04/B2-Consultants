@@ -1,5 +1,5 @@
 /**
- * WhatsApp submission pack — guards on the templates B2 sends to Meta for approval.
+ * WhatsApp submission pack - guards on the templates B2 sends to Meta for approval.
  *
  * The point of these: a rejection costs days of review queue, and the failure modes are all
  * mechanical (adjacent variables, undeclared parameters, a body over the limit). Catch them here,
@@ -17,9 +17,9 @@ import {
   BODY_CHAR_LIMIT,
 } from "../whatsapp-submission";
 import { OUTREACH_STEPS, STEP_BY_KEY } from "../outreach-sop";
-import { WHATSAPP_AVAILABLE_VARS, WHATSAPP_KINDS } from "../whatsapp";
+import { LEAD_TEMPLATE_VARS, WHATSAPP_AVAILABLE_VARS, WHATSAPP_KINDS } from "../whatsapp";
 
-describe("Submission pack — coverage", () => {
+describe("Submission pack - coverage", () => {
   test("every WhatsApp step in the SOP has exactly one template", () => {
     const messageSteps = OUTREACH_STEPS.filter((s) => s.channel === "WHATSAPP").map((s) => s.step);
     const covered = SUBMISSION_TEMPLATES.map((t) => t.step);
@@ -28,7 +28,7 @@ describe("Submission pack — coverage", () => {
 
   test("every template binds to a DISTINCT touchpoint", () => {
     // The app binds ONE WATI template per kind. Two SOP steps sharing a kind would send the
-    // intro's text where the follow-up's belonged — silently, and with no type error.
+    // intro's text where the follow-up's belonged - silently, and with no type error.
     const kinds = SUBMISSION_TEMPLATES.map((t) => t.kind);
     assert.equal(new Set(kinds).size, kinds.length, `duplicate kind: ${kinds.join(", ")}`);
   });
@@ -46,10 +46,10 @@ describe("Submission pack — coverage", () => {
   });
 });
 
-describe("Submission pack — the app can actually supply what the templates declare", () => {
+describe("Submission pack - the app can actually supply what the templates declare", () => {
   test("every declared variable is offered by its touchpoint", () => {
     // THE contract. If a template declares a variable the touchpoint can't fill, the app blocks
-    // the send at runtime — correct, but a wasted approval cycle. Catch it now.
+    // the send at runtime - correct, but a wasted approval cycle. Catch it now.
     for (const t of SUBMISSION_TEMPLATES) {
       const offered = WHATSAPP_AVAILABLE_VARS[t.kind];
       for (const v of t.vars) {
@@ -61,16 +61,36 @@ describe("Submission pack — the app can actually supply what the templates dec
   test("every variable the touchpoint offers is used by its template", () => {
     // The reverse: an offered-but-unused variable is dead config that will confuse whoever maps
     // the template in Settings.
+    //
+    // This is the TIDINESS direction, not the safety one - the assertion above is what stops a
+    // template declaring a variable we cannot fill. A touchpoint may legitimately offer more
+    // than its pack template uses when the founder binds an APPROVED template that was not
+    // authored from the SOP, and the pool is a menu for that binding rather than a payload.
+    //
+    // SOP_DISCO_CANCEL is the case: Step 16 fires 12h BEFORE the call, and the pack's
+    // b2_sop_disco_cancel actually reads "we noticed you missed your scheduled call" - which is
+    // untrue at that moment. b2_booking_auto_cancelled says the slot is being released for lack
+    // of confirmation, which is correct, and it needs {{booking_url}}.
+    //
+    // Since 22/09/2026 every lead-facing touchpoint also offers the whole LEAD_TEMPLATE_VARS pool,
+    // filled from the lead's record by sendWhatsApp, so any approved template can be bound to any
+    // of them. That pool is a deliberate menu, so it is exempt here; anything else must be used.
+    const BINDS_OUTSIDE_THE_PACK: Partial<Record<string, readonly string[]>> = {
+      SOP_DISCO_CANCEL: ["booking_url"],
+    };
+    const leadPool = new Set<string>(LEAD_TEMPLATE_VARS);
     for (const t of SUBMISSION_TEMPLATES) {
       const declared = new Set(t.vars.map((v) => v.name));
+      const allowed = new Set([...(BINDS_OUTSIDE_THE_PACK[t.kind] ?? []), ...leadPool]);
       for (const v of WHATSAPP_AVAILABLE_VARS[t.kind]) {
+        if (allowed.has(v)) continue;
         assert.ok(declared.has(v), `${t.kind} offers {{${v}}} but ${t.name} never declares it`);
       }
     }
   });
 });
 
-describe("Submission pack — bodies are derived from the SOP, not retyped", () => {
+describe("Submission pack - bodies are derived from the SOP, not retyped", () => {
   test("each submitted body is the SOP body with variables translated", () => {
     for (const t of SUBMISSION_TEMPLATES) {
       const sop = STEP_BY_KEY[t.step]!.body!;
@@ -86,8 +106,9 @@ describe("Submission pack — bodies are derived from the SOP, not retyped", () 
           .trim();
       const sopStripped = strip(sop);
       const bodyStripped = strip(body);
-      // Step 20 gets one documented closing line appended; everything else must match exactly.
-      if (t.step === "SSS_CONFIRM_2") {
+      // Steps 20 and 20b get one documented closing line appended - they share a body, so they
+      // share its trailing-variable problem and its fix. Everything else must match exactly.
+      if (t.step === "SSS_CONFIRM_2" || t.step === "SSS_CONFIRM_3") {
         assert.ok(bodyStripped.startsWith(sopStripped), `${t.name} must keep the SOP wording as its prefix`);
       } else {
         assert.equal(bodyStripped, sopStripped, `${t.name} drifted from the SOP text`);
@@ -95,7 +116,7 @@ describe("Submission pack — bodies are derived from the SOP, not retyped", () 
     }
   });
 
-  test("the video placeholder never reaches the body — it is a media header", () => {
+  test("the video placeholder never reaches the body - it is a media header", () => {
     const sss = SUBMISSION_TEMPLATES.find((t) => t.step === "SSS_CONFIRM_1")!;
     assert.ok(!submissionBody(sss).includes("ATTACH VIDEO"));
     assert.ok(sss.header, "SSS confirm 1 must declare a video header");
@@ -123,7 +144,7 @@ describe("Submission pack — bodies are derived from the SOP, not retyped", () 
   });
 });
 
-describe("Submission pack — Meta's mechanical rules", () => {
+describe("Submission pack - Meta's mechanical rules", () => {
   test("every body is within Meta's character limit", () => {
     for (const t of SUBMISSION_TEMPLATES) {
       const len = submissionBody(t).length;
@@ -189,7 +210,7 @@ describe("Submission pack — Meta's mechanical rules", () => {
   });
 
   /**
-   * The change is only defensible if what it replaced is still readable — that is the condition
+   * The change is only defensible if what it replaced is still readable - that is the condition
    * the SOP file's verbatim rule was relaxed under.
    */
   test("an accepted fix keeps the superseded wording", () => {
@@ -211,23 +232,35 @@ describe("Submission pack — Meta's mechanical rules", () => {
     assert.doesNotMatch(
       body,
       /quick call now/,
-      "auto-sending at opt-in makes an immediate-call promise false — a caller only rings if they do NOT book",
+      "auto-sending at opt-in makes an immediate-call promise false - a caller only rings if they do NOT book",
     );
     assert.match(body, /reply here and one of our team will call you/);
   });
 });
 
-describe("Submission pack — categories", () => {
-  test("all nine are MARKETING", () => {
+describe("Submission pack - categories", () => {
+  test("every promotional template is MARKETING; only a pure transaction notice may be UTILITY", () => {
     // Meta allows UTILITY only for a template that is non-promotional and carries no persuasive
     // intent; mixed content defaults to MARKETING. Every body here sells while it informs, so
-    // none of them clears that bar — see the rationale on SUBMISSION_TEMPLATES.
+    // none of them clears that bar - see the rationale on SUBMISSION_TEMPLATES.
     //
     // This is not a rubber stamp on the current values: to make any of these UTILITY the
     // promotional copy has to come OUT of the body, which is a proposedFix and a business
     // decision. Flipping the category alone would earn a silent re-categorisation from Meta and
     // an abuse flag, which is exactly the mistake this test exists to catch.
+    // The ONE documented exception. b2_sop_not_qualified tells someone a booked appointment has
+    // been cancelled: no offer, no link, no persuasion. That is a transaction update, and
+    // declaring it UTILITY is correct usage rather than the gaming this test guards against.
+    // Any OTHER template claiming UTILITY is the mistake, and still fails here.
+    const UTILITY_ALLOWED = new Set(["b2_sop_not_qualified"]);
     for (const t of SUBMISSION_TEMPLATES) {
+      if (UTILITY_ALLOWED.has(t.name)) {
+        assert.ok(
+          t.category === "UTILITY" || t.category === "MARKETING",
+          `${t.name} may be UTILITY or MARKETING`,
+        );
+        continue;
+      }
       assert.equal(t.category, "MARKETING", `${t.name} should be MARKETING`);
     }
   });
@@ -253,7 +286,7 @@ describe("Submission pack — categories", () => {
     }
   });
 
-  test("every variable carries a sample — Meta requires one", () => {
+  test("every variable carries a sample - Meta requires one", () => {
     for (const t of SUBMISSION_TEMPLATES) {
       for (const v of t.vars) {
         assert.ok(v.sample && v.sample.trim().length > 0, `${t.name} {{${v.name}}} has no sample value`);

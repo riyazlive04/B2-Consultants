@@ -116,7 +116,7 @@ export async function createSessionTask(sessionId: string, form: FormData): Prom
  * Backfill a newly-seated student's outstanding coursework.
  *
  * Called from the seat actions. Without it, someone who joins in week three sees an empty
- * task list and looks fully up to date — the exact opposite of the truth.
+ * task list and looks fully up to date - the exact opposite of the truth.
  */
 export async function seatStudentTasks(batchId: string, studentId: string): Promise<number> {
   const tasks = await prisma.sessionTask.findMany({
@@ -166,8 +166,8 @@ export async function completeSessionTask(
     },
   });
 
-  // Write-through to the tracker's headline fields so every existing read path — the student
-  // tracker, the at-risk radar — keeps working with no change. These two columns were the
+  // Write-through to the tracker's headline fields so every existing read path - the student
+  // tracker, the at-risk radar - keeps working with no change. These two columns were the
   // placeholder this table replaces; they stay correct rather than becoming stale.
   await prisma.enrollment.updateMany({
     where: { studentId: row.studentId, status: "ACTIVE" },

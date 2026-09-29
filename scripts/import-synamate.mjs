@@ -8,13 +8,13 @@
 //   Contact Id, First Name, Last Name, Phone, Email, Business Name, Created, Last Activity, Tags
 // There is NO source, pipeline stage, or opportunity value in the export. The lfmvp-*
 // tags are therefore the only funnel signal we have, and the stage map below is inferred
-// from them — it is a decision, not data.
+// from them - it is a decision, not data.
 //
 // ─────────────────── Two things worth knowing before reading on ───────────────────
 //
 // 1. DELETING THE DEMO LEADS FIGHTS THE SCHEMA, ON PURPOSE.
 //    `lead_stage_history` is append-only (a BEFORE UPDATE OR DELETE trigger raises), and
-//    it CASCADEs from `lead` — so a plain `DELETE FROM lead` is refused by the cascade.
+//    it CASCADEs from `lead` - so a plain `DELETE FROM lead` is refused by the cascade.
 //    We do NOT use `session_replication_role = replica` here (the data-migration script
 //    does): that disables FK triggers too, so the 9 CASCADE children would be orphaned
 //    and the 8 SET NULL children would keep dangling ids. Instead we disable exactly ONE
@@ -60,9 +60,9 @@ if (!TARGET) {
 // is further down the funnel, so the LAST match by this order wins.
 const STAGE_BY_TAG = [
   ["lfmvp-optin", "NEW_LEAD"],
-  ["lfmvp-visited-but-didn't-applied", "LOST"], // 8,365 — opted in, never applied
+  ["lfmvp-visited-but-didn't-applied", "LOST"], // 8,365 - opted in, never applied
   ["workshop-follow-up", "WORKSHOP_FOLLOWUP"],
-  ["lfmvp-applied-for-call", "DISCO_BOOKED"], // 2,429 — highest intent, wins over the rest
+  ["lfmvp-applied-for-call", "DISCO_BOOKED"], // 2,429 - highest intent, wins over the rest
 ];
 const RANK = Object.fromEntries(STAGE_BY_TAG.map(([t], i) => [t, i]));
 
@@ -116,7 +116,7 @@ function mapRow(r) {
     dateIn: isNaN(created) ? new Date() : created,
     stage,
     source: "SYNAMATE",
-    externalRef: norm(r["Contact Id"]) || null, // GHL id — the idempotency key
+    externalRef: norm(r["Contact Id"]) || null, // GHL id - the idempotency key
     notes: tags.length ? `Synamate tags: ${tags.join(", ")}` : null,
     createdAt: isNaN(created) ? new Date() : created,
   };
@@ -191,14 +191,14 @@ try {
 
   console.log("\nDeleting demo leads …");
   // lead_stage_history is append-only and CASCADEs from lead, so the cascade is refused
-  // unless that ONE guard stands down. We do NOT touch FK triggers — the 9 CASCADE and
+  // unless that ONE guard stands down. We do NOT touch FK triggers - the 9 CASCADE and
   // 8 SET NULL children must still be maintained correctly.
   await prisma.$executeRawUnsafe(`ALTER TABLE "lead_stage_history" DISABLE TRIGGER "lead_stage_history_append_only"`);
   try {
     const del = await prisma.lead.deleteMany({ where: { source: "MANUAL" } });
     console.log(`  deleted ${del.count} demo leads (children cascaded normally)`);
   } finally {
-    // Always re-arm, even if the delete threw — leaving this off would silently make the
+    // Always re-arm, even if the delete threw - leaving this off would silently make the
     // ledger's sibling guarantee unenforced for the rest of the connection's life.
     await prisma.$executeRawUnsafe(`ALTER TABLE "lead_stage_history" ENABLE TRIGGER "lead_stage_history_append_only"`);
     console.log("  append-only guard re-armed");
@@ -207,7 +207,7 @@ try {
   console.log("\nUpdating existing real leads matched by phone …");
   for (const u of toUpdate) {
     const { id, ...data } = u;
-    // Do NOT overwrite `source` — these arrived via PABBLY/FLEXIFUNNELS/NATIVE_FORM and
+    // Do NOT overwrite `source` - these arrived via PABBLY/FLEXIFUNNELS/NATIVE_FORM and
     // that provenance is the truth about how they reached us.
     delete data.source;
     await prisma.lead.update({ where: { id }, data: { externalRef: data.externalRef, notes: data.notes } });
@@ -229,7 +229,7 @@ try {
   const total = await prisma.lead.count();
   const bySource = await prisma.lead.groupBy({ by: ["source"], _count: true });
   const byStage = await prisma.lead.groupBy({ by: ["stage"], _count: true });
-  console.log(`\nDONE — ${total} leads in Supabase`);
+  console.log(`\nDONE - ${total} leads in Supabase`);
   console.log("  by source:", bySource.map((s) => `${s.source}=${s._count}`).join(" "));
   console.log("  by stage :", byStage.map((s) => `${s.stage}=${s._count}`).join(" "));
 } finally {

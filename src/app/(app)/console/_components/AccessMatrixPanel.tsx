@@ -15,12 +15,12 @@ import {
 } from "@/lib/permission-matrix";
 
 /**
- * Access Matrix — the answer to "who can see what", next to what the spec says it should be
+ * Access Matrix - the answer to "who can see what", next to what the spec says it should be
  * (Error Log O3).
  *
  * Read-only on purpose. The place to CHANGE access is the Sections tab (role defaults) and the
  * per-person dialog on Users (overrides); a second editor would be a second source of truth. What
- * has never existed is a way to check the result against the agreed table — so this screen reads
+ * has never existed is a way to check the result against the agreed table - so this screen reads
  * the same `sectionAllowed` the server uses and reports where the two disagree.
  *
  * Read the columns as the app's five roles and the "Spec §3" column as the eight the document
@@ -37,7 +37,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
 };
 
 /**
- * Cell presentation for an ALREADY-COMPUTED verdict — the grid computes every verdict once (for
+ * Cell presentation for an ALREADY-COMPUTED verdict - the grid computes every verdict once (for
  * the stat tiles) and this reads it back, rather than re-running `driftFor` per cell.
  * Colour is spent on meaning only: a leak is bad, a gap is a warning.
  */
@@ -52,16 +52,16 @@ function cellFor(row: MatrixRow, appRole: AppRole, verdict: DriftVerdict) {
       return {
         glyph: "?",
         tone: "var(--warn)",
-        title: `The spec grants this to ${who} only, but ${ROLE_LABELS[appRole]} is one role — it cannot be expressed as a default.`,
+        title: `The spec grants this to ${who} only, but ${ROLE_LABELS[appRole]} is one role - it cannot be expressed as a default.`,
       };
     }
     case "NOT_GATEABLE":
       return { glyph: "·", tone: "var(--ink-3)", title: row.note ?? "Not gated by a section." };
     default:
-      // ALIGNED — app matches spec, so the spec's own visibility says granted vs hidden.
+      // ALIGNED - app matches spec, so the spec's own visibility says granted vs hidden.
       return specVisibility(row, appRole) === "VISIBLE"
         ? { glyph: "✓", tone: "var(--good)", title: "Granted, and the spec agrees." }
-        : { glyph: "—", tone: "var(--ink-3)", title: "Hidden, and the spec agrees." };
+        : { glyph: "-", tone: "var(--ink-3)", title: "Hidden, and the spec agrees." };
   }
 }
 
@@ -84,7 +84,7 @@ export function AccessMatrixPanel({ sections }: { sections: ResolvedSection[] })
     <div className="space-y-4">
       <Hint>
         What each role can actually open right now, checked against the permission matrix in the
-        rebuild spec (§3). This screen only reports — change role defaults on the Sections tab, and
+        rebuild spec (§3). This screen only reports - change role defaults on the Sections tab, and
         individual grants from a person&rsquo;s row on Users.
       </Hint>
 
@@ -100,7 +100,7 @@ export function AccessMatrixPanel({ sections }: { sections: ResolvedSection[] })
             The spec names eight roles; the app has five. Owner and Admin are one account here, and
             L1, L2 and L3 are all <span className="font-semibold">Telecaller</span>. Where the
             document gives those collapsed roles different access, there is no default that satisfies
-            it — only a per-person override, or the role-model rework.
+            it - only a per-person override, or the role-model rework.
           </p>
           <ul className="mt-3 space-y-1.5">
             {conflicts.map((c) => (
@@ -108,7 +108,7 @@ export function AccessMatrixPanel({ sections }: { sections: ResolvedSection[] })
                 <span className="font-semibold text-ink">{c.row.label}</span>
                 <span className="text-muted">
                   {" "}
-                  — granted to {conflictingSpecRoles(c.row, c.appRole).join(", ")} only, but{" "}
+                  - granted to {conflictingSpecRoles(c.row, c.appRole).join(", ")} only, but{" "}
                   {ROLE_LABELS[c.appRole]} is one role.
                 </span>
               </li>
@@ -197,7 +197,7 @@ export function AccessMatrixPanel({ sections }: { sections: ResolvedSection[] })
         </ul>
         <Hint>
           L1 and L2 are told apart by a telecaller&rsquo;s log variant, which drives which My Desk
-          they get — it is not a role, so it cannot gate a section.
+          they get - it is not a role, so it cannot gate a section.
         </Hint>
       </Card>
     </div>

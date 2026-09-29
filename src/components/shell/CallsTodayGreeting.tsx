@@ -10,7 +10,7 @@ import { Btn } from "@/components/ui/controls";
  * The "you have N calls to take today" popup, shown once a day after signing in.
  *
  * Once a DAY, not once a session: the ask was "once they log in they have to see the total
- * number of calls" — but this app keeps you signed in, so a strict once-per-login popup would
+ * number of calls" - but this app keeps you signed in, so a strict once-per-login popup would
  * appear roughly never. Keying the dismissal on the IST date means it greets them the first
  * time they open the app each day and then stays out of the way, which is what was meant.
  *
@@ -29,7 +29,7 @@ export function CallsTodayGreeting({
   count: number;
   target: number;
   name: string;
-  /** The IST date (YYYY-MM-DD), resolved on the server — the client's clock may be wrong. */
+  /** The IST date (YYYY-MM-DD), resolved on the server - the client's clock may be wrong. */
   todayKey: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -41,7 +41,7 @@ export function CallsTodayGreeting({
     try {
       if (!localStorage.getItem(storageKey)) setOpen(true);
     } catch {
-      /* private mode / storage disabled — just don't show it rather than breaking the shell */
+      /* private mode / storage disabled - just don't show it rather than breaking the shell */
     }
   }, [storageKey]);
 
@@ -49,7 +49,7 @@ export function CallsTodayGreeting({
     try {
       localStorage.setItem(storageKey, "1");
     } catch {
-      /* ignore — worst case it greets them again */
+      /* ignore - worst case it greets them again */
     }
     setOpen(false);
   };
@@ -70,7 +70,7 @@ export function CallsTodayGreeting({
         </div>
         <p className="text-sm text-muted">
           {count === 0
-            ? "Nothing waiting right now — new leads will pop up the moment they're assigned to you."
+            ? "Nothing waiting right now - new leads will pop up the moment they're assigned to you."
             : "These are your open leads with no call logged today. Never-called leads are at the top of the list."}
         </p>
         <div className="flex items-center justify-end gap-2">

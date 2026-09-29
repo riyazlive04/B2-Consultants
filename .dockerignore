@@ -37,6 +37,10 @@ tsconfig.tsbuildinfo
 .playwright-mcp
 *.log
 
+# End-to-end suite: runs from a developer machine against a server, never inside the image.
+# It has its own package.json and gitignored credentials files.
+e2e
+
 # Docker & compose files — not needed inside the image.
 # NOTE: `Dockerfile` matches the ROOT one only, so docker/cron/Dockerfile and the
 # sidecar's *.sh stay in the build context (the cron service needs them). Caddyfile

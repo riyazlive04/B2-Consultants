@@ -2,7 +2,7 @@
 
 // Split out of cash/page.tsx (an async Server Component) for the same reason as
 // funnel/_components/FunnelTables.tsx: Column.cell/value are functions, and functions can't be
-// passed as props from a Server Component into DataTable ("use client") — Next.js throws at
+// passed as props from a Server Component into DataTable ("use client") - Next.js throws at
 // render time. Keeping the column definitions here, alongside DataTable, fixes it.
 
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -16,7 +16,7 @@ export function TopReceivablesTable({ rows }: { rows: ReceivableRow[] }) {
   const maxBalance = Math.max(1, ...topRows.map((r) => r.balanceInr));
 
   const columns: Column<ReceivableRow>[] = [
-    { key: "student", header: "Student", cell: (r) => <span className="max-w-[140px] truncate font-medium">{r.studentName}</span>, value: (r) => r.studentName },
+    { key: "student", header: "Student", cell: (r) => <span className="max-w-[140px] truncate font-medium" title={r.studentName}>{r.studentName}</span>, value: (r) => r.studentName },
     {
       key: "balance", header: "Balance", align: "right",
       cell: (r) => (

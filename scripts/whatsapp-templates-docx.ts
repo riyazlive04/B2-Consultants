@@ -1,5 +1,5 @@
 /**
- * Generates `WhatsApp_Templates_for_Approval.docx` — the submission pack B2 hands to whoever
+ * Generates `WhatsApp_Templates_for_Approval.docx` - the submission pack B2 hands to whoever
  * approves copy, then pastes into WATI.
  *
  * Content is DERIVED, never retyped: bodies come from the real SOP constants via
@@ -148,7 +148,7 @@ function table(headers: string[], rows: string[][], widths: number[], monoCols: 
 }
 
 /**
- * The message body, rendered as it will appear — monospaced, boxed, one paragraph per line so
+ * The message body, rendered as it will appear - monospaced, boxed, one paragraph per line so
  * Word preserves the SOP's blank lines exactly. Whoever approves this must see the real thing.
  */
 function bodyBox(text: string): Paragraph[] {
@@ -187,14 +187,14 @@ function cover(): Paragraph[] {
     }),
     spacer(160),
     p(
-      "Source of truth: Script for Outreach Specialist.docx, Steps 1–23. Every message body in this pack is generated directly from the text the application ships — it is not retyped, so this document and the app cannot disagree.",
+      "Source of truth: Script for Outreach Specialist.docx, Steps 1–23. Every message body in this pack is generated directly from the text the application ships - it is not retyped, so this document and the app cannot disagree.",
       { size: 19, color: MUTED, italics: true },
     ),
     spacer(80),
     p("Read this first", { bold: true, size: 22 }),
-    bullet("Business-initiated WhatsApp messages must be pre-approved templates. Until each one below is APPROVED in WATI and mapped in the app, the app will not send it — it queues the message for the specialist to send by hand instead. Nothing breaks; it just stays manual."),
+    bullet("Business-initiated WhatsApp messages must be pre-approved templates. Until each one below is APPROVED in WATI and mapped in the app, the app will not send it - it queues the message for the specialist to send by hand instead. Nothing breaks; it just stays manual."),
     bullet("B2’s WATI account currently has no approved discovery or booking templates. All nine of these are new submissions."),
-    bullet("Variables are written {{like_this}} — that is WATI’s named-parameter syntax. The SOP writes the same variables as [Prospect’s First Name]; the mapping is given per template."),
+    bullet("Variables are written {{like_this}} - that is WATI’s named-parameter syntax. The SOP writes the same variables as [Prospect’s First Name]; the mapping is given per template."),
     bullet("*Asterisks* render as bold in WhatsApp. They are intentional and must be kept."),
     bullet("Links are literal text, not variables, so Meta reviews them once at approval rather than on every send."),
     rule(),
@@ -210,24 +210,24 @@ function summaryTable(): (Paragraph | Table)[] {
         t.sopStep,
         t.name,
         t.category,
-        t.vars.map((v) => v.name).join(", ") || "—",
+        t.vars.map((v) => v.name).join(", ") || "-",
         t.kind,
       ]),
       [8, 30, 14, 26, 22],
       [1, 4],
     ),
     spacer(100),
-    p("All nine are MARKETING. Meta only allows UTILITY for a template that is non-promotional and carries no persuasive intent — anything with mixed content defaults to MARKETING. Every message in this pack sells something while it informs: the case studies link, the “*FREE*” framing, the “personalized game plan”, the re-booking CTAs on the two cancellations. That the prospect booked the appointment themselves is not enough on its own, and the call being a free sales call rather than a paid booking weakens the claim further.", {
+    p("All nine are MARKETING. Meta only allows UTILITY for a template that is non-promotional and carries no persuasive intent - anything with mixed content defaults to MARKETING. Every message in this pack sells something while it informs: the case studies link, the “*FREE*” framing, the “personalized game plan”, the re-booking CTAs on the two cancellations. That the prospect booked the appointment themselves is not enough on its own, and the call being a free sales call rather than a paid booking weakens the claim further.", {
       size: 19,
       color: MUTED,
     }),
     spacer(60),
-    p("Note that a “reply YES to confirm” is NOT what makes these MARKETING — a confirmation request for a booked appointment is the textbook UTILITY case. It is the promotional copy around it that decides. The clearest proof is Steps 16 and 21: they ask for nothing at all, and they are still MARKETING, because they carry a re-booking link.", {
+    p("Note that a “reply YES to confirm” is NOT what makes these MARKETING - a confirmation request for a booked appointment is the textbook UTILITY case. It is the promotional copy around it that decides. The clearest proof is Steps 16 and 21: they ask for nothing at all, and they are still MARKETING, because they carry a re-booking link.", {
       size: 19,
       color: MUTED,
     }),
     spacer(60),
-    p("Two consequences. Since April 2025 Meta approves a template as MARKETING whenever it judges it to be MARKETING, whatever you declared — and flags accounts that game the category, so declaring UTILITY here would buy a flag, not a cheaper message. And MARKETING templates are subject to Meta’s per-user marketing limits and require opt-in: B2 has that opt-in via the website form, so keep the form’s consent wording, it is the evidence. The cost B2 is accepting is that a time-critical confirmation reminder can be throttled for a prospect near their marketing cap — worth rechecking against real delivery rates once these are live.", {
+    p("Two consequences. Since April 2025 Meta approves a template as MARKETING whenever it judges it to be MARKETING, whatever you declared - and flags accounts that game the category, so declaring UTILITY here would buy a flag, not a cheaper message. And MARKETING templates are subject to Meta’s per-user marketing limits and require opt-in: B2 has that opt-in via the website form, so keep the form’s consent wording, it is the evidence. The cost B2 is accepting is that a time-critical confirmation reminder can be throttled for a prospect near their marketing cap - worth rechecking against real delivery rates once these are live.", {
       size: 19,
       color: MUTED,
     }),
@@ -245,7 +245,7 @@ function templateSection(t: SubmissionTemplate, index: number): (Paragraph | Tab
       spacing: { before: 280, after: 60 },
       pageBreakBefore: index > 0,
       children: [
-        new TextRun({ text: `${index + 1}. ${t.sopStep} — `, size: 26, bold: true, color: INK, font: FONT }),
+        new TextRun({ text: `${index + 1}. ${t.sopStep} - `, size: 26, bold: true, color: INK, font: FONT }),
         new TextRun({ text: t.name, size: 26, bold: true, color: ACCENT, font: MONO }),
       ],
     }),
@@ -269,9 +269,9 @@ function templateSection(t: SubmissionTemplate, index: number): (Paragraph | Tab
     p(t.categoryNote, { size: 19, color: MUTED, spacing: 120 }),
 
     // An OPEN question ("as the SOP writes it today") vs a settled one. With an acceptedFix the
-    // body below IS the approved text, so it gets the plain paste-this heading — the note further
+    // body below IS the approved text, so it gets the plain paste-this heading - the note further
     // down explains what it replaced.
-    p(t.proposedFix ? "Body — as the SOP writes it today" : "Body — paste exactly as shown", {
+    p(t.proposedFix ? "Body - as the SOP writes it today" : "Body - paste exactly as shown", {
       bold: true,
       size: 20,
     }),
@@ -282,7 +282,7 @@ function templateSection(t: SubmissionTemplate, index: number): (Paragraph | Tab
   /**
    * A wording change that has ALREADY been approved and is live in the SOP constant.
    *
-   * Printed in green as settled, not in red as a question — the body above is the approved one,
+   * Printed in green as settled, not in red as a question - the body above is the approved one,
    * so asking the submitter to decide again would be misleading. The superseded text is shown
    * underneath because B2 also holds the original SOP document: without it, someone comparing
    * the two would find a discrepancy and no explanation for it.
@@ -293,7 +293,7 @@ function templateSection(t: SubmissionTemplate, index: number): (Paragraph | Tab
         spacing: { before: 60, after: 80 },
         children: [
           new TextRun({
-            text: `✓  Approved wording change — decided ${t.acceptedFix.decidedOn}. The body above is the one to submit.`,
+            text: `✓  Approved wording change - decided ${t.acceptedFix.decidedOn}. The body above is the one to submit.`,
             size: 21,
             bold: true,
             color: ACCENT,
@@ -309,13 +309,13 @@ function templateSection(t: SubmissionTemplate, index: number): (Paragraph | Tab
   }
 
   // A wording change that needs a human's sign-off before submission. Shown as a diff-in-words:
-  // what's wrong, what to change it to, and why — never applied silently.
+  // what's wrong, what to change it to, and why - never applied silently.
   if (t.proposedFix) {
     out.push(
       new Paragraph({
         spacing: { before: 60, after: 80 },
         children: [
-          new TextRun({ text: "⚠  Proposed change — needs B2 approval before submitting", size: 21, bold: true, color: RISK, font: FONT }),
+          new TextRun({ text: "⚠  Proposed change - needs B2 approval before submitting", size: 21, bold: true, color: RISK, font: FONT }),
         ],
       }),
     );
@@ -365,39 +365,39 @@ function checklist(): (Paragraph | Table)[] {
       spacing: 160,
     }),
 
-    h2("Part A — Approve the copy (B2, internal)"),
+    h2("Part A - Approve the copy (B2, internal)"),
     checkbox("Every body below reads correctly to B2, including the *bold* markers and the 🇩🇪 emoji."),
     checkbox("The four links are current and live: optin.b2consultants.de/apply · optin.b2consultants.de/lang · casestudies.b2consultants.de/casestudies · optin.b2consultants.de/sss"),
-    checkbox("Step 20’s added closing line is acceptable (the SOP’s wording ends on the Zoom link, which Meta commonly rejects — see that template’s note)."),
-    checkbox("Decide how Step 19’s personalized video is delivered — see “Open decisions” below."),
+    checkbox("Step 20’s added closing line is acceptable (the SOP’s wording ends on the Zoom link, which Meta commonly rejects - see that template’s note)."),
+    checkbox("Decide how Step 19’s personalized video is delivered - see “Open decisions” below."),
     checkbox("Sender name confirmed: the {{sender}} value the prospect sees."),
 
-    h2("Part B — Submit in WATI (per template)"),
-    checkbox("Create the template with the EXACT name given — the app is mapped to these names."),
-    checkbox("Set the category to MARKETING on all nine. This is deliberate — see “The nine templates at a glance”. Do not re-declare any of them UTILITY to save on send cost: Meta re-categorises them anyway and flags the account for it."),
-    checkbox("Paste the body exactly. No trimming of blank lines — the spacing is part of the message."),
+    h2("Part B - Submit in WATI (per template)"),
+    checkbox("Create the template with the EXACT name given - the app is mapped to these names."),
+    checkbox("Set the category to MARKETING on all nine. This is deliberate - see “The nine templates at a glance”. Do not re-declare any of them UTILITY to save on send cost: Meta re-categorises them anyway and flags the account for it."),
+    checkbox("Paste the body exactly. No trimming of blank lines - the spacing is part of the message."),
     checkbox("Declare the variables in the order shown and give each the sample value listed. Meta rejects submissions with missing or unrealistic samples."),
     checkbox("Language: en. If WATI insists on a locale, use en_GB and record which you chose."),
     checkbox("Submit and record the date. Review is usually minutes, but can take up to 24–48 hours."),
-    checkbox("All nine show APPROVED in WATI. Note that a template can be approved and later re-categorised by Meta — recheck before go-live."),
+    checkbox("All nine show APPROVED in WATI. Note that a template can be approved and later re-categorised by Meta - recheck before go-live."),
 
-    h2("Part C — Wire it into the app (Admin)"),
+    h2("Part C - Wire it into the app (Admin)"),
     checkbox("Set WATI_ENABLED=true, WATI_API_ENDPOINT and WATI_ACCESS_TOKEN in the environment.", true),
     checkbox("WhatsApp → Settings → Refresh templates. The nine names should appear in the catalogue."),
-    checkbox("Bind each touchpoint to its template using the “App touchpoint” column in the table above. One template per touchpoint — never share one across two."),
-    checkbox("For each template, enter its variable list in Settings exactly as declared in WATI. A mismatch does not send a broken message — the app blocks the send and tells you which variable is missing."),
+    checkbox("Bind each touchpoint to its template using the “App touchpoint” column in the table above. One template per touchpoint - never share one across two."),
+    checkbox("For each template, enter its variable list in Settings exactly as declared in WATI. A mismatch does not send a broken message - the app blocks the send and tells you which variable is missing."),
     checkbox("Send a test message to your own number from WhatsApp → Settings. Confirm the variables resolve and the bold renders."),
     checkbox("Outreach → Settings → turn the engine ON.", true),
     checkbox("Backfill journeys for existing leads."),
-    checkbox("Point a cron at /api/cron/outreach EVERY MINUTE with the CRON_SECRET header. Cron cadence is the engine’s timing resolution — a 15-minute cron cannot police the 5-minute reaction SLA.", true),
+    checkbox("Point a cron at /api/cron/outreach EVERY MINUTE with the CRON_SECRET header. Cron cadence is the engine’s timing resolution - a 15-minute cron cannot police the 5-minute reaction SLA.", true),
     checkbox("Leave every step on MANUAL for the first week. Watch the queue, confirm the right message is proposed at the right time for real prospects."),
     checkbox("Only then turn on auto-send, one step at a time, starting with the lowest-risk (Step 13 Disco welcome).", true),
 
-    h2("Part D — Confirm it works end to end"),
+    h2("Part D - Confirm it works end to end"),
     checkbox("A real opt-in appears in Outreach → Due now within one cron tick, with the SLA clock running."),
     checkbox("The specialist gets the opt-in email (needs EMAIL_ENABLED + RESEND_API_KEY + a from address)."),
     checkbox("A booking made with a different email/phone format than the opt-in still links to the same prospect."),
-    checkbox("Replying YES to a confirmation message flips “WhatsApp Confirmed” — and replying “not interested” does NOT."),
+    checkbox("Replying YES to a confirmation message flips “WhatsApp Confirmed” - and replying “not interested” does NOT."),
     checkbox("Key Metrics exports with every column, including the CET appointment time."),
     rule(),
   ];
@@ -410,7 +410,7 @@ function wiring(): (Paragraph | Table)[] {
     p("What to do, and how it hangs together.", { size: 19, color: MUTED, spacing: 160 }),
 
     h2("The chain"),
-    p("A message reaches a prospect only if every link holds. Each link fails closed — it stops and explains, rather than sending something wrong.", {
+    p("A message reaches a prospect only if every link holds. Each link fails closed - it stops and explains, rather than sending something wrong.", {
       size: 19,
       color: MUTED,
       spacing: 120,
@@ -422,7 +422,7 @@ function wiring(): (Paragraph | Table)[] {
         ["2", "Variables resolve (name, date, time, zoom_link)", "The prospect’s Outreach card", "Send is blocked; the card says which variable is missing."],
         ["3", "The step is set to auto-send", "Outreach → Settings", "Stays in the queue for manual sending. This is the default."],
         ["4", "WATI is armed", "WATI_ENABLED + credentials", "Step stays DUE; the run notes say why."],
-        ["5", "A template is bound to the touchpoint", "WhatsApp → Settings", "Step stays DUE — “No WATI template configured”."],
+        ["5", "A template is bound to the touchpoint", "WhatsApp → Settings", "Step stays DUE - “No WATI template configured”."],
         ["6", "The template is APPROVED", "Meta, via WATI", "Send is skipped with the template’s real status."],
         ["7", "The prospect hasn’t opted out", "STOP replies", "Send is skipped and logged."],
       ],
@@ -430,16 +430,16 @@ function wiring(): (Paragraph | Table)[] {
       [],
     ),
     spacer(140),
-    p("The practical consequence: you can turn the engine on today, before a single template is approved. The specialist gets a queue that tells them exactly what to send and when, with the message written and the variables filled. Approval upgrades that from copy-paste to automatic — it is not a prerequisite for using the system.", {
+    p("The practical consequence: you can turn the engine on today, before a single template is approved. The specialist gets a queue that tells them exactly what to send and when, with the message written and the variables filled. Approval upgrades that from copy-paste to automatic - it is not a prerequisite for using the system.", {
       size: 19,
       spacing: 140,
     }),
 
     h2("Manual vs auto-send"),
     p("Two independent switches, deliberately:", { size: 19, spacing: 80 }),
-    bullet("Engine ON/OFF — does the SOP run at all? Schedules steps, runs booking checks, advances prospects."),
-    bullet("Auto-send, per step — may THIS step send without a human? Every step is manual by default."),
-    p("The engine can run with all nine steps manual. That is the default, and it is the shape the SOP already has — a person sends these messages today.", {
+    bullet("Engine ON/OFF - does the SOP run at all? Schedules steps, runs booking checks, advances prospects."),
+    bullet("Auto-send, per step - may THIS step send without a human? Every step is manual by default."),
+    p("The engine can run with all nine steps manual. That is the default, and it is the shape the SOP already has - a person sends these messages today.", {
       size: 19,
       color: MUTED,
       spacing: 140,
@@ -451,7 +451,7 @@ function wiring(): (Paragraph | Table)[] {
       [
         ["{{name}}", "The lead’s first name, captured at opt-in", "Fix the name on the contact record."],
         ["{{sender}}", "Key Metrics → “Resp. for TOUCHPOINT”; falls back to the default sender in Outreach → Settings", "Assign a touchpoint owner, or set the default name."],
-        ["{{date}} / {{time}}", "The booked appointment (disco), or the SSS date/time — rendered in the prospect’s IST", "Confirm the booking is linked to the prospect."],
+        ["{{date}} / {{time}}", "The booked appointment (disco), or the SSS date/time - rendered in the prospect’s IST", "Confirm the booking is linked to the prospect."],
         ["{{zoom_link}}", "The Zoom link on the prospect’s Outreach card", "Copy it from the Discovery Specialist’s Google Calendar and paste it into the card. The app cannot fetch this yet."],
       ],
       [18, 46, 36],
@@ -466,7 +466,7 @@ function wiring(): (Paragraph | Table)[] {
     bullet("Recommendation: submit the template with a video header, but keep Step 19 MANUAL. The specialist attaches the video in WhatsApp themselves, exactly as they do now. Automate it later if the volume justifies the build."),
     spacer(80),
     p("Zoom links", { bold: true, size: 20 }),
-    bullet("Entered by hand per prospect today. Google Calendar integration — matching the meeting by date/time/prospect and alerting when calendar access is missing — is not built."),
+    bullet("Entered by hand per prospect today. Google Calendar integration - matching the meeting by date/time/prospect and alerting when calendar access is missing - is not built."),
     bullet("The templates fail closed without a link, so the worst case is a blocked send, never a message reading “<<INSERT ZOOM LINK HERE>>”."),
     spacer(80),
     p("Synamate", { bold: true, size: 20 }),
@@ -505,7 +505,7 @@ async function main() {
             alignment: AlignmentType.CENTER,
             children: [
               new TextRun({
-                text: "Generated from the application source — re-run `npm run docs:whatsapp` after any template change.",
+                text: "Generated from the application source - re-run `npm run docs:whatsapp` after any template change.",
                 size: 16,
                 color: MUTED,
                 italics: true,

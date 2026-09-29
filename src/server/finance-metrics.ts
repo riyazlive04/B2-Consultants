@@ -70,7 +70,7 @@ export const getPendingRows = cache(async () => {
     /**
      * The instalment-plan surcharge, priced per plan length in the Console and snapshotted onto
      * the row when its schedule was generated (0 for a row with no plan). It is added here
-     * rather than folded into `totalFee` so the agreed fee keeps meaning "the fee we agreed" —
+     * rather than folded into `totalFee` so the agreed fee keeps meaning "the fee we agreed" -
      * `toCollect` is the figure that has to arrive, and it is what the BALANCE is measured from.
      */
     const planExtra = {
@@ -91,7 +91,7 @@ export const getPendingRows = cache(async () => {
     // A receivable is overdue when it is still owed and past its due date. It used to require
     // status === "ACTIVE", which is backwards: once the nightly sweep (or a manual edit) escalated
     // a row to the OVERDUE *status*, this flag flipped to FALSE, so the most-overdue payments
-    // silently dropped out of the red badge, the KPI count and the dashboard alert (§8.4 —
+    // silently dropped out of the red badge, the KPI count and the dashboard alert (§8.4 -
     // "overdue numbers look wrong"). Both live statuses that can still owe money count; PAID_IN_FULL
     // and DROPPED never do. `balance.inr > 0` guards the case where the money is in but the status
     // simply hasn't been reconciled yet.
@@ -108,7 +108,7 @@ export const getPendingRows = cache(async () => {
       planExtra,
       planExtraInrRaw: p.planExtraInrMinor.toString(),
       planExtraEurRaw: p.planExtraEurMinor.toString(),
-      /** Fee + plan surcharge — what actually has to be collected. Balance measures from this. */
+      /** Fee + plan surcharge - what actually has to be collected. Balance measures from this. */
       toCollect,
       intervalDays: p.intervalDays,
       paidSoFar: paid,
@@ -136,7 +136,7 @@ export const getPendingRows = cache(async () => {
 
 /**
  * @param period Which window to report on. Defaults to the current calendar month, which is
- *   exactly what this function did before it took an argument — so every existing caller is
+ *   exactly what this function did before it took an argument - so every existing caller is
  *   unchanged. Pass a resolved period (see `lib/period.ts`) to report on any other window.
  *
  *   The whole screen was hardcoded to `istMonthRange()` with no way to ask for July, which made
@@ -152,7 +152,7 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
   /**
    * The comparison window.
    *
-   * For the CURRENT month this stays the same-day slice of last month (day 1..today's day) —
+   * For the CURRENT month this stays the same-day slice of last month (day 1..today's day) -
    * comparing a part-month against a full month always flatters the past. For any OTHER window
    * the full preceding window of the same length is the honest comparator, because the window
    * being reported is itself complete.
@@ -191,7 +191,7 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
         where: { ...ACTIVE, date: { gte: prevMonthStart, lt: prevSameDayEnd } },
         // `programLevel` rides along so revenue-by-level can be compared month over month.
         // Without it the breakdown could only ever say "share of THIS month", which answers
-        // "how is the mix split" but never "which level is actually growing" — and the second
+        // "how is the mix split" but never "which level is actually growing" - and the second
         // is the question that moves where the founder spends selling time.
         select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true, programLevel: true },
       }),
@@ -251,7 +251,7 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
   // receivable row names a programme level and the level's kind decides the line.
   //
   // Costs now carry their OWN line (Expense.businessLine). A cost tagged B2 or GERMAN_NOTE
-  // lands wholly on that line; only SHARED costs — rent, ads, tooling — are apportioned by
+  // lands wholly on that line; only SHARED costs - rent, ads, tooling - are apportioned by
   // revenue share. That distinction is what makes per-line margin and runway meaningful:
   // when EVERY cost is allocated by revenue share, net÷revenue is identical for both lines
   // by construction, so the metric can only ever repeat the combined number back.
@@ -294,7 +294,7 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
     m.set(key, at);
   };
 
-  /** Walk a run of dates carrying both running totals — the combined and per-line series are the
+  /** Walk a run of dates carrying both running totals - the combined and per-line series are the
    *  same shape over different day maps, so they share this rather than repeating the loop. */
   const cumulate = (dates: readonly string[], byDay: Map<string, DayTakings>) => {
     let inr = 0;
@@ -333,7 +333,7 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
   //
   // §3.5: this used to be a map of only the days that HAD income, so a month with
   // takings on the 2nd, 9th and 20th produced a 3-point chart whose x-axis pretended
-  // those days were adjacent — a flat week of zero collections looked identical to
+  // those days were adjacent - a flat week of zero collections looked identical to
   // three consecutive good days. The series is now continuous, one entry per calendar
   // day from the 1st to today, so gaps read as the gaps they are. `cumulativeInr`
   // rides along because the running total is what gets compared to the target.
@@ -344,7 +344,7 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
   /**
    * How many days of the window to plot.
    *
-   * For the CURRENT month, stop at today — plotting a flat line out to the 31st would read as
+   * For the CURRENT month, stop at today - plotting a flat line out to the 31st would read as
    * "we earned nothing for the rest of the month" rather than "the month hasn't happened yet".
    * For a window that is already over, plot all of it; and for an arbitrary window (a week, a
    * quarter, a custom range) walk day-by-day from its own start rather than assuming the 1st.
@@ -401,10 +401,10 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
       net: netLine,
       marginPct: l.revenue.inr > 0 ? (netLine.inr / l.revenue.inr) * 100 : 0,
       revenueSharePct: share * 100,
-      /** Costs tagged to this line outright — the part that is measured, not apportioned. */
+      /** Costs tagged to this line outright - the part that is measured, not apportioned. */
       directCostInr: Number(own.inr),
       directCostEur: Number(own.eur),
-      /** This line's slice of the SHARED pool — the part that is an estimate. */
+      /** This line's slice of the SHARED pool - the part that is an estimate. */
       sharedCostInr: Number(sharedExpenses.inr) * share,
       sharedCostEur: Number(sharedExpenses.eur) * share,
       revenueSeries: series,
@@ -427,9 +427,9 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
       revenueSpark,
       revenueSeries,
       segments,
-      // last month, cut off at the SAME day-of-month — for honest MoM deltas.
+      // last month, cut off at the SAME day-of-month - for honest MoM deltas.
       // Both currencies: the ₹/€ toggle flips the "was X by this day last month" line too, and
-      // an INR-only comparator would have forced a read-time conversion — the one thing the
+      // an INR-only comparator would have forced a read-time conversion - the one thing the
       // dual-aggregate design exists to avoid.
       prevSameDay: {
         revenueInr: Number(sumAgg(prevIncomes).inr),

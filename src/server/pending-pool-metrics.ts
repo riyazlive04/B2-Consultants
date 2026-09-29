@@ -10,7 +10,7 @@ import type { TutorFeeLevel } from "@/lib/config-schema";
  * Reads for the pending pool and the per-batch cost line.
  *
  * Kept out of german-note-metrics.ts because that file is already the batch/community
- * reader — this is the waiting room and the money, which are different questions.
+ * reader - this is the waiting room and the money, which are different questions.
  */
 
 export type PoolRow = {
@@ -23,7 +23,7 @@ export type PoolRow = {
   preferredTime: string | null;
   workshopName: string | null;
   notes: string | null;
-  /** Whole days this person has been waiting — the number that makes a stale pool visible. */
+  /** Whole days this person has been waiting - the number that makes a stale pool visible. */
   waitingDays: number;
   createdAt: string;
 };
@@ -52,7 +52,7 @@ export const getPendingPoolData = cache(async (minToOpen: number = DEFAULT_MIN_T
   const [waiting, batches] = await Promise.all([
     prisma.gnPendingJoiner.findMany({
       where: { assignedBatchId: null },
-      orderBy: { createdAt: "asc" }, // longest wait first — they've earned the next seat
+      orderBy: { createdAt: "asc" }, // longest wait first - they've earned the next seat
       select: {
         id: true,
         studentId: true,
@@ -95,7 +95,7 @@ export const getPendingPoolData = cache(async (minToOpen: number = DEFAULT_MIN_T
   const pool: PoolJoiner[] = waiting.map((w) => ({ id: w.id, level: w.level, preference: w.preference }));
   const suggestions: PoolSuggestionRow[] = suggestBatchesToOpen(pool, minToOpen);
 
-  // Only batches with room can take a seat — a full one is not an option to offer.
+  // Only batches with room can take a seat - a full one is not an option to offer.
   const withRoom: BatchWithRoom[] = batches
     .filter((b) => b._count.members < b.targetStrength)
     .map((b) => ({
@@ -157,7 +157,7 @@ export const getBatchCosts = cache(async (): Promise<BatchCostRow[]> => {
   const out: BatchCostRow[] = [];
   for (const b of batches) {
     const feeLevel = LEVEL_TO_FEE_LEVEL[b.level];
-    if (!feeLevel) continue; // unpriced level — say nothing rather than invent a rate
+    if (!feeLevel) continue; // unpriced level - say nothing rather than invent a rate
     const headcount = b._count.members;
     out.push({
       id: b.id,

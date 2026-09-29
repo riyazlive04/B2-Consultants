@@ -32,14 +32,14 @@ export const GUIDES: GuideEntry[] = [
     section: "activity", icon: "🛡️", title: "Activity Log", href: "/activity",
     what: "Every action anyone takes in the app, stamped with the exact time it happened. Admin-only.",
     steps: [
-      "Feed answers “what's been happening” — every action grouped by day, newest first. Table answers “what exactly did Asma do at 3pm” — one row per action, timed to the second.",
+      "Feed answers “what's been happening” - every action grouped by day, newest first. Table answers “what exactly did Asma do at 3pm” - one row per action, timed to the second.",
       "Filter by who, section, action type or date range, or search for a person or record by name. Every filter lives in the address bar, so you can bookmark a view or paste the link to someone.",
-      "The engines log their own work under their own name — “Reminder engine”, “Booking engine” — with a cog instead of a face. If the automation messaged 40 leads overnight, that is what you will see; it is never filed under whoever last pressed “Run now”. Pick an engine in the Who filter to read only what ran on its own.",
-      "Every time is IST, and always exact. The “12m ago” next to it is only a convenience — the real timestamp never moves.",
+      "The engines log their own work under their own name - “Reminder engine”, “Booking engine” - with a cog instead of a face. If the automation messaged 40 leads overnight, that is what you will see; it is never filed under whoever last pressed “Run now”. Pick an engine in the Who filter to read only what ran on its own.",
+      "Every time is IST, and always exact. The “12m ago” next to it is only a convenience - the real timestamp never moves.",
       "“Details” on a row opens what actually changed: the value before and the value after.",
       "The log only holds what happened after it was switched on. It cannot reconstruct history from before that.",
     ],
-    tip: "Nothing here can be edited or deleted — not by a telecaller, not by you, not from the database. That is the point: a log its subjects could tidy up would be worth nothing.",
+    tip: "Nothing here can be edited or deleted - not by a telecaller, not by you, not from the database. That is the point: a log its subjects could tidy up would be worth nothing.",
   },
   {
     section: "finance", icon: "💰", title: "Finance", href: "/finance",
@@ -91,15 +91,15 @@ export const GUIDES: GuideEntry[] = [
     tip: "There is no way to farm points: corrections and backward moves earn nothing. The only strategy is doing the work.",
   },
   {
-    section: "people", icon: "👥", title: "People", href: "/people",
+    section: "people", icon: "👥", title: "Users", href: "/people",
     what: "Team profiles, OKRs, daily-log board and user accounts. Admin-only.",
     steps: [
       "Daily logs tab: who logged today, the 7 PM missing badge, weekly totals per person.",
       "OKRs tab: set max 3 per person per month; circles go green/amber/red on completion %.",
       "Team & org chart: profile cards, display-only chart, reorder with arrows.",
       "Users & access → Invite user: pick a role as a starting preset, then adjust two separate things. MODULES are what they can see; CAPABILITIES are what they can change. A head coach can read Finance without being able to post to the ledger.",
-      "You'll get a single-use invite link to send them — they set their own password, and nobody else ever sees it. Minting a new link kills the old one.",
-      "Suspend signs a person out immediately and blocks them from signing in again; Reactivate undoes it. Delete removes the login for good — the work they recorded stays.",
+      "You'll get a single-use invite link to send them - they set their own password, and nobody else ever sees it. Minting a new link kills the old one.",
+      "Suspend signs a person out immediately and blocks them from signing in again; Reactivate undoes it. Delete removes the login for good - the work they recorded stays.",
     ],
     tip: "Grant “Manage team & access” to delegate seat management. A delegate can never mint an Admin, edit an Admin, edit their own row, or hand out a capability they don't hold themselves.",
   },
@@ -128,7 +128,7 @@ export const GUIDES: GuideEntry[] = [
     tip: "Momentum cooling? Book a session - activity is what keeps the flame alive.",
   },
   {
-    section: "cv-check", icon: "🧾", title: "CV Diagnostic", href: "/cv-check",
+    section: "cv-check", icon: "🧾", title: "CV Studio", href: "/cv-check",
     what: "Upload/paste CV + target JD → JD-match score, B2-template conformance, generated fix-list.",
     steps: [
       "Upload the CV as a PDF or Word (.docx) - or paste the text - on the left, the German JD on the right, hit Run diagnostic. Uploaded files are read in-memory and never stored.",
@@ -152,7 +152,7 @@ export const GUIDES: GuideEntry[] = [
     tip: "Recordings play right on the page - use “open original” to open them on Fathom itself.",
   },
   {
-    section: "funnel", icon: "⏬", title: "Conversion Funnel", href: "/funnel",
+    section: "funnel", icon: "⏬", title: "Funnel Report", href: "/funnel",
     what: "Awareness → enrolled, weekly snapshots, drop-off alert, source attribution. Admin-only.",
     steps: [
       "Every Monday, save the weekly snapshot - awareness and GB downloads are manual, the rest is pre-filled from Pipeline/Students.",

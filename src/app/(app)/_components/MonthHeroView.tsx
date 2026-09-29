@@ -23,7 +23,7 @@ import { useCcy } from "@/components/ui/CurrencyToggle";
  *     rate. They are marked "≈" and the caption names the rupee original, because a converted
  *     target genuinely does drift as the rate moves.
  *
- * Every PERCENTAGE — pace, % of target, the gauge needle, the meter widths — is computed on the
+ * Every PERCENTAGE - pace, % of target, the gauge needle, the meter widths - is computed on the
  * INR basis upstream and passed in. So switching currency changes the words on screen and never
  * the judgement: "68% of target" says 68% in both.
  */
@@ -61,7 +61,7 @@ export type HeroLabels = {
   prevMonthShort: string;
   prevSameDayLabel: string;
   lineLabel: string | null;
-  /** ECB date behind the converted target — so the approximation is auditable. */
+  /** ECB date behind the converted target - so the approximation is auditable. */
   fxDate: string;
   fxRate: number;
 };
@@ -142,7 +142,7 @@ export function MonthHeroView({
   const pick = (m: MoneyAgg) => (ccy === "EUR" ? m.eur : m.inr);
   const isEur = ccy === "EUR";
 
-  /** The target is a rupee commitment — say so whenever it is being shown in euros. */
+  /** The target is a rupee commitment - say so whenever it is being shown in euros. */
   const approx = (m: MoneyAgg) => (isEur ? `≈ ${money(m, ccy, c)}` : money(m, ccy, c));
   const targetOrigin = isEur
     ? ` The target is set in rupees (${money(f.target, "INR", c)}); the euro figure is converted at today's ECB rate, ${l.fxRate.toFixed(2)}/€ on ${formatDate(l.fxDate)}.`
@@ -151,7 +151,7 @@ export function MonthHeroView({
   const paceMeta = r.paceSignal ? SIGNAL_META[r.paceSignal] : null;
   const projMeta = r.projectedSignal ? SIGNAL_META[r.projectedSignal] : null;
 
-  // Meter segments — each money source keeps one identity colour everywhere. Widths come from
+  // Meter segments - each money source keeps one identity colour everywhere. Widths come from
   // the chosen currency so the bar and the legend beside it agree.
   const targetPick = pick(f.target);
   let segUsed = 0;
@@ -175,13 +175,13 @@ export function MonthHeroView({
       label: "Collected so far",
       value: money(f.collected, ccy, c),
       color: undefined as string | undefined,
-      hint: "Money actually received this month — the sum of every income entry dated in this month.",
+      hint: "Money actually received this month - the sum of every income entry dated in this month.",
     },
     {
       label: "Forecast month-end",
       value:
         r.projectedPct === null
-          ? "—"
+          ? "-"
           : `${money(f.projected, ccy, c)} · ${Math.round(r.projectedPct)}% of target`,
       color: projMeta?.color,
       hint:
@@ -218,7 +218,7 @@ export function MonthHeroView({
         {!segmented && (
           <div className="flex justify-center lg:flex-none">
             <Gauge
-              // Needle position is the INR ratio in both currencies — the judgement must not
+              // Needle position is the INR ratio in both currencies - the judgement must not
               // change because a rate moved. Only the labels are currency-dependent.
               value={pick(f.collected)}
               max={targetPick}
@@ -297,7 +297,7 @@ export function MonthHeroView({
         <p className="relative mt-5 text-caption text-ink-2">
           Showing <span className="font-semibold">{l.lineLabel}</span> collections only. Pace, forecast
           and the path-to-target meter are hidden because the {approx(f.target)} monthly target is set
-          for the whole business — there is no separate B2 or German Note target to measure a single
+          for the whole business - there is no separate B2 or German Note target to measure a single
           line against.
         </p>
       ) : (
@@ -366,7 +366,7 @@ export function MonthHeroView({
             </div>
           </div>
 
-          {/* Summary tiles — the three numbers the meter resolves to */}
+          {/* Summary tiles - the three numbers the meter resolves to */}
           <div className="relative mt-5 grid grid-cols-3 gap-3 border-t border-primary-tint pt-4">
             {heroTiles.map((t) => (
               <div key={t.label}>
@@ -384,7 +384,7 @@ export function MonthHeroView({
             ))}
           </div>
 
-          {/* Day-by-day trajectory — detail, tucked behind a disclosure. */}
+          {/* Day-by-day trajectory - detail, tucked behind a disclosure. */}
           <details className="group relative mt-4 border-t border-primary-tint pt-3">
             <summary className="flex cursor-pointer list-none items-center gap-1.5 text-caption font-semibold text-ink-2 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
               <ChevronDown size={14} className="transition-transform group-open:rotate-180" />

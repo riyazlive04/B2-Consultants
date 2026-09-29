@@ -39,7 +39,7 @@ export default async function AutomationPage({
   const subtitle = openFolder
     ? `workflows in “${openFolder.name}”`
     : tab === "deleted"
-      ? "deleted workflows — restore them, or delete for good"
+      ? "deleted workflows - restore them, or delete for good"
       : "trigger → action workflows that tie the whole CRM together";
 
   return (

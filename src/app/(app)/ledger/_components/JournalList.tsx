@@ -19,7 +19,7 @@ import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
  * Now every entry reads as a block: a typed icon + colour on the left, its balancing TOTAL on the
  * right where the eye lands, and its debit/credit legs shown with explicit Dr/Cr chips down one
  * amount column instead of a half-empty two-column table. Voids and reversals keep their pills.
- * Still purely presentational and read-only — the ledger is never edited here.
+ * Still purely presentational and read-only - the ledger is never edited here.
  */
 
 type Line = {
@@ -66,7 +66,7 @@ export function JournalList({ entries }: { entries: Entry[] }) {
         // The entry total is the sum of the debit legs (which, in a balanced entry, equals the
         // sum of the credit legs). This is the "how much moved" number the header leads with.
         const totalMinor = e.lines.reduce((s, l) => s + l.baseDebitMinor, BigInt(0));
-        // Void/reversal entries are visually quieted — they exist for the audit trail, not to be
+        // Void/reversal entries are visually quieted - they exist for the audit trail, not to be
         // read as live money.
         const muted = isVoid || !!e.reversalOfId;
 
@@ -84,7 +84,7 @@ export function JournalList({ entries }: { entries: Entry[] }) {
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={`truncate text-sm font-semibold text-ink ${isVoid ? "text-muted line-through" : ""}`}>
+                  <span className={`truncate text-sm font-semibold text-ink ${isVoid ? "text-muted line-through" : ""}`} title={e.narration}>
                     {e.narration}
                   </span>
                   {isVoid && <Pill tone="bad">Void</Pill>}

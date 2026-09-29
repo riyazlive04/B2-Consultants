@@ -15,7 +15,7 @@ export function RunwayBadge({ months }: { months: number | null }) {
         title="Enter a weekly bank balance in Cash Health to compute runway"
       >
         <Gauge size={13} aria-hidden />
-        Runway: —
+        Runway: -
       </Link>
     );
   }
@@ -29,7 +29,7 @@ export function RunwayBadge({ months }: { months: number | null }) {
     >
       <Gauge size={13} aria-hidden />
       {/* §3: runway carries 1 decimal, always. `4` must read "4.0 months", never "4 mo".
-          Below `sm` only the "Runway:" *label* drops — the gauge icon already says what it
+          Below `sm` only the "Runway:" *label* drops - the gauge icon already says what it
           is, and the value keeps its decimal and full "months" unit. This is what stops the
           top-bar cluster overflowing a phone (§9.4 still wants the pill on every screen). */}
       <span className="tnum">

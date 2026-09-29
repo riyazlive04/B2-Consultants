@@ -1,6 +1,6 @@
 import { SkeletonBlock } from "@/components/ui/Skeleton";
 
-/** Opportunities: the drag-drop kanban board — header bar, then stage columns. */
+/** Opportunities: the drag-drop kanban board - header bar, then stage columns. */
 export default function Loading() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading opportunities">

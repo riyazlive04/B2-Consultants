@@ -11,14 +11,14 @@ import type { ActionResult } from "./finance-actions";
  * Merging two lead records into one.
  *
  * ── The rule ────────────────────────────────────────────────────────────────────
- * NOTHING IS DELETED. Every child row — calls, bookings, journey, stage history, answers,
- * opportunities, notes, tasks, WhatsApp messages — is RE-POINTED at the surviving lead, and the
+ * NOTHING IS DELETED. Every child row - calls, bookings, journey, stage history, answers,
+ * opportunities, notes, tasks, WhatsApp messages - is RE-POINTED at the surviving lead, and the
  * loser is soft-archived. A merge that dropped history would be worse than the duplicate it
  * fixes: the duplicate splits the record, a bad merge destroys half of it.
  *
  * ── Which row survives ──────────────────────────────────────────────────────────
  * The caller chooses, explicitly, from a screen that shows each candidate's call/booking/deal
- * counts. There is no "merge automatically" — picking the wrong direction is exactly the mistake
+ * counts. There is no "merge automatically" - picking the wrong direction is exactly the mistake
  * that cannot be undone by re-running anything, and the counts are the evidence a human needs.
  *
  * Blank fields on the survivor are filled from the loser (fill-blanks-only, the same contract
@@ -33,7 +33,7 @@ import type { ActionResult } from "./finance-actions";
  *
  * IF YOU ADD A RELATION TO `Lead`, ADD IT HERE. A table left out of this list keeps pointing at
  * the archived row after a merge: the data is not destroyed, but it becomes invisible to every
- * screen that reads through the surviving lead — which is the failure a merge exists to prevent.
+ * screen that reads through the surviving lead - which is the failure a merge exists to prevent.
  *
  * `OutreachJourney` is deliberately ABSENT: it is `@unique` on `leadId` and cannot be blindly
  * re-pointed. `mergeJourney` below handles it.
@@ -62,7 +62,7 @@ const LEAD_CHILD_TABLES = [
 ] as const satisfies readonly (keyof typeof prisma)[];
 
 /**
- * `OutreachJourney` is `@unique` on `leadId`, so it cannot simply be re-pointed — the survivor
+ * `OutreachJourney` is `@unique` on `leadId`, so it cannot simply be re-pointed - the survivor
  * may already have one. The survivor's own journey wins (it is the record being kept) and the
  * loser's is deleted; its `optInAt` is preserved onto the survivor when the loser's is EARLIER,
  * because the earliest opt-in is the true start of the relationship and speed-to-lead is
@@ -104,7 +104,7 @@ export async function mergeLeads(keepId: string, loseId: string): Promise<Action
     /**
      * Re-point EVERY child table that carries a `leadId`.
      *
-     * The list is exhaustive against the schema as of this commit — see `LEAD_CHILD_TABLES`,
+     * The list is exhaustive against the schema as of this commit - see `LEAD_CHILD_TABLES`,
      * which is typed so that a table name that stops existing fails the build. A relation ADDED
      * later will not fail the build, so the constant carries the instruction to update it; the
      * cost of missing one is orphaned history on an archived row, which is silent.
@@ -127,7 +127,7 @@ export async function mergeLeads(keepId: string, loseId: string): Promise<Action
     await mergeJourney(tx, keepId, loseId);
 
     /**
-     * Fill the survivor's BLANKS from the loser — never overwrite.
+     * Fill the survivor's BLANKS from the loser - never overwrite.
      *
      * The whole point of a merge is that between them the two rows hold one complete person: one
      * has the phone, the other has the email. Overwriting a populated field would discard a
@@ -154,7 +154,7 @@ export async function mergeLeads(keepId: string, loseId: string): Promise<Action
     });
 
     // Archived, not deleted. The row stays readable under Contacts → Archived, so a merge that
-    // turns out to have been wrong is still auditable — and `restoreLead` can bring it back.
+    // turns out to have been wrong is still auditable - and `restoreLead` can bring it back.
     await tx.lead.update({
       where: { id: loseId },
       data: {

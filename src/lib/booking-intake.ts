@@ -66,9 +66,9 @@ export const INTAKE_OPTIONS = {
     { value: "yes", label: "Yes, I am ready to learn German." },
   ],
   /**
-   * ── Budget (BANT: B) — NOTE THE UNIT CHANGE ────────────────────────────────────
+   * ── Budget (BANT: B) - NOTE THE UNIT CHANGE ────────────────────────────────────
    * MONTHLY rupees. The previous catalogue asked for annual income, so the bands and their
-   * scores below are not a re-labelling of the old ones — ₹50,000/month and ₹50,000/year are
+   * scores below are not a re-labelling of the old ones - ₹50,000/month and ₹50,000/year are
    * opposite ends of the market. Old rows keep their annual values and their annual scores
    * (see BANT_ANSWER_SCORES); nothing is retro-fitted onto a question that was never asked.
    */
@@ -116,7 +116,7 @@ export const INTAKE_OPTIONS = {
   ],
 } as const satisfies Record<string, readonly IntakeOption[]>;
 
-/** Suggested industries. Free text on purpose — the form lets a prospect add their own. */
+/** Suggested industries. Free text on purpose - the form lets a prospect add their own. */
 export const INDUSTRY_SUGGESTIONS = ["IT Related", "Mechanical Related"] as const;
 
 /**
@@ -124,7 +124,7 @@ export const INDUSTRY_SUGGESTIONS = ["IT Related", "Mechanical Related"] as cons
  *
  * Every booking taken before 07/08/2026 holds a value from the old catalogue. Without this,
  * `intakeLabel` falls through to the raw slug and the Bookings table starts showing "lt_5l"
- * and "b2+" against real prospects — the history silently degrades the moment the question
+ * and "b2+" against real prospects - the history silently degrades the moment the question
  * changes. Keyed by field so an old `none` cannot be read as a different field's `none`.
  */
 export const LEGACY_INTAKE_LABELS: Record<string, Record<string, string>> = {
@@ -148,30 +148,30 @@ export const LEGACY_INTAKE_LABELS: Record<string, Record<string, string>> = {
 
 /**
  * Weighted BANT (client notes): "for this answer, this score". Every qualifying answer
- * carries a 0-5 score; a dimension's score is the BEST evidence available for it (e.g.
+ * carries a 0-4 score; a dimension's score is the BEST evidence available for it (e.g.
  * high income still counts toward Budget when the invest answer is lukewarm). Retune by
  * editing the numbers - the form, the score and the verdict all move together.
  */
 export const BANT_ANSWER_SCORES: Record<string, Record<string, number>> = {
   // ── Budget ──
   readyToInvest: {
-    ready_now: 5, need_clarity: 2.5, not_ready: 0,
+    ready_now: 4, need_clarity: 2, not_ready: 0,
     // legacy
-    need_plan: 3, unsure: 1.5, no: 0,
+    need_plan: 2.4, unsure: 1.2, no: 0,
   },
   currentIncome: {
     // Monthly bands (current form).
-    gt_1l: 5, "75k_1l": 4, "50_75k": 3, "30_50k": 2, lt_30k: 1,
+    gt_1l: 4, "75k_1l": 3.2, "50_75k": 2.4, "30_50k": 1.6, lt_30k: 0.8,
     // Legacy ANNUAL bands, kept at their original scores. A stored `5_10l` meant ₹5–10 lakh a
     // YEAR and must keep scoring as that; silently re-reading it against the monthly bands
     // would re-rank every prospect booked before the question changed.
-    gt_20l: 5, "10_20l": 4, "5_10l": 2.5, lt_5l: 1,
+    gt_20l: 4, "10_20l": 3.2, "5_10l": 2, lt_5l: 0.8,
   },
   // ── Authority ──
   decisionMaking: {
-    mine: 5, consult: 3.5, other: 1,
+    mine: 4, consult: 2.8, other: 0.8,
     // legacy
-    family: 3,
+    family: 2.4,
   },
   // ── Need ──
   /**
@@ -180,32 +180,46 @@ export const BANT_ANSWER_SCORES: Record<string, Record<string, number>> = {
    * has not started applying has the weakest evidence of need, not the strongest.
    */
   alreadyApplied: {
-    interviews_no_offer: 5, applied_no_response: 4, not_started: 2,
+    interviews_no_offer: 4, applied_no_response: 3.2, not_started: 1.6,
     // legacy
-    actively: 5, planning: 3, not_yet: 1.5,
+    actively: 4, planning: 2.4, not_yet: 1.2,
   },
   // No longer asked on the public form; still scored so a historical row replays identically.
-  commitment: { fully: 5, serious: 3.5, curious: 1 },
+  commitment: { fully: 4, serious: 2.8, curious: 0.8 },
   // ── Timeline ──
   /**
    * "In the next 6 months" is now the most urgent option the form offers, so it takes the top
-   * score. Leaving it at its old 3 would have capped Timeline at exactly the "met" threshold and
+   * score. Leaving it at its old 2.4 would have capped Timeline at exactly the "met" threshold and
    * made a genuinely urgent prospect indistinguishable from a borderline one.
    */
   whenStartGermany: {
-    "6_months": 5, "6_12_months": 3, exploring: 0.5,
+    "6_months": 4, "6_12_months": 2.4, exploring: 0.4,
     // legacy
-    immediately: 5, "3_months": 4,
+    immediately: 4, "3_months": 3.2,
   },
 };
 
-/** A dimension counts as "met" (the boolean the pipeline ranking consumes) at ≥3/5. */
-const DIMENSION_MET_AT = 3;
+/**
+ * The top of the BANT scale. Every answer, every dimension and the average run 0-4.
+ *
+ * It was 0-5 until 22/09/2026, when the founders asked for BANT to read out of 4. Every score
+ * and threshold was multiplied by 0.8, so each prospect's verdict is unchanged; the migration
+ * `20260922180000_bant_scale_out_of_4` rescaled the stored scores the same way.
+ */
+export const BANT_MAX = 4;
 
-/** Verdict thresholds on the 0-5 average: >3 confirm · 2-3 doubt · <2 cancel. */
+/** Above this average the verdict is Confirm. */
+export const BANT_CONFIRM_ABOVE = 2.4;
+/** At or above this average (and not above BANT_CONFIRM_ABOVE) the verdict is Doubt; below it, Cancel. */
+export const BANT_DOUBT_FROM = 1.6;
+
+/** A dimension counts as "met" (the boolean the pipeline ranking consumes) at ≥2.4/4. */
+export const DIMENSION_MET_AT = 2.4;
+
+/** Verdict thresholds on the 0-4 average: >2.4 confirm · 1.6-2.4 doubt · <1.6 cancel. */
 export function bantVerdictFor(avg: number): "CONFIRM" | "DOUBT" | "CANCEL" {
-  if (avg > 3) return "CONFIRM";
-  if (avg >= 2) return "DOUBT";
+  if (avg > BANT_CONFIRM_ABOVE) return "CONFIRM";
+  if (avg >= BANT_DOUBT_FROM) return "DOUBT";
   return "CANCEL";
 }
 
@@ -224,27 +238,78 @@ export type BantResult = {
   bantNeed: boolean;
   bantTimeline: boolean;
   bantScore: number; // 0-4 count of dimensions met (pipeline-compatible)
-  bantAvg: number; // 0-5 mean of the four weighted dimension scores
+  bantAvg: number; // 0-4 mean of the scored answers
   bantVerdict: "CONFIRM" | "DOUBT" | "CANCEL";
 };
 
-const answerScore = (field: keyof typeof BANT_ANSWER_SCORES, value: string | null | undefined) =>
+/**
+ * The 0-4 the scorer gives ONE answer. Exported because the contact record and the caller's
+ * desk now show it per question: "why did this prospect score 2.6" is only answerable from
+ * the individual answers, and re-deriving that table in the view layer is how the number on
+ * screen starts disagreeing with the number in the verdict.
+ */
+export const answerScore = (field: keyof typeof BANT_ANSWER_SCORES, value: string | null | undefined) =>
   BANT_ANSWER_SCORES[field][value ?? ""] ?? 0;
 
 /**
- * Weighted BANT scoring. Each dimension scores 0-5 from its best answer; bantAvg is the
+ * Weighted BANT scoring. Each dimension scores 0-4 from its best answer; bantAvg is the
  * mean and bantVerdict applies Ameen's thresholds. The booleans + 0-4 bantScore keep the
  * exact shape the pipeline "Call these first" ranking already consumes.
  */
+/**
+ * The questions the average divides by - and every one of them is on the live form.
+ *
+ * `commitment` is deliberately ABSENT. It was scored here until 20/08/2026 while the public form
+ * had stopped asking it, so it returned 0 for every submission and took ~0.25 off everyone. That
+ * is invisible in a ranking, because a constant shifts everything equally - but the verdict
+ * thresholds are absolute and below 1.6 auto-disqualifies, so it was rejecting borderline
+ * applicants over a blank. Its scores stay in `BANT_ANSWER_SCORES` so a historical row can still
+ * be read; it just no longer divides anything.
+ *
+ * The rule to keep: a key belongs here only while the form actually asks it. Adding a question
+ * to this list without adding it to `BookingIntakeFields` re-creates the same bug.
+ */
+export const SCORED_QUESTION_KEYS = [
+  "readyToInvest",
+  "currentIncome",
+  "decisionMaking",
+  "alreadyApplied",
+  "whenStartGermany",
+] as const;
+
 export function computeBant(input: BantInput): BantResult {
   const budget = Math.max(answerScore("readyToInvest", input.readyToInvest), answerScore("currentIncome", input.currentIncome));
   const authority = answerScore("decisionMaking", input.decisionMaking);
-  const need = Math.max(answerScore("alreadyApplied", input.alreadyApplied), answerScore("commitment", input.commitment));
+  /**
+   * NEED rests on `alreadyApplied` alone.
+   *
+   * `commitment` was folded in here too until 20/08/2026. Leaving it while removing it from the
+   * average looked harmless - the boolean is "is there evidence for this dimension", and an old
+   * answer is still evidence - but it made the two scorers disagree: the catalogue no longer
+   * carries the question at all, so a historical row answering it got bantNeed true from one
+   * scorer and false from the other. Two scorers that disagree cannot both be right, and the
+   * cutover gate would have blocked the catalogue forever. Scored in one place or neither.
+   */
+  const need = answerScore("alreadyApplied", input.alreadyApplied);
   const timeline = answerScore("whenStartGermany", input.whenStartGermany);
 
   const dims = [budget, authority, need, timeline];
-  const bantAvg = Math.round((dims.reduce((a, b) => a + b, 0) / dims.length) * 10) / 10;
   const met = dims.map((d) => d >= DIMENSION_MET_AT);
+  /**
+   * The average is over the six QUESTIONS, not the four dimensions (founder decision,
+   * 20/08/2026). Budget therefore carries two votes and Authority one, which is the weighting
+   * the sales team had been applying by hand in the "New BANT" sheet.
+   *
+   * The denominator is the five questions the form asks - see `SCORED_QUESTION_KEYS` for why
+   * `commitment` is not among them.
+   *
+   * The dimension booleans and `bantScore` above are deliberately UNCHANGED - they still take
+   * the best evidence per dimension, because the pipeline's "call these first" ranking consumes
+   * them and that is a different question from "how strong is this prospect overall".
+   */
+  const scores = SCORED_QUESTION_KEYS.map((k) => answerScore(k, input[k as keyof BantInput]));
+  const bantAvg = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;
+
   return {
     bantBudget: met[0],
     bantAuthority: met[1],

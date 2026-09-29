@@ -1,23 +1,23 @@
 /**
- * Revenue recognition — straight-line over the service period.
+ * Revenue recognition - straight-line over the service period.
  *
  * THE PROBLEM: `Income.date` is the day money ARRIVED, and every margin number in this app is
  * computed off it. A 120-day Elite program collected up front therefore books 100% of its revenue
  * on day one, while 119 days of delivery obligation are still outstanding. Every margin figure
- * shown to a client is wrong — and wrong in the direction they notice at month four, when the
+ * shown to a client is wrong - and wrong in the direction they notice at month four, when the
  * cash has stopped but the costs of serving those students have not.
  *
  * WHAT THIS DELIBERATELY IS NOT: a deferred-revenue engine. No schedule rows per period, no GL
  * postings, no revenue-recognition ledger account. Straight-line over the program duration is
  * enough to make the number defensible, and the double-entry ledger already has enough moving
  * parts. If the founders later need audited deferred revenue, this is the arithmetic it would be
- * built on — but building that now would be solving a problem nobody has yet.
+ * built on - but building that now would be solving a problem nobody has yet.
  *
  * CASH IS NEVER REPLACED. Both numbers are true and they answer different questions ("what did we
  * collect" vs "what did we earn"). Substituting one for the other is the same mistake in the
  * opposite direction, so callers are expected to show both.
  *
- * Pure and dependency-free — this is the arithmetic that decides what a client is told, so it has
+ * Pure and dependency-free - this is the arithmetic that decides what a client is told, so it has
  * to be checkable without a database.
  */
 
@@ -25,12 +25,12 @@ const DAY_MS = 86_400_000;
 
 /** A payment and the service period it buys. */
 export type RecognisableAmount = {
-  /** Integer minor units (paise or cents). Kept opaque — this file never converts currency. */
+  /** Integer minor units (paise or cents). Kept opaque - this file never converts currency. */
   amountMinor: number;
   /** First day of service. For a linked enrollment this is `enrollmentDate`. */
   startDate: Date;
   /**
-   * Last day of service, INCLUSIVE. Null means there is no service period — a LIFETIME (Solo)
+   * Last day of service, INCLUSIVE. Null means there is no service period - a LIFETIME (Solo)
    * program, or an income with no enrollment to spread over. See `recognise` for what happens.
    */
   endDate: Date | null;
@@ -48,7 +48,7 @@ export type RecognitionResult = {
   recognisedMinor: number;
   /** Earned before the window opened. */
   priorMinor: number;
-  /** Still unearned at the END of the window — the deferred balance. */
+  /** Still unearned at the END of the window - the deferred balance. */
   deferredMinor: number;
   /** Days of the service period that fall inside the window. */
   daysInWindow: number;
@@ -77,7 +77,7 @@ function utcMidnight(d: Date): number {
  *
  * THE ROUNDING RULE: each day's share is `floor(amount * daysElapsed / totalDays)` computed on
  * the CUMULATIVE elapsed days, never by summing per-day shares. That guarantees the whole-life
- * total is exactly the amount with no drift — a per-day rounding would leave a few paise
+ * total is exactly the amount with no drift - a per-day rounding would leave a few paise
  * unrecognised on a 120-day program, and "revenue that never gets earned" is precisely the kind
  * of residue that makes an accountant distrust the whole report.
  */
@@ -87,7 +87,7 @@ export function recognise(item: RecognisableAmount, window: RecognitionWindow): 
   // No service period: recognise in full on the start date.
   //
   // This is the honest answer for LIFETIME (Solo), which has no end date because there is no
-  // ongoing obligation to spread across — inventing a notional 12-month period would be a
+  // ongoing obligation to spread across - inventing a notional 12-month period would be a
   // fabrication dressed as prudence. It is also the fallback for an income with no linked
   // enrollment, where we genuinely do not know what was bought.
   if (endDate === null) {
@@ -107,7 +107,7 @@ export function recognise(item: RecognisableAmount, window: RecognitionWindow): 
 
   const totalDays = inclusiveDays(startDate, endDate);
 
-  // Cumulative earned by the end of a given day — the only place the division happens.
+  // Cumulative earned by the end of a given day - the only place the division happens.
   const earnedBy = (day: Date): number => {
     const elapsed = Math.floor((utcMidnight(day) - utcMidnight(startDate)) / DAY_MS) + 1;
     if (elapsed <= 0) return 0;
@@ -153,7 +153,7 @@ export type RecognitionTotals = {
  * Totals a set of amounts over one window.
  *
  * `cashMinor` is included on purpose. A report that shows only recognised revenue invites exactly
- * the mirror-image error this file exists to fix — the founders' bank balance is real, and a
+ * the mirror-image error this file exists to fix - the founders' bank balance is real, and a
  * screen that never mentions it will be distrusted and then ignored.
  */
 export function recogniseAll(
@@ -183,7 +183,7 @@ export function recogniseAll(
 /**
  * The program end date implied by a duration, when an enrollment has no explicit one.
  *
- * Mirrors `ProgramDuration`: 90 days for Guided, 120 for Elite, and null for LIFETIME — which is
+ * Mirrors `ProgramDuration`: 90 days for Guided, 120 for Elite, and null for LIFETIME - which is
  * what routes Solo into the immediate branch above. The end day is INCLUSIVE, so a 90-day program
  * starting on the 1st ends on day 90, not day 91.
  */

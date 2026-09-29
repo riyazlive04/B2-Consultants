@@ -10,8 +10,8 @@ import { renderNotificationText } from "@/lib/notification-text";
 import type { Notification } from "@/server/notifications";
 
 /**
- * The dashboard's actionable-first band. Everything that needs a human decision —
- * overdue money, red students, stalled deals — is lifted out of the bell and the
+ * The dashboard's actionable-first band. Everything that needs a human decision -
+ * overdue money, red students, stalled deals - is lifted out of the bell and the
  * hero and put at the very top of the page, because that is the first question the
  * person is here to answer: "is there anything I have to act on right now?"
  *
@@ -19,7 +19,7 @@ import type { Notification } from "@/server/notifications";
  * "+N more in the bell" pointer rather than an endless list. `showWins` appends a
  * quiet "good news" footer (used for Head/User, who have no dedicated wins section).
  *
- * Client-side only for the sort control (Error Log C8) — the rows themselves are still
+ * Client-side only for the sort control (Error Log C8) - the rows themselves are still
  * plain server data handed down from the home page.
  */
 
@@ -33,7 +33,7 @@ const SEVERITY: Record<Notification["severity"], { dot: string; label: string; s
 
 /**
  * Error Log C8: the order used to be whatever the server computed, take it or leave it.
- * Two axes are all the underlying data honestly supports — a notification here is a derived,
+ * Two axes are all the underlying data honestly supports - a notification here is a derived,
  * stateless condition with no raised-at timestamp, so "newest first" is a sort nobody could
  * keep. "Priority" is the shipped order and stays the default; "by area" regroups the same
  * rows by the page they send you to, for clearing one screen in one trip.
@@ -45,7 +45,7 @@ const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: "area", label: "By area" },
 ];
 
-/** The destination a row lands on — "/students/42" and "/students" are the same trip. */
+/** The destination a row lands on - "/students/42" and "/students" are the same trip. */
 function areaOf(href: string): string {
   return href.split("?")[0].split("/")[1] ?? "";
 }
@@ -61,14 +61,14 @@ export function NeedsAttention({
 }) {
   const [sort, setSort] = useState<SortMode>("priority");
   // Notifications ship their amounts as `{m0}` tokens rather than formatted rupees, so a row
-  // saying "4 overdue payments — ₹3,25,500" can't sit under a toggle set to euros.
+  // saying "4 overdue payments - ₹3,25,500" can't sit under a toggle set to euros.
   const { ccy } = useCcy();
   const text = (s: string, n: Notification) =>
     renderNotificationText(s, n.amounts, (m) => money(m, ccy, { compact: true }));
 
   const actionable = notifications.filter((n) => n.severity !== "win");
   // §2.8: a person deliberately raised these, so they outrank every automated alert no matter
-  // what the reader sorts by — pinned above the list and never traded against `max`. A coach
+  // what the reader sorts by - pinned above the list and never traded against `max`. A coach
   // asking for the founder's attention must not end up inside "+N more in the bell", which is
   // exactly how these went unseen (C8); an extra row is the cheaper price.
   const escalations = actionable.filter((n) => n.escalated);
@@ -126,7 +126,7 @@ export function NeedsAttention({
 
       {allClear ? (
         <p className="px-5 py-4 text-sm text-muted">
-          Nothing needs you right now — you&apos;re on top of it.
+          Nothing needs you right now - you&apos;re on top of it.
         </p>
       ) : (
         <ul className="divide-y divide-line">

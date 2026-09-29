@@ -5,7 +5,7 @@ import { TimeSeriesChart } from "@/components/ui/chart";
 /**
  * New leads per day for the last 7 days, against the same weekdays a week earlier.
  *
- * A Client Component because `TimeSeriesChart` takes `formatValue` / `formatTooltip` — functions
+ * A Client Component because `TimeSeriesChart` takes `formatValue` / `formatTooltip` - functions
  * cannot be passed from a Server Component into a Client one, and `pipeline/page.tsx` is async.
  * Same reason `FunnelTables.tsx` exists; see the note at the top of that file.
  *

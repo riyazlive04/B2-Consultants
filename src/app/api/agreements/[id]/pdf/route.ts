@@ -10,7 +10,7 @@ import { renderAgreementPdf } from "@/server/agreement-render";
  * The founder's view of an agreement PDF.
  *
  * A DRAFT is rendered live from its fields (watermarked UNSIGNED). A SIGNED agreement is served
- * from `pdfBytes` — the exact bytes that were hashed at signing. It is never re-rendered: PDFKit
+ * from `pdfBytes` - the exact bytes that were hashed at signing. It is never re-rendered: PDFKit
  * stamps a creation date, so a re-render would not reproduce `pdfSha256` and the artifact we hand
  * over must be the artifact we attested to.
  */
@@ -46,9 +46,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
    * A signed-in STUDENT may fetch their OWN agreement (rebuild spec §10), and only once it is
    * sealed. Two conditions, both required:
    *
-   *   · the agreement's student row belongs to this login — checked as a scoped query rather than
+   *   · the agreement's student row belongs to this login - checked as a scoped query rather than
    *     by comparing an id the caller supplied, so there is nothing to spoof;
-   *   · `signedAt` is set — a student is never served the live DRAFT render, which is the
+   *   · `signedAt` is set - a student is never served the live DRAFT render, which is the
    *     founder's unexecuted working copy and carries an UNSIGNED watermark.
    *
    * Everyone else without the capability is refused, exactly as before.

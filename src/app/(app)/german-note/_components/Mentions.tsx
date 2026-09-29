@@ -31,7 +31,7 @@ export function MentionText({ body, candidates }: { body: string; candidates: Me
  * Typing `@` then a name filters the batch/community members; picking one
  * inserts the full display name.
  *
- * Keyboard: the textarea keeps focus and drives the listbox — ↑/↓ move the active
+ * Keyboard: the textarea keeps focus and drives the listbox - ↑/↓ move the active
  * option, Enter selects it, Esc dismisses. The options are real buttons too, so a
  * mouse click (onMouseDown, which must preventDefault to stop the textarea
  * blurring) and a native button activation (onClick → Enter/Space) both select.
@@ -161,7 +161,7 @@ export function MentionTextArea({
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-lvl-gn/10 text-caption font-bold text-ink">
                   {c.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                 </span>
-                <span className="truncate">{c.name}</span>
+                <span className="truncate" title={c.name}>{c.name}</span>
               </button>
             </li>
           ))}

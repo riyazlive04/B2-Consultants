@@ -3,21 +3,23 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { MessageStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
+import { htmlToText, isConfirmationReply } from "@/lib/confirmation-reply";
+import { markDiscoveryConfirmed } from "@/server/lead-stage-auto";
 
 /**
- * Inbound Resend webhook — Resend signs its webhook deliveries via Svix. Two jobs, mirroring the
+ * Inbound Resend webhook - Resend signs its webhook deliveries via Svix. Two jobs, mirroring the
  * WATI webhook's shape (see api/wati/webhook/route.ts):
  *  1. Delivery-status events (email.sent / .delivered / .bounced / .failed / .complained) → advance
  *     the matching Message row, matched by externalId (the Resend email id we stored at send time
- *     in server/messaging.ts's sendEmailMessage — unlike WATI, Resend DOES hand us an id up front,
+ *     in server/messaging.ts's sendEmailMessage - unlike WATI, Resend DOES hand us an id up front,
  *     so this match is exact, no toNumber/recency fallback needed).
- *  2. `email.received` — a genuine inbound reply. **This is a real, working Resend feature as of
- *     2025/2026 ("Inbound")**, but the webhook payload carries METADATA ONLY (no body) — we fetch
+ *  2. `email.received` - a genuine inbound reply. **This is a real, working Resend feature as of
+ *     2025/2026 ("Inbound")**, but the webhook payload carries METADATA ONLY (no body) - we fetch
  *     the actual content via Resend's Received Emails API (GET /emails/receiving/{id}, needs
  *     RESEND_API_KEY) and log an INBOUND Message row, matched to a Lead by the sender's address.
  *
  *     The one thing code alone can't finish: `email.received` never fires until an operator points a
- *     receiving address at Resend in their dashboard — either the free `<id>.resend.app` address, or
+ *     receiving address at Resend in their dashboard - either the free `<id>.resend.app` address, or
  *     MX records on a real (ideally dedicated sub-)domain. Until that one-time setup happens, this
  *     route still works fully for the six delivery-status events, which need nothing beyond
  *     registering this URL + a signing secret under Resend → Webhooks.
@@ -43,7 +45,7 @@ function verifySvixSignature(rawBody: string, svixId: string, svixTimestamp: str
   const expected = crypto.createHmac("sha256", secretBytes).update(signedContent).digest();
 
   // svix-signature carries space-separated "v1,<base64sig>" entries (one per active signing key,
-  // e.g. during secret rotation) — any match is valid.
+  // e.g. during secret rotation) - any match is valid.
   return svixSignature.split(" ").some((entry) => {
     const [version, sig] = entry.split(",");
     if (version !== "v1" || !sig) return false;
@@ -69,7 +71,7 @@ function mapResendStatus(type: string): MessageStatus | null {
     case "email.complained":
       return "FAILED";
     default:
-      // opened / clicked / delivery_delayed / scheduled / suppressed — nothing Message.status tracks.
+      // opened / clicked / delivery_delayed / scheduled / suppressed - nothing Message.status tracks.
       return null;
   }
 }
@@ -93,7 +95,7 @@ async function findLeadIdByEmail(email: string): Promise<string | null> {
 
 type ReceivedEmail = { from: string; to: string[]; subject: string | null; html: string | null; text: string | null };
 
-/** GET /emails/receiving/{id} — the only way to get the actual body; the webhook payload is
+/** GET /emails/receiving/{id} - the only way to get the actual body; the webhook payload is
  *  metadata-only. Never throws; a fetch failure just means we fall back to the webhook's own
  *  metadata for the row. */
 async function fetchReceivedEmail(emailId: string): Promise<ReceivedEmail | null> {
@@ -122,10 +124,6 @@ async function fetchReceivedEmail(emailId: string): Promise<ReceivedEmail | null
   }
 }
 
-function htmlToText(html: string): string {
-  return html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
-
 async function handleReceived(emailId: string, fallbackFrom: string, fallbackSubject: string | null): Promise<void> {
   const full = await fetchReceivedEmail(emailId);
   const from = (full?.from || fallbackFrom || "").trim();
@@ -139,7 +137,7 @@ async function handleReceived(emailId: string, fallbackFrom: string, fallbackSub
     data: {
       channel: "EMAIL",
       direction: "INBOUND",
-      status: "DELIVERED", // "arrived" — INBOUND rows have no send outcome of their own
+      status: "DELIVERED", // "arrived" - INBOUND rows have no send outcome of their own
       leadId,
       toAddress: from, // counterparty's address, matching the OUTBOUND convention (toAddress = the other party)
       fromAddress: full?.to?.[0] ?? null,
@@ -150,6 +148,48 @@ async function handleReceived(emailId: string, fallbackFrom: string, fallbackSub
       read: false,
     },
   });
+
+  /**
+   * Email is the third channel a prospect may confirm on (founder, 27/08/2026) - and until now
+   * the only one that was recorded and then ignored. An inbound reply was logged, linked to the
+   * lead, and that was the end of it: a prospect who answered "Yes" by email was still chased by
+   * the confirmation ladder and their slot was still auto-cancelled for being unconfirmed.
+   *
+   * `quoted: true` is what makes this work at all. A mail client quotes the entire original
+   * underneath the reply, the original IS the confirmation request, and it contains the words
+   * "cannot" and "reschedule" - so without stripping it, the fail-closed negation guard would
+   * reject essentially every genuine yes. See lib/confirmation-reply.ts.
+   *
+   * Gated on the SAME journey phase as the WhatsApp path, through the same helper, so a yes means
+   * one thing regardless of where it arrived.
+   */
+  if (leadId && isConfirmationReply(body, { quoted: true })) {
+    await confirmDiscoveryByEmail(leadId);
+  }
+}
+
+/**
+ * Apply an emailed YES to whichever confirmation is open for this lead.
+ *
+ * Deliberately narrower than the WhatsApp equivalent: it sets the Disco confirmation only. The
+ * SSS ladder's confirmation carries a personalised video and a founder's calendar slot, and the
+ * SOP asks for it on WhatsApp - promoting an email reply to an SSS confirmation would be
+ * inventing a rule nobody wrote. A yes at any other time is friendliness and sets nothing.
+ */
+async function confirmDiscoveryByEmail(leadId: string): Promise<void> {
+  const journey = await prisma.outreachJourney.findUnique({
+    where: { leadId },
+    select: { id: true, phase: true, whatsappConfirmed: true },
+  });
+  if (!journey || journey.phase !== "DISCO_CONFIRMATION" || journey.whatsappConfirmed) return;
+
+  await prisma.outreachJourney.update({
+    where: { id: journey.id },
+    // The column is named for WhatsApp because the Key Metrics sheet named it that; it has always
+    // meant "the prospect confirmed", which is why a verbal yes on a Step 16 call sets it too.
+    data: { whatsappConfirmed: true, whatsappConfirmedAt: new Date() },
+  });
+  await markDiscoveryConfirmed(leadId, "email").catch(() => undefined);
 }
 
 export async function POST(req: NextRequest) {
@@ -165,7 +205,7 @@ export async function POST(req: NextRequest) {
     return new Response("Too many requests", { status: 429 });
   }
 
-  // Raw text, not req.json() — the signature is computed over the exact bytes on the wire.
+  // Raw text, not req.json() - the signature is computed over the exact bytes on the wire.
   const rawBody = await req.text();
   if (!verifySvixSignature(rawBody, svixId, svixTimestamp, svixSignature, secret)) {
     return new Response("Unauthorized", { status: 401 });
@@ -196,7 +236,7 @@ export async function POST(req: NextRequest) {
       }
     }
   } catch {
-    // Never fail the webhook on a processing hiccup — Resend would retry-storm.
+    // Never fail the webhook on a processing hiccup - Resend would retry-storm.
   }
 
   return NextResponse.json({ ok: true });

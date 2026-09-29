@@ -13,7 +13,7 @@ import { submitAccessRequest } from "@/server/access-requests";
 
 /**
  * Auth screen from the design file: brand panel on the sky gradient, form pane
- * with a Sign in / Sign up toggle. Sign-up doesn't create an account — it files
+ * with a Sign in / Sign up toggle. Sign-up doesn't create an account - it files
  * an access request the Admin approves in People → Users & access.
  */
 
@@ -25,15 +25,15 @@ type ReqRole = "HEAD" | "USER" | "TUTOR" | "STUDENT";
  *
  * "Founder / Admin" is deliberately absent. It used to be the first option on this list, which
  * meant anyone who found the login page could request full finance, compliance and all-teams
- * access — and the request landed in the same approval queue as a telecaller's, where one
+ * access - and the request landed in the same approval queue as a telecaller's, where one
  * mis-click grants it. An admin seat is created BY an admin, from People → Users & access; there
  * is no legitimate case for requesting one from a public form.
  *
- * Removing it here is only half the fix — `submitAccessRequest`'s own enum is the real gate,
+ * Removing it here is only half the fix - `submitAccessRequest`'s own enum is the real gate,
  * since a crafted POST never runs this file. Both were narrowed together.
  *
  * Tutor and Student are new. Both roles already existed, already had working dashboards
- * (`/german-note`, `/my-journey`) and were already redirected there on sign-in — they simply had
+ * (`/german-note`, `/my-journey`) and were already redirected there on sign-in - they simply had
  * no way to say who they were on the one screen that asks.
  */
 const REQUEST_ROLES: { id: ReqRole; label: string; desc: string; icon: typeof ShieldCheck }[] = [
@@ -50,7 +50,7 @@ const fieldCls =
  * Which door someone came in through.
  *
  * ── Why a variant and not a second auth screen ──────────────────────────────────
- * Tutors and students already had working logins, working roles and working dashboards — the
+ * Tutors and students already had working logins, working roles and working dashboards - the
  * root page has redirected `TUTOR → /german-note` and `STUDENT → /my-journey` all along. What
  * was missing was any SIGN that this page was for them: the brand panel says "Internal tool ·
  * access by invitation" and the sign-up picker offered Admin/Head/Telecaller only.
@@ -66,7 +66,7 @@ const VARIANTS: Record<LoginVariant, {
   blurb: string;
   hero: string;
   heroBlurb: string;
-  /** Students are provisioned from a Student record — they cannot request a seat here. */
+  /** Students are provisioned from a Student record - they cannot request a seat here. */
   allowSignup: boolean;
   next: string;
 }> = {
@@ -75,7 +75,7 @@ const VARIANTS: Record<LoginVariant, {
     blurb: "Sign in to your B2 Consultants workspace.",
     hero: "One cockpit for the whole business.",
     heroBlurb:
-      "Finance, pipeline, students and team — every number traced to a balanced ledger. Sign in with the role that matches your seat.",
+      "Finance, pipeline, students and team - every number traced to a balanced ledger. Sign in with the role that matches your seat.",
     allowSignup: true,
     next: "/",
   },
@@ -84,7 +84,7 @@ const VARIANTS: Record<LoginVariant, {
     blurb: "Sign in to see your own journey, agreement and CV studio.",
     hero: "Your journey, in one place.",
     heroBlurb:
-      "Your milestones, your sessions, your agreement and the CV diagnostic — everything your coach is tracking, visible to you.",
+      "Your milestones, your sessions, your agreement and the CV diagnostic - everything your coach is tracking, visible to you.",
     // A student login is created FROM their student record by an admin (see portal-actions);
     // offering a request form here would collect requests nobody can action.
     allowSignup: false,
@@ -108,7 +108,7 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
   // staring at a login form that silently refuses them.
   const searchParams = useSearchParams();
   const suspended = searchParams.get("error") === "suspended";
-  // ResetPasswordForm sends people back here (never auto-signed-in — resetting a
+  // ResetPasswordForm sends people back here (never auto-signed-in - resetting a
   // password doesn't mint a session) with this flag so they know it worked.
   const resetDone = searchParams.get("reset") === "success";
   const [mode, setMode] = useState<Mode>("login");
@@ -122,12 +122,12 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
     suspended ? "This account has been suspended. Contact your admin." : null,
   );
   const [info, setInfo] = useState<string | null>(
-    resetDone ? "Password updated — sign in with your new password." : null,
+    resetDone ? "Password updated - sign in with your new password." : null,
   );
   const [busy, setBusy] = useState(false);
 
   // Character rules for the sign-up fields (see lib/field-rules). The password below deliberately
-  // gets none — a password must accept every character it was typed with.
+  // gets none - a password must accept every character it was typed with.
   const nameField = fieldKindProps<HTMLInputElement>("name", (e) => setName(e.target.value));
   const emailField = fieldKindProps<HTMLInputElement>("email", (e) => setEmail(e.target.value));
   const noteField = fieldKindProps<HTMLTextAreaElement>("text", (e) => setNote(e.target.value));
@@ -164,7 +164,7 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
       setMode("login");
       setName("");
       setNote("");
-      setInfo("Access request sent — your admin will set up your account and share the login.");
+      setInfo("Access request sent - your admin will set up your account and share the login.");
       return;
     }
 
@@ -177,7 +177,7 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
           ? // Say that we trimmed. A password that genuinely ends in a space is vanishingly
             // unlikely here (every one is admin-set or invite-chosen), but if someone has one,
             // this is the only sentence that tells them why they cannot get in.
-            `Invalid email or password.${trimmed ? " We removed a stray space from the end of your password — if your password really ends in one, contact your admin." : ""}`
+            `Invalid email or password.${trimmed ? " We removed a stray space from the end of your password - if your password really ends in one, contact your admin." : ""}`
           : `Sign-in failed: ${error.message ?? "server error"}`,
       );
       setBusy(false);
@@ -185,7 +185,7 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
     }
     /**
      * Honour `?next=` so the student and tutor entry points can land people on their own
-     * dashboard. Same-origin PATHS only — an absolute URL here would turn the login screen into
+     * dashboard. Same-origin PATHS only - an absolute URL here would turn the login screen into
      * an open redirect, which is a phishing primitive, not a convenience.
      */
     const next = searchParams.get("next");
@@ -201,7 +201,7 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
 
   return (
     <div className="flex min-h-screen items-stretch bg-surface">
-      {/* brand panel — the one allowed gradient (hero-sky) */}
+      {/* brand panel - the one allowed gradient (hero-sky) */}
       <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -354,7 +354,7 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
                     autoComplete="current-password"
                     className={`${fieldCls} pr-11`}
                   />
-                  {/* Show/hide toggle — reveal what you're typing before signing in. */}
+                  {/* Show/hide toggle - reveal what you're typing before signing in. */}
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
@@ -375,7 +375,7 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
                 <textarea
                   {...noteField.attrs}
                   /* 500, not the kind's 2000 cap: submitAccessRequest rejects anything longer,
-                     and it reports that as "enter a valid email" — a dead end for the typist. */
+                     and it reports that as "enter a valid email" - a dead end for the typist. */
                   maxLength={500}
                   value={note}
                   onChange={noteField.onChange}
@@ -427,7 +427,7 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
             </p>
           ) : (
             <p className="mt-5 text-center text-[13px] text-ink-3">
-              No login yet? Your coach sets one up from your student record — ask them.
+              No login yet? Your coach sets one up from your student record - ask them.
             </p>
           )}
         </div>

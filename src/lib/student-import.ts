@@ -5,7 +5,7 @@
  * before anything is written. That preview is the whole design. An import that writes first
  * and reports afterwards is how a spreadsheet paste silently duplicates half a cohort.
  *
- * Matching is by EMAIL, folded to lowercase — the same key the rest of the app already
+ * Matching is by EMAIL, folded to lowercase - the same key the rest of the app already
  * treats as a person's identity (see booking-actions on why the fold matters). A row with no
  * email cannot be matched to anyone, so it can only ever create.
  */
@@ -50,7 +50,7 @@ const COLUMN_ALIASES: Record<string, keyof ImportRow> = {
 /**
  * Split one CSV line, honouring double-quoted fields.
  *
- * Hand-rolled rather than split(",") because addresses contain commas — the single most
+ * Hand-rolled rather than split(",") because addresses contain commas - the single most
  * likely field in this import to be quoted, and the one that would silently shift every
  * later column if we ignored quoting.
  */
@@ -87,7 +87,7 @@ export type ParseResult =
   | { ok: true; rows: { row: ImportRow; line: number }[]; skipped: { line: number; reason: string; raw: string }[] }
   | { ok: false; error: string };
 
-/** Parse a CSV into candidate rows. Bad rows are collected, not fatal — one typo shouldn't reject the file. */
+/** Parse a CSV into candidate rows. Bad rows are collected, not fatal - one typo shouldn't reject the file. */
 export function parseStudentCsv(text: string): ParseResult {
   const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
   if (lines.length === 0) return { ok: false, error: "The file is empty" };
@@ -140,7 +140,7 @@ export type ExistingStudent = {
  * separately from `update` so a re-imported file reads as "nothing to do" rather than
  * inflating a change count nobody made.
  *
- * A blank cell means "no data in the sheet", never "delete what's on file" — an import is
+ * A blank cell means "no data in the sheet", never "delete what's on file" - an import is
  * usually a partial export, and treating gaps as deletions would quietly strip phone numbers
  * off half the roster.
  */

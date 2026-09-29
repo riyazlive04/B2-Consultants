@@ -6,7 +6,7 @@ import { SegmentToggle } from "@/components/ui/SegmentToggle";
 import { useFinanceCcy } from "./FinanceCurrency";
 
 /**
- * Finance's segment control — the shared `SegmentToggle` with each line's revenue printed
+ * Finance's segment control - the shared `SegmentToggle` with each line's revenue printed
  * inside its button.
  *
  * A wrapper rather than props on the shared component because those totals follow the page's
@@ -18,7 +18,7 @@ import { useFinanceCcy } from "./FinanceCurrency";
  *
  * It used to be `<Link href="?line=">`, which reset the moment you navigated away. The
  * selection is now a cookie written by the shared toggle, so it follows you across the app
- * (E1/E4) — while an explicit `?line=` still wins on arrival, keeping shared links working
+ * (E1/E4) - while an explicit `?line=` still wins on arrival, keeping shared links working
  * (see server/business-line-view.ts).
  */
 export function BusinessLineSwitch({

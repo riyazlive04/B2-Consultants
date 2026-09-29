@@ -14,7 +14,7 @@ import { DEFAULT_DUNNING_CONFIG, type DunningConfig } from "../config-schema";
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 const DUE = d("2026-08-10");
 
-/** Defaults: UPCOMING at -3, MISSED at +1, FINAL at +7. */
+/** Defaults: UPCOMING at -10, MISSED at +1, FINAL at +7. */
 const cfg = DEFAULT_DUNNING_CONFIG;
 
 function at(dayOffset: number, sent: DunningStage[] = [], config: DunningConfig = cfg) {
@@ -38,12 +38,18 @@ describe("days past due", () => {
 
 describe("which rung fires", () => {
   test("nothing before the first offset", () => {
-    assert.equal(at(-10), null);
-    assert.equal(at(-4), null);
+    assert.equal(at(-30), null);
+    assert.equal(at(-11), null);
   });
 
-  test("UPCOMING from three days before", () => {
-    assert.equal(at(-3), "UPCOMING");
+  /**
+   * Ten days, not three. The founder's own in-app follow-up window is 10 days
+   * (server/notifications.ts), so a student hearing about the same instalment at 3 days put the
+   * two on different clocks - the founder chasing something the student had not been told about.
+   */
+  test("UPCOMING from ten days before", () => {
+    assert.equal(at(-10), "UPCOMING");
+    assert.equal(at(-4), "UPCOMING");
     assert.equal(at(-2), "UPCOMING");
     assert.equal(at(0), "UPCOMING", "on the due date itself, MISSED hasn't been reached yet");
   });
@@ -65,12 +71,12 @@ describe("which rung fires", () => {
   });
 });
 
-describe("non-skipping — the thing that makes this feel human", () => {
+describe("non-skipping - the thing that makes this feel human", () => {
   /**
    * THE FAILURE MODE THIS PREVENTS. On the first armed run the engine meets a backlog of
    * instalments that are already weeks overdue. Every offset is satisfied for all of them. A
    * naive implementation sends all three rungs at once, and the student receives "just a
-   * reminder, due in three days", "you missed it" and "final notice" within the same minute —
+   * reminder, due in three days", "you missed it" and "final notice" within the same minute -
    * which tells them immediately that they are talking to a broken machine.
    */
   test("an instalment first seen ten days overdue gets ONLY the final notice", () => {

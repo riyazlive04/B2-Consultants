@@ -27,7 +27,7 @@ const COACH_OPTIONS = [
 ];
 
 // CSV formula-injection guard (mirrors DataTable): a cell starting with = + - @
-// or a tab/CR is executed by Excel/Sheets — neutralise with a leading apostrophe.
+// or a tab/CR is executed by Excel/Sheets - neutralise with a leading apostrophe.
 const csvSafe = (v: string | number | null | undefined): string | number => {
   if (typeof v !== "string") return v ?? "";
   return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
@@ -152,6 +152,9 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Full name">
               <TextInput kind="name" name="fullName" required />
+            </Field>
+            <Field label="Student ID" hint="Leave blank to allocate the next one automatically">
+              <TextInput name="code" placeholder="B2-0042" />
             </Field>
             <Field label="Email">
               <TextInput kind="email" name="email" />

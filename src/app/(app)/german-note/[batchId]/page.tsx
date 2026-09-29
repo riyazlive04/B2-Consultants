@@ -63,7 +63,7 @@ export default async function GnBatchPage({ params }: { params: { batchId: strin
                 <div className="space-y-3">
                   {isArchived && (
                     <p className="rounded-field bg-surface-2 px-3 py-2 text-xs text-muted">
-                      This batch is archived — the discussion is read-only, but your class recordings stay available for lifetime.
+                      This batch is archived - the discussion is read-only, but your class recordings stay available for lifetime.
                     </p>
                   )}
                   <CommunityFeed
@@ -86,7 +86,7 @@ export default async function GnBatchPage({ params }: { params: { batchId: strin
           <ul className="mt-3 space-y-1.5">
             {batch.members.length === 0 && <li className="text-xs text-muted">No members yet.</li>}
             {batch.members.map((m) => (
-              <li key={m.id} className="truncate text-sm text-ink-2">
+              <li key={m.id} className="truncate text-sm text-ink-2" title={m.fullName}>
                 {m.fullName}
               </li>
             ))}

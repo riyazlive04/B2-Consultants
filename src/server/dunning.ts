@@ -12,7 +12,7 @@ import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import { captureException } from "@/lib/observability";
 
 /**
- * The dunning ladder — the engine.
+ * The dunning ladder - the engine.
  *
  * REPLACES `payment-email-reminders.ts`, which sent ONE message, deduped by string-matching its
  * own subject line against the Message table, and had no concept of escalation. All of the
@@ -21,7 +21,7 @@ import { captureException } from "@/lib/observability";
  *
  * FOUR SAFETY PROPERTIES, in the order they matter:
  *
- *  1. SHIPS OFF. This talks to paying students — the highest-consequence outbound in the app.
+ *  1. SHIPS OFF. This talks to paying students - the highest-consequence outbound in the app.
  *  2. PER-RUN CAP. The first armed run meets the entire standing backlog at once. Uncapped that
  *     is a mailbomb with the founders' name on it; capped it is a queue that drains over days,
  *     which is also how a person would have done it.
@@ -105,7 +105,7 @@ export async function runDunning(): Promise<DunningRun> {
       },
       dunningEvents: { select: { stage: true } },
     },
-    orderBy: { dueDate: "asc" }, // oldest first — the most overdue gets the scarce cap slots
+    orderBy: { dueDate: "asc" }, // oldest first - the most overdue gets the scarce cap slots
     take: 500,
   });
 
@@ -137,7 +137,7 @@ export async function runDunning(): Promise<DunningRun> {
     const phone = student?.phone?.trim() ?? "";
 
     if ((wantsEmail && !email) && (wantsWhatsApp ? !phone : true)) {
-      // No usable channel. NOT recorded as a sent stage — the moment contact details are added,
+      // No usable channel. NOT recorded as a sent stage - the moment contact details are added,
       // this instalment should still be chaseable rather than silently skipped forever.
       run.noContact++;
       continue;
@@ -166,7 +166,7 @@ export async function runDunning(): Promise<DunningRun> {
     let delivered = false;
     let messageId: string | null = null;
     let note: string | null = null;
-    // "The channel is switched off" is not a failure — it is the keys-off default doing its job,
+    // "The channel is switched off" is not a failure - it is the keys-off default doing its job,
     // and it is what a founder sees on a dry run before arming anything. Tracked separately so
     // the run summary doesn't report a wall of failures for a correctly-disabled channel.
     let channelOff = false;
@@ -204,9 +204,9 @@ export async function runDunning(): Promise<DunningRun> {
       if (wantsWhatsApp && phone) {
         // Reuses the approved payment-reminder template rather than free text. WATI requires a
         // pre-approved template for business-initiated messages, so a bespoke per-stage WhatsApp
-        // body would simply be rejected — the escalation lives in the email copy until the
+        // body would simply be rejected - the escalation lives in the email copy until the
         // per-stage templates clear approval.
-        // NOTE: whatsapp.ts's SendOutcome is a different shape from messaging.ts's — `sent` /
+        // NOTE: whatsapp.ts's SendOutcome is a different shape from messaging.ts's - `sent` /
         // `error` / `messageId` rather than `status` / `message`. Same name, different type.
         const out = await sendPaymentReminderFor(inst.pendingPayment.id, null);
         if (out.sent) {
@@ -221,12 +221,12 @@ export async function runDunning(): Promise<DunningRun> {
       }
 
       // Copy the founder on the final notice, as a separate email. Separate rather than a real
-      // CC header because `sendEmailMessage` logs one Message row per recipient — and the
+      // CC header because `sendEmailMessage` logs one Message row per recipient - and the
       // founder's copy showing up in the student's conversation thread would be wrong.
       if (stage === "FINAL" && config.founderCc) {
         await sendEmailMessage({
           to: config.founderCc,
-          subject: `[Escalation] ${copy.subject} — ${student?.fullName ?? inst.pendingPayment.studentName}`,
+          subject: `[Escalation] ${copy.subject} - ${student?.fullName ?? inst.pendingPayment.studentName}`,
           body: [
             `Final notice sent to ${student?.fullName ?? inst.pendingPayment.studentName}.`,
             "",
@@ -234,7 +234,7 @@ export async function runDunning(): Promise<DunningRun> {
             `Due: ${formatDate(inst.dueDate)} (${daysPastDue(inst.dueDate, today)} days ago)`,
             `Instalment: #${inst.seq}`,
             "",
-            "The automated ladder ends here — this one needs a person.",
+            "The automated ladder ends here - this one needs a person.",
           ].join("\n"),
         });
       }
@@ -251,7 +251,7 @@ export async function runDunning(): Promise<DunningRun> {
       // a rung here would mean that when the founders finally arm email, every instalment the
       // dry runs walked past is silently un-chaseable. The ladder must stay exactly where it is.
       //
-      // Replaying it later is safe precisely because the ladder is non-skipping — an instalment
+      // Replaying it later is safe precisely because the ladder is non-skipping - an instalment
       // that has drifted 20 days overdue in the meantime gets the FINAL notice only, not a burst
       // of stale nudges about dates long past.
       run.skipped++;
@@ -292,7 +292,7 @@ export async function runDunning(): Promise<DunningRun> {
  * What the ladder WOULD do, without sending anything.
  *
  * Nobody is going to arm an engine that emails paying students on the strength of a description.
- * This answers "show me exactly who gets what tomorrow" — the same read path as the real run,
+ * This answers "show me exactly who gets what tomorrow" - the same read path as the real run,
  * minus every side effect.
  */
 export async function previewDunning(): Promise<

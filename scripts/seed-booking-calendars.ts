@@ -3,7 +3,7 @@
  *
  * WHY THIS EXISTS. The funnel's apply page offers "Book a call with Asma" and "Book a call with
  * Ameen", and each disco page renders a calendar scoped to that person. Availability used to be
- * ONE pattern with ONE owner, so only Asma's page could ever have times in it — on 07/08/2026
+ * ONE pattern with ONE owner, so only Asma's page could ever have times in it - on 07/08/2026
  * production held 73 open slots, all hers, and Ameen's page showed an empty calendar to every
  * prospect who picked him. This writes the migrated multi-calendar document.
  *
@@ -32,13 +32,13 @@ const SLOT_PATTERN_KEY = "slotPatternConfig";
 const WANTED: Array<{ email: string; name: string; pattern: Partial<BookingCalendar> }> = [
   {
     email: "asma@b2consultants.in",
-    name: "Discovery calls — Asma",
+    name: "Discovery calls - Asma",
     // Left to the live pattern where one already exists; these are only the fallback.
     pattern: { weekdays: ["MON", "TUE", "WED", "THU", "FRI"], startTime: "18:00", endTime: "21:00" },
   },
   {
     email: "ameen@b2consultants.in",
-    name: "Discovery calls — Ameen",
+    name: "Discovery calls - Ameen",
     pattern: { weekdays: ["MON", "TUE", "WED", "THU", "FRI"], startTime: "18:00", endTime: "21:00" },
   },
 ];
@@ -66,7 +66,7 @@ async function main() {
     const prior = existing.find((c) => c.assignedToId === person.id);
 
     if (prior) {
-      // Keep every field they already had — only the display name is asserted.
+      // Keep every field they already had - only the display name is asserted.
       next.push({ ...prior, name: want.name, enabled: true });
       console.log(`· kept   ${want.name.padEnd(28)} ${prior.weekdays.join("/")} ${prior.startTime}–${prior.endTime}  (existing pattern preserved)`);
       continue;
@@ -89,7 +89,7 @@ async function main() {
     console.log(`· added  ${want.name.padEnd(28)} ${created.weekdays.join("/")} ${created.startTime}–${created.endTime}`);
   }
 
-  // Anything already configured for somebody else stays — this script owns two calendars, not
+  // Anything already configured for somebody else stays - this script owns two calendars, not
   // the whole document.
   const others = existing.filter((c) => !next.some((n) => n.id === c.id || n.assignedToId === c.assignedToId));
   for (const o of others) console.log(`· left   ${o.name.padEnd(28)} (not managed by this script)`);
@@ -100,7 +100,7 @@ async function main() {
    * ── The document is written in BOTH shapes, deliberately ──────────────────────
    * The multi-calendar reader ships in code that is not deployed yet, and the running production
    * build still reads this key as a single flat `SlotPatternConfig`. A bare `{calendars: […]}`
-   * parses there as every-field-default — i.e. `enabled: false` — so the live hourly top-up would
+   * parses there as every-field-default - i.e. `enabled: false` - so the live hourly top-up would
    * quietly stop, and Asma's calendar would drain as the horizon rolled forward. A config change
    * must not turn off a running engine.
    *
@@ -142,8 +142,8 @@ async function main() {
  *
  * Needed because the running production build cannot see the new calendars yet, so Ameen's page
  * would keep showing an empty calendar until the multi-calendar code deploys. The instants come
- * from `slotStartsForRange` — the same planner the cron and the manual "generate for this range"
- * form both use — so once the new code ships it finds these already present and creates nothing.
+ * from `slotStartsForRange` - the same planner the cron and the manual "generate for this range"
+ * form both use - so once the new code ships it finds these already present and creates nothing.
  *
  * Additive only, exactly like `ensureBookingSlots`: it never updates or deletes, so a BOOKED or
  * BLOCKED slot cannot be touched.

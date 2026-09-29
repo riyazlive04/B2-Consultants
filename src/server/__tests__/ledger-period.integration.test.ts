@@ -15,21 +15,21 @@ import {
 } from "../ledger-core";
 
 /**
- * The money layer's INTEGRATION suite — the gap that let the mis-dated-reversal defect ship.
+ * The money layer's INTEGRATION suite - the gap that let the mis-dated-reversal defect ship.
  *
  * Why this file exists rather than more unit tests: `src/server/` is `server-only`, so the 484
  * `tsx` unit tests cannot reach `ledger-core.ts` at all. (`ledger-core.ts` itself carries no
- * "server-only" pragma, deliberately — see its header — which is what lets this file import it.)
+ * "server-only" pragma, deliberately - see its header - which is what lets this file import it.)
  *
  * And why period-scoped assertions specifically: `prisma/verify-ledger.ts` is a genuinely good
  * adversarial suite, but it asserts that the trial balance BALANCES. A reversal dated into the
- * wrong month balances perfectly — the original and its mirror are both in the all-time total,
+ * wrong month balances perfectly - the original and its mirror are both in the all-time total,
  * they simply sit in different months. Balance is not correctness. Every assertion below is
  * therefore scoped to a month.
  *
  * Needs a real Postgres: the balance rule is a DEFERRABLE trigger that fires at COMMIT, so there
  * is nothing meaningful to test against a mock. Point LEDGER_TEST_DATABASE_URL at a THROWAWAY
- * database — the suite posts real, permanent journal entries (see TAG below):
+ * database - the suite posts real, permanent journal entries (see TAG below):
  *
  *   npm run db:local
  *   LEDGER_TEST_DATABASE_URL="postgresql://b2:b2@localhost:5435/b2_dashboard?schema=public" npm test
@@ -50,7 +50,7 @@ const rupees = (n: number) => BigInt(n) * BigInt(100);
 
 /**
  * This suite does NOT delete the entries it posts, and cannot: `journal_line` carries an
- * append-only trigger that refuses DELETE outright — the very guarantee under test. So instead
+ * append-only trigger that refuses DELETE outright - the very guarantee under test. So instead
  * of cleaning up, every run tags its rows uniquely and every assertion is a DELTA against the
  * balance found at the start. That makes the suite correct against a database that already has
  * real postings in it, and re-runnable without tripping the one-live-entry-per-source rule.
@@ -86,7 +86,7 @@ const revenueIn = async (month: string) => (await getPeriodMovements(db, month))
 const revenueEarnedIn = async (month: string) => -(await revenueIn(month));
 
 /**
- * Period locks ARE removable, and the suite creates them — but only ever its own. A lock that was
+ * Period locks ARE removable, and the suite creates them - but only ever its own. A lock that was
  * already there belongs to the founder's real close, so the suite refuses to run rather than
  * quietly deleting it and leaving a reported month re-openable.
  */
@@ -99,7 +99,7 @@ async function assertMonthsOpen() {
     existing.length,
     0,
     `${existing.map((e) => e.month).join(", ")} is locked in this database. ` +
-      `The suite needs ${JUNE_KEY} and ${JULY_KEY} open and will not unlock a real close — ` +
+      `The suite needs ${JUNE_KEY} and ${JULY_KEY} open and will not unlock a real close - ` +
       `point LEDGER_TEST_DATABASE_URL at a throwaway database.`,
   );
 }
@@ -132,7 +132,7 @@ test("ledger period integrity", { skip }, async (t) => {
       await postEntry(t2, { ...draft, date: restatedDate(voided, draft.date) });
     });
 
-    // June now carries the RESTATED figure — not the original, and not both.
+    // June now carries the RESTATED figure - not the original, and not both.
     assert.equal(
       await revenueEarnedIn(JUNE_KEY),
       before.june + rupees(50_000),
@@ -142,7 +142,7 @@ test("ledger period integrity", { skip }, async (t) => {
     assert.equal(
       await revenueEarnedIn(JULY_KEY),
       before.july,
-      "July must be untouched — a June correction has no business appearing here",
+      "July must be untouched - a June correction has no business appearing here",
     );
   });
 
@@ -183,7 +183,7 @@ test("ledger period integrity", { skip }, async (t) => {
     assert.equal(
       await revenueEarnedIn(JUNE_KEY),
       juneAfterPost,
-      "a closed month is never restated — that is what the lock is for",
+      "a closed month is never restated - that is what the lock is for",
     );
     // Both halves landed in July: −20,000 reversal + 25,000 restatement = +5,000 net.
     assert.equal(

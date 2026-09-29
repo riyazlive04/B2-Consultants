@@ -5,7 +5,7 @@ import { BOOK_ORDER_STATUS_LABELS } from "@/lib/labels";
 import type { TutorDesk } from "@/server/tutor-desk";
 
 /**
- * The tutor's own summary (rebuild spec §9), shown above the German Note batch cards — a tutor is
+ * The tutor's own summary (rebuild spec §9), shown above the German Note batch cards - a tutor is
  * redirected here on sign-in, so this page is effectively their dashboard.
  *
  * Student IDs are printed beside every name because §9 asks for them explicitly: a tutor referring
@@ -13,7 +13,7 @@ import type { TutorDesk } from "@/server/tutor-desk";
  * the spec is removing.
  *
  * ATTENDANCE IS ABSENT ON PURPOSE. §9 lists it, but the schema has no attendance model and nothing
- * existing stands in for it — a watched recording is not a student who turned up. Faking it from a
+ * existing stands in for it - a watched recording is not a student who turned up. Faking it from a
  * lookalike would be worse than the gap.
  */
 
@@ -37,7 +37,7 @@ export function TutorSummary({ desk }: { desk: TutorDesk }) {
           <p className="mt-1 text-caption text-muted">
             today · {desk.sessionsThisMonth} this month
           </p>
-          <Hint>Read back from your daily log — this is the figure the head coach sees.</Hint>
+          <Hint>Read back from your daily log - this is the figure the head coach sees.</Hint>
         </Card>
 
         <Card title={<span className="flex items-center gap-2"><BookOpen size={16} /> Book orders</span>}>
@@ -65,7 +65,7 @@ export function TutorSummary({ desk }: { desk: TutorDesk }) {
       </div>
 
       {desk.students.length > 0 && (
-        <Card title="Your students" subtitle="ID beside each name — the reference the head coach asks for.">
+        <Card title="Your students" subtitle="ID beside each name - the reference the head coach asks for.">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] border-collapse text-sm">
               <thead>
@@ -83,7 +83,7 @@ export function TutorSummary({ desk }: { desk: TutorDesk }) {
                         {s.name}
                       </Link>
                     </td>
-                    <td className="px-3 py-2 tnum text-muted">{s.studentCode ?? "—"}</td>
+                    <td className="px-3 py-2 tnum text-muted">{s.studentCode ?? "-"}</td>
                     <td className="py-2 pl-3 text-muted">{s.batchName}</td>
                   </tr>
                 ))}

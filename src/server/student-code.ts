@@ -6,8 +6,8 @@ import { formatStudentCode, nextStudentNumber } from "@/lib/student-code";
 /**
  * Hand out the next student number (§6.1).
  *
- * Every path that can mint a Student goes through here — the admin form, lead conversion,
- * the CSV import and German Note self-enrolment — so a student can never arrive without a
+ * Every path that can mint a Student goes through here - the admin form, lead conversion,
+ * the CSV import and German Note self-enrolment - so a student can never arrive without a
  * code and reintroduce the duplicate-name ambiguity this was built to remove.
  *
  * Accepts a transaction client so a caller already inside `$transaction` allocates against

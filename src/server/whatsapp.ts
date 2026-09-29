@@ -1,9 +1,11 @@
 import "server-only";
+import { bookingUrl, leadTemplateVars } from "./lead-template-vars";
 import { Prisma, type WhatsAppKind, type WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import { formatDate, formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import {
+  WHATSAPP_AVAILABLE_VARS,
   WHATSAPP_KIND_LABELS,
   domainAllows,
   redirectedBodyPrefix,
@@ -11,6 +13,9 @@ import {
   type WatiTemplateConfig,
 } from "@/lib/whatsapp";
 import { normalizeWhatsappNumber } from "@/lib/phone";
+import { CALL_TIME_KINDS, dueReminderRung } from "@/lib/call-notice";
+import { sopOwnsCallReminders } from "@/lib/outreach-engine";
+import { coerceOutreachConfig } from "@/lib/outreach-sop";
 import type { SectionKey } from "@/lib/sections";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import {
@@ -23,6 +28,7 @@ import {
 } from "@/lib/wati";
 import { getPendingRows } from "./finance-metrics";
 import { ACTIVE } from "@/lib/soft-delete";
+import { advanceLeadStageForWhatsApp } from "./lead-stage-auto";
 
 /**
  * WhatsApp sending service + automatic reminder engine (WATI). Everything funnels through
@@ -44,9 +50,6 @@ function firstName(full: string): string {
   return n || full.trim() || "there";
 }
 
-function bookingUrl(): string {
-  return `${(process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "")}/book`;
-}
 
 // ───────────────────────────── Core send ─────────────────────────────
 
@@ -71,7 +74,7 @@ export type SendWhatsAppInput = WhatsAppTarget & {
   runtime?: WatiRuntime;
   /**
    * Rehearse: run every check (number, template, opt-out, variables) and write the row that
-   * proves what WOULD have gone out — but never call WATI. The row lands as SKIPPED with a
+   * proves what WOULD have gone out - but never call WATI. The row lands as SKIPPED with a
    * `DRY RUN` reason, so the WhatsApp history shows the exact recipient and text for review.
    *
    * This is the ONLY safe way to develop a new touchpoint against a live WATI account: the
@@ -95,7 +98,7 @@ async function isOptedOut(number: string): Promise<boolean> {
 }
 
 /**
- * Build WATI's `parameters` from the TEMPLATE's own variable list — a WhatsApp template accepts
+ * Build WATI's `parameters` from the TEMPLATE's own variable list - a WhatsApp template accepts
  * exactly the variables it was approved with, so sending an extra one is rejected outright.
  * Returns the missing names instead of substituting blanks: an empty variable renders a broken
  * message ("Hi ,") and WhatsApp rejects empty params anyway, so we'd rather skip and say why.
@@ -153,7 +156,7 @@ async function writeRow(input: {
  * Send one WhatsApp template message and log it. Fail-safe: resolves a SendOutcome, never throws.
  */
 export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcome> {
-  const { kind, to, vars, sentById = null, target, logSkips = true, dryRun = false } = {
+  const { kind, to, sentById = null, target, logSkips = true, dryRun = false } = {
     ...input,
     target: {
       leadId: input.leadId,
@@ -167,12 +170,22 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
 
   const runtime = input.runtime ?? (await getWatiRuntime());
   const template = runtime.settings.templates[kind];
+  /**
+   * A message to a LEAD whose template wants a variable the caller did not pass: fill it from the
+   * lead's own record (server/lead-template-vars.ts), so any approved template can be bound to any
+   * lead-facing touchpoint. The caller's own values always win - they know the specific booking.
+   */
+  let vars = input.vars;
+  if (template && target.leadId && template.params.some((p) => !vars[p])) {
+    const fromLead = await leadTemplateVars(target.leadId, { sss: kind.includes("SSS"), sentById }).catch(() => ({}));
+    vars = { ...fromLead, ...Object.fromEntries(Object.entries(vars).filter(([, v]) => v !== "" && v != null)) };
+  }
   const number = normalizeWhatsappNumber(to, runtime.settings.defaultCountry);
   const label = WHATSAPP_KIND_LABELS[kind];
   const body = input.bodySummary ?? label;
   const paramsJson = { template: template?.name ?? null, vars } as Prisma.InputJsonValue;
 
-  // Reasons the message can't actually go out. The first three are "system off" — for
+  // Reasons the message can't actually go out. The first three are "system off" - for
   // event-driven callers (logSkips=false) we stay silent rather than spamming SKIPPED rows.
   let systemOff: string | null = null;
   if (!runtime.envEnabled) systemOff = "WhatsApp sending is off (WATI_ENABLED not set)";
@@ -184,20 +197,31 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
   const built = template ? buildParameters(template, vars) : null;
 
   // Positive knowledge from the last catalog refresh that this template can't be sent. An unknown
-  // template is allowed through — WATI stays the authority, so a stale cache never blocks a
+  // template is allowed through - WATI stays the authority, so a stale cache never blocks a
   // genuinely approved template.
   const knownStatus = template?.name ? runtime.templateStatus[template.name] : undefined;
 
   let dataSkip: string | null = null;
   if (!systemOff) {
-    if (!number) dataSkip = "No valid WhatsApp number — save it with a country code (e.g. +91… or +49…)";
+    if (!number) dataSkip = "No valid WhatsApp number - save it with a country code (e.g. +91… or +49…)";
     else if (!template?.name) dataSkip = `No WATI template configured for "${label}"`;
     else if (knownStatus && knownStatus !== "APPROVED") {
-      dataSkip = `Template "${template.name}" is ${knownStatus} in WATI — pick an APPROVED template in WhatsApp → Settings.`;
+      dataSkip = `Template "${template.name}" is ${knownStatus} in WATI - pick an APPROVED template in WhatsApp → Settings.`;
     } else if (built && !built.ok) {
-      dataSkip =
-        `Template "${template.name}" expects ${built.missing.map((m) => `{{${m}}}`).join(", ")}, ` +
-        `which "${label}" cannot supply. Fix the variable list in WhatsApp → Settings.`;
+      // Two different problems, and only one of them is a Settings mistake. A variable the
+      // touchpoint offers but has no value for THIS recipient (a lead with no live booked call has
+      // no {{date}}) is a fact about the lead; blaming the variable list sent people to fix config
+      // that was already right.
+      const offered = new Set(WHATSAPP_AVAILABLE_VARS[kind]);
+      const unsupported = built.missing.filter((m) => !offered.has(m));
+      const noValue = built.missing.filter((m) => offered.has(m));
+      const list = (xs: string[]) => xs.map((m) => `{{${m}}}`).join(", ");
+      dataSkip = unsupported.length
+        ? `Template "${template.name}" expects ${list(unsupported)}, which "${label}" cannot supply. Fix the variable list in WhatsApp → Settings.`
+        : `Template "${template.name}" needs ${list(noValue)}, and this contact has no value for ${noValue.length > 1 ? "them" : "it"}` +
+          (noValue.some((m) => ["date", "time", "slot_time"].includes(m))
+            ? " - they have no live booked call (book one first; a past or no-show call is never quoted)."
+            : ".");
     } else if (await isOptedOut(number)) dataSkip = "Recipient has opted out of WhatsApp";
     else {
       /**
@@ -205,12 +229,12 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
        * listed in WhatsApp → Domains.
        *
        * Filed as a `dataSkip` rather than `systemOff` because it is a fact about THIS recipient,
-       * not about the system — so it always writes a row saying which domain was refused. A
+       * not about the system - so it always writes a row saying which domain was refused. A
        * message that vanishes with no trace is the thing that makes a gate impossible to debug
        * six weeks later.
        *
        * Only leads carry an origin. A send addressed at a student, an agreement or the book
-       * publisher has no lead to look up, and `domainAllows(…, null)` lets those through — the
+       * publisher has no lead to look up, and `domainAllows(…, null)` lets those through - the
        * gate is about where a PROSPECT came from, and it must never hold up a signed student's
        * paperwork.
        */
@@ -221,7 +245,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
           select: { originDomain: true },
         });
         if (!domainAllows(gate, lead?.originDomain)) {
-          dataSkip = `Blocked by the WhatsApp domain gate — this contact came from "${lead?.originDomain}", which is not in the allowed list.`;
+          dataSkip = `Blocked by the WhatsApp domain gate - this contact came from "${lead?.originDomain}", which is not in the allowed list.`;
         }
       }
     }
@@ -231,6 +255,29 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
   if (skipReason) {
     if (systemOff && !logSkips) {
       return { messageId: null, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
+    }
+    /**
+     * A data-skip writes a row so the reason is not invisible - but ONCE, not once per tick.
+     *
+     * The SOP engine re-attempts a DUE step every time the cron runs, so a reason that cannot
+     * change on its own ("No WATI template configured") produced one row per lead per minute.
+     * Between 25/08 and 27/08 that was 5,175 rows for two prospects, which buries the real
+     * delivery history on their contact cards and grows without bound.
+     *
+     * So: for an engine-driven caller, if the most recent attempt for this touchpoint and
+     * recipient was already skipped for the SAME reason, stay silent. The trace still exists -
+     * the first row - and the moment the reason CHANGES (a template gets bound, a number is
+     * fixed) a new row is written, which is the transition worth recording.
+     */
+    if (!logSkips) {
+      const last = await prisma.whatsAppMessage.findFirst({
+        where: { kind, direction: "OUTBOUND", ...targetWhere(target) },
+        orderBy: { createdAt: "desc" },
+        select: { status: true, error: true },
+      });
+      if (last?.status === "SKIPPED" && last.error === skipReason) {
+        return { messageId: null, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
+      }
     }
     const messageId = await writeRow({
       kind,
@@ -246,7 +293,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
     return { messageId, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
   }
 
-  // THE SAFETY VALVE. Applied last, after every check has run against the REAL recipient — so a
+  // THE SAFETY VALVE. Applied last, after every check has run against the REAL recipient - so a
   // redirected send still proves what a live one would have done (their opt-out, their template
   // variables), rather than testing a path nobody uses.
   const dest = resolveDestination(number!, runtime.settings.testRecipient);
@@ -255,10 +302,10 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
     dest.redirected ? { template: template?.name ?? null, vars, redirectedFrom: dest.intended } : paramsJson
   ) as Prisma.InputJsonValue;
 
-  // Would have sent. Rehearsal stops exactly here — after every check has passed for real,
+  // Would have sent. Rehearsal stops exactly here - after every check has passed for real,
   // and before the only line that touches the outside world.
   if (dryRun) {
-    const reason = `DRY RUN — not sent. Would have gone to ${dest.number} via template "${template!.name}".`;
+    const reason = `DRY RUN - not sent. Would have gone to ${dest.number} via template "${template!.name}".`;
     const messageId = await writeRow({
       kind,
       status: "SKIPPED",
@@ -296,6 +343,11 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
     sentById,
     target,
   });
+  // The board follows the message: a sent intro moves a fresh opt-in to "WhatsApp Sent". Done
+  // after the row is written and never allowed to fail the send - the message has already left.
+  if (result.ok && target.leadId) {
+    await advanceLeadStageForWhatsApp(target.leadId, kind).catch(() => undefined);
+  }
   return {
     messageId,
     status,
@@ -315,7 +367,7 @@ export type WhatsAppTargetField =
   | "agreementId";
 export type LastMessage = { status: WhatsAppStatus; kind: WhatsAppKind; createdAt: Date };
 
-/** Most-recent OUTBOUND message per target id — powers the "last WhatsApp" badge in the sections. */
+/** Most-recent OUTBOUND message per target id - powers the "last WhatsApp" badge in the sections. */
 export async function getLastWhatsAppByTarget(
   field: WhatsAppTargetField,
   ids: string[],
@@ -348,7 +400,7 @@ export async function getLastWhatsAppByTarget(
 
 export type WhatsAppStatusCell = { status: WhatsAppStatus; kind: WhatsAppKind; at: string };
 
-/** Serializable version of getLastWhatsAppByTarget — safe to pass from a server page to a client table. */
+/** Serializable version of getLastWhatsAppByTarget - safe to pass from a server page to a client table. */
 export async function getWhatsAppStatusMap(
   field: WhatsAppTargetField,
   ids: string[],
@@ -362,8 +414,8 @@ export async function getWhatsAppStatusMap(
 // ───────────────────────── Reconcile with WATI (what Meta actually did) ─────────────────────────
 
 /**
- * `SENT` only ever meant "WATI accepted the request". Meta can reject the message moments later —
- * a deleted template, a marketing quality restriction — and reports that asynchronously via the
+ * `SENT` only ever meant "WATI accepted the request". Meta can reject the message moments later -
+ * a deleted template, a marketing quality restriction - and reports that asynchronously via the
  * webhook. When the webhook can't reach us (local dev, a downtime window, a dropped delivery), our
  * history silently keeps claiming `Sent` for messages that never arrived.
  *
@@ -454,6 +506,23 @@ async function throttleOk(
   if (opts.maxCount !== undefined) {
     const count = await prisma.whatsAppMessage.count({ where: { ...base, status: { in: SUCCESSFUL } } });
     if (count >= opts.maxCount) return false;
+
+    /**
+     * ATTEMPTS, not just successes.
+     *
+     * Counting only successful sends against the cap means a send that always fails never
+     * reaches it, so it is retried until the underlying event passes. On 25-26/08/2026 one
+     * prospect got ten BOOKING_REMINDER attempts, every 2h15m through the night, each rejected
+     * by Meta with "Message undeliverable as Meta has restricted it for higher quality
+     * messaging" - a QUALITY restriction, which hammering it can only deepen. Nothing reached
+     * him, and the retries were making the number worse for everyone else.
+     *
+     * The allowance above `maxCount` is what keeps a genuinely transient failure recoverable
+     * while stopping a hard one from becoming a storm.
+     */
+    const RETRY_ALLOWANCE = 2;
+    const attempts = await prisma.whatsAppMessage.count({ where: base });
+    if (attempts >= opts.maxCount + RETRY_ALLOWANCE) return false;
   }
   if (opts.minSpacingMs !== undefined) {
     const last = await prisma.whatsAppMessage.findFirst({
@@ -484,7 +553,7 @@ export type ReminderRun = {
  */
 export async function runDueReminders(): Promise<ReminderRun> {
   const ranAt = new Date().toISOString();
-  // Correct any stale "Sent" rows first — Meta may have rejected them after WATI accepted.
+  // Correct any stale "Sent" rows first - Meta may have rejected them after WATI accepted.
   // Cheap, and it keeps the history honest even when the inbound webhook never arrives.
   await reconcileWhatsAppStatuses().catch(() => undefined);
   const runtime = await getWatiRuntime();
@@ -511,7 +580,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
    *
    * Only `sent` is logged. A SKIPPED row means nobody received anything (the channel was
    * paused, or it was a dry run), and a feed claiming "Sent Priya the reminder" when no
-   * message left the building is worse than silence. FAILED is left off for the same reason —
+   * message left the building is worse than silence. FAILED is left off for the same reason -
    * the WhatsApp screen already shows failures with their error, which the feed can't.
    *
    * `subject` is what makes the row readable: the engine knows the recipient's name at every
@@ -537,11 +606,11 @@ export async function runDueReminders(): Promise<ReminderRun> {
       meta: { kind, messageId: out.messageId },
     });
   };
-  // A touchpoint only runs when its template exists — avoids per-candidate SKIPPED spam every run.
+  // A touchpoint only runs when its template exists - avoids per-candidate SKIPPED spam every run.
   const hasTemplate = (kind: WhatsAppKind) => !!runtime.settings.templates[kind]?.name;
 
-  // 1. Discovery-call reminders — un-booked leads.
-  if (budget > 0 && hasTemplate("DISCO_REMINDER")) {
+  // 1. Discovery-call reminders - un-booked leads.
+  if (budget > 0 && cadence.discoEnabled && hasTemplate("DISCO_REMINDER")) {
     const cutoff = new Date(now - cadence.discoFirstDelayHours * HR);
     const oldest = new Date(now - cadence.discoMaxAgeDays * 24 * HR);
     const leads = await prisma.lead.findMany({
@@ -554,12 +623,12 @@ export async function runDueReminders(): Promise<ReminderRun> {
          * This used to read `createdAt: { lte: cutoff }` on the lead: "old enough to chase" with
          * nothing saying "not TOO old", so every un-booked lead ever created qualified and
          * `orderBy asc` started at the oldest row in the table. Bounding `createdAt` would have
-         * fixed the blast radius and still answered the wrong question — creation is not
+         * fixed the blast radius and still answered the wrong question - creation is not
          * consent to be messaged today.
          *
          * `outreachJourney.optInAt` is the moment the prospect last actually opted in, and
          * `acceptReturningOptIn` resets it to now whenever they submit again. So a lead who
-         * went cold eighteen months ago is silent until the day they opt in afresh — and then
+         * went cold eighteen months ago is silent until the day they opt in afresh - and then
          * they are picked up immediately, with no backfill of the reminders they missed.
          *
          * Requiring the relation to EXIST is the other half. The 23,429 contacts imported from
@@ -568,7 +637,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
          * fail-closed, and it is why arming WhatsApp is now a decision about 207 leads rather
          * than 13,103.
          *
-         * A booking needs no clause here — it moves the lead out of these two stages entirely,
+         * A booking needs no clause here - it moves the lead out of these two stages entirely,
          * and BOOKING_REMINDER takes over keyed on the slot time.
          */
         outreachJourney: { optInAt: { gte: oldest, lte: cutoff } },
@@ -589,19 +658,66 @@ export async function runDueReminders(): Promise<ReminderRun> {
     }
   }
 
-  // 2. Pre-call reminders — booked slots coming up.
-  if (budget > 0 && hasTemplate("BOOKING_REMINDER")) {
+  // 2. Pre-call reminders - booked slots coming up.
+  if (budget > 0 && cadence.bookingReminderEnabled && hasTemplate("BOOKING_REMINDER")) {
     const leadHours = cadence.bookingReminderLeadHours;
     const maxLead = Math.max(...leadHours);
-    const minLead = Math.min(...leadHours);
     const bookings = await prisma.bookingRequest.findMany({
       where: { status: "BOOKED", slot: { startsAt: { gt: new Date(now), lte: new Date(now + maxLead * HR) } } },
-      include: { slot: { select: { startsAt: true } } },
+      include: {
+        slot: { select: { startsAt: true } },
+        outreachJourney: { select: { phase: true, optInAt: true, qualified: true } },
+      },
       take: Math.min(budget * 2 + 50, 500),
     });
+    // Read directly rather than through server/outreach, which imports this module.
+    const sopCfg = coerceOutreachConfig(
+      (await prisma.appSetting.findUnique({ where: { key: "outreachConfig" } }))?.value ?? null,
+    );
+    // Numbers already reminded in THIS run: two live bookings on one phone must not both fire.
+    const remindedThisRun = new Set<string>();
     for (const b of bookings) {
       if (budget <= 0) break;
-      if (!(await throttleOk("BOOKING_REMINDER", { bookingRequestId: b.id }, { minSpacingMs: minLead * HR, maxCount: leadHours.length }))) continue;
+      if (!b.slot) continue;
+      /**
+       * One reminder system per call. When the SOP ladder will remind this prospect itself
+       * (Steps 14/15), this one stands down - see `sopOwnsCallReminders` for exactly when, and
+       * why every booking WITHOUT a live SOP journey keeps its reminders unchanged.
+       */
+      if (sopOwnsCallReminders(b.outreachJourney, sopCfg, new Date(now))) continue;
+
+      const number = normalizeWhatsappNumber(b.whatsapp || b.phone, runtime.settings.defaultCountry);
+      if (number && remindedThisRun.has(number)) continue;
+      /**
+       * Every earlier attempt that counts against this rung: anything that named this booking's
+       * time (the confirmation, a reschedule notice, earlier reminders - whatever their status),
+       * plus any reminder that already went to the same NUMBER for a different booking. The last
+       * part is the one that stops the 15-30 minute pairs of 17-18/09/2026: that number held two
+       * live bookings, each with its own reminder clock, so every reminder went out twice.
+       */
+      const prior = await prisma.whatsAppMessage.findMany({
+        where: {
+          direction: "OUTBOUND",
+          createdAt: { gte: new Date(b.slot.startsAt.getTime() - maxLead * HR) },
+          OR: [
+            { bookingRequestId: b.id, kind: { in: [...CALL_TIME_KINDS] } },
+            ...(number ? [{ kind: "BOOKING_REMINDER" as const, toNumber: number }] : []),
+          ],
+        },
+        select: { createdAt: true },
+      });
+      const remindersSoFar = await prisma.whatsAppMessage.count({
+        where: { bookingRequestId: b.id, kind: "BOOKING_REMINDER", direction: "OUTBOUND" },
+      });
+      const rung = dueReminderRung(
+        b.slot.startsAt,
+        leadHours,
+        new Date(now),
+        prior.map((p) => p.createdAt),
+        remindersSoFar,
+      );
+      if (rung === null) continue;
+      if (number) remindedThisRun.add(number);
       await record("BOOKING_REMINDER", await sendWhatsApp({
         kind: "BOOKING_REMINDER", to: b.whatsapp || b.phone, bookingRequestId: b.id, leadId: b.leadId ?? undefined, runtime,
         vars: {
@@ -613,8 +729,8 @@ export async function runDueReminders(): Promise<ReminderRun> {
     }
   }
 
-  // 3. No-show follow-ups — one nudge to rebook.
-  if (budget > 0 && hasTemplate("NO_SHOW_FOLLOWUP")) {
+  // 3. No-show follow-ups - one nudge to rebook.
+  if (budget > 0 && cadence.noShowEnabled && hasTemplate("NO_SHOW_FOLLOWUP")) {
     const leads = await prisma.lead.findMany({
       where: {
         ...ACTIVE,
@@ -635,8 +751,8 @@ export async function runDueReminders(): Promise<ReminderRun> {
     }
   }
 
-  // 4. Payment reminders — overdue pending payments (balance still > 0).
-  if (budget > 0 && hasTemplate("PAYMENT_REMINDER")) {
+  // 4. Payment reminders - overdue pending payments (balance still > 0).
+  if (budget > 0 && cadence.paymentEnabled && hasTemplate("PAYMENT_REMINDER")) {
     const [pendingRows, overdue] = await Promise.all([
       getPendingRows(),
       prisma.pendingPayment.findMany({
@@ -661,14 +777,14 @@ export async function runDueReminders(): Promise<ReminderRun> {
     }
   }
 
-  // 4b. EMI pre-due reminders — an instalment falls due in N days. The counterpart to #4:
+  // 4b. EMI pre-due reminders - an instalment falls due in N days. The counterpart to #4:
   // that one chases money that is already LATE; this one arrives while paying is still easy,
   // which is the whole point ("remind me BEFORE the day").
   //
   // Reads Instalment directly rather than PendingPayment.nextDueDate, because the headline
-  // next-due only ever names the earliest unpaid instalment — it cannot say "#2 of 3", and it
+  // next-due only ever names the earliest unpaid instalment - it cannot say "#2 of 3", and it
   // is a denormalised mirror that emi-actions keeps in sync. The instalment row is the fact.
-  if (budget > 0 && hasTemplate("EMI_PRE_DUE") && cadence.emiPreDueLeadDays.length > 0) {
+  if (budget > 0 && cadence.emiPreDueEnabled && hasTemplate("EMI_PRE_DUE") && cadence.emiPreDueLeadDays.length > 0) {
     const DAY = 24 * HR;
     // today is IST-midnight UTC; dueDate is @db.Date (also midnight) → exact day equality.
     const wanted = cadence.emiPreDueLeadDays.map((d) => new Date(today.getTime() + d * DAY));
@@ -695,7 +811,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
       if (budget <= 0) break;
       const p = it.pendingPayment;
       const phone = p.student?.phone;
-      if (!phone) continue; // no linked student / no number — nothing to send to
+      if (!phone) continue; // no linked student / no number - nothing to send to
       // Spacing, not maxCount: each lead-day should land once, and a 20h window lets the
       // "3 days out" and "on the day" messages both through while a 15-min cron re-running
       // all day cannot double-send. (maxCount would also miscount in dry run, where rows
@@ -720,8 +836,8 @@ export async function runDueReminders(): Promise<ReminderRun> {
     }
   }
 
-  // 5. Check-in nudges — active enrollments whose check-in date has arrived/passed.
-  if (budget > 0 && hasTemplate("CHECKIN_NUDGE")) {
+  // 5. Check-in nudges - active enrollments whose check-in date has arrived/passed.
+  if (budget > 0 && cadence.studentNudgesEnabled && hasTemplate("CHECKIN_NUDGE")) {
     const enrollments = await prisma.enrollment.findMany({
       where: { status: "ACTIVE", nextCheckInDate: { lte: today }, student: { phone: { not: null } } },
       include: { student: { select: { id: true, fullName: true, phone: true } } },
@@ -738,8 +854,8 @@ export async function runDueReminders(): Promise<ReminderRun> {
     }
   }
 
-  // 6. Sprint-miss nudges — recently missed sprint weeks.
-  if (budget > 0 && hasTemplate("SPRINT_MISS_NUDGE")) {
+  // 6. Sprint-miss nudges - recently missed sprint weeks.
+  if (budget > 0 && cadence.studentNudgesEnabled && hasTemplate("SPRINT_MISS_NUDGE")) {
     const misses = await prisma.sprintWeek.findMany({
       where: {
         status: "MISSED",
@@ -863,7 +979,7 @@ export async function sendBookingRescheduled(bookingRequestId: string, sentById?
   });
 }
 
-/** "We didn't hear back, so we've released your slot — rebook here." Sent on auto-cancel. */
+/** "We didn't hear back, so we've released your slot - rebook here." Sent on auto-cancel. */
 export async function sendBookingAutoCancelled(bookingRequestId: string, sentById?: string | null): Promise<SendOutcome> {
   const b = await loadBooking(bookingRequestId);
   if (!b) return notFound("Booking");
@@ -935,21 +1051,65 @@ export async function sendStudentNudgeFor(
 }
 
 /**
- * Realistic sample values for every variable a touchpoint can supply — so a test send exercises
+ * Realistic sample values for every variable a touchpoint can supply - so a test send exercises
  * the exact template, with the exact parameter count, that production will use.
  */
-function sampleVars(): Record<string, string> {
+async function sampleVars(): Promise<Record<string, string>> {
   const tomorrow = new Date(Date.now() + 24 * HR);
+  const slotTime = formatDateTimeInZone(tomorrow, "Asia/Kolkata");
+  // Split exactly as the SOP sender does ("Mon 21 Sept, 06:00 pm" -> date + time), so a test
+  // renders the date/time the way a real reminder will.
+  const cut = slotTime.lastIndexOf(", ");
+  const [date, time] = cut === -1 ? [slotTime, ""] : [slotTime.slice(0, cut), slotTime.slice(cut + 2)];
+  const base = (process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "");
+
+  // The real sender name is the one the SOP engine falls back to, so a test shows what a lead
+  // would actually read. Imported lazily: outreach.ts imports this module, and a top-level import
+  // back would be a load-time cycle.
+  let sender = "B2 Consultants";
+  try {
+    const { readOutreachConfig } = await import("./outreach");
+    sender = (await readOutreachConfig()).defaultSpecialistName?.trim() || sender;
+  } catch {
+    // A test send must never fail because the outreach settings could not be read.
+  }
+
+  /**
+   * One value per variable in WHATSAPP_AVAILABLE_VARS, across every touchpoint. It used to hold
+   * only name/booking_url/slot_time/amount, so "Send test" on any SOP template that declares
+   * {{sender}}, {{date}}, {{time}} or {{zoom_link}} was skipped with "expects {{sender}}, which
+   * ... cannot supply" - blaming the variable list for a gap in the TEST data. Real sends were
+   * never affected: the SOP engine supplies those itself.
+   */
   return {
     name: "there",
+    sender,
+    date,
+    time,
+    slot_time: slotTime,
+    due_date: formatDate(tomorrow),
     booking_url: bookingUrl(),
-    slot_time: formatDateTimeInZone(tomorrow, "Asia/Kolkata"),
+    sss_url: `${base}/sss`,
+    zoom_link: "https://zoom.us/j/0000000000",
     amount: formatInrMinor(2_500_000), // ₹25,000 in paise
+    total: formatInrMinor(7_500_000),
+    seq: "2",
+    code: "123456",
+    document_no: "TEST-0001",
+    sign_url: `${base}/agreement/test`,
+    sign_token: "test-token",
+    copy_url: `${base}/agreement/test/copy`,
+    publisher_name: "there",
+    order_ref: "TEST-ORDER",
+    level: "A1",
+    student_name: "Test Student",
+    ship_to: "Test address",
+    ship_phone: "+910000000000",
   };
 }
 
 /**
- * Free-form (session) message — valid ONLY inside the 24-hour window opened by the contact
+ * Free-form (session) message - valid ONLY inside the 24-hour window opened by the contact
  * messaging us first. Unlike a marketing template it is NOT subject to Meta's per-user marketing
  * frequency caps, so this is what actually lands when a template is being throttled.
  * Business-initiated reminders still use templates; this exists for testing and for replying
@@ -969,7 +1129,7 @@ export async function sendFreeFormMessage(
   if (!runtime.envEnabled) skip = "WhatsApp sending is off (WATI_ENABLED not set)";
   else if (runtime.paused) skip = "WhatsApp is paused in settings";
   else if (!runtime.configured) skip = "WATI is not configured (endpoint/token missing)";
-  else if (!number) skip = "No valid WhatsApp number — include the country code";
+  else if (!number) skip = "No valid WhatsApp number - include the country code";
   else if (!text.trim()) skip = "Message text is empty";
   else if (await isOptedOut(number)) skip = "Recipient has opted out of WhatsApp";
 
@@ -1015,7 +1175,7 @@ export async function sendTestMessage(
 ): Promise<SendOutcome> {
   return sendWhatsApp({
     kind, to: toRaw, sentById,
-    bodySummary: `Test send — ${WHATSAPP_KIND_LABELS[kind]}`,
-    vars: sampleVars(),
+    bodySummary: `Test send - ${WHATSAPP_KIND_LABELS[kind]}`,
+    vars: await sampleVars(),
   });
 }

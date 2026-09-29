@@ -76,7 +76,7 @@ test("shifting steps exactly one window and does not stick on a boundary", () =>
   const august = resolvePeriod(shiftPeriod(july, 1, TODAY), TODAY);
   assert.equal(august.label, "August 2026");
 
-  // Stepping back then forward returns to the same window — the anchor must land INSIDE the
+  // Stepping back then forward returns to the same window - the anchor must land INSIDE the
   // neighbour, never on its boundary, or the arrows stall.
   const back = shiftPeriod(july, -1, TODAY);
   assert.equal(resolvePeriod(shiftPeriod(back, 1, TODAY), TODAY).label, "July 2026");
@@ -109,7 +109,7 @@ test("parsePeriod orders a backwards custom range instead of rejecting it", () =
   assert.equal(p.to, "2026-07-31");
 });
 
-test("legacy ?range=N days still parses — saved links must not break", () => {
+test("legacy ?range=N days still parses - saved links must not break", () => {
   const p = parsePeriod({ range: "90" });
   assert.equal(p.kind, "custom");
   assert.ok(p.from && p.to, "resolves to a concrete window");

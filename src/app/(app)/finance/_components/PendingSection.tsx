@@ -32,7 +32,7 @@ const minorToInput = (raw: string) => {
   return v === BigInt(0) ? "" : (Number(v) / 100).toFixed(2);
 };
 
-/** Chosen currency first, the other beneath — the toggle's rule, in a table cell. */
+/** Chosen currency first, the other beneath - the toggle's rule, in a table cell. */
 const money2 = (m: { inr: number; eur: number }, ccy: Ccy) => moneyInline(m, ccy, { compact: true });
 
 const INSTALMENT_STATUS_OPTIONS = [
@@ -65,7 +65,7 @@ function EmiScheduleModal({
   const [intervalDays, setIntervalDays] = useState<number | null>(null);
 
   useEffect(() => {
-    if (has) return; // an existing schedule is history — don't re-price it
+    if (has) return; // an existing schedule is history - don't re-price it
     let live = true;
     previewInstalmentPlan(count)
       .then((p) => {
@@ -86,7 +86,7 @@ function EmiScheduleModal({
     };
   }, [count, has]);
 
-  // The schedule the current answers would produce — same split function the server uses.
+  // The schedule the current answers would produce - same split function the server uses.
   const previewTotal = {
     inr: row.totalFee.inr + (plan?.extraInr ?? 0),
     eur: row.totalFee.eur + (plan?.extraEur ?? 0),
@@ -100,7 +100,7 @@ function EmiScheduleModal({
     <Modal
       open
       onClose={onClose}
-      title={`EMI schedule — ${row.studentName}`}
+      title={`EMI schedule - ${row.studentName}`}
       subtitle={has ? `${paidCount}/${row.instalments.length} paid` : "No schedule yet"}
     >
       {has ? (
@@ -181,7 +181,7 @@ function EmiScheduleModal({
           className="space-y-4"
         >
           <p className="text-sm text-muted">
-            Split the fee into equal instalments — the last one absorbs any rounding. The extra for
+            Split the fee into equal instalments - the last one absorbs any rounding. The extra for
             each plan length is set in <strong>Console → Instalment Plans</strong>.
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -209,7 +209,7 @@ function EmiScheduleModal({
 
           {/*
             The surcharge and the schedule it produces, BEFORE generating. Without this the
-            founder types a count and finds out what it cost only afterwards — and the plan is
+            founder types a count and finds out what it cost only afterwards - and the plan is
             append-only in practice (clear + regenerate), so "afterwards" is the wrong time.
           */}
           <div className="rounded-field border border-line bg-surface-2 px-3 py-2.5">
@@ -221,7 +221,7 @@ function EmiScheduleModal({
               <div className="flex gap-2">
                 <dt className="text-muted">+ plan extra</dt>
                 <dd className="tnum text-ink-2">
-                  {plan ? money({ inr: plan.extraInr, eur: plan.extraEur }, ccy) : "—"}
+                  {plan ? money({ inr: plan.extraInr, eur: plan.extraEur }, ccy) : "-"}
                 </dd>
               </div>
               <div className="flex gap-2">
@@ -291,7 +291,7 @@ export function PendingSection({
   const remove = async (row: PendingRow) => {
     const ok = await askConfirm({
       title: `Archive pending payment for ${row.studentName}?`,
-      body: "It moves to the Archived tab — you can restore it there.",
+      body: "It moves to the Archived tab - you can restore it there.",
       confirmLabel: "Archive",
       danger: true,
     });
@@ -396,7 +396,7 @@ export function PendingSection({
 
   /**
    * The section's own bottom line: of everything owed, how much is in and how much is still out.
-   * Only rows that can still owe money count — a DROPPED or PAID_IN_FULL plan would otherwise
+   * Only rows that can still owe money count - a DROPPED or PAID_IN_FULL plan would otherwise
    * inflate both sides and make the collected share meaningless.
    */
   const owingRows = visibleRows.filter((r) => r.status === "ACTIVE" || r.status === "OVERDUE");
@@ -419,7 +419,7 @@ export function PendingSection({
   return (
     <section className="space-y-4">
       {owingRows.length > 0 && (
-        <Card title="Collected vs still to collect" subtitle={`Across ${owingRows.length} open plan${owingRows.length === 1 ? "" : "s"} — fee plus any instalment extra.`}>
+        <Card title="Collected vs still to collect" subtitle={`Across ${owingRows.length} open plan${owingRows.length === 1 ? "" : "s"} - fee plus any instalment extra.`}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {[
               { label: "Total to collect", m: totals.toCollect, tone: "text-ink" },

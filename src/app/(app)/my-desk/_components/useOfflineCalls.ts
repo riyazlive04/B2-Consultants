@@ -15,14 +15,14 @@ import {
  * The offline call queue, as a hook.
  *
  * Flushes on three triggers, because no single one is sufficient:
- *   • the browser's `online` event — the obvious case, signal returns while the tab is open;
- *   • mount — the tab was closed and reopened with entries still queued from last time;
- *   • a slow timer — `online` lies. It fires when the OS gets *an* interface, which on a
+ *   • the browser's `online` event - the obvious case, signal returns while the tab is open;
+ *   • mount - the tab was closed and reopened with entries still queued from last time;
+ *   • a slow timer - `online` lies. It fires when the OS gets *an* interface, which on a
  *     phone means a wifi network you have not authenticated to yet, so the first flush after
  *     it can still fail. The timer is the backstop that eventually gets them through.
  *
  * `navigator.onLine` is only ever used to SKIP obviously-doomed work and to render the
- * indicator. It is never trusted as proof of connectivity — a false `true` is common, so the
+ * indicator. It is never trusted as proof of connectivity - a false `true` is common, so the
  * real test is whether the server action resolves.
  */
 
@@ -73,7 +73,7 @@ export function useOfflineCalls(onSynced?: () => void) {
         return;
       }
 
-      // "duplicate" clears too — the row is already on the server, which is the outcome the
+      // "duplicate" clears too - the row is already on the server, which is the outcome the
       // device wanted. Only a rejection keeps its entry, so it can be counted and retired.
       const done = res.results.filter((r) => r.status !== "rejected").map((r) => r.clientKey);
       await dequeueCalls(done);
@@ -105,7 +105,7 @@ export function useOfflineCalls(onSynced?: () => void) {
       };
       const stored = await enqueueCall(entry);
       await refresh();
-      // Try immediately — when there IS a connection this makes the offline path behave
+      // Try immediately - when there IS a connection this makes the offline path behave
       // exactly like the online one, so there is only one code path to trust.
       if (stored) void flush();
       return stored;

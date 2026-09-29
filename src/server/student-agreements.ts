@@ -4,11 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { studentIdForUser } from "@/server/student-lookup";
 
 /**
- * A student's own agreements (rebuild spec §10: "own agreement — view, download, signature
+ * A student's own agreements (rebuild spec §10: "own agreement - view, download, signature
  * status"), for the signed-in student portal.
  *
  * THE GAP THIS CLOSES. The signed copy has always been reachable at `/agreement/<token>/copy`, and
- * the sign ceremony now links to it — but both of those are TOKEN routes, reached from a WhatsApp
+ * the sign ceremony now links to it - but both of those are TOKEN routes, reached from a WhatsApp
  * message. A student who signs, closes the tab and later signs into the app had no route back to
  * their own contract from inside the product. The token is single-use-ish and easily lost; their
  * login is not.
@@ -26,7 +26,7 @@ export type StudentAgreement = {
   readonly status: string;
   readonly issuedAt: string | null;
   readonly signedAt: string | null;
-  /** Present only once signed — the sealed PDF is what they download. */
+  /** Present only once signed - the sealed PDF is what they download. */
   readonly canDownload: boolean;
 };
 
@@ -47,7 +47,7 @@ export const getMyAgreements = cache(async (userId: string): Promise<StudentAgre
     status: String(a.status),
     issuedAt: a.issuedAt?.toISOString() ?? null,
     signedAt: a.signedAt?.toISOString() ?? null,
-    // Gate on the sealed artefact existing, not on the status column — a SIGNED row whose PDF
+    // Gate on the sealed artefact existing, not on the status column - a SIGNED row whose PDF
     // never sealed would otherwise offer a download that 404s.
     canDownload: a.status === "SIGNED" && !!a.pdfSha256,
   }));

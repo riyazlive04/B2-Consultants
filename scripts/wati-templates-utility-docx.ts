@@ -1,5 +1,5 @@
 /**
- * Generates `WhatsApp_Templates_UTILITY_Submission_Pack.docx` — the full inventory of all 26
+ * Generates `WhatsApp_Templates_UTILITY_Submission_Pack.docx` - the full inventory of all 26
  * WhatsApp templates the application needs WATI/Meta to approve, written to qualify as UTILITY
  * wherever that is honestly possible, each with the sample values Meta requires at submission.
  *
@@ -99,7 +99,7 @@ const TEMPLATES: Tpl[] = [
     kind: "BOOKING_CONFIRM_REQUEST",
     sub: "Confirm-or-hold request (Bookings loop)",
     category: "UTILITY",
-    fires: "As the call approaches — asks the prospect to reply YES to hold their slot before the auto-cancel cut-off.",
+    fires: "As the call approaches - asks the prospect to reply YES to hold their slot before the auto-cancel cut-off.",
     vars: [
       { name: "name", sample: "Priya" },
       { name: "slot_time", sample: "Sat 18 Jul, 07:00 PM" },
@@ -115,7 +115,7 @@ const TEMPLATES: Tpl[] = [
     kind: "BOOKING_RESCHEDULED",
     sub: "Rescheduled notice",
     category: "UTILITY",
-    fires: "When a call is moved to a new time — manual postpone, or promoted into a freed earlier slot.",
+    fires: "When a call is moved to a new time - manual postpone, or promoted into a freed earlier slot.",
     vars: [
       { name: "name", sample: "Priya" },
       { name: "slot_time", sample: "Sun 19 Jul, 05:30 PM" },
@@ -129,7 +129,7 @@ const TEMPLATES: Tpl[] = [
     area: "A · Discovery-call & booking lifecycle",
     name: "b2_booking_auto_cancelled",
     kind: "BOOKING_AUTO_CANCELLED",
-    sub: "Auto-cancelled — slot released",
+    sub: "Auto-cancelled - slot released",
     category: "UTILITY",
     fires: "When no confirmation arrives before the cut-off, so the slot is released; invites a rebook.",
     vars: [
@@ -141,7 +141,7 @@ const TEMPLATES: Tpl[] = [
       "If you'd still like to speak with us, you can book a new time here whenever suits you: {{booking_url}}",
     note: {
       tag: "Note",
-      text: "States a fact about an appointment the prospect made and offers the same booking function — it reads as UTILITY. Keep the copy factual (no “don't miss out”, no offer language) or it tips into MARKETING.",
+      text: "States a fact about an appointment the prospect made and offers the same booking function - it reads as UTILITY. Keep the copy factual (no “don't miss out”, no offer language) or it tips into MARKETING.",
     },
   },
   {
@@ -150,7 +150,7 @@ const TEMPLATES: Tpl[] = [
     kind: "NO_SHOW_FOLLOWUP",
     sub: "No-show follow-up",
     category: "UTILITY",
-    fires: "For a lead marked No-show — one nudge to rebook.",
+    fires: "For a lead marked No-show - one nudge to rebook.",
     vars: [
       { name: "name", sample: "Priya" },
       { name: "booking_url", sample: "https://app.b2consultants.de/book" },
@@ -160,14 +160,14 @@ const TEMPLATES: Tpl[] = [
       "If you'd like to arrange another time, you can book one here whenever you're ready: {{booking_url}}",
     note: {
       tag: "Borderline",
-      text: "There was a booked appointment, so a plain “we missed you, rebook here” can pass as UTILITY. If Meta re-categorises it, that is acceptable — it still sends; it just counts against the marketing cap.",
+      text: "There was a booked appointment, so a plain “we missed you, rebook here” can pass as UTILITY. If Meta re-categorises it, that is acceptable - it still sends; it just counts against the marketing cap.",
     },
   },
   {
     area: "A · Discovery-call & booking lifecycle",
     name: "b2_disco_reminder",
     kind: "DISCO_REMINDER",
-    sub: "Discovery-call reminder — not yet booked",
+    sub: "Discovery-call reminder - not yet booked",
     category: "MARKETING",
     fires: "For un-booked leads (New / Disco-not-booked) who haven't scheduled a call.",
     vars: [
@@ -180,7 +180,7 @@ const TEMPLATES: Tpl[] = [
     note: {
       warn: true,
       tag: "Cannot be UTILITY",
-      text: "The recipient has booked nothing — there is no transaction to notify about, so this is re-engagement, which Meta treats as MARKETING however plainly it is worded. Submit as MARKETING (opt-in is held via the website form), or drop the template and let the SOP intro/follow-up cover this contact.",
+      text: "The recipient has booked nothing - there is no transaction to notify about, so this is re-engagement, which Meta treats as MARKETING however plainly it is worded. Submit as MARKETING (opt-in is held via the website form), or drop the template and let the SOP intro/follow-up cover this contact.",
     },
   },
 
@@ -191,7 +191,7 @@ const TEMPLATES: Tpl[] = [
     kind: "SSS_RESCHEDULED",
     sub: "SSS rescheduled notice",
     category: "UTILITY",
-    fires: "When a Success Strategy Session is moved — founder blocked the slot/day, or a manual/drag reschedule.",
+    fires: "When a Success Strategy Session is moved - founder blocked the slot/day, or a manual/drag reschedule.",
     vars: [
       { name: "name", sample: "Priya" },
       { name: "slot_time", sample: "Mon 20 Jul, 06:30 PM" },
@@ -209,7 +209,7 @@ const TEMPLATES: Tpl[] = [
     kind: "AGREEMENT_SEND",
     sub: "Signing link",
     category: "UTILITY",
-    fires: "When the founder countersigns an agreement — carries the tokenised signing link.",
+    fires: "When the founder countersigns an agreement - carries the tokenised signing link.",
     vars: [
       { name: "name", sample: "Priya" },
       { name: "document_no", sample: "B2-2026-0142" },
@@ -217,7 +217,7 @@ const TEMPLATES: Tpl[] = [
     ],
     body:
       "Hi {{name}}, your B2 Consultants coaching agreement (ref *{{document_no}}*) is ready for your signature.\n\n" +
-      "Please review and sign it securely here — the link is unique to you: {{sign_url}}",
+      "Please review and sign it securely here - the link is unique to you: {{sign_url}}",
     note: {
       tag: "Variable choice",
       text: "The app can supply either {{sign_url}} (full link in the body) or {{sign_token}} (the 43-char token, if you approve a dynamic URL-button suffix instead). Declare ONE, not both, matching how you build the template. When submitting, paste a full real signing URL so Meta's reviewer sees the true format.",
@@ -255,7 +255,7 @@ const TEMPLATES: Tpl[] = [
     ],
     body:
       "Hi {{name}}, a reminder that your coaching agreement (ref *{{document_no}}*) is still awaiting your signature.\n\n" +
-      "You can complete it here before the link expires — it only takes a minute: {{sign_url}}",
+      "You can complete it here before the link expires - it only takes a minute: {{sign_url}}",
   },
   {
     area: "C · Coaching agreements",
@@ -263,14 +263,14 @@ const TEMPLATES: Tpl[] = [
     kind: "AGREEMENT_COPY",
     sub: "Countersigned copy",
     category: "UTILITY",
-    fires: "The moment the student signs — carries the link to the sealed, countersigned PDF. Delivering it is what marks the agreement Completed.",
+    fires: "The moment the student signs - carries the link to the sealed, countersigned PDF. Delivering it is what marks the agreement Completed.",
     vars: [
       { name: "name", sample: "Priya" },
       { name: "document_no", sample: "B2-2026-0142" },
       { name: "copy_url", sample: "https://app.b2consultants.de/copy/k7Qz2Xp9Rt4Bn" },
     ],
     body:
-      "Hi {{name}}, thank you for signing. Your countersigned copy of agreement *{{document_no}}* is available to download here — please keep it for your records: {{copy_url}}",
+      "Hi {{name}}, thank you for signing. Your countersigned copy of agreement *{{document_no}}* is available to download here - please keep it for your records: {{copy_url}}",
   },
 
   // ── D · Finance & payments ──
@@ -304,7 +304,7 @@ const TEMPLATES: Tpl[] = [
       { name: "due_date", sample: "20 Jul 2026" },
     ],
     body:
-      "Hi {{name}}, a reminder that instalment {{seq}} of {{total}} — *{{amount}}* — is due on *{{due_date}}*.\n\n" +
+      "Hi {{name}}, a reminder that instalment {{seq}} of {{total}} - *{{amount}}* - is due on *{{due_date}}*.\n\n" +
       "Please ensure funds are available by then. Reply here if you have any questions.",
   },
 
@@ -355,7 +355,7 @@ const TEMPLATES: Tpl[] = [
     note: {
       warn: true,
       tag: "Cannot be UTILITY",
-      text: "This is the first contact and its whole purpose is to invite someone to book — there is no existing appointment to notify about, so it is promotional by nature. Even stripped of “*FREE*”, Meta reads an invitation-to-book to a fresh lead as MARKETING. Submit as MARKETING (opt-in is held via the website form).",
+      text: "This is the first contact and its whole purpose is to invite someone to book - there is no existing appointment to notify about, so it is promotional by nature. Even stripped of “*FREE*”, Meta reads an invitation-to-book to a fresh lead as MARKETING. Submit as MARKETING (opt-in is held via the website form).",
     },
   },
   {
@@ -376,7 +376,7 @@ const TEMPLATES: Tpl[] = [
     note: {
       warn: true,
       tag: "Cannot be UTILITY",
-      text: "Same reason as Step 3 — chasing an un-booked lead is re-engagement. Submit as MARKETING.",
+      text: "Same reason as Step 3 - chasing an un-booked lead is re-engagement. Submit as MARKETING.",
     },
   },
   {
@@ -397,7 +397,7 @@ const TEMPLATES: Tpl[] = [
       "Our team is preparing for your call and will be in touch if we need anything further before then. See you soon.",
     note: {
       tag: "Made UTILITY",
-      text: "Original Step 13 linked the case-studies page (social proof). That link is removed here — it is what would force MARKETING. The confirmation itself is transactional.",
+      text: "Original Step 13 linked the case-studies page (social proof). That link is removed here - it is what would force MARKETING. The confirmation itself is transactional.",
     },
   },
   {
@@ -419,7 +419,7 @@ const TEMPLATES: Tpl[] = [
       "Please reply *YES* to confirm your attendance.",
     note: {
       tag: "Made UTILITY",
-      text: "The sales copy (“the possibilities of your next job in Germany”, “figure out your next best steps”) is removed. What remains — appointment time, join link, reply-YES — is a textbook UTILITY confirmation.",
+      text: "The sales copy (“the possibilities of your next job in Germany”, “figure out your next best steps”) is removed. What remains - appointment time, join link, reply-YES - is a textbook UTILITY confirmation.",
     },
   },
   {
@@ -457,7 +457,7 @@ const TEMPLATES: Tpl[] = [
       "If you'd still like to speak with us, you can book another time here whenever suits you: https://optin.b2consultants.de/apply",
     note: {
       tag: "Made UTILITY",
-      text: "States the slot was released (a fact about the prospect's own appointment) with one functional rebook link. Kept factual — no “don't miss out”.",
+      text: "States the slot was released (a fact about the prospect's own appointment) with one functional rebook link. Kept factual - no “don't miss out”.",
     },
   },
   {
@@ -541,7 +541,7 @@ const TEMPLATES: Tpl[] = [
       "Kindly confirm the quotation and expected dispatch date. Thank you.",
     note: {
       tag: "Approved and wired",
-      text: "Approved 3 Aug 2026 and live in the app: Students → Book orders → Update → “Send to publisher”. {{publisher_name}} comes from the Vendor, {{order_ref}} is allocated as BO-YYYY-NNNN on first send, {{level}} is the level's display label, and {{student_name}}/{{ship_to}}/{{ship_phone}} come from the order's snapshot — not live off the Student, so a later address edit cannot rewrite where a past parcel went. Sending is MANUAL by design; a status change never places an order. The publisher's number must be opted-in for a business-initiated template to deliver.",
+      text: "Approved 3 Aug 2026 and live in the app: Students → Book orders → Update → “Send to publisher”. {{publisher_name}} comes from the Vendor, {{order_ref}} is allocated as BO-YYYY-NNNN on first send, {{level}} is the level's display label, and {{student_name}}/{{ship_to}}/{{ship_phone}} come from the order's snapshot - not live off the Student, so a later address edit cannot rewrite where a past parcel went. Sending is MANUAL by design; a status change never places an order. The publisher's number must be opted-in for a business-initiated template to deliver.",
     },
   },
 ];
@@ -684,19 +684,19 @@ function cover(): Paragraph[] {
     }),
     new Paragraph({
       spacing: { after: 100 },
-      children: [new TextRun({ text: "WhatsApp Templates — UTILITY Submission Pack", size: 40, bold: true, color: INK, font: FONT })],
+      children: [new TextRun({ text: "WhatsApp Templates - UTILITY Submission Pack", size: 40, bold: true, color: INK, font: FONT })],
     }),
-    p("Every business-initiated WhatsApp message the application sends must be a template Meta has approved. This is the complete inventory — 26 templates across seven areas — written to qualify as UTILITY wherever that is honestly possible, each with the sample values Meta requires at submission.", {
+    p("Every business-initiated WhatsApp message the application sends must be a template Meta has approved. This is the complete inventory - 26 templates across seven areas - written to qualify as UTILITY wherever that is honestly possible, each with the sample values Meta requires at submission.", {
       size: 22,
       color: MUTED,
     }),
     spacer(140),
     p("Read this before you submit", { bold: true, size: 22 }),
-    bullet("You asked for these to be UTILITY, so every body is written as a plain, transactional notification — no “*FREE*”, no case-study links, no “personalised game plan”, no sales pitch. That wording is what actually earns the UTILITY category."),
-    bullet("Why the wording, not just the label, matters: since April 2025 Meta categorises a template by reading its content — it re-classifies anything promotional as MARKETING regardless of what you declared, and flags accounts that repeatedly mis-declare. A UTILITY label on selling copy costs you the flag, not a cheaper message."),
-    bullet("Three of the 26 cannot honestly be UTILITY (b2_disco_reminder, b2_sop_intro, b2_sop_followup_not_booked) — they are sent to people who have NOT booked anything, so there is no transaction to notify about. They are marked MARKETING with your options.", RISK),
+    bullet("You asked for these to be UTILITY, so every body is written as a plain, transactional notification - no “*FREE*”, no case-study links, no “personalised game plan”, no sales pitch. That wording is what actually earns the UTILITY category."),
+    bullet("Why the wording, not just the label, matters: since April 2025 Meta categorises a template by reading its content - it re-classifies anything promotional as MARKETING regardless of what you declared, and flags accounts that repeatedly mis-declare. A UTILITY label on selling copy costs you the flag, not a cheaper message."),
+    bullet("Three of the 26 cannot honestly be UTILITY (b2_disco_reminder, b2_sop_intro, b2_sop_followup_not_booked) - they are sent to people who have NOT booked anything, so there is no transaction to notify about. They are marked MARKETING with your options.", RISK),
     bullet("One template (the signing code, b2_agreement_otp) belongs in Meta's AUTHENTICATION category.", AUTH),
-    bullet("Business-initiated messages stay queued for a human until each template is APPROVED and mapped in the app — nothing breaks in the meantime, it just stays manual."),
+    bullet("Business-initiated messages stay queued for a human until each template is APPROVED and mapped in the app - nothing breaks in the meantime, it just stays manual."),
     rule(),
   ];
 }
@@ -764,7 +764,7 @@ function templateSection(t: Tpl, index: number, firstInArea: boolean): (Paragrap
       [30, 70],
     ),
     spacer(100),
-    p("Body — paste exactly as shown (keep the blank lines and *asterisks*)", { bold: true, size: 20 }),
+    p("Body - paste exactly as shown (keep the blank lines and *asterisks*)", { bold: true, size: 20 }),
     ...bodyBox(t.body),
     spacer(140),
     p("Variables & sample values", { bold: true, size: 20 }),
@@ -800,23 +800,23 @@ function checklist(): (Paragraph | Table)[] {
       color: MUTED,
       spacing: 160,
     }),
-    h2("Part A — Submit in WATI (per template)"),
-    checkbox("Create each template with the EXACT snake_case name shown — the app is mapped to these names.", true),
-    checkbox("Set the category as marked: UTILITY for the 22, AUTHENTICATION for the signing code, MARKETING for the three re-engagement messages. Do NOT re-declare a promotional body UTILITY to save cost — Meta re-categorises it and flags the account."),
-    checkbox("Paste the body exactly, blank lines included. Keep the *asterisks* — they render as bold in WhatsApp."),
+    h2("Part A - Submit in WATI (per template)"),
+    checkbox("Create each template with the EXACT snake_case name shown - the app is mapped to these names.", true),
+    checkbox("Set the category as marked: UTILITY for the 22, AUTHENTICATION for the signing code, MARKETING for the three re-engagement messages. Do NOT re-declare a promotional body UTILITY to save cost - Meta re-categorises it and flags the account."),
+    checkbox("Paste the body exactly, blank lines included. Keep the *asterisks* - they render as bold in WhatsApp."),
     checkbox("Declare each variable in the order shown and give it the sample value from its card. Meta rejects missing or unrealistic samples."),
     checkbox("For {{sign_url}} / {{copy_url}}, paste a full real link at submission so the reviewer sees the true format."),
     checkbox("Language en (use en_GB if WATI forces a locale). Submit and record the date; review is usually minutes but can take 24–48h."),
     checkbox("Build b2_agreement_otp through WATI's AUTHENTICATION template flow, not as a UTILITY text template."),
-    h2("Part B — Wire it into the app (Admin)"),
+    h2("Part B - Wire it into the app (Admin)"),
     checkbox("Set WATI_ENABLED=true, WATI_API_ENDPOINT and WATI_ACCESS_TOKEN in the environment.", true),
     checkbox("WhatsApp → Settings → Refresh templates. All approved names should appear in the catalogue."),
     checkbox("Bind each touchpoint to its template using the App touchpoint value on each card. One template per touchpoint."),
-    checkbox("Enter each template's variable list in Settings exactly as approved. A mismatch blocks the send and names the missing variable — it never delivers “Hi ,”."),
+    checkbox("Enter each template's variable list in Settings exactly as approved. A mismatch blocks the send and names the missing variable - it never delivers “Hi ,”."),
     checkbox("Send a test to your own number. Confirm variables resolve and the bold renders."),
     checkbox("Turn on sending one low-risk touchpoint at a time; watch the WhatsApp history before enabling the rest."),
     rule(),
-    p("Generated from scripts/wati-templates-utility-docx.ts — re-run `npx tsx scripts/wati-templates-utility-docx.ts` after any edit. The nine SOP bodies are UTILITY rewrites of Script for Outreach Specialist.docx (Steps 3–21); the app currently ships them as MARKETING via src/lib/whatsapp-submission.ts. 26 templates · the free-form MANUAL touchpoint needs no template and is excluded; b2_book_order is a proposed new touchpoint not yet wired.", {
+    p("Generated from scripts/wati-templates-utility-docx.ts - re-run `npx tsx scripts/wati-templates-utility-docx.ts` after any edit. The nine SOP bodies are UTILITY rewrites of Script for Outreach Specialist.docx (Steps 3–21); the app currently ships them as MARKETING via src/lib/whatsapp-submission.ts. 26 templates · the free-form MANUAL touchpoint needs no template and is excluded; b2_book_order is a proposed new touchpoint not yet wired.", {
       size: 16,
       color: MUTED,
       italics: true,
@@ -836,7 +836,7 @@ async function main() {
 
   const doc = new Document({
     creator: "B2 Consultants",
-    title: "WhatsApp Templates — UTILITY Submission Pack",
+    title: "WhatsApp Templates - UTILITY Submission Pack",
     description: "All 25 WhatsApp templates the app needs WATI to approve, written for UTILITY where possible, with sample values.",
     styles: { default: { document: { run: { font: FONT, size: 20, color: INK } } } },
     sections: [
@@ -852,7 +852,7 @@ async function main() {
             alignment: AlignmentType.CENTER,
             children: [
               new TextRun({
-                text: "B2 Consultants — WhatsApp template submission pack",
+                text: "B2 Consultants - WhatsApp template submission pack",
                 size: 16,
                 color: MUTED,
                 italics: true,
@@ -870,7 +870,7 @@ async function main() {
 
   const counts = TEMPLATES.reduce((a, t) => ((a[t.category] = (a[t.category] ?? 0) + 1), a), {} as Record<Category, number>);
   console.log(`Wrote ${out}`);
-  console.log(`${TEMPLATES.length} templates — ${counts.UTILITY ?? 0} UTILITY, ${counts.AUTHENTICATION ?? 0} AUTHENTICATION, ${counts.MARKETING ?? 0} MARKETING.`);
+  console.log(`${TEMPLATES.length} templates - ${counts.UTILITY ?? 0} UTILITY, ${counts.AUTHENTICATION ?? 0} AUTHENTICATION, ${counts.MARKETING ?? 0} MARKETING.`);
 }
 
 main().catch((e) => {

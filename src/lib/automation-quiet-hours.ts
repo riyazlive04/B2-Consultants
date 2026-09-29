@@ -1,7 +1,7 @@
 /**
  * Quiet-hours window maths for the Automation engine's Global Workflow Settings. Pure and
  * isomorphic: every function takes the instant explicitly (no hidden `new Date()`), so the
- * boundaries are testable without fake timers — same contract as outreach-engine.ts.
+ * boundaries are testable without fake timers - same contract as outreach-engine.ts.
  *
  * The window is expressed in IST hours because that's the app's business timezone (CONTEXT §6),
  * and IST is a fixed +05:30 with no DST, so this is exact arithmetic.
@@ -21,7 +21,7 @@ const fmtHour = (h: number) => `${String(h).padStart(2, "0")}:00`;
  *
  * The window normally wraps midnight (21:00 → 09:00), hence the two branches: a non-wrapping
  * window is a simple between, a wrapping one is "after start OR before end". A zero-width
- * window (start === end) means "nothing is quiet" rather than "everything is" — the safer
+ * window (start === end) means "nothing is quiet" rather than "everything is" - the safer
  * reading, since the alternative would silently freeze every send.
  */
 export function inQuietWindow(instant: Date, startHour: number, endHour: number): boolean {

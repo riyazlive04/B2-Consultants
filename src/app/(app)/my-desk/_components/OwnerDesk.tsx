@@ -5,7 +5,7 @@ import { SIGNAL_META } from "@/lib/signals";
 import type { DeskTask, OwnerDesk as OwnerDeskData } from "@/server/owner-desk";
 
 /**
- * My Desk for an admin or head coach (Error Log Q2) — the queues waiting on a decision, rather
+ * My Desk for an admin or head coach (Error Log Q2) - the queues waiting on a decision, rather
  * than the call statistics the specialist desks show.
  *
  * Cleared queues stay visible, greyed, instead of disappearing. A list that empties itself gives
@@ -62,16 +62,16 @@ export function OwnerDesk({ desk }: { desk: OwnerDeskData }) {
   }
 
   // A stopped process (the Outreach engine, off) is a decision waiting on the founder even
-  // though its count reads 0 — "everything is clear" must not be true while one of those sits here.
+  // though its count reads 0 - "everything is clear" must not be true while one of those sits here.
   const stopped = desk.tasks.some((t) => t.disabled);
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-2">
         {desk.total === 0 && !stopped ? (
-          <>Everything is clear — nothing is waiting on you right now.</>
+          <>Everything is clear - nothing is waiting on you right now.</>
         ) : desk.total === 0 ? (
-          <>Nothing is queued, but something below is switched off — worth a look.</>
+          <>Nothing is queued, but something below is switched off - worth a look.</>
         ) : (
           <>
             <span className="tnum font-semibold text-ink">{desk.total}</span>{" "}
@@ -81,7 +81,7 @@ export function OwnerDesk({ desk }: { desk: OwnerDeskData }) {
       </p>
 
       <div className="space-y-3">
-        {/* Sorted so anything outstanding — or switched off — rises above what is already clear. */}
+        {/* Sorted so anything outstanding - or switched off - rises above what is already clear. */}
         {[...desk.tasks]
           .sort((a, b) => Number(b.count > 0 || !!b.disabled) - Number(a.count > 0 || !!a.disabled))
           .map((t) => (

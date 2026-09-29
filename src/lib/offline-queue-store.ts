@@ -6,7 +6,7 @@ import type { QueuedCall } from "./offline-calls";
  * The device-side queue for calls logged without a connection.
  *
  * IndexedDB rather than localStorage, for three reasons that all bite in the field:
- *   • localStorage is synchronous — writing on the main thread during a call-logging tap is
+ *   • localStorage is synchronous - writing on the main thread during a call-logging tap is
  *     exactly when a telecaller notices jank;
  *   • it caps around 5MB of STRINGS, so a long offline stretch can silently start throwing;
  *   • and its failure mode is a thrown exception mid-write that loses the whole blob, where
@@ -17,7 +17,7 @@ import type { QueuedCall } from "./offline-calls";
  * bundle on a page a telecaller loads on mobile data.
  *
  * EVERY operation fails soft. A browser in private mode, with storage disabled, or out of
- * quota must degrade to "this call could not be queued" — never to a crash that costs the
+ * quota must degrade to "this call could not be queued" - never to a crash that costs the
  * telecaller the outcome they just typed. Callers get `false`/`[]` and surface it in the UI.
  */
 
@@ -40,7 +40,7 @@ function openDb(): Promise<IDBDatabase | null> {
         const db = req.result;
         if (!db.objectStoreNames.contains(STORE)) {
           // Keyed by the device-generated clientKey, which is also what the server dedupes
-          // on — so "already queued" and "already saved" mean the same thing end to end.
+          // on - so "already queued" and "already saved" mean the same thing end to end.
           db.createObjectStore(STORE, { keyPath: "clientKey" });
         }
       };
@@ -82,7 +82,7 @@ export async function enqueueCall(entry: QueuedCall): Promise<boolean> {
   return res !== null;
 }
 
-/** Everything still waiting, oldest first — the order they were recorded in. */
+/** Everything still waiting, oldest first - the order they were recorded in. */
 export async function listQueuedCalls(): Promise<QueuedCall[]> {
   const rows = await tx<QueuedCall[]>("readonly", (s) => s.getAll() as IDBRequest<QueuedCall[]>);
   return (rows ?? []).sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));

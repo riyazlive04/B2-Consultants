@@ -10,7 +10,7 @@ import type { TutorFeeRow } from "@/server/tutor-fees";
 import { recomputeTutorFees, setTutorFeeStatus, setTutorFeeOverride } from "@/server/tutor-fee-actions";
 
 /**
- * Tutor Fee ledger (Founder Console → Tutor Fees) — ER v2 Track C.
+ * Tutor Fee ledger (Founder Console → Tutor Fees) - ER v2 Track C.
  *
  * The `Tutor Fee` tab beside this one configures the RATE BANDS. This one is the RECORD: what
  * each batch actually owes its trainer right now, and where it is in the approval ladder.
@@ -20,7 +20,7 @@ import { recomputeTutorFees, setTutorFeeStatus, setTutorFeeOverride } from "@/se
  *     own workbook shows the tier, not just the total;
  *   · that an APPROVED fee is FROZEN, so a roster change afterwards does not silently
  *     re-price it. A frozen row that no longer matches its batch is shown as "frozen", not
- *     as "stale" — being out of date is the intent, not an error.
+ *     as "stale" - being out of date is the intent, not an error.
  */
 
 const inr = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
@@ -80,7 +80,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
     <div className="space-y-5">
       <Hint>
         What each batch owes its trainer, computed from the rate bands and the batch&apos;s{" "}
-        <strong>current headcount</strong>. Approving a fee <strong>freezes</strong> it — a
+        <strong>current headcount</strong>. Approving a fee <strong>freezes</strong> it - a
         student joining afterwards will not re-price work you have already signed off.
         {accrualOn ? (
           <> Approved fees also post <strong>Dr COGS / Cr Accounts payable</strong> to the ledger.</>
@@ -111,7 +111,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
 
         {fees.length === 0 ? (
           <p className="mt-4 text-sm text-ink-3">
-            No tutor fees yet. Only German levels (A1 / A2 / B1) carry a trainer fee — coaching
+            No tutor fees yet. Only German levels (A1 / A2 / B1) carry a trainer fee - coaching
             tiers are delivered by a salaried coach. Add a batch, then recompute.
           </p>
         ) : (
@@ -134,14 +134,14 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
                       <div className="font-medium text-ink">{f.batchCode ?? f.batchName}</div>
                       <div className="text-caption text-ink-3">{f.level}</div>
                     </td>
-                    <td className="py-2 pr-4 text-ink-2">{f.trainerName ?? "— unassigned —"}</td>
+                    <td className="py-2 pr-4 text-ink-2">{f.trainerName ?? "- unassigned -"}</td>
                     <td className="py-2 pr-4 text-ink-2">
                       {f.headcount} × {inr(f.ratePerHeadInrMinor)}
                       {/* Only a DRAFT can be actionably out of date; a frozen row is
                           out of date BY DESIGN, and saying "stale" there would read as a fault. */}
                       {f.stale && (
                         <div className="text-caption text-warn-ink">
-                          roster is now {f.currentHeadcount} — recompute
+                          roster is now {f.currentHeadcount} - recompute
                         </div>
                       )}
                       {!f.stale && f.status !== "DRAFT" && f.currentHeadcount !== f.headcount && (
@@ -149,7 +149,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
                           frozen at {f.headcount} (roster now {f.currentHeadcount})
                         </div>
                       )}
-                      {/* The fee is priced off the ROSTER — that is the founders' rule and this
+                      {/* The fee is priced off the ROSTER - that is the founders' rule and this
                           does not change it. It shows heads PRESENT beside heads enrolled because
                           the gap was previously invisible: the business paid per enrolment with
                           no record of attendance at all. Whether the basis should move is a
@@ -168,7 +168,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
                       {f.overrideAmountInrMinor !== null && (
                         <div className="text-caption text-ink-3">
                           overridden from {inr(f.amountInrMinor)}
-                          {f.overrideReason ? ` — ${f.overrideReason}` : ""}
+                          {f.overrideReason ? ` - ${f.overrideReason}` : ""}
                         </div>
                       )}
                     </td>

@@ -89,7 +89,7 @@ export default function WorkflowsList({
   async function runNow() {
     const res = await runWorkflowsNow();
     if (res.disabled) return toast("The engine is switched off in Global Workflow Settings", "error");
-    toast(`Ran automation — ${res.processed} enrollment${res.processed === 1 ? "" : "s"} processed`);
+    toast(`Ran automation - ${res.processed} enrollment${res.processed === 1 ? "" : "s"} processed`);
   }
   async function rename(f: FolderRow) {
     const next = window.prompt("Rename folder", f.name);
@@ -120,7 +120,7 @@ export default function WorkflowsList({
     setSelected(new Set());
     toast(
       res.skipped > 0
-        ? `${res.changed} ${publish ? "published" : "unpublished"} — ${res.skipped} skipped (no actions yet)`
+        ? `${res.changed} ${publish ? "published" : "unpublished"} - ${res.skipped} skipped (no actions yet)`
         : `${res.changed} workflow${res.changed === 1 ? "" : "s"} ${publish ? "published" : "unpublished"}`,
     );
   }
@@ -195,6 +195,11 @@ export default function WorkflowsList({
             <Settings size={14} /> Global Workflow Settings
           </Link>
         )}
+        {isAdmin && (
+          <Link href="/automation/stage-messages" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink-2 hover:bg-surface-2">
+            <Settings size={14} /> Stage messages
+          </Link>
+        )}
       </div>
 
       {openFolder && (
@@ -246,7 +251,7 @@ export default function WorkflowsList({
             <li key={f.id} className="flex items-center justify-between gap-3 px-5 py-3">
               <Link href={`/automation?folder=${f.id}`} className="flex min-w-0 items-center gap-2.5 text-sm font-semibold text-ink hover:text-primary">
                 <Folder size={16} className="flex-none text-ink-3" />
-                <span className="truncate">{f.name}</span>
+                <span className="truncate" title={f.name}>{f.name}</span>
               </Link>
               <div className="flex flex-none items-center gap-1">
                 <span className="mr-1 text-caption text-ink-3 tnum">
@@ -302,10 +307,10 @@ export default function WorkflowsList({
       {/* New workflow */}
       <Modal open={open} onClose={() => setOpen(false)} title={openFolder ? `New workflow in “${openFolder.name}”` : "New workflow"} size="sm">
         <form action={create} className="space-y-4">
-          {/* Creating inside a folder puts it in that folder — matches where the user is. */}
+          {/* Creating inside a folder puts it in that folder - matches where the user is. */}
           <input type="hidden" name="folderId" value={openFolder?.id ?? ""} />
           <Field label="Name"><TextInput name="name" required placeholder="e.g. New lead nurture" /></Field>
-          <Field label="Trigger — run this when…"><Select name="triggerType" options={TRIGGER_OPTS} defaultValue="FORM_SUBMITTED" /></Field>
+          <Field label="Trigger - run this when…"><Select name="triggerType" options={TRIGGER_OPTS} defaultValue="FORM_SUBMITTED" /></Field>
           <FormError message={error} />
           <div className="flex justify-end gap-2"><Btn variant="ghost" type="button" onClick={() => setOpen(false)}>Cancel</Btn><SubmitButton>Create</SubmitButton></div>
         </form>

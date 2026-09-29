@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 
 /**
- * The two clocks this business runs on — India (IST) and Germany (CET/CEST).
+ * The two clocks this business runs on - India (IST) and Germany (CET/CEST).
  *
  * Extracted from `profile/_components/TimeZoneCard` so the top bar and the profile card share one
  * definition of the zones, the detection rule and the stored preference. They were the same logic
  * written once and about to be written twice.
  *
  * The preference lives in `localStorage`, not the database: it is a display choice, it needs no
- * round trip and no schema, and it is legitimately per-device — the same person on the office
+ * round trip and no schema, and it is legitimately per-device - the same person on the office
  * desktop and a phone abroad wants different answers. The app's BUSINESS logic stays IST-anchored
  * regardless (the daily-log cutoff, the SOP ladder); this is only what a human reads.
  */
@@ -31,7 +31,7 @@ export function detectZone(): Zone {
     if (/kolkata|calcutta/i.test(tz)) return "IN";
     if (/berlin/i.test(tz) || tz.startsWith("Europe/")) return "DE";
   } catch {
-    /* ignore — fall through to the IST default */
+    /* ignore - fall through to the IST default */
   }
   return "IN"; // the app's home zone
 }
@@ -65,7 +65,7 @@ export function dateIn(tz: string, now: Date): string {
  * placeholder until mounted makes both passes identical.
  *
  * `tickMs` is the DISPLAY resolution, and the tick is aligned to it rather than to the moment the
- * component happened to mount — see the scheduler below for why that is the difference between a
+ * component happened to mount - see the scheduler below for why that is the difference between a
  * clock and a stopwatch.
  */
 export function useDualClock(tickMs = 60_000) {
@@ -81,7 +81,7 @@ export function useDualClock(tickMs = 60_000) {
     try {
       stored = localStorage.getItem(TZ_STORAGE_KEY);
     } catch {
-      /* ignore — private mode, or storage disabled */
+      /* ignore - private mode, or storage disabled */
     }
     setZone(stored === "IN" || stored === "DE" ? (stored as Zone) : d);
   }, []);
@@ -89,13 +89,13 @@ export function useDualClock(tickMs = 60_000) {
   /**
    * ── Why this is a self-rescheduling timeout and not `setInterval` ────────────────
    * `setInterval(…, 60_000)` counts from whenever the component mounted, so a clock mounted at
-   * 14:32:58 changes at 14:33:58 — it spends 58 of every 60 seconds displaying a minute that has
+   * 14:32:58 changes at 14:33:58 - it spends 58 of every 60 seconds displaying a minute that has
    * already passed. Watch it for ten seconds and it looks frozen, because it is: it was reported
    * as "not live" for exactly this reason. Sleeping until the next real boundary
    * (`tickMs - (t % tickMs)`) makes the digits change WHEN THE WALL CLOCK DOES.
    *
    * The visibility/focus resync is the other half. Browsers throttle timers in a hidden tab and
-   * freeze them outright after a few minutes, and a suspended laptop stops them entirely — so the
+   * freeze them outright after a few minutes, and a suspended laptop stops them entirely - so the
    * reading you come back to is stale by however long you were away, and would stay stale until
    * the next tick fired. Re-reading on the way back costs one render and removes the only case
    * where this component can display a confidently wrong time.

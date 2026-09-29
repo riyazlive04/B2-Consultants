@@ -1,5 +1,5 @@
 /**
- * The section library — the pre-styled bands the team picks from when building a page.
+ * The section library - the pre-styled bands the team picks from when building a page.
  *
  * ── Why a curated library instead of a free-form canvas ───────────────────────────────────────
  * GoHighLevel gives you an empty canvas and per-element style controls. That freedom is mostly
@@ -7,7 +7,7 @@
  * default outcome once more than one person edits. Here the team chooses a band that is already on
  * brand and fills in the copy; layout stays a code decision.
  *
- * The shapes below mirror the bands the live b2consultants.de is actually built from — a violet
+ * The shapes below mirror the bands the live b2consultants.de is actually built from - a violet
  * header, a hero with a circular portrait, a full-bleed violet two-column band, a contact block
  * beside a map, a CTA, and a footer. Adding a genuinely new layout is a day's work here, not a
  * sprint, and every page that uses it gets the fix.
@@ -18,7 +18,7 @@ import type { SiteSectionBlock } from "./site-types";
 export type SectionTemplate = {
   key: string;
   name: string;
-  /** Shown under the name in the picker — what the band is FOR, not what it contains. */
+  /** Shown under the name in the picker - what the band is FOR, not what it contains. */
   description: string;
   /** Grouping in the picker. */
   group: "Header & footer" | "Hero" | "Content" | "Conversion" | "Contact";
@@ -27,7 +27,7 @@ export type SectionTemplate = {
 
 /**
  * Ids must be unique within a page but stable across a render, so they are derived from a seed the
- * caller increments rather than from Date.now() — two sections added in the same millisecond would
+ * caller increments rather than from Date.now() - two sections added in the same millisecond would
  * otherwise collide, and React would treat a re-render as a remount.
  */
 const mk = (seed: number, n: number) => `s${seed}b${n}`;
@@ -39,7 +39,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
   // ── Header & footer ──────────────────────────────────────────────────────────
   {
     key: "header-brand",
-    name: "Header — logo and menu",
+    name: "Header - logo and menu",
     description: "Coloured bar with the logo on the left and the site menu on the right",
     group: "Header & footer",
     build: (s) => ({
@@ -56,7 +56,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
   },
   {
     key: "footer-simple",
-    name: "Footer — copyright and links",
+    name: "Footer - copyright and links",
     description: "Small print with privacy and terms links",
     group: "Header & footer",
     build: (s) => ({
@@ -72,7 +72,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
             id: mk(s, 2),
             type: "footerLinks",
             align: "center",
-            // "Label|href" per line — keeps the footer a plain editable list rather than needing a
+            // "Label|href" per line - keeps the footer a plain editable list rather than needing a
             // nested editor for three links.
             items: ["Privacy Policy|/privacy", "Terms|/terms"],
           },
@@ -84,7 +84,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
   // ── Hero ─────────────────────────────────────────────────────────────────────
   {
     key: "hero-portrait",
-    name: "Hero — portrait, headline, CTA",
+    name: "Hero - portrait, headline, CTA",
     description: "Circular photo above a large headline, promise line and button",
     group: "Hero",
     build: (s) => ({
@@ -95,7 +95,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
       padding: [64, 72],
       columns: [
         [
-          // `rounded` also sets next/image `priority` — the hero is almost always the Largest
+          // `rounded` also sets next/image `priority` - the hero is almost always the Largest
           // Contentful Paint element, and lazy-loading it delays the metric the page is judged on.
           { id: mk(s, 1), type: "image", rounded: true, width: 520, height: 520, align: "center" },
           { id: mk(s, 2), type: "heading", text: "Your headline here", align: "center" },
@@ -118,7 +118,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
   // ── Content ──────────────────────────────────────────────────────────────────
   {
     key: "band-two-column",
-    name: "Coloured band — two columns",
+    name: "Coloured band - two columns",
     description: "Full-width colour with a heading and two columns of copy",
     group: "Content",
     build: (s) => ({
@@ -139,7 +139,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
   {
     key: "content-prose",
     name: "Text block",
-    description: "A heading and body copy — for policy and long-form pages",
+    description: "A heading and body copy - for policy and long-form pages",
     group: "Content",
     build: (s) => ({
       id: `s${s}`,
@@ -193,7 +193,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
   {
     key: "cta-button",
     name: "Call to action",
-    description: "A single centred button — repeat it down a long page",
+    description: "A single centred button - repeat it down a long page",
     group: "Conversion",
     build: (s) => ({
       id: `s${s}`,
@@ -219,7 +219,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
   // ── Contact ──────────────────────────────────────────────────────────────────
   {
     key: "contact-map",
-    name: "Contact — address and map",
+    name: "Contact - address and map",
     description: "Postal details beside an embedded map",
     group: "Contact",
     build: (s) => ({

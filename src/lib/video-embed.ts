@@ -3,7 +3,7 @@
  * infra by design). Classes are recorded by fathom.ai, so the Fathom share
  * link is the primary provider; YouTube/Vimeo/Drive also accepted. This
  * parses each provider into a safe iframe src; anything else is rejected at
- * the action layer. Isomorphic — the client reuses it for paste-preview.
+ * the action layer. Isomorphic - the client reuses it for paste-preview.
  */
 
 export type GnVideoProviderKey = "FATHOM" | "YOUTUBE" | "VIMEO" | "GDRIVE";
@@ -76,7 +76,7 @@ export function parseVideoUrl(raw: string): ParsedVideo | null {
     }
     if (!id || !VIMEO_ID.test(id)) return null;
     if (hash && !VIMEO_HASH.test(hash)) hash = undefined;
-    // the ?h= hash is what makes unlisted videos playable — keep it
+    // the ?h= hash is what makes unlisted videos playable - keep it
     const suffix = hash ? `?h=${hash}` : "";
     return { provider: "VIMEO", embedUrl: `https://player.vimeo.com/video/${id}${suffix}` };
   }

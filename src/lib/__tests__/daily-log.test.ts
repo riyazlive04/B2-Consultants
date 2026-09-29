@@ -1,8 +1,8 @@
 /**
- * Daily Log derivation — the layer that turns stored integers into a readable, graded entry.
+ * Daily Log derivation - the layer that turns stored integers into a readable, graded entry.
  *
  * Everything under test is pure and takes `today`/`targets` explicitly, so no DB and no fake
- * timers — same approach as automation-quiet-hours.test.ts.
+ * timers - same approach as automation-quiet-hours.test.ts.
  *
  * The grading fork (target set vs. fall back to the person's own recent average) is the part
  * that's easy to get wrong, so it gets the most cases.
@@ -74,11 +74,11 @@ describe("describeLog", () => {
     assert.match(describeLog("DELIVERY_COACH", { sessionsDelivered: 4 }), /^4 sessions delivered\.$/);
   });
   test("an empty day still says something", () => {
-    assert.equal(describeLog("DISCOVERY_SPECIALIST", {}), "Logged the day — no numbers recorded.");
+    assert.equal(describeLog("DISCOVERY_SPECIALIST", {}), "Logged the day - no numbers recorded.");
   });
 });
 
-describe("deriveStatus — against a founder target", () => {
+describe("deriveStatus - against a founder target", () => {
   const at = (v: number) =>
     deriveStatus({ variant: "DISCOVERY_SPECIALIST", values: { discoveryCallsCompleted: v }, baseline: 0, target: 5 });
 
@@ -114,7 +114,7 @@ describe("deriveStatus — against a founder target", () => {
   });
 });
 
-describe("deriveStatus — falling back to the person's own average", () => {
+describe("deriveStatus - falling back to the person's own average", () => {
   test("with no target, it grades against the baseline and says so", () => {
     const s = deriveStatus({
       variant: "DISCOVERY_SPECIALIST",
@@ -191,7 +191,7 @@ describe("buildLogEntries", () => {
   const logs: RawLog[] = [
     rawLog({ id: "a", date: day(17), values: { discoveryCallsCompleted: 9 }, autoCapturedKeys: ["discoveryCallsCompleted"] }),
     rawLog({ id: "b", date: day(16), values: { discoveryCallsCompleted: 4 }, notes: "CRM outage blocked the queue" }),
-    rawLog({ id: "c", date: day(10), values: { discoveryCallsCompleted: 4 }, correctionNote: "Actually 4 — one double-logged" }),
+    rawLog({ id: "c", date: day(10), values: { discoveryCallsCompleted: 4 }, correctionNote: "Actually 4 - one double-logged" }),
     rawLog({ id: "d", date: day(1), values: { discoveryCallsCompleted: 4 } }),
   ];
   const entries = buildLogEntries(logs, NO_TARGETS, TODAY, true);
@@ -224,7 +224,7 @@ describe("buildLogEntries", () => {
 
   test("a blocker note is detected; a correction is carried through", () => {
     assert.equal(entries[1].hasBlockers, true);
-    assert.equal(entries[2].correctionNote, "Actually 4 — one double-logged");
+    assert.equal(entries[2].correctionNote, "Actually 4 - one double-logged");
   });
 
   test("who/when are rendered for the team feed", () => {

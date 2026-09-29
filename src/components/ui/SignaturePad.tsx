@@ -11,7 +11,7 @@ import { lockBodyScroll } from "@/lib/scroll-lock";
  * FOUR THINGS THAT ARE LOAD-BEARING:
  *
  * 1. COORDINATES ARE NORMALISED BY WIDTH (x/W, y/W), not stored in device pixels. A canvas that
- *    resizes — rotating a phone, opening full screen, a sidebar collapsing — would otherwise
+ *    resizes - rotating a phone, opening full screen, a sidebar collapsing - would otherwise
  *    throw the signature away or distort it. Dividing BOTH axes by the width keeps the scaling
  *    uniform, so the aspect ratio of the ink survives whatever the box does. The pad holds a
  *    fixed 2:1 box, so ink can never clip.
@@ -39,7 +39,7 @@ const EXPORT_WIDTH = 1200; // px across the full pad; the crop is a fraction of 
 const BASE_WIDTH = 0.0034;
 const PRESSURE_MIN = 0.55; // a stylus at zero pressure still leaves a line
 const PRESSURE_RANGE = 0.95;
-const SPEED_MAX = 0.004; // normalised units per ms — a fast flick
+const SPEED_MAX = 0.004; // normalised units per ms - a fast flick
 const SPEED_THIN = 0.55; // how much a fast stroke thins
 
 // A stray tap is not a signature. Both thresholds must be cleared.
@@ -47,7 +47,7 @@ const MIN_INK_LENGTH = 0.35; // total path length, in pad widths
 const MIN_INK_DIAGONAL = 0.1; // bounding-box diagonal
 
 // The canvas API needs a literal. This ink is printed into a PDF, not themed, so it does not
-// follow the light/dark tokens — it is always the document's near-navy.
+// follow the light/dark tokens - it is always the document's near-navy.
 const INK_COLOUR = "#16203A";
 
 type Pt = { x: number; y: number; p: number; t: number };
@@ -63,7 +63,7 @@ function widthFor(stroke: Stroke, a: Pt, b: Pt): number {
     return BASE_WIDTH * (PRESSURE_MIN + PRESSURE_RANGE * b.p);
   }
   // Nothing real to read from a finger or a mouse (both report a constant 0.5), so taper by
-  // speed instead — which is what a physical pen does anyway.
+  // speed instead - which is what a physical pen does anyway.
   const dt = Math.max(1, b.t - a.t);
   const speed = Math.hypot(b.x - a.x, b.y - a.y) / dt;
   const fast = Math.min(1, speed / SPEED_MAX);
@@ -190,7 +190,7 @@ export function SignaturePad({
     if (!fullScreen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setFullScreen(false);
     window.addEventListener("keydown", onKey);
-    // Shared counter (lib/scroll-lock.ts) — full-screen signing opens from inside the
+    // Shared counter (lib/scroll-lock.ts) - full-screen signing opens from inside the
     // agreement modal, so this and the modal's lock always interleave.
     const releaseScroll = lockBodyScroll();
     return () => {
@@ -287,7 +287,7 @@ export function SignaturePad({
     if (!active.current || disabled || !e.isPrimary) return;
     e.preventDefault();
     // A 120Hz stylus outruns the event loop. `getCoalescedEvents` returns every sample the browser
-    // buffered between frames — the difference between a smooth curve and a polygon.
+    // buffered between frames - the difference between a smooth curve and a polygon.
     const native = e.nativeEvent;
     const coalesced =
       typeof native.getCoalescedEvents === "function" ? native.getCoalescedEvents() : [];
@@ -418,7 +418,7 @@ export function SignaturePad({
         <div className="mb-3">
           <h2 className="font-display text-h3 text-ink">Sign here</h2>
           {/* Turning the phone is the real fix for a cramped pad. Say so, rather than rotating the
-              canvas with a CSS transform — that breaks pointer-coordinate mapping. */}
+              canvas with a CSS transform - that breaks pointer-coordinate mapping. */}
           <p className="text-caption text-faint sm:hidden">Turn your phone sideways for more room.</p>
           <p className="hidden text-caption text-faint sm:block">Press Esc to go back.</p>
         </div>

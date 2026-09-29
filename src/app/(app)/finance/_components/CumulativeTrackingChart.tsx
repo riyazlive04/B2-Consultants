@@ -5,25 +5,25 @@ import { formatInrMinor } from "@/lib/format";
 import type { AnnualPerformance } from "@/server/annual-metrics";
 
 /**
- * Cumulative forecast vs actual (Error Log F1) — modelled on the client's own tracking sheet
+ * Cumulative forecast vs actual (Error Log F1) - modelled on the client's own tracking sheet
  * ("Productivity / TCD Tracking", supplied as the reference screenshot).
  *
  * BARS, not lines. `AnnualChart` already plots the same two series as lines, and that is a
- * better read for trajectory — but the sheet the founder actually works from is a bar chart,
+ * better read for trajectory - but the sheet the founder actually works from is a bar chart,
  * and the point of F1 is to replace that spreadsheet, not to offer a prettier alternative to
  * it. Both live on the page: bars for "where are we against plan", lines for "where is this
  * heading".
  *
- * Was hand-rolled SVG with every bar's value printed above it in 8px text — on a month where two
+ * Was hand-rolled SVG with every bar's value printed above it in 8px text - on a month where two
  * bars land close in height, or where a bar sits near one of the three reference lines, those
  * labels printed on top of each other and were unreadable at any width. `TimeSeriesChart` drops
  * the always-on labels for a hover/keyboard tooltip (the same trade `RevenueChart` already made)
- * and moves the three reference figures into the legend row, which wraps instead of colliding —
+ * and moves the three reference figures into the legend row, which wraps instead of colliding -
  * both problems it shipped with, fixed once for every chart on this frame rather than re-solved
  * bar by bar.
  *
  * FUTURE MONTHS RENDER NOTHING. The source spreadsheet shows `#WERT!` for months with no data
- * and F4 is explicit that we must not reproduce that — nor substitute a zero, which reads as
+ * and F4 is explicit that we must not reproduce that - nor substitute a zero, which reads as
  * "achieved nothing" rather than "not yet". `isFuture` is the guard; the actual bar is simply
  * not drawn (`values` carries `null`), and the tooltip's data table reflects the same gap.
  */
@@ -48,7 +48,7 @@ export function CumulativeTrackingChart({ data }: { data: AnnualPerformance }) {
           key: "actual",
           label: "Actual cumulative",
           color: "var(--primary)",
-          // A future month has achieved nothing YET, which is not a measured zero (F4) — so it
+          // A future month has achieved nothing YET, which is not a measured zero (F4) - so it
           // draws no bar at all rather than a bar of height zero.
           values: months.map((m) => (m.isFuture ? null : m.cumAchievedInr)),
         },

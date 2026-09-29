@@ -27,7 +27,7 @@ async function main() {
   const unresolved: Unresolved[] = [];
   const linked = { agreement: 0, bookOrder: 0, pendingPayment: 0 };
 
-  // Every enrollment, indexed by (student, level). The level is `programLevel` — the same
+  // Every enrollment, indexed by (student, level). The level is `programLevel` - the same
   // Level.code the three tables store, so the join needs no translation.
   const enrollments = await prisma.enrollment.findMany({
     select: { id: true, studentId: true, programLevel: true },
@@ -43,7 +43,7 @@ async function main() {
     const hits = byKey.get(`${studentId}:${level}`) ?? [];
     if (hits.length === 1) return { id: hits[0] };
     if (hits.length === 0) return { reason: `no enrollment at level ${level}` };
-    return { reason: `${hits.length} enrollments at level ${level} — ambiguous` };
+    return { reason: `${hits.length} enrollments at level ${level} - ambiguous` };
   };
 
   // ── BookOrder: has both studentId and level, so it resolves directly. ──────────
@@ -116,9 +116,9 @@ async function main() {
   console.log(`  BookOrder      ${linked.bookOrder}`);
   console.log(`  PendingPayment ${linked.pendingPayment}`);
 
-  console.log(`\nLeft unlinked (deliberately — never guessed): ${unresolved.length}`);
+  console.log(`\nLeft unlinked (deliberately - never guessed): ${unresolved.length}`);
   for (const u of unresolved.slice(0, 40)) {
-    console.log(`  ${u.table.padEnd(15)} ${u.id}  ${u.who} · ${u.level} — ${u.reason}`);
+    console.log(`  ${u.table.padEnd(15)} ${u.id}  ${u.who} · ${u.level} - ${u.reason}`);
   }
   if (unresolved.length > 40) console.log(`  … and ${unresolved.length - 40} more`);
 

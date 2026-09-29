@@ -1,13 +1,13 @@
 /**
  * Shared shapes for the Synamate Sites parity (Phase 2): Forms + Funnels.
  * These describe the JSON stored on Form.fields / Form.settings / FunnelStep.blocks.
- * Isomorphic — imported from both server (validation, rendering) and client (builders).
+ * Isomorphic - imported from both server (validation, rendering) and client (builders).
  */
 
 // ─────────────────────────── Forms ───────────────────────────
 
 /**
- * The item model behind the form builder — a Google Forms-shaped catalogue.
+ * The item model behind the form builder - a Google Forms-shaped catalogue.
  *
  * ── Why this is one flat list and not sections-containing-fields ─────────────────
  * `section`, `heading` and `image` are ITEMS in the same ordered array as the questions, exactly
@@ -25,7 +25,7 @@
  * the server cannot disagree about whether an answer is acceptable.
  */
 export type FormFieldType =
-  // free text — `email`/`phone`/`number` are separate types rather than "text with validation"
+  // free text - `email`/`phone`/`number` are separate types rather than "text with validation"
   // because their keys map onto the contact record and their keyboards differ on a phone
   | "text" | "email" | "phone" | "number" | "textarea"
   // choose from a list
@@ -34,7 +34,7 @@ export type FormFieldType =
   | "scale" | "rating"
   // when
   | "date" | "time"
-  // a single yes/no tick (consent). PRE-DATES `checkboxes` — see the note above.
+  // a single yes/no tick (consent). PRE-DATES `checkboxes` - see the note above.
   | "checkbox"
   /**
    * An amount of money. Its own type rather than `number` with a prefix, because the answer has a
@@ -48,7 +48,7 @@ export type FormFieldType =
    * a submission stays a row of strings and nothing has to stream bytes out of Postgres.
    */
   | "file"
-  /** A drawn or typed signature. The answer is a PNG data URL — self-contained, no second fetch. */
+  /** A drawn or typed signature. The answer is a PNG data URL - self-contained, no second fetch. */
   | "signature"
   /**
    * Consent, with the legal text beside it. Distinct from `checkbox` because it is a different
@@ -58,21 +58,21 @@ export type FormFieldType =
    */
   | "terms"
   /**
-   * A value carried with the submission but never shown — campaign, ad id, referrer. Prefilled
+   * A value carried with the submission but never shown - campaign, ad id, referrer. Prefilled
    * from a URL parameter or a fixed default. This is what the Synamate form calls a "Hidden"
    * field, and it is how a lead arrives already knowing where it came from.
    */
   | "hidden"
   /**
    * A running total derived from the options the respondent picked (`FormOption.score`). Not an
-   * input: it is computed at submit, so it cannot be forged by editing the page — which is the
+   * input: it is computed at submit, so it cannot be forged by editing the page - which is the
    * only way a score is worth anything for triage.
    */
   | "score"
   /**
    * Bot protection. Renders no visible control: it plants a honeypot and stamps the render time,
    * and the submit action rejects anything that fills the trap or answers impossibly fast.
-   * Deliberately not a third-party captcha — no vendor, no cookie banner, nothing for a real
+   * Deliberately not a third-party captcha - no vendor, no cookie banner, nothing for a real
    * respondent on a phone to fail.
    */
   | "captcha"
@@ -98,7 +98,7 @@ export function isMultiItem(type: FormFieldType): boolean {
  * One option on a choice question.
  *
  * `goTo` is Google's "go to section based on answer". It may only name a LATER section (or
- * `"submit"`) — see `resolveGoTo`. That restriction is ours, not Google's, and it exists so that a
+ * `"submit"`) - see `resolveGoTo`. That restriction is ours, not Google's, and it exists so that a
  * form with a cycle in it cannot be built in the first place.
  */
 export type FormOption = {
@@ -113,7 +113,7 @@ export type FormValidation =
   | { kind: "number"; min?: number; max?: number; integer?: boolean; message?: string }
   | { kind: "length"; min?: number; max?: number; message?: string }
   | { kind: "regex"; pattern: string; mustMatch?: boolean; message?: string }
-  /** checkboxes only — "select at least / at most / exactly N" */
+  /** checkboxes only - "select at least / at most / exactly N" */
   | { kind: "count"; min?: number; max?: number; exactly?: number; message?: string };
 
 export type FormItem = {
@@ -154,17 +154,17 @@ export type FormItem = {
   // ── hidden ──
   /** Fixed value when the URL carries nothing. */
   hiddenValue?: string;
-  /** Query parameter to read the value from — `?ad=spring` with `hiddenFrom: "ad"`. */
+  /** Query parameter to read the value from - `?ad=spring` with `hiddenFrom: "ad"`. */
   hiddenFrom?: string;
 
   // ── file ──
   /** Accept attribute, e.g. ".pdf,.doc,image/*". Enforced again on the server. */
   accept?: string;
-  /** Per-file cap in megabytes. Clamped server-side to MAX_UPLOAD_MB — a page can lie. */
+  /** Per-file cap in megabytes. Clamped server-side to MAX_UPLOAD_MB - a page can lie. */
   maxSizeMb?: number;
 
   // ── phone ──
-  /** ISO-3166 alpha-2 the country selector opens on. Defaults to IN — the audience's origin. */
+  /** ISO-3166 alpha-2 the country selector opens on. Defaults to IN - the audience's origin. */
   defaultCountry?: string;
 
   // ── monetary ──
@@ -175,13 +175,13 @@ export type FormItem = {
   termsText?: string;
   termsUrl?: string;
 
-  /** html items only — raw markup, rendered unescaped. Admin-authored, same contract as Block.html. */
+  /** html items only - raw markup, rendered unescaped. Admin-authored, same contract as Block.html. */
   html?: string;
 
   validation?: FormValidation;
 };
 
-/** Kept as the historical name — plenty of call sites still say `FormField`. */
+/** Kept as the historical name - plenty of call sites still say `FormField`. */
 export type FormField = FormItem;
 
 /** An answer is a scalar, or a list for multi-select. */
@@ -215,7 +215,7 @@ export type FormSettings = {
   /** Randomise question order within each page. */
   shuffleQuestions?: boolean;
   /**
-   * Best-effort one-submission-per-browser. NOT a guarantee — there is no sign-in on a public
+   * Best-effort one-submission-per-browser. NOT a guarantee - there is no sign-in on a public
    * capture page, so this is a cookie. It stops the double-tap it is there for and nothing more;
    * the builder's help text says so in as many words.
    */
@@ -247,7 +247,7 @@ export const FIELD_TYPE_GROUPS: {
       { value: "radio", label: "Multiple choice", hint: "Pick one" },
       { value: "checkboxes", label: "Checkboxes", hint: "Pick several" },
       { value: "select", label: "Dropdown", hint: "Pick one, from a list" },
-      { value: "checkbox", label: "Checkbox — single", hint: "One tick, e.g. consent" },
+      { value: "checkbox", label: "Checkbox - single", hint: "One tick, e.g. consent" },
     ],
   },
   {
@@ -281,7 +281,7 @@ export const FIELD_TYPE_GROUPS: {
     ],
   },
   {
-    group: "Layout — collects nothing",
+    group: "Layout - collects nothing",
     types: [
       { value: "section", label: "Section / page break" },
       { value: "heading", label: "Title and description" },
@@ -293,25 +293,25 @@ export const FIELD_TYPE_GROUPS: {
 ];
 
 /**
- * The element palette — what the builder's left drawer offers, in Synamate's categories.
+ * The element palette - what the builder's left drawer offers, in Synamate's categories.
  *
  * ── Why this is separate from FIELD_TYPE_GROUPS ────────────────────────────────────────────────
  * That list is the MODEL: every field type exactly once, and it is what the normaliser validates
- * against. This is the AUTHORING catalogue, and the two are not the same shape — "First Name",
+ * against. This is the AUTHORING catalogue, and the two are not the same shape - "First Name",
  * "Last Name", "City" and "Website" are all one type (`text`) with a different key, label and
  * keyboard. Collapsing them into the model would mean four near-identical types to validate and
  * render; collapsing the palette into the model would mean the drawer offering "Short answer"
  * four times and the author filling in the contact key by hand every time, which is exactly the
  * step the GHL palette exists to remove.
  *
- * `quick` marks the tiles on the "Quick Add" tab; the rest are "Add Object Fields" — the ones
+ * `quick` marks the tiles on the "Quick Add" tab; the rest are "Add Object Fields" - the ones
  * that write a known key on the contact record.
  */
 export type PaletteItem = {
   /** Tile caption. */
   label: string;
   type: FormFieldType;
-  /** Lucide icon name, resolved by the builder — this file stays free of React. */
+  /** Lucide icon name, resolved by the builder - this file stays free of React. */
   icon: string;
   /** Defaults merged over `newItem(type)`. A preset is a type plus the fields that make it one. */
   preset?: Partial<FormItem>;
@@ -471,7 +471,7 @@ function normaliseValidation(raw: unknown): FormValidation | undefined {
 /**
  * Turn whatever is in the `fields` JSON column into today's shape.
  *
- * Every read path goes through this — the builder, the public page and the submit action — so a
+ * Every read path goes through this - the builder, the public page and the submit action - so a
  * form saved before any of this existed renders and validates identically to one saved after. Old
  * rows have no `id` and no per-option objects; ids are derived from the INDEX rather than
  * generated, so re-reading an unsaved legacy form twice yields the same ids and React does not
@@ -525,7 +525,7 @@ export function normaliseItems(raw: unknown): FormItem[] {
     }
     if (type === "rating") item.scaleMax = item.scaleMax ?? 5;
     if (type === "monetary") item.currency = item.currency ?? "INR";
-    // Consent that is optional is not consent — it is a checkbox. An author who genuinely wants an
+    // Consent that is optional is not consent - it is a checkbox. An author who genuinely wants an
     // optional tick has `checkbox` for exactly that.
     if (type === "terms") item.required = true;
     // A score is computed at submit, never entered, so requiring it could only ever fail.
@@ -600,7 +600,7 @@ export function newItem(type: FormFieldType, id: string, keySeed: number): FormI
  * differently. A score is used to decide who gets called first; it has to be worth trusting.
  *
  * Returns null when the form has no `score` item, so the caller can tell "no scoring here" from
- * "scored zero" — a real distinction when the sales team sorts by it.
+ * "scored zero" - a real distinction when the sales team sorts by it.
  */
 export function computeScore(items: readonly FormItem[], answers: FormAnswers): number | null {
   if (!items.some((i) => i.type === "score")) return null;
@@ -677,7 +677,7 @@ function isAnswered(v: FormAnswerValue | undefined): boolean {
  *
  * Google's rule when several questions on one page carry branching: the LAST one answered wins.
  * We do the same, then fall back to the section's own "after this section" setting, then to the
- * next page. Targets that are not strictly forwards are ignored rather than honoured — that plus
+ * next page. Targets that are not strictly forwards are ignored rather than honoured - that plus
  * the builder only offering later sections makes a loop unconstructable.
  */
 export function nextPageIndex(
@@ -709,7 +709,7 @@ export function nextPageIndex(
  * The items a respondent actually saw, given the answers they gave.
  *
  * The server calls this before enforcing `required`. Without it, a required question sitting in a
- * branch nobody was sent down makes the form permanently unsubmittable — the classic branching
+ * branch nobody was sent down makes the form permanently unsubmittable - the classic branching
  * bug, and one that only shows up after the form is live.
  */
 export function reachableItems(items: readonly FormItem[], answers: FormAnswers): FormItem[] {
@@ -728,7 +728,7 @@ export function reachableItems(items: readonly FormItem[], answers: FormAnswers)
 
 // ── Answers ─────────────────────────────────────────────────────────────────────
 
-/** One human-readable line for an answer — for tables, CSV and the contact's custom fields. */
+/** One human-readable line for an answer - for tables, CSV and the contact's custom fields. */
 export function answerToText(v: FormAnswerValue | undefined): string {
   if (v == null) return "";
   return Array.isArray(v) ? v.join(", ") : v;
@@ -779,7 +779,7 @@ export function validateAnswer(item: FormItem, value: FormAnswerValue | undefine
     }
     case "terms":
       // The tick posts "yes"; anything else means it was not ticked. `required` is forced on in
-      // the normaliser, so an unanswered one is already caught above — this is the tampered case.
+      // the normaliser, so an unanswered one is already caught above - this is the tampered case.
       if (text !== "yes") return `${label || "The terms"} must be accepted`;
       break;
     case "file":
@@ -798,7 +798,7 @@ export function validateAnswer(item: FormItem, value: FormAnswerValue | undefine
       break;
     case "radio":
     case "select":
-      // With "Other" on, any text is legitimate — that is the entire point of the option.
+      // With "Other" on, any text is legitimate - that is the entire point of the option.
       if (!item.allowOther && !(item.options ?? []).some((o) => o.label === text)) {
         return `${label}: pick one of the options`;
       }
@@ -827,7 +827,7 @@ export function validateAnswer(item: FormItem, value: FormAnswerValue | undefine
       break;
     case "regex": {
       // The pattern is authored by a signed-in founder, not by the public, and both it (200) and
-      // the answer (2000) are length-capped — which is what keeps a pathological pattern from
+      // the answer (2000) are length-capped - which is what keeps a pathological pattern from
       // becoming a way to hang the submit path. An uncompilable pattern is ignored, never thrown:
       // a typo in a validation rule must not take the public form down.
       let re: RegExp;
@@ -863,7 +863,7 @@ export function validateAnswer(item: FormItem, value: FormAnswerValue | undefine
  *
  * `section` is a full-bleed horizontal band (this is what carries a background colour across the
  * viewport). `row` is a horizontal group inside it, `column` a vertical slice of that row, and
- * everything else is a leaf element. Containers are not decoration — they are where padding,
+ * everything else is a leaf element. Containers are not decoration - they are where padding,
  * background and width live, exactly as in GHL, so a design can be expressed by nesting rather
  * than by one-off CSS per element.
  *
@@ -882,14 +882,14 @@ export type BlockType =
    *
    * A sibling of `form`, not a variant of it: a form collects answers, this holds a slot. Both
    * resolve their data server-side and are handed down prefetched (see `getPublicStep`), because
-   * availability has to be read at request time — a cached "19:00 is free" is how two people book
+   * availability has to be read at request time - a cached "19:00 is free" is how two people book
    * the same slot.
    */
   | "booking"
   // ── composites & spacing ──
   | "card" | "stat" | "divider" | "spacer"
   /**
-   * A rounded label chip — "OUR GUARANTEE", "★ NEXT BATCH FILLING NOW", "PHASE 1 · WEEK 1–2",
+   * A rounded label chip - "OUR GUARANTEE", "★ NEXT BATCH FILLING NOW", "PHASE 1 · WEEK 1–2",
    * the green "27 days" on a testimonial.
    *
    * Its own element rather than a styled `eyebrow` because it appears eight times on one page in
@@ -900,7 +900,7 @@ export type BlockType =
   /** Initials in a circle, as on each testimonial. Text is the initials; tone picks the colour. */
   | "avatar"
   /**
-   * A small coloured disc marking a heading — the blue dot on each "everything included" tile.
+   * A small coloured disc marking a heading - the blue dot on each "everything included" tile.
    *
    * Not a one-item `bullets` list: the dot sits in its own column so the description below
    * lines up with the TITLE rather than under the marker, which is what the original does and
@@ -908,12 +908,12 @@ export type BlockType =
    */
   | "dot"
   /**
-   * Raw HTML/JS, the equivalent of GHL's "Custom HTML/Javascript" element — the training page
+   * Raw HTML/JS, the equivalent of GHL's "Custom HTML/Javascript" element - the training page
    * uses four of them, so a migration is impossible without it.
    *
    * DANGEROUS BY CONSTRUCTION: it renders unescaped markup on a PUBLIC page, so it is an XSS
    * sink by definition. Gated on the `pipeline.configure`-class admin capability at the editing
-   * boundary, never on the render side — a page that already contains one must keep rendering
+   * boundary, never on the render side - a page that already contains one must keep rendering
    * even when a non-admin views it.
    */
   | "html";
@@ -924,7 +924,7 @@ export type BlockType =
  * Deliberately a CLOSED set of primitives rather than free-form CSS: every value is validated and
  * rendered into a style object we control, so an editor cannot inject `position:fixed` over the
  * whole viewport, and a page stays readable when the theme changes. Colours accept a design token
- * name (`primary`, `ink`, …) or a literal hex — tokens survive a rebrand, hex is the escape hatch
+ * name (`primary`, `ink`, …) or a literal hex - tokens survive a rebrand, hex is the escape hatch
  * when a design demands an exact value.
  */
 export type NodeStyle = {
@@ -954,12 +954,12 @@ export type NodeStyle = {
   lineHeight?: number;
   letterSpacing?: number;
   align?: "left" | "center" | "right";
-  /** `column` only — flex growth, so a 70/30 split is expressible without hard widths. */
+  /** `column` only - flex growth, so a 70/30 split is expressible without hard widths. */
   grow?: number;
   /** Gap between children, px. */
   gap?: number;
   shadow?: "none" | "card" | "soft";
-  /** Italic — the convention for a pulled quote, which is what every testimonial here is. */
+  /** Italic - the convention for a pulled quote, which is what every testimonial here is. */
   italic?: boolean;
   hidden?: boolean;
 };
@@ -972,12 +972,12 @@ export type Block = {
    * Desktop styling, and the phone override applied on top of it.
    *
    * Two objects rather than one keyed by breakpoint because that is the only distinction the
-   * builder's device toggle makes, and a page that reads correctly on a phone is not optional —
+   * builder's device toggle makes, and a page that reads correctly on a phone is not optional -
    * the funnel's traffic is a Meta ad audience, which is overwhelmingly mobile.
    */
   style?: NodeStyle;
   styleMobile?: Partial<NodeStyle>;
-  /** `html` element only — raw markup, rendered unescaped. See the BlockType note. */
+  /** `html` element only - raw markup, rendered unescaped. See the BlockType note. */
   html?: string;
   align?: "left" | "center" | "right";
   url?: string; // image src / video embed url
@@ -986,14 +986,14 @@ export type Block = {
   href?: string; // button target
   /**
    * Visual variant. Read per block type, so the same field means different things:
-   *   button  — primary | soft | outline | accent (the amber CTA that sits on the dark band)
-   *   bullets — "check" for ✔, "dash" for the em-dash lists the curriculum uses; default a disc
+   *   button  - primary | soft | outline | accent (the amber CTA that sits on the dark band)
+   *   bullets - "check" for ✔, "dash" for the em-dash lists the curriculum uses; default a disc
    */
   variant?: "primary" | "soft" | "outline" | "accent" | "check" | "dash";
   /**
    * Colour of a `pill` or `avatar`.
    *
-   * A named set, not a free colour: these chips carry MEANING on the page — amber is the
+   * A named set, not a free colour: these chips carry MEANING on the page - amber is the
    * guarantee, green is a result, blue/orange/green mark the three curriculum phases in order.
    * A palette keeps that consistent and survives a rebrand; a hex per chip would not.
    */
@@ -1003,11 +1003,11 @@ export type Block = {
   formId?: string; // embedded form
 
   /**
-   * Click opens this form in a POPUP instead of navigating — the CTA pattern the live Synamate
+   * Click opens this form in a POPUP instead of navigating - the CTA pattern the live Synamate
    * page uses, where "Apply for Guided Mode" and the video still both raise the same opt-in
    * dialog rather than sending the visitor to another page.
    *
-   * Read on `button` and `image`. Set on a button it wins over `href` — a control cannot both
+   * Read on `button` and `image`. Set on a button it wins over `href` - a control cannot both
    * open a dialog and leave the page, and silently doing one while the author configured the
    * other is worse than either. `href` is deliberately NOT cleared when this is set, so switching
    * the behaviour back restores the link the author already typed.
@@ -1019,21 +1019,21 @@ export type Block = {
    */
   opensFormId?: string;
   /**
-   * `booking` blocks — WHOSE calendar this shows (a `User.id`).
+   * `booking` blocks - WHOSE calendar this shows (a `User.id`).
    *
    * Required in practice: the whole point of a per-person disco page is that Asma's page offers
    * Asma's slots. Left unset the block falls back to every open slot, which is the old `/book`
    * behaviour and is better than rendering nothing, but it makes two "personalised" pages show
-   * identical availability — so the authoring side should always set it.
+   * identical availability - so the authoring side should always set it.
    */
   bookingOwnerId?: string;
-  /** `booking` blocks — the small label above the title ("DISCO"). */
+  /** `booking` blocks - the small label above the title ("DISCO"). */
   bookingEyebrow?: string;
   /**
-   * `booking` blocks — where to send the prospect once the booking is confirmed.
+   * `booking` blocks - where to send the prospect once the booking is confirmed.
    *
    * Unset keeps the inline "You're booked in 🎉" card, which is the right default for the
-   * standalone `/book` page: there is nowhere else to go. Inside a funnel there IS — the
+   * standalone `/book` page: there is nowhere else to go. Inside a funnel there IS - the
    * confirmation step, which is a page the team can edit, measure a view on, and hang the next
    * action off. A funnel that ends on a component's built-in success card ends where the
    * analytics stop.
@@ -1041,13 +1041,13 @@ export type Block = {
   bookingRedirectUrl?: string;
   /** Popup headline. Falls back to the form's own name, so an unset field is never a blank dialog. */
   modalTitle?: string;
-  /** The line under it — "20 minutes. Free. Changes everything." Optional. */
+  /** The line under it - "20 minutes. Free. Changes everything." Optional. */
   modalSubtitle?: string;
   /**
    * LEGACY row layout: N columns as bare block lists, with no identity or style of their own.
    *
    * Superseded by `children` holding real `column` nodes, which is what lets a column carry its
-   * own width, padding and background — the thing a 70/30 hero split needs. Kept because funnel
+   * own width, padding and background - the thing a 70/30 hero split needs. Kept because funnel
    * steps authored before the node model still hold this shape in their `blocks` JSON, and a
    * saved page must never stop rendering because the editor moved on. `normalizeRow` below is the
    * single place that reconciles the two, so no renderer or editor has to know both.
@@ -1056,7 +1056,7 @@ export type Block = {
   /** Nested children of any container: a section's rows, a row's columns, a card's contents. */
   children?: Block[];
   /**
-   * `section` only — the band's background PRESET. `dark` is the inverted CTA strip at the foot
+   * `section` only - the band's background PRESET. `dark` is the inverted CTA strip at the foot
    * of the page; `muted` is the alternating grey that separates one section from the next.
    *
    * A preset rather than a raw colour so a rebrand moves every band at once. `style.background`
@@ -1090,8 +1090,8 @@ export function isContainer(type: BlockType): boolean {
  * A row's columns, whichever way the page was authored.
  *
  * New pages nest real `column` nodes in `children`; pages from before the node model hold bare
- * block lists in `columns`. Everything that walks a row — renderer, builder, and any future
- * migration — goes through here, so the legacy shape is understood in exactly one place and can
+ * block lists in `columns`. Everything that walks a row - renderer, builder, and any future
+ * migration - goes through here, so the legacy shape is understood in exactly one place and can
  * be deleted in exactly one place once no stored page uses it.
  */
 export function normalizeRow(row: Block): Block[] {

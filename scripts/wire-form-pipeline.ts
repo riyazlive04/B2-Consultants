@@ -5,7 +5,7 @@
  * `submitPublicForm` already does three of the four things a new enquiry needs: it upserts the
  * contact through the same idempotent lead-intake the webhooks use, stamps `stage: NEW_LEAD`, and
  * calls `pickFirstCaller()` so the lead lands on someone's My Desk under the configured split.
- * The fourth — creating the Opportunity — is opt-in per form (`settings.createOpportunity`), and
+ * The fourth - creating the Opportunity - is opt-in per form (`settings.createOpportunity`), and
  * a form created before anyone thought about the board simply does not have it set.
  *
  *   npm run wire:pipeline -- --form=free-consultation --stage="New Lead" --dry-run --force
@@ -82,7 +82,7 @@ async function main() {
   console.log(`  after:  ${after}`);
 
   if (before === after) return console.log("\nNothing to change.");
-  if (flag("dry-run")) return console.log("\nDry run — nothing written.");
+  if (flag("dry-run")) return console.log("\nDry run - nothing written.");
 
   await prisma.form.update({ where: { id: form.id }, data: { settings: next as unknown as object } });
   console.log("\nSaved.");

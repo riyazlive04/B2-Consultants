@@ -12,26 +12,29 @@ import {
   type OutreachConfig,
   type OutreachVars,
 } from "@/lib/outreach-sop";
+import { sendEmailMessage } from "./messaging";
 import {
   planJourney,
   normalizeEmail,
   isActionable,
   isTerminal,
   type JourneyState,
+  type Plan,
 } from "@/lib/outreach-engine";
+import { callTimeNotice, CALL_TIME_KINDS, mayRetryAutoSend } from "@/lib/call-notice";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { sendWhatsApp } from "./whatsapp";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import { advanceLeadStage } from "./lead-stage-auto";
 
 /**
- * Outreach SOP — the DB shell around `lib/outreach-engine.ts`.
+ * Outreach SOP - the DB shell around `lib/outreach-engine.ts`.
  *
  * All the decisions live in the pure engine; this file only reads state, writes what the engine
  * decided, and (optionally) hands a rendered message to the WATI layer. Keeping the split strict
  * is what lets the SOP's timing rules be tested at their boundaries without a database.
  *
- * The engine has no autonomous clock — `runDueOutreach()` is the scheduler seam, same stance as
+ * The engine has no autonomous clock - `runDueOutreach()` is the scheduler seam, same stance as
  * the existing WhatsApp reminder engine (see /api/cron/outreach).
  */
 
@@ -59,7 +62,7 @@ export async function writeOutreachConfig(cfg: OutreachConfig): Promise<void> {
  * Step 1 → the journey exists. Called from every intake path.
  *
  * Idempotent by the leadId unique: a webhook redelivery or a second capture for the same human
- * links to the existing journey rather than restarting their SOP clock. That matters — restarting
+ * links to the existing journey rather than restarting their SOP clock. That matters - restarting
  * it would re-open a chase against someone already deep in the disco ladder.
  */
 export async function ensureJourney(leadId: string, optInAt?: Date) {
@@ -74,17 +77,22 @@ export async function ensureJourney(leadId: string, optInAt?: Date) {
       data: { leadId, optInAt: optInAt ?? lead.createdAt },
     });
   } catch {
-    // Lost a race with a concurrent capture — the other writer's row is just as good.
+    // Lost a race with a concurrent capture - the other writer's row is just as good.
     return prisma.outreachJourney.findUnique({ where: { leadId } });
   }
 }
 
-const JOURNEY_INCLUDE = {
+export const JOURNEY_INCLUDE = {
   steps: true,
   // `bantAvg`/`bantSource` ride along so Step 11 can score a prospect who answered the band-score
-  // questions on the LANDING PAGE rather than on our booking form — see `bantForQualification`.
+  // questions on the LANDING PAGE rather than on our booking form - see `bantForQualification`.
   lead: {
-    select: { id: true, name: true, phone: true, email: true, bantAvg: true, bantSource: true },
+    select: {
+      id: true, name: true, phone: true, email: true, bantAvg: true, bantSource: true,
+      // Only the fields the projection needs, and only NO_SHOW rows: the Level 2 chase turns on
+      // a specialist having recorded that the prospect did not join.
+      outcomes: { where: { outcome: "NO_SHOW" }, select: { callDate: true }, orderBy: { callDate: "desc" }, take: 1 },
+    },
   },
   booking: { include: { slot: { select: { startsAt: true } } } },
   respTouchpoint: { select: { id: true, name: true } },
@@ -105,7 +113,7 @@ export async function getJourney(journeyId: string): Promise<JourneyRow | null> 
  *
  * Falling back to the lead is the whole point of scoring at opt-in. Before it, this verdict was
  * reachable ONLY through a `BookingRequest`, so a prospect who answered every qualification
- * question on the landing page still arrived at the discovery specialist unqualified — the
+ * question on the landing page still arrived at the discovery specialist unqualified - the
  * engine had a score sitting one join away and no way to read it.
  */
 export function bantForQualification(
@@ -133,6 +141,7 @@ export function projectJourney(row: JourneyRow): JourneyState {
     whatsappConfirmed: row.whatsappConfirmed,
     salesCallConfirmed: row.salesCallConfirmed,
     highlyQualified: row.highlyQualified,
+    discoNoShow: row.lead.outcomes.length > 0,
     steps,
   };
 }
@@ -140,7 +149,7 @@ export function projectJourney(row: JourneyRow): JourneyState {
 // ─────────────────────────────── Step 10: the booking cross-check ───────────────────────────────
 
 /**
- * Step 10 — "is the personalized discovery call booked?"
+ * Step 10 - "is the personalized discovery call booked?"
  *
  * The SOP does this by copying the email out of one sheet and Ctrl+F-ing the other. We do the same
  * comparison, but case- and whitespace-insensitively, which is strictly more reliable than the
@@ -148,7 +157,7 @@ export function projectJourney(row: JourneyRow): JourneyState {
  *
  * Phone is a fallback, not a peer: a prospect can book with a different email than they opted in
  * with, and phone is the identity the WhatsApp conversation actually runs on. It is normalized
- * through libphonenumber so `+91 98765 43210` and `919876543210` match — the exact-string compare
+ * through libphonenumber so `+91 98765 43210` and `919876543210` match - the exact-string compare
  * this app used before would call those two different people.
  *
  * Returns the booking, or null. Never guesses.
@@ -218,7 +227,7 @@ export async function runBookingCheck(journeyId: string): Promise<boolean> {
 /**
  * Render one step's message for one prospect, and report anything left unresolved.
  *
- * `[DATE]`/`[TIME]` render in IST because these messages go to the prospect, who is in India — the
+ * `[DATE]`/`[TIME]` render in IST because these messages go to the prospect, who is in India - the
  * SOP's Step 13 says so outright ("on *[DATE]* at *[TIME]* IST"). CET is the internal Key Metrics
  * view's concern, not the prospect's (see outreach-metrics.ts).
  */
@@ -226,9 +235,9 @@ export function renderStep(
   row: JourneyRow,
   step: OutreachStep,
   specialistName: string,
-): { body: string | null; unresolved: string[] } {
+): { body: string | null; subject: string | null; unresolved: string[] } {
   const def = STEP_BY_KEY[step];
-  if (!def?.body) return { body: null, unresolved: [] };
+  if (!def?.body) return { body: null, subject: null, unresolved: [] };
 
   const firstName = (row.lead.name ?? "").trim().split(/\s+/)[0] || row.lead.name;
   const isSss = step.startsWith("SSS_");
@@ -247,10 +256,13 @@ export function renderStep(
   if (row.zoomLink) vars["<<INSERT ZOOM LINK HERE>>"] = row.zoomLink;
 
   const body = renderOutreachTemplate(def.body, vars);
-  // The video placeholder is an instruction to the human, not a variable — it is expected to
+  // The subject goes through the SAME variable pool as the body, so a subject naming the
+  // prospect cannot drift from the greeting inside the mail.
+  const subject = def.subject ? renderOutreachTemplate(def.subject, vars) : null;
+  // The video placeholder is an instruction to the human, not a variable - it is expected to
   // survive rendering, so it never counts as "unresolved".
   const unresolved = unresolvedVars(body).filter((v) => v !== "<< ATTACH VIDEO TO THIS MESSAGE>>");
-  return { body, unresolved };
+  return { body, subject, unresolved };
 }
 
 /** "Sat 18 Jul, 07:00 PM" → ["Sat 18 Jul", "07:00 PM"]. */
@@ -274,7 +286,7 @@ export type OutreachRun = {
 };
 
 /**
- * One pass of the SOP engine. Idempotent — run it as often as the cron fires.
+ * One pass of the SOP engine. Idempotent - run it as often as the cron fires.
  *
  * Order matters: run the Step 10 booking checks BEFORE planning, so a prospect who booked since
  * the last tick has `booked = true` when the ladder is computed and their chase stops in the same
@@ -302,7 +314,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
 
   /**
    * The recency floor. Without it this matched every non-terminal journey ever created, and
-   * `updatedAt asc` below started at the oldest — so arming the engine replayed the SOP across
+   * `updatedAt asc` below started at the oldest - so arming the engine replayed the SOP across
    * the entire historical import. See `OutreachConfig.maxAgeDays`.
    */
   const oldestOptIn = new Date(Date.now() - cfg.maxAgeDays * 24 * 60 * 60 * 1000);
@@ -314,14 +326,15 @@ export async function runDueOutreach(): Promise<OutreachRun> {
     // `lead.name` and `bookingId` ride along for the activity log: the founder's feed names the
     // prospect, and the pre-loop link state is what tells a check that FOUND a booking apart from
     // one that merely re-confirmed a link an earlier check already made.
-    select: { id: true, bookingId: true, lead: { select: { name: true } } },
+    // `leadId` rides along too: the final check moves the pipeline card, which needs the lead.
+    select: { id: true, leadId: true, bookingId: true, lead: { select: { name: true } } },
     take: cfg.maxPerRun,
     orderBy: { updatedAt: "asc" },
   });
 
   const now = new Date();
 
-  for (const { id, bookingId, lead } of active) {
+  for (const { id, leadId, bookingId, lead } of active) {
     run.scanned++;
 
     // ── Step 10 first: any actionable SYSTEM check materialised for this journey.
@@ -329,11 +342,11 @@ export async function runDueOutreach(): Promise<OutreachRun> {
       where: {
         journeyId: id,
         status: "DUE",
-        step: { in: ["CHECK_1", "CHECK_2", "FINAL_CHECK"] },
+        step: { in: ["CHECK_1", "CHECK_2", "CHECK_3", "FINAL_CHECK"] },
         dueAt: { lte: now },
       },
     });
-    // runBookingCheck reports "is it booked", not "did I link it just now" — it returns true
+    // runBookingCheck reports "is it booked", not "did I link it just now" - it returns true
     // forever once the link exists. Tracking it here keeps CHECK_2 and FINAL_CHECK from each
     // re-announcing a booking CHECK_1 already found.
     let linked = bookingId !== null;
@@ -344,6 +357,17 @@ export async function runDueOutreach(): Promise<OutreachRun> {
         where: { id: check.id },
         data: { status: "SENT", actedAt: now, outcome: booked ? "BOOKED" : "NOT_BOOKED" },
       });
+      /**
+       * The final check is the give-up, and the founder's flow says the CARD moves, not just the
+       * journey. Marking the journey IGNORED was invisible on the pipeline board, so a dead lead
+       * sat in an open stage forever and the board overstated the pipeline.
+       *
+       * Guarded on the open stages only: a lead someone has since moved to WON, or parked
+       * somewhere deliberately, is not dragged backwards by a cron.
+       */
+      if (!booked && check.step === "FINAL_CHECK") {
+        await advanceLeadStage(leadId, "LOST", ["NEW_LEAD", "WHATSAPP_SENT", "DISCO_NOT_BOOKED"]);
+      }
       if (booked && !linked) {
         linked = true;
         await logSystemActivity(SYSTEM_ACTORS.outreach, {
@@ -351,7 +375,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
           section: "outreach",
           entityType: "OutreachJourney",
           entityId: id,
-          summary: `Matched ${lead.name} to their booked discovery call — ${STEP_BY_KEY[check.step].label}`,
+          summary: `Matched ${lead.name} to their booked discovery call - ${STEP_BY_KEY[check.step].label}`,
           meta: { step: check.step },
         });
       }
@@ -360,17 +384,37 @@ export async function runDueOutreach(): Promise<OutreachRun> {
     const row = await getJourney(id);
     if (!row) continue;
 
+    /**
+     * ── Close Step 11's row whenever a verdict exists. ──
+     *
+     * Recording the verdict on the JOURNEY without closing the STEP left the whole disco ladder
+     * unreachable: Steps 13-17 are gated on Step 11 having been acted, so two prospects
+     * (25/08/2026) sat at `qualified: YES` with no welcome, no confirmation reminders and no
+     * cancellation - their calls came and went untouched.
+     *
+     * Written as a reconciliation over "has a verdict" rather than inside the branch that just
+     * computed one, deliberately: the branch only runs when `qualified` was still null, so a
+     * journey verdicted BEFORE this fix - or by a human in the UI - would never be repaired by it
+     * and would stay stuck for good.
+     */
+    if (row.qualified) {
+      await prisma.outreachStepLog.updateMany({
+        where: { journeyId: id, step: "BANT_QUALIFICATION", status: "DUE" },
+        data: { status: "SENT", actedAt: now, outcome: row.qualified },
+      });
+    }
+
     // ── Auto-derive the Qualified verdict from BANT (Step 11). The verdict is a pure function of
     // the score, so the engine can take it; a human can still override it in the UI.
     //
-    // The score may now come from the LEAD as well as the booking — a prospect who answered the
+    // The score may now come from the LEAD as well as the booking - a prospect who answered the
     // band-score questions on the landing page carries one from opt-in. That closes a real hole:
     // a booking matched by Step 10's cross-check rather than created by our own /book form has no
     // `bantAvg` of its own, so Step 11 could never fire for it and the prospect reached the
     // discovery specialist unqualified despite having answered every question.
     //
     // Still gated on `bookingId`. Qualified is the SOP's Step 11 verdict and it drives the Step
-    // 13/17 messaging ladder, all of which is gated on `booked` in the pure engine — recording a
+    // 13/17 messaging ladder, all of which is gated on `booked` in the pure engine - recording a
     // verdict for someone still being chased for a booking would put the two out of step.
     const scored = row.qualified === null ? bantForQualification(row) : null;
     if (row.bookingId && scored) {
@@ -388,7 +432,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
           // Naming the SOURCE matters in the founder's feed: "scored 2.8 from the landing page"
           // and "scored 2.8 from the booking form" are different amounts of evidence, and the
           // person reviewing a borderline verdict needs to know which one they are looking at.
-          summary: `Scored ${row.lead.name} ${QUALIFIED_LABELS[verdict]} from a BANT average of ${scored.avg.toFixed(1)} (${scored.from === "opt-in" ? "landing page" : "booking form"})`,
+          summary: `Scored ${row.lead.name} ${QUALIFIED_LABELS[verdict]} from a BANT average of ${scored.avg.toFixed(1)}/4 (${scored.from === "opt-in" ? "landing page" : "booking form"})`,
           meta: { verdict, bantAvg: scored.avg, bantFrom: scored.from },
         });
       }
@@ -407,9 +451,13 @@ export async function runDueOutreach(): Promise<OutreachRun> {
         });
         run.materialised++;
       } catch {
-        // @@unique([journeyId, step]) — another run beat us to it. Exactly the intended outcome.
+        // @@unique([journeyId, step]) - another run beat us to it. Exactly the intended outcome.
       }
     }
+
+    // ── Close the bookkeeping steps the engine owns (Step 12). After materialise, so a row
+    // created in this pass is closed in the same pass rather than showing DUE for one tick.
+    await applyCompletions(id, plan.complete, now);
 
     // ── Supersede what events overtook.
     if (plan.supersede.length) {
@@ -432,17 +480,145 @@ export async function runDueOutreach(): Promise<OutreachRun> {
       run.phaseChanges++;
       // Only the give-up goes on the feed. The other transitions restate something the feed
       // already carries (a step sent, a booking matched), whereas this one is the engine
-      // deciding on its own that a prospect is dormant — and nobody else will say so.
+      // deciding on its own that a prospect is dormant - and nobody else will say so.
       if (plan.phase === "IGNORED") {
         await logSystemActivity(SYSTEM_ACTORS.outreach, {
           action: "outreach.journey.ignore",
           section: "outreach",
           entityType: "OutreachJourney",
           entityId: id,
-          summary: `Marked ${fresh.lead.name} dormant — no response through the follow-up ladder`,
+          summary: `Marked ${fresh.lead.name} dormant - no response through the follow-up ladder`,
           meta: { from: fresh.phase },
         });
       }
+    }
+
+    /**
+     * ── Steps 17/18 and 22: release the calendar, automatically.
+     *
+     * A SYSTEM step with no message, so it never passes through the auto-send path - it has to be
+     * executed here. The planner only materialises it once the prospect has been told, on either
+     * channel, so reaching this point means the notice is out and the slot should go.
+     *
+     * BOTH cancellations run through this one loop. `SSS_CANCEL` used to be raised by the planner
+     * and executed by nobody: it sat DUE for ever, the SSS slot stayed BOOKED with the prospect
+     * still attached, the journey stayed in SSS_CONFIRMATION and the lead stayed at "SSS Call
+     * Booked" - the founder's calendar quietly holding a call the SOP had already given up on.
+     * Keeping the two in one loop is what stops the second one drifting from the first again.
+     */
+    const dueCancels = await prisma.outreachStepLog.findMany({
+      where: { journeyId: id, status: "DUE", step: { in: ["DISCO_CANCEL", "SSS_CANCEL"] }, dueAt: { lte: now } },
+      select: { id: true, step: true },
+    });
+    for (const c of dueCancels) {
+      const isSss = c.step === "SSS_CANCEL";
+      const res = isSss ? await releaseSssBooking(id) : await releaseDiscoBooking(id);
+      await prisma.outreachStepLog.update({
+        where: { id: c.id },
+        data: { status: "SENT", actedAt: now, outcome: res.cancelled ? "CANCELLED" : "ALREADY_CANCELLED" },
+      });
+      if (res.cancelled) {
+        await logSystemActivity(SYSTEM_ACTORS.outreach, {
+          action: isSss ? "outreach.sss.cancel" : "outreach.disco.cancel",
+          section: "outreach",
+          entityType: "OutreachJourney",
+          entityId: id,
+          summary: isSss
+            ? `Released ${lead.name}'s Success Strategy Session${res.freedSlot ? " and re-opened the slot" : ""}`
+            : `Released ${lead.name}'s discovery call${res.freedSlot ? " and re-opened the slot" : ""}`,
+          meta: { freedSlot: res.freedSlot, step: c.step },
+        });
+      }
+    }
+
+    /**
+     * ── The call came and went. ──
+     *
+     * The SOP ladder is entirely pre-call: every confirmation and cancellation window is
+     * measured BEFORE the slot. So a prospect who booked, never confirmed, and never showed had
+     * nothing at all happen to them once the time passed - the card stayed in "Discovery Call
+     * Booked" indefinitely and the board went on counting a call that never took place. That is
+     * exactly what happened to two prospects on 26/08/2026.
+     *
+     * Deliberately narrow. It fires ONLY when all of these hold:
+     *   · the slot start is more than `noShowSweepHours` in the past (grace for a late call, or
+     *     a specialist who has not logged the outcome yet),
+     *   · the booking is still BOOKED - anyone who marked it COMPLETED, NO_SHOW or CANCELLED has
+     *     said what happened, and their answer is not overwritten,
+     *   · the prospect never confirmed, on EITHER record - the journey's own flag or the
+     *     booking's `confirmedAt`, which is what the Bookings page and the confirmation loop
+     *     write. Reading only the journey flag is how a prospect who was confirmed on the
+     *     Bookings page was still written off as a no-show two hours after their call.
+     * A confirmed prospect who simply did not show is left alone: that is a no-show for a human
+     * to judge, not a cancellation.
+     */
+    const sweepBefore = new Date(now.getTime() - cfg.sla.noShowSweepHours * 3_600_000);
+    const stale = await prisma.outreachJourney.findUnique({
+      where: { id },
+      select: {
+        whatsappConfirmed: true,
+        booking: {
+          select: { id: true, status: true, slotId: true, confirmedAt: true, slot: { select: { startsAt: true } } },
+        },
+      },
+    });
+    const staleSlot = stale?.booking?.slot?.startsAt;
+    const sweepCandidate =
+      stale &&
+      !stale.whatsappConfirmed &&
+      !stale.booking?.confirmedAt &&
+      stale.booking?.status === "BOOKED" &&
+      staleSlot &&
+      staleSlot < sweepBefore;
+    /**
+     * ...and only if they were actually TOLD this time.
+     *
+     * "Never confirmed" is only evidence of a no-show when the prospect knew when to turn up. On
+     * 18/09/2026 a call moved to a new time, the reschedule notice and every reminder FAILED on
+     * Meta's per-user cap, and this sweep wrote her off two hours after a slot nobody had managed
+     * to tell her about. So: if nothing naming the CURRENT slot ever delivered, or the latest
+     * message naming it did not, the booking is left BOOKED, the lead is not moved, and a human is
+     * asked to look - the row goes RED on the queue and in Key Metrics, and an open task lands on
+     * the owner's contact card. Fail closed: a write-off that waits for a person costs a few hours;
+     * a wrong one tells a prospect we gave up on them.
+     */
+    const notice =
+      sweepCandidate && stale.booking
+        ? callTimeNotice(
+            await prisma.whatsAppMessage.findMany({
+              where: { bookingRequestId: stale.booking.id, direction: "OUTBOUND", kind: { in: [...CALL_TIME_KINDS] } },
+              select: { kind: true, status: true, params: true, createdAt: true },
+              orderBy: { createdAt: "desc" },
+              take: 50,
+            }),
+            formatDateTimeInZone(staleSlot!, "Asia/Kolkata"),
+          )
+        : null;
+    if (sweepCandidate && notice && !notice.told) {
+      await flagUntoldNoShow(id, leadId, lead.name, staleSlot!, notice.reason);
+    }
+    if (sweepCandidate && notice?.told && stale.booking) {
+      const freedSlotId = stale.booking.slotId;
+      await prisma.$transaction(async (tx) => {
+        // NO_SHOW rather than CANCELLED: the slot was consumed - nobody else could book it - and
+        // recording it as cancelled would understate how much calendar the no-shows are costing.
+        await tx.bookingRequest.update({ where: { id: stale.booking!.id }, data: { status: "NO_SHOW" } });
+        if (freedSlotId) {
+          await tx.appointmentSlot.update({ where: { id: freedSlotId }, data: { status: "OPEN" } });
+        }
+      });
+      // "Cancelled/Unqualified" on the board is LeadStage LOST. Only from the stages that mean
+      // "still in the discovery conversation" - a lead someone has since moved on is left alone.
+      await advanceLeadStage(leadId, "LOST", ["STRATEGY_CALL_BOOKED", "DISCO_BOOKED", "DISCO_NOT_BOOKED"]);
+      await logSystemActivity(SYSTEM_ACTORS.outreach, {
+        action: "outreach.disco.noshow",
+        section: "outreach",
+        entityType: "OutreachJourney",
+        entityId: id,
+        summary: `${lead.name} never confirmed and the call time passed - moved to Cancelled/Unqualified`,
+        meta: { slotAt: staleSlot.toISOString() },
+      });
+      run.phaseChanges++;
     }
 
     // ── Auto-send anything the admin has opted in AND that is actually due.
@@ -460,7 +636,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
  *
  * Every gate here fails closed and leaves the row DUE for a human rather than sending something
  * wrong: not opted in, not a WhatsApp step, not yet due, unresolved variables, no valid number, or
- * no WATI template mapped for the touchpoint. A DUE row is a safe resting state — the specialist
+ * no WATI template mapped for the touchpoint. A DUE row is a safe resting state - the specialist
  * sees it in the queue and sends it themselves.
  */
 async function autoSendDue(
@@ -477,30 +653,53 @@ async function autoSendDue(
     (s) =>
       s.status === "DUE" &&
       cfg.autoSend[s.step] === true &&
-      STEP_BY_KEY[s.step]?.channel === "WHATSAPP" &&
+      (STEP_BY_KEY[s.step]?.channel === "WHATSAPP" || STEP_BY_KEY[s.step]?.channel === "EMAIL") &&
       isActionable({ status: s.status, dueAt: s.dueAt, actedAt: s.actedAt, outcome: s.outcome }, now),
   );
 
   for (const s of due) {
     const specialist = row.respTouchpoint?.name ?? cfg.defaultSpecialistName;
-    const { body, unresolved } = renderStep(row, s.step, specialist);
+    const { body, subject, unresolved } = renderStep(row, s.step, specialist);
     if (!body) continue;
 
     if (unresolved.length) {
       // Checklist: "no unresolved placeholders reaching the send step". Leave it for a human.
-      out.notes.push(`${row.lead.name} · ${s.step}: needs ${unresolved.join(", ")} — left for manual send.`);
+      out.notes.push(`${row.lead.name} · ${s.step}: needs ${unresolved.join(", ")} - left for manual send.`);
       continue;
     }
 
-    if (!mapToWhatsAppKind(s.step)) continue; // not a WhatsApp step — nothing to auto-send
+    const isEmail = STEP_BY_KEY[s.step]?.channel === "EMAIL";
+    const waKind = isEmail ? null : mapToWhatsAppKind(s.step);
+    if (!isEmail && !waKind) continue; // not a WhatsApp step - nothing to auto-send
+
+    /**
+     * Stop re-sending a step the provider keeps refusing. See `mayRetryAutoSend`: a FAILED send
+     * left the row DUE, and a DUE row is picked up again on the very next tick - under Meta's
+     * per-user marketing cap that is a fresh rejection every run, each one making the cap worse.
+     * Scoped to attempts since THIS step row was raised, so a returning prospect's new cycle is
+     * not held back by a failure from an old one.
+     */
+    if (waKind) {
+      const failures = await prisma.whatsAppMessage.findMany({
+        where: { kind: waKind, leadId: row.leadId, direction: "OUTBOUND", status: "FAILED", createdAt: { gte: s.createdAt } },
+        select: { error: true },
+        take: 5,
+      });
+      if (!mayRetryAutoSend(failures)) {
+        out.notes.push(`${row.lead.name} · ${s.step}: WhatsApp refused it (${failures[0]?.error ?? "send failed"}) - not retried automatically, left for manual send.`);
+        continue;
+      }
+    }
 
     // Shared with the instant-intro path. See `sopWhatsAppSend` for why this is one function.
-    const res = await sopWhatsAppSend(row, s.step, specialist, body);
+    const res = isEmail
+      ? await sopEmailSend(row, subject, body)
+      : await sopWhatsAppSend(row, s.step, specialist, body);
 
     if (res.sent) {
       await markSent(s.id, body, null, res.messageId);
       out.ok++;
-      // Only a real send lands here — every gate above leaves the row DUE for a human, and a
+      // Only a real send lands here - every gate above leaves the row DUE for a human, and a
       // feed claiming a message that never left the building is worse than no feed at all.
       const def = STEP_BY_KEY[s.step];
       await logSystemActivity(SYSTEM_ACTORS.outreach, {
@@ -508,13 +707,13 @@ async function autoSendDue(
         section: "outreach",
         entityType: "OutreachJourney",
         entityId: row.id,
-        summary: `Sent ${row.lead.name} ${def.sopStep} — ${def.label}`,
+        summary: `Sent ${row.lead.name} ${def.sopStep} - ${def.label}`,
         meta: { step: s.step, sopStep: def.sopStep, messageId: res.messageId },
       });
     } else {
-      // Not a failure of the SOP — usually the WATI layer being off or the touchpoint unmapped.
+      // Not a failure of the SOP - usually the WATI layer being off or the touchpoint unmapped.
       // Leave the row DUE so the specialist sends it by hand; that is the designed fallback.
-      out.notes.push(`${row.lead.name} · ${s.step}: ${res.error ?? "send skipped"} — left for manual send.`);
+      out.notes.push(`${row.lead.name} · ${s.step}: ${res.error ?? "send skipped"} - left for manual send.`);
       if (res.status === "FAILED") out.failed++;
     }
   }
@@ -528,11 +727,11 @@ async function autoSendDue(
  * Extracted from `autoSendDue` so the INSTANT intro path (`outreach-instant.ts`) sends through
  * exactly the same call rather than assembling its own. The variable pool, the audit body, the
  * null `sentById` convention and `logSkips: false` are all load-bearing details that would drift
- * the moment there were two copies of them — and drifting here means sending a prospect the wrong
+ * the moment there were two copies of them - and drifting here means sending a prospect the wrong
  * template, which no type would catch.
  *
  * Returns the raw send outcome; the caller decides what to do with a skip. It never marks the step
- * SENT — that stays the caller's job, because only the caller knows which step row it holds.
+ * SENT - that stays the caller's job, because only the caller knows which step row it holds.
  */
 export async function sopWhatsAppSend(
   row: JourneyRow,
@@ -553,23 +752,208 @@ export async function sopWhatsAppSend(
   });
 }
 
+/** The task title the untold-no-show guard raises. Also its idempotency key - see below. */
+const UNTOLD_NOSHOW_TASK = "Discovery call time passed, but the prospect may never have been told it";
+
+/**
+ * The human hand-off for a no-show the sweep refused to write off (see the sweep in
+ * `runDueOutreach`). Reuses the two "needs attention" mechanisms the app already has rather than
+ * inventing a third: the journey's red flag, which the outreach queue card and the Key Metrics row
+ * already render with its reason, and an open ContactTask on the lead, which is what a specialist
+ * ticks off once they have spoken to the prospect or recorded the outcome.
+ *
+ * Idempotent across ticks - the sweep re-evaluates this booking every run until someone records
+ * what happened. The task is keyed on its title and "raised after this slot started", so one slot
+ * gets one task, and a later reschedule that also goes unheard gets its own. The flag is only
+ * raised when the row is not already red, so a reason a human or Step 16 wrote is never
+ * overwritten.
+ */
+async function flagUntoldNoShow(
+  journeyId: string,
+  leadId: string,
+  leadName: string,
+  slotAt: Date,
+  reason: "never-told" | "last-notice-undelivered",
+): Promise<void> {
+  const existing = await prisma.contactTask.findFirst({
+    where: { leadId, title: UNTOLD_NOSHOW_TASK, createdAt: { gte: slotAt } },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const when = formatDateTimeInZone(slotAt, "Asia/Kolkata");
+  const why =
+    reason === "never-told"
+      ? `no WhatsApp naming ${when} IST was ever delivered to them`
+      : `the latest WhatsApp naming ${when} IST did not deliver`;
+  const j = await prisma.outreachJourney.findUnique({
+    where: { id: journeyId },
+    select: { respDiscoId: true, respTouchpointId: true, lead: { select: { assignedToId: true } } },
+  });
+  await prisma.contactTask.create({
+    data: {
+      leadId,
+      title: UNTOLD_NOSHOW_TASK,
+      body:
+        `The call was at ${when} IST and was not confirmed, but ${why}. ` +
+        "It has NOT been marked a no-show. Reach the prospect, then record the outcome on the Bookings page (or rebook them).",
+      dueAt: new Date(),
+      // The disco owner first: they were meant to be on the call. Then whoever runs the SOP
+      // touchpoints, then the lead's owner - the first person who would plausibly act on it.
+      assignedToId: j?.respDiscoId ?? j?.respTouchpointId ?? j?.lead.assignedToId ?? null,
+    },
+  });
+  await prisma.outreachJourney.updateMany({
+    where: { id: journeyId, redFlag: false },
+    data: { redFlag: true, redFlagReason: `Call time passed, prospect may not have been told (${when} IST) - check before marking no-show` },
+  });
+  await logSystemActivity(SYSTEM_ACTORS.outreach, {
+    action: "outreach.disco.flag",
+    section: "outreach",
+    entityType: "OutreachJourney",
+    entityId: journeyId,
+    summary: `${leadName}'s call time passed but ${why} - left for a human instead of marking a no-show`,
+    meta: { slotAt: slotAt.toISOString(), reason },
+  });
+}
+
+/**
+ * Step 17/18 - actually release the booked discovery call.
+ *
+ * Both routes into this (BANT below the bar, and no confirmation after two calls) end here, and
+ * the founder's instruction is that the calendar is cleared automatically rather than left as a
+ * checklist item somebody has to remember. The prospect has already been told on both channels -
+ * the planner gates this step behind the notice going out - so nobody finds an empty calendar
+ * without an explanation.
+ *
+ * Mirrors the transaction in `booking-automation.ts`: detach the booking from its slot (freeing
+ * the unique `slotId`), re-open the slot so it can be sold again, and walk the lead back to
+ * DISCO_NOT_BOOKED so the board shows the truth. Returns what it did, for the activity feed.
+ */
+async function releaseDiscoBooking(journeyId: string): Promise<{ cancelled: boolean; freedSlot: boolean }> {
+  const row = await prisma.outreachJourney.findUnique({
+    where: { id: journeyId },
+    select: { bookingId: true, leadId: true, booking: { select: { id: true, status: true, slotId: true } } },
+  });
+  const b = row?.booking;
+  // Already cancelled by a human, or never booked: nothing to do, and saying so is not an error.
+  if (!b || b.status === "CANCELLED") return { cancelled: false, freedSlot: false };
+
+  const freedSlotId = b.slotId;
+  await prisma.$transaction(async (tx) => {
+    await tx.bookingRequest.update({ where: { id: b.id }, data: { status: "CANCELLED", slotId: null } });
+    if (freedSlotId) {
+      await tx.appointmentSlot.update({ where: { id: freedSlotId }, data: { status: "OPEN" } });
+    }
+    if (row.leadId) {
+      const lead = await tx.lead.findUnique({ where: { id: row.leadId }, select: { stage: true } });
+      if (lead && lead.stage === "DISCO_BOOKED") {
+        await tx.lead.update({ where: { id: row.leadId }, data: { stage: "DISCO_NOT_BOOKED" } });
+        await tx.leadStageHistory.create({
+          data: { leadId: row.leadId, fromStage: "DISCO_BOOKED", toStage: "DISCO_NOT_BOOKED" },
+        });
+      }
+    }
+  });
+  return { cancelled: true, freedSlot: Boolean(freedSlotId) };
+}
+
+/**
+ * Step 22 - the SSS counterpart of `releaseDiscoBooking`.
+ *
+ * Same shape, same return contract, one calendar down: the SOP's right-hand column ends "Confirmed?
+ * No → CANCEL the SSS call → End", and until now nothing in the app performed that cancellation.
+ *
+ * `cancelledAt` is the load-bearing detail. Freeing the slot clears `sssSlot.journeyId`, and
+ * `listSssNeedsScheduling` looks for exactly "highly qualified with no SSS slot" - so without the
+ * stamp a prospect the SOP had just given up on would pop straight back onto the founder's "Needs
+ * an SSS time" list to be booked all over again.
+ *
+ * The lead walks to LOST ("Cancelled/Unqualified") and only from SSS_BOOKED: anyone a human has
+ * since moved on has overtaken this signal, exactly as the no-show sweep treats its own stages.
+ */
+async function releaseSssBooking(journeyId: string): Promise<{ cancelled: boolean; freedSlot: boolean }> {
+  const row = await prisma.outreachJourney.findUnique({
+    where: { id: journeyId },
+    select: { leadId: true, cancelledAt: true, sssSlot: { select: { id: true } } },
+  });
+  // Already cancelled by a human, or no journey: nothing to do, and saying so is not an error.
+  if (!row || row.cancelledAt) return { cancelled: false, freedSlot: false };
+
+  const freedSlotId = row.sssSlot?.id ?? null;
+  await prisma.$transaction(async (tx) => {
+    if (freedSlotId) {
+      // Detach AND re-open in one write - a slot left BOOKED with no prospect is worse than either.
+      await tx.sssSlot.update({ where: { id: freedSlotId }, data: { status: "OPEN", journeyId: null } });
+    }
+    await tx.outreachJourney.update({
+      where: { id: journeyId },
+      data: { cancelledAt: new Date(), cancelReason: "No confirmation for the SSS call (SOP Step 22)" },
+    });
+  });
+  await advanceLeadStage(row.leadId, "LOST", ["SSS_BOOKED"]);
+  return { cancelled: true, freedSlot: Boolean(freedSlotId) };
+}
+
+/**
+ * Send one SOP step by email, shaped to the same return contract as `sopWhatsAppSend` so the
+ * caller's send/mark/log path stays one branch rather than two.
+ *
+ * Goes through `sendEmailMessage` rather than Resend directly: that is where the EMAIL_ENABLED
+ * gate, the `message` delivery log and the recipient allowlist already live, and a second path
+ * around them is exactly how an outbound channel ends up unlogged or ungated.
+ */
+async function sopEmailSend(row: JourneyRow, subject: string | null, body: string) {
+  if (!row.lead.email) {
+    return { sent: false, status: "SKIPPED" as const, error: "lead has no email address", messageId: null };
+  }
+  const res = await sendEmailMessage({
+    leadId: row.leadId,
+    to: row.lead.email,
+    subject: subject ?? "Your free Discovery Call spot is still open",
+    body,
+    // No human pressed send. Matches the null `sentById` convention the WhatsApp path uses.
+    sentById: null,
+  });
+  return {
+    sent: res.status === "SENT",
+    status: res.status,
+    error: res.ok && res.status === "SENT" ? null : res.message,
+    messageId: null,
+  };
+}
+
 /**
  * SOP step → WhatsAppKind. Reuses the existing WATI layer's template mapping, opt-out enforcement
  * and delivery log rather than growing a second one.
  *
  * STRICTLY 1:1, and that matters. The app binds exactly ONE WATI template per kind, so pointing
- * two SOP steps at one kind would send the intro's text where the follow-up's belonged — a silent
+ * two SOP steps at one kind would send the intro's text where the follow-up's belonged - a silent
  * wrong-message bug that no type would catch. Nine SOP messages, nine kinds, nine templates.
  */
 const STEP_TO_KIND = {
   INTRO_WHATSAPP: "SOP_INTRO",
   FOLLOWUP_WHATSAPP: "SOP_FOLLOWUP",
+  FOLLOWUP_WHATSAPP_2: "SOP_FOLLOWUP_2",
+  /**
+   * Mapped, but SHIPPED OFF (founder's instruction, 25/08/2026): `autoSend.DISCO_REJECT_MSG` is
+   * false until `b2_sop_not_qualified` clears Meta review, and the founder ticks it themselves.
+   *
+   * The wiring is here so nothing has to be edited on approval day, and two independent guards
+   * stop it sending before then: the auto-send flag, and the fact that no WATI template is bound
+   * to SOP_NOT_QUALIFIED yet - an unbound kind is skipped by the send layer rather than falling
+   * back to another template. It must NEVER borrow b2_sop_disco_cancel, which says "we didn't
+   * receive your confirmation" - untrue for a BANT rejection, and a lie told to a real person.
+   */
+  DISCO_REJECT_MSG: "SOP_NOT_QUALIFIED",
   DISCO_WELCOME: "SOP_DISCO_WELCOME",
   DISCO_CONFIRM_1: "SOP_DISCO_CONFIRM_1",
   DISCO_CONFIRM_2: "SOP_DISCO_CONFIRM_2",
   DISCO_CANCEL_MSG: "SOP_DISCO_CANCEL",
   SSS_CONFIRM_1: "SOP_SSS_CONFIRM_1",
   SSS_CONFIRM_2: "SOP_SSS_CONFIRM_2",
+  SSS_CONFIRM_3: "SOP_SSS_CONFIRM_3",
+  DISCO_NOSHOW_MSG: "SOP_DISCO_NOSHOW",
   SSS_CANCEL_MSG: "SOP_SSS_CANCEL",
 } as const satisfies Partial<Record<OutreachStep, WhatsAppKind>>;
 
@@ -622,8 +1006,8 @@ export async function markSent(
   /**
    * The board's "WhatsApp Sent" column IS this step.
    *
-   * Advancing here rather than at the three call sites — the cron auto-sender, the instant intro
-   * at capture, and the specialist's manual "Mark sent" — means every route that can send the
+   * Advancing here rather than at the three call sites - the cron auto-sender, the instant intro
+   * at capture, and the specialist's manual "Mark sent" - means every route that can send the
    * intro moves the card, and no future fourth route can forget to. Only from NEW_LEAD: a lead
    * further along has overtaken this signal (see `advanceLeadStage`).
    *
@@ -637,7 +1021,71 @@ export async function markSent(
 }
 
 /**
- * Re-plan a single journey right now — used after a human action so the next step appears
+ * "The prospect confirmed their discovery call" - recorded on the JOURNEY, wherever it came from.
+ *
+ * The SOP's confirmation ladder (Steps 14/15/16) and the post-call no-show sweep both read
+ * `whatsappConfirmed` and nothing else. A confirmation taken anywhere off the outreach queue -
+ * the Bookings page's "Mark confirmed", a WhatsApp YES that arrived before the journey reached
+ * DISCO_CONFIRMATION - therefore left the ladder running, and the sweep went on to write the
+ * CONFIRMED booking off as a no-show and the lead as LOST two hours after the call.
+ *
+ * One function so every channel records the same fact the same way, and so the next channel that
+ * appears has somewhere obvious to call. The lead's CARD is a separate concern that
+ * `markDiscoveryConfirmed` already owns - each caller does that for itself, because who is
+ * allowed to move a card differs by channel.
+ *
+ * Fails closed in both directions: a terminal journey is not revived, and an already-confirmed one
+ * is not re-stamped. `refreshJourney` follows so the reminders are superseded at once rather than
+ * waiting for the next cron tick with a live ladder still in the specialist's queue.
+ */
+export async function markSopDiscoConfirmed(journeyId: string): Promise<boolean> {
+  const j = await prisma.outreachJourney.findUnique({
+    where: { id: journeyId },
+    select: { phase: true, whatsappConfirmed: true },
+  });
+  if (!j || j.whatsappConfirmed || isTerminal(j.phase)) return false;
+
+  await prisma.outreachJourney.update({
+    where: { id: journeyId },
+    data: { whatsappConfirmed: true, whatsappConfirmedAt: new Date() },
+  });
+  await refreshJourney(journeyId);
+  return true;
+}
+
+/**
+ * The journey a booking belongs to, for the confirmation paths above.
+ *
+ * Matched on the LINK first. The fallback is deliberately narrow - the same lead, and only while
+ * that journey has no booking of its own - because a journey already pointing at a different
+ * appointment must never be confirmed by this one.
+ */
+export async function journeyForBooking(bookingId: string, leadId: string | null): Promise<string | null> {
+  const j = await prisma.outreachJourney.findFirst({
+    where: leadId ? { OR: [{ bookingId }, { leadId, bookingId: null }] } : { bookingId },
+    select: { id: true },
+  });
+  return j?.id ?? null;
+}
+
+/**
+ * Write the engine's own completions (see `Plan.complete`).
+ *
+ * DUE-guarded, so it can never overwrite a step a human already skipped or ticked, and a second
+ * run is a no-op. `actedById` stays null - the app's convention for "the system did this" - and
+ * the note carries the reason, so the step log reads as done, by whom and why.
+ */
+async function applyCompletions(journeyId: string, complete: Plan["complete"], now: Date): Promise<void> {
+  for (const c of complete) {
+    await prisma.outreachStepLog.updateMany({
+      where: { journeyId, step: c.step, status: "DUE" },
+      data: { status: "SENT", actedAt: now, actedById: null, outcome: c.outcome, note: c.note },
+    });
+  }
+}
+
+/**
+ * Re-plan a single journey right now - used after a human action so the next step appears
  * immediately instead of waiting for the cron tick. Same engine, same idempotency.
  */
 export async function refreshJourney(journeyId: string): Promise<void> {
@@ -654,9 +1102,10 @@ export async function refreshJourney(journeyId: string): Promise<void> {
         data: { journeyId, step: m.step, dueAt: m.dueAt, channel: STEP_BY_KEY[m.step].channel },
       });
     } catch {
-      /* unique — already there */
+      /* unique - already there */
     }
   }
+  await applyCompletions(journeyId, plan.complete, now);
   if (plan.supersede.length) {
     await prisma.outreachStepLog.updateMany({
       where: { journeyId, step: { in: plan.supersede }, status: "DUE" },

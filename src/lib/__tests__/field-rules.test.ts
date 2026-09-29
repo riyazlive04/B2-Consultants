@@ -1,15 +1,15 @@
 /**
- * Field rules — the character gate every form in the app now depends on.
+ * Field rules - the character gate every form in the app now depends on.
  *
  * Everything here is pure and isomorphic (no DB, no libphonenumber), so it tests exactly what
  * both sides run: the browser calls `filter` on each keystroke, the server action calls `schema`
- * on submit. The pairing is the point — a filter that drops a character its schema still accepts
+ * on submit. The pairing is the point - a filter that drops a character its schema still accepts
  * is merely untidy, but a schema that rejects what the filter happily let a user type is a form
  * that cannot be submitted and does not say why. The `filter ∘ schema` block at the bottom pins
  * that agreement down.
  *
  * The name cases carry the weight. B2's contacts are Indian and German, so "Müller" and "अमीन"
- * are the normal case, not the exotic one — an ASCII-only rule would reject the customer rather
+ * are the normal case, not the exotic one - an ASCII-only rule would reject the customer rather
  * than the typo, and it would do it while looking perfectly reasonable to an English-speaking
  * reviewer.
  *
@@ -28,14 +28,14 @@ const messageFor = (k: keyof typeof FIELD_RULES, v: string) => {
   return r.success ? null : r.error.issues[0]?.message;
 };
 
-describe("name — every alphabet's letters, plus digits that never stand alone", () => {
+describe("name - every alphabet's letters, plus digits that never stand alone", () => {
   test("drops symbols as they are typed, but KEEPS digits", () => {
-    // Digits are allowed so "Anna Smith 2" can be typed — appending a number is how the two
+    // Digits are allowed so "Anna Smith 2" can be typed - appending a number is how the two
     // real "Anna Smith"s on this roster get told apart by hand (Error Log I1).
     assert.equal(filter("name")("Rahul7 Sharma!@#"), "Rahul7 Sharma");
   });
 
-  test("keeps German umlauts — precomposed and NFD-decomposed alike", () => {
+  test("keeps German umlauts - precomposed and NFD-decomposed alike", () => {
     assert.equal(filter("name")("Müller"), "Müller");
     // A Mac paste can deliver "u" + U+0308; stripping the mark would silently yield "Muller".
     assert.equal(filter("name")("Müller"), "Müller");
@@ -65,7 +65,7 @@ describe("name — every alphabet's letters, plus digits that never stand alone"
   });
 
   test("a name may carry a digit, but may never be ONLY digits", () => {
-    // The letter requirement — not the character class — is what keeps a phone number out of
+    // The letter requirement - not the character class - is what keeps a phone number out of
     // the name column (Error Log I2). Allowing digits does not weaken it.
     assert.equal(accepts("name", "Anna Smith 2"), true);
     assert.equal(accepts("name", "Elizabeth II"), true);
@@ -76,7 +76,7 @@ describe("name — every alphabet's letters, plus digits that never stand alone"
 
   test("KNOWN TRADE-OFF: junk containing a digit now passes", () => {
     // "Ok test ok 1000 123" is a real row in the lead table and used to be refused. No
-    // character-class rule can separate it from "Anna Smith 2" — both are letters plus digits.
+    // character-class rule can separate it from "Anna Smith 2" - both are letters plus digits.
     // Accepted deliberately: blocking the customer's own disambiguation to catch one junk row
     // is the worse trade. Junk like this is a data-cleanup problem, not a validation one.
     assert.equal(accepts("name", "Ok test ok 1000 123"), true);
@@ -104,7 +104,7 @@ describe("name — every alphabet's letters, plus digits that never stand alone"
   });
 });
 
-describe("phone — digits plus the punctuation people actually type", () => {
+describe("phone - digits plus the punctuation people actually type", () => {
   test("drops letters", () => {
     assert.equal(filter("phone")("+91 98765abc43210"), "+91 9876543210");
   });
@@ -129,7 +129,7 @@ describe("phone — digits plus the punctuation people actually type", () => {
   });
 });
 
-describe("money — digits and at most one dot", () => {
+describe("money - digits and at most one dot", () => {
   test("drops letters and separators", () => {
     // The comma matters: cash-actions' moneyInput regex rejects it outright, so a typed
     // "25,000" used to fail on submit with no hint as to why.
@@ -140,7 +140,7 @@ describe("money — digits and at most one dot", () => {
     assert.equal(filter("money")("12.34.56"), "12.34");
   });
 
-  test("drops a minus — no money input in the app takes one", () => {
+  test("drops a minus - no money input in the app takes one", () => {
     assert.equal(filter("money")("-50"), "50");
   });
 
@@ -169,7 +169,7 @@ describe("int / rate", () => {
 });
 
 describe("email / city / url", () => {
-  test("email folds case — it is the key leads are matched on", () => {
+  test("email folds case - it is the key leads are matched on", () => {
     assert.equal(rules("email").schema.parse("Ameen@X.COM"), "ameen@x.com");
   });
 
@@ -180,7 +180,7 @@ describe("email / city / url", () => {
 
   test("city is name-shaped, and Indian localities carry digits", () => {
     // "Sector 62", "Phase 3", "Pune 411001" are ordinary here. City shares the name filter, so
-    // it necessarily shares the digit rule — the two MUST agree or the browser accepts what the
+    // it necessarily shares the digit rule - the two MUST agree or the browser accepts what the
     // server rejects.
     assert.equal(filter("city")("Pune 411001"), "Pune 411001");
     assert.ok(accepts("city", "Baden-Württemberg"));
@@ -196,7 +196,7 @@ describe("email / city / url", () => {
 
   test("url refuses script-bearing schemes", () => {
     // Not hypothetical: forms' `redirectUrl` is assigned to window.location.href, and
-    // `z.string().url()` alone ACCEPTS this — "//x" opens a JS comment, "%0A" closes it,
+    // `z.string().url()` alone ACCEPTS this - "//x" opens a JS comment, "%0A" closes it,
     // and alert(1) runs. The protocol allow-list is what stops it.
     assert.equal(accepts("url", "javascript://x%0Aalert(1)"), false);
     assert.equal(accepts("url", "javascript:alert(1)"), false);
@@ -206,7 +206,7 @@ describe("email / city / url", () => {
   });
 });
 
-describe("optionalRule — an untouched box means 'not provided'", () => {
+describe("optionalRule - an untouched box means 'not provided'", () => {
   test("blank and whitespace become undefined", () => {
     assert.equal(optionalRule("phone").parse(""), undefined);
     assert.equal(optionalRule("phone").parse("   "), undefined);
@@ -218,7 +218,7 @@ describe("optionalRule — an untouched box means 'not provided'", () => {
   });
 });
 
-describe("filter ∘ schema — what a user can type, the server must accept", () => {
+describe("filter ∘ schema - what a user can type, the server must accept", () => {
   // The filter is UX; the schema is the gate. If these disagree, a user types something the
   // box allows and then cannot submit, with an error that blames them for the kit's mistake.
   const cases: Array<[keyof typeof FIELD_RULES, string]> = [

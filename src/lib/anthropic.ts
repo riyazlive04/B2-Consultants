@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
  *       AI_REVIEW_ENABLED   "true" to arm the AI review (default off)
  *       ANTHROPIC_API_KEY   Anthropic API key (x-api-key)
  *   - NON-SECRET config in AppSetting("aiConfig"): paused toggle, model, maxTokens.
- * Never throws into a request path — callClaude() always resolves a result object,
+ * Never throws into a request path - callClaude() always resolves a result object,
  * so a missing key or a network blip degrades to the deterministic analyser instead
  * of 500-ing the page. Nothing is sent to Anthropic unless runtime.enabled is true.
  */
@@ -19,9 +19,9 @@ const API_VERSION = "2023-06-01";
 
 /** Latest Claude models the founder can pick from in Settings. */
 export const AI_MODELS = [
-  { id: "claude-sonnet-5", label: "Claude Sonnet 5 — balanced (recommended)" },
-  { id: "claude-opus-4-8", label: "Claude Opus 4.8 — deepest review" },
-  { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — fastest / cheapest" },
+  { id: "claude-sonnet-5", label: "Claude Sonnet 5 - balanced (recommended)" },
+  { id: "claude-opus-4-8", label: "Claude Opus 4.8 - deepest review" },
+  { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 - fastest / cheapest" },
 ] as const;
 
 const DEFAULT_MODEL = "claude-sonnet-5";
@@ -84,7 +84,7 @@ export type ClaudeResult = { ok: true; text: string } | { ok: false; error: stri
 
 /**
  * One-shot Claude Messages call. Resolves a result; never throws. The caller must have
- * checked runtime.enabled first. `timeoutMs` is generous (the review can be long — the
+ * checked runtime.enabled first. `timeoutMs` is generous (the review can be long - the
  * founder asked for a thorough pass, not a snappy one).
  */
 export async function callClaude(opts: {

@@ -1,0 +1,13 @@
+# Credentials and real contacts: never commit. The *.example.json files are the templates.
+creds.local.json
+creds.prod.json
+fence.local.json
+.auth/
+
+# Run output
+node_modules/
+reports/
+test-results/
+playwright-report/
+*.log
+*.dump

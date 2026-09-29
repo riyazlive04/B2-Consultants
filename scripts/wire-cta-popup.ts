@@ -1,5 +1,5 @@
 /**
- * Point a funnel's CTAs at a form POPUP instead of a link — in place, without rebuilding the page.
+ * Point a funnel's CTAs at a form POPUP instead of a link - in place, without rebuilding the page.
  *
  * `prisma/seed-training-page.ts` also wires the popup, but it REPLACES the whole page and would
  * discard anything edited in the builder since. This script only touches the two fields it is
@@ -12,7 +12,7 @@
  * Options
  *   --funnel=<slug>      default "vsl-funnel"
  *   --step=<slug>        only this step; default every step of the funnel
- *   --form=<slug>        REQUIRED — the published form the popup shows
+ *   --form=<slug>        REQUIRED - the published form the popup shows
  *   --button=<text>      match buttons whose label contains this; default "Apply for Guided Mode"
  *   --image=<text>       match images whose alt contains this; default "Watch the training"
  *   --title=<text>       popup headline    (default: the live page's)
@@ -56,13 +56,13 @@ function walk(list: Block[], formId: string | null, stepName: string, hits: Hit[
       (b.type === "image" && IMAGE_MATCH && label.toLowerCase().includes(IMAGE_MATCH.toLowerCase()));
 
     if (matches) {
-      const was = b.opensFormId ? `popup(${b.opensFormId})` : b.type === "button" ? `link(${b.href ?? "—"})` : "no action";
+      const was = b.opensFormId ? `popup(${b.opensFormId})` : b.type === "button" ? `link(${b.href ?? "-"})` : "no action";
       if (OFF) {
         if (b.opensFormId) {
           delete b.opensFormId;
           delete b.modalTitle;
           delete b.modalSubtitle;
-          hits.push({ step: stepName, node: b.id, kind: b.type, was, now: b.type === "button" ? `link(${b.href ?? "—"})` : "no action" });
+          hits.push({ step: stepName, node: b.id, kind: b.type, was, now: b.type === "button" ? `link(${b.href ?? "-"})` : "no action" });
         }
       } else if (b.opensFormId !== formId || b.modalTitle !== TITLE || b.modalSubtitle !== SUBTITLE) {
         b.opensFormId = formId!;
@@ -89,7 +89,7 @@ async function main() {
     if (!form) throw new Error(`No form with slug "${FORM}".`);
     // A draft form resolves to nothing on the public page, so the popup would open empty. Better
     // to refuse here than to ship a dialog that silently captures no one.
-    if (!form.published) throw new Error(`Form "${form.name}" is not published — publish it first, or the popup opens empty.`);
+    if (!form.published) throw new Error(`Form "${form.name}" is not published - publish it first, or the popup opens empty.`);
     formId = form.id;
     console.log(`Popup form: ${form.name} (${FORM})`);
   }
@@ -106,7 +106,7 @@ async function main() {
     const blocks = (step.blocks as Block[]) ?? [];
     const before = hits.length;
     walk(blocks, formId, step.slug, hits);
-    // Variants are steps too, so a running A/B test gets wired on both arms in the same pass —
+    // Variants are steps too, so a running A/B test gets wired on both arms in the same pass -
     // otherwise half the traffic would keep seeing the old behaviour and the test would be
     // measuring the popup rather than whatever it was set up to measure.
     if (hits.length > before && !DRY) {
@@ -115,7 +115,7 @@ async function main() {
   }
 
   if (hits.length === 0) {
-    console.log("Nothing to change — every matching CTA is already wired the way you asked.");
+    console.log("Nothing to change - every matching CTA is already wired the way you asked.");
     console.log(`(Matching on button label containing "${BUTTON_MATCH}" and image alt containing "${IMAGE_MATCH}".)`);
     return;
   }

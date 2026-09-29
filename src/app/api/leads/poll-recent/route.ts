@@ -10,15 +10,15 @@ import { KANBAN_STAGES } from "@/server/pipeline-metrics";
  *
  * Unlike /api/leads/poll (assigned-to-me, for My Desk), this covers the two OTHER places a
  * brand-new inbound lead (Pabbly, Meta, FlexiFunnels…) is first visible: the admin leads
- * table and the kanban board — both reachable before anyone has assigned or contacted it.
+ * table and the kanban board - both reachable before anyone has assigned or contacted it.
  *
  * `scope` picks which of the two visibility rules to run, so a tab only pays for the query
- * it actually needs (LeadSection polls "table", KanbanBoard polls "kanban" — the two never
+ * it actually needs (LeadSection polls "table", KanbanBoard polls "kanban" - the two never
  * run at once since Tabs remounts panels on switch):
  *   - "table"  mirrors getPipelineOverview's leadWhere: Admin sees every lead, everyone else
  *     only the ones they entered themselves. A webhook lead has no enteredById, so it only
- *     ever surfaces here for Admin — same rule the initial page load already enforces.
- *   - "kanban" mirrors getKanbanLeads: every OPEN-stage lead, regardless of owner — the board
+ *     ever surfaces here for Admin - same rule the initial page load already enforces.
+ *   - "kanban" mirrors getKanbanLeads: every OPEN-stage lead, regardless of owner - the board
  *     is shared. `canMove` is computed here so the client never has to see enteredById.
  *
  * Same trade-off as every other poll route in the app (see /api/leads/poll): a plain indexed

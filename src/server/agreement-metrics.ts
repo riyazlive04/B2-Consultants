@@ -35,7 +35,7 @@ const LIST_SELECT = {
   student: { select: { id: true, fullName: true, code: true } },
   // The lead's own students, so a code can be resolved even when the agreement was raised
   // against the lead and never directly linked to a Student (Error Log I1). A lead may have
-  // MANY students, so this is only usable when there is exactly one — see `resolveStudentCode`.
+  // MANY students, so this is only usable when there is exactly one - see `resolveStudentCode`.
   lead: { select: { id: true, name: true, students: { select: { id: true, code: true } } } },
   issuedBy: { select: { id: true, name: true } },
 } as const;
@@ -43,7 +43,7 @@ const LIST_SELECT = {
 /**
  * The student code to show for an agreement.
  *
- * Direct link wins. Otherwise fall back to the lead's student — but ONLY when the lead has
+ * Direct link wins. Otherwise fall back to the lead's student - but ONLY when the lead has
  * exactly one, because showing the wrong "Anna Smith"'s code on a signed contract is worse
  * than showing none. Zero or many → no code, and the name stands alone as it did before.
  */
@@ -114,7 +114,7 @@ export type AgreementCounts = {
 };
 
 export async function getAgreementCounts(): Promise<AgreementCounts> {
-  // A groupBy on the STORED status cannot see expiry — it would count a fortnight-dead link as
+  // A groupBy on the STORED status cannot see expiry - it would count a fortnight-dead link as
   // "awaiting signature" forever. Agreements are low-volume and this selects a few thin columns
   // (never pdfBytes), so read and derive: the tiles then agree with the rows.
   const rows = await prisma.agreement.findMany({
@@ -189,12 +189,12 @@ const EMPTY: AgreementData = {
 };
 
 /**
- * Open the form on everything the CRM already knows. Every value here is a *suggestion* — once
+ * Open the form on everything the CRM already knows. Every value here is a *suggestion* - once
  * issued, the agreement's `data` is frozen and never reads these rows again.
  *
  * Postal address and batch have no column anywhere in the schema (they are terms of *this*
  * document, which is why they live in `AgreementData`). But they DO exist in this client's
- * previous agreement — so a re-issue lifts them from there rather than asking a second time. A
+ * previous agreement - so a re-issue lifts them from there rather than asking a second time. A
  * brand-new client's first agreement still has to be typed, and says so.
  */
 export async function getAgreementPrefill(opts: {
@@ -264,7 +264,7 @@ export async function getAgreementPrefill(opts: {
       leadId = lead.id;
       data.student.fullName = lead.name;
       data.student.email = lead.email ?? "";
-      // Blank, not null, when the lead has no number (nullable since the Synamate import) — this
+      // Blank, not null, when the lead has no number (nullable since the Synamate import) - this
       // is a form suggestion, and `agreement.ts` requires min(5) before it can ever be issued.
       data.student.phone = lead.phone ?? "";
       mark("fullName", data.student.fullName);
@@ -283,7 +283,7 @@ export async function getAgreementPrefill(opts: {
     }
   }
 
-  // The two fields nothing else in the schema holds — lift them from this client's last agreement.
+  // The two fields nothing else in the schema holds - lift them from this client's last agreement.
   if (leadId || studentId) {
     const prior = await prisma.agreement.findFirst({
       where: leadId ? { OR: [{ leadId }, { student: { leadId } }] } : { studentId: studentId! },
@@ -310,7 +310,7 @@ export async function getAgreementPrefill(opts: {
       }
       if (lifted) {
         notes.push(
-          `Address and batch carried over from ${prior.documentNo} — check they are still current before issuing.`,
+          `Address and batch carried over from ${prior.documentNo} - check they are still current before issuing.`,
         );
       }
     }

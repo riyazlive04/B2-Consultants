@@ -13,7 +13,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
  * Student import (spec Part 2 §9: "Export exists now; import is planned").
  *
  * Preview-then-commit. Nothing is written until the founder has seen the counts and the
- * skipped rows — this writes into a live roster of real people, and a bad paste that reports
+ * skipped rows - this writes into a live roster of real people, and a bad paste that reports
  * afterwards is a cleanup job, not an error message.
  */
 export function ImportPanel() {
@@ -65,7 +65,7 @@ export function ImportPanel() {
       <p className="max-w-2xl text-sm text-muted">
         Import students from a CSV. Needs a header row with a <strong>name</strong> column;{" "}
         <strong>email</strong>, <strong>phone</strong> and <strong>address</strong> are matched
-        too. People are matched by email — a matching email updates that student, a new one
+        too. People are matched by email - a matching email updates that student, a new one
         creates. Nothing is written until you confirm.
       </p>
 
@@ -109,7 +109,7 @@ export function ImportPanel() {
           )}
 
           {plan.creates + plan.updates === 0 ? (
-            <p className="text-sm text-muted">Nothing to import — every row already matches what&apos;s on file.</p>
+            <p className="text-sm text-muted">Nothing to import - every row already matches what&apos;s on file.</p>
           ) : (
             <div className="flex justify-end">
               <Btn onClick={commit} disabled={busy}>

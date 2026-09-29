@@ -36,7 +36,7 @@ describe("what counts as attending", () => {
   });
 
   test("EXCUSED is excluded from the denominator entirely", () => {
-    // An excused absence is the system working — the student told someone. Counting it against
+    // An excused absence is the system working - the student told someone. Counting it against
     // them punishes exactly the behaviour we want.
     assert.equal(isCounted("EXCUSED"), false);
     assert.equal(isCounted("ABSENT"), true);
@@ -93,7 +93,7 @@ describe("consecutive misses", () => {
     assert.equal(summarise(marks("ABSENT", "ABSENT", "LATE")).consecutiveMissed, 0);
   });
 
-  test("an excused session is skipped — it neither breaks nor extends the streak", () => {
+  test("an excused session is skipped - it neither breaks nor extends the streak", () => {
     // "Away for a wedding, then missed two more" is a two-session streak. If EXCUSED reset it,
     // the student would look fine right up until they stopped coming entirely.
     assert.equal(summarise(marks("PRESENT", "EXCUSED", "ABSENT", "ABSENT")).consecutiveMissed, 2);
@@ -139,7 +139,7 @@ describe("the signal", () => {
   });
 
   test("a consecutive-miss streak turns a healthy average red on its own", () => {
-    // 7 present then 3 absent = 70% — comfortably amber by rate alone. But this is the student
+    // 7 present then 3 absent = 70% - comfortably amber by rate alone. But this is the student
     // about to drop, and the average is exactly the statistic that cannot see it.
     const s = summarise(
       marks("PRESENT", "PRESENT", "PRESENT", "PRESENT", "PRESENT", "PRESENT", "PRESENT", "ABSENT", "ABSENT", "ABSENT"),
@@ -158,12 +158,12 @@ describe("the signal", () => {
   test("every signal carries a reason", () => {
     assert.match(signalReason(summarise(marks("PRESENT")), cfg), /too few to judge/);
     assert.match(signalReason(summarise(marks("PRESENT", "PRESENT")), cfg), /100% attendance/);
-    // 3/4 = 75% — amber territory, so the reason names the target rather than the floor.
+    // 3/4 = 75% - amber territory, so the reason names the target rather than the floor.
     assert.match(
       signalReason(summarise(marks("PRESENT", "PRESENT", "PRESENT", "ABSENT")), cfg),
       /below the 80% target/,
     );
-    // 2/5 = 40% — below the floor, so the reason names the floor instead.
+    // 2/5 = 40% - below the floor, so the reason names the floor instead.
     assert.match(
       signalReason(summarise(marks("PRESENT", "ABSENT", "ABSENT", "ABSENT", "PRESENT")), cfg),
       /below the 60% floor/,
@@ -189,7 +189,7 @@ describe("session-level numbers", () => {
 
   test("attended headcount is the number to hold beside the roster-priced fee", () => {
     // The fee is priced off the roster; this says how much of it was in the room. The gap is
-    // the point — it is reported, never auto-corrected.
+    // the point - it is reported, never auto-corrected.
     assert.equal(attendedHeadcount(["PRESENT", "LATE", "ABSENT", "EXCUSED", "PRESENT"]), 3);
   });
 

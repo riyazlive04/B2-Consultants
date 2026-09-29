@@ -5,11 +5,11 @@
  * date, and one clean line for the closer.
  *
  * WHY IT EXISTS: BANT and outcome drive priority scoring, the HQ rate, commission and the
- * SSS ladder — and they are the fields most likely to be left at their defaults when someone
+ * SSS ladder - and they are the fields most likely to be left at their defaults when someone
  * has fifteen more calls to make. The note gets typed regardless. Reading the note is
  * therefore the cheapest place in the app to recover that data.
  *
- * PURE and isomorphic — no prisma, no server-only, no hidden `new Date()`. `today` is passed
+ * PURE and isomorphic - no prisma, no server-only, no hidden `new Date()`. `today` is passed
  * in, so every relative date ("Sunday", "in 3 days") is testable without fake timers, the
  * same contract as automation-quiet-hours.ts and daily-log.ts.
  *
@@ -18,7 +18,7 @@
  * armed it. Both return the same `CallNoteExtraction`, both carry `source`, and the UI says
  * which one produced the suggestion. That is deliberate: the AI seam in this app is
  * keys-off by default (lib/anthropic.ts), so a feature that only works with a key would be
- * dead weight on a fresh install — and a suggestion whose provenance is hidden is worse than
+ * dead weight on a fresh install - and a suggestion whose provenance is hidden is worse than
  * no suggestion at all.
  *
  * NOTHING HERE DECIDES ANYTHING. The output is a suggestion the human confirms before the
@@ -39,7 +39,7 @@ export type CallOutcomeValue = (typeof CALL_OUTCOMES)[number];
 
 export type BantFlags = { budget: boolean; authority: boolean; need: boolean; timeline: boolean };
 
-/** Which phrase in the note justified each field — shown in the UI so a tick can be checked. */
+/** Which phrase in the note justified each field - shown in the UI so a tick can be checked. */
 export type Evidence = Partial<Record<"outcome" | "budget" | "authority" | "need" | "timeline" | "followUpDate", string>>;
 
 export type CallNoteExtraction = {
@@ -48,12 +48,12 @@ export type CallNoteExtraction = {
   bant: BantFlags;
   /** YYYY-MM-DD, only when the note actually implies one */
   followUpDate: string | null;
-  /** short tag for what's blocking — "decision-maker absent", "budget", … */
+  /** short tag for what's blocking - "decision-maker absent", "budget", … */
   objection: string | null;
   /** one clean line for the closer */
   summary: string | null;
   /**
-   * Reads as highly qualified. SUGGESTION ONLY — never auto-applied to the checkbox.
+   * Reads as highly qualified. SUGGESTION ONLY - never auto-applied to the checkbox.
    * `highlyQualified` is capability-guarded (outreach.qualify) and drives priority scoring,
    * the HQ-rate metric, gamification XP and the SSS confirmation ladder. A model that ticks
    * it silently would be writing to a permissioned field through the back door.
@@ -91,7 +91,7 @@ const MAX_FOLLOW_UP_DAYS = 180;
 
 /**
  * Weekday names and the short forms people actually type in a hurry. The alternation is
- * `\b`-anchored, so "sun" can't swallow the start of "sunday" — the engine backtracks to the
+ * `\b`-anchored, so "sun" can't swallow the start of "sunday" - the engine backtracks to the
  * longer alias.
  */
 const WEEKDAY_ALIASES: Record<string, number> = {
@@ -104,7 +104,7 @@ const WEEKDAY_ALIASES: Record<string, number> = {
   sat: 6, saturday: 6,
 };
 
-/** YYYY-MM-DD for a Date, in UTC — the form's date inputs are date-only, so no timezone maths. */
+/** YYYY-MM-DD for a Date, in UTC - the form's date inputs are date-only, so no timezone maths. */
 export function toDateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -120,7 +120,7 @@ export function fromDateKey(key: string): Date | null {
 
 /**
  * The next occurrence of `weekday` strictly after `from`. "Call Sunday" said on a Sunday
- * means next Sunday, not today — the call already happened today.
+ * means next Sunday, not today - the call already happened today.
  */
 export function nextWeekday(from: Date, weekday: number): Date {
   const delta = ((weekday - from.getUTCDay() + 7) % 7) || 7;
@@ -129,7 +129,7 @@ export function nextWeekday(from: Date, weekday: number): Date {
 
 /**
  * A follow-up date is only kept if it's plausibly a follow-up: not before the call, and not
- * beyond MAX_FOLLOW_UP_DAYS. Everything else is dropped rather than shown — a wrong date
+ * beyond MAX_FOLLOW_UP_DAYS. Everything else is dropped rather than shown - a wrong date
  * silently written into the form is the most expensive mistake this feature could make.
  */
 export function boundFollowUp(key: string | null, today: string): string | null {
@@ -237,7 +237,7 @@ function firstMatch(text: string, rules: Rule[]): string | null {
 }
 
 /**
- * Deterministic extraction — no network, no key, always available.
+ * Deterministic extraction - no network, no key, always available.
  *
  * It is intentionally conservative: a rule fires only on a phrase that means one thing, and
  * every BANT dimension has a negative pattern that VETOES a positive match ("wants it but
@@ -301,7 +301,7 @@ export function heuristicExtract(note: string, today: string): CallNoteExtractio
 
 /**
  * The system prompt. Two rules do the heavy lifting:
- *   - "unstated is not false" — the note is shorthand, so silence must map to null/false
+ *   - "unstated is not false" - the note is shorthand, so silence must map to null/false
  *     rather than an invented negative;
  *   - every field carries the phrase it came from, so a human can check a tick in one glance
  *     instead of re-reading the note.
@@ -326,7 +326,7 @@ export const EXTRACTION_SYSTEM = [
   "- timeline needs a stated timeframe, not general eagerness.",
   "- Resolve relative dates against the call date you are given. Never return a date before it.",
   "- Every field you fill must appear in `evidence`. If you cannot quote the note for it, leave the field null or false.",
-  "- Quote the note verbatim in `evidence` — do not paraphrase.",
+  "- Quote the note verbatim in `evidence` - do not paraphrase.",
 ].join("\n");
 
 /** The user turn: the note, plus the call date so relative dates resolve. */
@@ -348,7 +348,7 @@ const asText = (v: unknown, max: number): string | null => {
  *
  * Everything is treated as hostile: an unknown outcome string, a date in the past, a
  * confidence of 7, evidence as an array. The model is a suggestion engine pointed at fields
- * that drive commission — this is the boundary where that suggestion has to become
+ * that drive commission - this is the boundary where that suggestion has to become
  * well-formed or be dropped.
  */
 export function coerceExtraction(raw: unknown, today: string): CallNoteExtraction {
@@ -385,7 +385,7 @@ export function coerceExtraction(raw: unknown, today: string): CallNoteExtractio
   }
 
   // A tick with no evidence is exactly what the prompt forbids, so it's a signal the model
-  // drifted — drop the tick rather than the whole extraction. Same for a dropped date.
+  // drifted - drop the tick rather than the whole extraction. Same for a dropped date.
   if (out.bant.budget && !out.evidence.budget) out.bant.budget = false;
   if (out.bant.authority && !out.evidence.authority) out.bant.authority = false;
   if (out.bant.need && !out.evidence.need) out.bant.need = false;
@@ -404,14 +404,14 @@ export const BANT_LABELS: Record<keyof BantFlags, string> = {
   timeline: "Timeline",
 };
 
-/** "Filled 3 fields from the note." — the one line the panel leads with. */
+/** "Filled 3 fields from the note." - the one line the panel leads with. */
 export function summariseExtraction(x: CallNoteExtraction): string {
   const bits: string[] = [];
   if (x.outcome) bits.push("the outcome");
   const ticks = (Object.keys(x.bant) as (keyof BantFlags)[]).filter((k) => x.bant[k]);
   if (ticks.length) bits.push(`${ticks.length} BANT box${ticks.length === 1 ? "" : "es"}`);
   if (x.followUpDate) bits.push("a follow-up date");
-  if (bits.length === 0) return "Nothing in that note mapped to a field — fill them in by hand.";
+  if (bits.length === 0) return "Nothing in that note mapped to a field - fill them in by hand.";
   const last = bits.pop();
   const list = bits.length ? `${bits.join(", ")} and ${last}` : last;
   return `Suggested ${list} from the note.`;

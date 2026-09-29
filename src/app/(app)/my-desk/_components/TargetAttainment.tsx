@@ -6,11 +6,11 @@ import { SIGNAL_META, type SignalLevel } from "@/lib/signals";
 import type { TargetSpec } from "@/lib/outreach-sla";
 
 /**
- * JD target attainment, ranked worst-first — the specialist's triage list.
+ * JD target attainment, ranked worst-first - the specialist's triage list.
  *
  * ── THE DEFECT THIS REPLACES ─────────────────────────────────────────────────────────────────
  * Both desks rendered their targets as a flat grid of KPI cards, each with its own progress bar
- * scaled to its OWN target. So "25" against a 30-call floor (83% of target — nearly there) and
+ * scaled to its OWN target. So "25" against a 30-call floor (83% of target - nearly there) and
  * "25" against a 100% requirement (a crisis) drew **the same length bar**, side by side, in
  * identical cards. The screen could show eight numbers but could not answer the question a
  * specialist actually opens it with at 4pm: *which of these can I still fix today?*
@@ -23,14 +23,14 @@ import type { TargetSpec } from "@/lib/outreach-sla";
  *
  * ── WHAT IS DELIBERATELY PRESERVED ───────────────────────────────────────────────────────────
  * Replacing KPI cards must not cost information, so every row still carries:
- *   · the REAL figure (`display`) — attainment is the comparator, not the number being reported
+ *   · the REAL figure (`display`) - attainment is the comparator, not the number being reported
  *   · the target, inline
  *   · the signal colour, from the same `signalForTarget` the cards used, so red still means red
  *   · the plain-English definition, via `hint` → `InfoHint` (§5.3 requires one on every rate)
  *
  * ── HONESTY NOTES ────────────────────────────────────────────────────────────────────────────
  * Attainment is UNCAPPED: 140% of a 30-call floor is a good day and clamping it to "done" would
- * hide the best performer. And a null metric is NOT 0% — it means nothing happened yet, which is
+ * hide the best performer. And a null metric is NOT 0% - it means nothing happened yet, which is
  * not a failure, so those rows sort to the bottom and say so rather than showing a red zero the
  * specialist can do nothing about.
  */
@@ -46,7 +46,7 @@ export function TargetAttainment<K extends string>({
   signalFor: (k: K, value: number | null) => SignalLevel | null;
   /**
    * Fallback order for rows that cannot be ranked (nothing measured yet). Defaults to the spec
-   * object's own key order, which is the JD order — deriving it beats a second hand-kept list
+   * object's own key order, which is the JD order - deriving it beats a second hand-kept list
    * that can silently drift out of step with the specs.
    */
   order?: readonly K[];
@@ -65,10 +65,10 @@ export function TargetAttainment<K extends string>({
       label: spec.label,
       // Sort key and bar length are the same thing: progress toward this metric's own target.
       value: attained ?? 0,
-      // The REAL figure, not the attainment — attainment is how the rows are made comparable,
+      // The REAL figure, not the attainment - attainment is how the rows are made comparable,
       // it is not the number being reported.
-      display: value === null ? "—" : `${Math.round(value)}${unit}`,
-      // Always the target, never "nothing measured yet": the value column already shows "—" for
+      display: value === null ? "-" : `${Math.round(value)}${unit}`,
+      // Always the target, never "nothing measured yet": the value column already shows "-" for
       // an unmeasured metric, so the long form said the same thing twice and was the only string
       // here wide enough to truncate. The target is the fact the reader still needs.
       meta: `of ${spec.green}${unit}`,
@@ -80,7 +80,7 @@ export function TargetAttainment<K extends string>({
           : [
               { value: 100, label: "Target", color: "var(--ink)" },
               // The amber floor, expressed on the same normalised scale. Below this tick the
-              // metric is red — so the two ticks bracket "acceptable".
+              // metric is red - so the two ticks bracket "acceptable".
               {
                 value: (spec.amber / spec.green) * 100,
                 label: `Amber floor (${spec.amber}${unit})`,
@@ -90,9 +90,9 @@ export function TargetAttainment<K extends string>({
     };
   });
 
-  // Worst first — that ordering IS the recommendation. Unmeasured rows go last: they are not
+  // Worst first - that ordering IS the recommendation. Unmeasured rows go last: they are not
   // failures and must not occupy the position reserved for "fix this now".
-  // Keyed off the source value rather than the rendered "—", so a formatting change to `display`
+  // Keyed off the source value rather than the rendered "-", so a formatting change to `display`
   // can never silently reshuffle the ranking.
   const ranked = [...rows].sort((a, b) => {
     const aNull = values[a.key as K] === null;

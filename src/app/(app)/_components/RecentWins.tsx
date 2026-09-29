@@ -7,7 +7,7 @@ import { formatDate } from "@/lib/format";
 import { SectionHeading, ViewAll } from "@/components/ui/kit";
 
 /**
- * Recent wins (Admin only) — a short, celebratory timeline of the last few good
+ * Recent wins (Admin only) - a short, celebratory timeline of the last few good
  * things: deals closed, offers landed, journeys finished. It is the "recent
  * activity" glance, deliberately capped at the latest handful; the full history
  * lives on /pipeline and /students. Renders nothing at all when there's no news,
@@ -82,8 +82,8 @@ export async function RecentWins() {
                 {w.emoji}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-ink">{w.title}</span>
-                <span className="block truncate text-caption text-muted">{w.detail}</span>
+                <span className="block truncate text-sm font-semibold text-ink" title={w.title}>{w.title}</span>
+                <span className="block truncate text-caption text-muted" title={w.detail}>{w.detail}</span>
               </span>
               <span className="tnum flex-none text-caption text-ink-3">{formatDate(w.when)}</span>
             </Link>

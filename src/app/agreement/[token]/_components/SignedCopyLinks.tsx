@@ -4,7 +4,7 @@ import { Download, SquareArrowOutUpRight } from "lucide-react";
  * The student's two routes to the contract they signed.
  *
  * `[token]/copy` has always served the sealed bytes, but nothing in the product ever pointed at it
- * — the only link lived inside the AGREEMENT_COPY WhatsApp message. That send is deliberately
+ * - the only link lived inside the AGREEMENT_COPY WhatsApp message. That send is deliberately
  * fail-safe (`agreement-sign.ts`: it resolves an outcome, never throws), so whenever WATI is off or
  * the template is not yet approved the row lands SKIPPED and the message never arrives, leaving the
  * student with no way at all to obtain their own executed agreement. The token in their address bar

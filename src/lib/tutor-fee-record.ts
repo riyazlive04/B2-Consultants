@@ -1,9 +1,9 @@
 /**
- * Tutor fee RECORD — turning the rule in `tutor-fee.ts` into something the founders can
+ * Tutor fee RECORD - turning the rule in `tutor-fee.ts` into something the founders can
  * approve and pay (ER v2 Track C).
  *
  * `tutor-fee.ts` answers "what is owed". This answers "what should the row say, and may it
- * change". It deliberately does not re-implement the rate rule — it calls it — because a
+ * change". It deliberately does not re-implement the rate rule - it calls it - because a
  * posting rule that exists twice is a posting rule that will eventually disagree with itself.
  *
  * Pure: no prisma, no session. The DB side is `server/tutor-fee-actions.ts`.
@@ -15,7 +15,7 @@ import { DEFAULT_TUTOR_FEE_CONFIG, type TutorFeeConfig, type TutorFeeLevel } fro
 
 const RUPEES_TO_PAISE = 100;
 
-/** The four fields a recompute writes. All snapshots — see the model comment on `TutorFee`. */
+/** The four fields a recompute writes. All snapshots - see the model comment on `TutorFee`. */
 export type ComputedTutorFee = {
   headcount: number;
   ratePerHeadInrMinor: bigint;
@@ -26,7 +26,7 @@ export type ComputedTutorFee = {
 
 /**
  * The level codes the fee bands are keyed on. `Level.code` is "GN_A1"; the config's band keys
- * are "A1". Anything that is not a German level has no tutor fee — coaching tiers are
+ * are "A1". Anything that is not a German level has no tutor fee - coaching tiers are
  * delivered by a coach on salary, not a per-head trainer.
  */
 export function tutorFeeLevelFromCode(levelCode: string): TutorFeeLevel | null {
@@ -38,7 +38,7 @@ export function tutorFeeLevelFromCode(levelCode: string): TutorFeeLevel | null {
  * What the fee row for a batch should say, given who is actually seated in it right now.
  *
  * Returns null when the level carries no trainer fee, so callers skip rather than write a
- * zero row — a ₹0 fee and "this batch has no trainer fee concept" are different claims, and
+ * zero row - a ₹0 fee and "this batch has no trainer fee concept" are different claims, and
  * a table full of the former hides the latter.
  */
 export function computeTutorFee(
@@ -57,7 +57,7 @@ export function computeTutorFee(
     headcount,
     ratePerHeadInrMinor: BigInt(ratePerHeadRupees * RUPEES_TO_PAISE),
     amountInrMinor: BigInt(amount),
-    bandLabel: `${headcount} student${headcount === 1 ? "" : "s"} — ${band} ${config.thresholdStudents} → ₹${ratePerHeadRupees.toLocaleString("en-IN")}/head`,
+    bandLabel: `${headcount} student${headcount === 1 ? "" : "s"} - ${band} ${config.thresholdStudents} → ₹${ratePerHeadRupees.toLocaleString("en-IN")}/head`,
   };
 }
 
@@ -65,7 +65,7 @@ export function computeTutorFee(
  * Is this fee still recomputable?
  *
  * DRAFT rows track the roster: someone joins, the fee goes up. APPROVED and PAID rows are
- * frozen — the founder signed off on a number computed against a headcount, and a student
+ * frozen - the founder signed off on a number computed against a headcount, and a student
  * arriving next month must not silently re-price it. CANCELLED rows are left alone too;
  * reviving one is a deliberate act, not a side effect of a nightly job.
  *
@@ -91,7 +91,7 @@ export function canTransition(from: TutorFeeStatus, to: TutorFeeStatus): boolean
 /**
  * The figure actually owed: the override when one is set, otherwise the computed amount.
  *
- * Everything downstream — the batch P&L, the ledger accrual, the payout total — must read
+ * Everything downstream - the batch P&L, the ledger accrual, the payout total - must read
  * THIS, never `amountInrMinor` directly, or an override would show on screen and be ignored
  * by the money.
  */

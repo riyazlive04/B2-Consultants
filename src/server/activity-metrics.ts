@@ -6,11 +6,11 @@ import { istBoundaryToInstant, parseDateInput } from "@/lib/dates";
 import { activityKind, activityLabel, type ActivityKind } from "@/lib/activity-actions";
 
 /**
- * The read half of the activity log — the founder's "who did what, when".
+ * The read half of the activity log - the founder's "who did what, when".
  *
  * Every filter is a URL search param rather than client state, so a view of the log is a
  * link: Ameen can bookmark "Asma, pipeline, last Tuesday" or paste it to someone. It also
- * keeps the whole page server-rendered — the table can be thousands of rows without any of
+ * keeps the whole page server-rendered - the table can be thousands of rows without any of
  * them crossing to the browser.
  */
 
@@ -23,7 +23,7 @@ export type ActivityFilters = {
   /** IST calendar day, "YYYY-MM-DD", inclusive on both ends. */
   from?: string;
   to?: string;
-  /** Free text over the summary — how the founder finds a lead by name. */
+  /** Free text over the summary - how the founder finds a lead by name. */
   q?: string;
   page: number;
 };
@@ -44,7 +44,7 @@ export type ActivityRow = {
   meta: unknown;
 };
 
-/** Parse `?…` into filters. Anything unrecognised falls back rather than throwing — a hand-edited URL shows the unfiltered log, never an error page. */
+/** Parse `?…` into filters. Anything unrecognised falls back rather than throwing - a hand-edited URL shows the unfiltered log, never an error page. */
 export function parseActivityFilters(sp: Record<string, string | string[] | undefined>): ActivityFilters {
   const one = (v: string | string[] | undefined) => {
     const s = Array.isArray(v) ? v[0] : v;
@@ -66,14 +66,14 @@ function isDay(v: string | undefined): boolean {
   return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(parseDateInput(v).getTime());
 }
 
-/** True when any filter is narrowing the list — drives the "clear filters" affordance. */
+/** True when any filter is narrowing the list - drives the "clear filters" affordance. */
 export function hasActiveFilters(f: ActivityFilters): boolean {
   return !!(f.actorId || f.section || f.action || f.from || f.to || f.q);
 }
 
 /**
  * An engine (or a token-verified signer) has no user row, so those entries carry a null
- * `actorId` and there is no id to filter on — yet "show me only what the automation did" is
+ * `actorId` and there is no id to filter on - yet "show me only what the automation did" is
  * a question the founder will absolutely ask. The Who dropdown therefore offers them under a
  * `name:` sentinel, which resolves to a match on the name plus a null actor.
  *
@@ -96,7 +96,7 @@ function buildWhere(f: ActivityFilters): Prisma.ActivityLogWhereInput {
   // `at` is a timestamp, so an IST day boundary has to be converted to the real instant it
   // represents (00:00 IST = 18:30 UTC the day before). Filtering the column with the raw
   // UTC-midnight date would shift the window 5.5h and silently drop everything logged
-  // between midnight and 05:30 IST — the graveyard shift would vanish from its own audit.
+  // between midnight and 05:30 IST - the graveyard shift would vanish from its own audit.
   if (f.from || f.to) {
     const at: Prisma.DateTimeFilter = {};
     if (f.from) at.gte = istBoundaryToInstant(parseDateInput(f.from));
@@ -120,7 +120,7 @@ export async function getActivityPage(f: ActivityFilters): Promise<{
   const [rows, total] = await Promise.all([
     prisma.activityLog.findMany({
       where,
-      // `at` alone isn't a total order — two actions inside the same millisecond would page
+      // `at` alone isn't a total order - two actions inside the same millisecond would page
       // nondeterministically and could repeat or skip a row across pages. `id` breaks the tie.
       orderBy: [{ at: "desc" }, { id: "desc" }],
       take: ACTIVITY_PAGE_SIZE,
@@ -179,7 +179,7 @@ export async function getActivityFilterOptions(): Promise<ActivityFilterOptions>
 
   return {
     // Real users filter by id. Engines, signers and departed users have no id, so they filter
-    // by name via the sentinel — otherwise the automation's own work would be unfilterable,
+    // by name via the sentinel - otherwise the automation's own work would be unfilterable,
     // and a departed telecaller's history would drop out of the Who list entirely.
     actors: actors.map((a) => ({
       value: a.actorId ?? `${NAME_PREFIX}${a.actorName}`,
@@ -223,7 +223,7 @@ function todayIstBoundary(): Date {
 }
 
 /**
- * The trail for ONE record — "everything that ever happened to this lead", newest first.
+ * The trail for ONE record - "everything that ever happened to this lead", newest first.
  * Not wired into a screen yet; it's the query the entity drawers will want, and it exists
  * here so the `[entityType, entityId]` index has its intended reader.
  */

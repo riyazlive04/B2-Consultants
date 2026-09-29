@@ -53,7 +53,7 @@ export function DailyLogClient({
 }: {
   view: MyDailyLogView;
   quests?: QuestProgress[];
-  /** XP a log is worth under today's rules — the toast must not quote a stale number */
+  /** XP a log is worth under today's rules - the toast must not quote a stale number */
   logXp: number;
   /** streak lengths that pay a bonus today; hitting one earns confetti */
   streakMilestones: number[];
@@ -70,7 +70,7 @@ export function DailyLogClient({
     : 0;
   const onTrack = view.okrs.filter((o) => signalForPercent(o.completionPct) === "ok").length;
 
-  // This week vs last, on the headline metric — a quick "am I trending up?" read.
+  // This week vs last, on the headline metric - a quick "am I trending up?" read.
   const primaryUnit = view.primaryMetricKey ? LOG_FIELD_UNIT[view.primaryMetricKey] ?? "" : "";
   const sumPrimary = (from: number, to: number) =>
     view.entries
@@ -95,7 +95,7 @@ export function DailyLogClient({
         weekday: "short",
         day: "numeric",
         month: "short",
-        timeZone: "UTC", // the date is a UTC-midnight @db.Date — local tz would shift it a day
+        timeZone: "UTC", // the date is a UTC-midnight @db.Date - local tz would shift it a day
       })
     : "";
 
@@ -103,10 +103,10 @@ export function DailyLogClient({
     setError(null);
     const res = await submitDailyLog(form);
     if (!res.ok) return setError(res.error);
-    // Amending an auto-saved row isn't a new log — it doesn't extend a streak or pay XP again,
+    // Amending an auto-saved row isn't a new log - it doesn't extend a streak or pay XP again,
     // so a streak toast here would be a lie the Arena would then contradict.
     if (amending) {
-      toast("Log confirmed — it's yours now ✓");
+      toast("Log confirmed - it's yours now ✓");
       return;
     }
     const newStreak = view.streak + 1;
@@ -127,12 +127,12 @@ export function DailyLogClient({
           {view.todayIsAuto ? (
             <>
               <p className="mt-1 font-display text-h1 font-bold tracking-tight text-warn">Auto</p>
-              <p className="mt-1 text-caption text-muted">Saved from activity — confirm it below.</p>
+              <p className="mt-1 text-caption text-muted">Saved from activity - confirm it below.</p>
             </>
           ) : view.submittedToday ? (
             <>
               <p className="mt-1 font-display text-h1 font-bold tracking-tight text-good">In ✓</p>
-              <p className="mt-1 text-caption text-muted">Locked for today — one per day.</p>
+              <p className="mt-1 text-caption text-muted">Locked for today - one per day.</p>
             </>
           ) : closed ? (
             <>
@@ -194,7 +194,7 @@ export function DailyLogClient({
         </div>
       </div>
 
-      {/* This week's quests — auto-tracked from the logs below */}
+      {/* This week's quests - auto-tracked from the logs below */}
       {quests.length > 0 && (
         <section>
           <div className="mb-3 flex items-baseline justify-between">
@@ -261,15 +261,15 @@ export function DailyLogClient({
       {/* Today's log */}
       {amending ? (
         /* An EOD_AUTO row: the job's account of a day nobody logged. Amendable precisely
-           because auto-capture is partial — the fields it can't see are blank below, and
+           because auto-capture is partial - the fields it can't see are blank below, and
            they're the ones the pay board counts. */
         <form action={submit} className="rounded-card border border-warn bg-surface p-5 shadow-card">
           <h3 className="font-display text-h2 font-semibold">
-            {amend.isToday ? "Amend today's auto-saved log" : `Amend your auto-saved log — ${amendDateLabel}`}
+            {amend.isToday ? "Amend today's auto-saved log" : `Amend your auto-saved log - ${amendDateLabel}`}
           </h3>
           <p className="mb-4 mt-1 text-xs text-muted">
             Nobody logged {amend.isToday ? "today" : "that day"}, so the {view.eod.cutoffLabel} job saved what your
-            activity showed. It couldn&apos;t see everything — fill in the rest and it becomes your log.
+            activity showed. It couldn&apos;t see everything - fill in the rest and it becomes your log.
           </p>
           <input type="hidden" name="variant" value={view.variant ?? ""} />
           <input type="hidden" name="logId" value={amend.id} />
@@ -278,7 +278,7 @@ export function DailyLogClient({
             <Sparkles size={14} className="mt-0.5 flex-none" />
             <span>
               These numbers were <strong>derived from your activity</strong>, not typed by you. Anything the
-              system has no record of is blank — check every field, then submit to make it yours.
+              system has no record of is blank - check every field, then submit to make it yours.
             </span>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -291,7 +291,7 @@ export function DailyLogClient({
                   label={isAuto ? `${label}  ·  Auto` : label}
                   hint={isAuto ? "Derived from your activity - correct it if it's wrong" : "Never captured - enter it"}
                 >
-                  {/* maxLength 6 mirrors the action's `num` rule (/^\d{0,6}$/) — a 7th digit
+                  {/* maxLength 6 mirrors the action's `num` rule (/^\d{0,6}$/) - a 7th digit
                       is a typo, and the field should refuse it rather than the form. */}
                   <TextInput
                     kind="int"
@@ -320,13 +320,13 @@ export function DailyLogClient({
           <div>
             <p className="font-semibold text-ok">Today&apos;s log is in.</p>
             <p className="mt-1 text-muted">
-              One log per day — if something needs changing, ask Admin to add a correction note.
+              One log per day - if something needs changing, ask Admin to add a correction note.
             </p>
           </div>
         </div>
       ) : closed ? (
         /* Past the cutoff with no log and no auto-save to fall back on. Saying "submit below"
-           here would be a lie — the action will refuse it. */
+           here would be a lie - the action will refuse it. */
         <div className="flex items-start gap-3 rounded-card border border-line bg-bad-soft p-5 text-sm shadow-card">
           <Lock size={18} className="mt-0.5 flex-none text-bad" />
           <div>
@@ -334,7 +334,7 @@ export function DailyLogClient({
             <p className="mt-1 text-muted">
               The {view.eod.cutoffLabel} cutoff has passed.{" "}
               {view.eod.autoSave
-                ? "Your numbers will be auto-saved from your activity shortly — come back to check and amend them."
+                ? "Your numbers will be auto-saved from your activity shortly - come back to check and amend them."
                 : "Ask Admin if today still needs to be recorded."}
             </p>
           </div>
@@ -383,7 +383,7 @@ export function DailyLogClient({
         </form>
       )}
 
-      {/* My log history — the activity timeline */}
+      {/* My log history - the activity timeline */}
       <section>
         <div className="mb-3 flex items-baseline justify-between gap-3">
           <h3 className="font-display text-h2 font-semibold">My log history</h3>
@@ -395,7 +395,7 @@ export function DailyLogClient({
           entries={view.entries}
           mode="personal"
           emptyTitle="No logs yet"
-          emptyBody="Submit your first above — your calls, proposals and follow-ups become a track record here."
+          emptyBody="Submit your first above - your calls, proposals and follow-ups become a track record here."
         />
       </section>
     </div>

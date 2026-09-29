@@ -12,13 +12,13 @@ import type { ActionResult } from "./finance-actions";
  * Workshop registrations (ER v2 Track G).
  *
  * ── Why this exists ──────────────────────────────────────────────────────────────
- * Attendance was an INTEGER typed onto an ad set, and only people who CONVERTED got a row —
+ * Attendance was an INTEGER typed onto an ad set, and only people who CONVERTED got a row -
  * with no link to a Lead. "Who attended and didn't buy, and can we re-target them" was
  * therefore unanswerable, despite the pipeline carrying SENT_TO_WORKSHOP and
  * WORKSHOP_FOLLOWUP stages built for exactly that motion.
  *
- * Registrations go through `upsertIntakeLead` — the SAME idempotent path the Meta and
- * FlexiFunnels webhooks use — rather than a second bespoke intake. That is what keeps one
+ * Registrations go through `upsertIntakeLead` - the SAME idempotent path the Meta and
+ * FlexiFunnels webhooks use - rather than a second bespoke intake. That is what keeps one
  * human as one Lead when they register for a workshop having already opted in elsewhere.
  */
 
@@ -48,7 +48,7 @@ export async function registerForWorkshop(workshopId: string, form: FormData): P
   const d = parsed.data;
 
   if (!d.email && !d.phone) {
-    return { ok: false, error: "A registration needs a phone or an email — otherwise they can never be followed up" };
+    return { ok: false, error: "A registration needs a phone or an email - otherwise they can never be followed up" };
   }
 
   const workshop = await prisma.workshop.findUnique({
@@ -135,7 +135,7 @@ export async function setWorkshopAttendance(
  * Link a conversion row to the registration it came from.
  *
  * Historical conversions were typed straight from the workbook with no registration behind
- * them, which is why `registrationId` is nullable. Linking is manual and one-way here — the
+ * them, which is why `registrationId` is nullable. Linking is manual and one-way here - the
  * founders know who is who; a fuzzy name match on money would be a guess recorded as a fact.
  */
 export async function linkConversionToRegistration(

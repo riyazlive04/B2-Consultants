@@ -7,11 +7,11 @@ import { BUSINESS_LINE_LABELS, type BusinessLineView } from "@/lib/business-line
 import { setBusinessLineView } from "@/server/business-line-view";
 
 /**
- * B2 · German Note · Combined — the app-wide segment control (Error Log E1/E4).
+ * B2 · German Note · Combined - the app-wide segment control (Error Log E1/E4).
  *
  * ONE component for every screen. It began as a Finance-only widget with the revenue split
  * baked into it; `totals` is now optional so Finance keeps that richer rendering (E2 asked to
- * SEE the split — B2 ₹2,00,000 + GN ₹47,000 — not merely to filter by it) while other screens
+ * SEE the split - B2 ₹2,00,000 + GN ₹47,000 - not merely to filter by it) while other screens
  * get the same control without inventing figures they don't have.
  *
  * Buttons writing a cookie, not links: the selection has to persist across navigation, and a
@@ -31,7 +31,7 @@ export function SegmentToggle({
   label?: string;
   /**
    * Take over the switch. Given, the caller owns the change and this control does NOT
-   * re-render from the server — used by the home dashboard, where every view is already
+   * re-render from the server - used by the home dashboard, where every view is already
    * in the DOM so switching is instant. Omitted, the default server round-trip applies,
    * which is right for Finance where each line is a genuinely different query.
    */

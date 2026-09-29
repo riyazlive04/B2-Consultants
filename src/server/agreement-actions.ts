@@ -124,7 +124,7 @@ export async function updateAgreement(id: string, data: unknown): Promise<Action
 
 /**
  * Countersign and send with a freshly drawn signature. The founder signs first, exactly as the
- * master document reads. The body lives in `issueAgreementCore` — see the note there on why.
+ * master document reads. The body lives in `issueAgreementCore` - see the note there on why.
  */
 export async function issueAgreement(
   id: string,
@@ -159,10 +159,10 @@ async function founderDeviceFrom(device: unknown) {
  *
  * Each half is taken from the moment it actually happened, because a contract's device record is
  * only worth anything if every field is true:
- *   reported — THIS session's browser (the founder is issuing from here, now)
- *   capture  — how the ink was really drawn, back at `savedAt`. Never synthesised: a `capture`
+ *   reported - THIS session's browser (the founder is issuing from here, now)
+ *   capture  - how the ink was really drawn, back at `savedAt`. Never synthesised: a `capture`
  *              invented at issue time would be a fabricated claim about a signature's provenance.
- *   observed — the IP/UA our server sees on THIS request (added by founderDeviceFrom).
+ *   observed - the IP/UA our server sees on THIS request (added by founderDeviceFrom).
  */
 async function savedSignatureDevice(reported: unknown, saved: SavedSignature) {
   const savedDevice = readStoredDevice(saved.savedDevice);
@@ -191,7 +191,7 @@ async function agreementParty(id: string) {
 /**
  * The feed entry shared by all three issue paths.
  *
- * `issueAgreementCore` hands back a signing URL with the raw token in it — the one place that token
+ * `issueAgreementCore` hands back a signing URL with the raw token in it - the one place that token
  * ever exists. It stops here: `signature` records which ink was stamped, never the credential.
  */
 async function logIssued(session: AppSession, id: string, source: SignatureSource["source"]) {
@@ -258,7 +258,7 @@ export type IssueOutcome =
   | { kind: "needsSignature" };
 
 /**
- * Countersign an existing draft with the stored signature — no modal, no redraw.
+ * Countersign an existing draft with the stored signature - no modal, no redraw.
  * `reported` is this browser's own account of itself (collectReportedDevice), not the ink.
  */
 export async function issueAgreementWithSavedSignature(
@@ -297,13 +297,13 @@ export type GenerateOutcome =
  *
  * It refuses to guess. If the CRM has no postal address (nothing in the schema holds one, and no
  * previous agreement exists to lift it from), this returns `needsForm` and the founder types the
- * two fields — rather than issuing a contract with a blank §2 header. An existing draft for the
+ * two fields - rather than issuing a contract with a blank §2 header. An existing draft for the
  * same client is reused instead of stacking a second one.
  */
 export async function generateAndSendAgreement(input: {
   leadId?: string | null;
   studentId?: string | null;
-  /** This browser's account of itself (collectReportedDevice) — not the signature. */
+  /** This browser's account of itself (collectReportedDevice) - not the signature. */
   reported?: unknown;
 }): Promise<ActionResult<GenerateOutcome>> {
   const { allowed, denied, session } = await capabilityCheck("agreements.issue");
@@ -395,7 +395,7 @@ export async function resendAgreementLink(id: string): Promise<ActionResult<{ de
     to: parsed.data.student.phone,
     vars: { name: firstName(parsed.data.student.fullName), document_no: row.documentNo },
     sentById: session.user.id,
-    bodySummary: `Agreement ${row.documentNo} — reminder`,
+    bodySummary: `Agreement ${row.documentNo} - reminder`,
     agreementId: id,
     leadId: row.leadId,
     studentId: row.studentId,
@@ -450,7 +450,7 @@ export async function voidAgreement(id: string, reason: string): Promise<ActionR
   return { ok: true };
 }
 
-/** Void this one and open a fresh draft carrying the same fields — the "edit after send" path. */
+/** Void this one and open a fresh draft carrying the same fields - the "edit after send" path. */
 export async function cloneAgreement(id: string): Promise<ActionResult<{ id: string }>> {
   const { allowed, denied } = await capabilityCheck("agreements.issue");
   if (!allowed) return denied;
@@ -461,7 +461,7 @@ export async function cloneAgreement(id: string): Promise<ActionResult<{ id: str
   });
   if (!row) return { ok: false, error: "Agreement not found." };
 
-  // A signed agreement is never voided — it is superseded by the new draft, and both survive.
+  // A signed agreement is never voided - it is superseded by the new draft, and both survive.
   if (row.status !== "SIGNED" && row.status !== "VOIDED") {
     const voided = await voidAgreement(id, "Superseded by a revised agreement");
     if (!voided.ok) return voided;

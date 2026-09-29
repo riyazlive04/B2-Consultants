@@ -13,12 +13,12 @@ import {
 /**
  * Three things are under test, and they are the three that fail silently.
  *
- * 1. NORMALISATION — every form saved before the Google-parity rebuild is still in the database in
+ * 1. NORMALISATION - every form saved before the Google-parity rebuild is still in the database in
  *    the old shape. If the upgrade-on-read drops a field, a live form quietly stops collecting it.
- * 2. BRANCHING — a required question inside a section nobody was routed to must not block the
+ * 2. BRANCHING - a required question inside a section nobody was routed to must not block the
  *    submit. Get this wrong and the form is permanently unsubmittable, but only for the
  *    respondents who took the other branch, so it looks like "some people can't submit".
- * 3. VALIDATION — the same function runs in the browser and in the server action. A disagreement
+ * 3. VALIDATION - the same function runs in the browser and in the server action. A disagreement
  *    between the two is a form that passes client-side and then fails after the button is pressed.
  */
 
@@ -37,12 +37,12 @@ test("a legacy field survives the upgrade with its meaning intact", () => {
   assert.equal(f.key, "city");
   assert.equal(f.type, "select");
   assert.equal(f.required, true);
-  // A bare string[] becomes {label} objects — the shape the option editor and branching need.
+  // A bare string[] becomes {label} objects - the shape the option editor and branching need.
   assert.deepEqual(f.options, [{ label: "Delhi" }, { label: "Pune" }]);
   assert.ok(f.id, "an id is derived for a row that never had one");
 });
 
-test("legacy `checkbox` stays a single tick — it is NOT re-read as multi-select", () => {
+test("legacy `checkbox` stays a single tick - it is NOT re-read as multi-select", () => {
   const [f] = normaliseItems([{ key: "consent", label: "I agree", type: "checkbox" }]);
   assert.equal(f.type, "checkbox");
   assert.equal(f.options, undefined, "a single tick has no option list");
@@ -112,7 +112,7 @@ test("the last answered branching question wins, as in Google Forms", () => {
   assert.equal(nextPageIndex(pages[0], { a: "yes", b: "yes" }, pages), 2);
 });
 
-test("a backwards target is ignored — a cycle is unconstructable", () => {
+test("a backwards target is ignored - a cycle is unconstructable", () => {
   const items: FormItem[] = [
     item({ id: "q0", type: "text", key: "q0" }),
     item({ id: "s1", type: "section", key: "", goTo: "s1" }),
@@ -184,7 +184,7 @@ test("number range, whole numbers and the custom message", () => {
   assert.equal(validateAnswer(whole, "2.5"), "Staff count only", "the author's wording wins");
 });
 
-test("an uncompilable regex is ignored, not thrown — a typo must not take the form down", () => {
+test("an uncompilable regex is ignored, not thrown - a typo must not take the form down", () => {
   const q = item({ id: "q", type: "text", key: "q", validation: { kind: "regex", pattern: "([" } });
   assert.equal(validateAnswer(q, "anything"), null);
 });

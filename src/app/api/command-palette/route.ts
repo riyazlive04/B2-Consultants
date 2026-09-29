@@ -8,13 +8,13 @@ import { getSectionsConfig } from "@/server/founder-config";
 
 /**
  * Lightweight summary feed for the global ⌘K command palette (BUILD_CHECKLIST.md §3):
- * id/label/sublabel/type/href only, no full records — fetching every contact/opportunity/
+ * id/label/sublabel/type/href only, no full records - fetching every contact/opportunity/
  * invoice up front would be exactly the "ship 1000+ rows to the client" mistake §17 of the
  * product audit flags elsewhere. Capped per type and ordered by recency, same shape as the
  * "500 most-recently-touched records" the task calls for.
  *
  * Section-gated the same way the pages themselves are (founder's live config + per-user
- * overrides, not just the role default) — a USER without Payments access shouldn't be able to
+ * overrides, not just the role default) - a USER without Payments access shouldn't be able to
  * find an invoice by typing its number into the palette that a page-level guard would block.
  */
 
@@ -45,8 +45,8 @@ export async function GET() {
           select: { id: true, name: true, phone: true, company: { select: { name: true } } },
         })
       : Promise.resolve([]),
-    // Students were absent entirely, so searching a student by name — or by the B2-0001 code
-    // that exists precisely to tell two "Anna Smith"s apart — found nothing (Error Log I1).
+    // Students were absent entirely, so searching a student by name - or by the B2-0001 code
+    // that exists precisely to tell two "Anna Smith"s apart - found nothing (Error Log I1).
     allowed("students")
       ? prisma.student.findMany({
           // No ACTIVE filter: Student is deliberately NOT one of the soft-deleted models, so
@@ -85,7 +85,7 @@ export async function GET() {
     ...students.map((st) => ({
       id: `student-${st.id}`,
       label: st.fullName,
-      // The code goes in the sublabel because the palette scores sublabels too — so typing
+      // The code goes in the sublabel because the palette scores sublabels too - so typing
       // "B2-0042" finds the student, which is the whole point of issuing codes.
       sublabel: [st.code, st.email].filter(Boolean).join(" · ") || null,
       type: "student" as const,
@@ -96,7 +96,7 @@ export async function GET() {
       label: o.name,
       sublabel: o.lead.name,
       type: "opportunity" as const,
-      // Board.tsx has no per-card deep link (the edit modal isn't URL-addressable) — this at
+      // Board.tsx has no per-card deep link (the edit modal isn't URL-addressable) - this at
       // least lands on the right pipeline rather than just "/opportunities".
       href: `/opportunities?pipeline=${o.pipelineId}`,
     })),

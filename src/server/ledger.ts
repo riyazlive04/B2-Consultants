@@ -8,8 +8,8 @@ import {
 
 /**
  * App-facing ledger reads (SPEC §10.4). The engine itself lives in `ledger-core.ts`,
- * which takes a `LedgerDb` so the seed and backfill scripts — which cannot import
- * `server-only` — can reuse the exact same posting rules.
+ * which takes a `LedgerDb` so the seed and backfill scripts - which cannot import
+ * `server-only` - can reuse the exact same posting rules.
  *
  * Writes are deliberately NOT re-exported: a caller must open a transaction and reach
  * for `postEntry` from ledger-core directly, because the deferred balance trigger only

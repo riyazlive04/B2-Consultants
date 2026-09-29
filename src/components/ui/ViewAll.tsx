@@ -9,7 +9,7 @@ import { useCanNavigate } from "@/components/shell/SectionAccess";
  * The "View all →" action beside a section heading.
  *
  * Lives in its own file rather than in `kit.tsx` because it needs a hook, and `kit.tsx` is
- * imported by server components — putting `"use client"` on the whole kit would drag Card,
+ * imported by server components - putting `"use client"` on the whole kit would drag Card,
  * PageHeader and every other primitive across the boundary with it. `kit.tsx` re-exports this
  * one, so every existing `import { ViewAll } from "@/components/ui/kit"` keeps working.
  *

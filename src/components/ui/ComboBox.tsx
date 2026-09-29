@@ -1,26 +1,27 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { useFormReset } from "./use-form-reset";
 import { Check } from "lucide-react";
 import {
   baseCls, errCls, okCls, Popover, sizeCls, useControlProps, type ControlSize,
 } from "./field-base";
 
 /**
- * A searchable text field that can ALSO resolve to a known record — a "combobox" (§5.5 popover
+ * A searchable text field that can ALSO resolve to a known record - a "combobox" (§5.5 popover
  * language, same portal + anchoring as SelectMenu/DatePicker).
  *
  * Built for the income "Student name" field (issue 2.6): the operator types, matching students
- * appear, and picking one fills the visible name AND stamps a hidden id — so the payment links to
+ * appear, and picking one fills the visible name AND stamps a hidden id - so the payment links to
  * the right student record instead of relying on a fragile typed-name match (which is how two
- * "Priya"s cross-credit). Free text is still allowed — a payer who has no student record yet keeps
+ * "Priya"s cross-credit). Free text is still allowed - a payer who has no student record yet keeps
  * their typed name and the id stays empty.
  *
  * Two plain inputs carry the values, so it's a drop-in inside any <form> with no client wiring on
  * the server: the visible <input name={nameText}> and a hidden <input name={nameValue}>.
  */
 /**
- * `hint` is a secondary identifier shown beside the label and searchable with it — the
+ * `hint` is a secondary identifier shown beside the label and searchable with it - the
  * student code (§6.1), so two "Anna Smith" rows can be told apart in the dropdown and so
  * typing "B2-0007" finds the right one. It is deliberately NOT written into the text field
  * on pick: `nameText` feeds Income.studentName, and appending a code there would corrupt
@@ -61,6 +62,23 @@ export function ComboBox({
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(defaultText);
   const [selected, setSelected] = useState(defaultValue);
+
+  /**
+   * Follow `form.reset()` back to the defaults - see `useFormReset`.
+   *
+   * Worse here than on the pickers, and worth spelling out. BOTH inputs this renders are
+   * React-CONTROLLED (`value={text}`, `value={selected}`), so a reset does not merely fail to
+   * update the display: the browser cannot clear them at all, because React re-asserts the state
+   * on the next render. After saving one payment the box kept the previous student's name AND
+   * their hidden id, so the next entry silently linked its money to the wrong student's record.
+   *
+   * Restored to the mounted defaults rather than read back from the DOM, precisely because a
+   * controlled input's DOM value is the state we are trying to correct.
+   */
+  useFormReset(inputRef, () => {
+    setText(defaultText);
+    setSelected(defaultValue);
+  });
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const listId = useId();
@@ -139,7 +157,7 @@ export function ComboBox({
           <div id={listId} role="listbox">
             {matches.length === 0 ? (
               <div className="px-2.5 py-1.5 text-sm text-ink-3">
-                No student matches — “{text.trim()}” will be saved as typed.
+                No student matches - “{text.trim()}” will be saved as typed.
               </div>
             ) : (
               matches.map((o, i) => {
@@ -157,7 +175,7 @@ export function ComboBox({
                       isSel ? "font-medium text-ink" : "",
                     ].join(" ")}
                   >
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    <span className="min-w-0 flex-1 truncate" title={o.label}>{o.label}</span>
                     {o.hint && (
                       <span className="tnum flex-none text-caption text-ink-3">{o.hint}</span>
                     )}

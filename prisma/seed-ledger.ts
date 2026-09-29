@@ -7,7 +7,7 @@
  * posts through `postEntryOnce`, which is a no-op once that row has a live entry. Re-running
  * after adding rows backfills only the new ones.
  *
- * The drafts come from `finance-posting.ts` — the same module the live Finance actions use —
+ * The drafts come from `finance-posting.ts` - the same module the live Finance actions use -
  * so a backfilled entry and a freshly-entered one are indistinguishable in the ledger.
  */
 import { PrismaClient } from "@prisma/client";
@@ -60,7 +60,7 @@ async function main() {
   const rupees = (v: bigint) => `₹${(Number(v) / 100).toLocaleString("en-IN")}`;
   console.log(`· trial balance: debits ${rupees(tb.totalDebit)} / credits ${rupees(tb.totalCredit)}`);
   if (!tb.balanced) {
-    console.error("TRIAL BALANCE DOES NOT BALANCE — refusing to report success.");
+    console.error("TRIAL BALANCE DOES NOT BALANCE - refusing to report success.");
     process.exitCode = 1;
     return;
   }

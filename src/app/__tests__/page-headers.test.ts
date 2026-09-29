@@ -7,25 +7,25 @@ import { join } from "node:path";
  * Every app page must use one of the two shared headers.
  *
  * ── What this stops ─────────────────────────────────────────────────────────────
- * Five pages had hand-rolled their own header strip — each with its own icon chip, its own type
- * scale, its own action slot — which is why the app's screens read like five different products.
+ * Five pages had hand-rolled their own header strip - each with its own icon chip, its own type
+ * scale, its own action slot - which is why the app's screens read like five different products.
  * Converting them is a one-off; this test is what stops the sixth appearing, because nothing
  * about a bespoke `<h1>` fails a build or a review by itself.
  *
  * ── The rule ────────────────────────────────────────────────────────────────────
- *   ListHeader — record-list screens (a count and a filter bar)
- *   PageHeader — everything else
+ *   ListHeader - record-list screens (a count and a filter bar)
+ *   PageHeader - everything else
  *
  * If you are adding a page and this test fails, use one of them rather than adding to the
  * exemption list. The exemptions below are pages that genuinely have no header, and each says
- * why — a bare filename there would defeat the point.
+ * why - a bare filename there would defeat the point.
  */
 
 const APP_DIR = join(process.cwd(), "src", "app", "(app)");
 
 /** Pages that legitimately render no header, with the reason. */
 const EXEMPT: Record<string, string> = {
-  "page.tsx": "the dashboard — its own MonthHero IS the header",
+  "page.tsx": "the dashboard - its own MonthHero IS the header",
 };
 
 function pageFiles(dir: string, acc: string[] = []): string[] {
@@ -56,7 +56,7 @@ test("every app page uses PageHeader or ListHeader", () => {
     /**
      * A page may also delegate its header to a component it renders (a detail page handing the
      * record to a client component that headers it). Only flag pages that render their OWN
-     * `<h1>` — that is the hand-rolled case, and the one that drifts.
+     * `<h1>` - that is the hand-rolled case, and the one that drifts.
      */
     if (src.includes("<h1")) offenders.push(rel);
   }

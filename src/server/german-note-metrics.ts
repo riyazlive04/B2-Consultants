@@ -7,9 +7,9 @@ import type { AppRole } from "@/lib/rbac";
 
 /**
  * German Note read layer (Phase 4). Access rules live HERE and in the action
- * guards — never UI-only:
+ * guards - never UI-only:
  *  - global community: ADMIN, any TUTOR, students with ≥1 ACTIVE-batch membership
- *  - batch page: that batch's members (any batch status — alumni keep read
+ *  - batch page: that batch's members (any batch status - alumni keep read
  *    access to their recordings), its tutor, Admin
  * HEAD/USER granted the section via a per-user override see a "not enrolled"
  * empty state (isParticipant stays false).
@@ -19,7 +19,7 @@ export type GnAccess = {
   isAdmin: boolean;
   isTutor: boolean;
   /** HEAD: sees every batch and the community, but writes nothing. `isParticipant`
-   *  is true so the feed loads, so it can no longer stand in for "may post" — the
+   *  is true so the feed loads, so it can no longer stand in for "may post" - the
    *  post/comment/like paths must check `!isViewer` alongside it. */
   isViewer: boolean;
   isParticipant: boolean;
@@ -94,7 +94,7 @@ export type GnLevelProgress = {
   pct: number; // progress through the current level band
 };
 
-/** Where a member sits within their level band — powers the "N points to level X" meter. */
+/** Where a member sits within their level band - powers the "N points to level X" meter. */
 export function gnLevelProgress(points: number): GnLevelProgress {
   const level = gnLevelForPoints(points);
   const floor = LEVEL_THRESHOLDS[level - 1] ?? 0;
@@ -143,7 +143,7 @@ export type GnRecordingRow = {
   watched: boolean;
   /** Tracked %, or null when the provider reports nothing. */
   watchedPct: number | null;
-  /** They ticked it, but the tracking says otherwise — the case the founders want visible. */
+  /** They ticked it, but the tracking says otherwise - the case the founders want visible. */
   disputed: boolean;
 };
 
@@ -195,7 +195,7 @@ export type GnBatchDetail = {
 /**
  * The LMS at a glance, for the ADMIN/HEAD home tile.
  *
- * Deliberately unscoped — this is an oversight read, so it counts every ACTIVE batch
+ * Deliberately unscoped - this is an oversight read, so it counts every ACTIVE batch
  * rather than the viewer's own. Callers must gate it by role; it does no checking.
  */
 export const getGnHomeSnapshot = cache(async () => {
@@ -225,7 +225,7 @@ export const getGnAccess = cache(async (role: AppRole, userId: string): Promise<
   }
   // HEAD oversees the LMS without being in it: every batch, read-only. No `isAdmin`,
   // because that flag also carries manage + moderate rights (canManage, canPin,
-  // canModerate) — a Head must not be able to delete a student's post.
+  // canModerate) - a Head must not be able to delete a student's post.
   if (role === "HEAD") {
     return { isAdmin: false, isTutor: false, isViewer: true, isParticipant: true, memberBatchIds: [], tutorBatchIds: [] };
   }
@@ -607,7 +607,7 @@ export const getGnBatchDetail = cache(
       embedUrl: r.embedUrl,
       notes: r.notes,
       postedByName: r.postedBy?.name ?? null,
-      // A watch row no longer implies "watched" — tracking may exist with no tick, and a tick
+      // A watch row no longer implies "watched" - tracking may exist with no tick, and a tick
       // may be contradicted by tracking. resolveWatchTruth is the single place that decides.
       ...(() => {
         const w = r.watches[0];

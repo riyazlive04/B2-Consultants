@@ -15,10 +15,10 @@ import { OwnCommission } from "./_components/OwnCommission";
 export const dynamic = "force-dynamic";
 
 /**
- * "My Desk" — the specialist's own working screen.
+ * "My Desk" - the specialist's own working screen.
  *
  * WHICH desk depends on `TeamProfile.logVariant`, not on the app Role. Section RBAC can
- * only gate on ROLE, and both specialists are the same USER role — what actually separates
+ * only gate on ROLE, and both specialists are the same USER role - what actually separates
  * Nilofer's job from Asma's is the function recorded on their team profile. That is the same
  * predicate the daily log and the pay board already branch on, so a person's variant is set
  * once and every screen agrees:
@@ -29,11 +29,11 @@ export const dynamic = "force-dynamic";
  *   anything else        → the original generic call desk
  *
  * ORDER MATTERS, and the variant is checked FIRST on purpose. An admin who also works a phone
- * keeps their specialist desk — role is only consulted once we know there is no specialist screen
+ * keeps their specialist desk - role is only consulted once we know there is no specialist screen
  * to show, so nobody loses a working screen to gain the task list.
  *
  * Q2 asked for "task list for admin/head, call stats for telecallers". What Ameen actually got was
- * the no-profile explainer — the founder being told to ask himself to link his login. A head coach
+ * the no-profile explainer - the founder being told to ask himself to link his login. A head coach
  * with a profile but no variant got the generic call desk: someone else's numbers, in effect.
  *
  * No profile and no owning role → an explainer, never a crash or an empty shell (Error Log O2:
@@ -45,7 +45,7 @@ export default async function MyDeskPage() {
    * Identity only, not the whole generic desk.
    *
    * This used to be `getTelecallerDesk`, whose entire result was then thrown away for the two
-   * specialist variants — the page read three fields off it and rendered a completely different
+   * specialist variants - the page read three fields off it and rendered a completely different
    * desk. So an L1 caller waited for 500 leads, a month of call logs and every goal to load
    * BEFORE their own desk even started querying, on a pooled connection where those two rounds
    * do not overlap. The generic desk is still built below, for the one branch that renders it.
@@ -53,7 +53,7 @@ export default async function MyDeskPage() {
   const who = await getDeskIdentity(session.user.id);
 
   const header = (name: string, roleTitle: string, subtitle: string) => (
-    <PageHeader icon={<Phone />} title="My Desk" subtitle={`${name} · ${roleTitle} — ${subtitle}`} />
+    <PageHeader icon={<Phone />} title="My Desk" subtitle={`${name} · ${roleTitle} - ${subtitle}`} />
   );
 
   /**
@@ -62,7 +62,7 @@ export default async function MyDeskPage() {
    * Rendered here rather than inside the desk components on purpose: both are client
    * components (they own modals, countdowns and the offline queue), and money has no reason to
    * travel to the browser as data when it only needs to arrive as markup. It is also why both
-   * desks share one block — the split/both-calls/closer arithmetic does not differ by level.
+   * desks share one block - the split/both-calls/closer arithmetic does not differ by level.
    */
   if (who?.logVariant === "APPOINTMENT_SETTER") {
     const [l1, commission] = await Promise.all([

@@ -1,30 +1,30 @@
 /**
- * Workflow DRY RUN — "if this workflow had been live last month, what would it have done?"
+ * Workflow DRY RUN - "if this workflow had been live last month, what would it have done?"
  *
  * PURE and isomorphic (no prisma, no server-only, no hidden `new Date()`), same contract as
- * automation-quiet-hours.ts and outreach-engine.ts: every input — the trigger events, the
- * contacts' facts, the clock — is handed in, so the whole projection is testable without a
+ * automation-quiet-hours.ts and outreach-engine.ts: every input - the trigger events, the
+ * contacts' facts, the clock - is handed in, so the whole projection is testable without a
  * database. `server/automation-dryrun.ts` does the fetching; this file does the thinking.
  *
  * FIDELITY IS THE WHOLE POINT. Nobody arms an automation they can't preview, and a preview
- * nobody trusts is worse than none — so the walk below mirrors `server/automation.ts`
+ * nobody trusts is worse than none - so the walk below mirrors `server/automation.ts`
  * (`emitTrigger` + `advanceEnrollment`) step for step, including the parts that are easy to
  * forget:
  *   - trigger-config filtering (form / tag / stage), with the same case rules;
  *   - the re-enrollment gate, both settings (ACTIVE-blocks vs once-per-contact-ever);
  *   - WAIT advancing a virtual clock rather than ending the run;
- *   - IF_TAG jumping — forwards, backwards, or into a cycle — under the same step cap;
+ *   - IF_TAG jumping - forwards, backwards, or into a cycle - under the same step cap;
  *   - quiet hours parking a send until the window closes, which shifts every later step too;
  *   - a send to a contact with no email/phone failing WITHOUT failing the enrollment.
  *
  * WHAT IT CANNOT KNOW, and therefore says out loud (`approximations` on the result):
  *   - Contact state (tags, stage) is today's, not the state on the day the trigger fired.
  *     Within one run we mutate a local copy, so an ADD_TAG at step 1 is visible to an IF_TAG
- *     at step 4 — but the starting point is the present.
+ *     at step 4 - but the starting point is the present.
  *   - Only enrollments inside the window count toward the re-enrollment gate; a contact the
  *     real workflow enrolled last year is invisible here.
  *   - The cron resumes waits on a tick, so real sends land a little later than projected.
- * These are stated, never silently smoothed over — an over-confident preview is the failure
+ * These are stated, never silently smoothed over - an over-confident preview is the failure
  * mode this feature exists to prevent.
  *
  * NOTHING HERE WRITES. The projection is a value; the caller renders it and throws it away.
@@ -41,9 +41,9 @@ export type DryRunEvent = {
   at: Date;
   /** FORM_SUBMITTED */
   formId?: string | null;
-  /** TAG_ADDED — the tag that was added, lowercase as the app stores it */
+  /** TAG_ADDED - the tag that was added, lowercase as the app stores it */
   tag?: string | null;
-  /** STAGE_CHANGED — the LeadStage moved INTO */
+  /** STAGE_CHANGED - the LeadStage moved INTO */
   stage?: string | null;
 };
 
@@ -82,7 +82,7 @@ export type DryRunInput = {
   settings: DryRunSettings;
   windowStart: Date;
   windowEnd: Date;
-  /** true when the event fetch hit its cap — the projection is a floor, not a total */
+  /** true when the event fetch hit its cap - the projection is a floor, not a total */
   truncated?: boolean;
 };
 
@@ -95,7 +95,7 @@ export type StepOutcome =
   | "LOGGED_ONLY"
   /** no email address / no phone number on the contact */
   | "UNREACHABLE"
-  /** empty body or a template that no longer exists — the step is a no-op */
+  /** empty body or a template that no longer exists - the step is a no-op */
   | "NOTHING_TO_SEND"
   /** the contact record changed (tag, stage, task) */
   | "CHANGED"
@@ -124,7 +124,7 @@ export const OUTCOME_LABELS: Record<StepOutcome, string> = {
 const REACHING_OUTCOMES: StepOutcome[] = ["DELIVERED"];
 
 export type ProjectedStep = {
-  /** 0-based index into `actions` — the builder shows it 1-based */
+  /** 0-based index into `actions` - the builder shows it 1-based */
   index: number;
   type: WorkflowActionType;
   at: Date;
@@ -141,7 +141,7 @@ export type ProjectedEnrollment = {
   /** when the last step would run (enrolledAt + every WAIT + any quiet-hours hold) */
   finishesAt: Date;
   steps: ProjectedStep[];
-  /** set when the step cap tripped — an IF_TAG cycle */
+  /** set when the step cap tripped - an IF_TAG cycle */
   cutShort: boolean;
 };
 
@@ -180,7 +180,7 @@ export type DryRunResult = {
   byAction: ActionBreakdown[];
   /** the first few enrollments, step by step, for the "show me one" question */
   sample: ProjectedEnrollment[];
-  /** longest projected run in the window, in minutes — "this workflow tails a contact for 9 days" */
+  /** longest projected run in the window, in minutes - "this workflow tails a contact for 9 days" */
   longestRunMinutes: number;
   cyclesHit: number;
   /** problems with the workflow itself: an empty SMS, a deleted template, a branch cycle */
@@ -193,7 +193,7 @@ const SAMPLE_SIZE = 25;
 
 // ───────────────────────────── trigger matching ─────────────────────────────
 
-/** Mirrors emitTrigger's three `continue` guards — including the case rules. */
+/** Mirrors emitTrigger's three `continue` guards - including the case rules. */
 export function matchesTriggerConfig(type: TriggerType, cfg: TriggerConfig, ev: DryRunEvent): boolean {
   if (type === "FORM_SUBMITTED" && cfg.formId) return cfg.formId === ev.formId;
   if (type === "TAG_ADDED" && cfg.tag) return cfg.tag.trim().toLowerCase() === (ev.tag ?? "").trim().toLowerCase();
@@ -204,7 +204,7 @@ export function matchesTriggerConfig(type: TriggerType, cfg: TriggerConfig, ev: 
 // ───────────────────────────── static workflow lint ─────────────────────────────
 
 /**
- * Problems visible without running anything. Reported even when the window is empty — a
+ * Problems visible without running anything. Reported even when the window is empty - a
  * workflow that would never have enrolled anyone should still tell you its SMS has no body.
  */
 export function lintActions(actions: WorkflowAction[], templates: Record<string, DryRunTemplate>): string[] {
@@ -214,12 +214,12 @@ export function lintActions(actions: WorkflowAction[], templates: Record<string,
     const tpl = a.templateId ? templates[a.templateId] : undefined;
     switch (a.type) {
       case "SEND_EMAIL":
-        if (a.templateId && !tpl) out.push(`${at(i, a)} uses a template that no longer exists — it would send nothing.`);
+        if (a.templateId && !tpl) out.push(`${at(i, a)} uses a template that no longer exists - it would send nothing.`);
         else if (!a.templateId && !(a.body ?? "").trim()) out.push(`${at(i, a)} has an empty body.`);
         else if (tpl && tpl.channel !== "EMAIL") out.push(`${at(i, a)} points at an SMS template.`);
         break;
       case "SEND_SMS":
-        if (a.templateId && !tpl) out.push(`${at(i, a)} uses a template that no longer exists — it would send nothing.`);
+        if (a.templateId && !tpl) out.push(`${at(i, a)} uses a template that no longer exists - it would send nothing.`);
         else if (!a.templateId && !(a.body ?? "").trim()) out.push(`${at(i, a)} has no message body, so it would do nothing.`);
         else if (tpl && tpl.channel !== "SMS") out.push(`${at(i, a)} points at an email template.`);
         break;
@@ -235,7 +235,7 @@ export function lintActions(actions: WorkflowAction[], templates: Record<string,
       case "IF_TAG": {
         if (!(a.tag ?? "").trim()) out.push(`${at(i, a)} has no tag to check, so it always takes the "no" branch.`);
         const self = [a.thenStep, a.elseStep].filter((s) => s === i);
-        if (self.length) out.push(`${at(i, a)} branches to itself — that's a loop.`);
+        if (self.length) out.push(`${at(i, a)} branches to itself - that's a loop.`);
         break;
       }
       case "MOVE_STAGE":
@@ -296,7 +296,7 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
   // Chronological, because the re-enrollment gate depends on what already happened.
   const events = [...input.events].sort((a, b) => a.at.getTime() - b.at.getTime());
 
-  /** Contact state as the run mutates it — starts from today's facts (see the header note). */
+  /** Contact state as the run mutates it - starts from today's facts (see the header note). */
   const state = new Map<string, { tags: Set<string>; stage: string }>();
   const busyUntil = new Map<string, number>(); // leadId → projected finish of its last run
   const everEnrolled = new Set<string>();
@@ -309,7 +309,7 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
     result.matched++;
 
     const lead = leads[ev.leadId];
-    if (!lead) continue; // contact archived/deleted since — nothing to project onto
+    if (!lead) continue; // contact archived/deleted since - nothing to project onto
 
     // The enrollment gate, both settings (emitTrigger's `blocking` query).
     if (!settings.allowReEnrollment) {
@@ -341,7 +341,7 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
         cutShort = true;
         result.cyclesHit++;
         warnings.add(
-          `A run exceeded ${maxSteps} steps and was cut short — check the IF_TAG branches for a loop. The live engine fails these enrollments.`,
+          `A run exceeded ${maxSteps} steps and was cut short - check the IF_TAG branches for a loop. The live engine fails these enrollments.`,
         );
         break;
       }
@@ -374,7 +374,7 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
         continue;
       }
 
-      // Quiet hours gate outbound sends only, and park ON the step — so the send still happens,
+      // Quiet hours gate outbound sends only, and park ON the step - so the send still happens,
       // just later, and every step after it shifts with it.
       let heldUntil: Date | undefined;
       if (
@@ -400,7 +400,7 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
             push("UNREACHABLE", "No email address on this contact", heldUntil);
           } else if (!channels.email.live) {
             result.messages.loggedOnly.email++;
-            push("LOGGED_ONLY", `Would log ${via} — ${channels.email.reason}`, heldUntil);
+            push("LOGGED_ONLY", `Would log ${via} - ${channels.email.reason}`, heldUntil);
           } else {
             result.messages.delivered.email++;
             push("DELIVERED", `Emails ${via}`, heldUntil);
@@ -420,7 +420,7 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
             push("UNREACHABLE", "No phone number on this contact", heldUntil);
           } else if (!channels.sms.live) {
             result.messages.loggedOnly.sms++;
-            push("LOGGED_ONLY", `Would log ${via} — ${channels.sms.reason}`, heldUntil);
+            push("LOGGED_ONLY", `Would log ${via} - ${channels.sms.reason}`, heldUntil);
           } else {
             result.messages.delivered.sms++;
             push("DELIVERED", `Texts ${via}`, heldUntil);
@@ -438,7 +438,7 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
             push("UNREACHABLE", "No phone number on this contact", heldUntil);
           } else if (!channels.whatsapp.live) {
             result.messages.loggedOnly.whatsapp++;
-            push("LOGGED_ONLY", `Would log ${via} — ${channels.whatsapp.reason}`, heldUntil);
+            push("LOGGED_ONLY", `Would log ${via} - ${channels.whatsapp.reason}`, heldUntil);
           } else {
             result.messages.delivered.whatsapp++;
             push("DELIVERED", `WhatsApps ${via}`, heldUntil);
@@ -524,11 +524,11 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
       approximations.push("Waits are projected to the minute; the live engine resumes them on the next cron tick.");
     }
     approximations.push(
-      "Only enrollments inside this window count toward re-enrollment — a contact the live workflow enrolled earlier isn't known here.",
+      "Only enrollments inside this window count toward re-enrollment - a contact the live workflow enrolled earlier isn't known here.",
     );
   }
   if (result.truncated) {
-    warnings.add("The scan hit its cap, so these are the earliest events in the window — the real totals are higher.");
+    warnings.add("The scan hit its cap, so these are the earliest events in the window - the real totals are higher.");
   }
 
   const reached = REACHING_OUTCOMES.reduce(
@@ -540,14 +540,14 @@ export function simulateWorkflow(input: DryRunInput): DryRunResult {
     reached === 0 &&
     actions.some((a) => a.type === "SEND_EMAIL" || a.type === "SEND_SMS" || a.type === "SEND_WHATSAPP")
   ) {
-    warnings.add("No message in this workflow would actually reach anyone — check the channel status and contact details above.");
+    warnings.add("No message in this workflow would actually reach anyone - check the channel status and contact details above.");
   }
 
   result.warnings = [...warnings];
   return result;
 }
 
-/** "2 days", "90 minutes", "3 hours" — the builder's own WAIT vocabulary. */
+/** "2 days", "90 minutes", "3 hours" - the builder's own WAIT vocabulary. */
 export function formatMinutes(mins: number): string {
   if (mins % 1440 === 0) {
     const d = mins / 1440;

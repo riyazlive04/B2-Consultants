@@ -12,9 +12,10 @@ import {
   type WatiTemplateSummary,
 } from "@/lib/whatsapp";
 import { normalizeWhatsappNumber, toCountry } from "@/lib/phone";
+import { checkRecipient } from "@/lib/outbound-allowlist";
 
 /**
- * WATI (WhatsApp Business API) — server-only config + HTTP client.
+ * WATI (WhatsApp Business API) - server-only config + HTTP client.
  *
  * Config split (matches the app's conventions):
  *  - SECRETS in env, read inline, fail-closed when unset:
@@ -40,7 +41,16 @@ function coerceCadence(raw: unknown): WatiCadence {
   const leadHours = Array.isArray(c.bookingReminderLeadHours)
     ? c.bookingReminderLeadHours.filter((h): h is number => typeof h === "number" && h >= 0)
     : DEFAULT_CADENCE.bookingReminderLeadHours;
+  // Only an explicit stored `false` turns a touchpoint off. Absent (settings saved before these
+  // switches existed) or malformed keeps it on - the behaviour every install already had.
+  const flag = (v: unknown) => v !== false;
   return {
+    discoEnabled: flag(c.discoEnabled),
+    bookingReminderEnabled: flag(c.bookingReminderEnabled),
+    noShowEnabled: flag(c.noShowEnabled),
+    paymentEnabled: flag(c.paymentEnabled),
+    emiPreDueEnabled: flag(c.emiPreDueEnabled),
+    studentNudgesEnabled: flag(c.studentNudgesEnabled),
     discoFirstDelayHours: num(c.discoFirstDelayHours, DEFAULT_CADENCE.discoFirstDelayHours),
     discoRepeatHours: num(c.discoRepeatHours, DEFAULT_CADENCE.discoRepeatHours),
     discoMaxReminders: num(c.discoMaxReminders, DEFAULT_CADENCE.discoMaxReminders),
@@ -48,7 +58,7 @@ function coerceCadence(raw: unknown): WatiCadence {
     bookingReminderLeadHours: leadHours.length ? leadHours : DEFAULT_CADENCE.bookingReminderLeadHours,
     noShowDelayHours: num(c.noShowDelayHours, DEFAULT_CADENCE.noShowDelayHours),
     paymentRepeatHours: num(c.paymentRepeatHours, DEFAULT_CADENCE.paymentRepeatHours),
-    // An explicitly stored [] means "EMI pre-due is off" and is honoured — unlike
+    // An explicitly stored [] means "EMI pre-due is off" and is honoured - unlike
     // bookingReminderLeadHours above, which treats empty as "unset, use defaults".
     emiPreDueLeadDays: Array.isArray(c.emiPreDueLeadDays)
       ? c.emiPreDueLeadDays.filter((d): d is number => typeof d === "number" && Number.isInteger(d) && d >= 0)
@@ -80,7 +90,7 @@ function coerceTemplates(raw: unknown): WatiTemplateMap {
 }
 
 /**
- * Domains are re-normalised on READ, not trusted as stored — the same reasoning as the
+ * Domains are re-normalised on READ, not trusted as stored - the same reasoning as the
  * testRecipient number below. A hostname that survived a hand-edit of the AppSetting row in a
  * shape the matcher cannot match would be a gate silently blocking traffic it was meant to pass.
  * Anything unparseable is dropped rather than kept as dead config.
@@ -106,7 +116,7 @@ function coerceSettings(raw: unknown): WatiSettings {
     cadence: coerceCadence(v.cadence),
     domainGate: coerceDomainGate(v.domainGate),
     // Re-normalized on READ, not trusted as stored. The valve only protects anything if the
-    // number is one WATI will accept — a value that fails to normalize would otherwise be sent
+    // number is one WATI will accept - a value that fails to normalize would otherwise be sent
     // as-is, fail, and leave someone believing test mode was on.
     testRecipient:
       typeof v.testRecipient === "string" && v.testRecipient.trim()
@@ -147,7 +157,7 @@ export type WatiRuntime = {
   /**
    * name → status, from the last "Refresh templates from WATI". Used to refuse a send when we
    * positively KNOW the template is DELETED/PENDING/REJECTED. An absent entry means "we don't
-   * know" — we let WATI be the authority rather than block on a stale cache.
+   * know" - we let WATI be the authority rather than block on a stale cache.
    */
   templateStatus: Record<string, string>;
 };
@@ -191,7 +201,7 @@ function paramsFromBody(body: string): string[] {
 /**
  * WATI's API and its dashboard export disagree on field names (`elementName` vs `ElementName`,
  * `customParams` vs `TemplateParamMapping`), and older tenants return neither. Read all three,
- * then fall back to parsing `{{var}}` out of the body — which is what WhatsApp positions anyway.
+ * then fall back to parsing `{{var}}` out of the body - which is what WhatsApp positions anyway.
  */
 function toTemplateSummary(raw: unknown): WatiTemplateSummary | null {
   if (!raw || typeof raw !== "object") return null;
@@ -394,7 +404,7 @@ function extractMessageId(body: unknown): string | null {
 }
 
 /**
- * Send a FREE-FORM (session) message. Only valid inside the 24-hour customer-service window — i.e.
+ * Send a FREE-FORM (session) message. Only valid inside the 24-hour customer-service window - i.e.
  * after the contact has messaged the business. Outside that window WhatsApp rejects it, which is
  * why business-initiated reminders must remain templates (see sendTemplateMessage).
  *
@@ -408,6 +418,10 @@ export async function sendSessionMessage(args: {
   messageText: string;
 }): Promise<WatiSendResult> {
   const { endpoint, token, whatsappNumber, messageText } = args;
+
+  const gate = checkRecipient(whatsappNumber, "whatsapp");
+  if (!gate.allowed) return { ok: false, skipped: true, watiMessageId: null, error: gate.reason };
+
   const url =
     `${endpoint.replace(/\/+$/, "")}/api/v1/sendSessionMessage/${encodeURIComponent(whatsappNumber)}` +
     `?messageText=${encodeURIComponent(messageText)}`;
@@ -442,7 +456,7 @@ export async function sendSessionMessage(args: {
 }
 
 /**
- * POST a pre-approved WhatsApp template message via WATI. Never throws — returns a result
+ * POST a pre-approved WhatsApp template message via WATI. Never throws - returns a result
  * object the caller logs. Business-initiated messages MUST be templates (24h-window rule),
  * which is why there is no free-text send here.
  */
@@ -455,6 +469,13 @@ export async function sendTemplateMessage(args: {
   parameters: WatiParameter[];
 }): Promise<WatiSendResult> {
   const { endpoint, token, whatsappNumber, templateName, broadcastName, parameters } = args;
+
+  // Last gate before the wire. Placed here rather than in the callers because every outbound
+  // WhatsApp path in the app funnels through this function - the SOP ladder, dunning, booking
+  // confirmations and the "Run reminders now" button alike.
+  const gate = checkRecipient(whatsappNumber, "whatsapp");
+  if (!gate.allowed) return { ok: false, skipped: true, watiMessageId: null, error: gate.reason };
+
   const url = `${endpoint.replace(/\/+$/, "")}/api/v1/sendTemplateMessage?whatsappNumber=${encodeURIComponent(whatsappNumber)}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);

@@ -16,8 +16,8 @@ import { getSssConfig, getSssPatternConfig } from "./founder-config";
  * have none for this owner. It never updates or deletes, so a BOOKED or BLOCKED slot is
  * untouchable by construction, and a second tick in the same hour creates nothing.
  *
- * Two fields of the shared `SlotPatternConfig` are ignored here on purpose — `assignedToId` and
- * `durationMins` — because an SSS slot's owner and length already live in `sssConfig` and two
+ * Two fields of the shared `SlotPatternConfig` are ignored here on purpose - `assignedToId` and
+ * `durationMins` - because an SSS slot's owner and length already live in `sssConfig` and two
  * sources for one fact is how they end up disagreeing.
  */
 
@@ -49,7 +49,7 @@ export async function ensureSssSlots(): Promise<SssTopUpResult> {
   });
   if (!starts.length) return { ran: false, reason: "pattern fits no slots in the horizon" };
 
-  // Only drop instants already in the past — an SSS is founder-scheduled, so unlike the public
+  // Only drop instants already in the past - an SSS is founder-scheduled, so unlike the public
   // booking page there is no minimum-notice window to respect.
   const now = Date.now();
   const upcoming = starts.filter((s) => s.getTime() >= now);
@@ -82,7 +82,7 @@ export async function ensureSssSlots(): Promise<SssTopUpResult> {
   };
 }
 
-/** Upcoming OPEN SSS slots — the figure that has been 0 since the table was created. */
+/** Upcoming OPEN SSS slots - the figure that has been 0 since the table was created. */
 export async function countOpenSssSlots(): Promise<{ open: number; nextAt: Date | null }> {
   const now = new Date();
   const [open, next] = await Promise.all([

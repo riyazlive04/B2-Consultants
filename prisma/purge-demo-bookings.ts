@@ -1,5 +1,5 @@
 /**
- * Remove the seeded demo bookings — and the slot batch they came in with — from a live database.
+ * Remove the seeded demo bookings - and the slot batch they came in with - from a live database.
  *
  * WHY: `prisma/demo-data.ts` was run against production at some point. On 29 Jul 2026 the result
  * was that **every** `BookingRequest` (3) and **every** `AppointmentSlot` (15) in production was
@@ -8,11 +8,11 @@
  * and the "3 orphaned bookings needing a backfill" in the audit were these.
  *
  * WHY THE SLOTS TOO. Two of the three bookings hold their slot in `BOOKED`. Deleting a booking
- * alone leaves its slot claimed by nothing — an orphan that can never be booked and never frees
+ * alone leaves its slot claimed by nothing - an orphan that can never be booked and never frees
  * itself. The batch is one seed run, all of it now in the past, so it goes as a unit.
  *
  * SCOPE, deliberately narrow. It touches ONLY `BookingRequest` and `AppointmentSlot`, and only
- * rows it can positively identify as fixtures. It does not touch demo Leads or demo Students —
+ * rows it can positively identify as fixtures. It does not touch demo Leads or demo Students -
  * students carry enrolments and money, and removing them would move financial figures, which is a
  * separate decision that deserves its own look. Those are reported at the end, not deleted.
  *
@@ -52,7 +52,7 @@ async function main() {
 
   /**
    * Slots from the same seed batch, identified by sharing a creation MINUTE with a demo booking.
-   * Anything created outside that window is somebody's real calendar and is left strictly alone —
+   * Anything created outside that window is somebody's real calendar and is left strictly alone -
    * this is why the batch window is derived from the data rather than hardcoded to a date.
    */
   const batchStart = new Date(Math.min(...bookings.map((b) => b.createdAt.getTime())));
@@ -68,7 +68,7 @@ async function main() {
   const total = await prisma.appointmentSlot.count();
 
   console.log(`\nBOOKINGS TO DELETE (${bookings.length})`);
-  for (const b of bookings) console.log(`  · ${b.name} — ${b.email} — ${b.status}${b.slotId ? " — holds a slot" : ""}`);
+  for (const b of bookings) console.log(`  · ${b.name} - ${b.email} - ${b.status}${b.slotId ? " - holds a slot" : ""}`);
 
   console.log(`\nSLOTS FROM THE SAME SEED BATCH (${slots.length} of ${total} in the database)`);
   console.log(`  created between ${batchStart.toISOString()} and ${batchEnd.toISOString()}`);
@@ -76,7 +76,7 @@ async function main() {
   console.log(`  ${future.length} of them are in the future`);
 
   if (future.length) {
-    console.log(`\n  !! ${future.length} slot(s) are in the FUTURE — a prospect could be holding one.`);
+    console.log(`\n  !! ${future.length} slot(s) are in the FUTURE - a prospect could be holding one.`);
     console.log(`     Refusing to delete the batch. Check these by hand first.`);
     return;
   }
@@ -92,7 +92,7 @@ async function main() {
   }
 
   if (!APPLY) {
-    console.log(`\nDry run — nothing deleted. Re-run with --apply.\n`);
+    console.log(`\nDry run - nothing deleted. Re-run with --apply.\n`);
     return;
   }
 
@@ -113,7 +113,7 @@ async function main() {
   ]);
   console.log(
     `\nSTILL PRESENT, not touched by this script: ${demoLeads} demo lead(s) and ${demoStudents} demo student(s).\n` +
-      `Students carry enrolments and payments, so removing them would move financial figures —\n` +
+      `Students carry enrolments and payments, so removing them would move financial figures -\n` +
       `that needs its own look rather than riding along with a booking cleanup.\n`,
   );
 }

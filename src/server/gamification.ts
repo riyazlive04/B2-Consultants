@@ -20,7 +20,7 @@ import { okrCompletionPct } from "./people-metrics";
  * Server side of the Arena: loads the append-only history and hands it to the
  * pure engine in lib/gamification.ts. Wrapped in React.cache so the layout
  * (notifications), the home card and the Arena page share ONE computation per
- * request. Data volumes are a 3-4 person team's history — full scans are cheap
+ * request. Data volumes are a 3-4 person team's history - full scans are cheap
  * and keep the scores exact and retroactive.
  */
 
@@ -30,7 +30,7 @@ const LOG_FIELDS = [
   "sessionsDelivered", "studentsCheckedInOn", "assignmentsReviewed", "studentsFlaggedAtRisk",
 ] as const;
 
-/** @db.Date columns are UTC midnight — the calendar day IS the key. */
+/** @db.Date columns are UTC midnight - the calendar day IS the key. */
 const dateKeyOf = (d: Date) => d.toISOString().slice(0, 10);
 
 /** Timestamps (changedAt etc.) → the IST business day they happened on. */
@@ -51,7 +51,7 @@ export type TeamGame = {
   monthKey: string;
   players: RankedPlayer[];
   feed: Array<XpEvent & { name: string }>;
-  /** the rules in force today — what the Arena explains and what new work scores by */
+  /** the rules in force today - what the Arena explains and what new work scores by */
   ruleset: Ruleset;
 };
 
@@ -59,7 +59,7 @@ export type TeamGame = {
  * Cross-request cache (audit §C #20). getTeamGame full-scans ~7 append-only tables on nearly every
  * page load (the layout's notification count, the home card and the Arena all call it), and
  * React.cache only dedupes WITHIN a single request. This per-instance memo holds the result for a
- * short TTL ACROSS requests — the same pattern notifications.ts already uses (notifMemo). Keyed by
+ * short TTL ACROSS requests - the same pattern notifications.ts already uses (notifMemo). Keyed by
  * the IST day so it self-busts at midnight; `invalidateTeamGameMemo` lets an XP-affecting write
  * clear it so a fresh action shows immediately rather than up to TTL late.
  */
@@ -80,11 +80,11 @@ export const getTeamGame = cache(async (): Promise<TeamGame> => {
 
   const [profiles, logs, stageHistory, outcomes, milestoneLogs, signalLogs, okrs] = await Promise.all([
     prisma.teamProfile.findMany({
-      // The Arena ranks the people who COMPETE — the outreach/discovery team (spec §Q4 / plan 3.6:
+      // The Arena ranks the people who COMPETE - the outreach/discovery team (spec §Q4 / plan 3.6:
       // "leaderboard excludes non-competing roles, head coach promoted out of ranking"). ADMIN was
       // already out; HEAD is oversight, not a contender, so a head coach who logs a session no
       // longer lands on the board above the telecallers it exists to motivate. To let the head
-      // compete again, drop HEAD from this list — a one-line reversal.
+      // compete again, drop HEAD from this list - a one-line reversal.
       where: { userId: { not: null }, dashboardRole: { notIn: ["ADMIN", "HEAD"] } },
       orderBy: { orderIndex: "asc" },
     }),

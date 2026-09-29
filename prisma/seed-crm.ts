@@ -1,9 +1,9 @@
 /**
- * Synamate CRM parity — pipeline seed.
+ * Synamate CRM parity - pipeline seed.
  *
  * 1. Creates the default "Sales" pipeline if it doesn't exist.
  * 2. Shapes its columns into the twelve live Synamate stages (`lib/pipeline-stages.ts`) and
- *    re-files any card that is in the wrong one — `server/pipeline-reshape.applySynamateStages`,
+ *    re-files any card that is in the wrong one - `server/pipeline-reshape.applySynamateStages`,
  *    the same code the `db:pipeline-sync` CLI and the board's "Restore the Synamate columns"
  *    button run, so a fresh database and a live one can never end up with different boards.
  * 3. Backfills one Opportunity per Lead that doesn't have one yet.
@@ -70,7 +70,7 @@ async function main() {
     const data = leads.flatMap((l) => {
       const stageId = stageIdFor(l.stage, l.paymentPlan);
       // No column for this lead's stage means the board has been edited past what the mapping
-      // covers. Skip the lead rather than throw — a missing card is recoverable by re-running.
+      // covers. Skip the lead rather than throw - a missing card is recoverable by re-running.
       if (!stageId) return [];
       const pos = posByStage.get(stageId) ?? 0;
       posByStage.set(stageId, pos + 1);

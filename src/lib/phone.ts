@@ -9,7 +9,7 @@ import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/
  *
  * B2 messages Indian AND German contacts, so a single "default country code" that we blindly
  * prepend is unsafe: `0151 2345 6789` is a German mobile, `098765 43210` is an Indian one, and
- * both are "a number starting with 0". Guessing wrong doesn't fail loudly — it WhatsApps a
+ * both are "a number starting with 0". Guessing wrong doesn't fail loudly - it WhatsApps a
  * stranger. So we delegate to libphonenumber-js, which knows each country's trunk prefixes and
  * valid lengths, and we **fail closed**: anything that isn't a demonstrably valid number returns
  * null, the send is SKIPPED, and the operator sees "No valid WhatsApp number" and fixes it.
@@ -43,7 +43,7 @@ export function toCountry(raw: string | null | undefined): CountryCode {
 
 /**
  * Normalize to E.164 digits WITHOUT the leading "+" (WATI's expected `whatsappNumber` format).
- * Returns null when the number is missing, malformed, or not valid for the resolved country —
+ * Returns null when the number is missing, malformed, or not valid for the resolved country -
  * callers must skip the send rather than dial garbage.
  */
 export function normalizeWhatsappNumber(
@@ -64,7 +64,7 @@ export function normalizeWhatsappNumber(
   const national = parsePhoneNumberFromString(s, country);
   if (national?.isValid()) return national.number.replace(/^\+/, "");
 
-  // 2) Bare E.164 digits (WATI's `waId`, e.g. "919876543210") — retry with a "+".
+  // 2) Bare E.164 digits (WATI's `waId`, e.g. "919876543210") - retry with a "+".
   const digits = s.replace(/\D/g, "");
   if (!s.startsWith("+") && digits.length >= 11) {
     const e164 = parsePhoneNumberFromString(`+${digits}`);
@@ -74,9 +74,25 @@ export function normalizeWhatsappNumber(
   return null;
 }
 
+/**
+ * The form a phone number is STORED in: E.164 with the "+" ("+919789961631").
+ *
+ * Lead capture used to store whatever the form sent - "+91 09789961631" with the Indian trunk
+ * zero left in after the country code, or "98765 43210" with no code at all - and that raw
+ * string is what every screen then showed. Canonicalising on the way in means one number has
+ * one spelling everywhere. A number libphonenumber cannot make sense of is kept as typed
+ * (trimmed) rather than dropped: losing a lead's only contact detail is worse than an odd string.
+ */
+export function canonicalPhone(raw: string | null | undefined, defaultCountry: string = DEFAULT_COUNTRY): string | null {
+  const s = (raw ?? "").trim();
+  if (!s) return null;
+  const normalized = normalizeWhatsappNumber(s, defaultCountry);
+  return normalized ? `+${normalized}` : s;
+}
+
 /** Pretty international form for display, e.g. "+91 98765 43210". Falls back to "+digits". */
 export function displayWhatsappNumber(normalized: string | null | undefined): string {
-  if (!normalized) return "—";
+  if (!normalized) return "-";
   const parsed = parsePhoneNumberFromString(`+${normalized}`);
   return parsed?.formatInternational() ?? `+${normalized}`;
 }

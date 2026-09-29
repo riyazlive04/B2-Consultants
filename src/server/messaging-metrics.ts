@@ -12,7 +12,7 @@ import type { WhatsAppKind } from "@prisma/client";
 export type InboxThread = {
   leadId: string;
   name: string;
-  /** Null since the Synamate import — a contact can exist with no number. Display only; the send
+  /** Null since the Synamate import - a contact can exist with no number. Display only; the send
    *  actions re-read the phone and refuse on their own (messaging-actions.ts). */
   phone: string | null;
   email: string | null;
@@ -20,7 +20,7 @@ export type InboxThread = {
   lastSnippet: string;
   lastChannel: "EMAIL" | "SMS" | "WHATSAPP";
   /** True when the most recent INBOUND `Message` (Email/SMS) row for this lead is unread.
-   *  WhatsApp threads don't carry this signal — `read`/`assignedToId` (§0 schema) only live on
+   *  WhatsApp threads don't carry this signal - `read`/`assignedToId` (§0 schema) only live on
    *  `Message`, so a thread whose latest activity is a WhatsApp reply won't flip this true even
    *  though WATI's own REPLIED status already surfaces that elsewhere. */
   unread: boolean;
@@ -59,8 +59,8 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   for (const m of wa) consider(m.leadId, m.lead, m.createdAt, m.body ?? "(template)", "WHATSAPP");
 
   // Thread-level read/assignment state, sourced from `Message` only (the schema field only lives
-  // there — see §0). "Unread" = the most recent INBOUND Message row is unread. "Assigned to" =
-  // whoever the most recent Message row (either direction) is assigned to — assignThread() below
+  // there - see §0). "Unread" = the most recent INBOUND Message row is unread. "Assigned to" =
+  // whoever the most recent Message row (either direction) is assigned to - assignThread() below
   // writes assignedToId onto every Message row for the lead in one pass, so any row agrees.
   const latestInboundAt = new Map<string, Date>();
   const latestAssignAt = new Map<string, Date>();
@@ -134,7 +134,7 @@ export type WhatsAppComposerTemplate = { kind: WhatsAppKind; label: string; name
 export async function getMessagingSettings() {
   const [email, sms, wati] = await Promise.all([getEmailRuntime(), getSmsRuntime(), getWatiRuntime()]);
   // Every touchpoint that has a template mapped in WhatsApp → Settings is offered in the
-  // composer's "Use template" mode — a business-initiated WhatsApp send (outside the 24h session
+  // composer's "Use template" mode - a business-initiated WhatsApp send (outside the 24h session
   // window opened by the contact) MUST be an approved template; there is no freeform alternative.
   const templates: WhatsAppComposerTemplate[] = Object.entries(wati.settings.templates)
     .filter((entry): entry is [string, NonNullable<(typeof entry)[1]>] => !!entry[1])

@@ -7,8 +7,8 @@ import type { TerminationReport } from "@/server/termination-report";
  * The offboarding record, as a filed document.
  *
  * Deliberately states what did NOT move as prominently as what did. Someone reading this a year
- * later is usually trying to answer one of two questions — "what were they responsible for" or
- * "why is this old commission still in their name" — and the second is only answerable if the
+ * later is usually trying to answer one of two questions - "what were they responsible for" or
+ * "why is this old commission still in their name" - and the second is only answerable if the
  * document says the attribution was left alone on purpose.
  */
 
@@ -42,7 +42,7 @@ function TerminationDoc({ r }: { r: TerminationReport }) {
   const held = r.holds.categories.filter((c) => c.count > 0);
 
   return (
-    <Document title={`Offboarding record — ${r.profile.name}`}>
+    <Document title={`Offboarding record - ${r.profile.name}`}>
       <Page size="A4" style={s.page}>
         <View style={s.header}>
           <PdfBrandMark size={34} />
@@ -59,7 +59,7 @@ function TerminationDoc({ r }: { r: TerminationReport }) {
           label="Joined"
           value={r.tenure.joined ? new Date(r.tenure.joined).toLocaleDateString("en-GB") : "not recorded"}
         />
-        <Line label="Months served" value={r.tenure.months ?? "—"} />
+        <Line label="Months served" value={r.tenure.months ?? "-"} />
         <Line label="First-call share at departure" value={`${r.profile.firstCallSharePct}%`} />
 
         <Text style={s.h2}>Roles and responsibilities</Text>
@@ -84,14 +84,14 @@ function TerminationDoc({ r }: { r: TerminationReport }) {
 
         <Text style={s.h2}>Handover</Text>
         {held.length === 0 ? (
-          <Text style={s.body}>Nothing was outstanding — no open leads, calls, tasks or accounts.</Text>
+          <Text style={s.body}>Nothing was outstanding - no open leads, calls, tasks or accounts.</Text>
         ) : (
           held.map((c) => <Line key={c.key} label={c.label} value={c.count} />)
         )}
 
         <Text style={s.note}>
           Open work was reassigned. Their call history, recorded discovery outcomes, stage changes,
-          audit entries and past commission attribution were deliberately NOT reassigned — those
+          audit entries and past commission attribution were deliberately NOT reassigned - those
           are a record of what happened, and commission is derived from them at the time it is
           read. Rewriting them would have credited someone else with work this person did.
         </Text>

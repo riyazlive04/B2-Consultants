@@ -12,19 +12,19 @@ import { AGE_BUCKETS, bucketForDaysOverdue, type AgeBucketKey } from "@/lib/agei
  *
  * REPLACES a bucket-total column chart, which was wrong in two ways at once:
  *
- *   • G1 — the buckets were 1–30 / 31–60 / 61–90 / 90+ days. The collection cycle is at most
+ *   • G1 - the buckets were 1–30 / 31–60 / 61–90 / 90+ days. The collection cycle is at most
  *     a fortnight, so effectively every overdue receivable landed in the first column and the
  *     chart said nothing. They are weeks now.
  *
- *   • G2 — each bar was scaled to the LARGEST value in the set, so a student owing ₹75,000 of
+ *   • G2 - each bar was scaled to the LARGEST value in the set, so a student owing ₹75,000 of
  *     an agreed ₹1,25,000 rendered as a full bar and read as "owes everything". A bar is now
  *     scaled to that student's OWN agreed total, which is the only denominator that makes the
  *     length mean anything, and both figures are printed beside it.
  *
  * Per-student rows rather than one stacked bar per bucket (G3): a stacked segment could not say
  * who was inside it, which is the only thing this screen is consulted for. Each row carries the
- * student's ID next to their name — two students called "Anna Smith" is a real case here, and
- * has already caused a payment to be credited to the wrong one — and links to the record.
+ * student's ID next to their name - two students called "Anna Smith" is a real case here, and
+ * has already caused a payment to be credited to the wrong one - and links to the record.
  *
  * "On schedule" is deliberately absent (G4). Money that is not late is not part of an ageing
  * analysis; it lives in the receivables list, and including it here made the one column nobody
@@ -32,13 +32,13 @@ import { AGE_BUCKETS, bucketForDaysOverdue, type AgeBucketKey } from "@/lib/agei
  */
 
 export type AgeRow = {
-  /** PendingPayment id — the record a click opens. */
+  /** PendingPayment id - the record a click opens. */
   id: string;
   studentName: string;
   studentId: string | null;
   /** Outstanding, in paise. */
   balanceInr: number;
-  /** The full agreed amount, in paise — the denominator for this student's bar. */
+  /** The full agreed amount, in paise - the denominator for this student's bar. */
   totalFeeInr: number;
   daysOverdue: number;
 };
@@ -98,8 +98,8 @@ export function AgeAnalysis({
                 <ul className="space-y-1.5">
                   {list.map((r) => {
                     // THE fix for G2. Guard the denominator: a receivable with no agreed total
-                    // recorded would divide by zero, so it renders full — it owes everything
-                    // that is known about it — rather than crashing or showing an empty bar.
+                    // recorded would divide by zero, so it renders full - it owes everything
+                    // that is known about it - rather than crashing or showing an empty bar.
                     const frac = r.totalFeeInr > 0 ? Math.min(1, r.balanceInr / r.totalFeeInr) : 1;
                     return (
                       <li key={r.id}>
@@ -114,7 +114,7 @@ export function AgeAnalysis({
                                 code={r.studentId ? studentCodeById[r.studentId] : null}
                               />
                             </span>
-                            {/* Both figures, per G2 — the bar length is meaningless without them. */}
+                            {/* Both figures, per G2 - the bar length is meaningless without them. */}
                             <span className="tnum flex-none text-caption text-muted">
                               <span className="font-semibold text-ink">
                                 {formatInrMinor(r.balanceInr, { compact: true })}

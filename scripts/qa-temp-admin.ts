@@ -4,7 +4,7 @@
  *   npx tsx scripts/qa-temp-admin.ts            # create + print a fresh random password
  *   npx tsx scripts/qa-temp-admin.ts --remove   # delete the account and all its sessions
  *
- * This is a real ADMIN account on whatever database .env points at — which is production.
+ * This is a real ADMIN account on whatever database .env points at - which is production.
  * Three deliberate properties keep that honest:
  *   * the address and display name say TEMPORARY, so it can never be mistaken for a
  *     colleague's account in the Users list or in the activity log;
@@ -22,7 +22,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 const prisma = new PrismaClient();
 
 const EMAIL = "qa.temp.verify@b2consultants.in";
-const NAME = "QA TEMPORARY — delete me";
+const NAME = "QA TEMPORARY - delete me";
 
 const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
@@ -38,7 +38,7 @@ const makePassword = () => `qa-${randomBytes(12).toString("hex")}`;
 async function remove() {
   const user = await prisma.user.findUnique({ where: { email: EMAIL } });
   if (!user) {
-    console.log("No temporary QA account exists — nothing to remove.");
+    console.log("No temporary QA account exists - nothing to remove.");
     return;
   }
   await prisma.session.deleteMany({ where: { userId: user.id } });
@@ -58,7 +58,7 @@ async function create() {
     console.log("Created a new temporary QA admin.");
   } else {
     await ctx.internalAdapter.updatePassword(user.id, await ctx.password.hash(password));
-    console.log("Temporary QA admin already existed — password reset.");
+    console.log("Temporary QA admin already existed - password reset.");
   }
 
   await prisma.user.update({

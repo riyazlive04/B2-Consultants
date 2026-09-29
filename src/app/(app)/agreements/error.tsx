@@ -6,7 +6,7 @@ import { AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 
-/** Error boundary for the Agreements surface — legal/money views must never fail to a blank screen. */
+/** Error boundary for the Agreements surface - legal/money views must never fail to a blank screen. */
 export default function AgreementsError({
   error,
   reset,
@@ -27,7 +27,7 @@ export default function AgreementsError({
           </span>
           <h1 className="font-display text-xl font-bold tracking-tight text-ink">Agreements couldn’t load</h1>
           <p className="max-w-sm text-sm text-muted">
-            We hit a problem loading this agreement view. Nothing was signed or changed — try again, and if it
+            We hit a problem loading this agreement view. Nothing was signed or changed - try again, and if it
             keeps happening, refresh the page.
           </p>
           {process.env.NODE_ENV === "development" && error?.message && (

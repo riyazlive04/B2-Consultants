@@ -14,11 +14,11 @@ import { Modal } from "@/components/ui/Modal";
 import { Trash2 } from "lucide-react";
 
 /**
- * The pending pool (spec Part 2 §2.2) — everyone who has committed but has no seat yet.
+ * The pending pool (spec Part 2 §2.2) - everyone who has committed but has no seat yet.
  *
  * This screen exists because the founders' rule creates a gap: a workshop with one joiner
  * opens no batch, so that person is currently remembered only by whoever ran the workshop.
- * The waiting-days column is the point — a pool you can't see the age of is just a nicer
+ * The waiting-days column is the point - a pool you can't see the age of is just a nicer
  * place to forget people.
  */
 
@@ -87,7 +87,7 @@ export function PendingPoolPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-muted">
           People who&apos;ve committed but have no seat yet. A workshop that yields a single joiner
-          opens no batch — they wait here until enough people accumulate. This is why batch
+          opens no batch - they wait here until enough people accumulate. This is why batch
           numbers legitimately have gaps.
         </p>
         <Btn onClick={() => { setAdding(true); setError(null); }}>
@@ -102,7 +102,7 @@ export function PendingPoolPanel({
             <div key={`${s.level}-${s.slot}`} className="rounded-field border border-accent/40 bg-accent-soft px-4 py-3">
               <p className="text-caption font-semibold uppercase text-ink-3">Ready to open</p>
               <p className="mt-1 text-sm font-semibold text-ink">
-                {s.level} · {s.slot.toLowerCase()} — {s.count} waiting
+                {s.level} · {s.slot.toLowerCase()} - {s.count} waiting
               </p>
               <p className="mt-0.5 text-xs text-muted">{s.reason}</p>
             </div>
@@ -111,7 +111,7 @@ export function PendingPoolPanel({
             <div key={`${s.level}-${s.slot}`} className="rounded-field border border-line bg-surface-2 px-4 py-3">
               <p className="text-caption font-semibold uppercase text-ink-3">Holding</p>
               <p className="mt-1 text-sm font-semibold text-ink">
-                {s.level} · {s.slot.toLowerCase()} — {s.count} waiting
+                {s.level} · {s.slot.toLowerCase()} - {s.count} waiting
               </p>
               <p className="mt-0.5 text-xs text-muted">{s.reason}</p>
             </div>
@@ -140,7 +140,7 @@ export function PendingPoolPanel({
             </thead>
             <tbody>
               {rows.map((r) => {
-                // Only offer batches at this joiner's level — the action re-checks anyway,
+                // Only offer batches at this joiner's level - the action re-checks anyway,
                 // but offering an impossible choice is a UI that lies.
                 const options = batchesWithRoom.filter((b) => b.level === r.level);
                 return (
@@ -162,7 +162,7 @@ export function PendingPoolPanel({
                         <Clock size={13} /> {r.waitingDays}d
                       </span>
                     </td>
-                    <td className="py-2 pr-4 text-xs text-muted">{r.workshopName ?? "—"}</td>
+                    <td className="py-2 pr-4 text-xs text-muted">{r.workshopName ?? "-"}</td>
                     <td className="py-2 pr-4">
                       {options.length === 0 ? (
                         <span className="text-xs text-muted">No {r.level} batch with room</span>
@@ -212,7 +212,7 @@ export function PendingPoolPanel({
             <Field label="Timetable" hint="'Either' keeps them available for whichever batch opens first.">
               <Select name="preference" options={PREFS.map((p) => ({ value: p.value, label: p.label }))} />
             </Field>
-            <Field label="Preferred time" hint="As they said it on the confirmation call — e.g. 'evening', 'after 7pm'.">
+            <Field label="Preferred time" hint="As they said it on the confirmation call - e.g. 'evening', 'after 7pm'.">
               <TextInput name="preferredTime" />
             </Field>
             <Field label="Notes">

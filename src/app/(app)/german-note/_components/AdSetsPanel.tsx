@@ -71,7 +71,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
 
       {adSets.length === 0 ? (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          No ad-sets yet — add spend &amp; reach to see CTR, CPC and conversion rate.
+          No ad-sets yet - add spend &amp; reach to see CTR, CPC and conversion rate.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-card border border-line bg-surface shadow-card">
@@ -97,7 +97,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
                   <td className="px-3 py-2.5 text-right tnum">{num(s.reach)}</td>
                   <td className="px-3 py-2.5 text-right tnum">{num(s.linkClicks)}</td>
                   <td className="px-3 py-2.5 text-right tnum">{pct(s.ctr)}</td>
-                  <td className="px-3 py-2.5 text-right tnum">{s.cpc === null ? "—" : inr(s.cpc)}</td>
+                  <td className="px-3 py-2.5 text-right tnum">{s.cpc === null ? "-" : inr(s.cpc)}</td>
                   <td className="px-3 py-2.5 text-right tnum">{num(s.attended)}</td>
                   <td className="px-3 py-2.5 text-right">
                     <span className="tnum">{num(s.conversions)}</span>
@@ -136,7 +136,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
                   <td className="px-3 py-2.5 text-right tnum">{num(adTotals.reach)}</td>
                   <td className="px-3 py-2.5 text-right tnum">{num(adTotals.linkClicks)}</td>
                   <td className="px-3 py-2.5 text-right tnum">{pct(adTotals.ctr)}</td>
-                  <td className="px-3 py-2.5 text-right tnum">{adTotals.cpc === null ? "—" : inr(adTotals.cpc)}</td>
+                  <td className="px-3 py-2.5 text-right tnum">{adTotals.cpc === null ? "-" : inr(adTotals.cpc)}</td>
                   <td className="px-3 py-2.5 text-right tnum">{num(adTotals.attended)}</td>
                   <td className="px-3 py-2.5 text-right">
                     <span className="tnum">{num(adTotals.conversions)}</span>

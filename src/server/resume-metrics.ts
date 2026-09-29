@@ -31,7 +31,7 @@ function fmtDate(d: Date): string {
  *
  * `cv-check` opens for ADMIN, HEAD and STUDENT (sections.ts). The first two run the Studio *for*
  * candidates and need the whole list; a STUDENT *is* a candidate and must only ever reach their
- * own. Until this existed, every read in this module was gated on the section alone — so any
+ * own. Until this existed, every read in this module was gated on the section alone - so any
  * student could list, open and download every other student's CV, employment history and all.
  *
  * Two deliberate choices:
@@ -100,7 +100,7 @@ export type ResumeDetail = {
 
 export async function getResume(id: string, scope: ResumeScope): Promise<ResumeDetail | null> {
   // findFirst, not findUnique: the scope is a non-unique filter, and an out-of-scope CV must be
-  // indistinguishable from a missing one — never a 403 that confirms the id exists.
+  // indistinguishable from a missing one - never a 403 that confirms the id exists.
   const row = await prisma.resume.findFirst({
     where: { id, ...scope },
     include: { reviews: { orderBy: { createdAt: "desc" } } },

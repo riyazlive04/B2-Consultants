@@ -4,6 +4,7 @@ import { getAllPublishedPageParams, getPublicPage } from "@/server/sites-metrics
 import SitePageRenderer from "@/components/sites/SitePageRenderer";
 import ForwardParams from "@/components/sites/ForwardParams";
 import SiteTracking from "@/components/sites/SiteTracking";
+import { publicMetadata, siteCanonical } from "@/lib/public-seo";
 
 /**
  * The public marketing site, served at /s/<slug>/<path> until a real domain is attached.
@@ -18,7 +19,7 @@ import SiteTracking from "@/components/sites/SiteTracking";
  * live immediately rather than after the window expires.
  *
  * ── And why searchParams is NOT read here ─────────────────────────────────────────────────────
- * Reading `searchParams` opts a page out of static rendering entirely — which would hand back the
+ * Reading `searchParams` opts a page out of static rendering entirely - which would hand back the
  * per-request latency this route exists to avoid. A statically rendered page has no request to
  * read a query string from, so attribution forwarding cannot happen on the server at all; doing it
  * here would silently produce nothing. <ForwardParams /> does it in the browser instead, where the
@@ -30,12 +31,12 @@ export const revalidate = 300;
  * Prerender every published page at build time.
  *
  * Without this the route is "server-rendered on demand": Next cannot prerender a catch-all it has
- * no params for, so it renders dynamically and emits `Cache-Control: private, no-store` — which no
+ * no params for, so it renders dynamically and emits `Cache-Control: private, no-store` - which no
  * CDN or browser will ever cache, and every ad click pays the full cross-region database round
  * trip. Measured before adding this: `no-store` on both a cold and a warm request.
  *
  * `dynamicParams` stays at its default of true, so a page published after the last build still
- * resolves — it is just rendered on demand until the next deploy, rather than 404ing.
+ * resolves - it is just rendered on demand until the next deploy, rather than 404ing.
  */
 export async function generateStaticParams() {
   return getAllPublishedPageParams();
@@ -47,19 +48,31 @@ function toPath(segments?: string[]): string {
   return `/${segments.join("/")}`;
 }
 
+/**
+ * Title, description, canonical, Open Graph, Twitter card and an EXPLICIT robots directive.
+ *
+ * The explicit robots is load-bearing. The root layout marks the whole app `noindex, nofollow`
+ * because it is an internal dashboard, and Next merges metadata downwards - so a marketing page
+ * that simply says nothing about robots inherits "do not index me" and disappears from search
+ * without a single thing looking broken. `publicMetadata` always emits the key.
+ */
 export async function generateMetadata({
   params,
 }: {
   params: { slug: string; path?: string[] };
 }): Promise<Metadata> {
-  const page = await getPublicPage(params.slug, toPath(params.path));
-  if (!page) return { title: "Not found" };
-  return {
+  const path = toPath(params.path);
+  const page = await getPublicPage(params.slug, path);
+  if (!page) return { title: "Not found", robots: { index: false, follow: false } };
+
+  return publicMetadata({
     title: page.seoTitle || page.title,
-    description: page.seoDescription ?? undefined,
-    openGraph: page.ogImageUrl ? { images: [page.ogImageUrl] } : undefined,
-    robots: page.noIndex ? { index: false, follow: false } : undefined,
-  };
+    description: page.seoDescription,
+    canonical: siteCanonical(page.siteDomain, params.slug, path),
+    imageUrl: page.ogImageUrl,
+    siteName: page.siteName,
+    index: !page.noIndex,
+  });
 }
 
 export default async function PublicSitePage({
@@ -79,7 +92,7 @@ export default async function PublicSitePage({
         footer={page.footer}
         theme={page.theme}
         nav={page.nav}
-        // Empty by design — see the note above. The browser fills this in.
+        // Empty by design - see the note above. The browser fills this in.
         incoming={{}}
         fromPath={path}
         siteDomain={page.siteDomain}

@@ -26,7 +26,7 @@ function cell(value: unknown): string {
         ? value.toString()
         : String(value);
   if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-  // Double up embedded quotes, then wrap — the RFC 4180 rule.
+  // Double up embedded quotes, then wrap - the RFC 4180 rule.
   return `"${s.replace(/"/g, '""')}"`;
 }
 
@@ -42,7 +42,7 @@ export function csvRow(values: unknown[]): string {
  * duration of the request, on a 1 vCPU box with no swap.
  *
  * The BOM is deliberate. Without it Excel on Windows reads the file as the system codepage and
- * mangles every non-ASCII character — which here means every German name.
+ * mangles every non-ASCII character - which here means every German name.
  */
 export function csvStreamResponse(
   filename: string,
@@ -60,11 +60,11 @@ export function csvStreamResponse(
           if (chunk) controller.enqueue(encoder.encode(chunk));
         }
       } catch (err) {
-        // The headers have already been sent, so this cannot become a 500 — the honest thing is
+        // The headers have already been sent, so this cannot become a 500 - the honest thing is
         // to put the failure IN the file, where whoever opens it will see it, rather than
         // truncating silently and leaving them with a plausible-looking partial export.
         controller.enqueue(
-          encoder.encode(csvRow([`EXPORT FAILED — ${err instanceof Error ? err.message : "unknown error"}`])),
+          encoder.encode(csvRow([`EXPORT FAILED - ${err instanceof Error ? err.message : "unknown error"}`])),
         );
       }
       controller.close();

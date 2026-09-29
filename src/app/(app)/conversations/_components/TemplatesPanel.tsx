@@ -45,7 +45,7 @@ export default function TemplatesPanel({ templates }: { templates: Template[] })
             <Tr key={t.id} className="border-b border-line hover:bg-surface-2">
               <Td><button onClick={() => openEdit(t)} className="text-sm font-semibold text-ink hover:text-primary">{t.name}</button></Td>
               <Td><Pill tone={t.channel === "EMAIL" ? "info" : "primary"}>{t.channel}</Pill></Td>
-              <Td className="max-w-sm truncate text-sm text-ink-3">{t.subject ? `${t.subject} — ` : ""}{t.body}</Td>
+              <Td className="max-w-sm truncate text-sm text-ink-3">{t.subject ? `${t.subject} - ` : ""}{t.body}</Td>
               <Td align="right">
                 <div className="flex items-center justify-end gap-1">
                   <Btn size="sm" variant="ghost" onClick={() => openEdit(t)}>Edit</Btn>

@@ -34,14 +34,14 @@ export const dynamic = "force-dynamic";
 export default async function StudentsPage() {
   const session = await requireSection("students"); // Admin full, Head view (PRD2 §2)
   const isAdmin = session.role === "ADMIN";
-  // Mirrors `updateTracker`'s own `requireAdminOrHead` gate — the weekly-round form is only
+  // Mirrors `updateTracker`'s own `requireAdminOrHead` gate - the weekly-round form is only
   // offered to people the server will actually accept a write from.
   const canEditTracker = isAdmin || session.role === "HEAD";
   const { counts, avgSatisfaction, avgNps, satisfactionBreakdown, npsBreakdown, tracker, momentumBoard, atRiskRadar, ltvSummary, students } =
     await getStudentsOverview();
   const waByStudent = await getWhatsAppStatusMap("studentId", tracker.map((t) => t.studentId));
   const today = toDateInputValue(istToday());
-  // Book orders and Import are Admin-only tabs — a Head shouldn't pay for reads they can't see.
+  // Book orders and Import are Admin-only tabs - a Head shouldn't pay for reads they can't see.
   const [bookOrders, studentOptions] = isAdmin
     ? await Promise.all([getBookOrderData(), getStudentOptions()])
     : [{ rows: [], vendors: [], thresholdRupees: 0 }, []];
@@ -170,9 +170,9 @@ export default async function StudentsPage() {
           icon={<Crown size={18} />}
           detail={{
             rows: [
-              { label: "Avg paid — Solo", value: formatInrMinor(ltvSummary.avgSolo, { compact: true }) },
-              { label: "Avg paid — Guided", value: formatInrMinor(ltvSummary.avgGuided, { compact: true }) },
-              { label: "Avg paid — Elite", value: formatInrMinor(ltvSummary.avgElite, { compact: true }) },
+              { label: "Avg paid - Solo", value: formatInrMinor(ltvSummary.avgSolo, { compact: true }) },
+              { label: "Avg paid - Guided", value: formatInrMinor(ltvSummary.avgGuided, { compact: true }) },
+              { label: "Avg paid - Elite", value: formatInrMinor(ltvSummary.avgElite, { compact: true }) },
               { label: "Upgrade rate", value: formatPct(ltvSummary.upgradeRatePct) },
             ],
           }}
@@ -187,12 +187,12 @@ export default async function StudentsPage() {
         <span className="font-medium text-ink">Upgrade rate:</span> {formatPct(ltvSummary.upgradeRatePct)}
       </p>
 
-      {/* Momentum board — gamified journey showcase: who's moving fastest right now.
+      {/* Momentum board - gamified journey showcase: who's moving fastest right now.
           Derived from milestones + sessions + activity recency; nothing extra to enter. */}
       {momentumBoard.length > 0 && (
         <Card
           title={<CardTitle icon={<Rocket size={18} />}>Momentum board</CardTitle>}
-          subtitle="Journey XP = milestones covered + sessions + applications + interviews. Use it in check-ins — students love seeing their bar move."
+          subtitle="Journey XP = milestones covered + sessions + applications + interviews. Use it in check-ins - students love seeing their bar move."
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {momentumBoard.map((t, i) => (
@@ -257,7 +257,7 @@ export default async function StudentsPage() {
             content: <TrackerTable rows={tracker} isAdmin={isAdmin} waStatus={waByStudent} />,
           },
           /**
-           * The weekly round — the in-app replacement for the Google Form that was being used to
+           * The weekly round - the in-app replacement for the Google Form that was being used to
            * collect tracker updates. Same fields, same audited write path, no sheet to reconcile.
            * Admin and Head only, matching `updateTracker`'s own `requireAdminOrHead` gate: showing
            * a form to someone the server will refuse is worse than not showing it.

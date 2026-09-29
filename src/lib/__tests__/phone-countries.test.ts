@@ -39,7 +39,7 @@ describe("splitPhone", () => {
 
   test("prefers the LONGEST matching dial code", () => {
     // +1 is the United States and +1868 is Trinidad. Matching the short one first would file
-    // every Caribbean number under the US — and then dial it wrong.
+    // every Caribbean number under the US - and then dial it wrong.
     assert.equal(splitPhone("+1868 2911234").iso2, "TT");
     assert.equal(splitPhone("+1 4155550123").iso2, "US");
     assert.equal(splitPhone("+1876 5551234").iso2, "JM");

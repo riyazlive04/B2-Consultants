@@ -6,7 +6,7 @@ import { AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 
-/** Error boundary for the Console surface — admin/money config must never fail to a blank screen. */
+/** Error boundary for the Console surface - admin/money config must never fail to a blank screen. */
 export default function ConsoleError({
   error,
   reset,
@@ -27,7 +27,7 @@ export default function ConsoleError({
           </span>
           <h1 className="font-display text-xl font-bold tracking-tight text-ink">Console couldn’t load</h1>
           <p className="max-w-sm text-sm text-muted">
-            We hit a problem loading the console. No settings were changed — try again, and if it keeps
+            We hit a problem loading the console. No settings were changed - try again, and if it keeps
             happening, refresh the page.
           </p>
           {process.env.NODE_ENV === "development" && error?.message && (

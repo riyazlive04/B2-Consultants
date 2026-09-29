@@ -7,11 +7,12 @@ import { requireSection } from "@/lib/rbac";
 import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { logActivity } from "./activity-log";
 import { resolveStageAfterCall } from "@/lib/call-outcome";
+import { clampCalledAt } from "@/lib/offline-calls";
 import { syncDefaultOpportunity } from "./opportunity-sync";
 import type { ActionResult } from "./finance-actions";
 
 /**
- * Per-dial call logging — the fact behind the telecaller desk.
+ * Per-dial call logging - the fact behind the telecaller desk.
  *
  * Before this, "calls made" existed only as a DailyLog number the telecaller typed in at the
  * end of the day: an aggregate, self-reported, and unlinked to any lead. Nothing recorded that
@@ -19,10 +20,10 @@ import type { ActionResult } from "./finance-actions";
  * had no answer. Each row here is one dial.
  *
  * Append-only, like DailyLog: a mis-logged call is corrected by logging another, never by
- * editing history — the counts a bonus is paid on must not be silently rewritable. Deletion is
+ * editing history - the counts a bonus is paid on must not be silently rewritable. Deletion is
  * Admin-only and exists for genuine mistakes (a test row, a double-tap), not for tidying.
  *
- * Gate: `pipeline` — the section Asma/Nilofer already have for lead work. A telecaller can log
+ * Gate: `pipeline` - the section Asma/Nilofer already have for lead work. A telecaller can log
  * a call against any lead they can see; the row stamps who they are from the session, never
  * from the form, so a call can't be logged in someone else's name.
  */
@@ -43,6 +44,15 @@ const callSchema = z.object({
    * because a stage select disagreed would be a strictly worse outcome than not moving the card.
    */
   nextStage: z.string().trim().max(40).optional().or(z.literal("")),
+  /**
+   * When the Call button was pressed, as the device saw it (ISO). The outcome form opens as the
+   * call ends, so without this the logged time would be the END of the conversation plus however
+   * long the notes took - and speed-to-lead would measure typing speed. Optional: the desks'
+   * "Log outcome" button (no dial) posts nothing and gets the server clock. Clamped server-side
+   * exactly like an offline replay - it can never sit in the future or reach back past the queue
+   * age, so it cannot be used to flatter the five-minute number.
+   */
+  calledAt: z.string().trim().optional().or(z.literal("")),
 });
 
 const OUTCOME_LABELS: Record<string, string> = {
@@ -62,7 +72,7 @@ function firstError(e: z.ZodError): string {
   return e.issues[0]?.message ?? "Invalid input";
 }
 
-/** Log one dial against a lead. `calledAt` is server-stamped — never trusted from the client. */
+/** Log one dial against a lead. `calledAt` is server-stamped - never trusted from the client. */
 export async function logCall(leadId: string, form: FormData): Promise<ActionResult> {
   const session = await requireSection("pipeline");
   const parsed = callSchema.safeParse(Object.fromEntries(form));
@@ -78,6 +88,12 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
   // why the automatic move takes precedence over the select.
   const nextStage = resolveStageAfterCall(lead.stage, d.outcome, d.nextStage);
 
+  // The dial instant, if the client sent one and it parses; otherwise now. See the schema note.
+  const receivedAt = new Date();
+  const claimed = d.calledAt ? new Date(d.calledAt) : null;
+  const calledAt =
+    claimed && !Number.isNaN(claimed.getTime()) ? clampCalledAt(claimed, receivedAt).calledAt : receivedAt;
+
   const row = await prisma.$transaction(async (tx) => {
     const created = await tx.callLog.create({
       data: {
@@ -85,15 +101,16 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
         userId: session.user.id,
         outcome: d.outcome,
         notes: d.notes || null,
+        calledAt,
       },
     });
     // Keep speed-to-lead honest: the first connected conversation IS first contact. Mirrors
-    // markLeadContacted's rule — only the first one counts, so a later call can't reset the
+    // markLeadContacted's rule - only the first one counts, so a later call can't reset the
     // clock and flatter the speed metric. Only SPOKE qualifies: a no-answer isn't contact.
     if (d.outcome === "SPOKE") {
       await tx.lead.updateMany({
         where: { id: leadId, contactedAt: null },
-        data: { contactedAt: new Date() },
+        data: { contactedAt: calledAt },
       });
     }
     // The stage move rides in the SAME transaction as the call log: a logged call that
@@ -104,7 +121,7 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
       await tx.leadStageHistory.create({
         data: { leadId, fromStage: lead.stage, toStage: nextStage, changedById: session.user.id },
       });
-      // Without this the Opportunities board keeps showing the deal in its old column —
+      // Without this the Opportunities board keeps showing the deal in its old column -
       // the same drift every other stage-writing path calls this to avoid.
       await syncDefaultOpportunity(tx, leadId, nextStage);
     }
@@ -120,13 +137,15 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
     // both records a call AND moves a card, and the founder's activity feed should not make
     // someone open the row to find out which happened.
     summary: nextStage
-      ? `Logged a call with ${lead.name} — ${outcomeLabel(d.outcome)}, moved to ${LEAD_STAGE_LABELS[nextStage] ?? nextStage}`
-      : `Logged a call with ${lead.name} — ${outcomeLabel(d.outcome)}`,
+      ? `Logged a call with ${lead.name} - ${outcomeLabel(d.outcome)}, moved to ${LEAD_STAGE_LABELS[nextStage] ?? nextStage}`
+      : `Logged a call with ${lead.name} - ${outcomeLabel(d.outcome)}`,
     meta: { outcome: d.outcome, leadId, ...(nextStage ? { toStage: nextStage } : {}) },
   });
 
   revalidatePath("/my-desk");
   revalidatePath("/pipeline");
+  // The board colours its cards by the first call, so it has to hear about this one.
+  revalidatePath("/opportunities");
   return { ok: true };
 }
 
@@ -134,7 +153,7 @@ export async function logCall(leadId: string, form: FormData): Promise<ActionRes
 export async function deleteCallLog(id: string): Promise<ActionResult> {
   const session = await requireSection("pipeline");
   if (session.role !== "ADMIN") {
-    return { ok: false, error: "Only an admin can remove a logged call — log a correcting call instead." };
+    return { ok: false, error: "Only an admin can remove a logged call - log a correcting call instead." };
   }
   const removed = await prisma.callLog
     .delete({ where: { id }, include: { lead: { select: { name: true } } } })
@@ -145,7 +164,7 @@ export async function deleteCallLog(id: string): Promise<ActionResult> {
       section: "pipeline",
       entityType: "CallLog",
       entityId: removed.id,
-      summary: `Removed a logged call with ${removed.lead.name} — ${outcomeLabel(removed.outcome)}`,
+      summary: `Removed a logged call with ${removed.lead.name} - ${outcomeLabel(removed.outcome)}`,
       meta: { outcome: removed.outcome, leadId: removed.leadId },
     });
   }

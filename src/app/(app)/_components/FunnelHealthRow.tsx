@@ -4,7 +4,7 @@ import { formatPct } from "@/lib/format";
 import type { FunnelHealth, StageRow } from "@/lib/funnel-health";
 
 /**
- * Row 5 of the executive dashboard (rebuild spec §4) — nine outreach stages, this month against
+ * Row 5 of the executive dashboard (rebuild spec §4) - nine outreach stages, this month against
  * the six-month average, with the single biggest leak as the headline.
  *
  * The headline is the whole point. Nine conversion percentages is a report; "you are losing 18
@@ -16,13 +16,13 @@ import type { FunnelHealth, StageRow } from "@/lib/funnel-health";
  * so rendering it under the German Note view would attach it to the wrong business.
  */
 
-const pct = (v: number | null) => (v === null ? "—" : formatPct(v * 100));
+const pct = (v: number | null) => (v === null ? "-" : formatPct(v * 100));
 
 /** Fractional benchmarks are averages; a "213.5" would read as a miscount rather than a mean. */
 const num = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
 
 function DeltaBadge({ row }: { row: StageRow }) {
-  if (row.rateDelta === null) return <span className="text-caption text-muted">—</span>;
+  if (row.rateDelta === null) return <span className="text-caption text-muted">-</span>;
   const better = row.rateDelta >= 0;
   return (
     <span
@@ -43,14 +43,14 @@ export function FunnelHealthRow({ health }: { health: FunnelHealth }) {
   const benchmarkNote =
     benchmarkSource === "history"
       ? `Benchmark is this app's own ${monthsOfHistory}-month average.`
-      : `Not enough history yet (${monthsOfHistory} month${monthsOfHistory === 1 ? "" : "s"} with traffic) — benchmark is the published target from the rebuild spec.`;
+      : `Not enough history yet (${monthsOfHistory} month${monthsOfHistory === 1 ? "" : "s"} with traffic) - benchmark is the published target from the rebuild spec.`;
 
   return (
     <section className="space-y-4">
       <SectionHeading
         icon={<Filter size={18} />}
         title="Funnel health"
-        description="This month against the six-month benchmark — where the funnel is leaking"
+        description="This month against the six-month benchmark - where the funnel is leaking"
         action={<ViewAll href="/pipeline">View pipeline</ViewAll>}
       />
 
@@ -63,7 +63,7 @@ export function FunnelHealthRow({ health }: { health: FunnelHealth }) {
             <TrendingDown size={14} /> Biggest leak
           </p>
           <p className="mt-1.5 font-display text-h3 text-ink">
-            {leak.row.stage.label} — {pct(leak.row.rate)}
+            {leak.row.stage.label} - {pct(leak.row.rate)}
             <span className="text-ink-2">
               {" "}
               vs {pct(vsTarget ? (leak.row.stage.targetRate ?? null) : leak.row.benchmarkRate)} {rateLabel}
@@ -72,7 +72,7 @@ export function FunnelHealthRow({ health }: { health: FunnelHealth }) {
           <p className="mt-1 text-sm text-ink-2">
             About <span className="font-semibold tnum">{Math.round(leak.peopleLost)}</span> people lost here this
             month at the {rateLabel} rate
-            {vsTarget && " — this is a rate the team committed to, not just a historical average"}.
+            {vsTarget && " - this is a rate the team committed to, not just a historical average"}.
             Owned by <span className="font-semibold">{leak.row.stage.owner}</span>.
           </p>
         </div>

@@ -1,13 +1,13 @@
 /**
- * The founder's resume template — "how the resume should be". Persisted as JSON in
+ * The founder's resume template - "how the resume should be". Persisted as JSON in
  * AppSetting("resumeTemplateConfig") the same way the section layout and gamification
  * rulesets are (see src/server/founder-config.ts). No row = the shipped B2 default, so
  * a fresh install renders the canonical template with nothing to seed.
  *
  * It controls three things the founder owns:
- *   1. SECTIONS — which blocks appear, their order and their heading (EN + DE).
- *   2. STYLE   — accent colour, font, page size, and whether the photo/DOB show.
- *   3. ATS     — the rubric the AI review scores against + free-text house rules the
+ *   1. SECTIONS - which blocks appear, their order and their heading (EN + DE).
+ *   2. STYLE   - accent colour, font, page size, and whether the photo/DOB show.
+ *   3. ATS     - the rubric the AI review scores against + free-text house rules the
  *                founder wants Claude to enforce (e.g. "insist on relocation readiness").
  *
  * Isomorphic: the builder preview and the DOCX/PDF generators both read it, and the
@@ -50,7 +50,7 @@ export type AtsSeverity = "high" | "medium" | "low";
 /**
  * One founder-editable ATS criterion. The AI reviewer is told to enforce every enabled
  * rule (weighted by `weight`, flagged at `severity`) and the offline analyser folds the
- * enabled rules it recognises into its score. New rules can be added freely — an
+ * enabled rules it recognises into its score. New rules can be added freely - an
  * unrecognised rule still steers the AI even though the offline path can't check it.
  */
 export type AtsRule = {
@@ -98,7 +98,7 @@ const DEFAULT_SECTIONS: ResumeSectionSetting[] = [
  * built-in rules; founder-added rules get a fresh id and still drive the AI reviewer.
  */
 export const DEFAULT_ATS_RULES: AtsRule[] = [
-  { id: "no-placeholder", label: "No leftover template text", instruction: "Every placeholder from the template is replaced — no “Position Name”, “mm/jjjj”, “xxxx@…”.", weight: 5, severity: "high", enabled: true },
+  { id: "no-placeholder", label: "No leftover template text", instruction: "Every placeholder from the template is replaced - no “Position Name”, “mm/jjjj”, “xxxx@…”.", weight: 5, severity: "high", enabled: true },
   { id: "contact-parseable", label: "Parseable contact header", instruction: "Email and phone sit in a plain text header an ATS can read (not inside an image or table).", weight: 4, severity: "high", enabled: true },
   { id: "jd-keywords", label: "Mirrors the JD language", instruction: "Uses the job description’s own words for the skills/tools the candidate genuinely has.", weight: 5, severity: "high", enabled: true },
   { id: "quantified", label: "Quantified achievements", instruction: "At least ~4 in 10 bullets carry a metric (%, €, time saved, volume, team size).", weight: 4, severity: "high", enabled: true },
@@ -130,7 +130,7 @@ export const DEFAULT_RESUME_TEMPLATE: ResumeTemplateConfig = {
   },
 };
 
-/** All section ids in canonical order — used to validate/repair a saved config. */
+/** All section ids in canonical order - used to validate/repair a saved config. */
 export const ALL_SECTION_IDS: ResumeSectionId[] = DEFAULT_SECTIONS.map((s) => s.id);
 
 const asStr = (v: unknown, fallback: string): string => (typeof v === "string" ? v : fallback);
@@ -237,7 +237,7 @@ function coerceBands(raw: unknown): AtsBands {
   return { strong, partial };
 }
 
-/** Enabled ATS rules, heaviest first — what the reviewer enforces. */
+/** Enabled ATS rules, heaviest first - what the reviewer enforces. */
 export function enabledAtsRules(cfg: ResumeTemplateConfig): AtsRule[] {
   return cfg.ats.rules.filter((r) => r.enabled).sort((a, b) => b.weight - a.weight);
 }
@@ -249,7 +249,7 @@ export function atsVerdict(score: number, bands: AtsBands): "strong" | "partial"
   return "weak";
 }
 
-/** Sections that are on, in the founder's order — what the generators iterate. */
+/** Sections that are on, in the founder's order - what the generators iterate. */
 export function orderedEnabledSections(cfg: ResumeTemplateConfig): ResumeSectionSetting[] {
   return cfg.sections.filter((s) => s.enabled).sort((a, b) => a.order - b.order);
 }

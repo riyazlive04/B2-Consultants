@@ -21,7 +21,7 @@ export function NotificationBell({ items: initialItems }: { items: Notification[
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const hasRisk = items.some((i) => i.severity === "risk");
-  // Same substitution as the dashboard band — the bell shows these exact rows, so an amount
+  // Same substitution as the dashboard band - the bell shows these exact rows, so an amount
   // must not read in rupees here while the page it links to reads in euros.
   const { ccy } = useCcy();
   const text = (s: string, n: Notification) =>

@@ -43,7 +43,7 @@ function toRow(w: Prisma.WorkflowGetPayload<typeof workflowRowSelect>): Workflow
 
 /**
  * Live workflows for one folder view. `folderId` null = the root ("Home") listing, which shows
- * only unfoldered workflows — the folders themselves are listed separately by `getFolders`,
+ * only unfoldered workflows - the folders themselves are listed separately by `getFolders`,
  * exactly as the Synamate reference does it. Soft-deleted rows never appear here.
  */
 export async function getWorkflowsList(folderId: string | null = null): Promise<WorkflowRow[]> {

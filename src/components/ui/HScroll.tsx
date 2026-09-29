@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 /**
  * A horizontally scrolling row with a VISIBLE affordance.
  *
- * `overflow-x-auto` alone technically scrolls, which is why the boards "worked" — but on Windows
+ * `overflow-x-auto` alone technically scrolls, which is why the boards "worked" - but on Windows
  * and macOS the scrollbar is an overlay that only appears mid-gesture, so a board with stages off
  * the right edge looks like a board that simply ends there. Nothing tells you to keep going.
  *
@@ -18,7 +18,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
  * Also handles the ordinary keyboard case: the strip is focusable, so ← / → and Home / End work
  * without a pointer.
  *
- * The scroll element is exposed via ref, because callers already drive it — the opportunities
+ * The scroll element is exposed via ref, because callers already drive it - the opportunities
  * board auto-scrolls this same element while a card is mid-drag.
  */
 
@@ -49,7 +49,7 @@ export const HScroll = forwardRef<HScrollHandle, {
     measure();
     el.addEventListener("scroll", measure, { passive: true });
     // Columns are added, removed and filtered at runtime, so the overflow changes without any
-    // scroll or resize event — a ResizeObserver on the content is the only reliable trigger.
+    // scroll or resize event - a ResizeObserver on the content is the only reliable trigger.
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     for (const child of Array.from(el.children)) ro.observe(child);
@@ -82,7 +82,7 @@ export const HScroll = forwardRef<HScrollHandle, {
    * Arrows sit near the TOP of the strip, not vertically centred.
    *
    * A kanban column is far taller than the viewport, so `top-1/2` centres the arrow on the
-   * board's full height — which put it hundreds of pixels below the fold, i.e. invisible exactly
+   * board's full height - which put it hundreds of pixels below the fold, i.e. invisible exactly
    * when it was needed. Level with the column headers, it is on screen whenever the board is.
    */
   const arrow = (dir: -1 | 1, show: boolean) => (

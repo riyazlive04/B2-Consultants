@@ -1,9 +1,9 @@
 /**
- * Batch-opening rule — spec Part 2 §2.
+ * Batch-opening rule - spec Part 2 §2.
  *
  * `singleJoinerOpensNothing` is the case the founders described directly: a workshop that
  * yields one person opens no batch, and that person waits for the next workshop. It is also
- * the explanation for the "out of order" batch numbers in their sheet — the gaps are the
+ * the explanation for the "out of order" batch numbers in their sheet - the gaps are the
  * policy, not a bug.
  *
  * Run: npm test
@@ -15,7 +15,7 @@ import { suggestBatchesToOpen, DEFAULT_MIN_TO_OPEN, type PoolJoiner } from "../p
 
 const j = (id: string, level: string, preference: PoolJoiner["preference"] = "EITHER"): PoolJoiner => ({ id, level, preference });
 
-describe("pending pool — opening batches", () => {
+describe("pending pool - opening batches", () => {
   test("a single joiner opens nothing and stays pooled (BO-005)", () => {
     const out = suggestBatchesToOpen([j("a", "GN_A1")]);
     assert.equal(out.length, 1);
@@ -36,14 +36,14 @@ describe("pending pool — opening batches", () => {
   });
 
   test("levels never merge into one batch", () => {
-    // An A1 and an A2 student are not two thirds of a batch — they're two waits.
+    // An A1 and an A2 student are not two thirds of a batch - they're two waits.
     const out = suggestBatchesToOpen([j("a", "GN_A1"), j("b", "GN_A2")]);
     assert.equal(out.length, 2);
     assert.ok(out.every((s) => !s.openable), "one each is still one each");
   });
 });
 
-describe("pending pool — timetable preference", () => {
+describe("pending pool - timetable preference", () => {
   test("weekday and weekend are separate batches", () => {
     const out = suggestBatchesToOpen([
       j("a", "GN_A1", "WEEKDAY"),
@@ -70,7 +70,7 @@ describe("pending pool — timetable preference", () => {
       j("flex", "GN_A1", "EITHER"),
     ]);
     const seen = out.flatMap((s) => s.joinerIds);
-    assert.equal(new Set(seen).size, seen.length, "one person, one seat — no double-counting");
+    assert.equal(new Set(seen).size, seen.length, "one person, one seat - no double-counting");
   });
 
   test("all-flexible joiners still open a batch", () => {
@@ -81,7 +81,7 @@ describe("pending pool — timetable preference", () => {
   });
 });
 
-describe("pending pool — the floor is configurable", () => {
+describe("pending pool - the floor is configurable", () => {
   test("the shipped floor is above one, per the spec", () => {
     assert.ok(DEFAULT_MIN_TO_OPEN > 1, "the one rule the spec states outright is that 1 is not enough");
   });

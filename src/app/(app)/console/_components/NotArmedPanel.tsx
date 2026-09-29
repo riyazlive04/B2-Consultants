@@ -9,7 +9,7 @@ import { Card, Hint } from "./kit";
  *
  * ── Why this screen is worth a tab ──────────────────────────────────────────────
  * This app ships nearly everything OFF, which is right for anything that spends money or
- * messages a customer — and it had no single place that said so. The result was a set of
+ * messages a customer - and it had no single place that said so. The result was a set of
  * "bugs" that were all the same non-bug: availability was never configured, so the booking
  * calendar was empty and both specialist desks had nothing on them; email was never armed, so
  * password resets and dunning silently did nothing.
@@ -28,7 +28,7 @@ export function NotArmedPanel({ items }: { items: NotArmedItem[] }) {
     <div className="space-y-5">
       <Hint>
         Everything on this list is <strong>built and working</strong>. The only question is
-        whether it is switched on. Anything in the top section is currently doing nothing —
+        whether it is switched on. Anything in the top section is currently doing nothing -
         which is usually what &ldquo;that section looks broken&rdquo; turns out to mean.
       </Hint>
 

@@ -1,9 +1,9 @@
 /**
- * Chart maths — the geometry every chart in the app now shares.
+ * Chart maths - the geometry every chart in the app now shares.
  *
  * These are worth testing precisely because they are invisible: a wrong scale doesn't throw,
  * it draws a plausible picture of the wrong number. The cases below pin the three ways that
- * actually happens — an axis labelled with unrecognisable numbers, a baseline that floats and
+ * actually happens - an axis labelled with unrecognisable numbers, a baseline that floats and
  * exaggerates a difference, and a "+100%" growth figure invented out of a zero denominator.
  *
  * Run: npm test
@@ -71,7 +71,7 @@ describe("niceTicks", () => {
 });
 
 describe("domainFor", () => {
-  test("bars baseline at zero — a floating baseline exaggerates every difference", () => {
+  test("bars baseline at zero - a floating baseline exaggerates every difference", () => {
     const { min } = domainFor([420, 440, 460]);
     assert.equal(min, 0);
   });
@@ -270,7 +270,7 @@ describe("splitAtCrossings", () => {
     assert.deepEqual(endOfFirst, startOfSecond);
   });
 
-  test("touching exactly counts as ahead — on target is met, not missed", () => {
+  test("touching exactly counts as ahead - on target is met, not missed", () => {
     const segs = splitAtCrossings([
       { x: 0, aY: 30, bY: 30 },
       { x: 10, aY: 30, bY: 30 },
@@ -328,7 +328,7 @@ describe("attainmentPct", () => {
     assert.equal(attainmentPct(25, 100), 25);
   });
 
-  test("does not cap — overshooting a target is information", () => {
+  test("does not cap - overshooting a target is information", () => {
     assert.equal(attainmentPct(42, 30), 140);
   });
 
@@ -342,7 +342,7 @@ describe("attainmentPct", () => {
 });
 
 describe("seriesColor", () => {
-  test("is a token reference, never a hex — dark mode depends on it", () => {
+  test("is a token reference, never a hex - dark mode depends on it", () => {
     assert.match(seriesColor(0), /^var\(--/);
   });
 

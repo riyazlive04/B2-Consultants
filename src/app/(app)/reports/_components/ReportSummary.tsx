@@ -10,7 +10,7 @@ import { objectLabel, type ReportObject, type ReportResult } from "@/lib/reports
  * The three-second read, above the chart.
  *
  * Each tile carries its own change against the previous period, because a total without a
- * direction is not a decision — "23,434 contacts" is a fact the founder already knows; "23,434,
+ * direction is not a decision - "23,434 contacts" is a fact the founder already knows; "23,434,
  * down 31% on the previous 90 days" is the thing worth opening the page for.
  *
  * `positiveIsGood` is set per tile rather than assumed: more contacts is good, and so is a higher
@@ -42,13 +42,13 @@ export default function ReportSummary({
   /** What to say when a delta is withheld, so a missing chip never reads as "no change". */
   const noCompareNote = (previous: number | null | undefined) =>
     !hasCompare
-      ? "All time — nothing to compare against"
+      ? "All time - nothing to compare against"
       : previous === 0 || previous == null
         ? "No records in the previous period"
         : undefined;
 
   // Per-card breakdowns for the expand popup, each ranked by the field that card is actually
-  // about — a "matched" count and a "pipeline value" total don't agree on which group is #1.
+  // about - a "matched" count and a "pipeline value" total don't agree on which group is #1.
   const byCount = [...result.rows].sort((a, b) => b.count - a.count).slice(0, 8);
   const byValue = result.rows
     .filter((r): r is typeof r & { sumMinor: number } => r.sumMinor != null)
@@ -79,7 +79,7 @@ export default function ReportSummary({
           icon={<Coins size={18} />}
           delta={deltaFor(result.totalSumMinor, result.prevTotalSumMinor)}
           secondary={noCompareNote(result.prevTotalSumMinor) ?? formatInrMinor(result.totalSumMinor)}
-          tooltip="The sum of the money field on every matched record. Opportunity value is the deal's own figure, not collected cash — Finance is where cash lives."
+          tooltip="The sum of the money field on every matched record. Opportunity value is the deal's own figure, not collected cash - Finance is where cash lives."
           detail={{ rows: byValue.map((r) => ({ label: r.label, value: formatInrMinor(r.sumMinor, { compact: true }) })) }}
         />
       )}
@@ -91,7 +91,7 @@ export default function ReportSummary({
           icon={<Trophy size={18} />}
           delta={deltaFor(result.overallWinRatePct, result.prevOverallWinRatePct)}
           secondary={noCompareNote(result.prevOverallWinRatePct)}
-          tooltip="Won ÷ all matched opportunities in the period. Read it beside the count — a 100% win rate off one deal and off forty are the same number and very different facts."
+          tooltip="Won ÷ all matched opportunities in the period. Read it beside the count - a 100% win rate off one deal and off forty are the same number and very different facts."
           detail={{ rows: byWinRate.map((r) => ({ label: r.label, value: formatPct(r.winRatePct) })) }}
         />
       )}

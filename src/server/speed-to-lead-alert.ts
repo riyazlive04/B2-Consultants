@@ -15,7 +15,7 @@ import { getSpeedToLeadAlertConfig } from "./founder-config";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 
 /**
- * Speed-to-lead alerting — the engine.
+ * Speed-to-lead alerting - the engine.
  *
  * The app already GRADES every lead against the JD's response clauses (lib/outreach-sla.ts) and
  * renders the result on the L1 desk. What it has never done is tell anyone when the grade is bad,
@@ -30,7 +30,7 @@ import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
  *   - Computes the report ALWAYS, even when the alert is off or email is unarmed, and logs it.
  *     "What would we have sent" has to be answerable before anyone will arm this.
  *   - Sends at most one email per cooldown, whatever the tick rate.
- *   - Never throws into the cron — always resolves a result object.
+ *   - Never throws into the cron - always resolves a result object.
  */
 
 const LAST_ALERT_KEY = "speedToLeadAlert.lastSentAt";
@@ -43,7 +43,7 @@ export type SpeedToLeadRun = {
   considered: number;
   hitRate: number | null;
   worstAgeMinutes: number;
-  /** The standing backlog — reported, never alerted on. See the module note. */
+  /** The standing backlog - reported, never alerted on. See the module note. */
   uncontactedTotal?: number;
   delivered?: number;
 };
@@ -51,7 +51,7 @@ export type SpeedToLeadRun = {
 /**
  * Loads the alertable slice: leads that opted in inside the lookback.
  *
- * `optInAt` comes from the OutreachJourney when there is one and falls back to `createdAt` — the
+ * `optInAt` comes from the OutreachJourney when there is one and falls back to `createdAt` - the
  * same baseline `l1-desk-metrics.ts` uses, so the alert and the desk can never disagree about
  * when a lead's clock started.
  */
@@ -71,7 +71,7 @@ async function loadRecentLeads(sinceMs: number): Promise<SpeedToLeadLead[]> {
       assignedToId: true,
       assignedTo: { select: { name: true, email: true } },
       outreachJourney: { select: { optInAt: true } },
-      // The FIRST connection is what both SLA clocks are judged on — a lead rung at 09:02 and
+      // The FIRST connection is what both SLA clocks are judged on - a lead rung at 09:02 and
       // again at 15:00 met the five-minute rule, and taking the latest call would mark it late.
       callLogs: {
         where: { outcome: "SPOKE" },
@@ -138,7 +138,7 @@ function alertHtml(report: SpeedToLeadReport, backlog: number, thresholdMinutes:
     <p style="color:#636F85;margin:0 0 16px">
       Nobody has connected with ${report.breaches.length === 1 ? "this lead" : "these leads"} and
       ${report.breaches.length === 1 ? "it has" : "the oldest has"} been waiting
-      ${formatAge(report.worstAgeMinutes)} — past the ${thresholdMinutes}-minute threshold.
+      ${formatAge(report.worstAgeMinutes)} - past the ${thresholdMinutes}-minute threshold.
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;max-width:520px">
       <tr>
@@ -155,7 +155,7 @@ function alertHtml(report: SpeedToLeadReport, backlog: number, thresholdMinutes:
     </p>
     <p style="color:#636F85;font-size:12px;margin:14px 0 0">
       Separately, <strong>${backlog.toLocaleString("en-IN")}</strong> leads in total have never been
-      connected with. That backlog is deliberately not what this alert fires on — it would fire
+      connected with. That backlog is deliberately not what this alert fires on - it would fire
       forever. Adjust the threshold and recipients in Founder Console → Maintenance.
     </p>
   </div>`;
@@ -180,7 +180,7 @@ export async function runSpeedToLeadAlert(): Promise<SpeedToLeadRun> {
     worstAgeMinutes: report.worstAgeMinutes,
   };
 
-  // The report is computed and returned even when disabled — that is how the founders can see
+  // The report is computed and returned even when disabled - that is how the founders can see
   // what this WOULD say before turning it on, which is the only honest way to pick a threshold.
   if (!cfg.enabled) return { ...base, reason: "Speed-to-lead alerting is switched off" };
   if (!cfg.recipients.length) return { ...base, reason: "No recipients configured" };

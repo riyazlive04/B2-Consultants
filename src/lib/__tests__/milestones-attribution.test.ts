@@ -1,5 +1,5 @@
 /**
- * Milestones (Track I) + attribution (Track F) — the pure rules.
+ * Milestones (Track I) + attribution (Track F) - the pure rules.
  *
  * Both modules exist to feed a RADAR the founders are meant to act on, so the cases that
  * matter most are the ones that would make a radar lie:
@@ -23,14 +23,14 @@ import {
 } from "../milestones";
 import { economicsFor, bandByMedian, medianOf, type SourceTotals } from "../attribution";
 
-describe("milestones — the ladder", () => {
+describe("milestones - the ladder", () => {
   test("programme lengths follow the tracker", () => {
     assert.equal(programDays("DAYS_90"), 90);
     assert.equal(programDays("DAYS_120"), 120);
     assert.equal(programDays("LIFETIME"), null);
   });
 
-  test("the SAME ladder scales to 90 and 120 days — no second hand-maintained list", () => {
+  test("the SAME ladder scales to 90 and 120 days - no second hand-maintained list", () => {
     const guided = defaultMilestoneLadder(90);
     const elite = defaultMilestoneLadder(120);
     assert.equal(guided.length, elite.length);
@@ -39,19 +39,19 @@ describe("milestones — the ladder", () => {
     assert.equal(elite.at(-1)!.targetDay, 120);
   });
 
-  test("no milestone lands on day 0 — the founders count enrolment day as day one", () => {
+  test("no milestone lands on day 0 - the founders count enrolment day as day one", () => {
     for (const m of defaultMilestoneLadder(90)) assert.ok(m.targetDay >= 1, `${m.key}`);
   });
 
   test("LIFETIME gets NO ladder, so Solo students are never permanently overdue", () => {
     // A milestone with no deadline isn't a milestone. Seeding day-0 rows here would put every
-    // Solo student on the at-risk radar forever — the false alarm that gets a radar ignored.
+    // Solo student on the at-risk radar forever - the false alarm that gets a radar ignored.
     assert.deepEqual(defaultMilestoneLadder(null), []);
     assert.deepEqual(defaultMilestoneLadder(0), []);
   });
 });
 
-describe("milestones — health", () => {
+describe("milestones - health", () => {
   test("achieved is done even when it was hit late", () => {
     // Consulted BEFORE the deadline: a milestone hit late is still hit.
     assert.equal(milestoneHealth("ACHIEVED", 10, 99), "done");
@@ -70,7 +70,7 @@ describe("milestones — health", () => {
     assert.equal(milestoneHealth("NOT_STARTED", 10, null), "on_track");
   });
 
-  test("overdueCount is a count, not a boolean — one slip in seven is normal", () => {
+  test("overdueCount is a count, not a boolean - one slip in seven is normal", () => {
     const items = [
       { status: "ACHIEVED" as const, targetDay: 5 },
       { status: "NOT_STARTED" as const, targetDay: 10 },
@@ -104,7 +104,7 @@ const src = (over: Partial<SourceTotals> & { sourceId: string }): SourceTotals =
   ...over,
 });
 
-describe("attribution — economics", () => {
+describe("attribution - economics", () => {
   test("computes CPL, CAC, ROAS and conversion", () => {
     // ₹10,000 spend = 1,000,000 paise · 100 leads · 5 enrolments · ₹50,000 revenue.
     const e = economicsFor(
@@ -118,7 +118,7 @@ describe("attribution — economics", () => {
 
   test("NO SPEND yields null ratios, never zero", () => {
     // A ₹0 cost-per-lead would sort an unpaid campaign to the top of "cheapest acquisition"
-    // and move the budget onto it. Null renders as "—".
+    // and move the budget onto it. Null renders as "-".
     const e = economicsFor(src({ sourceId: "b", leads: 40, enrolments: 2 }));
     assert.equal(e.cplInrMinor, null);
     assert.equal(e.cacInrMinor, null);
@@ -133,7 +133,7 @@ describe("attribution — economics", () => {
   });
 });
 
-describe("attribution — banding against the period's own median", () => {
+describe("attribution - banding against the period's own median", () => {
   const rows = [
     economicsFor(src({ sourceId: "hi", spendInrMinor: 100n, revenueInrMinor: 900n })), // roas 9
     economicsFor(src({ sourceId: "mid", spendInrMinor: 100n, revenueInrMinor: 500n })), // roas 5
@@ -153,7 +153,7 @@ describe("attribution — banding against the period's own median", () => {
     assert.equal(bandByMedian(withOrganic).get("organic"), "unrated");
   });
 
-  test("a single campaign is 'mid' — there is no comparison to report", () => {
+  test("a single campaign is 'mid' - there is no comparison to report", () => {
     const one = [economicsFor(src({ sourceId: "solo", spendInrMinor: 100n, revenueInrMinor: 400n }))];
     assert.equal(bandByMedian(one).get("solo"), "mid");
   });

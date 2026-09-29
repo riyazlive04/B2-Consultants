@@ -11,7 +11,7 @@ import { Card, Hint, Toggle } from "./kit";
  * Console → Per-person rules.
  *
  * ── Why this screen exists ──────────────────────────────────────────────────────
- * Commission rates were global-only — four percentages that applied to everyone — so
+ * Commission rates were global-only - four percentages that applied to everyone - so
  * "Nilofer is first-call only" was an arrangement between people and nowhere in the system. It
  * held only because she happened not to run discovery calls; the report would have paid her for
  * one the moment she covered a slot.
@@ -24,7 +24,7 @@ import { Card, Hint, Toggle } from "./kit";
  * ── What a toggle here means ────────────────────────────────────────────────────
  * An override, not the whole truth. Missing = the person's ROLE default applies, which is why a
  * fresh install behaves exactly as before. Admins hold everything and cannot lose it, so their
- * rows are locked — the founder can never lock themselves out of their own business.
+ * rows are locked - the founder can never lock themselves out of their own business.
  */
 
 /** The keys worth setting per person. The rest are role-shaped and belong in the access dialog. */
@@ -32,7 +32,7 @@ const PER_PERSON_GROUPS: { title: string; blurb: string; keys: CapabilityKey[] }
   {
     title: "Commission eligibility",
     blurb:
-      "Which legs of a deal split this person earns. Turning one off does NOT hide their work — the payout report still shows they ran the call, marked “not eligible” at zero, so nothing disappears silently.",
+      "Which legs of a deal split this person earns. Turning one off does NOT hide their work - the payout report still shows they ran the call, marked “not eligible” at zero, so nothing disappears silently.",
     keys: ["commission.firstCall", "commission.discovery", "commission.closer"],
   },
   {
@@ -81,7 +81,7 @@ export function PerPersonPanel({ people }: { people: PersonRow[] }) {
     <div className="space-y-5">
       <Hint>
         Per-person overrides. A switch here beats the role default; leave it as the role default
-        and nothing changes. <strong>Admins hold everything</strong> and are shown locked — the
+        and nothing changes. <strong>Admins hold everything</strong> and are shown locked - the
         founder can never remove their own access.
       </Hint>
 
@@ -116,7 +116,7 @@ export function PerPersonPanel({ people }: { people: PersonRow[] }) {
                           <span className="inline-flex justify-center">
                             <Toggle
                               hideLabel
-                              label={`${p.name} — ${CAPABILITIES.find((c) => c.key === key)?.name ?? key}`}
+                              label={`${p.name} - ${CAPABILITIES.find((c) => c.key === key)?.name ?? key}`}
                               checked={isAdmin || Boolean(p.held[key])}
                               disabled={isAdmin || busy === `${p.id}:${key}`}
                               title={isAdmin ? "Admins always hold every capability" : undefined}

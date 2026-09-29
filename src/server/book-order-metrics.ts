@@ -18,7 +18,7 @@ export type BookOrderRow = {
   status: string;
   vendorId: string | null;
   vendorName: string | null;
-  /** Null until the publisher is first messaged — the reference is allocated lazily. */
+  /** Null until the publisher is first messaged - the reference is allocated lazily. */
   orderRef: string | null;
   /** Whether we can message this vendor at all; drives the button's disabled state. */
   vendorPhone: string | null;
@@ -32,7 +32,7 @@ export type BookOrderRow = {
   /** When the publisher was last told about this order, and whether it actually went out. */
   publisherMessagedAt: string | null;
   publisherMessageSent: boolean;
-  /** Total cash this student has paid — the variable the trigger actually reads. */
+  /** Total cash this student has paid - the variable the trigger actually reads. */
   cashCollectedRupees: number;
   /** True when a DEFERRED order has since met the threshold and is just waiting on a human. */
   readyToRelease: boolean;
@@ -54,7 +54,7 @@ const toRupees = (v: bigint | null) => (v === null ? null : Math.round(Number(v)
 
 /**
  * Statuses that mean the message genuinely reached WATI. SKIPPED and FAILED write a row too, and
- * QUEUED has not been accepted yet — treating any of those as "the publisher has been told" is
+ * QUEUED has not been accepted yet - treating any of those as "the publisher has been told" is
  * how an unplaced order gets marked as placed.
  */
 const LEFT_THE_BUILDING = new Set<WhatsAppStatus>(["SENT", "DELIVERED", "READ", "REPLIED"]);
@@ -131,12 +131,12 @@ export const getBookOrderData = cache(async () => {
       deferReason: o.deferReason,
       publisherMessagedAt: lastMessage?.createdAt.toISOString() ?? null,
       // A SKIPPED/FAILED attempt still writes a row, so "we messaged them" must read the status
-      // rather than the mere existence of a message — otherwise a blocked send looks like a
+      // rather than the mere existence of a message - otherwise a blocked send looks like a
       // placed order.
       publisherMessageSent: lastMessage !== null && LEFT_THE_BUILDING.has(lastMessage.status),
       cashCollectedRupees: Math.round(cash / 100),
       // Surfaced so a deferred order that has quietly become payable is visible even if the
-      // release job hasn't run — the panel should never be the last to know.
+      // release job hasn't run - the panel should never be the last to know.
       readyToRelease: o.status === "DEFERRED" && decision.order,
       shortfallRupees: Math.round(decision.shortfallInrMinor / 100),
       createdAt: o.createdAt.toISOString(),

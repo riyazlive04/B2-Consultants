@@ -1,7 +1,7 @@
 import type { LeadStage, PaymentPlan } from "@prisma/client";
 
 /**
- * The default Opportunity board's columns — a 1:1 mirror of the live Synamate pipeline
+ * The default Opportunity board's columns - a 1:1 mirror of the live Synamate pipeline
  * (app.synamate.com → Opportunities), in Synamate's order and with Synamate's exact wording.
  *
  * ── Why the names are copied character-for-character ────────────────────────────
@@ -13,13 +13,13 @@ import type { LeadStage, PaymentPlan } from "@prisma/client";
  * ── Twelve columns, fifteen lifecycle stages ────────────────────────────────────
  * `LeadStage` carries three states Synamate has no column for (NEW_LEAD, DISCO_NOT_BOOKED,
  * DISCO_COMPLETED, PROPOSAL_SENT) because the funnel %, commission split and gamification XP are
- * all measured off them — they stay in the enum and keep working, they just don't get their own
+ * all measured off them - they stay in the enum and keep working, they just don't get their own
  * column. `BOARD_COLUMN_FOR_STAGE` below is what decides where such a lead's card is filed.
  *
  * The other mismatch runs the other way: Synamate ends in two won columns, "Split Pay" and
  * "Full pay", where this schema has one WON stage plus `Lead.paymentPlan`. Both columns therefore
  * carry `legacyStage: "WON"` and are told apart by `paymentPlan` (schema.prisma
- * PipelineStage.paymentPlan) — never by name, so renaming a column can't break the routing.
+ * PipelineStage.paymentPlan) - never by name, so renaming a column can't break the routing.
  *
  * Pure and isomorphic: imported by the seed, the reshape script, the server actions and the board.
  */
@@ -33,7 +33,7 @@ export type SynamateStage = {
 export const SYNAMATE_STAGES: readonly SynamateStage[] = [
   // The early funnel, added 06/08/2026 on the founder's instruction. Until then a fresh opt-in was
   // filed straight into "Pre-Qualified & Confirmed", which said a lead had been qualified and a
-  // call confirmed when nobody had so much as messaged them — and it hid the single busiest
+  // call confirmed when nobody had so much as messaged them - and it hid the single busiest
   // column on the board inside one that is meant to hold a handful of confirmed calls.
   { name: "Fresh Optins", legacyStage: "NEW_LEAD", paymentPlan: null },
   { name: "WhatsApp Sent", legacyStage: "WHATSAPP_SENT", paymentPlan: null },
@@ -62,8 +62,8 @@ export const SYNAMATE_STAGES: readonly SynamateStage[] = [
  *   PROPOSAL_SENT            → Offer and didn’t buy         (an offer is out, no decision yet)
  *
  * `PROPOSAL_SENT` folding into "Offer and didn't buy" is the one that reads oddly: the column is
- * named for the outcome, not the moment. It is still the right column — it is where Synamate's
- * offer-made deals sit while their three-touch follow-up runs (SALES-LOGIC.md §1.11-12) — but it
+ * named for the outcome, not the moment. It is still the right column - it is where Synamate's
+ * offer-made deals sit while their three-touch follow-up runs (SALES-LOGIC.md §1.11-12) - but it
  * means the column's count includes offers that are merely outstanding. Read a true "offer made,
  * refused" figure off `LeadStage`, not off this column.
  */
@@ -93,13 +93,13 @@ const BOARD_COLUMN_FOR_STAGE: Record<LeadStage, LeadStage> = {
  * Which of the twelve columns a lead belongs in.
  *
  * Returns the column's `legacyStage` + `paymentPlan`, i.e. what to match a `PipelineStage` row on
- * — deliberately not a name and not an id, so the caller's query survives a rename and works on
+ * - deliberately not a name and not an id, so the caller's query survives a rename and works on
  * any pipeline that has been bridged to the same stages.
  *
  * A WON lead with no payment plan recorded (every win from before the plan field existed) is
  * filed into "Split Pay": both columns are WON so no metric moves either way, and split is the
- * plan the overwhelming majority of wins actually use. Setting the plan — on the lead form, or by
- * dropping the card in the other column — moves it.
+ * plan the overwhelming majority of wins actually use. Setting the plan - on the lead form, or by
+ * dropping the card in the other column - moves it.
  */
 export function boardColumnFor(
   stage: LeadStage,

@@ -9,7 +9,7 @@
  * whether the roster is 50 or 0, so it belongs in Tools & Software. It was mis-tagged
  * because the expense form's own help text used to offer Skool as a COGS example.
  *
- * SCOPE — deliberately narrow. This flips the `isCogs` REPORTING FLAG only.
+ * SCOPE - deliberately narrow. This flips the `isCogs` REPORTING FLAG only.
  * It does NOT rewrite `category`, because the ledger account a row posts to is derived from
  * its category (chart-of-accounts.ts `expenseAccountFor`): changing that would leave the
  * already-posted journal entry pointing at the wrong account without a matching repost.
@@ -46,7 +46,7 @@ async function main() {
     );
   }
   if (needsManual.length) {
-    console.log("\n  MANUAL REVIEW — category is COGS_DIRECT_DELIVERY, so the posted journal");
+    console.log("\n  MANUAL REVIEW - category is COGS_DIRECT_DELIVERY, so the posted journal");
     console.log("  entry must be re-posted too. Re-categorise these in the app, not here:");
     for (const r of needsManual) {
       console.log(`    ${r.id}  ${r.date.toISOString().slice(0, 10)}  ${r.vendor}`);
@@ -54,7 +54,7 @@ async function main() {
   }
 
   if (!COMMIT) {
-    console.log("\nDRY RUN — nothing written. Re-run with --commit to apply.");
+    console.log("\nDRY RUN - nothing written. Re-run with --commit to apply.");
     return;
   }
   if (safeToFix.length === 0) {

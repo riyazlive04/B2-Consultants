@@ -2,7 +2,7 @@
  * Bulk password reset for every login on the CONNECTED database.
  *
  * This is a break-glass tool. It exists because email is off (EMAIL_ENABLED="false"), so the
- * Forgot-password flow cannot deliver a reset link — leaving no in-app way back into an account
+ * Forgot-password flow cannot deliver a reset link - leaving no in-app way back into an account
  * whose password is lost.
  *
  *   node --env-file=.env scripts/reset-all-passwords.mjs                    # dry run
@@ -37,7 +37,7 @@ const target = (process.env.DATABASE_URL ?? "").replace(/:[^:@/]+@/, ":****@");
 const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL ?? "");
 
 console.log(`Target: ${target}`);
-console.log(`        ${isLocal ? "LOCAL database" : "*** NOT LOCAL — this is a live system ***"}\n`);
+console.log(`        ${isLocal ? "LOCAL database" : "*** NOT LOCAL - this is a live system ***"}\n`);
 
 const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
@@ -70,7 +70,7 @@ for (const r of rows) {
 
 console.log(
   DRY
-    ? "\nDRY RUN — nothing changed. Re-run with --apply --i-mean-it to write these."
+    ? "\nDRY RUN - nothing changed. Re-run with --apply --i-mean-it to write these."
     : "\nDone. Every account must set a new password at first sign-in.",
 );
 await prisma.$disconnect();

@@ -1,5 +1,5 @@
 /**
- * Reports workbench — period resolution, chart selection and measure semantics.
+ * Reports workbench - period resolution, chart selection and measure semantics.
  *
  * All pure, and all three are places where a wrong answer looks completely plausible: a
  * comparison window off by a month, a ranking drawn as a line, or a "share of total win rate".
@@ -48,7 +48,7 @@ describe("parseReportRange", () => {
 });
 
 describe("resolveReportRange", () => {
-  test("the comparison window is equal-length and immediately prior — never year-ago", () => {
+  test("the comparison window is equal-length and immediately prior - never year-ago", () => {
     const r = resolveReportRange("30d", REF);
     assert.ok(r.from && r.previous);
     const span = r.to.getTime() - r.from.getTime();
@@ -94,7 +94,7 @@ describe("resolveReportRange", () => {
 });
 
 describe("chartShapeFor", () => {
-  test("categorical groupings always rank as bars — never a line across categories", () => {
+  test("categorical groupings always rank as bars - never a line across categories", () => {
     assert.equal(chartShapeFor("leadSource", 4), "bars");
     assert.equal(chartShapeFor("stage", 30), "bars");
   });
@@ -134,20 +134,20 @@ describe("measures", () => {
   });
 
   test("a missing previous window stays null rather than collapsing to zero", () => {
-    // Zero would render as "▼ 100%" — a confident claim that something dropped, from no data.
+    // Zero would render as "▼ 100%" - a confident claim that something dropped, from no data.
     const noPrev: ReportRow = { ...row, prevCount: null, prevSumMinor: null, prevWinRatePct: null };
     assert.equal(measurePrevValue(noPrev, "count"), null);
     assert.equal(measurePrevValue(noPrev, "value"), null);
     assert.equal(measurePrevValue(noPrev, "winRate"), null);
   });
 
-  test("win rate is not additive — no share column, no total row", () => {
+  test("win rate is not additive - no share column, no total row", () => {
     assert.equal(measureIsAdditive("count"), true);
     assert.equal(measureIsAdditive("value"), true);
     assert.equal(measureIsAdditive("winRate"), false, "a 'share of total win rate' is nonsense");
   });
 
-  test("contacts offer only count — they carry no money or outcome field", () => {
+  test("contacts offer only count - they carry no money or outcome field", () => {
     assert.deepEqual(MEASURES.contacts.map((m) => m.key), ["count"]);
     assert.equal(defaultMeasure("contacts"), "count");
     assert.equal(isValidMeasure("contacts", "value"), false);

@@ -4,11 +4,12 @@ import type { LeadStage, OutreachPhase } from "@prisma/client";
 import {
   DORMANT_PHASES,
   REOPENABLE_STAGES,
+  STALE_AFTER_DAYS,
   planReturningOptIn,
   type ReturningLeadState,
 } from "../returning-opt-in";
 
-/** A lead that is live and owned — the "nothing to do" baseline. */
+/** A lead that is live and owned - the "nothing to do" baseline. */
 function state(over: Partial<ReturningLeadState> = {}): ReturningLeadState {
   return {
     stage: "NEW_LEAD",
@@ -19,12 +20,13 @@ function state(over: Partial<ReturningLeadState> = {}): ReturningLeadState {
   };
 }
 
-describe("planReturningOptIn — the case this was built for", () => {
+describe("planReturningOptIn - the case this was built for", () => {
   it("re-opens the exact shape that went missing: LOST, unassigned, no journey", () => {
     // Mohamed: imported from Synamate in June, marked LOST, never assigned, no journey. Opted in
     // three times in fifteen minutes and appeared nowhere.
     const plan = planReturningOptIn(state({ stage: "LOST", assignedToId: null, journey: null }));
     assert.deepEqual(plan, {
+      restore: false,
       reopenStage: true,
       needsOwner: true,
       restartJourney: true,
@@ -32,7 +34,7 @@ describe("planReturningOptIn — the case this was built for", () => {
     });
   });
 
-  it("is idempotent — the second opt-in a minute later changes nothing more", () => {
+  it("is idempotent - the second opt-in a minute later changes nothing more", () => {
     // After the first re-open the lead is NEW_LEAD, owned, and on a fresh OPT_IN journey.
     const plan = planReturningOptIn(
       state({ stage: "NEW_LEAD", assignedToId: "user_1", journey: { phase: "OPT_IN", bookingId: null } }),
@@ -41,13 +43,42 @@ describe("planReturningOptIn — the case this was built for", () => {
   });
 });
 
-describe("planReturningOptIn — what it must not disturb", () => {
-  it("leaves an archived lead alone: archiving is a decision, not an accident", () => {
+describe("planReturningOptIn - an archived lead who comes back", () => {
+  it("restores an archived lead and gives it the full fresh start", () => {
+    // 19/08/2026: a card deleted from the board archived the lead; the same person re-submitted
+    // ninety seconds later, was deduped onto the archived row, received the intro WhatsApp, and
+    // was invisible on every board and desk. A new submission is the person, not the webhook.
     const plan = planReturningOptIn(
       state({ stage: "LOST", assignedToId: null, journey: null, deletedAt: new Date() }),
     );
-    assert.deepEqual(plan, { reopenStage: false, needsOwner: false, restartJourney: false, reopened: false });
+    assert.deepEqual(plan, {
+      restore: true,
+      reopenStage: true,
+      needsOwner: true,
+      restartJourney: true,
+      reopened: true,
+    });
   });
+
+  it("restores even when the archived lead was already NEW_LEAD and owned - but writes no stage row", () => {
+    const plan = planReturningOptIn(state({ deletedAt: new Date() }));
+    assert.equal(plan.restore, true);
+    assert.equal(plan.reopenStage, false);
+    assert.equal(plan.needsOwner, false);
+    assert.equal(plan.restartJourney, true);
+    assert.equal(plan.reopened, true);
+  });
+
+  it("restores an archived lead that had booked before - they are live again, whatever comes next", () => {
+    const plan = planReturningOptIn(
+      state({ stage: "LOST", deletedAt: new Date(), journey: { phase: "IGNORED", bookingId: "bk_1" } }),
+    );
+    assert.equal(plan.restore, true);
+    assert.equal(plan.reopened, true);
+  });
+});
+
+describe("planReturningOptIn - what it must not disturb", () => {
 
   it("leaves a lead that already booked alone, even when it looks dormant", () => {
     // bookingId set is the strongest signal there is: they are past the queue.
@@ -57,12 +88,12 @@ describe("planReturningOptIn — what it must not disturb", () => {
     assert.equal(plan.reopened, false);
   });
 
-  it("does not reset a live SLA — a mid-chase journey keeps its own clock", () => {
+  it("does not reset a live SLA - a mid-chase journey keeps its own clock", () => {
     const plan = planReturningOptIn(state({ journey: { phase: "BOOKING_CHASE", bookingId: null } }));
     assert.equal(plan.restartJourney, false);
   });
 
-  it("does not restart a COMPLETED journey — that outreach succeeded", () => {
+  it("does not restart a COMPLETED journey - that outreach succeeded", () => {
     const plan = planReturningOptIn(state({ journey: { phase: "COMPLETED", bookingId: null } }));
     assert.equal(plan.restartJourney, false);
   });
@@ -70,7 +101,7 @@ describe("planReturningOptIn — what it must not disturb", () => {
   it("never steals a lead that already has an owner", () => {
     const plan = planReturningOptIn(state({ stage: "LOST", assignedToId: "user_2" }));
     assert.equal(plan.needsOwner, false);
-    assert.equal(plan.reopenStage, true, "the stage still re-opens — only the owner is preserved");
+    assert.equal(plan.reopenStage, true, "the stage still re-opens - only the owner is preserved");
   });
 
   it("does not drag a customer back into the dial queue", () => {
@@ -87,15 +118,15 @@ describe("planReturningOptIn — what it must not disturb", () => {
   });
 });
 
-describe("planReturningOptIn — the three triggers are independent", () => {
+describe("planReturningOptIn - the three triggers are independent", () => {
   it("an unassigned but otherwise live lead gets an owner and nothing else", () => {
     const plan = planReturningOptIn(state({ assignedToId: null }));
-    assert.deepEqual(plan, { reopenStage: false, needsOwner: true, restartJourney: false, reopened: true });
+    assert.deepEqual(plan, { restore: false, reopenStage: false, needsOwner: true, restartJourney: false, reopened: true });
   });
 
   it("a journeyless live lead gets a journey and nothing else", () => {
     const plan = planReturningOptIn(state({ journey: null }));
-    assert.deepEqual(plan, { reopenStage: false, needsOwner: false, restartJourney: true, reopened: true });
+    assert.deepEqual(plan, { restore: false, reopenStage: false, needsOwner: false, restartJourney: true, reopened: true });
   });
 
   it("every dormant phase restarts the clock", () => {
@@ -130,5 +161,64 @@ describe("the constants stay honest", () => {
 
   it("COMPLETED is never treated as dormant", () => {
     assert.equal(DORMANT_PHASES.includes("COMPLETED"), false);
+  });
+});
+
+describe("planReturningOptIn - stale leads (no stage change for 14 days)", () => {
+  const now = new Date("2026-09-22T12:00:00Z");
+  const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 3600_000);
+  const FRESH_START = { restore: false, reopenStage: true, needsOwner: false, restartJourney: true, reopened: true };
+
+  it("sends a stale lead back to New Lead with a fresh clock", () => {
+    const plan = planReturningOptIn(
+      state({ stage: "STRATEGY_CALL_BOOKED", lastStageChangeAt: daysAgo(STALE_AFTER_DAYS), now }),
+    );
+    assert.deepEqual(plan, FRESH_START);
+  });
+
+  it("leaves a lead moved inside the window where it is", () => {
+    const plan = planReturningOptIn(
+      state({ stage: "STRATEGY_CALL_BOOKED", lastStageChangeAt: daysAgo(STALE_AFTER_DAYS - 1), now }),
+    );
+    assert.equal(plan.reopenStage, false);
+    assert.equal(plan.restartJourney, false);
+  });
+
+  it("overrides the booking hard stop for a dead booking (last month's no-show)", () => {
+    const plan = planReturningOptIn(
+      state({
+        stage: "NO_SHOW",
+        journey: { phase: "DISCO_CONFIRMATION", bookingId: "b_old" },
+        lastStageChangeAt: daysAgo(25),
+        now,
+      }),
+    );
+    assert.deepEqual(plan, FRESH_START);
+  });
+
+  it("never reopens a lead with a call still ahead of them", () => {
+    const plan = planReturningOptIn(
+      state({
+        stage: "STRATEGY_CALL_BOOKED",
+        journey: { phase: "DISCO_CONFIRMATION", bookingId: "b_live" },
+        lastStageChangeAt: daysAgo(30),
+        hasUpcomingBooking: true,
+        now,
+      }),
+    );
+    assert.equal(plan.reopened, false);
+  });
+
+  it("never drags a customer back to the top of the funnel", () => {
+    for (const stage of ["WON", "DEPOSIT_PAID"] as LeadStage[]) {
+      const plan = planReturningOptIn(state({ stage, lastStageChangeAt: daysAgo(90), now }));
+      assert.equal(plan.reopenStage, false, stage);
+    }
+  });
+
+  it("a stale lead already in New Lead only restarts its clock", () => {
+    const plan = planReturningOptIn(state({ stage: "NEW_LEAD", lastStageChangeAt: daysAgo(40), now }));
+    assert.equal(plan.reopenStage, false);
+    assert.equal(plan.restartJourney, true);
   });
 });

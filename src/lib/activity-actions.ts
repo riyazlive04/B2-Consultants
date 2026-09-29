@@ -1,5 +1,5 @@
 /**
- * Isomorphic vocabulary for the activity log — importable from client AND server.
+ * Isomorphic vocabulary for the activity log - importable from client AND server.
  *
  * An action is a dotted verb: `<subject>.<verb>` or `<area>.<subject>.<verb>`, e.g.
  * `call.log`, `lead.update`, `finance.income.create`.
@@ -7,7 +7,7 @@
  * WHY THERE IS NO HARDCODED UNION OF EVERY ACTION
  * The obvious design is `type ActivityAction = "call.log" | "lead.update" | …`, with one
  * central list every call site must register in. It was rejected twice over: it makes one
- * file a merge bottleneck for changes spread across ~35 action modules, and — worse — the
+ * file a merge bottleneck for changes spread across ~35 action modules, and - worse - the
  * founder's filter dropdown would then be a hand-maintained mirror of what's actually in
  * the table. Mirrors drift. An action that stopped firing would still be offered as a
  * filter, and one added without a catalogue entry would be invisible to it.
@@ -18,7 +18,7 @@
  * action ship by adding exactly one `logActivity` call and nothing else.
  */
 
-/** Free-form by design — see the header. Kept as a named type so intent reads at call sites. */
+/** Free-form by design - see the header. Kept as a named type so intent reads at call sites. */
 export type ActivityAction = string;
 
 /** Drives tone in the feed/table. Derived from the verb, so a new action is coloured for free. */
@@ -93,7 +93,7 @@ export function activityGroup(action: ActivityAction): string {
  * against a fixed zone also keeps SSR and hydration from disagreeing, which a bare
  * toLocaleString() would guarantee the moment the founder travelled.
  */
-// Locales match the house convention in daily-log.ts / format.ts — en-GB dates, en-US times.
+// Locales match the house convention in daily-log.ts / format.ts - en-GB dates, en-US times.
 // Not cosmetic pedantry: en-IN renders "Fri, 17 Jul, 2026" (comma before the year) and a
 // lowercase "pm", so a third style here would be visibly inconsistent with the Daily Log
 // feed sitting one nav item away.
@@ -109,7 +109,7 @@ const DAY_KEY_FMT = new Intl.DateTimeFormat("en-CA", {
   year: "numeric", month: "2-digit", day: "2-digit", timeZone: IST,
 });
 
-/** "3:04:09 PM" — to the second, because "exactly when" is the point of the feature. */
+/** "3:04:09 PM" - to the second, because "exactly when" is the point of the feature. */
 export function activityTime(at: Date): string {
   return TIME_FMT.format(at);
 }
@@ -119,20 +119,20 @@ export function activityDate(at: Date): string {
   return DATE_FMT.format(at);
 }
 
-/** "2026-07-17" in IST — the grouping key for date buckets. */
+/** "2026-07-17" in IST - the grouping key for date buckets. */
 export function activityDayKey(at: Date): string {
   return DAY_KEY_FMT.format(at);
 }
 
-/** "Fri, 17 Jul 2026 · 3:04:09 PM IST" — the unambiguous form, for the table and tooltips. */
+/** "Fri, 17 Jul 2026 · 3:04:09 PM IST" - the unambiguous form, for the table and tooltips. */
 export function activityStamp(at: Date): string {
   return `${activityDate(at)} · ${activityTime(at)} IST`;
 }
 
-/** "just now" / "12m ago" / "3h ago" — relative, for the feed. `now` is injectable for tests. */
+/** "just now" / "12m ago" / "3h ago" - relative, for the feed. `now` is injectable for tests. */
 export function activityRelative(at: Date, now: Date = new Date()): string {
   const secs = Math.round((now.getTime() - at.getTime()) / 1000);
-  if (secs < 0) return "just now"; // clock skew — never render "in 3 minutes"
+  if (secs < 0) return "just now"; // clock skew - never render "in 3 minutes"
   if (secs < 45) return "just now";
   const mins = Math.round(secs / 60);
   if (mins < 60) return `${mins}m ago`;

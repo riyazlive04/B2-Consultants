@@ -19,14 +19,14 @@ import { saveResumeTemplate, saveAiSettings, resetResumeTemplate } from "@/serve
 
 /** Model choices mirrored from lib/anthropic (kept here so this client file needn't import the server-only module). */
 const MODEL_OPTIONS = [
-  { value: "claude-sonnet-5", label: "Claude Sonnet 5 — balanced (recommended)" },
-  { value: "claude-opus-4-8", label: "Claude Opus 4.8 — deepest review" },
-  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — fastest / cheapest" },
+  { value: "claude-sonnet-5", label: "Claude Sonnet 5 - balanced (recommended)" },
+  { value: "claude-opus-4-8", label: "Claude Opus 4.8 - deepest review" },
+  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 - fastest / cheapest" },
 ];
 
 /**
  * Founder control panel: "how the resume should be" (which sections, order, headings,
- * style) + the ATS rubric + the Claude seam settings. Admin-only — the page gates the
+ * style) + the ATS rubric + the Claude seam settings. Admin-only - the page gates the
  * tab, the server actions re-check requireAdmin. The API key + on/off flag live in env
  * (shown here read-only), so nothing secret is edited from the browser.
  */
@@ -161,7 +161,7 @@ export function TemplateEditor({ template, aiStatus }: { template: ResumeTemplat
       >
         {/* axis weights */}
         <p className="mb-2 text-caption font-semibold uppercase tracking-wide text-muted">Axis weights</p>
-        {/* These are the founder's dials, not CV content — every one is a whole 0-100 percent
+        {/* These are the founder's dials, not CV content - every one is a whole 0-100 percent
             that coerceResumeTemplate() clamps on the way in, so digits-only is the true alphabet. */}
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Keyword %" hint="JD-term coverage"><TextInput kind="int" maxLength={3} value={String(cfg.ats.weightKeywords)} onChange={(e) => setAts({ weightKeywords: Number(e.target.value) || 0 })} /></Field>
@@ -172,8 +172,8 @@ export function TemplateEditor({ template, aiStatus }: { template: ResumeTemplat
         {/* verdict bands */}
         <p className="mb-2 mt-6 text-caption font-semibold uppercase tracking-wide text-muted">Verdict bands</p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Strong match at ≥ %" hint="Green — polish & send"><TextInput kind="int" maxLength={3} value={String(cfg.ats.bands.strong)} onChange={(e) => setAts({ bands: { ...cfg.ats.bands, strong: Number(e.target.value) || 0 } })} /></Field>
-          <Field label="Partial match at ≥ %" hint="Amber — close the gaps"><TextInput kind="int" maxLength={3} value={String(cfg.ats.bands.partial)} onChange={(e) => setAts({ bands: { ...cfg.ats.bands, partial: Number(e.target.value) || 0 } })} /></Field>
+          <Field label="Strong match at ≥ %" hint="Green - polish & send"><TextInput kind="int" maxLength={3} value={String(cfg.ats.bands.strong)} onChange={(e) => setAts({ bands: { ...cfg.ats.bands, strong: Number(e.target.value) || 0 } })} /></Field>
+          <Field label="Partial match at ≥ %" hint="Amber - close the gaps"><TextInput kind="int" maxLength={3} value={String(cfg.ats.bands.partial)} onChange={(e) => setAts({ bands: { ...cfg.ats.bands, partial: Number(e.target.value) || 0 } })} /></Field>
         </div>
 
         {/* rule checklist */}

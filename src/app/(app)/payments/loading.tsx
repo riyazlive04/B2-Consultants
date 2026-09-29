@@ -1,6 +1,6 @@
 import { SkeletonBlock, SkeletonMetricCards, SkeletonTable, SkeletonTabs } from "@/components/ui/Skeleton";
 
-/** Payments: invoices / estimates / products / subscriptions — tiles then a list. */
+/** Payments: invoices / estimates / products / subscriptions - tiles then a list. */
 export default function Loading() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading payments">

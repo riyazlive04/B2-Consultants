@@ -6,23 +6,25 @@ import { Card, Hint } from "@/components/ui/kit";
 import { SelectMenu } from "@/components/ui/SelectMenu";
 import { toast } from "@/components/ui/feedback";
 import { DIMENSION_LABELS, type QuestionOption } from "@/lib/qualification";
+import { BANT_MAX } from "@/lib/booking-intake";
 import type { IntakeMappingReport } from "@/server/intake-inspection";
 import type { BantDimension, QuestionKind } from "@prisma/client";
 import {
   createQualificationQuestion,
   updateQualificationQuestion,
   setQualificationQuestionActive,
+  setQualificationScorer,
 } from "@/server/qualification-actions";
 
 /**
- * Qualification questions (Founder Console → Qualification) — ER v2 Track D.
+ * Qualification questions (Founder Console → Qualification) - ER v2 Track D.
  *
  * These questions produce the BANT verdict that decides WHO GETS CALLED, so the panel is
  * built to make two things impossible to miss:
  *
  *  1. THE CUTOVER GATE. The catalogue runs in SHADOW until a full historical replay agrees
  *     with the shipped scorer on every past booking. Until then the live form still scores
- *     from its original columns, and the banner says so — an admin editing questions here
+ *     from its original columns, and the banner says so - an admin editing questions here
  *     needs to know their edits are not yet live.
  *
  *  2. VERSIONING. Editing an ANSWERED question creates version N+1 rather than mutating it,
@@ -38,7 +40,7 @@ export type AdminQuestion = {
   helpText: string | null;
   kind: QuestionKind;
   options: QuestionOption[];
-  /** Field names an external form may use for this question — see the mapping fieldset. */
+  /** Field names an external form may use for this question - see the mapping fieldset. */
   inboundKeys: string[];
   dimension: BantDimension;
   weight: number;
@@ -50,14 +52,86 @@ export type AdminQuestion = {
 
 export type ShadowStatus = { total: number; scored: number; disagreements: number; readyToFlip: boolean };
 
+/** Which scorer is live right now - see `qualificationConfigSchema`. */
+export type ScorerMode = "shipped" | "catalogue";
+
 /**
  * What the landing page actually sent, and what we failed to read.
  *
  * This panel is the reason the mapping is maintainable at all. Without it the founder is asked
  * to configure field names for a form they cannot see from here, and a mistake shows up only as
- * scores that are quietly too low — the failure mode that never gets reported because nothing
+ * scores that are quietly too low - the failure mode that never gets reported because nothing
  * looks broken.
  */
+/**
+ * Which scorer is live, why it may not be switchable, and the switch itself.
+ *
+ * The three states are kept visually distinct because they mean very different things to the
+ * person about to edit a score table: LIVE means their next save changes who gets called;
+ * READY means it does not yet but one click would; BLOCKED means the catalogue and the shipped
+ * tables disagree and nothing should move until that is resolved.
+ */
+function ScorerSwitch({ shadow, scorer }: { shadow: ShadowStatus; scorer: ScorerMode }) {
+  const router = useRouter();
+  const [busy, start] = useTransition();
+  const live = scorer === "catalogue";
+
+  const flip = (next: ScorerMode) =>
+    start(async () => {
+      const res = await setQualificationScorer(next);
+      if (!res.ok) return toast(res.error, "error");
+      toast(next === "catalogue" ? "These questions now decide the verdict" : "Reverted to the shipped scoring tables");
+      router.refresh();
+    });
+
+  const tone = live
+    ? "border-ok bg-ok-soft text-ok-ink"
+    : shadow.readyToFlip
+      ? "border-ok bg-ok-soft text-ok-ink"
+      : "border-warn bg-warn-soft text-warn-ink";
+
+  return (
+    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-field border px-4 py-3 text-sm ${tone}`}>
+      <span className="min-w-0 flex-1">
+        {live ? (
+          <>
+            <strong>These questions are live.</strong> Every new booking is scored from the table
+            below, and a change here changes who gets called - and, while auto-disqualify is on,
+            who is turned away.
+          </>
+        ) : shadow.scored === 0 ? (
+          <>
+            <strong>Not live - nothing scored yet.</strong> Bookings are scored by the shipped
+            tables. The catalogue is recorded alongside for comparison, but a booking has to come
+            in before there is any evidence it agrees.
+          </>
+        ) : shadow.disagreements > 0 ? (
+          <>
+            <strong>Not live - {shadow.disagreements} disagreement(s) across {shadow.scored} scored
+            bookings.</strong>{" "}
+            The catalogue has drifted from the shipped scorer. Re-seed it
+            (<code>prisma/seed-qualification.ts</code>) before switching anything.
+          </>
+        ) : (
+          <>
+            <strong>Not live - but ready.</strong> The catalogue reproduces all {shadow.scored}{" "}
+            historical verdicts exactly, so switching changes nothing today and everything you edit
+            afterwards.
+          </>
+        )}
+      </span>
+      <button
+        type="button"
+        disabled={busy || (!live && !shadow.readyToFlip)}
+        onClick={() => flip(live ? "shipped" : "catalogue")}
+        className="flex-none rounded-btn border border-current px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+      >
+        {busy ? "Saving…" : live ? "Revert to shipped scoring" : "Make these questions live"}
+      </button>
+    </div>
+  );
+}
+
 function InboundReport({ report }: { report: IntakeMappingReport }) {
   const nothingWrong = report.unresolved.length === 0 && report.unmapped.length === 0;
 
@@ -65,7 +139,7 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
    * The total failure, stated first and in plain words.
    *
    * Leads ARE arriving from a source that can carry answers, and NONE of them scored. That is not
-   * "no submissions yet" — it is a mapping that matches nothing, and it is invisible in every
+   * "no submissions yet" - it is a mapping that matches nothing, and it is invisible in every
    * other panel because an unscored lead looks exactly like an unqualified one. Production ran
    * this way for months: 111 Pabbly leads, 13 questions configured, zero scores, nothing on any
    * screen saying so.
@@ -83,7 +157,7 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
         <p role="alert" className="mt-2 rounded-field border border-bad bg-bad-soft px-3 py-2.5 text-sm text-bad">
           <strong>No lead has been scored in the last 7 days.</strong> {captured} lead
           {captured === 1 ? "" : "s"} arrived from a form that should carry qualification answers,
-          and not one produced a band score — so every discovery call is being prepared blind.
+          and not one produced a band score - so every discovery call is being prepared blind.
           Either the answers are not reaching us, or the field names below match no question.
           Start with &ldquo;Fields we are not reading&rdquo;.
         </p>
@@ -104,7 +178,7 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
             </>
           ) : (
             <>
-              No submission has left readable evidence yet — the next delivery will populate this
+              No submission has left readable evidence yet - the next delivery will populate this
               list even if nothing in it maps.
             </>
           )
@@ -131,7 +205,7 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
       {report.unresolved.length > 0 && (
         <div className="mt-3 rounded-field border border-warn bg-warn-soft p-3">
           <p className="text-sm font-semibold text-warn-ink">
-            Answers we could not recognise — these prospects are scoring too low
+            Answers we could not recognise - these prospects are scoring too low
           </p>
           <p className="mt-0.5 text-caption text-warn-ink">
             The question matched, the answer did not. Paste each value into that question&apos;s
@@ -185,10 +259,12 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
 export function QualificationPanel({
   questions,
   shadow,
+  scorer,
   inbound,
 }: {
   questions: AdminQuestion[];
   shadow: ShadowStatus;
+  scorer: ScorerMode;
   inbound: IntakeMappingReport;
 }) {
   const router = useRouter();
@@ -226,38 +302,13 @@ export function QualificationPanel({
     <div className="space-y-5">
       <Hint>
         The booking form&apos;s qualification questions and how each answer scores. A dimension
-        takes the <strong>best</strong> answer it has, not the sum — high income still counts
+        takes the <strong>best</strong> answer it has, not the sum - high income still counts
         toward Budget when the invest answer is lukewarm.
       </Hint>
 
-      {/* The gate. Deliberately loud: an admin editing here must know whether it is live. */}
-      <div
-        className={`rounded-field border px-4 py-3 text-sm ${
-          shadow.readyToFlip
-            ? "border-ok bg-ok-soft text-ok-ink"
-            : "border-warn bg-warn-soft text-warn-ink"
-        }`}
-      >
-        {shadow.scored === 0 ? (
-          <>
-            <strong>Shadow mode — no submissions scored yet.</strong> The live booking form
-            still scores from its original columns. This catalogue is recorded alongside and
-            compared, but nothing reads it.
-          </>
-        ) : shadow.disagreements > 0 ? (
-          <>
-            <strong>Shadow mode — {shadow.disagreements} disagreement(s) across {shadow.scored} scored bookings.</strong>{" "}
-            The catalogue in this database has drifted from the shipped scorer. Re-seed it
-            (<code>prisma/seed-qualification.ts</code>) before anything is switched over.
-          </>
-        ) : (
-          <>
-            <strong>Gate passed — {shadow.scored} bookings, zero disagreements.</strong> The
-            catalogue reproduces every historical verdict exactly, so the public form can be
-            switched to it.
-          </>
-        )}
-      </div>
+      {/* The gate, and the switch it guards. Deliberately loud: an admin editing scores below
+          needs to know in one glance whether those edits decide anything. */}
+      <ScorerSwitch shadow={shadow} scorer={scorer} />
 
       <InboundReport report={inbound} />
 
@@ -287,7 +338,7 @@ export function QualificationPanel({
                     <code>{q.key}</code> · v{q.version} · {DIMENSION_LABELS[q.dimension]}
                     {q.dimension !== "NONE" && q.weight !== 1 ? ` · weight ${q.weight}` : ""}
                     {q.answerCount > 0 && (
-                      <> · <strong>{q.answerCount} answered — editing creates v{q.version + 1}</strong></>
+                      <> · <strong>{q.answerCount} answered - editing creates v{q.version + 1}</strong></>
                     )}
                   </div>
                   {q.options.length > 0 && (
@@ -358,20 +409,89 @@ const DIMENSIONS: BantDimension[] = ["BUDGET", "AUTHORITY", "NEED", "TIMELINE", 
 const KINDS: QuestionKind[] = ["SELECT", "MULTI_SELECT", "BOOLEAN", "TEXT", "LONG_TEXT", "NUMBER"];
 
 /**
- * Aliases are merged onto the options for reading, but stored in their own column — so the
- * Options JSON box must show them stripped, or a save would round-trip them back into the
- * frozen `options` value and the version guard would reject the next edit.
+ * The answers box is plain text, one `answer text | score` per line. The server still takes the
+ * option list as JSON, so the form converts on submit - see `toServerForm`.
+ *
+ * Each option also has an internal `value`, the id past answers are stored under. The admin
+ * never types it: an existing option keeps its value (matched by its text, or by its line when
+ * the text itself was reworded), and a new one gets a slug of its text. Aliases are left out
+ * here - they live in their own column, and round-tripping them into `options` would make the
+ * version guard see a change that was never made.
  */
-function stripAliases(options: QuestionOption[]): Omit<QuestionOption, "aliases">[] {
-  return options.map(({ value, label, score }) => ({ value, label, score }));
+function optionsToText(options: QuestionOption[]): string {
+  return options.map((o) => `${o.label} | ${o.score}`).join("\n");
 }
 
-/** The alias editor's text form: one `value: alias, alias` line per option that has any. */
+/** The mapping box, keyed by answer text rather than the internal value the admin never sees. */
 function aliasesToText(options: QuestionOption[]): string {
   return options
     .filter((o) => o.aliases?.length)
-    .map((o) => `${o.value}: ${o.aliases!.join(", ")}`)
+    .map((o) => `${o.label} | ${o.aliases!.join(", ")}`)
     .join("\n");
+}
+
+const slug = (t: string) =>
+  t.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "option";
+
+/** Split "text | tail" on the LAST pipe, so answer text may itself contain one. */
+function splitPipe(line: string): [string, string | null] {
+  const at = line.lastIndexOf("|");
+  return at < 0 ? [line.trim(), null] : [line.slice(0, at).trim(), line.slice(at + 1).trim()];
+}
+
+/**
+ * Turn the text boxes back into what the server action parses: `options` as JSON and
+ * `answerAliases` as `value: alias, alias` lines. Returns an error message for a line it cannot
+ * read, rather than guessing a score.
+ */
+function toServerForm(fd: FormData, previous: QuestionOption[]): string | null {
+  const lines = String(fd.get("options") ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const byLabel = new Map(previous.map((o) => [o.label.trim().toLowerCase(), o]));
+  const matched = new Set<string>();
+  // First pass: an answer whose text is unchanged keeps its value, wherever it moved to.
+  const parsed = lines.map((line) => {
+    const [label, tail] = splitPipe(line);
+    const prev = byLabel.get(label.toLowerCase());
+    if (prev) matched.add(prev.value);
+    return { label, tail, prev };
+  });
+  const used = new Set<string>();
+  const options: { value: string; label: string; score: number }[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const { label, tail } = parsed[i];
+    let { prev } = parsed[i];
+    if (!label) return `Line ${i + 1} has no answer text`;
+    const score = tail === null || tail === "" ? 0 : Number(tail);
+    if (!Number.isFinite(score) || score < 0 || score > BANT_MAX) {
+      return `"${label}": the score after | must be a number from 0 to ${BANT_MAX}`;
+    }
+    // Second pass: a reworded answer on the same line as an unmatched old one is that answer.
+    if (!prev && previous[i] && !matched.has(previous[i].value)) {
+      prev = previous[i];
+      matched.add(prev.value);
+    }
+    const base = prev?.value ?? slug(label);
+    let value = base;
+    for (let n = 2; used.has(value); n++) value = `${base}_${n}`;
+    used.add(value);
+    options.push({ value, label, score });
+  }
+  fd.set("options", options.length ? JSON.stringify(options) : "");
+
+  const valueByLabel = new Map(options.map((o) => [o.label.toLowerCase(), o.value]));
+  const aliasLines: string[] = [];
+  for (const line of String(fd.get("answerAliases") ?? "").split("\n")) {
+    if (!line.trim()) continue;
+    const [label, aliases] = splitPipe(line);
+    const value = valueByLabel.get(label.toLowerCase());
+    if (!value) return `Other wording for "${label}": no answer above has that text`;
+    if (aliases) aliasLines.push(`${value}: ${aliases}`);
+  }
+  fd.set("answerAliases", aliasLines.join("\n"));
+  return null;
 }
 
 function QuestionForm({
@@ -384,7 +504,13 @@ function QuestionForm({
   busy: boolean;
 }) {
   return (
-    <form action={onSubmit} className="mt-3 grid gap-3 rounded-field border border-line bg-surface-2 p-3">
+    <form
+      action={(fd) => {
+        const error = toServerForm(fd, question?.options ?? []);
+        if (error) return toast(error, "error");
+        onSubmit(fd);
+      }}
+      className="mt-3 grid gap-3 rounded-field border border-line bg-surface-2 p-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-caption uppercase text-ink-3">
           Key
@@ -398,7 +524,7 @@ function QuestionForm({
         </label>
         <label className="text-caption uppercase text-ink-3">
           Dimension
-          {/* SelectMenu (§5.5) — these two were the last raw <select>s in the console. */}
+          {/* SelectMenu (§5.5) - these two were the last raw <select>s in the console. */}
           <span className="mt-1 block">
             <SelectMenu
               name="dimension"
@@ -451,27 +577,35 @@ function QuestionForm({
       </div>
 
       <label className="text-caption uppercase text-ink-3">
-        Options — JSON: [{"{"}&quot;value&quot;,&quot;label&quot;,&quot;score&quot;{"}"}], score 0–5
+        Answers - one per line: answer text | score (0-4)
         <textarea
           name="options"
-          rows={4}
-          defaultValue={JSON.stringify(stripAliases(question?.options ?? []), null, 0)}
-          className="mt-1 w-full rounded-field border border-line bg-surface px-2 py-1 font-mono text-caption text-ink"
+          rows={Math.max(4, (question?.options.length ?? 0) + 1)}
+          defaultValue={optionsToText(question?.options ?? [])}
+          placeholder={"No, I haven't started applying. | 2\nI've applied, but no responses | 4\nI got some interviews, but no offer | 5"}
+          className="mt-1 w-full rounded-field border border-line bg-surface px-2 py-1 text-sm normal-case text-ink"
         />
+        <span className="mt-1 block normal-case text-ink-3">
+          Leave the score off for a Context only question. Text and number questions need no answers.
+        </span>
       </label>
 
       {/* ── Inbound mapping ───────────────────────────────────────────────────────────────
           Editable even on an ANSWERED question without spawning a new version: these two fields
           change how an external form's wording is RECOGNISED, not what was asked or what it
           scored. See `updateQualificationQuestion`. */}
-      <fieldset className="grid gap-3 rounded-field border border-line bg-surface p-3">
-        <legend className="px-1 text-caption font-semibold uppercase text-ink-3">
-          Landing-page mapping
-        </legend>
+      <details
+        open={!!(question?.inboundKeys.length || question?.options.some((o) => o.aliases?.length))}
+        className="rounded-field border border-line bg-surface p-3"
+      >
+        <summary className="cursor-pointer text-caption font-semibold uppercase text-ink-3">
+          Advanced: landing-page wording
+        </summary>
+        <div className="mt-3 grid gap-3">
         <p className="text-caption text-ink-3">
-          What this question is called, and what its answers are called, on the form that feeds
-          Pabbly. Capitalisation, spaces, dashes and underscores are ignored — only add an entry
-          when the wording genuinely differs.
+          Only needed when the opt-in form words this question or its answers differently from
+          above. Answers already match on the key and the answer text, ignoring capitalisation,
+          spaces and punctuation. The panel warns you when a submitted answer did not match.
         </p>
 
         <label className="text-caption uppercase text-ink-3">
@@ -485,16 +619,17 @@ function QuestionForm({
         </label>
 
         <label className="text-caption uppercase text-ink-3">
-          Answer wording — one option per line, <code>value: text, text</code>
+          Other wording for an answer - answer text | other wording, other wording
           <textarea
             name="answerAliases"
             rows={Math.max(3, question?.options.length ?? 3)}
             defaultValue={aliasesToText(question?.options ?? [])}
-            placeholder={"immediately: Right away, ASAP\n3_months: Within 3 months"}
+            placeholder={"Immediately | Right away, ASAP\nWithin 3 months | In the next 3 months"}
             className="mt-1 w-full rounded-field border border-line bg-surface-2 px-2 py-1 font-mono text-caption text-ink"
           />
         </label>
-      </fieldset>
+        </div>
+      </details>
 
       <div className="flex items-center gap-3">
         <button
@@ -506,7 +641,7 @@ function QuestionForm({
         </button>
         {question && question.answerCount > 0 && (
           <span className="text-caption text-warn-ink">
-            {question.answerCount} answers exist — this creates v{question.version + 1} and retires v{question.version}.
+            {question.answerCount} answers exist - this creates v{question.version + 1} and retires v{question.version}.
           </span>
         )}
       </div>

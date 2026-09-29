@@ -8,14 +8,14 @@ import type { AppRole } from "@/lib/sections";
 import type { SignalLevel } from "@/lib/signals";
 
 /**
- * My Desk for an admin or head coach — a task list, not call statistics (Error Log Q2).
+ * My Desk for an admin or head coach - a task list, not call statistics (Error Log Q2).
  *
  * The desk branches on `TeamProfile.logVariant` into the L1 and L2 specialist screens. Anyone
  * without a variant fell through to either the generic call desk (call stats, meaningless to a
  * founder) or, with no team profile at all, an explainer telling them to ask Ameen to link their
- * login — which is what Ameen himself saw.
+ * login - which is what Ameen himself saw.
  *
- * So this answers the same question the specialist desks answer — "what needs me right now?" —
+ * So this answers the same question the specialist desks answer - "what needs me right now?" -
  * with the queues a founder or head actually owns. It is deliberately NOT the home page's Needs
  * Attention: that surfaces metric alerts (runway, overdue totals, targets slipping). These are
  * items sitting in a queue with someone's name on them, waiting on a decision.
@@ -34,7 +34,7 @@ export type DeskTask = {
   /** Canonical signal level: `watch` for things going stale, `risk` for things already late. */
   readonly tone: SignalLevel;
   /**
-   * True for a stopped PROCESS rather than a cleared queue — `count` is 0 because nothing is
+   * True for a stopped PROCESS rather than a cleared queue - `count` is 0 because nothing is
    * running, not because the work is done. Must never render as the same green "all clear" a
    * genuine empty queue gets (that's what happened to the Outreach engine: off since it shipped,
    * and nothing on any screen said so until someone opened Settings).
@@ -69,7 +69,7 @@ export const getOwnerDesk = cache(async (role: AppRole): Promise<OwnerDesk> => {
           slot: { startsAt: { gte: now, lt: horizon } },
         },
       }),
-      // Same predicate as l1-desk-metrics.ts's `callable` / the hand-out batch's candidates —
+      // Same predicate as l1-desk-metrics.ts's `callable` / the hand-out batch's candidates -
       // a lead nobody could call anyway (WON, LOST, no phone) doesn't belong in this count. This
       // exists because the 29 Jul incident (23,430 of 23,435 leads unassigned) was invisible on
       // every screen in the app until someone thought to run this exact query by hand; a founder
@@ -77,11 +77,11 @@ export const getOwnerDesk = cache(async (role: AppRole): Promise<OwnerDesk> => {
       prisma.lead.count({
         where: { ...ACTIVE, assignedToId: null, stage: { notIn: ["WON", "LOST"] }, phone: { not: null } },
       }),
-      // NOT `status: "OVERDUE"`. The app decides overdue by DERIVING it on ACTIVE rows — that is
-      // what the home page counts — so querying the status column would put a different number on
+      // NOT `status: "OVERDUE"`. The app decides overdue by DERIVING it on ACTIVE rows - that is
+      // what the home page counts - so querying the status column would put a different number on
       // two screens that claim to show the same thing.
       seesMoney ? getPendingRows() : Promise.resolve(null),
-      // Same shape the Outreach page itself reads — reusing it here rather than re-deriving a
+      // Same shape the Outreach page itself reads - reusing it here rather than re-deriving a
       // second "is it on, how much is due" query that could drift from what /outreach shows.
       seesMoney ? getOutreachQueue() : Promise.resolve(null),
     ]);
@@ -94,7 +94,7 @@ export const getOwnerDesk = cache(async (role: AppRole): Promise<OwnerDesk> => {
     {
       key: "unconfirmed",
       label: "Discovery calls awaiting confirmation",
-      detail: `Booked in the next ${CONFIRM_WINDOW_HOURS} hours with no reply yet — unconfirmed calls are the ones that no-show.`,
+      detail: `Booked in the next ${CONFIRM_WINDOW_HOURS} hours with no reply yet - unconfirmed calls are the ones that no-show.`,
       count: unconfirmed,
       href: "/bookings",
       tone: "risk",
@@ -102,7 +102,7 @@ export const getOwnerDesk = cache(async (role: AppRole): Promise<OwnerDesk> => {
     {
       key: "unassigned-leads",
       label: "Unassigned leads",
-      detail: "Callable leads nobody owns — no specialist desk or SOP queue will ever surface these on its own.",
+      detail: "Callable leads nobody owns - no specialist desk or SOP queue will ever surface these on its own.",
       count: unassignedCallable,
       href: "/pipeline",
       tone: "risk",
@@ -143,8 +143,8 @@ export const getOwnerDesk = cache(async (role: AppRole): Promise<OwnerDesk> => {
       key: "outreach-engine",
       label: "Outreach SOP engine",
       detail: outreach.enabled
-        ? `${outreach.counts.due} step${outreach.counts.due === 1 ? "" : "s"} waiting on a specialist — send, call or check a booking.`
-        : "Off since it shipped — nobody is being scheduled a WhatsApp, a call or a booking check. Turn it on in Outreach → Settings when the team is ready.",
+        ? `${outreach.counts.due} step${outreach.counts.due === 1 ? "" : "s"} waiting on a specialist - send, call or check a booking.`
+        : "Off since it shipped - nobody is being scheduled a WhatsApp, a call or a booking check. Turn it on in Outreach → Settings when the team is ready.",
       count: outreach.counts.due,
       href: "/outreach",
       tone: "watch",

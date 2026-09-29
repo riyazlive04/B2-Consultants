@@ -11,7 +11,7 @@ import type { ActionResult } from "./finance-actions";
 /**
  * The section library and page templates (one `SectionSnippet` model, two scopes).
  *
- * Writing is gated on `funnels` like the builder itself — anyone who can build a page can save a
+ * Writing is gated on `funnels` like the builder itself - anyone who can build a page can save a
  * piece of one. DELETING is gated on `sites.manage`, because the library is shared: removing a
  * section everyone reaches for is not the same kind of act as removing it from your own page.
  */
@@ -81,7 +81,7 @@ export async function deleteSnippet(id: string): Promise<ActionResult> {
   if (!row) return { ok: false, error: "That snippet no longer exists" };
   // The built-ins are the library's floor. Someone tidying up should not be able to leave the
   // next person with an empty picker and no way to get the starter sections back.
-  if (row.builtIn) return { ok: false, error: "Built-in sections can't be deleted — save your own version instead" };
+  if (row.builtIn) return { ok: false, error: "Built-in sections can't be deleted - save your own version instead" };
 
   await prisma.sectionSnippet.delete({ where: { id } });
   await logActivity(session, {

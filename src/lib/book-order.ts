@@ -10,7 +10,7 @@ import {
  * immediately; otherwise wait. If the student is on EMI, ordering is deferred (they haven't
  * fully paid)."
  *
- * So the decision is about CASH RECEIVED, not about the sale price or the plan on paper — an
+ * So the decision is about CASH RECEIVED, not about the sale price or the plan on paper - an
  * EMI student who has actually paid ₹30,000 across instalments has earned their books just as
  * much as someone who paid it in one go. Keying off "is on EMI" instead of "has paid enough"
  * would strand exactly the customer who has been paying reliably for months.
@@ -49,7 +49,7 @@ export function decideBookOrder(
     return {
       order: true,
       reason: "threshold_met",
-      explain: `Paid ${inr(paid)} — at or above the ${inr(threshold)} order threshold. Order now.`,
+      explain: `Paid ${inr(paid)} - at or above the ${inr(threshold)} order threshold. Order now.`,
       shortfallInrMinor: 0,
     };
   }
@@ -57,7 +57,7 @@ export function decideBookOrder(
   return {
     order: false,
     reason: "below_threshold",
-    explain: `Paid ${inr(paid)} of the ${inr(threshold)} threshold — hold until ${inr(shortfall)} more is collected.`,
+    explain: `Paid ${inr(paid)} of the ${inr(threshold)} threshold - hold until ${inr(shortfall)} more is collected.`,
     shortfallInrMinor: shortfall,
   };
 }
@@ -67,6 +67,6 @@ export function initialBookOrderStatus(
   decision: BookOrderDecision,
 ): "QUOTE_REQUESTED" | "DEFERRED" {
   // Ordering starts by asking the publisher for a price (§9.2: "get a quotation first"),
-  // never by jumping straight to ORDERED — the amount isn't known until they quote.
+  // never by jumping straight to ORDERED - the amount isn't known until they quote.
   return decision.order ? "QUOTE_REQUESTED" : "DEFERRED";
 }

@@ -1,9 +1,9 @@
 /**
- * Coaching agreement — isomorphic core. NO prisma, NO server-only, NO secrets, so the founder's
+ * Coaching agreement - isomorphic core. NO prisma, NO server-only, NO secrets, so the founder's
  * field form (client) and the PDF renderer + server actions all import the same truth.
  *
  * THE ONE RULE: `AgreementData` is a frozen snapshot. Once an agreement is issued, the document
- * renders from this object and nothing else — it never joins back to the mutable Student row.
+ * renders from this object and nothing else - it never joins back to the mutable Student row.
  * A contract must show what was true at signing, not what the CRM says today. That is also why
  * the student's postal address and the programme batch live here rather than as Student columns:
  * they are terms of *this* document.
@@ -18,7 +18,7 @@ import { formatInrMinor } from "./format";
 /** The git-pinned renderer. Bump when the clauses change; old agreements keep rendering their own. */
 export const AGREEMENT_TEMPLATE_VERSION = "guided-v3";
 
-/** How long a signing link stays live. Longer than an invite (7d) — a contract deserves a re-read. */
+/** How long a signing link stays live. Longer than an invite (7d) - a contract deserves a re-read. */
 export const AGREEMENT_TTL_DAYS = 14;
 
 /** OTP that binds the signature to control of the delivery number. */
@@ -57,8 +57,8 @@ export const AGREEMENT_BANKS = [
  * Money travels as a decimal string of MINOR units (paise), matching the BigInt columns
  * elsewhere. JSON has no BigInt, and `number` silently loses precision past 2^53.
  *
- * NOT `rule("money")`, despite both being "money": that kind describes what a person TYPES —
- * major-unit rupees with an optional "69999.50" decimal — while this describes what the form has
+ * NOT `rule("money")`, despite both being "money": that kind describes what a person TYPES -
+ * major-unit rupees with an optional "69999.50" decimal - while this describes what the form has
  * already converted for storage. Swapping it in would accept a fractional paise, which `BigInt(v)`
  * then throws on, and would drop the >0 floor. The money kind guards the input (AgreementForm's
  * fee boxes); this guards the payload. They are different questions.
@@ -79,17 +79,17 @@ const instalmentSchema = z.object({
 /**
  * DELIBERATELY NOT built from `rule()` (lib/field-rules), unlike the rest of the app's forms.
  *
- * This schema is not just an input gate — it is the DESERIALIZER for frozen snapshots. Every
+ * This schema is not just an input gate - it is the DESERIALIZER for frozen snapshots. Every
  * surface re-parses stored rows through it (`parseAgreementData`, `getAgreementDetail`), and
  * `contentHash()` derives the `dataSha256` printed on every page from the PARSED object. So a
  * stricter rule here is retroactive, and applies to contracts that are already executed:
  *
- *   - a rejection (rule("name") refuses "Rahaman, Ameenur" — no comma in its class) turns a signed
+ *   - a rejection (rule("name") refuses "Rahaman, Ameenur" - no comma in its class) turns a signed
  *     agreement into "Stored fields are invalid" and blocks its own reminders;
  *   - a transform (rule("name") squishes double spaces, rule("email") folds case) silently rewrites
  *     the snapshot on read, so the hash no longer matches the one on the signed PDF.
  *
- * Character rules belong on the INPUT — AgreementForm carries kind="name"/"phone"/"email"/"money",
+ * Character rules belong on the INPUT - AgreementForm carries kind="name"/"phone"/"email"/"money",
  * which is what keeps new agreements clean. Anything added here must be satisfiable by every row
  * already in the table. This action is founder-gated (`agreements.issue`), not a public endpoint,
  * so the "a crafted POST skips the filter" argument that drives the shared rules does not apply.
@@ -98,7 +98,7 @@ export const agreementDataSchema = z
   .object({
     student: z.object({
       fullName: z.string().trim().min(2, "Enter the student's full name").max(120),
-      /** §2 header. No home for this on Student — and it must be frozen at signing anyway. */
+      /** §2 header. No home for this on Student - and it must be frozen at signing anyway. */
       address: z.string().trim().min(5, "Enter the student's postal address").max(300),
       /** Delivery + OTP target. Stored raw; normalized at send time by lib/phone.ts. */
       phone: z.string().trim().min(5, "Enter a WhatsApp number with country code").max(32),
@@ -120,27 +120,27 @@ export const agreementDataSchema = z
         totalInrMinor: minorUnits,
         /**
          * 2 to 6 instalments (Error Log N3). The original template (§7.2) allowed exactly two,
-         * so this was `.min(2).max(2)` — which made the plans the business actually sells
+         * so this was `.min(2).max(2)` - which made the plans the business actually sells
          * unrecordable: B2 sells 4 EMI on a bundle and 6 EMI across three courses, and German
          * Note runs up to 6 equal instalments.
          *
          * WIDENING is the safe direction, and that is not incidental. This schema re-parses
          * every stored agreement and `contentHash` hashes the PARSED object, so a narrower rule
          * would retroactively invalidate executed contracts. Every existing row holds exactly
-         * two instalments, which still satisfies `.min(2)` — so they parse to the identical
+         * two instalments, which still satisfies `.min(2)` - so they parse to the identical
          * object and keep the hash printed on their signed PDF. See the agreement-hash test.
          */
         instalments: z.array(instalmentSchema).min(2).max(6),
       }),
     ]),
     /**
-     * Bundle add-ons — the ₹300 / ₹600 book and material charges (Error Log N5), itemised so
+     * Bundle add-ons - the ₹300 / ₹600 book and material charges (Error Log N5), itemised so
      * the student sees what they are paying for rather than one opaque total.
      *
      * `.optional()` with NO `.default()`, deliberately. `canonicalJson` drops `undefined` keys,
      * so an agreement signed before this field existed parses to exactly the same object and
      * hashes to exactly the same value. A `.default([])` would materialise the key on every old
-     * row and change every historic hash — silently breaking the integrity check on contracts
+     * row and change every historic hash - silently breaking the integrity check on contracts
      * that are already executed.
      *
      * These are part of `totalInrMinor`, not extra to it: the instalment-sum invariant below is
@@ -179,12 +179,12 @@ export type AgreementData = z.infer<typeof agreementDataSchema>;
 const inrGrouping = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 
 /**
- * "69,999 INR" — Indian grouping, the word INR, and deliberately NO ₹ symbol.
+ * "69,999 INR" - Indian grouping, the word INR, and deliberately NO ₹ symbol.
  *
  * DOCUMENT / LEGAL-PROSE ONLY. ₹ (U+20B9) does not exist in WinAnsi, the encoding of react-pdf's
  * built-in Helvetica, so it renders as a blank box in the PDF. The master agreement writes
  * "69,999 INR" for the same reason a typesetter would. On-screen surfaces must instead use
- * `formatInrMinor` (₹1,00,000.99) per DESIGN_SYSTEM §3 — a bare number is never shown for money.
+ * `formatInrMinor` (₹1,00,000.99) per DESIGN_SYSTEM §3 - a bare number is never shown for money.
  */
 export function formatInrPlainForDocument(minor: bigint | string): string {
   const n = typeof minor === "string" ? BigInt(minor) : minor;
@@ -194,7 +194,7 @@ export function formatInrPlainForDocument(minor: bigint | string): string {
   return `${major} INR`;
 }
 
-/** "04.07.2026" — the German convention the master uses throughout, from an ISO yyyy-mm-dd. */
+/** "04.07.2026" - the German convention the master uses throughout, from an ISO yyyy-mm-dd. */
 export function formatGermanDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${d}.${m}.${y}`;
@@ -219,7 +219,7 @@ export function formatGermanDateOf(d: Date): string {
  * always produce the same string, whatever order the form built them in.
  *
  * This is what gets hashed into `dataSha256` and printed on every page. It is the reproducible
- * half of the integrity story — the PDF bytes are NOT reproducible (PDFKit stamps a creation date
+ * half of the integrity story - the PDF bytes are NOT reproducible (PDFKit stamps a creation date
  * and a document id), so `pdfSha256` proves the stored file is untouched while this proves what
  * was agreed. Never try to re-derive `pdfSha256` by re-rendering.
  */
@@ -233,7 +233,7 @@ export function canonicalJson(value: unknown): string {
 }
 
 /** The exact bytes that get hashed. Template version is inside, so the same fields under a
- *  different clause set hash differently — which is the whole point. */
+ *  different clause set hash differently - which is the whole point. */
 export function canonicalPayload(data: AgreementData, templateVersion: string): string {
   return canonicalJson({ templateVersion, data });
 }

@@ -13,7 +13,7 @@ const DAY = 86_400_000;
 const NOW = new Date("2026-08-03T09:00:00.000Z");
 const ago = (days: number) => new Date(NOW.getTime() - days * DAY);
 
-describe("lead priority — the shipped weights reproduce the old hardcoded formula", () => {
+describe("lead priority - the shipped weights reproduce the old hardcoded formula", () => {
   /**
    * THE SAFETY PROPERTY OF THIS REFACTOR.
    *
@@ -65,18 +65,18 @@ describe("lead priority — the shipped weights reproduce the old hardcoded form
   });
 
   test("the config default and the scorer default are the same numbers", () => {
-    // Two places declare these — a drift between them would mean the Console showed one set of
+    // Two places declare these - a drift between them would mean the Console showed one set of
     // weights while an unconfigured install ran another.
     assert.deepEqual(DEFAULT_CALL_DISTRIBUTION.priority, DEFAULT_PRIORITY_WEIGHTS);
   });
 });
 
-describe("lead priority — an unscored lead is not a zero-scored one", () => {
+describe("lead priority - an unscored lead is not a zero-scored one", () => {
   test("null BANT contributes nothing, and does not out-rank a genuine 0", () => {
     const base = { arrivedAt: ago(30), lastActivityAt: ago(30) };
     const unscored = priorityScore({ ...base, bantScore: null }, DEFAULT_PRIORITY_WEIGHTS, NOW);
     const scoredZero = priorityScore({ ...base, bantScore: 0 }, DEFAULT_PRIORITY_WEIGHTS, NOW);
-    // Same score — but for different reasons, and neither claims evidence it doesn't have.
+    // Same score - but for different reasons, and neither claims evidence it doesn't have.
     assert.equal(unscored.score, scoredZero.score);
     assert.ok(!unscored.reasons.some((r) => r.startsWith("BANT")), "must not claim a BANT reading");
   });
@@ -90,10 +90,10 @@ describe("lead priority — an unscored lead is not a zero-scored one", () => {
   });
 });
 
-describe("lead priority — the idle penalty is capped", () => {
+describe("lead priority - the idle penalty is capped", () => {
   test("a very old lead stays beatable rather than buried", () => {
     // Uncapped, a year-old lead would score so far negative that no amount of BANT could lift it
-    // back into view — which is a decision to abandon it, not to deprioritise it.
+    // back into view - which is a decision to abandon it, not to deprioritise it.
     const ancient = priorityScore(
       { bantScore: 4, arrivedAt: ago(400), lastActivityAt: ago(400) },
       DEFAULT_PRIORITY_WEIGHTS,
@@ -109,7 +109,7 @@ describe("lead priority — the idle penalty is capped", () => {
   });
 });
 
-describe("lead priority — founder weights actually change the order", () => {
+describe("lead priority - founder weights actually change the order", () => {
   const two = (w: PriorityWeights) => {
     const fresh = priorityScore({ bantScore: 0, arrivedAt: ago(1), lastActivityAt: ago(1) }, w, NOW).score;
     const strongOld = priorityScore({ bantScore: 4, arrivedAt: ago(60), lastActivityAt: ago(60) }, w, NOW).score;
@@ -120,11 +120,11 @@ describe("lead priority — founder weights actually change the order", () => {
     const off = two({ ...DEFAULT_PRIORITY_WEIGHTS, bantPerPoint: 0 });
     assert.ok(off.fresh > off.strongOld, "with BANT off, freshness wins");
     const on = two({ ...DEFAULT_PRIORITY_WEIGHTS, bantPerPoint: 25 });
-    assert.ok(on.strongOld > on.fresh, "turning BANT up flips it — which is the point of the dial");
+    assert.ok(on.strongOld > on.fresh, "turning BANT up flips it - which is the point of the dial");
   });
 });
 
-describe("lead priority — sorting is stable and deterministic", () => {
+describe("lead priority - sorting is stable and deterministic", () => {
   test("ties break on arrival, oldest first", () => {
     const rows = [
       { score: 10, reasons: [], arrivedAt: ago(1) },
@@ -136,7 +136,7 @@ describe("lead priority — sorting is stable and deterministic", () => {
   });
 });
 
-describe("call distribution — splitting a batch by share", () => {
+describe("call distribution - splitting a batch by share", () => {
   const nilofer = { userId: "n", name: "Nilofer", sharePct: 70 };
   const asma = { userId: "a", name: "Asma", sharePct: 30 };
 
@@ -186,7 +186,7 @@ describe("call distribution — splitting a batch by share", () => {
     assert.deepEqual(alloc.map((a) => a.count), [4, 3, 3], "the leftover goes to the first, not nowhere");
   });
 
-  test("zero-share members are excluded — that is what 'not in the rotation' means", () => {
+  test("zero-share members are excluded - that is what 'not in the rotation' means", () => {
     const alloc = allocateByShare(10, [nilofer, { userId: "z", name: "Zero", sharePct: 0 }]);
     assert.deepEqual(alloc.map((a) => a.name), ["Nilofer"]);
     assert.equal(alloc[0].count, 10);

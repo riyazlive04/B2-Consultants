@@ -18,7 +18,7 @@ import { Card, Hint, NumInput, Picker, SaveBar, Toggle } from "./kit";
  * Two small operational rules that share a tab (Founder Console → Operations):
  * when book orders release, and how the pipeline is driven.
  *
- * Both are config rather than code for the same reason as the commission rates — the spec
+ * Both are config rather than code for the same reason as the commission rates - the spec
  * lists each as still open (§18.3 the threshold, §18.6 the pipeline mode), so the numbers the
  * founders said on a call are defaults to start from, not facts to compile in.
  */
@@ -67,7 +67,7 @@ function BookOrderSection({ config }: { config: BookOrderConfig }) {
     <div className="space-y-5">
       <Hint>
         When we place a student&apos;s book order with the publisher. The rule reads{" "}
-        <strong>cash actually collected</strong>, not the payment plan — an EMI student who has
+        <strong>cash actually collected</strong>, not the payment plan - an EMI student who has
         genuinely paid past the threshold gets their books, because the point of holding back is
         unpaid money, not the existence of instalments.
       </Hint>
@@ -157,7 +157,7 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
   return (
     <div className="space-y-5">
       <Hint>
-        How a lead moves between pipeline stages. Same data either way — this only decides
+        How a lead moves between pipeline stages. Same data either way - this only decides
         whether a <strong>rule</strong> moves the card or a <strong>hand</strong> does.
       </Hint>
 
@@ -181,7 +181,7 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
           </Field>
           {draft.mode === "drag_drop" && (
             <p className="rounded-field border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
-              In drag-and-drop, a card moved by hand stays where it was put — the stage rules
+              In drag-and-drop, a card moved by hand stays where it was put - the stage rules
               stop correcting it. That is the trade: control over consistency.
             </p>
           )}
@@ -190,7 +190,7 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
               the board, which is why the live board held one card against 23,545 leads. */}
           <Field
             label="New leads on the board"
-            hint="A card is created in the column matching the lead's stage, at zero value — nothing has been quoted yet. Switch off only if you want the board to hold hand-picked deals; leads will then never appear on it by themselves."
+            hint="A card is created in the column matching the lead's stage, at zero value - nothing has been quoted yet. Switch off only if you want the board to hold hand-picked deals; leads will then never appear on it by themselves."
           >
             <Toggle
               label="Put every new lead on the Opportunities board"

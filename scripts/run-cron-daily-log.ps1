@@ -1,4 +1,4 @@
-# B2 — daily-log EOD tick.
+# B2 - daily-log EOD tick.
 #
 # The app has no clock of its own. The CUTOFF doesn't need one (submitDailyLog reads the real
 # clock, so the deadline holds regardless), but AUTO-SAVE does: without this tick, a member who
@@ -7,7 +7,7 @@
 # Safe to run as often as you like: the endpoint no-ops before the founder's cutoff and is
 # idempotent after it (one row per person per day, enforced by a unique index).
 #
-# The secret is read from .env at run time and sent as a header — never baked into the task
+# The secret is read from .env at run time and sent as a header - never baked into the task
 # definition, never echoed, so it can't leak into Task Scheduler's UI or the log below.
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\run-cron-daily-log.ps1
@@ -48,7 +48,7 @@ try {
     Write-Log ("ok    date={0} autoSaved={1} alreadyLogged={2}  {3}" -f $run.date, $run.autoSaved, $run.alreadyLogged, $who)
   }
 } catch {
-  # A stopped dev server is the normal case on a laptop — log it and move on, never throw.
+  # A stopped dev server is the normal case on a laptop - log it and move on, never throw.
   Write-Log ("FAIL  {0}" -f $_.Exception.Message)
   exit 1
 }

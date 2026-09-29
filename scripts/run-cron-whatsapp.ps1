@@ -1,11 +1,11 @@
-# B2 — WhatsApp reminder tick.
+# B2 - WhatsApp reminder tick.
 #
-# The app has no clock of its own: `automation-queue.ts` says it outright — "Nothing here can
+# The app has no clock of its own: `automation-queue.ts` says it outright - "Nothing here can
 # wake itself up without an HTTP request landing on this process." BullMQ has a Queue but no
 # Worker. So this script IS the scheduler: Windows Task Scheduler runs it, it pokes the
 # endpoint, the endpoint runs the due reminders.
 #
-# The secret is read from .env at run time and sent as a header — never baked into the task
+# The secret is read from .env at run time and sent as a header - never baked into the task
 # definition, never echoed, so it can't leak into Task Scheduler's UI or the log below.
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\run-cron-whatsapp.ps1
@@ -47,7 +47,7 @@ try {
     Write-Log ("ok    sent={0} skipped={1} failed={2}  {3}" -f $run.total.sent, $run.total.skipped, $run.total.failed, $kinds)
   }
 } catch {
-  # A stopped dev server is the normal case on a laptop — log it and move on, never throw.
+  # A stopped dev server is the normal case on a laptop - log it and move on, never throw.
   Write-Log ("FAIL  {0}" -f $_.Exception.Message)
   exit 1
 }

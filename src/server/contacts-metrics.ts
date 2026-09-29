@@ -4,7 +4,9 @@ import { Prisma, LeadStage, LeadSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatInrMinor, formatEurMinor } from "@/lib/format";
 import { resolveBant, type BantSnapshot } from "@/lib/bant-view";
+import { bookingAnswerLines, storedAnswerLines, type BantAnswerLine } from "@/lib/bant-answers";
 import { ACTIVE } from "@/lib/soft-delete";
+import { WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
 
 /**
  * Read layer for the Synamate-parity Contacts CRM (SYNAMATE_CLONE_SPEC §5).
@@ -15,7 +17,7 @@ import { ACTIVE } from "@/lib/soft-delete";
 export type ContactRow = {
   id: string;
   name: string;
-  /** Null since the Synamate import — thousands of contacts arrived with an email but no number. */
+  /** Null since the Synamate import - thousands of contacts arrived with an email but no number. */
   phone: string | null;
   email: string | null;
   company: string | null;
@@ -35,7 +37,7 @@ export type ContactListFilters = {
 };
 
 // A real page size, not a silent-truncation cap: every row beyond this is still reachable via
-// nextCursor — nothing is ever dropped on the floor the way the old LIST_CAP=1000 dropped row
+// nextCursor - nothing is ever dropped on the floor the way the old LIST_CAP=1000 dropped row
 // 1001+ with no way to reach it. BUILD_CHECKLIST.md §3.
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 500;
@@ -44,7 +46,7 @@ export type ContactsListOpts = {
   search?: string;
   tagId?: string;
   ownerId?: string;
-  /** Raw strings from the URL — validated against the real enum before use, invalid/unknown
+  /** Raw strings from the URL - validated against the real enum before use, invalid/unknown
    *  values are just ignored rather than throwing (a stale bookmark shouldn't 500 the page). */
   stage?: string;
   source?: string;
@@ -62,7 +64,7 @@ export type ContactsListResult = {
   /** Id to pass as `cursor` for the next page, or null if this is the last page. */
   nextCursor: string | null;
   hasMore: boolean;
-  /** Count of rows matching the current filters (not the whole table) — powers the
+  /** Count of rows matching the current filters (not the whole table) - powers the
    *  "Showing X–Y of Z" pagination notice. */
   filteredTotal: number;
 };
@@ -94,7 +96,7 @@ function dateRangeFilter(from?: string, to?: string): Prisma.DateTimeFilter | un
  * This is the whole point of the export API: the previous export was a client-side dump of the
  * rows already on screen, so "download all leads for July" produced whatever subset of July had
  * fitted in the current page. Sharing the `where` builder is what makes the file and the screen
- * describe the same set — and keeps them describing the same set when a filter is added later.
+ * describe the same set - and keeps them describing the same set when a filter is added later.
  */
 export function contactsWhere(opts: ContactsListOpts): Prisma.LeadWhereInput {
   const search = opts.search?.trim();
@@ -155,7 +157,7 @@ function toContactRow(l: Prisma.LeadGetPayload<{ select: typeof CONTACT_ROW_SELE
 
 /**
  * Contacts list, newest first, filtered server-side (search text / tag / owner / stage / source /
- * city / date range) and paginated with a real keyset cursor — replaces the old LIST_CAP=1000
+ * city / date range) and paginated with a real keyset cursor - replaces the old LIST_CAP=1000
  * flat dump. Ordered by `createdAt desc, id desc` so the cursor (on the unique `id`) is stable
  * even when many leads share a `createdAt`.
  */
@@ -173,10 +175,10 @@ export async function getContactsList(opts: ContactsListOpts): Promise<ContactsL
     });
 
   const [leads, filteredTotal] = await Promise.all([
-    // A bookmarked/shared `?cursor=` can go stale (that contact was since deleted) — Prisma
+    // A bookmarked/shared `?cursor=` can go stale (that contact was since deleted) - Prisma
     // throws on a cursor row that no longer exists. Falling back to page 1 beats a 500 for
     // what's really just an expired link. Any other failure (e.g. a real DB error) still
-    // propagates — only a cursor lookup gets a retry.
+    // propagates - only a cursor lookup gets a retry.
     findPage(opts.cursor).catch((err) => {
       if (!opts.cursor) throw err;
       return findPage(undefined);
@@ -221,7 +223,16 @@ export async function getContactListFilters(): Promise<ContactListFilters> {
 
 export type TimelineEvent = {
   id: string;
-  kind: "NOTE" | "STAGE_CHANGE" | "WHATSAPP" | "OUTCOME" | "BOOKING" | "TASK";
+  /**
+   * `CALL` is every logged dial - the one thing this timeline never showed.
+   *
+   * Its absence was strange rather than deliberate: the empty state has always promised "notes,
+   * CALLS, messages, stage changes and appointments", and calls were the only one of the five
+   * missing. It matters more now that the call-back chase runs off exactly these rows - a card
+   * that says "moved to Cancelled/Unqualified" with no visible reason invites the question this
+   * timeline exists to answer, and the answer is the three call-backs above it.
+   */
+  kind: "NOTE" | "STAGE_CHANGE" | "WHATSAPP" | "OUTCOME" | "BOOKING" | "TASK" | "CALL";
   at: Date;
   title: string;
   body: string | null;
@@ -232,7 +243,7 @@ export type TimelineEvent = {
 export type ContactDetail = {
   id: string;
   name: string;
-  /** Null since the Synamate import — see ContactRow.phone. */
+  /** Null since the Synamate import - see ContactRow.phone. */
   phone: string | null;
   email: string | null;
   city: string | null;
@@ -269,13 +280,13 @@ export type ContactDetail = {
    * The resolved band score, or null for "not scored".
    *
    * NULL IS NOT ZERO. An unscored prospect is one nobody has evidence about; rendering them as
-   * 0.0/5 beside genuinely poor prospects is how a good lead gets deprioritised for never having
+   * 0.0/4 beside genuinely poor prospects is how a good lead gets deprioritised for never having
    * been asked. See lib/bant-view.ts.
    */
   bant: BantSnapshot | null;
   bantScoredAt: Date | null;
   /** The individual answers behind the score, in the order the form asked them. */
-  answers: { question: string; dimension: string; answer: string; score: number | null }[];
+  answers: BantAnswerLine[];
   timeline: TimelineEvent[];
 };
 
@@ -306,10 +317,22 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
         take: 100,
       },
       whatsappMessages: { orderBy: { createdAt: "desc" }, take: 100 },
+      /**
+       * Every dial, oldest first.
+       *
+       * ASCENDING deliberately, unlike its neighbours: the call-back round each row belongs to is
+       * its POSITION in the sequence, so the numbering has to be computed forwards even though
+       * the timeline is finally sorted newest-first.
+       */
+      callLogs: {
+        include: { user: { select: { name: true } } },
+        orderBy: { calledAt: "asc" },
+        take: 100,
+      },
       outcomes: { orderBy: { callDate: "desc" }, take: 50 },
       bookings: { include: { slot: { select: { startsAt: true } } }, orderBy: { createdAt: "desc" }, take: 50 },
       /**
-       * The stored answers behind the band score — ER v2 Track D's `LeadAnswer` rows.
+       * The stored answers behind the band score - ER v2 Track D's `LeadAnswer` rows.
        *
        * Pinned to the QUESTION VERSION that was answered, so re-tuning a question later cannot
        * rewrite the reason this person was called. Ordered by the catalogue's own order so the
@@ -324,6 +347,13 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
     },
   });
   if (!lead) return null;
+
+  /**
+   * The submission the verdict was taken on. Picked once and reused for both the score and the
+   * answers below, so they can never come from different bookings.
+   */
+  const scoredBooking = lead.bookings.find((b) => b.bantAvg !== null) ?? null;
+  const bookingLines = bookingAnswerLines(scoredBooking);
 
   // Build the merged activity timeline (newest first).
   const timeline: TimelineEvent[] = [];
@@ -354,12 +384,72 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
       id: `wa-${w.id}`,
       kind: "WHATSAPP",
       at: w.createdAt,
-      title: `WhatsApp ${w.direction === "INBOUND" ? "received" : "sent"}${w.kind ? ` · ${w.kind}` : ""}`,
-      body: w.body ?? null,
+      // The touchpoint's NAME, not its enum constant. "SOP 7b · Second follow-up, still not
+      // booked" tells the reader what the prospect received; "SOP_FOLLOWUP_2" makes them go and
+      // look it up, which on a record meant to explain a decision is the whole cost.
+      // The VERB reports the outcome, not the attempt. Ten failed pre-call reminders all read
+      // "WhatsApp sent" here while the prospect received nothing - the founder reasonably read
+      // the card as proof of delivery and asked why the messages never arrived. The red tone
+      // below always said otherwise, but nobody reads a colour over a sentence.
+      title: `WhatsApp ${
+        w.direction === "INBOUND"
+          ? "received"
+          : w.status === "FAILED"
+            ? "FAILED"
+            : w.status === "SKIPPED"
+              ? "skipped"
+              : "sent"
+      }${w.kind ? ` · ${WHATSAPP_KIND_LABELS[w.kind] ?? w.kind}` : ""}`,
+      // A skipped or failed send has a written reason and no body. Showing the reason is the
+      // point: "nothing went out because no template is bound" must not look like silence.
+      body: w.body ?? w.error ?? null,
       authorName: null,
-      tone: w.status === "FAILED" ? "bad" : w.direction === "INBOUND" ? "good" : "primary",
+      tone:
+        w.status === "FAILED"
+          ? "bad"
+          : w.status === "SKIPPED"
+            ? "warn"
+            : w.direction === "INBOUND"
+              ? "good"
+              : "primary",
     });
   }
+
+  /**
+   * The dials, numbered the way the call-back chase numbers them.
+   *
+   * The first CONNECTED call opens the chase, and everything after it is a call-back - so the
+   * labels here are the same sequence the caller saw on their desk ("Call-back 2 of 3") and the
+   * same one the give-up entry counts. Anything before the first connection is an attempt, not a
+   * call-back, and is labelled as such rather than being given a round number it never had.
+   *
+   * Kept in step with `lib/callback-chase.ts` by construction: both count dials after the first
+   * SPOKE, and both treat a dial that rang out as a real attempt.
+   */
+  const firstSpokeIdx = lead.callLogs.findIndex((c) => c.outcome === "SPOKE");
+  lead.callLogs.forEach((c, i) => {
+    const outcome = c.outcome.replaceAll("_", " ").toLowerCase();
+    const label =
+      firstSpokeIdx === -1 || i < firstSpokeIdx
+        ? `Call attempt ${i + 1}`
+        : i === firstSpokeIdx
+          ? "Call - first connected"
+          : `Call-back ${i - firstSpokeIdx}`;
+    timeline.push({
+      id: `call-${c.id}`,
+      kind: "CALL",
+      at: c.calledAt,
+      title: `${label} · ${outcome}`,
+      body: c.notes ?? null,
+      authorName: c.user?.name ?? null,
+      tone:
+        c.outcome === "SPOKE"
+          ? "good"
+          : c.outcome === "NOT_INTERESTED" || c.outcome === "WRONG_NUMBER"
+            ? "bad"
+            : "neutral",
+    });
+  });
   for (const o of lead.outcomes) {
     timeline.push({
       id: `outcome-${o.id}`,
@@ -439,26 +529,28 @@ export async function getContactDetail(id: string): Promise<ContactDetail | null
       valueDisplay: `${formatInrMinor(o.valueInrMinor)} · ${formatEurMinor(o.valueEurMinor)}`,
     })),
     /**
-     * The band score, resolved by the app's single rule — the BOOKING's score where one exists,
+     * The band score, resolved by the app's single rule - the BOOKING's score where one exists,
      * otherwise the LEAD's own (the landing page's answers, taken at opt-in).
      *
      * This screen showed no score at all. It is the "client section" a specialist opens before a
-     * call, and the landing page had been collecting these answers the whole time — so the one
+     * call, and the landing page had been collecting these answers the whole time - so the one
      * place the score was most useful was the one place it never appeared.
      *
      * Null means NOT SCORED, and the UI must render it as that, never as zero.
      */
-    bant: resolveBant(
-      lead.bookings.find((b) => b.bantAvg !== null) ?? null,
-      lead,
-    ),
+    bant: resolveBant(scoredBooking, lead),
     bantScoredAt: lead.bantScoredAt,
-    answers: lead.answers.map((a) => ({
-      question: a.question.text,
-      dimension: a.question.dimension,
-      answer: a.answerRaw,
-      score: a.score,
-    })),
+    /**
+     * Booking answers FIRST, stored answers as the fallback - the same precedence resolveBant
+     * applies to the score, so the number and the answers under it can never describe different
+     * submissions.
+     *
+     * This card used to read `lead.answers` alone, which are written only by the landing-page
+     * opt-in path. A prospect who qualified by BOOKING A DISCOVERY CALL - most of them - had
+     * their answers sitting in the booking's own columns the whole time and saw an empty card
+     * saying the answers "were not kept".
+     */
+    answers: bookingLines.length > 0 ? bookingLines : storedAnswerLines(lead.answers),
     timeline,
   };
 }

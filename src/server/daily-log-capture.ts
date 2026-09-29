@@ -12,11 +12,11 @@ import type { LogVariant } from "@/lib/daily-log";
  * it and the EOD job writes rows from it, and if those two ever drifted, an auto-saved row would
  * silently disagree with what the member saw on screen an hour earlier.
  *
- * WHAT IT CANNOT SEE — this is load-bearing, not a footnote. Several fields have no event source
+ * WHAT IT CANNOT SEE - this is load-bearing, not a footnote. Several fields have no event source
  * anywhere in the schema and are always absent from the result:
- *     followUpMessagesSent   (APPOINTMENT_SETTER) — no per-message record until WATI logs one
- *     studentsCheckedInOn    (DELIVERY_COACH)     — no check-in event
- *     assignmentsReviewed    (DELIVERY_COACH)     — no review event
+ *     followUpMessagesSent   (APPOINTMENT_SETTER) - no per-message record until WATI logs one
+ *     studentsCheckedInOn    (DELIVERY_COACH)     - no check-in event
+ *     assignmentsReviewed    (DELIVERY_COACH)     - no review event
  * The Telecaller Pay board sums followUpMessagesSent into "calls", so a row built only from this
  * function reads LOW against a hand-entered one. That is why EOD_AUTO rows stay amendable
  * (see submitDailyLog) instead of being final like a HUMAN submission.
@@ -26,7 +26,7 @@ const IST_OFFSET_MS = 5.5 * 3600000;
 
 /**
  * Numbers derivable for `variant` on `date`. Keys absent from the result have no activity
- * source — never coerce those to 0, or "nobody reported it" becomes "they did none".
+ * source - never coerce those to 0, or "nobody reported it" becomes "they did none".
  *
  * `date` is a UTC-midnight @db.Date value (the DailyLog.date encoding).
  */
@@ -35,7 +35,7 @@ export async function computeAutoCapture(
   variant: LogVariant | string | null,
   date: Date,
 ): Promise<Record<string, number>> {
-  // The IST day as real instants — createdAt/changedAt are TIMESTAMPs, so a raw UTC-midnight
+  // The IST day as real instants - createdAt/changedAt are TIMESTAMPs, so a raw UTC-midnight
   // boundary would shift the window 5.5h late (lib/dates.ts istBoundaryToInstant).
   const istDayStartUtc = new Date(date.getTime() - IST_OFFSET_MS);
   const istDayEndUtc = new Date(istDayStartUtc.getTime() + 86400000);

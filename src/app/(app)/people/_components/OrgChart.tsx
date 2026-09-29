@@ -36,7 +36,7 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
   const team = current.filter((m) => m.dashboardRole !== "ADMIN");
   const showForm = adding || editing;
 
-  // Anyone still here can take over — offering a departed or suspended colleague would just move
+  // Anyone still here can take over - offering a departed or suspended colleague would just move
   // the orphaned-work problem along.
   const successors = current.map((m) => ({ value: m.id, label: `${m.fullName} · ${m.roleTitle}` }));
 
@@ -72,10 +72,10 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
         </div>
         {m.status !== "ACTIVE" && <Pill tone="warn">{TEAM_STATUS_LABELS[m.status]}</Pill>}
       </div>
-      <p className="mt-2 truncate text-xs text-muted">{m.email}</p>
+      <p className="mt-2 truncate text-xs text-muted" title={m.email}>{m.email}</p>
       {m.dateJoined && <p className="text-xs text-muted">Joined {formatDate(m.dateJoined)}</p>}
       {m.keyResponsibilities && (
-        <p className="mt-2 line-clamp-3 text-xs text-muted">{m.keyResponsibilities}</p>
+        <p className="mt-2 line-clamp-3 text-xs text-muted" title={m.keyResponsibilities}>{m.keyResponsibilities}</p>
       )}
       <div className="mt-3 flex items-center gap-2 text-sm">
         <Btn variant="ghost" size="sm" onClick={() => { setEditing(m); setAdding(false); }}>
@@ -122,7 +122,7 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
 
       {/* ── Former team members ──────────────────────────────────────────────────────
           Not the app's `deletedAt` archive: that one is purged after 90 days, and an employment
-          record must outlive that — their name has to keep resolving on every call, commission
+          record must outlive that - their name has to keep resolving on every call, commission
           and audit row they ever produced. Permanent, and restorable. */}
       {former.length > 0 && (
         <details className="rounded-card border border-line bg-surface p-4">
@@ -137,7 +137,7 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
                     {m.fullName} <span className="font-normal text-muted">· {m.roleTitle}</span>
                   </p>
                   <p className="text-xs text-muted">
-                    Left {m.terminatedAt ? formatDate(m.terminatedAt) : "—"}
+                    Left {m.terminatedAt ? formatDate(m.terminatedAt) : "-"}
                     {m.terminationReason ? ` · ${m.terminationReason}` : ""}
                   </p>
                 </div>

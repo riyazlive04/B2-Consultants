@@ -7,8 +7,10 @@ import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
 import { normalizeLevelCode } from "@/lib/levels";
 import type { QuestionOption } from "@/lib/qualification";
+import { BANT_MAX } from "@/lib/booking-intake";
 import { logActivity } from "./activity-log";
-import { QUALIFICATION_CACHE_TAG } from "./qualification";
+import { QUALIFICATION_CACHE_TAG, shadowAgreement } from "./qualification";
+import { getQualificationConfig, writeQualificationConfig } from "./founder-config";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -25,7 +27,7 @@ import type { ActionResult } from "./finance-actions";
  * the recorded reason we called someone months after the call.
  *
  * The database enforces it too (`qualification_question_version_guard`), so this is defence
- * in depth — but the action is where the NEW VERSION gets created, which the trigger can't do.
+ * in depth - but the action is where the NEW VERSION gets created, which the trigger can't do.
  */
 
 function firstError(e: z.ZodError): string {
@@ -35,7 +37,7 @@ function firstError(e: z.ZodError): string {
 const optionSchema = z.object({
   value: z.string().trim().min(1),
   label: z.string().trim().min(1),
-  score: z.coerce.number().min(0).max(5),
+  score: z.coerce.number().min(0).max(BANT_MAX),
 });
 
 const questionSchema = z.object({
@@ -54,7 +56,7 @@ const questionSchema = z.object({
    * builder called the field, and we cannot offer a list of names we have never seen.
    */
   inboundKeys: z.string().trim().max(1000).optional(),
-  /** `optionValue: alias, alias` per line — the answer texts the external form sends. */
+  /** `optionValue: alias, alias` per line - the answer texts the external form sends. */
   answerAliases: z.string().trim().max(4000).optional(),
 });
 
@@ -73,7 +75,7 @@ function parseInboundKeys(raw: string | undefined): string[] {
   return raw ? splitList(raw, 25) : [];
 }
 
-/** Prisma's Json column wants `undefined` (leave alone) or a value — never a bare `{}` we built. */
+/** Prisma's Json column wants `undefined` (leave alone) or a value - never a bare `{}` we built. */
 function aliasesFor(raw: string | undefined, options: QuestionOption[]) {
   const parsed = parseAnswerAliases(raw, new Set(options.map((o) => o.value)));
   return Object.keys(parsed).length ? (parsed as never) : Prisma.JsonNull;
@@ -83,7 +85,7 @@ function aliasesFor(raw: string | undefined, options: QuestionOption[]) {
  * Parse the alias editor's `optionValue: alias, alias` lines.
  *
  * A line-based mini-format rather than JSON on purpose: this is the field a non-technical
- * founder edits most often — every time the landing page's wording changes — and a stray comma
+ * founder edits most often - every time the landing page's wording changes - and a stray comma
  * in a JSON blob rejects the whole save. Here a malformed line is simply skipped, and options
  * that were never mentioned keep the aliases they already had (the caller merges).
  */
@@ -137,14 +139,14 @@ export async function createQualificationQuestion(form: FormData): Promise<Actio
   const opts = parseOptions(d.options);
   if (!opts.ok) return { ok: false, error: opts.error };
   if (d.dimension !== "NONE" && !SCORED_KINDS.includes(d.kind)) {
-    return { ok: false, error: "A scored question needs a fixed option list — free text cannot be scored" };
+    return { ok: false, error: "A scored question needs a fixed option list - free text cannot be scored" };
   }
   if (d.dimension !== "NONE" && opts.value.length === 0) {
     return { ok: false, error: "A scored question needs at least one option" };
   }
 
   const existing = await prisma.qualificationQuestion.findFirst({ where: { key }, select: { id: true } });
-  if (existing) return { ok: false, error: `A question with the key "${key}" already exists — edit it instead` };
+  if (existing) return { ok: false, error: `A question with the key "${key}" already exists - edit it instead` };
 
   const last = await prisma.qualificationQuestion.aggregate({ _max: { orderIndex: true } });
 
@@ -182,7 +184,7 @@ export async function createQualificationQuestion(form: FormData): Promise<Actio
 /**
  * Edit a question.
  *
- * If it has NO answers, the row is edited in place — nothing depends on its old wording.
+ * If it has NO answers, the row is edited in place - nothing depends on its old wording.
  * If it HAS answers, a new version is created and the old one retired. The caller does not
  * choose: which path is taken is a property of the data, not a preference, and offering it as
  * an option would eventually let someone pick the wrong one.
@@ -224,7 +226,7 @@ export async function updateQualificationQuestion(questionId: string, form: Form
    *
    * Only the former earns a new version. Adding "Right away" as an alias for the option that
    * already meant `immediately` does not change what this prospect was asked or what their
-   * answer scored — it fixes a parsing rule that was wrong from the day the landing page was
+   * answer scored - it fixes a parsing rule that was wrong from the day the landing page was
    * reworded. Versioning that would spawn a new question every time marketing edits a label,
    * and would leave a trail of retired versions that differ from each other in nothing a
    * reader could see.
@@ -242,7 +244,7 @@ export async function updateQualificationQuestion(questionId: string, form: Form
 
   let versioned = false;
   if (current._count.answers > 0 && evidenceChanged) {
-    // Frozen. New version, old one retired — the answers keep citing what they were given
+    // Frozen. New version, old one retired - the answers keep citing what they were given
     // against. Done in one transaction so the catalogue is never momentarily missing the key.
     await prisma.$transaction(async (tx) => {
       await tx.qualificationQuestion.update({ where: { id: questionId }, data: { active: false } });
@@ -325,5 +327,53 @@ export async function reorderQualificationQuestions(ids: string[]): Promise<Acti
 
   revalidateTag(QUALIFICATION_CACHE_TAG);
   revalidatePath("/console");
+  return { ok: true };
+}
+
+/**
+ * Choose which scorer decides the BANT verdict.
+ *
+ * Switching TO the catalogue is gated on the replay agreeing on every historical booking. The
+ * gate is re-checked HERE and not merely rendered in the UI: the panel's banner is a view of a
+ * cached number, and the decision this flips - who gets called, who gets a rejection email - is
+ * not one to take on a stale read. Switching BACK is never gated; undoing a change must not
+ * depend on the thing you are undoing being healthy.
+ */
+export async function setQualificationScorer(scorer: "shipped" | "catalogue"): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("qualification.manage");
+  if (!allowed) return denied;
+
+  const before = await getQualificationConfig();
+  if (before.scorer === scorer) return { ok: true };
+
+  if (scorer === "catalogue") {
+    const gate = await shadowAgreement();
+    if (!gate.readyToFlip) {
+      return {
+        ok: false,
+        error:
+          gate.scored === 0
+            ? "No submissions have been scored yet, so there is nothing to prove the catalogue matches. Take a booking first."
+            : `The catalogue disagrees with the current scorer on ${gate.disagreements} of ${gate.scored} bookings. Re-seed it before switching.`,
+      };
+    }
+  }
+
+  await writeQualificationConfig({ ...before, scorer });
+  await logActivity(session, {
+    action: "qualification.scorer.set",
+    section: "bookings",
+    entityType: "AppSetting",
+    entityId: "qualificationConfig",
+    summary:
+      scorer === "catalogue"
+        ? "Switched BANT scoring to the editable question catalogue"
+        : "Switched BANT scoring back to the shipped tables",
+    meta: { from: before.scorer, to: scorer },
+  });
+
+  revalidateTag(QUALIFICATION_CACHE_TAG);
+  revalidatePath("/console");
+  revalidatePath("/book");
   return { ok: true };
 }

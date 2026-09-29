@@ -1,0 +1,16 @@
+{
+  "name": "b2-dashboard-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright end-to-end suite for the B2 dashboard. Kept out of the app's package.json so the production image never installs it.",
+  "scripts": {
+    "test": "playwright test --workers=1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^20.19.43",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.0",
+    "typescript": "^5.9.3"
+  }
+}

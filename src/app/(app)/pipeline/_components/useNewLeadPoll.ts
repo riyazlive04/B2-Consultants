@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
  * while the tab is hidden, and let the SERVER's clock be the cursor (echoed back as `now`)
  * so a sleeping tab or a skewed client clock can't skip or re-announce leads.
  *
- * `onNewLeads` is read through a ref rather than a dep — it's a fresh closure every render,
+ * `onNewLeads` is read through a ref rather than a dep - it's a fresh closure every render,
  * and putting it in the effect's deps would restart (and so never fire) the interval.
  */
 export function useNewLeadPoll(
@@ -37,7 +37,7 @@ export function useNewLeadPoll(
         if (data.now) sinceRef.current = data.now;
         if (data.leads?.length) cbRef.current(data.leads);
       } catch {
-        /* transient network error — the cursor didn't move, so next tick retries this window */
+        /* transient network error - the cursor didn't move, so next tick retries this window */
       }
     };
     const t = setInterval(poll, intervalMs);

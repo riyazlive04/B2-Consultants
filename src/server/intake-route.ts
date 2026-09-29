@@ -11,21 +11,21 @@ import type { Prisma } from "@prisma/client";
  * ── Why a factory ───────────────────────────────────────────────────────────────
  * `/api/leads/pabbly`, `/api/leads/meta` and `/api/leads/flexifunnels` each hand-roll the same
  * hundred lines: read the secret, compare it, take a rate token, parse the body, echo it under a
- * debug flag, unwrap the envelope. Three copies is where they start to differ — and they had
+ * debug flag, unwrap the envelope. Three copies is where they start to differ - and they had
  * already begun to (only Pabbly echoes the raw payload, only Pabbly returns `reopened`).
  *
  * Adding a fourth source should be ~20 lines of MAPPING, not a hundred lines of plumbing, because
  * the plumbing is where the security lives.
  *
  * ── The contract every intake route keeps ───────────────────────────────────────
- *   FAIL CLOSED  — no configured secret means 503, never "accept anything". An open lead
+ *   FAIL CLOSED  - no configured secret means 503, never "accept anything". An open lead
  *                  endpoint is an open write into the CRM for whoever finds the URL.
- *   RATE LIMITED — keyed on the ENDPOINT, not the caller's IP: every delivery arrives from one
+ *   RATE LIMITED - keyed on the ENDPOINT, not the caller's IP: every delivery arrives from one
  *                  vendor address, so a per-IP bucket was a global bucket in disguise that also
  *                  reset the day the vendor changed egress.
- *   RETRY-ABLE   — a 429 carries `Retry-After`, which Pabbly and WATI both honour and redeliver
+ *   RETRY-ABLE   - a 429 carries `Retry-After`, which Pabbly and WATI both honour and redeliver
  *                  on. A bare 429 silently DROPS a real lead, which is worse than no limiter.
- *   OBSERVABLE   — every delivery stamps `lastDeliveryAt` so Console can show whether a webhook
+ *   OBSERVABLE   - every delivery stamps `lastDeliveryAt` so Console can show whether a webhook
  *                  is wired up at all. "Is this endpoint even receiving anything" had no answer.
  */
 
@@ -40,18 +40,18 @@ export type IntakeContext = {
 export type IntakeHandler = (ctx: IntakeContext) => Promise<Response>;
 
 export type IntakeRouteOptions = {
-  /** Stable id — names the rate-limit bucket and the delivery-status row. */
+  /** Stable id - names the rate-limit bucket and the delivery-status row. */
   name: string;
   /** The env var holding this endpoint's shared secret. */
   secretEnv: string;
   handler: IntakeHandler;
 };
 
-/** AppSetting key holding `{ [name]: { at, ok } }` — the Console "Integrations" card reads it. */
+/** AppSetting key holding `{ [name]: { at, ok } }` - the Console "Integrations" card reads it. */
 const STATUS_KEY = "integrationDeliveries";
 
 /**
- * Record that a delivery arrived. Never throws and never blocks the response — this is
+ * Record that a delivery arrived. Never throws and never blocks the response - this is
  * observability, and losing a status stamp must not cost a lead.
  */
 export async function recordDelivery(name: string, ok: boolean, note?: string): Promise<void> {
@@ -120,7 +120,7 @@ export function intakeRoute(opts: IntakeRouteOptions) {
 
     /**
      * TEMPORARY (LEAD_WEBHOOK_DEBUG): echo the raw body so a sender's exact field names can be
-     * READ off a real delivery instead of guessed at. Prints lead PII — turn it off once the
+     * READ off a real delivery instead of guessed at. Prints lead PII - turn it off once the
      * mapping is confirmed. After the secret check, so an unauthenticated caller can never write
      * to the log.
      */

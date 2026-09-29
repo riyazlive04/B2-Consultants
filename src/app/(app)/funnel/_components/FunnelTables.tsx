@@ -3,7 +3,7 @@
 // The three DataTable instances on the Conversion Funnel page, split into their own Client
 // Component. `funnel/page.tsx` is an async Server Component; `Column.cell`/`Column.value` are
 // functions, and functions cannot be passed as props from a Server Component into a Client
-// Component (DataTable is "use client") — Next.js throws at render/serialize time, a bug the
+// Component (DataTable is "use client") - Next.js throws at render/serialize time, a bug the
 // Mobile & Tables migration introduced by defining these columns directly in page.tsx. Moving the
 // column definitions in here (client-side) alongside DataTable fixes it; page.tsx now only passes
 // plain, serializable data as props.
@@ -47,8 +47,8 @@ export function FunnelMetricsTable({ months }: { months: Month[] }) {
           {row.label === "Overall conversion rate" && (
             <span
               tabIndex={0}
-              aria-label="Enrolments ÷ leads captured in the month — how much of the top of the funnel becomes paying students."
-              title="Enrolments ÷ leads captured in the month — how much of the top of the funnel becomes paying students."
+              aria-label="Enrolments ÷ leads captured in the month - how much of the top of the funnel becomes paying students."
+              title="Enrolments ÷ leads captured in the month - how much of the top of the funnel becomes paying students."
               className="ml-1.5 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line bg-surface-2 text-caption leading-none text-muted"
             >
               i
@@ -96,7 +96,7 @@ export function FunnelSnapshotsTable({ snapshots }: { snapshots: SnapshotRow[] }
     { key: "enrollments", header: "Enrolments", align: "right", sortable: false, cell: (s) => s.enrollments },
     { key: "gb", header: "GB downloads", align: "right", sortable: false, cell: (s) => s.ghostedDownloads },
     { key: "workshop", header: "Workshop", align: "right", sortable: false, cell: (s) => s.workshopAttendees },
-    { key: "notes", header: "Notes", sortable: false, cell: (s) => <span className="max-w-64 truncate text-muted">{s.notes ?? ""}</span> },
+    { key: "notes", header: "Notes", sortable: false, cell: (s) => <span className="max-w-64 truncate text-muted" title={s.notes ?? ""}>{s.notes ?? ""}</span> },
   ];
 
   return <DataTable rows={snapshots} columns={snapshotColumns} filterPlaceholder="Filter weeks…" />;

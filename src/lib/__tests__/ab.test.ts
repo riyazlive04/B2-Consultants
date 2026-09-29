@@ -32,13 +32,13 @@ describe("pickWeighted", () => {
     assert.equal(pickWeighted([control, variantB], 0.999999)?.id, "step-b");
   });
 
-  test("honours uneven weights — 90/10 is not 50/50", () => {
+  test("honours uneven weights - 90/10 is not 50/50", () => {
     const cands = [{ id: "a", abWeight: 90 }, { id: "b", abWeight: 10 }];
     assert.equal(pickWeighted(cands, 0.89)?.id, "a");
     assert.equal(pickWeighted(cands, 0.91)?.id, "b");
   });
 
-  test("weights are shares, not percentages — they need not sum to 100", () => {
+  test("weights are shares, not percentages - they need not sum to 100", () => {
     // Three variants at weight 1 each is a clean three-way split. Requiring percentages would
     // have made that 33/33/34 and unrepresentable without rounding by hand.
     const cands = [{ id: "a", abWeight: 1 }, { id: "b", abWeight: 1 }, { id: "c", abWeight: 1 }];
@@ -64,7 +64,7 @@ describe("pickWeighted", () => {
 });
 
 describe("assignVariant", () => {
-  test("is sticky — the same visitor gets the same page every time", () => {
+  test("is sticky - the same visitor gets the same page every time", () => {
     const first = assignVariant([control, variantB], "vis-42", control.id)?.id;
     for (let i = 0; i < 25; i++) {
       assert.equal(assignVariant([control, variantB], "vis-42", control.id)?.id, first);
@@ -77,7 +77,7 @@ describe("assignVariant", () => {
 
   test("buckets are independent per experiment", () => {
     // If the seed ignored the step id, a visitor in the control of one test would be in the
-    // control of every test — several separate experiments silently sampling one cohort.
+    // control of every test - several separate experiments silently sampling one cohort.
     const other = [{ id: "s2-control", abWeight: 50 }, { id: "s2-b", abWeight: 50 }];
     let differing = 0;
     for (let i = 0; i < 200; i++) {

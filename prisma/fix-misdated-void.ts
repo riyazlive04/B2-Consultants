@@ -3,31 +3,31 @@
  *
  * THE DAMAGE. Until 29 Jul 2026, voiding an entry dated the reversal `on` (the day of the edit)
  * while the caller's restatement kept the record's own date. The all-time trial balance still
- * balanced — original and mirror are both in the total, just in different months — so
+ * balanced - original and mirror are both in the total, just in different months - so
  * `verify-ledger.ts` passed throughout and nothing surfaced it. But every PERIOD-scoped read saw:
  *
  *   · the original's month counting BOTH the voided original AND the restatement, and
  *   · the month of the edit carrying a bare reversal that belongs to no transaction.
  *
- * Live example this repairs: ₹45,000 "Income — Sandeep Rao (GN_BUNDLE)", original dated 24 Jun,
+ * Live example this repairs: ₹45,000 "Income - Sandeep Rao (GN_BUNDLE)", original dated 24 Jun,
  * reversal dated 17 Jul, restatement correctly dated 24 Jun. June is overstated by ₹45,000 and
  * July understated by the same.
  *
  * WHY A CORRECTING PAIR RATHER THAN AN EDIT. `journal_entry` and `journal_line` are append-only at
- * the database — UPDATE and DELETE are both refused by trigger. That is the point of a ledger, and
+ * the database - UPDATE and DELETE are both refused by trigger. That is the point of a ledger, and
  * it is not worked around here. Instead this posts two new, individually balanced entries:
  *
- *   A, dated in the ORIGINAL's month  — a mirror, cancelling the voided original where it sits
- *   B, dated in the REVERSAL's month  — an un-mirror, cancelling the marooned reversal
+ *   A, dated in the ORIGINAL's month  - a mirror, cancelling the voided original where it sits
+ *   B, dated in the REVERSAL's month  - an un-mirror, cancelling the marooned reversal
  *
  * A and B are exact opposites, so the all-time trial balance is untouched (it was already correct)
  * while both months become right. Every figure moves through `postEntry`, so the balance rule, the
- * period lock and the database triggers all apply — and the correction lands in the hash-chained
+ * period lock and the database triggers all apply - and the correction lands in the hash-chained
  * audit log like any other money write.
  *
  * NOT EVERY CROSS-MONTH REVERSAL IS THE BUG, and this distinction is the whole reason the script
  * refuses to sweep. When the original's period is LOCKED, the fixed `voidEntry` deliberately dates
- * BOTH halves into the current period — a closed month must not be restated — and "correcting"
+ * BOTH halves into the current period - a closed month must not be restated - and "correcting"
  * that would swing the books the other way. The two are told apart by where the RESTATEMENT sits:
  *
  *   SPLIT        reversal in one month, restatement in the original's month → the defect
@@ -84,27 +84,27 @@ async function main() {
       include: { lines: { include: { account: { select: { code: true } } } } },
     });
     if (!reversal) {
-      console.log(`· ${original.id} — VOID with no reversal. Left alone; needs a human.`);
+      console.log(`· ${original.id} - VOID with no reversal. Left alone; needs a human.`);
       continue;
     }
 
     const originalMonth = monthKeyOf(original.date);
     const reversalMonth = monthKeyOf(reversal.date);
     if (originalMonth === reversalMonth) {
-      console.log(`· ${short(original.narration)} — already in one period (${originalMonth}). Nothing to do.`);
+      console.log(`· ${short(original.narration)} - already in one period (${originalMonth}). Nothing to do.`);
       continue;
     }
 
     // A correction that was itself already corrected: skip, or the books swing the other way.
     if (await alreadyCorrected(original.id)) {
-      console.log(`· ${short(original.narration)} — a correction for this is already posted. Skipping.`);
+      console.log(`· ${short(original.narration)} - a correction for this is already posted. Skipping.`);
       continue;
     }
 
     /**
      * Where the restatement landed is what separates the defect from correct locked-period
      * behaviour. No restatement at all means the void was a delete, which under the old code
-     * left the original uncancelled in its own month — the same defect.
+     * left the original uncancelled in its own month - the same defect.
      */
     const restated = await prisma.journalEntry.findFirst({
       where: { sourceType: original.sourceType, sourceId: original.sourceId, status: "POSTED" },
@@ -114,20 +114,20 @@ async function main() {
     const consolidated = restatedMonth !== null && restatedMonth === reversalMonth;
 
     const value = original.lines.reduce((s, l) => s + l.baseDebitMinor, BigInt(0));
-    console.log(`· ${short(original.narration)} — ${rupees(value)}   [${original.id}]`);
+    console.log(`· ${short(original.narration)} - ${rupees(value)}   [${original.id}]`);
 
     if (consolidated) {
-      console.log(`    CONSOLIDATED — reversal and restatement both in ${reversalMonth}, original alone in ${originalMonth}.`);
+      console.log(`    CONSOLIDATED - reversal and restatement both in ${reversalMonth}, original alone in ${originalMonth}.`);
       console.log(`    That is what a LOCKED ${originalMonth} is supposed to look like. Leaving it alone.`);
       continue;
     }
 
-    console.log(`    SPLIT — ${originalMonth} overstated (voided original + ${restatedMonth ? "its restatement" : "nothing to cancel it"}),`);
+    console.log(`    SPLIT - ${originalMonth} overstated (voided original + ${restatedMonth ? "its restatement" : "nothing to cancel it"}),`);
     console.log(`            ${reversalMonth} understated (a reversal belonging to ${originalMonth}).`);
 
     const blocked = [originalMonth, reversalMonth].filter((m) => locks.has(m));
     if (blocked.length) {
-      console.log(`    SKIPPED — ${blocked.join(" and ")} locked; re-opening a closed month is your call, not mine.`);
+      console.log(`    SKIPPED - ${blocked.join(" and ")} locked; re-opening a closed month is your call, not mine.`);
       continue;
     }
 
@@ -143,19 +143,19 @@ async function main() {
     }
 
     await prisma.$transaction(async (tx) => {
-      // A — cancel the voided original inside its OWN month.
+      // A - cancel the voided original inside its OWN month.
       await postEntry(tx, {
         date: original.date,
-        narration: `Period correction — cancels the voided "${original.narration}" in ${originalMonth}`,
+        narration: `Period correction - cancels the voided "${original.narration}" in ${originalMonth}`,
         sourceType: "MANUAL",
         sourceId: null,
         postedById: original.postedById,
         lines: mirrorOf(original.lines),
       });
-      // B — cancel the marooned reversal inside the month it was wrongly dated into.
+      // B - cancel the marooned reversal inside the month it was wrongly dated into.
       await postEntry(tx, {
         date: reversal.date,
-        narration: `Period correction — cancels the ${reversalMonth} reversal of "${original.narration}", which belongs to ${originalMonth}`,
+        narration: `Period correction - cancels the ${reversalMonth} reversal of "${original.narration}", which belongs to ${originalMonth}`,
         sourceType: "MANUAL",
         sourceId: null,
         postedById: reversal.postedById,
@@ -179,7 +179,7 @@ async function main() {
   }
 
   if (!TARGETS.size) {
-    console.log(`\nReport only — no entry ids given, so nothing was written.\n`);
+    console.log(`\nReport only - no entry ids given, so nothing was written.\n`);
   } else {
     console.log(`\n${APPLY ? "Corrected" : "Would correct"} ${fixed} of ${TARGETS.size} named entr${TARGETS.size === 1 ? "y" : "ies"}.${APPLY ? "\n" : " Add --apply to post.\n"}`);
   }
@@ -202,7 +202,7 @@ function mirrorOf(lines: Array<{ account: { code: string }; currency: string; fx
 async function alreadyCorrected(originalId: string): Promise<boolean> {
   const original = await prisma.journalEntry.findUniqueOrThrow({ where: { id: originalId }, select: { narration: true } });
   const n = await prisma.journalEntry.count({
-    where: { narration: { contains: `Period correction — cancels the voided "${original.narration}"` } },
+    where: { narration: { contains: `Period correction - cancels the voided "${original.narration}"` } },
   });
   return n > 0;
 }

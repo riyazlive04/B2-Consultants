@@ -205,6 +205,50 @@ const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
   ...STAGE_KIND_VARS,
 };
 
+/**
+ * The variables each kind sends, in the order a POSITIONAL template receives them.
+ *
+ * This is `BASE_AVAILABLE_VARS` - the authored, minimal list - and deliberately NOT
+ * `WHATSAPP_AVAILABLE_VARS` below, which unions the lead-facing extras in. That union is right for
+ * "what may this template use?" and catastrophic for "which variable fills {{2}}?": AGREEMENT_SEND
+ * offers both `sign_url` and `sign_token`, so zipping against the superset could put a signing link
+ * where the document number belongs.
+ */
+export const WHATSAPP_TEMPLATE_VAR_ORDER: Record<WhatsAppKind, readonly string[]> = BASE_AVAILABLE_VARS;
+
+/**
+ * Which variable fills each placeholder of a POSITIONAL template - one whose parameters are
+ * `{{1}}`, `{{2}}`, `{{3}}` rather than named.
+ *
+ * WHY THIS EXISTS. Meta's own template editor numbers placeholders; WATI's named parameters are a
+ * convenience on top, and a tenant ends up with a mix. `b2_booking_confirm_request` - the approved
+ * template for the confirm-or-cancel loop - declares ["1","2","3"], while the app sends
+ * `name` / `slot_time` / `booking_url`. `buildParameters` looked each declared name up in `vars`,
+ * found nothing, and SKIPPED every send: safe, and completely inert.
+ *
+ * Returns null when it must not guess, in which case the caller keeps the old by-name behaviour
+ * and fails closed:
+ *   · the template is named, not positional - nothing to translate;
+ *   · the counts differ, so which variable goes where is genuinely unknown. Guessing there would
+ *     deliver real values into the wrong sentence, which is worse than sending nothing.
+ *
+ * Sending the DECLARED names with the right values is correct whichever way WATI resolves
+ * parameters - by name it matches, by position it is already in order.
+ */
+export function positionalVarMap(
+  kind: WhatsAppKind,
+  declared: readonly string[],
+): Record<string, string> | null {
+  if (declared.length === 0) return null;
+  if (!declared.every((p) => /^\d+$/.test(p))) return null;
+  const canonical = WHATSAPP_TEMPLATE_VAR_ORDER[kind] ?? [];
+  if (canonical.length !== declared.length) return null;
+  // Sort numerically, so a template that lists its params out of order still maps {{1}} to the
+  // first variable. "10" must sort after "9", which a string sort gets wrong.
+  const inOrder = [...declared].sort((a, b) => Number(a) - Number(b));
+  return Object.fromEntries(inOrder.map((param, i) => [param, canonical[i]]));
+}
+
 export const WHATSAPP_AVAILABLE_VARS = Object.fromEntries(
   Object.entries(BASE_AVAILABLE_VARS).map(([k, v]) => [
     k,

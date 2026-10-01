@@ -11,6 +11,7 @@ import {
   redirectedBodyPrefix,
   resolveDestination,
   type WatiTemplateConfig,
+  positionalVarMap,
 } from "@/lib/whatsapp";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { CALL_TIME_KINDS, dueReminderRung } from "@/lib/call-notice";
@@ -102,15 +103,28 @@ async function isOptedOut(number: string): Promise<boolean> {
  * exactly the variables it was approved with, so sending an extra one is rejected outright.
  * Returns the missing names instead of substituting blanks: an empty variable renders a broken
  * message ("Hi ,") and WhatsApp rejects empty params anyway, so we'd rather skip and say why.
+ *
+ * POSITIONAL TEMPLATES. Meta numbers placeholders ({{1}}, {{2}}); WATI's named parameters are a
+ * convenience layered on top, so one tenant has both styles. A positional template used to match
+ * nothing here - `vars["1"]` is undefined - so every send of it was skipped as "missing 1, 2, 3".
+ * Safe, and silently inert: that is why mapping the approved `b2_booking_confirm_request` would
+ * have sent nothing at all. `positionalVarMap` translates, and refuses to guess when it cannot
+ * know, in which case this falls back to the by-name lookup and still fails closed.
  */
 function buildParameters(
+  kind: WhatsAppKind,
   template: WatiTemplateConfig,
   vars: Record<string, string>,
 ): { ok: true; params: WatiParameter[] } | { ok: false; missing: string[] } {
+  const positional = positionalVarMap(kind, template.params);
   const missing: string[] = [];
   const params = template.params.map((name) => {
-    const value = vars[name];
-    if (value === undefined || value === "") missing.push(name);
+    // The placeholder keeps the name the template declared; only the LOOKUP is translated.
+    const source = positional?.[name] ?? name;
+    const value = vars[source];
+    // Name both when they differ, so "missing 2 (slot_time)" says which value was absent AND
+    // which placeholder it would have filled.
+    if (value === undefined || value === "") missing.push(source === name ? name : `${name} (${source})`);
     return { name, value: value ?? "" };
   });
   return missing.length ? { ok: false, missing } : { ok: true, params };
@@ -194,7 +208,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
 
   // Resolve the template's own variables. Done before the opt-out lookup so a misconfigured
   // template surfaces immediately, without a DB round-trip.
-  const built = template ? buildParameters(template, vars) : null;
+  const built = template ? buildParameters(kind, template, vars) : null;
 
   // Positive knowledge from the last catalog refresh that this template can't be sent. An unknown
   // template is allowed through - WATI stays the authority, so a stale cache never blocks a

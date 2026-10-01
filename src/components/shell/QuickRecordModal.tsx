@@ -5,6 +5,9 @@ import { Modal } from "@/components/ui/Modal";
 import { Tabs } from "@/components/ui/Tabs";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
 import { AmountPair } from "@/components/ui/AmountPair";
+import {
+  firstShare, planShares, remainingShares, type MoneyText,
+} from "@/lib/instalment-amounts";
 import { ComboBox } from "@/components/ui/ComboBox";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { celebrate, toast } from "@/components/ui/feedback";
@@ -128,6 +131,13 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
   const [entryDate, setEntryDate] = useState<string>(data.today);
   const [scheduleComplete, setScheduleComplete] = useState(false);
   const blockSave = paymentType === "INSTALMENT" && !scheduleComplete;
+  // The fee and the plan surcharge, divided - exactly as on the Finance page, because a plan
+  // agreed here is the same plan. See lib/instalment-amounts.
+  const [feeAmount, setFeeAmount] = useState<MoneyText>({ inr: "", eur: "" });
+  const [extraAmount, setExtraAmount] = useState<MoneyText>({ inr: "", eur: "" });
+  const planMode = paymentType === "INSTALMENT";
+  const shares = planMode ? planShares(feeAmount, extraAmount, instalmentCount) : [];
+  const banked = firstShare(shares);
   const { error, formRef, submit } = useQuickSubmit(
     async (fd) => {
       const res = await createIncome(fd);
@@ -142,10 +152,18 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
-    const onReset = () => setPaymentType("FULL_PAYMENT");
+    // Every one of these is React state fed by `onChange`, and `reset()` fires no change event -
+    // without this the next payment opened on the last one's plan, schedule and all.
+    const onReset = () => {
+      setPaymentType("FULL_PAYMENT");
+      setInstalmentCount(null);
+      setEntryDate(data.today);
+      setScheduleComplete(false);
+      setFeeAmount({ inr: "", eur: "" });
+    };
     form.addEventListener("reset", onReset);
     return () => form.removeEventListener("reset", onReset);
-  }, [formRef]);
+  }, [formRef, data.today]);
 
   return (
     <form ref={formRef} action={submit} className="space-y-4">
@@ -179,16 +197,25 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
             }
           />
         </Field>
+        {/* Renamed, not just relabelled, on a plan - the hidden pair below carries the first
+            instalment, which is what actually gets banked. See the Finance page for why. */}
         <AmountPair
           fxRate={data.fxRate}
           fxStale={data.fxStale}
           fxDate={data.fxDate}
-          inrName="amountInr"
-          eurName="amountEur"
-          inrLabel="Amount received (₹)"
-          eurLabel="Amount received (€)"
-          baseHint="INR, EUR, or both"
+          inrName={planMode ? "planTotalInr" : "amountInr"}
+          eurName={planMode ? "planTotalEur" : "amountEur"}
+          inrLabel={planMode ? "Total fee (₹)" : "Amount received (₹)"}
+          eurLabel={planMode ? "Total fee (€)" : "Amount received (€)"}
+          baseHint={planMode ? "The whole fee - divided across the instalments below" : "INR, EUR, or both"}
+          onAmountsChange={setFeeAmount}
         />
+        {planMode && (
+          <>
+            <input type="hidden" name="amountInr" value={banked.inr} />
+            <input type="hidden" name="amountEur" value={banked.eur} />
+          </>
+        )}
         <Field label="Programme level">
           <Select name="programLevel" options={data.levelOptions} defaultValue="GUIDED" />
         </Field>
@@ -223,11 +250,14 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
               inrLabel="Extra amount (₹)"
               eurLabel="Extra amount (€)"
               baseHint="Added to the fee for paying in instalments"
+              onAmountsChange={setExtraAmount}
             />
             <InstalmentSchedule
               className="sm:col-span-2"
               count={instalmentCount}
               anchorDate={entryDate}
+              shares={remainingShares(shares)}
+              bankedToday={banked}
               onCompleteChange={setScheduleComplete}
             />
           </>

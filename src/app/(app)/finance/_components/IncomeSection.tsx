@@ -15,6 +15,9 @@ import {
   optionsFrom, PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, PROGRAM_LEVEL_LABELS,
 } from "@/lib/labels";
 import { AmountPair } from "@/components/ui/AmountPair";
+import {
+  firstShare, planShares, remainingShares, type MoneyText,
+} from "@/lib/instalment-amounts";
 import { StudentName } from "@/components/ui/StudentName";
 import { money, moneyAlt, moneyInline, moneyValue } from "@/lib/money-display";
 import { useFinanceCcy } from "./FinanceCurrency";
@@ -96,6 +99,21 @@ export function IncomeSection({
   const [scheduleComplete, setScheduleComplete] = useState(false);
   const needsSchedule = paymentType === "INSTALMENT" && !editing;
   const blockSave = needsSchedule && !scheduleComplete;
+  /**
+   * ── The fee, and how it is divided ────────────────────────────────────────────────
+   * On an instalment plan the top box is the WHOLE agreed fee, not the money in hand: the fee
+   * plus the plan surcharge is cut into equal instalments, the first of which is what is being
+   * recorded today. So the label changes with the payment type, and the figures below are
+   * derived rather than typed - see lib/instalment-amounts for why that matters.
+   *
+   * Editing never does this. The schedule of a plan already under way is not something an income
+   * edit may silently redraw; that belongs in the receivable itself, under Pending.
+   */
+  const [feeAmount, setFeeAmount] = useState<MoneyText>({ inr: "", eur: "" });
+  const [extraAmount, setExtraAmount] = useState<MoneyText>({ inr: "", eur: "" });
+  const planMode = needsSchedule;
+  const shares = planMode ? planShares(feeAmount, extraAmount, instalmentCount) : [];
+  const banked = firstShare(shares);
   const switchEditing = (row: IncomeRow | null) => {
     setEditing(row);
     setPaymentTypeChoice(null);
@@ -128,6 +146,16 @@ export function IncomeSection({
     if (!editing) celebrate(); // money in the door - worth confetti (edits stay quiet)
     switchEditing(null);
     formRef.current?.reset();
+    /**
+     * `form.reset()` restores the native boxes, but these four are React state fed by `onChange`
+     * - and reset fires no change event. Left alone they carried the last payment's plan into
+     * the next one: the schedule kept its dates, and the save button stayed open on a count that
+     * was no longer typed anywhere.
+     */
+    setInstalmentCount(null);
+    setEntryDate(today);
+    setScheduleComplete(false);
+    setFeeAmount({ inr: "", eur: "" });
   };
 
   const remove = async (row: IncomeRow) => {
@@ -321,18 +349,32 @@ export function IncomeSection({
               </label>
             )}
           </Field>
+          {/*
+            The boxes are RENAMED on a plan, not just relabelled. `amountInr` is what gets
+            banked, and on a plan that is one instalment - so the typed total goes to a name the
+            action does not read, and the hidden pair below carries the first share instead.
+            Renaming rather than quietly submitting something other than what is on screen is
+            the whole point: the two halves of the field agree about what they mean.
+          */}
           <AmountPair
             fxRate={fxRate}
             fxStale={fxStale}
             fxDate={fxDate}
-            inrName="amountInr"
-            eurName="amountEur"
-            inrLabel="Amount received (₹)"
-            eurLabel="Amount received (€)"
-            baseHint="INR, EUR, or both"
+            inrName={planMode ? "planTotalInr" : "amountInr"}
+            eurName={planMode ? "planTotalEur" : "amountEur"}
+            inrLabel={planMode ? "Total fee (₹)" : "Amount received (₹)"}
+            eurLabel={planMode ? "Total fee (€)" : "Amount received (€)"}
+            baseHint={planMode ? "The whole fee - divided across the instalments below" : "INR, EUR, or both"}
             defaultInr={editing ? minorToInput(editing.amountInrRaw) : ""}
             defaultEur={editing ? minorToInput(editing.amountEurRaw) : ""}
+            onAmountsChange={setFeeAmount}
           />
+          {planMode && (
+            <>
+              <input type="hidden" name="amountInr" value={banked.inr} />
+              <input type="hidden" name="amountEur" value={banked.eur} />
+            </>
+          )}
           <Field label="Programme level">
             <Select name="programLevel" options={levelOptions} defaultValue={editing?.programLevel ?? "GUIDED"} />
           </Field>
@@ -373,6 +415,7 @@ export function IncomeSection({
                 baseHint="Added to the fee for paying in instalments"
                 defaultInr={editing ? minorToInput(editing.instalmentExtraInrRaw) : ""}
                 defaultEur={editing ? minorToInput(editing.instalmentExtraEurRaw) : ""}
+                onAmountsChange={setExtraAmount}
               />
               {/* Only on a NEW entry. Editing an income row must not silently rewrite a schedule
                   the student has already agreed to and may have started paying against - that
@@ -381,6 +424,8 @@ export function IncomeSection({
                 <InstalmentSchedule
                   count={instalmentCount}
                   anchorDate={entryDate}
+                  shares={remainingShares(shares)}
+                  bankedToday={banked}
                   onCompleteChange={setScheduleComplete}
                 />
               )}

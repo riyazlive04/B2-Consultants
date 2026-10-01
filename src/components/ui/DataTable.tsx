@@ -5,6 +5,10 @@ import { Search, Download, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Inbox,
 import { EmptyState } from "./kit";
 import { Btn } from "./controls";
 
+/** Page sizes offered under the table. The first is the default and the floor for showing the pager. */
+const PAGE_SIZES = [25, 50, 100] as const;
+const SMALLEST_PAGE = PAGE_SIZES[0];
+
 export type Column<T> = {
   key: string;
   header: string;
@@ -99,7 +103,14 @@ export function DataTable<T>({
   // while `visible` recomputes at React's leisure.
   const deferredFilter = useDeferredValue(filter);
   const [page, setPage] = useState(0);
-  const PAGE_SIZE = 25;
+  /**
+   * How many rows a page holds. A choice rather than a constant: 25 suits a screen being read,
+   * but someone reconciling a month of income wants the lot on one page and Ctrl-F, and being
+   * forced through pages of 25 to find one row is the complaint this answers. "All" is capped
+   * only by what the server already sent.
+   */
+  const [pageSize, setPageSize] = useState<number>(25);
+  const PAGE_SIZE = pageSize;
 
   const raw = (row: T, col: Column<T>): string | number | null => {
     if (col.value) return col.value(row);
@@ -148,6 +159,11 @@ export function DataTable<T>({
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const paged = visible.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const firstOnPage = visible.length === 0 ? 0 : safePage * PAGE_SIZE + 1;
+  const lastOnPage = Math.min(visible.length, (safePage + 1) * PAGE_SIZE);
+  // The pager stays on screen whenever there is more than one page's worth to read, even after
+  // someone picks a bigger page - otherwise choosing "100" makes the control that chose it vanish.
+  const showPager = visible.length > SMALLEST_PAGE;
 
   // Select-all spans every filtered row, not just this page - see Selection's doc.
   const selectableVisible = useMemo(
@@ -180,6 +196,18 @@ export function DataTable<T>({
 
   const checkboxCls = "h-4 w-4 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40";
   const colCount = columns.length + (selection ? 1 : 0);
+  /**
+   * ── The row actions stay reachable ───────────────────────────────────────────────
+   * A ten-column table is wider than the card holding it, so it scrolls sideways - and what
+   * scrolls off first is the right-hand edge, which is exactly where Edit and Delete live. The
+   * buttons were there, half cut off, and reaching them meant scrolling a table you had no
+   * reason to think was scrollable.
+   *
+   * Pinned instead, so they sit against the right edge whatever the table is doing. Detected by
+   * convention (`key: "actions"`), which is what all sixteen action columns in the app already
+   * use, rather than by a flag every call site would have to remember.
+   */
+  const stickyKey = columns[columns.length - 1]?.key === "actions" ? "actions" : null;
 
   const toggleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -279,7 +307,7 @@ export function DataTable<T>({
           <thead className="sticky top-0 z-10 bg-surface-2">
             <tr className="border-b border-line text-left text-label font-semibold uppercase text-ink-2">
               {selection && (
-                <th className="w-10 px-5 py-3">
+                <th className="w-10 px-4 py-3">
                   <input
                     type="checkbox"
                     className={checkboxCls}
@@ -302,7 +330,11 @@ export function DataTable<T>({
                         ? "ascending"
                         : "descending"
                   }
-                  className={`px-5 py-3 ${col.align === "right" ? "text-right" : ""}`}
+                  className={`px-4 py-3 ${col.align === "right" ? "text-right" : ""} ${
+                    col.key === stickyKey
+                      ? "sticky right-0 z-20 bg-surface-2 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-line"
+                      : ""
+                  }`}
                 >
                   {col.sortable === false ? (
                     col.header
@@ -336,7 +368,7 @@ export function DataTable<T>({
                   className={`border-b border-line last:border-b-0 ${isSelected(row) ? "bg-primary-soft/40" : ""} ${rowClassName?.(row) ?? ""}`}
                 >
                   {selection && (
-                    <td className="px-5 py-4">
+                    <td className="px-4 py-4">
                       <input
                         type="checkbox"
                         className={checkboxCls}
@@ -347,12 +379,51 @@ export function DataTable<T>({
                       />
                     </td>
                   )}
-                  {columns.map((col) => (
-                    // §5.6: 52px rows (py-4), not 48 (py-3.5)
-                    <td key={col.key} className={`px-5 py-4 ${col.align === "right" ? "tnum text-right" : ""}`}>
-                      {col.cell(row)}
-                    </td>
-                  ))}
+                  {columns.map((col) => {
+                    const isSticky = col.key === stickyKey;
+                    // The pinned cell needs its OWN background, or the columns it covers show
+                    // through it. It has to be the row's background, not the card's, so a
+                    // highlighted row stays one colour across the join.
+                    const stickyBg = isSelected(row)
+                      ? "bg-primary-soft"
+                      : rowClassName?.(row) || "bg-surface";
+                    /**
+                     * Only PLAIN text is capped and ellipsed. A cell that renders a component -
+                     * a student chip, an instalment summary with its own sub-lines, the action
+                     * buttons - is composed to fit already, and clipping it to one line would
+                     * cut a deliberate second line off. A free-text note is the one that runs
+                     * long, and it is always a string.
+                     */
+                    const node = col.cell(row);
+                    const plain = typeof node === "string" || typeof node === "number" ? String(node) : null;
+                    const text = plain && plain.length > 28 ? plain : "";
+                    return (
+                      // §5.6: 52px rows (py-4), not 48 (py-3.5)
+                      <td
+                        key={col.key}
+                        /**
+                         * NOT WRAPPING is the whole point. Left to wrap, "Bank transfer (INR)"
+                         * became three lines and a note became four, so neighbouring rows stood
+                         * 73px and 169px tall and the table read as a ragged list rather than a
+                         * grid. Long text is capped and ellipsed instead, with the full value on
+                         * hover - the row keeps its height, and nothing is lost.
+                         */
+                        className={`px-4 py-4 align-middle whitespace-nowrap ${
+                          col.align === "right" ? "tnum text-right" : ""
+                        } ${
+                          isSticky
+                            ? `sticky right-0 z-10 ${stickyBg} before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-line`
+                            : ""
+                        }`}
+                        title={text || undefined}
+                      >
+                        {/* The cap has to sit on a block INSIDE the cell: `max-width` on a
+                            table cell is advisory under `table-layout: auto`, and the browser
+                            widens the column anyway. */}
+                        {plain === null ? node : <span className="block max-w-[14rem] truncate">{plain}</span>}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))
             )}
@@ -396,27 +467,50 @@ export function DataTable<T>({
           </ul>
         )}
       </div>
-      {pageCount > 1 && (
-        <div className="flex items-center justify-between border-t border-line px-4 py-2.5 text-sm">
-          <button
-            type="button"
-            disabled={safePage === 0}
-            onClick={() => setPage(safePage - 1)}
-            className="inline-flex h-10 items-center gap-1 rounded-btn border border-line px-3 text-sm hover:bg-surface-2 disabled:bg-surface-2 disabled:text-ink-disabled disabled:hover:bg-surface-2"
-          >
-            <ChevronLeft size={15} /> Prev
-          </button>
-          <span className="text-xs text-muted tnum">
-            Page {safePage + 1} of {pageCount}
+      {/* ── Pager ─────────────────────────────────────────────────────────────────────
+          Says WHICH rows are on screen, not just which page. "Page 2 of 2" leaves you counting;
+          "26-32 of 32" answers the question the number was asked for. The page size sits beside
+          it because the honest answer to "this is tedious to page through" is often "show me
+          more at once". */}
+      {showPager && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-2.5 text-sm">
+          <label className="flex items-center gap-2 text-xs text-muted">
+            Rows per page
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
+              className="h-9 rounded-btn border border-line bg-surface px-2 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-soft"
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+              <option value={visible.length}>All</option>
+            </select>
+          </label>
+          <span className="text-xs text-muted tnum" aria-live="polite">
+            {firstOnPage}-{lastOnPage} of {visible.length}
           </span>
-          <button
-            type="button"
-            disabled={safePage >= pageCount - 1}
-            onClick={() => setPage(safePage + 1)}
-            className="inline-flex h-10 items-center gap-1 rounded-btn border border-line px-3 text-sm hover:bg-surface-2 disabled:bg-surface-2 disabled:text-ink-disabled disabled:hover:bg-surface-2"
-          >
-            Next <ChevronRight size={15} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={safePage === 0}
+              onClick={() => setPage(safePage - 1)}
+              className="inline-flex h-10 items-center gap-1 rounded-btn border border-line px-3 text-sm hover:bg-surface-2 disabled:bg-surface-2 disabled:text-ink-disabled disabled:hover:bg-surface-2"
+            >
+              <ChevronLeft size={15} /> Prev
+            </button>
+            <span className="whitespace-nowrap text-xs text-muted tnum">
+              Page {safePage + 1} of {pageCount}
+            </span>
+            <button
+              type="button"
+              disabled={safePage >= pageCount - 1}
+              onClick={() => setPage(safePage + 1)}
+              className="inline-flex h-10 items-center gap-1 rounded-btn border border-line px-3 text-sm hover:bg-surface-2 disabled:bg-surface-2 disabled:text-ink-disabled disabled:hover:bg-surface-2"
+            >
+              Next <ChevronRight size={15} />
+            </button>
+          </div>
         </div>
       )}
     </div>

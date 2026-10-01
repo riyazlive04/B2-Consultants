@@ -4,7 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Btn } from "@/components/ui/controls";
 import { TextInput } from "@/components/ui/form";
+import { useFormReset } from "@/components/ui/use-form-reset";
 import { DUE_DATE_SCHEME_LABELS, dueDateSeries, type DueDateScheme } from "@/lib/instalment-dates";
+import type { MoneyText } from "@/lib/instalment-amounts";
+import {
+  formatEurMinor, formatInrMinor, majorStringToMinor, minorToMajorString,
+} from "@/lib/format";
 
 /**
  * The remaining due dates for an instalment plan, captured on the income entry itself.
@@ -16,12 +21,17 @@ import { DUE_DATE_SCHEME_LABELS, dueDateSeries, type DueDateScheme } from "@/lib
  * student whose plan nobody went back to build, because a due date that was never written
  * down cannot raise a reminder.
  *
- * FILLED IN FOR YOU, BY DEFAULT. "How many instalments" already says how many dates there are,
- * and the date of this payment says where they start, so asking the operator to type four more
- * dates is asking them to repeat themselves. Tick-box on, and the dates follow one of the two
- * rules a plan is actually agreed on (lib/instalment-dates): the 1st of each month, or every 30
- * days. Untick it and the rows are yours - every box stays editable either way, because real
- * plans skip a month or land unevenly.
+ * FILLED IN FOR YOU, BY DEFAULT. Everything in these rows has already been said higher up the
+ * form. "How many instalments" says how many there are; the date of this payment says where they
+ * start; the fee and the plan surcharge say what each one costs. Asking the operator to type all
+ * of that again, four more times, is asking them to repeat themselves - and the schedule is what
+ * the chasing ladder reads, so a figure mistyped here chases the wrong amount.
+ *
+ * Tick-box on, and the dates follow one of the two rules a plan is actually agreed on
+ * (lib/instalment-dates) - the 1st of each month, or every 30 days - while the amounts are the
+ * fee plus the surcharge divided equally (lib/instalment-amounts). Untick it, or edit any box,
+ * and the rows are yours: real plans skip a month and land unevenly, and nothing here overwrites
+ * a schedule somebody has taken over.
  *
  * The rows travel as ONE JSON field rather than repeated inputs named the same thing. The income
  * action parses with `Object.fromEntries(form)`, which keeps only the last value of a repeated
@@ -45,6 +55,26 @@ function addMonth(iso: string): string {
 
 const emptyRow = (): ScheduleRow => ({ dueDate: "", amountInr: "", amountEur: "" });
 
+/** Add up a list of ₹/€ amounts, keeping an unused currency unused. */
+function sumText(parts: MoneyText[]): MoneyText {
+  const add = (pick: (p: MoneyText) => string) => {
+    const live = parts.filter((p) => pick(p).trim() !== "");
+    if (live.length === 0) return "";
+    return minorToMajorString(live.reduce((a, p) => a + majorStringToMinor(pick(p)), BigInt(0)));
+  };
+  return { inr: add((p) => p.inr), eur: add((p) => p.eur) };
+}
+
+/** "₹10,150.00", "€92.00", or both - and "" when there is no amount to show. */
+function moneyText(m: MoneyText): string {
+  return [
+    m.inr.trim() ? formatInrMinor(majorStringToMinor(m.inr)) : "",
+    m.eur.trim() ? formatEurMinor(majorStringToMinor(m.eur)) : "",
+  ]
+    .filter(Boolean)
+    .join(" + ");
+}
+
 export function InstalmentSchedule({
   defaultRows,
   // How wide the block sits in its form's grid. The Finance page lays income out in four
@@ -52,6 +82,8 @@ export function InstalmentSchedule({
   className = "sm:col-span-2 lg:col-span-4",
   count,
   anchorDate,
+  shares,
+  bankedToday,
   onCompleteChange,
 }: {
   defaultRows?: ScheduleRow[];
@@ -60,6 +92,18 @@ export function InstalmentSchedule({
   count?: number | null;
   /** The date of the payment being recorded - where the series starts. */
   anchorDate?: string;
+  /**
+   * What each REMAINING instalment costs - the fee plus the surcharge, already divided
+   * (lib/instalment-amounts). One entry per row. Absent while there is no fee to divide, in
+   * which case the amounts stay blank and only the dates are filled.
+   */
+  shares?: MoneyText[];
+  /**
+   * The first instalment - the money actually being banked by this entry. Shown because the box
+   * above now holds the WHOLE fee, and the difference between the two is the one thing somebody
+   * reading this form back needs to be sure of.
+   */
+  bankedToday?: MoneyText;
   /**
    * Told whenever "every row has a date" changes, so the form can hold its submit button closed.
    * A plan saved with a blank date silently drops that receivable, and nothing ever chases it.
@@ -74,24 +118,42 @@ export function InstalmentSchedule({
   const boxRef = useRef<HTMLDivElement>(null);
 
   /**
-   * Re-fill the dates whenever the plan's shape changes - the count, the payment date, or the
-   * rule. Amounts already typed are kept: only the dates are ours to decide.
+   * Re-fill the rows whenever the plan's shape changes - the count, the payment date, the rule,
+   * or the money being divided.
    *
    * Does nothing while the box is unticked, so a hand-built schedule is never overwritten, and
-   * nothing while the count is still blank or 1 - there is no series to draw yet.
+   * nothing while the count is still blank or 1 - there is no series to draw yet. An amount that
+   * cannot be derived yet (no fee entered) leaves that box as it was rather than blanking it,
+   * so typing the fee last still fills the schedule instead of wiping it.
+   *
+   * `shares` is a fresh array every render, so the effect keys off its CONTENT. Keying off the
+   * array itself would re-run on every keystroke anywhere in the form and fight the operator.
    */
+  const sharesKey = JSON.stringify(shares ?? []);
   useEffect(() => {
     if (!autoFill) return;
     const dates = dueDateSeries(scheme, anchorDate ?? "", count ?? 0);
     if (dates.length === 0) return;
+    const amounts: MoneyText[] = JSON.parse(sharesKey);
     setRows((cur) =>
       dates.map((dueDate, i) => ({
         dueDate,
-        amountInr: cur[i]?.amountInr ?? "",
-        amountEur: cur[i]?.amountEur ?? "",
+        amountInr: amounts[i]?.inr ?? cur[i]?.amountInr ?? "",
+        amountEur: amounts[i]?.eur ?? cur[i]?.amountEur ?? "",
       })),
     );
-  }, [autoFill, scheme, anchorDate, count]);
+  }, [autoFill, scheme, anchorDate, count, sharesKey]);
+
+  /**
+   * A successful save calls form.reset(). The rows are React state, so they survive it - which
+   * left the NEXT payment opening on the last student's schedule, dates and all, with nothing on
+   * screen saying so. Back to one empty row, filling itself again.
+   */
+  useFormReset(boxRef, () => {
+    setRows(defaultRows?.length ? defaultRows : [emptyRow()]);
+    setAutoFill(true);
+    setScheme("MONTH_FIRST");
+  });
 
   /**
    * Report completeness upward. A row with no date is the thing that must block the save; a row
@@ -126,9 +188,10 @@ export function InstalmentSchedule({
   };
 
   const setRow = (i: number, patch: Partial<ScheduleRow>) => {
-    // Editing a DATE by hand means the operator has taken over; leaving autofill on would
-    // overwrite their entry the next time the count or the payment date changed.
-    if (patch.dueDate !== undefined) setAutoFill(false);
+    // Any hand edit means the operator has taken over - a plan where one instalment is larger
+    // than the rest is a normal thing to agree. Leaving autofill on would overwrite their entry
+    // the next time the count, the payment date or the fee changed.
+    setAutoFill(false);
     setRows((cur) => cur.map((r, n) => (n === i ? { ...r, ...patch } : r)));
   };
 
@@ -159,7 +222,9 @@ export function InstalmentSchedule({
             onChange={(e) => setAutoFill(e.currentTarget.checked)}
             className="h-4 w-4 rounded border-line"
           />
-          <span className="font-medium text-ink">Fill the dates in for me</span>
+          <span className="font-medium text-ink">
+            Fill the {shares?.length ? "dates and amounts" : "dates"} in for me
+          </span>
         </label>
         <div className="flex items-center gap-1" role="group" aria-label="How the dates are spaced">
           {(Object.keys(DUE_DATE_SCHEME_LABELS) as DueDateScheme[]).map((k) => (
@@ -182,6 +247,21 @@ export function InstalmentSchedule({
           <span className="text-caption text-muted">Set the number of instalments above and the dates appear.</span>
         )}
       </div>
+
+      {/* What the division came to, in words. The box above holds the whole fee on a plan, so
+          "how much is actually going in the till today" is the question this answers. */}
+      {bankedToday && moneyText(bankedToday) && (
+        <p className="mt-2 rounded-card bg-surface-2 px-3 py-2 text-caption text-ink-2">
+          <span className="font-medium text-ink">{moneyText(bankedToday)}</span> of the{" "}
+          <span className="font-medium text-ink">{moneyText(sumText([bankedToday, ...(shares ?? [])]))}</span>{" "}
+          total is recorded as received today
+          {shares?.length
+            ? `; the ${shares.length} instalment${shares.length === 1 ? "" : "s"} below ${
+                shares.length === 1 ? "is" : "are"
+              } the rest.`
+            : "."}
+        </p>
+      )}
 
       <div className="mt-2 space-y-2">
         {rows.map((r, i) => (

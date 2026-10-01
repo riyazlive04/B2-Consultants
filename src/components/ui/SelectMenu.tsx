@@ -60,8 +60,18 @@ export function SelectMenu({
 
   // A successful save calls form.reset(), which restores the hidden <select> and would otherwise
   // leave this trigger showing the previous entry's option - see `useFormReset`.
+  //
+  // The re-dispatch is the other half of that fix, and it is not cosmetic. A select very often
+  // decides what the rest of a form SHOWS - "Instalment" reveals the plan questions, a category
+  // reveals its own fields - and that is parent state, driven by `onChange`. `form.reset()` fires
+  // no change event, so the parent never heard: the trigger went back to "Full payment" while the
+  // instalment questions stayed on screen, filled in, ready to be submitted against a payment type
+  // that no longer wanted them. Announcing the restored value puts both halves back in step.
   useFormReset(selectRef, () => {
-    if (!controlled) setUncontrolled(selectRef.current?.value ?? "");
+    const el = selectRef.current;
+    if (!el) return;
+    if (!controlled) setUncontrolled(el.value);
+    el.dispatchEvent(new Event("change", { bubbles: true }));
   });
   const currentVal = controlled ? ((value as string) ?? "") : uncontrolled;
   const currentOpt = options.find((o) => o.value === currentVal);

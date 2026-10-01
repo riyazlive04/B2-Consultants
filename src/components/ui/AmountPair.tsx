@@ -51,6 +51,7 @@ export function AmountPair({
   defaultInr = "",
   defaultEur = "",
   className = "sm:col-span-2",
+  onAmountsChange,
 }: {
   /** INR per EUR, as the server will stamp it. */
   fxRate: number;
@@ -69,6 +70,15 @@ export function AmountPair({
    * different shape can override it.
    */
   className?: string;
+  /**
+   * The amounts WILL BE SUBMITTED, for a form that has to do arithmetic on them - the income
+   * form divides a fee across an instalment plan while it is being typed.
+   *
+   * Reports "" for a currency that is being mirrored, because a derived box is `disabled` and so
+   * never reaches FormData. Anything reading this is therefore working with the same two figures
+   * the server will get, not with what happens to be on screen.
+   */
+  onAmountsChange?: (amounts: { inr: string; eur: string }) => void;
 }) {
   const [inr, setInr] = useState(defaultInr);
   const [eur, setEur] = useState(defaultEur);
@@ -146,6 +156,16 @@ export function AmountPair({
   const inrDerived = derived("INR");
   const eurDerived = derived("EUR");
   const convertedHint = `Converted ${rateNote} - not stored separately`;
+
+  // Tell the parent what will actually be submitted - a derived box is disabled and sends
+  // nothing, so it reports as absent rather than as the number on screen.
+  const submittedInr = inrDerived ? "" : inr;
+  const submittedEur = eurDerived ? "" : eur;
+  const notify = useRef(onAmountsChange);
+  useEffect(() => { notify.current = onAmountsChange; });
+  useEffect(() => {
+    notify.current?.({ inr: submittedInr, eur: submittedEur });
+  }, [submittedInr, submittedEur]);
 
   /**
    * ── A FIXED FOOTPRINT, not a fragment ────────────────────────────────────────────

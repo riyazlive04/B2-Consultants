@@ -29,6 +29,12 @@ RUN apk add --no-cache openssl
 # (non-Docker) builds deliberately leave both off.
 ENV NEXT_OUTPUT_STANDALONE=1
 ENV NEXT_TELEMETRY_DISABLED=1
+# Node sizes its heap against the HOST's total RAM, not what is actually free, so on a 16GB
+# laptop the type-checker happily grows past what Windows can spare - and it is the BuildKit VM
+# that Windows then kills, which surfaces as the useless `rpc error: code = Unavailable ... EOF`
+# rather than as an out-of-memory message. Capped, the build collects garbage instead of growing,
+# and the same cap keeps a build off a small VPS from taking the box down with it.
+ENV NODE_OPTIONS=--max-old-space-size=2560
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # No DATABASE_URL needed: `prisma generate` reads the schema, not the database.

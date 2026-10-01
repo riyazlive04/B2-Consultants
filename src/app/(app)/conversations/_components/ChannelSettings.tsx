@@ -6,7 +6,7 @@ import { Card, Pill } from "@/components/ui/kit";
 import { Field, TextInput, SubmitButton } from "@/components/ui/form";
 import { Switch } from "@/components/ui/controls";
 import { toast } from "@/components/ui/feedback";
-import { saveEmailSettings, saveSmsSettings } from "@/server/messaging-actions";
+import { saveEmailSettings, saveSmsSettings, sendTestEmail } from "@/server/messaging-actions";
 
 type Settings = {
   email: { enabled: boolean; configured: boolean; envEnabled: boolean; paused: boolean; fromEmail: string; fromName: string };
@@ -32,6 +32,10 @@ export default function ChannelSettings({ settings }: { settings: Settings }) {
     const res = await saveEmailSettings(fd);
     toast(res.ok ? "Email settings saved" : res.error, res.ok ? "success" : "error");
   }
+  async function testEmail(fd: FormData) {
+    const res = await sendTestEmail(fd);
+    toast(res.message, res.ok ? "success" : "error");
+  }
   async function saveSms(fd: FormData) {
     if (smsPaused) fd.set("paused", "on");
     const res = await saveSmsSettings(fd);
@@ -48,6 +52,15 @@ export default function ChannelSettings({ settings }: { settings: Settings }) {
             <Field label="From email" hint="Must be on a Resend-verified domain"><TextInput name="fromEmail" kind="email" defaultValue={settings.email.fromEmail} placeholder="hello@b2consultants.com" /></Field>
             <label className="flex items-center justify-between text-sm font-medium text-ink">Pause sending<Switch checked={emailPaused} onChange={setEmailPaused} /></label>
             <div className="flex justify-end"><SubmitButton>Save email</SubmitButton></div>
+          </form>
+
+          {/* Separate form: the only way to prove the whole chain (key → verified domain → app)
+              really works. Names the exact gate that is shut, or shows Resend's own rejection. */}
+          <form action={testEmail} className="space-y-3 border-t border-line pt-4">
+            <Field label="Send a test to" hint="Proves the key, the verified domain and the app path in one go">
+              <TextInput name="to" kind="email" placeholder="you@b2consultants.in" />
+            </Field>
+            <div className="flex justify-end"><SubmitButton>Send test</SubmitButton></div>
           </form>
         </div>
       </Card>

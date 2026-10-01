@@ -84,3 +84,4 @@ scripts/set-local-passwords.mjs
 
 # Pre-launch data reset exports - contain lead PII and message bodies. Never commit.
 prelaunch-reset-backup-*.json
+/.next-dev*

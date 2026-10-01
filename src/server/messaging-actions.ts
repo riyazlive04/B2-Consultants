@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { WhatsAppKind, WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection, requireAdmin } from "@/lib/rbac";
-import { readEmailSettings, writeEmailSettings } from "@/lib/email";
+import { brandEmailHeader, getEmailRuntime, readEmailSettings, sendResendEmail, writeEmailSettings } from "@/lib/email";
 import { readSmsSettings, writeSmsSettings } from "@/lib/sms";
 import { WHATSAPP_KINDS, WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
 import { getWatiRuntime } from "@/lib/wati";
@@ -316,6 +316,64 @@ export async function saveEmailSettings(form: FormData): Promise<ActionResult> {
   }
   revalidatePath("/conversations");
   return { ok: true };
+}
+
+/**
+ * "Send test" from the email settings card — the one thing that tells you the Resend connection is
+ * really live, end to end.
+ *
+ * Deliberately NOT routed through sendEmailMessage: that helper is built for production paths and
+ * fails SOFT, logging a SKIPPED row and returning ok:true when a gate is shut. That is exactly the
+ * wrong behaviour while you are wiring the channel up — "Logged (email is off)" does not tell you
+ * WHICH of the three gates is off. This names the specific gate instead, and on a real attempt
+ * surfaces Resend's own error verbatim, which is where "domain is not verified" actually shows up.
+ */
+export type TestSendResult = { ok: boolean; message: string };
+
+export async function sendTestEmail(form: FormData): Promise<TestSendResult> {
+  const session = await requireAdmin();
+
+  const parsed = optionalRule("email").safeParse(String(form.get("to") ?? ""));
+  if (!parsed.success) return { ok: false, message: firstError(parsed.error) };
+  const to = parsed.data;
+  if (!to) return { ok: false, message: "Enter an address to send the test to" };
+
+  const rt = await getEmailRuntime();
+  if (!rt.envEnabled) return { ok: false, message: 'EMAIL_ENABLED is not "true" in the environment — set it and restart the app' };
+  if (!rt.apiKey) return { ok: false, message: "RESEND_API_KEY is not set in the environment — add it and restart the app" };
+  if (!rt.fromEmail) return { ok: false, message: "Save a From address above before sending a test" };
+  if (rt.paused) return { ok: false, message: 'Sending is paused — turn off "Pause sending" above and save' };
+
+  const from = rt.fromName ? `${rt.fromName} <${rt.fromEmail}>` : rt.fromEmail;
+  const html = `${brandEmailHeader()}<div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#16203A;line-height:1.6">
+    <p>This is a test email from the B2 Consultants app.</p>
+    <p>If you are reading it, the Resend connection is live: the API key works, the sending domain is verified, and the app can send.</p>
+  </div>`;
+  const subject = "B2 Consultants — email channel test";
+  const res = await sendResendEmail({ apiKey: rt.apiKey, from, to, subject, html });
+
+  // Logged like any other send, so the test is visible in Conversations rather than invisible.
+  await prisma.message.create({
+    data: {
+      channel: "EMAIL", direction: "OUTBOUND", status: res.ok ? "SENT" : "FAILED",
+      toAddress: to, fromAddress: rt.fromEmail, subject, body: "Email channel test",
+      provider: "resend", externalId: res.id ?? null, error: res.error ?? null, sentById: session.user.id,
+    },
+  });
+
+  await logActivity(session, {
+    action: "email.test.send",
+    section: "conversations",
+    entityType: "AppSetting",
+    entityId: "emailConfig",
+    summary: `Sent a test email to ${to} — ${res.ok ? "accepted by Resend" : "rejected"}`,
+    meta: { to, from, ok: res.ok, error: res.error ?? null },
+  });
+
+  revalidatePath("/conversations");
+  return res.ok
+    ? { ok: true, message: `Sent to ${to} — check the inbox (and the spam folder)` }
+    : { ok: false, message: res.error ?? "Resend rejected the send" };
 }
 
 export async function saveSmsSettings(form: FormData): Promise<ActionResult> {

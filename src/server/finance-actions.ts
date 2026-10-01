@@ -22,8 +22,16 @@ import {
   unsettleIncome,
   type SettlementRecord,
 } from "./instalment-settlement";
+import { allocateStudentCode } from "./student-code";
 
 /** Finance is Admin-only in every direction (PRD1 §4.1). All actions re-check. */
+
+/**
+ * Case- and spacing-insensitive name match, identical to the one `getPendingRows` sums a
+ * student's payments with (server/finance-metrics) - so a name that links here is the same name
+ * that adds up there.
+ */
+const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
 /**
  * Every write here moves money, so every write posts to the ledger in the SAME transaction
@@ -280,8 +288,40 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
   const fx = await getTodayInrPerEur();
   const incomeAccounts = await levelIncomeAccounts();
   let created: Income | null = null;
+  /**
+   * "Create a student record for this name", ticked on the entry form.
+   *
+   * ADMIN ONLY, because minting a Student is an admin act everywhere else (students-actions).
+   * A non-admin's tick is ignored rather than refused: the payment is what they came to record,
+   * and it still saves under the typed name exactly as it did before.
+   */
+  const mintStudent = form.get("createStudent") === "on" && !d.studentId && session.role === "ADMIN";
+  let mintedStudent: { id: string; code: string | null; backfilled: number } | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
+      /**
+       * Resolve the student this money belongs to BEFORE writing anything, so the income, the
+       * receivable and the backfill all point at one record.
+       *
+       * An exact name already on the roster is MATCHED rather than duplicated - two students
+       * with one name is the ambiguity the student code exists to remove, and a second "Anna
+       * Smith" would split her payment history down the middle.
+       */
+      let linkedStudentId = d.studentId || null;
+      if (mintStudent) {
+        const roster = await tx.student.findMany({ select: { id: true, fullName: true } });
+        const match = roster.find((s) => nameKey(s.fullName) === nameKey(d.studentName));
+        if (match) {
+          linkedStudentId = match.id;
+        } else {
+          const student = await tx.student.create({
+            data: { code: await allocateStudentCode(tx), fullName: d.studentName },
+          });
+          linkedStudentId = student.id;
+          mintedStudent = { id: student.id, code: student.code, backfilled: 0 };
+        }
+      }
+
       const income = await tx.income.create({
         data: {
           date: incomeDate,
@@ -293,7 +333,7 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
           paymentType: d.paymentType,
           paymentMethod: d.paymentMethod,
           ...instalment,
-          studentId: d.studentId || null,
+          studentId: linkedStudentId,
           notes: d.notes || null,
           enteredById: session.user.id,
         },
@@ -324,7 +364,7 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
         const plan = await tx.pendingPayment.create({
           data: {
             studentName: d.studentName,
-            studentId: d.studentId || null,
+            studentId: linkedStudentId,
             programLevel: d.programLevel,
             totalFeeInrMinor: income.amountInrMinor + scheduledInr,
             totalFeeEurMinor: income.amountEurMinor + scheduledEur,
@@ -359,6 +399,31 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
               status: "DUE" as const,
             })),
           ],
+        });
+      }
+
+      /**
+       * Earlier payments typed under the same name join the new record.
+       *
+       * The same backfill `createStudent` and `convertLeadToStudent` already run, for the same
+       * reason: a student's payment history is the whole point of the link, and one that started
+       * at today's receipt would be a history with its beginning missing. Only rows linked to
+       * NOBODY are touched - a payment already attributed to another student is never moved.
+       */
+      if (mintedStudent) {
+        const orphans = await tx.income.findMany({
+          where: { studentId: null },
+          select: { id: true, studentName: true },
+        });
+        const ids = orphans.filter((i) => nameKey(i.studentName) === nameKey(d.studentName)).map((i) => i.id);
+        if (ids.length) {
+          await tx.income.updateMany({ where: { id: { in: ids } }, data: { studentId: mintedStudent.id } });
+          mintedStudent.backfilled = ids.length;
+        }
+        // A receivable typed under the same name is the other half of that history.
+        await tx.pendingPayment.updateMany({
+          where: { studentId: null, studentName: d.studentName },
+          data: { studentId: mintedStudent.id },
         });
       }
 
@@ -407,6 +472,19 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
         paymentMethod: row.paymentMethod,
         instalmentCount: row.instalmentCount,
       },
+    });
+  }
+
+  // Its own audit line: a student record appeared, and the roster is where people look for it.
+  if (mintedStudent) {
+    const minted: { id: string; code: string | null; backfilled: number } = mintedStudent;
+    await logActivity(session, {
+      action: "student.create",
+      section: "students",
+      entityType: "Student",
+      entityId: minted.id,
+      summary: `Created ${d.studentName}${minted.code ? ` (${minted.code})` : ""} while recording a payment`,
+      meta: { from: "finance.income", incomeEntriesLinked: minted.backfilled },
     });
   }
 

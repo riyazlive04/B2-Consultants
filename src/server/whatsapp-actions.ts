@@ -14,6 +14,8 @@ import {
   type WatiCadence,
 } from "@/lib/whatsapp";
 import { normalizeWhatsappNumber, toCountry } from "@/lib/phone";
+import { parseDurationListMinutes } from "@/lib/duration";
+import { prepareConfirmLoopSave } from "./confirm-loop-config";
 import { readWatiSettings, writeWatiSettings, fetchWatiTemplates, writeTemplateCatalog } from "@/lib/wati";
 import {
   runDueReminders,
@@ -273,17 +275,19 @@ function num(form: FormData, key: string, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
-function parseLeadHours(raw: FormDataEntryValue | null): number[] {
-  if (typeof raw !== "string") return DEFAULT_CADENCE.bookingReminderLeadHours;
-  const list = raw
-    .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  return list.length ? list : DEFAULT_CADENCE.bookingReminderLeadHours;
+/**
+ * The pre-call rungs, as minutes. The box takes durations ("36h, 24h, 90m") and a bare number
+ * still means HOURS, which is what every value typed into it before minutes existed meant.
+ * An empty/unreadable box means "unset" here and falls back to the defaults - unlike parseLeadDays
+ * below, where a cleared box is how the touchpoint is switched off.
+ */
+function parseLeadWindows(raw: FormDataEntryValue | null): number[] {
+  const list = parseDurationListMinutes(typeof raw === "string" ? raw : "");
+  return list.length ? list : DEFAULT_CADENCE.bookingReminderLeadMinutes;
 }
 
 /**
- * Days-before-due for the EMI reminder. Unlike parseLeadHours, `0` is meaningful here
+ * Days-before-due for the EMI reminder. Unlike parseLeadWindows, `0` is meaningful here
  * ("on the due day"), and a deliberately cleared box means OFF rather than "use defaults" -
  * so an admin can actually switch this touchpoint off from the settings form.
  */
@@ -333,7 +337,7 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
     discoRepeatHours: num(form, "discoRepeatHours", DEFAULT_CADENCE.discoRepeatHours),
     discoMaxReminders: num(form, "discoMaxReminders", DEFAULT_CADENCE.discoMaxReminders),
     discoMaxAgeDays: num(form, "discoMaxAgeDays", DEFAULT_CADENCE.discoMaxAgeDays),
-    bookingReminderLeadHours: parseLeadHours(form.get("bookingReminderLeadHours")),
+    bookingReminderLeadMinutes: parseLeadWindows(form.get("bookingReminderLead")),
     noShowDelayHours: num(form, "noShowDelayHours", DEFAULT_CADENCE.noShowDelayHours),
     paymentRepeatHours: num(form, "paymentRepeatHours", DEFAULT_CADENCE.paymentRepeatHours),
     emiPreDueLeadDays: parseLeadDays(form.get("emiPreDueLeadDays")),
@@ -362,6 +366,22 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
   const settings: WatiSettings = {
     paused, defaultCountry, templates, cadence, testRecipient, domainGate: before.domainGate,
   };
+  /**
+   * ── The confirm-or-cancel loop, saved from the same form ────────────────────────────
+   * Its settings live in `bookingRulesConfig`, not in `watiConfig`, because the engine that
+   * reads them cancels bookings and frees slots - WhatsApp is how it asks, not what it owns.
+   * One config, two doors: the Bookings tab still edits the same fields, and BOTH writers
+   * merge over the current config so neither can reset a field it doesn't render.
+   *
+   * CHECKED BEFORE ANYTHING IS WRITTEN. Two configs are saved by one button, so a refusal here
+   * after the WATI half had landed would report failure on a form that had in fact half-saved -
+   * and the operator would have no way to tell which half.
+   */
+  // Validated before anything is written - see prepareConfirmLoopSave. One implementation, shared
+  // with the Bookings and Console doors onto the same rule.
+  const confirmLoop = await prepareConfirmLoopSave(form, session, "WhatsApp settings");
+  if (!confirmLoop.ok) return { ok: false, message: confirmLoop.error };
+
   await writeWatiSettings(settings);
   const diff = diffFields(before, settings);
   if (diff.changed.length) {
@@ -374,6 +394,10 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
+
+  // Written only now that the WATI half is safely stored (it was validated before either write).
+  if (confirmLoop.ok && confirmLoop.write) await confirmLoop.write();
+
   revalidatePath("/whatsapp");
   return { ok: true, message: "WhatsApp settings saved" };
 }

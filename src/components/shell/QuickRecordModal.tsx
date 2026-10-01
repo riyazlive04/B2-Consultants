@@ -150,12 +150,21 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
               tomorrow (FIN-02). Create-only form, so this is always a new record. */}
           <TextInput type="date" name="date" required defaultValue={data.today} defaultToday />
         </Field>
-        <Field label="Student name" hint={data.studentOptions.length > 0 ? "Search to link a student - feeds their total paid" : undefined}>
-          {data.studentOptions.length > 0 ? (
-            <ComboBox options={data.studentOptions} nameText="studentName" nameValue="studentId" required placeholder="Search or type who paid" />
-          ) : (
-            <TextInput kind="name" name="studentName" required placeholder="Who paid" />
-          )}
+        {/* Searchable even with an empty roster - see the same field on the Finance page for why
+            a silent fallback to a plain box is worse than an empty list that says so. */}
+        <Field label="Student name" hint="Search to link a student - feeds their total paid">
+          <ComboBox
+            options={data.studentOptions}
+            nameText="studentName"
+            nameValue="studentId"
+            required
+            placeholder={data.studentOptions.length > 0 ? "Search or type who paid" : "Type who paid"}
+            emptyHint={
+              data.studentOptions.length > 0
+                ? undefined
+                : "No students on file yet - the payment saves under this name; create the student under Finance or Students to start their history."
+            }
+          />
         </Field>
         <AmountPair
           fxRate={data.fxRate}

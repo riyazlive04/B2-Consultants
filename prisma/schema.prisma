@@ -1690,11 +1690,63 @@ model AppointmentSlot {
   assignedToId String?
   assignedTo   User?           @relation("SlotAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
   booking      BookingRequest?
+  /// Every time this slot was handed back to the calendar - see SlotRelease.
+  releases     SlotRelease[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
   @@index([status, startsAt])
   @@map("appointment_slot")
+}
+
+/// Why a booked slot was handed back to the calendar.
+enum SlotReleaseReason {
+  NO_CONFIRMATION // the confirm-or-cancel engine: the prospect never replied YES in time
+  CANCELLED // a human marked the booking CANCELLED
+  NO_SHOW // a human marked it NO_SHOW after the call did not happen
+  POSTPONED // the booking moved to a different slot (manual postpone, or promote-next)
+}
+
+/// One slot handed back to the calendar, kept after the booking has let go of it.
+///
+/// WHY THIS TABLE EXISTS. Releasing a slot NULLS `BookingRequest.slotId`, because that column is
+/// `@unique` and the slot cannot be re-booked while a cancelled booking still points at it. So the
+/// release destroyed the only record of WHEN the call had been: a cancelled booking rendered "-"
+/// where its time should be, and the freed slot went back on the week calendar looking like it had
+/// never been booked at all. "Show me the slots we cancelled" was unanswerable from the data.
+///
+/// Every column the list needs is SNAPSHOTTED (`slotStartsAt`, `prospectName`, `releasedByName`)
+/// rather than joined, because the point of the row is to survive the thing it describes - slots
+/// are deleted, bookings are archived, people leave the team.
+model SlotRelease {
+  id               String            @id @default(cuid())
+  /// The slot that was freed. Nullable only because a slot can later be deleted outright.
+  slotId           String?
+  slot             AppointmentSlot?  @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  bookingRequestId String?
+  bookingRequest   BookingRequest?   @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
+  /// When the released call had been, in UTC.
+  slotStartsAt     DateTime
+  durationMins     Int               @default(30)
+  /// Who the slot was being held for.
+  prospectName     String
+  reason           SlotReleaseReason
+  /// What the slot became. OPEN when it is genuinely re-bookable; BLOCKED when it was released
+  /// inside the min-notice window, where the public form would refuse it anyway (see
+  /// `releasedSlotStatus`) - publishing it as OPEN would advertise capacity nobody can take.
+  releasedStatus   SlotStatus        @default(OPEN)
+  /// Filled in when promote-next moved another call up into this opening - the one figure that
+  /// says whether a cancellation cost us the slot or merely reshuffled it.
+  promotedBookingId String?
+  promotedName      String?
+  /// Null means the automation did it; a name means a person did.
+  releasedByName   String?
+  createdAt        DateTime          @default(now())
+
+  @@index([slotStartsAt])
+  @@index([createdAt])
+  @@index([reason, createdAt])
+  @@map("slot_release")
 }
 
 /// SSS (Success Strategy Session) slot - the founder-run sales/closing call calendar. Distinct
@@ -1800,6 +1852,8 @@ model BookingRequest {
   whatsappMessages WhatsAppMessage[]
   outreachJourney  OutreachJourney?
   answers          LeadAnswer[]
+  /// The slots this booking has given back (cancel / no-show / postpone) - see SlotRelease.
+  slotReleases     SlotRelease[]
 
   @@index([status, createdAt])
   @@index([bantScore])

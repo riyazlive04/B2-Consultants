@@ -38,9 +38,19 @@ const CATALOG_KEY = "watiTemplateCatalog";
 function coerceCadence(raw: unknown): WatiCadence {
   const c = (raw && typeof raw === "object" ? raw : {}) as Partial<WatiCadence>;
   const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : d);
-  const leadHours = Array.isArray(c.bookingReminderLeadHours)
-    ? c.bookingReminderLeadHours.filter((h): h is number => typeof h === "number" && h >= 0)
-    : DEFAULT_CADENCE.bookingReminderLeadHours;
+  /**
+   * Pre-call rungs are stored in MINUTES. A settings row written before that change carries whole
+   * hours under the old key, so it is converted here - once, on read - and rewritten in minutes
+   * the next time the form is saved. Both keys absent means "unset": use the defaults.
+   */
+  const legacy = c as { bookingReminderLeadHours?: unknown };
+  const storedMinutes = Array.isArray(c.bookingReminderLeadMinutes)
+    ? c.bookingReminderLeadMinutes.filter((m): m is number => typeof m === "number" && m >= 0)
+    : Array.isArray(legacy.bookingReminderLeadHours)
+      ? legacy.bookingReminderLeadHours
+          .filter((h): h is number => typeof h === "number" && h >= 0)
+          .map((h) => Math.round(h * 60))
+      : DEFAULT_CADENCE.bookingReminderLeadMinutes;
   // Only an explicit stored `false` turns a touchpoint off. Absent (settings saved before these
   // switches existed) or malformed keeps it on - the behaviour every install already had.
   const flag = (v: unknown) => v !== false;
@@ -55,11 +65,11 @@ function coerceCadence(raw: unknown): WatiCadence {
     discoRepeatHours: num(c.discoRepeatHours, DEFAULT_CADENCE.discoRepeatHours),
     discoMaxReminders: num(c.discoMaxReminders, DEFAULT_CADENCE.discoMaxReminders),
     discoMaxAgeDays: num(c.discoMaxAgeDays, DEFAULT_CADENCE.discoMaxAgeDays),
-    bookingReminderLeadHours: leadHours.length ? leadHours : DEFAULT_CADENCE.bookingReminderLeadHours,
+    bookingReminderLeadMinutes: storedMinutes.length ? storedMinutes : DEFAULT_CADENCE.bookingReminderLeadMinutes,
     noShowDelayHours: num(c.noShowDelayHours, DEFAULT_CADENCE.noShowDelayHours),
     paymentRepeatHours: num(c.paymentRepeatHours, DEFAULT_CADENCE.paymentRepeatHours),
     // An explicitly stored [] means "EMI pre-due is off" and is honoured - unlike
-    // bookingReminderLeadHours above, which treats empty as "unset, use defaults".
+    // bookingReminderLeadMinutes above, which treats empty as "unset, use defaults".
     emiPreDueLeadDays: Array.isArray(c.emiPreDueLeadDays)
       ? c.emiPreDueLeadDays.filter((d): d is number => typeof d === "number" && Number.isInteger(d) && d >= 0)
       : DEFAULT_CADENCE.emiPreDueLeadDays,

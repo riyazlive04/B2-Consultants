@@ -9,6 +9,7 @@ import {
   getSpeedToLeadAlertConfig,
   getDunningConfig,
   getPipelineConfig,
+  getBookingRulesConfig,
 } from "./founder-config";
 import { readDeliveryStatuses } from "./intake-route";
 
@@ -50,7 +51,7 @@ export type NotArmedItem = {
 };
 
 export async function getNotArmedReport(): Promise<NotArmedItem[]> {
-  const [email, wati, slots, maintenance, posting, speedToLead, dunning, pipeline, deliveries, heartbeat] =
+  const [email, wati, slots, maintenance, posting, speedToLead, dunning, pipeline, deliveries, heartbeat, bookingRules] =
     await Promise.all([
       getEmailRuntime(),
       getWatiRuntime(),
@@ -62,6 +63,7 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       getPipelineConfig(),
       readDeliveryStatuses(),
       prisma.appSetting.findUnique({ where: { key: "cronHeartbeat" } }),
+      getBookingRulesConfig(),
     ]);
 
   /**
@@ -124,6 +126,19 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
         ? "Sending is paused or unconfigured - /whatsapp"
         : 'Set WATI_ENABLED="true" with the endpoint and token',
       needsDeploy: !wati.envEnabled,
+    },
+    {
+      /**
+       * Off by DEFAULT and deliberately so - it cancels real bookings - which is exactly the
+       * shape of switch this list exists for: built, inert, and indistinguishable from broken
+       * to anyone waiting for an unanswered slot to be released.
+       */
+      key: "confirmLoop",
+      name: "Confirm-or-cancel unconfirmed calls",
+      armed: bookingRules.autoCancelEnabled,
+      consequence:
+        "Nobody is asked to reply YES before their call, and a slot nobody confirmed is never released - it stays booked through the no-show and blocks the prospect who would have taken it.",
+      where: "Console → Sales ops → Confirm-or-cancel (also WhatsApp → Settings, or Bookings → Manage availability)",
     },
     {
       key: "intake",

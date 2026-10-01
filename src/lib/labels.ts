@@ -100,6 +100,24 @@ export const SLOT_STATUS_LABELS: Record<string, string> = {
   BLOCKED: "Blocked",
 };
 
+/** Why a booked slot went back on the calendar (SlotReleaseReason). */
+export const SLOT_RELEASE_REASON_LABELS: Record<string, string> = {
+  NO_CONFIRMATION: "No reply",
+  CANCELLED: "Cancelled",
+  NO_SHOW: "No show",
+  POSTPONED: "Postponed",
+};
+
+/**
+ * The state of the hold on a booked slot while we wait for the prospect's "YES"
+ * (lib/booking-hold.ts). Short enough for a calendar chip; the tooltip carries the moment.
+ */
+export const SLOT_HOLD_LABELS: Record<string, string> = {
+  CONFIRMED: "Confirmed",
+  AWAITING_REPLY: "Held - awaiting YES",
+  NOT_ASKED: "Held - not asked yet",
+};
+
 // A bookable slot "type" is pure display layer - AppointmentSlot has no type/category
 // field, just durationMins. Map the two durations the admin can choose between when
 // generating slots to a human name; anything else (legacy data) falls back gracefully.

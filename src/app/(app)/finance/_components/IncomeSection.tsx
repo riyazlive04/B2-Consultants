@@ -19,6 +19,24 @@ import { StudentName } from "@/components/ui/StudentName";
 import { money, moneyAlt, moneyInline, moneyValue } from "@/lib/money-display";
 import { useFinanceCcy } from "./FinanceCurrency";
 
+/**
+ * Whole days from `today` (an IST YYYY-MM-DD) to a due date. Compared as calendar dates, not
+ * elapsed milliseconds: "due today" has to stay true all day, not stop being true at noon.
+ */
+function daysUntil(dueIso: string, today: string): number {
+  const due = Date.parse(`${dueIso.slice(0, 10)}T00:00:00Z`);
+  const from = Date.parse(`${today}T00:00:00Z`);
+  if (Number.isNaN(due) || Number.isNaN(from)) return 0;
+  return Math.round((due - from) / 86_400_000);
+}
+
+function dueLabel(days: number): string {
+  if (days < 0) return `${-days} day${days === -1 ? "" : "s"} overdue`;
+  if (days === 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  return `In ${days} days`;
+}
+
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
   return v === BigInt(0) ? "" : (Number(v) / 100).toFixed(2);
@@ -33,6 +51,9 @@ export function IncomeSection({
   fxRate,
   fxStale,
   fxDate,
+  canCreateStudent = false,
+  upcomingByStudent = {},
+  upcomingInstalments = [],
 }: {
   rows: IncomeRow[];
   today: string;
@@ -42,6 +63,12 @@ export function IncomeSection({
   fxRate: number;
   fxStale?: boolean;
   fxDate?: string;
+  /** Minting a student is an admin act (server/students-actions), so only an admin is offered it. */
+  canCreateStudent?: boolean;
+  /** Instalment dates still to come, keyed by student id or normalised name (see the page). */
+  upcomingByStudent?: Record<string, { dueDate: string; inr: number; eur: number }[]>;
+  /** Flat, date-ordered list for the reminder strip - overdue first, then soonest. */
+  upcomingInstalments?: { studentName: string; dueDate: string; inr: number; eur: number }[];
 }) {
   const { ccy } = useFinanceCcy();
   const [editing, setEditing] = useState<IncomeRow | null>(null);
@@ -55,7 +82,23 @@ export function IncomeSection({
   const switchEditing = (row: IncomeRow | null) => {
     setEditing(row);
     setPaymentTypeChoice(null);
+    setStudentPick({ text: row?.studentName ?? "", value: row?.studentId ?? "" });
   };
+  /**
+   * What the student box currently holds. `value` is the resolved student id, so an empty one
+   * beside non-empty text is exactly the case the "create this student" offer exists for.
+   * Compared on the same normalisation the server links names with (case + spacing), so an
+   * existing "anna  smith" is never offered as a new record.
+   */
+  const [studentPick, setStudentPick] = useState({ text: "", value: "" });
+  const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  /** The dates still to come for the plan this row belongs to, soonest first. */
+  const upcomingFor = (r: IncomeRow) => upcomingByStudent[r.studentId ?? nameKey(r.studentName)] ?? [];
+  const typedName = studentPick.text.trim();
+  const newStudentName =
+    typedName && !studentPick.value && !studentOptions.some((o) => nameKey(o.label) === nameKey(typedName))
+      ? typedName
+      : "";
   // Optimistic delete: hide the row at once, restore it if the archive fails.
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const visibleRows = rows.filter((r) => !removedIds.has(r.id));
@@ -126,28 +169,56 @@ export function IncomeSection({
     {
       key: "type", header: "Type",
       cell: (r) => {
-        if (r.paymentType !== "INSTALMENT" || !r.instalmentCount) return PAYMENT_TYPE_LABELS[r.paymentType];
+        /**
+         * Everything below applies to an instalment payment WITH OR WITHOUT a stored count.
+         * The count only arrived when the entry form started asking for it, so every payment
+         * recorded before that reads as a bare "Instalment" - and those are exactly the plans
+         * whose dates are worth showing, because nothing else on the row hints they exist.
+         */
+        if (r.paymentType !== "INSTALMENT") return PAYMENT_TYPE_LABELS[r.paymentType];
         const extraInr = BigInt(r.instalmentExtraInrRaw);
         const extraEur = BigInt(r.instalmentExtraEurRaw);
         const extras = [
           ...(extraInr > BigInt(0) ? [formatInrMinor(extraInr)] : []),
           ...(extraEur > BigInt(0) ? [formatEurMinor(extraEur)] : []),
         ];
+        /**
+         * The plan's REMAINING dates, not just its length. "Instalment · 3×" said how the fee
+         * was split and nothing about when the rest of it arrives, so the dates captured on this
+         * very form were invisible from the row that captured them - readable only by opening
+         * the receivable under Pending payments.
+         */
+        const upcoming = upcomingFor(r);
         return (
           <span>
-            {PAYMENT_TYPE_LABELS[r.paymentType]} · {r.instalmentCount}×
+            {PAYMENT_TYPE_LABELS[r.paymentType]}
+            {r.instalmentCount ? ` · ${r.instalmentCount}×` : ""}
             {extras.length > 0 && (
               // As-entered again: the surcharge is stored in the currency it was charged in.
               <span className="block text-caption text-muted">+{extras.join(" + ")} extra</span>
+            )}
+            {upcoming.length > 0 && (
+              <span className="block text-caption text-muted" title={upcoming.map((u) => formatDate(u.dueDate)).join(" · ")}>
+                Next due {formatDate(upcoming[0].dueDate)}
+                {upcoming.length > 1 && ` · ${upcoming.length - 1} more after`}
+              </span>
             )}
           </span>
         );
       },
       // the count joins the filter/CSV value so "3" or "instalment" finds the row
-      value: (r) =>
-        r.paymentType === "INSTALMENT" && r.instalmentCount
-          ? `${PAYMENT_TYPE_LABELS[r.paymentType]} (${r.instalmentCount}x)`
-          : PAYMENT_TYPE_LABELS[r.paymentType],
+      // The count and the next date join the filter/CSV value, so "3x" or a date finds the row.
+      value: (r) => {
+        if (r.paymentType !== "INSTALMENT") return PAYMENT_TYPE_LABELS[r.paymentType];
+        const next = upcomingFor(r)[0];
+        return [
+          PAYMENT_TYPE_LABELS[r.paymentType],
+          r.instalmentCount ? `(${r.instalmentCount}x)` : "",
+          next ? `next ${formatDate(next.dueDate)}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+      },
     },
     { key: "method", header: "Method", cell: (r) => PAYMENT_METHOD_LABELS[r.paymentMethod], value: (r) => PAYMENT_METHOD_LABELS[r.paymentMethod] },
     { key: "notes", header: "Notes", cell: (r) => r.notes ?? "", value: (r) => r.notes ?? "" },
@@ -189,24 +260,47 @@ export function IncomeSection({
               defaultToday={!editing}
             />
           </Field>
-          <Field
-            label="Student name"
-            hint={studentOptions.length > 0 ? "Search to link a student - feeds their total paid" : undefined}
-          >
-            {studentOptions.length > 0 ? (
-              // Searchable auto-populate (issue 2.6): picking a student fills the name AND the
-              // hidden studentId, so the payment links to the right record instead of a typed match.
-              <ComboBox
-                options={studentOptions}
-                nameText="studentName"
-                nameValue="studentId"
-                required
-                placeholder="Search or type who paid"
-                defaultText={editing?.studentName ?? ""}
-                defaultValue={editing?.studentId ?? ""}
-              />
-            ) : (
-              <TextInput kind="name" name="studentName" required placeholder="Who paid" defaultValue={editing?.studentName ?? ""} />
+          {/*
+            ── Student name ──────────────────────────────────────────────────────────────
+            Searchable ALWAYS, even with an empty roster. The box used to fall back to a plain
+            text input whenever no student existed, which is the state a new install is in: the
+            operator saw an ordinary "Who paid" field, nothing ever auto-populated, and every
+            payment was filed under a typed name that reached no student's payment history -
+            with nothing on screen saying why. An empty roster is now something the field SAYS,
+            and offers to fix.
+          */}
+          <Field label="Student name" hint="Search to link a student - feeds their total paid">
+            <ComboBox
+              options={studentOptions}
+              nameText="studentName"
+              nameValue="studentId"
+              required
+              placeholder={studentOptions.length > 0 ? "Search or type who paid" : "Type who paid"}
+              defaultText={editing?.studentName ?? ""}
+              defaultValue={editing?.studentId ?? ""}
+              onStateChange={setStudentPick}
+              emptyHint={
+                studentOptions.length > 0
+                  ? undefined
+                  : "No students on file yet - type the name, then tick “Create a student record” below."
+              }
+            />
+            {/*
+              Offered only when the typed name resolved to nobody. Ticking it mints the student
+              record with this payment, which is the only way a first payment can ever reach a
+              payment history: until a Student row exists there is nothing for it to attach to.
+            */}
+            {canCreateStudent && !editing && newStudentName && (
+              <label className="mt-2 flex items-start gap-2">
+                <input name="createStudent" type="checkbox" defaultChecked className="mt-0.5 h-4 w-4 rounded border-line" />
+                <span className="text-caption">
+                  Create a student record for “{newStudentName}”
+                  <span className="block text-muted">
+                    Links this payment - and any earlier one under the same name - to their history.
+                    You can fill in the rest under Students.
+                  </span>
+                </span>
+              </label>
             )}
           </Field>
           <AmountPair
@@ -277,6 +371,41 @@ export function IncomeSection({
         </div>
         </form>
       </Card>
+
+      {/*
+        ── The reminder, where the money work happens ────────────────────────────────────
+        An instalment date written down on the entry form used to be visible only inside the
+        receivable, two tabs away. Nothing on the screen where payments are recorded said who
+        owes what this week, so the first anyone heard of a date was the dunning ladder chasing
+        it after the fact. Overdue leads; "today" and "tomorrow" are spelled out, because those
+        are the two that change what someone does this morning.
+      */}
+      {upcomingInstalments.length > 0 && (
+        <Card title="Instalment dates coming up">
+          <ul className="divide-y divide-line">
+            {upcomingInstalments.map((u, i) => {
+              const days = daysUntil(u.dueDate, today);
+              const late = days < 0;
+              return (
+                <li key={`${u.studentName}-${u.dueDate}-${i}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate font-medium">{u.studentName}</span>
+                  <span className="tnum text-muted">{formatDate(u.dueDate)}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-caption font-medium ${
+                      late ? "bg-bad-soft text-bad" : days <= 2 ? "bg-warn-soft text-warn" : "bg-surface-2 text-muted"
+                    }`}
+                  >
+                    {dueLabel(days)}
+                  </span>
+                  <span className="tnum w-28 text-right">
+                    {moneyInline({ inr: u.inr, eur: u.eur }, ccy, { compact: true })}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
 
       <DataTable rows={visibleRows} columns={columns} csvName="income" filterPlaceholder="Filter income…" />
     </section>

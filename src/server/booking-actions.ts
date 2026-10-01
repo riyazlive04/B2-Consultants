@@ -16,6 +16,8 @@ import { markDiscoveryConfirmed } from "./lead-stage-auto";
 import { journeyForBooking, markSopDiscoConfirmed } from "./outreach";
 import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/consent";
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
+import { coerceDurationMinutes } from "@/lib/duration";
+import { releasedSlotStatus } from "@/lib/booking-hold";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { activityStamp } from "@/lib/activity-actions";
 import { slotStartsForRange, WEEKDAY_KEYS } from "@/lib/slot-plan";
@@ -29,6 +31,8 @@ import { mirrorBookingScoreToLead } from "./lead-qualification";
 import { scoreSubmission } from "./qualification";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
 import { promoteIntoFreedSlot, runBookingConfirmations } from "./booking-automation";
+import { recordSlotRelease } from "./slot-release";
+import { prepareConfirmLoopSave } from "./confirm-loop-config";
 import { sendEmailMessage } from "./messaging";
 import { afterResponse } from "./after-response";
 import type { ActionResult } from "./finance-actions";
@@ -685,10 +689,9 @@ const bookingRulesFormSchema = z.object({
   bufferMinutes: z.coerce.number().int().min(0).max(240),
   minNoticeHours: z.coerce.number().int().min(0).max(240),
   maxAdvanceDays: z.coerce.number().int().min(1).max(365),
-  // Confirmation loop (Module E) - the two window fields; the toggles are read separately below
-  // because an unchecked HTML checkbox submits nothing at all.
-  confirmRequestLeadHours: z.coerce.number().int().min(0).max(240),
-  autoCancelHours: z.coerce.number().int().min(0).max(240),
+  // The confirmation loop's three windows arrive as duration strings ("3h", "45m") and are
+  // parsed below; the toggles are read separately too, because an unchecked HTML checkbox
+  // submits nothing at all.
   // The rejection template. Bounds mirror `bookingRulesConfigSchema` so the form cannot store a
   // value the config would later refuse and coerce away.
   rejectionSubject: z.string().trim().min(1).max(200),
@@ -708,6 +711,14 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
     ...parsed.data,
     autoCancelEnabled: form.get("autoCancelEnabled") === "on",
     promoteNext: form.get("promoteNext") === "on",
+    // Unreadable duration → keep what is stored. These decide when a real prospect's call is
+    // released, so a typo must not silently snap them back to the shipped defaults.
+    confirmRequestLeadMinutes: coerceDurationMinutes(form.get("confirmRequestLead"), current.confirmRequestLeadMinutes),
+    autoCancelMinutes: coerceDurationMinutes(form.get("autoCancelWindow"), current.autoCancelMinutes),
+    confirmReplyGraceMinutes: Math.max(
+      5,
+      coerceDurationMinutes(form.get("confirmReplyGrace"), current.confirmReplyGraceMinutes, 1440),
+    ),
     // Read separately for the same reason as the two above: an unchecked HTML checkbox submits
     // nothing at all, so `?? current` would keep it stuck on forever once enabled.
     autoDisqualify: form.get("autoDisqualify") === "on",
@@ -730,6 +741,22 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
   }
   revalidatePath("/bookings");
   revalidatePath("/book");
+  return { ok: true };
+}
+
+/**
+ * Save ONLY the confirm-or-cancel block - the Console door onto the same rule.
+ *
+ * Separate from `updateBookingRules` because that one validates the whole Booking-rules form
+ * (buffer, notice, advance window, the rejection template) and would refuse a submission that
+ * carries none of them. Both merge over the stored config, so neither can reset what the other
+ * owns.
+ */
+export async function saveConfirmLoopRules(form: FormData): Promise<ActionResult> {
+  const session = await requireSection("bookings");
+  const res = await prepareConfirmLoopSave(form, session, "the Console");
+  if (!res.ok) return { ok: false, error: res.error };
+  if (res.write) await res.write();
   return { ok: true };
 }
 
@@ -761,23 +788,6 @@ const BOOKING_STATUSES = ["BOOKED", "RESCHEDULED", "CANCELLED", "COMPLETED", "NO
  * NO_SHOW for the pipeline's deal-risk view. On a CANCELLED, the freed slot is offered to the next
  * same-caller/same-day call (promote-next), if that toggle is on.
  */
-/**
- * What status a released slot should take (Error Log M2).
- *
- * OPEN only when someone could actually book it. The public form refuses anything inside
- * `minNoticeHours`, so releasing a slot that starts within the hour publishes capacity that
- * does not exist - the calendar shows a free slot the booking page will reject. Inside the
- * window it is BLOCKED instead: still not sold, but honestly unusable.
- *
- * Shared by cancel/no-show and by reschedule, because both hand a slot back and both had the
- * same phantom.
- */
-function releasedSlotStatus(startsAt: Date | null, minNoticeHours: number): "OPEN" | "BLOCKED" {
-  if (!startsAt) return "OPEN";
-  const hoursUntil = (startsAt.getTime() - Date.now()) / 3_600_000;
-  return hoursUntil >= minNoticeHours ? "OPEN" : "BLOCKED";
-}
-
 export async function setBookingStatus(id: string, status: string): Promise<ActionResult> {
   const session = await requireSection("bookings");
   if (!(BOOKING_STATUSES as readonly string[]).includes(status)) {
@@ -788,7 +798,7 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
     // `slot.startsAt` decides whether the freed slot is genuinely re-bookable (M2).
     select: {
       slotId: true, leadId: true, name: true, status: true,
-      slot: { select: { startsAt: true } },
+      slot: { select: { startsAt: true, durationMins: true } },
     },
   });
   if (!booking) return { ok: false, error: "Booking not found" };
@@ -822,6 +832,22 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
 
     if (freesSlot && booking.slotId) {
       await tx.appointmentSlot.update({ where: { id: booking.slotId }, data: { status: freedSlotStatus } });
+      /**
+       * Keep the cancellation visible after the fact. Detaching `slotId` just above is what makes
+       * the slot re-bookable AND what erases the booking's own time - the table rendered "-" where
+       * it used to be. This row is the only remaining record that this slot was sold and given
+       * back, and it is what Bookings → Cancelled slots lists.
+       */
+      await recordSlotRelease(tx, {
+        slotId: booking.slotId,
+        bookingRequestId: id,
+        slotStartsAt: booking.slot?.startsAt ?? new Date(),
+        durationMins: booking.slot?.durationMins ?? 30,
+        prospectName: booking.name,
+        reason: status === "NO_SHOW" ? "NO_SHOW" : "CANCELLED",
+        releasedStatus: freedSlotStatus,
+        releasedByName: session.user.name?.trim() || session.user.email || "Unknown user",
+      });
     }
     if (status === "NO_SHOW" && booking.leadId) {
       const lead = await tx.lead.findUnique({ where: { id: booking.leadId }, select: { stage: true } });
@@ -896,7 +922,10 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
   const session = await requireSection("bookings");
   const booking = await prisma.bookingRequest.findUnique({
     where: { id: bookingId },
-    select: { slotId: true, status: true, name: true, slot: { select: { startsAt: true } } },
+    select: {
+      slotId: true, status: true, name: true,
+      slot: { select: { startsAt: true, durationMins: true } },
+    },
   });
   if (!booking) return { ok: false, error: "Booking not found" };
   if (booking.status === "CANCELLED") return { ok: false, error: "This booking is cancelled - it can't be moved" };
@@ -922,9 +951,19 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
       // …then release the old slot - OPEN only if it is still far enough out to be re-booked.
       if (booking.slotId) {
         const rules = await getBookingRulesConfig();
-        await tx.appointmentSlot.update({
-          where: { id: booking.slotId },
-          data: { status: releasedSlotStatus(booking.slot?.startsAt ?? null, rules.minNoticeHours) },
+        const freed = releasedSlotStatus(booking.slot?.startsAt ?? null, rules.minNoticeHours);
+        await tx.appointmentSlot.update({ where: { id: booking.slotId }, data: { status: freed } });
+        // Recorded as POSTPONED, not cancelled: the call is still happening, just later. Without
+        // the row the vacated slot would appear on the calendar as one nobody ever booked.
+        await recordSlotRelease(tx, {
+          slotId: booking.slotId,
+          bookingRequestId: bookingId,
+          slotStartsAt: booking.slot?.startsAt ?? new Date(),
+          durationMins: booking.slot?.durationMins ?? 30,
+          prospectName: booking.name,
+          reason: "POSTPONED",
+          releasedStatus: freed,
+          releasedByName: session.user.name?.trim() || session.user.email || "Unknown user",
         });
       }
     });
@@ -1011,6 +1050,16 @@ export async function runBookingAutomationNow(): Promise<ActionResult & { summar
   if (!run.enabled) return { ok: false, error: run.reason ?? "Confirmation loop is off" };
   return {
     ok: true,
-    summary: `${run.asked} asked · ${run.cancelled} auto-cancelled · ${run.promoted} promoted`,
+    /**
+     * `skippedNotReached` is appended only when it is non-zero, and it is the most important
+     * figure in the line when it is: it means the settings WOULD have released those slots and
+     * the engine refused, because it cannot prove the prospect was ever asked. Without it a run
+     * that did nothing at all reports "0 auto-cancelled" and looks like a quiet day.
+     */
+    summary:
+      `${run.asked} asked · ${run.cancelled} auto-cancelled · ${run.promoted} promoted` +
+      (run.skippedNotReached
+        ? ` · ${run.skippedNotReached} left alone (never reached them - check WhatsApp is on and the template is approved)`
+        : ""),
   };
 }

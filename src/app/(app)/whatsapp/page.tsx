@@ -4,6 +4,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
 import { getWhatsAppAdminData } from "@/server/whatsapp-metrics";
+import { getBookingRulesConfig } from "@/server/founder-config";
 import { WhatsAppHistory } from "./_components/WhatsAppHistory";
 import { WhatsAppSettingsForm } from "./_components/WhatsAppSettingsForm";
 import { WhatsAppTools } from "./_components/WhatsAppTools";
@@ -33,6 +34,8 @@ function Chip({ ok, label }: { ok: boolean; label: string }) {
 export default async function WhatsAppPage() {
   const session = await requireSection("whatsapp");
   const data = await getWhatsAppAdminData();
+  // The confirm-or-cancel loop is edited on the Settings tab but stored with the booking rules.
+  const bookingRules = await getBookingRulesConfig();
   const { status, counts } = data;
 
   /**
@@ -169,7 +172,7 @@ export default async function WhatsAppPage() {
       <Tabs
         tabs={[
           { label: `History${counts.total ? ` (${counts.total})` : ""}`, content: <WhatsAppHistory rows={data.messages} /> },
-          { label: "Settings", content: <WhatsAppSettingsForm settings={data.settings} catalog={data.catalog} /> },
+          { label: "Settings", content: <WhatsAppSettingsForm settings={data.settings} rules={bookingRules} catalog={data.catalog} /> },
           { label: `Opt-outs & test`, content: <WhatsAppTools optOuts={data.optOuts} templates={data.settings.templates} /> },
         ]}
       />

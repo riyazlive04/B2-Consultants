@@ -16,9 +16,14 @@ import {
   type WatiSettings,
   type WatiTemplateSummary,
 } from "@/lib/whatsapp";
+import { formatDuration, formatDurationList } from "@/lib/duration";
+import type { BookingRulesConfig } from "@/lib/config-schema";
 
 const inputCls =
   "w-full rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm outline-none transition-colors focus:border-accent focus:bg-surface";
+
+/** Said once per field group: the only thing an operator has to know to type these boxes. */
+const DURATION_HINT = "Use h or m - e.g. 3h, 45m, 1h30m. A bare number means hours.";
 
 function NumField({ name, label, defaultValue, hint }: { name: string; label: string; defaultValue: number; hint?: string }) {
   return (
@@ -69,9 +74,12 @@ function ScheduleGroup({
 
 export function WhatsAppSettingsForm({
   settings,
+  rules,
   catalog = [],
 }: {
   settings: WatiSettings;
+  /** The confirm-or-cancel loop's settings; stored with the booking rules, edited here too. */
+  rules: BookingRulesConfig;
   catalog?: WatiTemplateSummary[];
 }) {
   const router = useRouter();
@@ -88,6 +96,8 @@ export function WhatsAppSettingsForm({
     paymentEnabled: c.paymentEnabled,
     emiPreDueEnabled: c.emiPreDueEnabled,
     studentNudgesEnabled: c.studentNudgesEnabled,
+    // Not a cadence field: this one saves into the booking rules (see saveWatiSettings).
+    autoCancelEnabled: rules.autoCancelEnabled,
   });
   const setOn = (key: keyof typeof enabled) => (v: boolean) => setEnabled((e) => ({ ...e, [key]: v }));
 
@@ -225,9 +235,73 @@ export function WhatsAppSettingsForm({
             onToggle={setOn("bookingReminderEnabled")}
           >
             <label className="mt-3 block">
-              <span className="text-xs font-medium text-muted">Hours before slot (comma-separated)</span>
-              <input name="bookingReminderLeadHours" defaultValue={c.bookingReminderLeadHours.join(", ")} className={`mt-1 ${inputCls}`} placeholder="24, 2" />
+              <span className="text-xs font-medium text-muted">Time before slot (comma-separated)</span>
+              <input
+                name="bookingReminderLead"
+                defaultValue={formatDurationList(c.bookingReminderLeadMinutes)}
+                className={`mt-1 ${inputCls}`}
+                placeholder="36h, 24h, 2h"
+              />
+              <span className="mt-0.5 block text-caption text-muted">
+                {DURATION_HINT} Each entry is one reminder, sent once - “36h, 24h, 90m” is three.
+              </span>
             </label>
+          </ScheduleGroup>
+
+          {/*
+            ── Confirm-or-cancel ─────────────────────────────────────────────────────────
+            The one touchpoint here that does something IRREVERSIBLE to a prospect's booking,
+            so it says plainly what "no reply" costs them. Its settings are stored with the
+            booking rules, not the WhatsApp cadence - the Bookings tab edits the same fields.
+          */}
+          <ScheduleGroup
+            title="Confirm-or-cancel (no reply → release the slot)"
+            hint="Asks a booked prospect to reply YES, then frees the slot if they never do."
+            name="autoCancelEnabled"
+            on={enabled.autoCancelEnabled}
+            onToggle={setOn("autoCancelEnabled")}
+          >
+            <p className="mt-2 text-caption text-muted">
+              A WhatsApp <span className="font-medium">“yes”</span> confirms automatically; you can also
+              confirm by hand from Bookings. If nothing comes back, the booking is cancelled, the slot
+              reopens, the lead returns to <span className="font-medium">Disco not booked</span>, and the
+              prospect is told. Same setting as <span className="font-medium">Bookings → Booking rules</span>.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <label className="block">
+                <span className="text-xs font-medium text-muted">Ask to confirm (before slot)</span>
+                <input name="confirmRequestLead" defaultValue={formatDuration(rules.confirmRequestLeadMinutes)} className={`mt-1 ${inputCls}`} placeholder="24h" />
+                <span className="mt-0.5 block text-caption text-muted">0m = never ask (and so never auto-cancel).</span>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-muted">Cancel if unconfirmed (before slot)</span>
+                <input name="autoCancelWindow" defaultValue={formatDuration(rules.autoCancelMinutes)} className={`mt-1 ${inputCls}`} placeholder="3h" />
+                <span className="mt-0.5 block text-caption text-muted">Must be shorter than the ask window above.</span>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-muted">Give them at least this long to reply</span>
+                <input name="confirmReplyGrace" defaultValue={formatDuration(rules.confirmReplyGraceMinutes)} className={`mt-1 ${inputCls}`} placeholder="30m" />
+                <span className="mt-0.5 block text-caption text-muted">Counted from the request. Minimum 5m.</span>
+              </label>
+            </div>
+            <p className="mt-2 text-caption text-muted">{DURATION_HINT}</p>
+            <label className="mt-3 flex items-start gap-2">
+              <input name="promoteNext" type="checkbox" defaultChecked={rules.promoteNext} className="mt-0.5 h-4 w-4 rounded border-line" />
+              <span className="text-sm">
+                Move the next call up into a freed slot
+                <span className="block text-caption text-muted">
+                  Same caller, same day - and that prospect is told their call moved earlier. Also applies
+                  when you cancel a booking by hand.
+                </span>
+              </span>
+            </label>
+            {enabled.autoCancelEnabled && (
+              <p className="mt-3 rounded-field border border-warn bg-warn-soft px-3 py-2 text-caption">
+                This cancels real bookings. Nothing goes out at all unless the{" "}
+                <span className="font-medium">Confirm request</span> and{" "}
+                <span className="font-medium">Auto-cancelled</span> templates below are mapped and approved.
+              </p>
+            )}
           </ScheduleGroup>
 
           <ScheduleGroup

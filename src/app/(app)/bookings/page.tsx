@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   CalendarCheck,
   CalendarClock,
+  CalendarPlus,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -13,16 +14,19 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/kit";
 import { Tabs } from "@/components/ui/Tabs";
 import { bantSignal, resolveBant } from "@/lib/bant-view";
+import { slotHold, type SlotHold } from "@/lib/booking-hold";
+import { slotTint } from "@/lib/slot-tint";
 import { istToday, istWeekRange, istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
-import { BOOKING_STATUS_LABELS, slotTypeLabel } from "@/lib/labels";
+import { BOOKING_STATUS_LABELS, SLOT_HOLD_LABELS, SLOT_RELEASE_REASON_LABELS, slotTypeLabel } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { getBookableTeamMembers, getBookingsOverview, getWeekSlots, type WeekSlot } from "@/server/booking-metrics";
 import { getBookingCalendars, getBookingRulesConfig, getSssConfig } from "@/server/founder-config";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { listSssSlots, listSssNeedsScheduling } from "@/server/sss-slots";
-import { SlotManager } from "./_components/SlotManager";
+import { listSlotReleases, releasesBySlotForWeek } from "@/server/slot-release";
 import { BookingsTable } from "./_components/BookingsTable";
+import { CancelledSlotsTable } from "./_components/CancelledSlotsTable";
 import { SssCalendar } from "./_components/SssCalendar";
 
 export const dynamic = "force-dynamic";
@@ -36,14 +40,57 @@ export const dynamic = "force-dynamic";
  * else on the screen matched. `--surface` follows the theme, so the same 10% mix reads as a
  * subtle tint in both. (Design system §: never hardcode `white`; use the token.)
  */
-const slotStyle = (s: WeekSlot) => {
-  if (s.booking?.status === "NO_SHOW" || s.booking?.status === "CANCELLED") {
-    return { bg: "var(--risk-soft)", edge: "var(--risk)" };
-  }
-  if (s.status === "BOOKED") return { bg: "color-mix(in srgb, var(--chart-1) 12%, var(--surface))", edge: "var(--chart-1)" };
-  if (s.status === "OPEN") return { bg: "color-mix(in srgb, var(--ok) 12%, var(--surface))", edge: "var(--ok)" };
-  return { bg: "var(--surface-2)", edge: "var(--muted)" }; // BLOCKED
+const slotStyle = (s: WeekSlot, hold: SlotHold | null) => {
+  if (s.booking?.status === "NO_SHOW" || s.booking?.status === "CANCELLED") return slotTint("RISK");
+  /**
+   * A slot held for someone who has not answered yet gets its own colour.
+   *
+   * It used to be the same blue card as a confirmed call, separated by a 6px dot - so the single
+   * question this calendar is asked ("is that slot actually taken?") could not be answered by
+   * looking at it. Amber is the app's "watch" token: held, not settled.
+   */
+  if (s.status === "BOOKED" && hold && hold.state !== "CONFIRMED") return slotTint("HELD");
+  if (s.status === "BOOKED") return slotTint("BOOKED");
+  if (s.status === "OPEN") return slotTint("OPEN");
+  return slotTint("BLOCKED");
 };
+
+/** Compact IST clock for the "comes back at…" line - the whole date is already the column. */
+const istClock = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata",
+});
+const istStamp = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short", hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata",
+});
+
+/** "no reply" / "cancelled" / "postponed" - the reason, mid-sentence. */
+const reasonWord = (reason: string) => (SLOT_RELEASE_REASON_LABELS[reason] ?? reason).toLowerCase();
+
+/**
+ * The tooltip tail for a slot that came back: who had it, why they lost it, and whether anyone
+ * took it afterwards. Empty for a slot that was never booked, which is most of them.
+ */
+function freedTitle(freed: { prospectName: string; reason: string; promotedName: string | null } | undefined) {
+  if (!freed) return "";
+  const promoted = freed.promotedName ? `, ${freed.promotedName} moved in` : "";
+  return ` · Freed: ${freed.prospectName} - ${reasonWord(freed.reason)}${promoted}`;
+}
+
+/** One line saying what the hold is waiting on, and when it runs out. */
+function holdNote(hold: SlotHold): { chip: string | null; title: string } {
+  if (hold.state === "CONFIRMED") return { chip: null, title: "Confirmed - they replied YES" };
+  if (hold.state === "NOT_ASKED") {
+    return {
+      chip: null,
+      title: hold.askAt
+        ? `Held - we ask them to confirm on ${istStamp.format(hold.askAt)} IST`
+        : "Held - no confirm request is scheduled (the confirmation loop is off)",
+    };
+  }
+  return hold.releaseAt
+    ? { chip: `frees ${istClock.format(hold.releaseAt)}`, title: `Held - asked on ${istStamp.format(hold.askedAt)} IST. Released at ${istStamp.format(hold.releaseAt)} IST if they stay silent.` }
+    : { chip: null, title: `Held - asked on ${istStamp.format(hold.askedAt)} IST. Nothing is released automatically, so this one is yours to judge.` };
+}
 
 /**
  * One prospect's score as a calendar chip.
@@ -67,7 +114,11 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
   const weekStartUtc = istWallToUtc(toDateInputValue(week.start), "00:00");
   const weekEndUtc = istWallToUtc(toDateInputValue(week.end), "00:00");
 
-  const [{ kpis, slots, bookings, openSlots }, weekSlots, teamMembers, rules, sssSlots, sssNeeds, sssConfig, slotPattern] =
+  const [
+    { kpis, slots, bookings, openSlots },
+    weekSlots, teamMembers, rules, sssSlots, sssNeeds, sssConfig, slotPattern,
+    weekReleases, slotReleases,
+  ] =
     await Promise.all([
       getBookingsOverview(),
       getWeekSlots(weekStartUtc, weekEndUtc),
@@ -79,6 +130,10 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       // Read so the page can EXPLAIN an empty calendar instead of just showing one - see the
       // availability banner below.
       getBookingCalendars(),
+      // Which of this week's slots came back, and why - so a freed cell says "Priya never replied"
+      // rather than looking like a slot nobody ever booked.
+      releasesBySlotForWeek(weekStartUtc, weekEndUtc),
+      listSlotReleases(),
     ]);
   /**
    * Depends on `bookings`, so it cannot join the batch above - but it must not be a bare
@@ -104,6 +159,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
   /** Switched on but toothless - the trap the banner below has to name specifically. */
   const enabledButEmpty = slotPattern.some((c) => c.enabled && c.weekdays.length === 0);
 
+  /**
+   * Counted the way the tab's own default filter counts: a postponed call is not a cancelled one.
+   * The badge said 2 while the table below it showed 1, which is the fastest way to make a number
+   * stop meaning anything.
+   */
+  const cancelledSlotCount = slotReleases.filter((r) => r.reason !== "POSTPONED").length;
+
   const todayKey = toDateInputValue(istToday());
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(week.start);
@@ -121,10 +183,37 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
   };
   const weekLabel = `${formatDate(week.start)} - ${formatDate(new Date(weekEndUtc.getTime() - 86400000))}`;
 
+  /**
+   * The hold on each booked slot, worked out once for the whole grid.
+   *
+   * `slotHold` is pure (lib/booking-hold) and restates the engine's own arithmetic, so what the
+   * calendar promises - "this comes back at 14:30" - is what booking-automation.ts will do.
+   */
+  const holdFor = (s: WeekSlot): SlotHold | null =>
+    s.status === "BOOKED" && s.booking && s.booking.status === "BOOKED"
+      ? slotHold({
+          slotStartsAt: new Date(s.startsAt),
+          confirmedAt: s.booking.confirmedAt ? new Date(s.booking.confirmedAt) : null,
+          confirmSentAt: s.booking.confirmSentAt ? new Date(s.booking.confirmSentAt) : null,
+          rules,
+        })
+      : null;
+
   const weekCounts = {
     booked: weekSlots.filter((s) => s.status === "BOOKED").length,
     open: weekSlots.filter((s) => s.status === "OPEN").length,
     blocked: weekSlots.filter((s) => s.status === "BLOCKED").length,
+    /**
+     * Booked but nobody has said yes - every amber card on the grid, which is what this legend
+     * row has to count. Narrowing it to AWAITING_REPLY would have printed "1" beside a dot
+     * matching three cards: a slot nobody has been asked about yet is just as unconfirmed, it is
+     * only earlier in the same story.
+     */
+    held: weekSlots.filter((s) => {
+      const h = holdFor(s);
+      return h !== null && h.state !== "CONFIRMED";
+    }).length,
+    freed: weekSlots.filter((s) => weekReleases[s.id]).length,
   };
   const nextBooked = slots.find((s) => s.status === "BOOKED" && s.bookedName);
 
@@ -272,6 +361,12 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                 <span className="flex-1 text-muted">Booked</span>
                 <span className="font-semibold tnum">{weekCounts.booked}</span>
               </li>
+              {/* Held but unanswered - the slots the confirmation loop is counting down on. */}
+              <li className="flex items-center gap-2" title="Booked, but nobody has replied YES yet. Each card says when we ask - or, once asked, when the slot is released.">
+                <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: "var(--watch)" }} />
+                <span className="flex-1 text-muted">Held, unconfirmed</span>
+                <span className="font-semibold tnum">{weekCounts.held}</span>
+              </li>
               <li className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: "var(--ok)" }} />
                 <span className="flex-1 text-muted">Open</span>
@@ -282,7 +377,12 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                 <span className="flex-1 text-muted">Blocked</span>
                 <span className="font-semibold tnum">{weekCounts.blocked}</span>
               </li>
-              <li className="flex items-center gap-2 border-t border-line pt-2">
+              <li className="flex items-center gap-2 border-t border-line pt-2" title="Slots that were booked and came back this week - listed under Cancelled slots.">
+                <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: "var(--accent)" }} />
+                <span className="flex-1 text-muted">Freed this week</span>
+                <span className="font-semibold tnum">{weekCounts.freed}</span>
+              </li>
+              <li className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: "var(--risk)" }} />
                 <span className="flex-1 text-muted">No-shows (month)</span>
                 <span className="font-semibold tnum">{kpis.noShows}</span>
@@ -295,10 +395,17 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="font-display text-h2 font-semibold">{weekLabel}</h3>
             <div className="flex items-center gap-1">
-              {/* Availability moved out of the tab strip and next to the thing it fills.
-                  A disclosure, not a tab: it is opened to set the working pattern and then
-                  closed for months. */}
-              <SlotManager slots={slots} teamMembers={teamMembers} rules={rules} collapsible />
+              {/* Availability lives next to the calendar it fills, but on its own ROUTE.
+                  It was a dialog, and it had outgrown one: five settings stacked in a 600px
+                  scrolling box, over a page scrolled somewhere else, with the browser's Back
+                  button doing nothing. A link costs nothing here and gives that screen a URL,
+                  working Back, and room for its fields. */}
+              <Link
+                href="/bookings/availability"
+                className="inline-flex h-8 items-center gap-1.5 rounded-field border border-line px-3 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              >
+                <CalendarPlus size={14} /> Manage availability
+              </Link>
               <Link href={weekNav(-7)} className="grid h-8 w-8 place-items-center rounded-field border border-line text-muted transition-colors hover:bg-surface-2 hover:text-ink" aria-label="Previous week">
                 <ChevronLeft size={16} />
               </Link>
@@ -326,7 +433,10 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                     {weekSlots
                       .filter((s) => s.dayKey === d.key)
                       .map((s) => {
-                        const st = slotStyle(s);
+                        const hold = holdFor(s);
+                        const note = hold ? holdNote(hold) : null;
+                        const freed = weekReleases[s.id];
+                        const st = slotStyle(s, hold);
                         return (
                           <div
                             key={s.id}
@@ -334,8 +444,8 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                             style={{ background: st.bg, borderLeft: `3px solid ${st.edge}` }}
                             title={
                               s.booking
-                                ? `${s.booking.name}${s.assignedToName ? ` · with ${s.assignedToName}` : ""} · ${s.time} IST · ${slotTypeLabel(s.durationMins)} · ${bantLabel(s.booking.bant)} · ${s.booking.confirmed ? "Confirmed" : "Awaiting confirmation"} · ${BOOKING_STATUS_LABELS[s.booking.status] ?? s.booking.status}`
-                                : `${s.status === "OPEN" ? "Open slot" : "Blocked"}${s.assignedToName ? ` · ${s.assignedToName}` : ""} · ${s.time} IST · ${slotTypeLabel(s.durationMins)}`
+                                ? `${s.booking.name}${s.assignedToName ? ` · with ${s.assignedToName}` : ""} · ${s.time} IST · ${slotTypeLabel(s.durationMins)} · ${bantLabel(s.booking.bant)} · ${note ? note.title : s.booking.confirmed ? "Confirmed" : "Awaiting confirmation"} · ${BOOKING_STATUS_LABELS[s.booking.status] ?? s.booking.status}`
+                                : `${s.status === "OPEN" ? "Open slot" : "Blocked"}${s.assignedToName ? ` · ${s.assignedToName}` : ""} · ${s.time} IST · ${slotTypeLabel(s.durationMins)}${freedTitle(freed)}`
                             }
                           >
                             <p className="text-caption font-medium text-muted">
@@ -346,7 +456,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                                 <span
                                   aria-hidden
                                   className="h-1.5 w-1.5 flex-none rounded-full"
-                                  title={s.booking.confirmed ? "Confirmed" : "Awaiting confirmation"}
+                                  title={note ? note.title : s.booking.confirmed ? "Confirmed" : "Awaiting confirmation"}
                                   style={{ background: s.booking.confirmed ? "var(--ok)" : "var(--watch)" }}
                                 />
                               )}
@@ -371,6 +481,22 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                                 <p className="mt-0.5 truncate text-caption text-muted" title={s.assignedToName}>{s.assignedToName}</p>
                               )
                             )}
+
+                            {/* ── What the hold is waiting on, and what became of a freed slot ──
+                                The two facts a held-or-returned slot never showed. "frees 2:30 pm"
+                                on an amber card is the whole confirm-or-cancel rule, in place, on
+                                the slot it applies to; "Freed · Priya, no reply" stops a returned
+                                slot from reading as one nobody ever wanted. */}
+                            {note?.chip && (
+                              <p className="mt-0.5 truncate text-caption font-medium text-watch-ink" title={note.title}>
+                                {note.chip}
+                              </p>
+                            )}
+                            {!s.booking && freed && (
+                              <p className="mt-0.5 truncate text-caption text-muted" title={freedTitle(freed)}>
+                                Freed · {freed.promotedName ? freed.promotedName + " moved in" : freed.prospectName + ", " + reasonWord(freed.reason)}
+                              </p>
+                            )}
                           </div>
                         );
                       })}
@@ -389,7 +515,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                     .
                   </>
                 ) : (
-                  <>No slots this week - generate availability under &ldquo;Manage availability&rdquo; above.</>
+                  <>
+                    No slots this week -{" "}
+                    <Link href="/bookings/availability#add-slots" className="font-semibold text-accent underline">
+                      add availability
+                    </Link>
+                    .
+                  </>
                 )}
               </p>
             )}
@@ -411,6 +543,15 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       <Tabs
         tabs={[
           { label: `Booking requests${bookings.length ? ` (${bookings.length})` : ""}`, content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} /> },
+          {
+            /**
+             * The slots we gave back. Its own view because a release is the one booking event with
+             * no row anywhere else: the booking lost its time the moment `slotId` was nulled, and
+             * the slot itself looks untouched once it reopens.
+             */
+            label: `Cancelled slots${cancelledSlotCount ? ` (${cancelledSlotCount})` : ""}`,
+            content: <CancelledSlotsTable rows={slotReleases} />,
+          },
           {
             label: "SSS Calendar",
             content: (

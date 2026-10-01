@@ -229,7 +229,20 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
           </div>
         </div>
 
-        <p className="text-caption text-ink-3">Internal tool · access by invitation</p>
+        {/* The same credit the signed-in app carries, folded into the line that was already
+            here rather than bolted on as a second footer - this pane has one closing line. */}
+        <p className="text-caption text-ink-3">
+          Internal tool · access by invitation · Developed by{" "}
+          <a
+            href="https://sirahdigital.in/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium underline decoration-line underline-offset-2 transition-colors hover:text-primary hover:decoration-primary"
+          >
+            Sirah Digital
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        </p>
       </div>
 
       {/* form pane */}

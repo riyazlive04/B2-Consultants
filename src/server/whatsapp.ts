@@ -660,10 +660,10 @@ export async function runDueReminders(): Promise<ReminderRun> {
 
   // 2. Pre-call reminders - booked slots coming up.
   if (budget > 0 && cadence.bookingReminderEnabled && hasTemplate("BOOKING_REMINDER")) {
-    const leadHours = cadence.bookingReminderLeadHours;
-    const maxLead = Math.max(...leadHours);
+    const leadMinutes = cadence.bookingReminderLeadMinutes;
+    const maxLeadMs = Math.max(...leadMinutes) * 60_000;
     const bookings = await prisma.bookingRequest.findMany({
-      where: { status: "BOOKED", slot: { startsAt: { gt: new Date(now), lte: new Date(now + maxLead * HR) } } },
+      where: { status: "BOOKED", slot: { startsAt: { gt: new Date(now), lte: new Date(now + maxLeadMs) } } },
       include: {
         slot: { select: { startsAt: true } },
         outreachJourney: { select: { phase: true, optInAt: true, qualified: true } },
@@ -698,7 +698,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
       const prior = await prisma.whatsAppMessage.findMany({
         where: {
           direction: "OUTBOUND",
-          createdAt: { gte: new Date(b.slot.startsAt.getTime() - maxLead * HR) },
+          createdAt: { gte: new Date(b.slot.startsAt.getTime() - maxLeadMs) },
           OR: [
             { bookingRequestId: b.id, kind: { in: [...CALL_TIME_KINDS] } },
             ...(number ? [{ kind: "BOOKING_REMINDER" as const, toNumber: number }] : []),
@@ -711,7 +711,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
       });
       const rung = dueReminderRung(
         b.slot.startsAt,
-        leadHours,
+        leadMinutes,
         new Date(now),
         prior.map((p) => p.createdAt),
         remindersSoFar,

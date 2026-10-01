@@ -13,6 +13,20 @@ const istDay = new Intl.DateTimeFormat("en-GB", {
 const istTime = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata",
 });
+/**
+ * Berlin clock time with no date.
+ *
+ * `formatDateTimeInZone` gives "Thu 01 Oct, 11:43 am CET" - correct, and exactly wrong for a list
+ * grouped by day, where it printed the date a second time on every single row. The day is the
+ * group heading now; a row only needs the hand on the clock.
+ */
+const cetClock = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Europe/Berlin",
+});
+/** IST calendar day - the key both the week grid and the availability list group on. */
+const istDateKey = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Kolkata",
+});
 
 export async function getBookingsOverview() {
   const now = new Date();
@@ -39,6 +53,18 @@ export async function getBookingsOverview() {
       take: 300,
       include: {
         slot: { select: { startsAt: true, durationMins: true, assignedTo: { select: { id: true, name: true } } } },
+        /**
+         * The slot this booking gave back, if it has given one back.
+         *
+         * A cancel NULLS `slotId` (it is unique, so the slot cannot be re-booked otherwise), which
+         * left this table printing "-" in the time column of every cancelled row - the one row
+         * where "when was it?" is the whole question. One row, newest first.
+         */
+        slotReleases: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { slotStartsAt: true, reason: true, releasedStatus: true, promotedName: true },
+        },
         // The lead's own columns too, so `resolveBant` can fall back to the LANDING PAGE's
         // opt-in score for a booking that carries none. Without them a prospect who answered
         // the qualification questions at opt-in but not at booking showed as unscored here
@@ -92,8 +118,12 @@ export async function getBookingsOverview() {
     slots: upcomingSlots.map((s) => ({
       id: s.id,
       day: istDay.format(s.startsAt),
+      /** YYYY-MM-DD in IST - what the availability list groups on, and compares against today. */
+      dayKey: istDateKey.format(s.startsAt),
       time: istTime.format(s.startsAt),
       cet: formatDateTimeInZone(s.startsAt, "Europe/Berlin"),
+      /** Berlin clock only. The day heading already carries the date. */
+      cetTime: cetClock.format(s.startsAt),
       durationMins: s.durationMins,
       status: s.status,
       bookedName: s.booking?.name ?? null,
@@ -120,6 +150,21 @@ export async function getBookingsOverview() {
       // Confirmation loop (Module E): confirmed = the prospect said YES (WhatsApp) or was marked so.
       confirmed: b.confirmedAt !== null,
       confirmSent: b.confirmSentAt !== null,
+      confirmSentAt: b.confirmSentAt ? b.confirmSentAt.toISOString() : null,
+      /**
+       * The slot it USED to hold. Deliberately a separate field rather than filling slotDay/slotTime
+       * back in: a cancelled booking must not render a time that looks like a live appointment.
+       * The UI shows it as "was <time>" with the reason.
+       */
+      released: b.slotReleases[0]
+        ? {
+            day: istDay.format(b.slotReleases[0].slotStartsAt),
+            time: istTime.format(b.slotReleases[0].slotStartsAt),
+            reason: b.slotReleases[0].reason,
+            slotStatus: b.slotReleases[0].releasedStatus,
+            promotedName: b.slotReleases[0].promotedName,
+          }
+        : null,
       // The ONE resolved snapshot every surface renders - booking score first, then the lead's
       // opt-in score, null when nobody has scored them. Callers must show null as "not scored".
       bant: resolveBant(b, b.lead),
@@ -141,10 +186,6 @@ export async function getBookingsOverview() {
   };
 }
 
-const istDateKey = new Intl.DateTimeFormat("en-CA", {
-  year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Kolkata",
-});
-
 /** All slots inside [weekStartUtc, weekEndUtc) for the week-calendar view, keyed by IST day. */
 export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
   const slots = await prisma.appointmentSlot.findMany({
@@ -162,7 +203,7 @@ export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
        */
       booking: {
         select: {
-          name: true, status: true, confirmedAt: true,
+          name: true, status: true, confirmedAt: true, confirmSentAt: true,
           bantScore: true, bantAvg: true, bantVerdict: true,
           bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true,
           lead: {
@@ -180,6 +221,7 @@ export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
     id: s.id,
     dayKey: istDateKey.format(s.startsAt),
     time: istTime.format(s.startsAt),
+    startsAt: s.startsAt.toISOString(),
     durationMins: s.durationMins,
     status: s.status,
     assignedToName: s.assignedTo?.name ?? null,
@@ -188,6 +230,12 @@ export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
           name: s.booking.name,
           status: s.booking.status,
           confirmed: s.booking.confirmedAt !== null,
+          /**
+           * ISO strings, not Dates: this crosses the server→client boundary into the calendar,
+           * which needs the exact stamps to say when an unanswered hold is released (lib/booking-hold).
+           */
+          confirmedAt: s.booking.confirmedAt ? s.booking.confirmedAt.toISOString() : null,
+          confirmSentAt: s.booking.confirmSentAt ? s.booking.confirmSentAt.toISOString() : null,
           // Null when nobody has scored this prospect. The caller MUST render that as
           // "not scored" and never as 0 - see resolveBant's contract.
           bant: resolveBant(s.booking, s.booking.lead),

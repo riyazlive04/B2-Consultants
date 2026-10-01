@@ -42,6 +42,14 @@ type Props = {
   size?: ControlSize;
   className?: string;
   id?: string;
+  /**
+   * Told on every change of either value - typing, picking, and the reset that follows a save.
+   * The caller needs it to offer "this name is new, create a record for it": that question can
+   * only be asked once we know the typed text resolved to nothing.
+   */
+  onStateChange?: (state: { text: string; value: string }) => void;
+  /** Shown in place of the default "will be saved as typed" line when nothing matches. */
+  emptyHint?: string;
 };
 
 const MAX_MATCHES = 50;
@@ -57,6 +65,8 @@ export function ComboBox({
   size = "md",
   className = "",
   id,
+  onStateChange,
+  emptyHint,
 }: Props) {
   const { invalid, "aria-describedby": describedBy } = useControlProps();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +88,7 @@ export function ComboBox({
   useFormReset(inputRef, () => {
     setText(defaultText);
     setSelected(defaultValue);
+    onStateChange?.({ text: defaultText, value: defaultValue });
   });
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -96,6 +107,7 @@ export function ComboBox({
     setText(o.label);
     setSelected(o.value);
     setOpen(false);
+    onStateChange?.({ text: o.label, value: o.value });
     inputRef.current?.focus();
   }
 
@@ -140,6 +152,7 @@ export function ComboBox({
           setSelected(""); // typing invalidates any prior pick until it matches again
           setActive(0);
           setOpen(true);
+          onStateChange?.({ text: e.currentTarget.value, value: "" });
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKey}
@@ -157,7 +170,7 @@ export function ComboBox({
           <div id={listId} role="listbox">
             {matches.length === 0 ? (
               <div className="px-2.5 py-1.5 text-sm text-ink-3">
-                No student matches - “{text.trim()}” will be saved as typed.
+                {emptyHint ?? `No student matches - “${text.trim()}” will be saved as typed.`}
               </div>
             ) : (
               matches.map((o, i) => {

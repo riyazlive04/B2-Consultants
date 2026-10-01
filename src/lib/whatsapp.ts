@@ -284,8 +284,15 @@ export type WatiCadence = {
    * fast to chase old leads, it is whether to chase them at all.
    */
   discoMaxAgeDays: number;
-  /** Hours-before-slot at which to send a pre-call reminder (each once). */
-  bookingReminderLeadHours: number[];
+  /**
+   * Minutes-before-slot at which to send a pre-call reminder (each rung once).
+   *
+   * Minutes, not hours, since the cron ticks every minute: "remind them 20 minutes before" is a
+   * real request and was not expressible while this was a whole-hour list. The settings field
+   * takes durations (`36h, 24h, 90m`); a row stored under the old `bookingReminderLeadHours`
+   * key is converted on read (see lib/wati.coerceCadence).
+   */
+  bookingReminderLeadMinutes: number[];
   /** Delay after a No-show before the rebook nudge. */
   noShowDelayHours: number;
   /** Minimum spacing between payment reminders for the same pending payment. */
@@ -324,7 +331,7 @@ export const DEFAULT_CADENCE: WatiCadence = {
   // 30 days. Long enough to cover a real nurture window, short enough that arming the engine
   // cannot reach back into a historical import.
   discoMaxAgeDays: 30,
-  bookingReminderLeadHours: [24, 2],
+  bookingReminderLeadMinutes: [24 * 60, 2 * 60],
   noShowDelayHours: 2,
   paymentRepeatHours: 72,
   emiPreDueLeadDays: [3, 0], // three days out, then again on the day

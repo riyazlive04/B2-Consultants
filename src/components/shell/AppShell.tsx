@@ -19,6 +19,7 @@ import { NavClock } from "./NavClock";
 import { RecordButton } from "./RecordButton";
 import { SectionAccessProvider } from "./SectionAccess";
 import { BrandLogo } from "./BrandLogo";
+import { AppFooter } from "./AppFooter";
 import { FallbackIcon, SECTION_ICONS } from "./section-icons";
 import { CommandPalette, openCommandPalette } from "@/components/ui/CommandPalette";
 import { useModKey } from "@/lib/use-mod-key";
@@ -462,12 +463,24 @@ export function AppShell({
         <main
           id="main"
           tabIndex={-1}
-          className="w-full flex-1 overflow-x-clip px-4 py-6 outline-none md:px-7 md:py-7"
+          /**
+           * Bottom padding is deliberately deeper than the top (pb-10/12 vs pt-6/7).
+           *
+           * Symmetric `py-6` looked right on a short page and wrong on every long one: the last
+           * card ended 24px from the viewport edge, so a list that had been scrolling for two
+           * screens just stopped dead. Content needs room to finish, and the footer needs room
+           * to be a footer rather than the next row of the page.
+           */
+          className="w-full flex-1 overflow-x-clip px-4 pb-10 pt-6 outline-none md:px-7 md:pb-12 md:pt-7"
         >
           {/* O2: any client component below can now ask whether a section link is reachable,
               instead of rendering a link that bounces to /?denied=. */}
           <SectionAccessProvider hrefs={accessibleHrefs}>{children}</SectionAccessProvider>
         </main>
+
+        {/* `mt-auto` on the footer plus `flex-1` on main keeps it at the bottom of a page too
+            short to fill the viewport, instead of floating up under the content. */}
+        <AppFooter />
       </div>
 
       {/* mobile drawer */}

@@ -100,6 +100,7 @@ export default async function FinancePage({
   const fxDate = fx.date.toISOString();
   const archivedCount = archIncomes.length + archExpenses.length + archPendings.length;
   const canPurge = session.role === "ADMIN";
+  const isAdmin = session.role === "ADMIN";
   const today = toDateInputValue(istToday());
   const monthKey = today.slice(0, 7);
   // Follows the SELECTED window, not today - a page showing June that says "July" is worse
@@ -118,6 +119,45 @@ export default async function FinancePage({
   const studentCodeById: Record<string, string> = Object.fromEntries(
     studentRows.flatMap((s) => (s.code ? [[s.id, s.code] as const] : [])),
   );
+  /**
+   * The instalment dates still to come, per student - so the income row that STARTED a plan can
+   * say when the rest of it falls due. Built from the receivables already loaded above rather
+   * than a second query: the dates were written down on the income entry, and the whole point of
+   * writing them down is that somebody can see them afterwards without opening another tab.
+   *
+   * Keyed by student id where there is one and by normalised name where there isn't, which is
+   * exactly how the balance maths already pairs a payment with its receivable.
+   */
+  const upcomingByStudent: Record<string, { dueDate: string; inr: number; eur: number }[]> = {};
+  for (const p of pendings) {
+    if (p.status === "PAID_IN_FULL" || p.status === "DROPPED") continue;
+    const due = p.instalments
+      .filter((i) => i.status !== "PAID")
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .map((i) => ({ dueDate: i.dueDate, inr: i.inr, eur: i.eur }));
+    if (!due.length) continue;
+    const key = p.studentId ?? p.studentName.trim().toLowerCase().replace(/\s+/g, " ");
+    upcomingByStudent[key] = [...(upcomingByStudent[key] ?? []), ...due];
+  }
+
+  /**
+   * The same dates as one flat, date-ordered list - the in-app reminder itself.
+   *
+   * The notification centre already carries "instalments due soon", but a founder recording
+   * today's payments is looking at Finance, not at the bell, and a due date nobody sees until it
+   * is missed is the reason the dunning ladder ever has work to do. Overdue rows lead, because
+   * those are the ones that stopped being a reminder and started being a problem.
+   */
+  const upcomingInstalments = pendings
+    .filter((p) => p.status !== "PAID_IN_FULL" && p.status !== "DROPPED")
+    .flatMap((p) =>
+      p.instalments
+        .filter((i) => i.status !== "PAID")
+        .map((i) => ({ studentName: p.studentName, dueDate: i.dueDate, inr: i.inr, eur: i.eur })),
+    )
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .slice(0, 8);
+
   const levelOpts = levelOptions(activeLevels); // income/pending accept any level (incl. bundles)
 
   // ── Business line (§1). "ALL" stays the default so the page is unchanged for
@@ -481,6 +521,9 @@ export default async function FinancePage({
                 fxRate={fxRate}
                 fxStale={fx.stale}
                 fxDate={fxDate}
+                canCreateStudent={isAdmin}
+                upcomingByStudent={upcomingByStudent}
+                upcomingInstalments={upcomingInstalments}
               />
             ),
           },

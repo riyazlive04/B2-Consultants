@@ -11,7 +11,7 @@
 
 import type { WhatsAppKind, WhatsAppStatus } from "@prisma/client";
 
-const HR = 3_600_000;
+const MIN = 60_000;
 
 /**
  * Statuses that mean the message left WATI and was not rejected afterwards.
@@ -91,8 +91,8 @@ export function callTimeNotice(rows: readonly NoticeRow[], slotLabel: string): C
 /**
  * Which pre-call reminder rung, if any, should go out for this booking right now.
  *
- * `leadHours` are the configured offsets ("24, 2" = T-24h and T-2h). A rung OPENS at
- * `slot - h`, and the rung that matters is the most recent one to open. It is sent at most ONCE:
+ * `leadMinutes` are the configured offsets in MINUTES ("1440, 120" = T-24h and T-2h). A rung OPENS
+ * at `slot - m`, and the rung that matters is the most recent one to open. It is sent at most ONCE:
  * any earlier attempt at or after the rung opened - SENT, FAILED or SKIPPED alike - closes it.
  *
  * This replaces "send on the first tick inside the widest window, then every `min(leadHours)`
@@ -111,11 +111,11 @@ export function callTimeNotice(rows: readonly NoticeRow[], slotLabel: string): C
  * reminded twice under the old cadence (T-24h and T-22h) is not reminded a third time at T-2h
  * just because the new rule would have spaced them differently.
  *
- * Returns the rung in hours, or null when nothing is due.
+ * Returns the rung in MINUTES, or null when nothing is due.
  */
 export function dueReminderRung(
   slotAt: Date,
-  leadHours: readonly number[],
+  leadMinutes: readonly number[],
   now: Date,
   attempts: readonly Date[],
   remindersSoFar = 0,
@@ -123,11 +123,11 @@ export function dueReminderRung(
   const slot = slotAt.getTime();
   const t = now.getTime();
   if (t >= slot) return null;
-  if (remindersSoFar >= leadHours.length) return null;
-  const open = leadHours.filter((h) => Number.isFinite(h) && h > 0 && slot - h * HR <= t);
+  if (remindersSoFar >= leadMinutes.length) return null;
+  const open = leadMinutes.filter((m) => Number.isFinite(m) && m > 0 && slot - m * MIN <= t);
   if (open.length === 0) return null;
   const rung = Math.min(...open);
-  const opensAt = slot - rung * HR;
+  const opensAt = slot - rung * MIN;
   if (attempts.some((a) => a.getTime() >= opensAt)) return null;
   return rung;
 }

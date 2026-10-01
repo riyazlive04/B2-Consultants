@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/form";
 import { setBookingStatus, setBookingConfirmed, rescheduleBooking } from "@/server/booking-actions";
 import { sendBookingConfirmationMsg, sendBookingReminderMsg } from "@/server/whatsapp-actions";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
-import { BANT_VERDICT_LABELS, BOOKING_STATUS_LABELS } from "@/lib/labels";
+import { BANT_VERDICT_LABELS, BOOKING_STATUS_LABELS, SLOT_RELEASE_REASON_LABELS } from "@/lib/labels";
 import { BANT_ORIGIN_LABELS } from "@/lib/bant-view";
 import { formatDate } from "@/lib/format";
 import type { BookingRow, OpenSlotOption, TeamMemberOption } from "@/server/booking-metrics";
@@ -139,13 +139,38 @@ export function BookingsTable({
     },
     {
       key: "slot", header: "Call time",
-      cell: (r) => (
-        <div className="whitespace-nowrap">
-          <div>{r.slotDay} {r.slotTime && <span className="tnum">· {r.slotTime} IST</span>}</div>
-          {r.slotCet && <div className="text-xs text-muted">{r.slotCet} CET</div>}
-        </div>
-      ),
-      value: (r) => `${r.slotDay} ${r.slotTime}`,
+      /**
+       * A booking that let its slot go shows the time it USED to have, struck through.
+       *
+       * Releasing a slot NULLS `slotId` - it has to, the column is unique and the slot must be
+       * re-bookable - so every cancelled row printed a bare "-" here. That is the column where the
+       * question "when was this call?" lives, and it was the one row where the answer mattered
+       * most. Struck through, not plain: the time is history, and it must not read as an
+       * appointment somebody still has.
+       */
+      cell: (r) =>
+        r.slotDay === "-" && r.released ? (
+          <div className="whitespace-nowrap">
+            <div className="text-muted line-through">
+              {r.released.day} <span className="tnum">· {r.released.time} IST</span>
+            </div>
+            <div className="text-xs text-muted">
+              {SLOT_RELEASE_REASON_LABELS[r.released.reason] ?? r.released.reason}
+              {r.released.promotedName ? ` · ${r.released.promotedName} moved in` : ""}
+            </div>
+          </div>
+        ) : (
+          <div className="whitespace-nowrap">
+            <div>{r.slotDay} {r.slotTime && <span className="tnum">· {r.slotTime} IST</span>}</div>
+            {r.slotCet && <div className="text-xs text-muted">{r.slotCet} CET</div>}
+          </div>
+        ),
+      // Sorted and exported on whichever time the row actually has, so a cancelled call is not
+      // dumped at one end of the sort for want of a value.
+      value: (r) =>
+        r.slotDay === "-" && r.released
+          ? `${r.released.day} ${r.released.time} (released)`
+          : `${r.slotDay} ${r.slotTime}`,
     },
     {
       key: "assigned", header: "Assigned to",

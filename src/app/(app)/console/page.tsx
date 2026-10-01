@@ -33,6 +33,7 @@ import { getAllQualificationQuestions, shadowAgreement } from "@/server/qualific
 import { getIntakeMappingReport } from "@/server/intake-inspection";
 import { getCallDistribution, getQualificationConfig } from "@/server/founder-config";
 import { getBookableTeamMembers } from "@/server/booking-metrics";
+import { listSlotReleases } from "@/server/slot-release";
 import { listRewardGrants, listRewardRules } from "@/server/rewards";
 import { SectionsPanel } from "./_components/SectionsPanel";
 import { AccessMatrixPanel } from "./_components/AccessMatrixPanel";
@@ -50,6 +51,7 @@ import { QualificationPanel } from "./_components/QualificationPanel";
 import { CallDistributionPanel } from "./_components/CallDistributionPanel";
 import { OperationsPanel } from "./_components/OperationsPanel";
 import { AvailabilityPanel } from "./_components/AvailabilityPanel";
+import { ConfirmLoopPanel } from "./_components/ConfirmLoopPanel";
 import { MaintenancePanel } from "./_components/MaintenancePanel";
 import { AlertsPanel } from "./_components/AlertsPanel";
 import { cronHealth } from "@/server/uptime";
@@ -173,6 +175,7 @@ export default async function ConsolePage() {
     speedToLeadConfig,
     dunningConfig,
     attendanceConfig,
+    slotReleases,
   ] = await Promise.all([
     getMaintenanceConfig(),
     getScheduledReportConfig(),
@@ -188,6 +191,9 @@ export default async function ConsolePage() {
     getSpeedToLeadAlertConfig(),
     getDunningConfig(),
     getAttendanceConfig(),
+    // What the confirm-or-cancel loop has actually released. A console that can arm an automation
+    // should be able to show what it did - "off by default" is only half the story.
+    listSlotReleases(40),
   ]);
 
   // The SSS diary's owner is a User (the founder), not a TeamProfile - resolve the name so the
@@ -367,6 +373,18 @@ export default async function ConsolePage() {
                         bookingMaxAdvanceDays={bookingRules.maxAdvanceDays}
                       />
                     ),
+                  },
+                  {
+                    /**
+                     * The confirm-or-cancel rule, in the console that already tells you it is off.
+                     *
+                     * Console → System → Not armed has listed this loop as disarmed since it
+                     * shipped, and the only places to arm it were a modal on the Bookings page and
+                     * the WhatsApp settings tab. Same stored rule, same parser - see
+                     * server/confirm-loop-config.ts.
+                     */
+                    label: "Confirm-or-cancel",
+                    content: <ConfirmLoopPanel rules={bookingRules} releases={slotReleases} />,
                   },
                   {
                     label: "Operations",

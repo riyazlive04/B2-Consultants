@@ -33,6 +33,7 @@ import {
 import { GOAL_METRICS } from "./goals";
 import { REWARD_WINDOWS, type RewardTrigger } from "./rewards";
 import { DEFAULT_CALLBACK_CHASE } from "./callback-chase";
+import { MAX_WINDOW_MINUTES } from "./duration";
 
 const DATE_KEY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD date");
 const slug = z.string().trim().min(1).max(60).regex(/^[a-zA-Z0-9._-]+$/, "Letters, numbers, dot, dash and underscore only");
@@ -283,18 +284,43 @@ export const bookingRulesConfigSchema = z
     // engine release an unconfirmed slot. The two window fields drive the cadence; promoteNext
     // governs whether the next same-caller/same-day call is moved up into a freed slot.
     autoCancelEnabled: z.boolean().default(false),
-    // Send the "please reply YES" request once the slot is within this many hours (0 disables asking).
-    confirmRequestLeadHours: z.number().int().min(0).max(240).default(24),
-    // Release the slot if it is still unconfirmed within this many hours of the call. Kept < the
-    // request lead so there is always a window between "asked" and "cancelled".
-    autoCancelHours: z.number().int().min(0).max(240).default(3),
+    /**
+     * ── The three windows, in MINUTES ────────────────────────────────────────────────
+     * They were whole hours until the cron began ticking every minute; "cancel it 20 minutes
+     * before the call if they still haven't answered" was simply not expressible. Stored as
+     * minutes, typed as a duration string (`45m`, `3h`) - see lib/duration.
+     *
+     * `confirmRequestLeadHours` / `autoCancelHours` are the fields a row written before that
+     * change carries. They are read once, converted below, and never written again - which is
+     * why they are optional here and absent from the parsed type.
+     */
+    confirmRequestLeadHours: z.number().int().min(0).max(240).optional(),
+    autoCancelHours: z.number().int().min(0).max(240).optional(),
+    // Ask for the "please reply YES" once the slot is this close (0 disables asking entirely).
+    confirmRequestLeadMinutes: z.number().int().min(0).max(MAX_WINDOW_MINUTES).optional(),
+    // Release the slot if it is still unconfirmed this close to the call. Kept < the request
+    // lead so there is always a window between "asked" and "cancelled".
+    autoCancelMinutes: z.number().int().min(0).max(MAX_WINDOW_MINUTES).optional(),
+    /**
+     * How long a prospect gets to answer before silence counts as "no", measured from the moment
+     * the request went out. Floored at 5 minutes on purpose: a promoted call is stamped as asked
+     * at the moment it is moved, and with no grace at all the very next tick - one minute later -
+     * would cancel the call it had just rescheduled.
+     */
+    confirmReplyGraceMinutes: z.number().int().min(5).max(1440).default(30),
     // On any cancel (auto or manual), move the next booked call for the same caller on the same day
     // up into the freed slot and notify them. Independent of autoCancelEnabled.
     promoteNext: z.boolean().default(true),
   })
-  .refine((c) => c.confirmRequestLeadHours === 0 || c.confirmRequestLeadHours > c.autoCancelHours, {
+  // Legacy hours → minutes, once, on the way in. Everything downstream sees only minutes.
+  .transform(({ confirmRequestLeadHours, autoCancelHours, ...c }) => ({
+    ...c,
+    confirmRequestLeadMinutes: c.confirmRequestLeadMinutes ?? (confirmRequestLeadHours ?? 24) * 60,
+    autoCancelMinutes: c.autoCancelMinutes ?? (autoCancelHours ?? 3) * 60,
+  }))
+  .refine((c) => c.confirmRequestLeadMinutes === 0 || c.confirmRequestLeadMinutes > c.autoCancelMinutes, {
     message: "Ask-to-confirm lead time must be greater than the auto-cancel window",
-    path: ["confirmRequestLeadHours"],
+    path: ["confirmRequestLeadMinutes"],
   });
 
 export type BookingRulesConfig = z.infer<typeof bookingRulesConfigSchema>;
@@ -307,8 +333,9 @@ export const DEFAULT_BOOKING_RULES_CONFIG: BookingRulesConfig = {
   rejectionSubject: DEFAULT_REJECTION_SUBJECT,
   rejectionBody: DEFAULT_REJECTION_BODY,
   autoCancelEnabled: false,
-  confirmRequestLeadHours: 24,
-  autoCancelHours: 3,
+  confirmRequestLeadMinutes: 24 * 60,
+  autoCancelMinutes: 3 * 60,
+  confirmReplyGraceMinutes: 30,
   promoteNext: true,
 };
 

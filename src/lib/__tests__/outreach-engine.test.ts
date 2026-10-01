@@ -1150,12 +1150,13 @@ describe("sopOwnsCallReminders - when the booking pre-call reminder stands down"
 
 describe("dueReminderRung - one reminder per rung, never a retry", () => {
   const slot = at(48 * HR);
-  const lead = [24, 2];
+  // Offsets are MINUTES now (the cron ticks every minute), so "24, 2" is written the long way.
+  const lead = [24 * 60, 2 * 60];
   const t = (hoursBefore: number) => new Date(slot.getTime() - hoursBefore * HR);
 
   test("nothing before the widest rung opens, the rung itself exactly when it does", () => {
     assert.equal(dueReminderRung(slot, lead, new Date(t(24).getTime() - MIN), []), null);
-    assert.equal(dueReminderRung(slot, lead, t(24), []), 24);
+    assert.equal(dueReminderRung(slot, lead, t(24), []), 24 * 60);
   });
 
   test("a rung that was attempted - even FAILED - is not retried on later runs", () => {
@@ -1165,23 +1166,23 @@ describe("dueReminderRung - one reminder per rung, never a retry", () => {
     }
   });
 
-  test("the next rung fires at its own offset, not min(leadHours) after the previous one", () => {
+  test("the next rung fires at its own offset, not min(lead) after the previous one", () => {
     const first = t(24);
     assert.equal(dueReminderRung(slot, lead, t(22), [first]), null, "the old cadence re-sent here, at T-22h");
-    assert.equal(dueReminderRung(slot, lead, t(2), [first]), 2);
+    assert.equal(dueReminderRung(slot, lead, t(2), [first]), 2 * 60);
     assert.equal(dueReminderRung(slot, lead, t(1), [first, t(2)]), null, "and only once");
   });
 
   test("booked inside a rung: the booking confirmation covers it", () => {
     const confirmation = t(20);
     assert.equal(dueReminderRung(slot, lead, t(19.75), [confirmation]), null);
-    assert.equal(dueReminderRung(slot, lead, t(2), [confirmation]), 2);
+    assert.equal(dueReminderRung(slot, lead, t(2), [confirmation]), 2 * 60);
   });
 
   test("never more reminders in total than configured offsets (bookings reminded under the old cadence)", () => {
     // Old cadence: T-24h and T-22h already went out. The T-2h rung must not add a third.
     assert.equal(dueReminderRung(slot, lead, t(2), [t(24), t(22)], 2), null);
-    assert.equal(dueReminderRung(slot, lead, t(2), [t(24)], 1), 2);
+    assert.equal(dueReminderRung(slot, lead, t(2), [t(24)], 1), 2 * 60);
   });
 
   test("no reminder once the call has started, and nonsense offsets are ignored", () => {
@@ -1194,6 +1195,15 @@ describe("dueReminderRung - one reminder per rung, never a retry", () => {
     // number's reminders as attempts, so the second booking stays quiet.
     const twinReminder = new Date(t(24).getTime() + 5 * MIN);
     assert.equal(dueReminderRung(slot, lead, new Date(t(24).getTime() + 20 * MIN), [twinReminder]), null);
+  });
+
+  test("sub-hour rungs are expressible: a 20-minute warning opens at T-20m, not before", () => {
+    const fine = [90, 20];
+    const m = (minsBefore: number) => new Date(slot.getTime() - minsBefore * MIN);
+    assert.equal(dueReminderRung(slot, fine, m(91), []), null);
+    assert.equal(dueReminderRung(slot, fine, m(90), []), 90);
+    assert.equal(dueReminderRung(slot, fine, m(45), [m(90)]), null, "nothing between the two rungs");
+    assert.equal(dueReminderRung(slot, fine, m(20), [m(90)]), 20);
   });
 });
 

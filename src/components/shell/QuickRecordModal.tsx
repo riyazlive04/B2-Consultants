@@ -122,6 +122,12 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
   // follow up and the chasing ladder had nothing to chase. A payment plan agreed here is the
   // same plan agreed on the Finance page, and it has to be written down the same way.
   const [paymentType, setPaymentType] = useState("FULL_PAYMENT");
+  // Same three pieces as the Finance form: the plan's shape, where it starts, and whether every
+  // due date is in. Kept in step so a plan agreed here is written down the same way.
+  const [instalmentCount, setInstalmentCount] = useState<number | null>(null);
+  const [entryDate, setEntryDate] = useState<string>(data.today);
+  const [scheduleComplete, setScheduleComplete] = useState(false);
+  const blockSave = paymentType === "INSTALMENT" && !scheduleComplete;
   const { error, formRef, submit } = useQuickSubmit(
     async (fd) => {
       const res = await createIncome(fd);
@@ -148,7 +154,14 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
           {/* `data.today` is India's date, fetched when the modal opened; the browser then
               fills in its own today so a late-evening entry from Germany is not dated
               tomorrow (FIN-02). Create-only form, so this is always a new record. */}
-          <TextInput type="date" name="date" required defaultValue={data.today} defaultToday />
+          <TextInput
+            type="date"
+            name="date"
+            required
+            defaultValue={data.today}
+            defaultToday
+            onChange={(e) => setEntryDate(e.currentTarget.value)}
+          />
         </Field>
         {/* Searchable even with an empty roster - see the same field on the Finance page for why
             a silent fallback to a plain box is worse than an empty list that says so. */}
@@ -190,7 +203,16 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
         {paymentType === "INSTALMENT" && (
           <>
             <Field label="Number of instalments" hint="How many instalments the fee is split into">
-              <TextInput kind="int" name="instalmentCount" required placeholder="e.g. 3" />
+              <TextInput
+                kind="int"
+                name="instalmentCount"
+                required
+                placeholder="e.g. 3"
+                onChange={(e) => {
+                  const n = Number.parseInt(e.currentTarget.value, 10);
+                  setInstalmentCount(Number.isFinite(n) && n > 0 ? n : null);
+                }}
+              />
             </Field>
             <AmountPair
               fxRate={data.fxRate}
@@ -202,7 +224,12 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
               eurLabel="Extra amount (€)"
               baseHint="Added to the fee for paying in instalments"
             />
-            <InstalmentSchedule className="sm:col-span-2" />
+            <InstalmentSchedule
+              className="sm:col-span-2"
+              count={instalmentCount}
+              anchorDate={entryDate}
+              onCompleteChange={setScheduleComplete}
+            />
           </>
         )}
         <Field label="Payment method">
@@ -215,7 +242,12 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
-        <SubmitButton>Add income</SubmitButton>
+        <SubmitButton
+          disabled={blockSave}
+          title="Every instalment needs a due date before this can be saved"
+        >
+          Add income
+        </SubmitButton>
         <FormError message={error} />
         <KeepOpenToggle on={keepOpen} onChange={setKeepOpen} />
       </div>

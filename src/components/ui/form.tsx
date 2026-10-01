@@ -222,12 +222,27 @@ export function CheckboxField({ name, label, defaultChecked, hint, value, requir
 }
 
 /** Kept as the app-wide submit button; `controls.tsx` re-exports the same thing as SubmitBtn. */
-export function SubmitButton({ children }: { children: ReactNode }) {
+export function SubmitButton({
+  children,
+  disabled = false,
+  title,
+}: {
+  children: ReactNode;
+  /**
+   * Hold the button closed while the form cannot be submitted meaningfully - an instalment plan
+   * with no due dates, say. The disabled styling below is already the app's "not yet" grey, so a
+   * blocked form reads as blocked instead of failing after the click.
+   */
+  disabled?: boolean;
+  /** Why it is closed. Without this a greyed-out button is just a dead end. */
+  title?: string;
+}) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      disabled={pending}
+      title={disabled ? title : undefined}
+      disabled={pending || disabled}
       className="inline-flex h-10 flex-none items-center justify-center gap-2 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-ink-disabled"
     >
       {pending && <Loader2 size={15} className="animate-spin" />}

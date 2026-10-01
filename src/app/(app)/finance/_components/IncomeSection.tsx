@@ -79,6 +79,23 @@ export function IncomeSection({
   // edit mode resets the answer along with the rest of the re-keyed form.
   const [paymentTypeChoice, setPaymentTypeChoice] = useState<string | null>(null);
   const paymentType = paymentTypeChoice ?? editing?.paymentType ?? "FULL_PAYMENT";
+  /**
+   * The two answers the schedule below is drawn from: how many instalments there are, and the
+   * date this first one was paid. Held here rather than read off the DOM because the schedule
+   * has to re-fill the moment either changes.
+   */
+  const [instalmentCount, setInstalmentCount] = useState<number | null>(
+    editing?.instalmentCount ?? null,
+  );
+  const [entryDate, setEntryDate] = useState<string>(editing ? editing.date.slice(0, 10) : today);
+  /**
+   * Whether every due date has been filled in. An instalment plan saved with a blank date drops
+   * that receivable on the floor - nothing chases a date nobody wrote down - so the save is held
+   * until they are all there, and the button says so rather than failing on click.
+   */
+  const [scheduleComplete, setScheduleComplete] = useState(false);
+  const needsSchedule = paymentType === "INSTALMENT" && !editing;
+  const blockSave = needsSchedule && !scheduleComplete;
   const switchEditing = (row: IncomeRow | null) => {
     setEditing(row);
     setPaymentTypeChoice(null);
@@ -258,6 +275,7 @@ export function IncomeSection({
               required
               defaultValue={editing ? editing.date.slice(0, 10) : today}
               defaultToday={!editing}
+              onChange={(e) => setEntryDate(e.currentTarget.value)}
             />
           </Field>
           {/*
@@ -338,6 +356,10 @@ export function IncomeSection({
                   required
                   placeholder="e.g. 3"
                   defaultValue={editing?.instalmentCount ? String(editing.instalmentCount) : ""}
+                  onChange={(e) => {
+                    const n = Number.parseInt(e.currentTarget.value, 10);
+                    setInstalmentCount(Number.isFinite(n) && n > 0 ? n : null);
+                  }}
                 />
               </Field>
               <AmountPair
@@ -355,7 +377,13 @@ export function IncomeSection({
               {/* Only on a NEW entry. Editing an income row must not silently rewrite a schedule
                   the student has already agreed to and may have started paying against - that
                   edit belongs in the receivable itself, under Pending. */}
-              {!editing && <InstalmentSchedule />}
+              {!editing && (
+                <InstalmentSchedule
+                  count={instalmentCount}
+                  anchorDate={entryDate}
+                  onCompleteChange={setScheduleComplete}
+                />
+              )}
             </>
           )}
           <Field label="Payment method">
@@ -365,8 +393,18 @@ export function IncomeSection({
             <TextInput kind="text" name="notes" placeholder="Any extra info" defaultValue={editing?.notes ?? ""} />
           </Field>
         </div>
-        <div className="mt-4 flex items-center gap-3">
-          <SubmitButton>{editing ? "Save changes" : "Add income"}</SubmitButton>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <SubmitButton
+            disabled={blockSave}
+            title="Every instalment needs a due date before this can be saved"
+          >
+            {editing ? "Save changes" : "Add income"}
+          </SubmitButton>
+          {blockSave && (
+            <p className="text-caption text-muted">
+              Fill in every due date above to save this plan.
+            </p>
+          )}
           <FormError message={error} />
         </div>
         </form>

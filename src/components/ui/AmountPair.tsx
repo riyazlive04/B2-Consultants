@@ -50,6 +50,7 @@ export function AmountPair({
   baseHint,
   defaultInr = "",
   defaultEur = "",
+  className = "sm:col-span-2",
 }: {
   /** INR per EUR, as the server will stamp it. */
   fxRate: number;
@@ -63,6 +64,11 @@ export function AmountPair({
   baseHint?: string;
   defaultInr?: string;
   defaultEur?: string;
+  /**
+   * How wide the pair sits in its parent grid. Two columns everywhere today; a form with a
+   * different shape can override it.
+   */
+  className?: string;
 }) {
   const [inr, setInr] = useState(defaultInr);
   const [eur, setEur] = useState(defaultEur);
@@ -141,8 +147,20 @@ export function AmountPair({
   const eurDerived = derived("EUR");
   const convertedHint = `Converted ${rateNote} - not stored separately`;
 
+  /**
+   * ── A FIXED FOOTPRINT, not a fragment ────────────────────────────────────────────
+   *
+   * This used to render a bare fragment: two Fields plus, once an amount existed, a `<p>` that
+   * spanned two columns. In a four-column form that `<p>` is a GRID ITEM, so the moment anyone
+   * typed a figure it claimed two cells of the next row and shoved every field after it sideways
+   * - Programme level and Payment type jumped to the right, and a form with two AmountPairs
+   * rearranged itself twice. The page looked like it was collapsing because it was.
+   *
+   * Wrapped, the pair always occupies the same two columns of the parent whether or not the note
+   * is showing, and the note spans the pair's OWN grid. Nothing outside can be moved by it.
+   */
   return (
-    <>
+    <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${className}`}>
       <Field label={inrLabel} hint={inrDerived ? convertedHint : baseHint}>
         <TextInput
           ref={inrRef}
@@ -206,6 +224,6 @@ export function AmountPair({
           )}
         </p>
       )}
-    </>
+    </div>
   );
 }

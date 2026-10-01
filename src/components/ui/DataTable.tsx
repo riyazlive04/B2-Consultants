@@ -62,6 +62,7 @@ export function DataTable<T>({
   toolbarExtra,
   hideFilter = false,
   defaultSort,
+  onRowClick,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -88,6 +89,16 @@ export function DataTable<T>({
    * what the user is looking at.
    */
   defaultSort?: string | { key: string; dir?: "asc" | "desc" };
+  /**
+   * Open the record behind a row. The row itself becomes the hit target (and the whole card on
+   * a phone), because a table that only ever shows what FITS is a table whose notes, method and
+   * as-entered amounts are invisible - they are truncated, or on a column scrolled off to the
+   * right.
+   *
+   * Clicks that started inside a control are left alone: Edit, Delete, the select checkbox and
+   * any link in a cell do their own job rather than also opening the record behind them.
+   */
+  onRowClick?: (row: T) => void;
 }) {
   const initialSort = typeof defaultSort === "string" ? { key: defaultSort, dir: "asc" as const } : defaultSort;
   const [sortKey, setSortKey] = useState<string | null>(initialSort?.key ?? null);
@@ -157,6 +168,26 @@ export function DataTable<T>({
     [visible, selection],
   );
   const isSelected = (row: T) => !!selection && selection.selected.has(selection.rowKey(row));
+  /**
+   * A click anywhere on the row opens it - EXCEPT one that started on a control. Without this
+   * guard, "Delete" would ask to confirm an archive and open the record behind it at the same
+   * time, and ticking a select box would open the row it was selecting.
+   */
+  const openRow = (row: T) => (e: React.MouseEvent) => {
+    if (!onRowClick) return;
+    if ((e.target as HTMLElement).closest("button,a,input,label,select,textarea")) return;
+    onRowClick(row);
+  };
+  const openOnKey = (row: T) => (e: React.KeyboardEvent) => {
+    if (!onRowClick || (e.key !== "Enter" && e.key !== " ")) return;
+    if (e.target !== e.currentTarget) return; // a control inside the row owns its own keys
+    e.preventDefault();
+    onRowClick(row);
+  };
+  const rowOpenProps = (row: T) =>
+    onRowClick
+      ? { onClick: openRow(row), onKeyDown: openOnKey(row), tabIndex: 0, "aria-label": "Open this record" }
+      : {};
   const allSelected = selectableVisible.length > 0 && selectableVisible.every(isSelected);
   const someSelected = selectableVisible.some(isSelected);
 
@@ -351,7 +382,10 @@ export function DataTable<T>({
               paged.map((row, i) => (
                 <tr
                   key={selection ? selection.rowKey(row) : i}
-                  className={`border-b border-line last:border-b-0 ${isSelected(row) ? "bg-primary-soft/40" : ""} ${rowClassName?.(row) ?? ""}`}
+                  {...rowOpenProps(row)}
+                  className={`group border-b border-line last:border-b-0 ${
+                    onRowClick ? "cursor-pointer hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary" : ""
+                  } ${isSelected(row) ? "bg-primary-soft/40" : ""} ${rowClassName?.(row) ?? ""}`}
                 >
                   {selection && (
                     <td className="px-4 py-4">
@@ -370,9 +404,11 @@ export function DataTable<T>({
                     // The pinned cell needs its OWN background, or the columns it covers show
                     // through it. It has to be the row's background, not the card's, so a
                     // highlighted row stays one colour across the join.
+                    // The pinned cell paints its own background, so a row hover would stop dead
+                    // at its left edge unless it follows the row too.
                     const stickyBg = isSelected(row)
                       ? "bg-primary-soft"
-                      : rowClassName?.(row) || "bg-surface";
+                      : rowClassName?.(row) || (onRowClick ? "bg-surface group-hover:bg-surface-2" : "bg-surface");
                     /**
                      * Only PLAIN text is capped and ellipsed. A cell that renders a component -
                      * a student chip, an instalment summary with its own sub-lines, the action
@@ -426,7 +462,10 @@ export function DataTable<T>({
             {paged.map((row, i) => (
               <li
                 key={selection ? selection.rowKey(row) : i}
-                className={`space-y-2 p-4 ${isSelected(row) ? "bg-primary-soft/40" : ""} ${rowClassName?.(row) ?? ""}`}
+                {...rowOpenProps(row)}
+                className={`space-y-2 p-4 ${onRowClick ? "cursor-pointer hover:bg-surface-2" : ""} ${
+                  isSelected(row) ? "bg-primary-soft/40" : ""
+                } ${rowClassName?.(row) ?? ""}`}
               >
                 {selection && (
                   <label className="flex items-center gap-2 text-label uppercase text-ink-2">

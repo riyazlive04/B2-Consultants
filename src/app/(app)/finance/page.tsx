@@ -114,6 +114,32 @@ export default async function FinancePage({
     label: s.fullName,
     hint: s.code ?? undefined,
   }));
+  /**
+   * ── Payers with no student record ────────────────────────────────────────────────
+   * The "Student name" box only ever offered rows from the `Student` table, so on an install
+   * where nobody has minted student records it suggests NOTHING - the operator types the same
+   * name from scratch every month, spells it differently once, and that month's money files
+   * itself under a second payer.
+   *
+   * So the names we have actually been paid by join the list, marked as having no record yet.
+   * They carry no id (picking one links nothing, exactly as typing it by hand does not), which
+   * is what keeps the "Create a student record for X" offer below intact: that offer tests the
+   * STUDENT list, not this one, and it remains the way the missing record gets created.
+   */
+  const nameKeyOf = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  const studentNameKeys = new Set(studentRows.map((s) => nameKeyOf(s.fullName)));
+  const payerOptions = [
+    ...new Map(
+      incomes
+        .filter((i) => !i.studentId && i.studentName.trim())
+        .map((i) => [nameKeyOf(i.studentName), i.studentName.trim()] as const)
+        .filter(([key]) => !studentNameKeys.has(key)),
+    ).values(),
+  ]
+    .sort((a, b) => a.localeCompare(b))
+    // A roster-sized cap: the dropdown is a convenience, not a second ledger.
+    .slice(0, 200)
+    .map((label) => ({ value: "", label, hint: "no record yet" }));
   // The same map getStudentCodeMap builds for Cash Health, taken from the rows already loaded
   // above rather than reading the whole Student table a second time.
   const studentCodeById: Record<string, string> = Object.fromEntries(
@@ -164,6 +190,13 @@ export default async function FinancePage({
   //    anyone who never touches the switch. An unknown ?line= falls back to ALL.
   const kindByLevel = new Map(activeLevels.map((l) => [l.code, l.kind as string]));
   const lineOfLevel = (code: string) => lineForKind(kindByLevel.get(code));
+  /**
+   * The same derivation, handed to the income form so it can SAY which book an entry lands in.
+   * The page's Combined / B2 / German Note switch filters what is being read; the programme
+   * level is what decides where the money being typed actually goes, and those two had no
+   * relationship on screen.
+   */
+  const levelLines = Object.fromEntries(levelOpts.map((o) => [o.value, lineOfLevel(o.value)]));
   const seg = line === "ALL" ? null : metrics.segments[line];
   const { start: monthStart, endExclusive: monthEndExclusive } = period;
   const monthEndInclusive = new Date(monthEndExclusive.getTime() - 86_400_000);
@@ -454,6 +487,8 @@ export default async function FinancePage({
                   canCreateStudent={isAdmin}
                   upcomingByStudent={upcomingByStudent}
                   upcomingInstalments={upcomingInstalments}
+                  levelLines={levelLines}
+                  payerOptions={payerOptions}
                 />
               ),
             },

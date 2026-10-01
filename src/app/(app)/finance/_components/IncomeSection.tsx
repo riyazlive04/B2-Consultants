@@ -21,6 +21,8 @@ import {
 import { StudentName } from "@/components/ui/StudentName";
 import { money, moneyAlt, moneyInline, moneyValue } from "@/lib/money-display";
 import { useFinanceCcy } from "./FinanceCurrency";
+import { IncomeDetailCard } from "./IncomeDetailCard";
+import { BUSINESS_LINE_LABELS, type BusinessLine } from "@/lib/business-line";
 
 /**
  * Whole days from `today` (an IST YYYY-MM-DD) to a due date. Compared as calendar dates, not
@@ -57,6 +59,8 @@ export function IncomeSection({
   canCreateStudent = false,
   upcomingByStudent = {},
   upcomingInstalments = [],
+  levelLines = {},
+  payerOptions = [],
 }: {
   rows: IncomeRow[];
   today: string;
@@ -72,8 +76,26 @@ export function IncomeSection({
   upcomingByStudent?: Record<string, { dueDate: string; inr: number; eur: number }[]>;
   /** Flat, date-ordered list for the reminder strip - overdue first, then soonest. */
   upcomingInstalments?: { studentName: string; dueDate: string; inr: number; eur: number }[];
+  /**
+   * Level code → which of the two businesses it belongs to (lib/business-line). DERIVED from the
+   * level's kind on the server, never stored on the income row, so a level added later lands on
+   * the right side with no backfill.
+   */
+  levelLines?: Record<string, BusinessLine>;
+  /**
+   * Names we have been paid by that have no `Student` row behind them (built on the server from
+   * the income history already on this page). They carry no id, so picking one fills the name and
+   * links nothing - which is what typing it by hand has always done, minus the typo.
+   */
+  payerOptions?: { value: string; label: string; hint?: string }[];
 }) {
   const { ccy } = useFinanceCcy();
+  /**
+   * Students first (they link), then payers we only know by name. `newStudentName` below is
+   * deliberately still tested against `studentOptions` alone: a name that is merely familiar is
+   * exactly the one that still needs a record creating.
+   */
+  const nameOptions = [...studentOptions, ...payerOptions];
   const [editing, setEditing] = useState<IncomeRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -114,9 +136,26 @@ export function IncomeSection({
   const planMode = needsSchedule;
   const shares = planMode ? planShares(feeAmount, extraAmount, instalmentCount) : [];
   const banked = firstShare(shares);
+  /**
+   * ── Which book this payment lands in ──────────────────────────────────────────────
+   * The programme level decides it: a German level or bundle credits German Note, anything else
+   * credits B2 (lib/business-line, and `incomeAccountFor` for the matching ledger account). It is
+   * worth saying out loud on the form, because the Finance page above has its own Combined / B2 /
+   * German Note switch and the two are NOT the same thing - the switch filters what you are
+   * reading, the level decides where the money you are typing actually goes. Someone recording a
+   * payment while the page is filtered to German Note would otherwise have no way to notice the
+   * level still said Guided.
+   */
+  const [levelChoice, setLevelChoice] = useState<string | null>(null);
+  const programLevel = levelChoice ?? editing?.programLevel ?? "GUIDED";
+  const entryLine = levelLines[programLevel];
+  const lineLabel = entryLine ? BUSINESS_LINE_LABELS[entryLine] : null;
+  /** The row whose full record is open. Reading, not editing - see IncomeDetailCard. */
+  const [viewing, setViewing] = useState<IncomeRow | null>(null);
   const switchEditing = (row: IncomeRow | null) => {
     setEditing(row);
     setPaymentTypeChoice(null);
+    setLevelChoice(null);
     setStudentPick({ text: row?.studentName ?? "", value: row?.studentId ?? "" });
   };
   /**
@@ -156,6 +195,7 @@ export function IncomeSection({
     setEntryDate(today);
     setScheduleComplete(false);
     setFeeAmount({ inr: "", eur: "" });
+    setLevelChoice(null);
   };
 
   const remove = async (row: IncomeRow) => {
@@ -282,7 +322,20 @@ export function IncomeSection({
   return (
     <section className="space-y-4">
       <Card
-        title={editing ? `Edit income - ${editing.studentName}` : "Daily income entry"}
+        /**
+         * A node, not a string, so the business line can sit beside the heading in a quieter
+         * weight - it is context for the heading, not part of its name. `Card` renders a plain
+         * string as the h2 itself, so the heading styles come with us.
+         */
+        title={
+          <h2 className="flex flex-wrap items-baseline gap-x-2 font-display text-h3 text-ink">
+            <span>{editing ? `Edit income - ${editing.studentName}` : "Income entry"}</span>
+            {lineLabel && (
+              <span className="text-body text-muted">- {lineLabel}</span>
+            )}
+          </h2>
+        }
+        subtitle={lineLabel ? `Recorded against ${lineLabel} - set by the programme level below.` : undefined}
         actions={
           editing ? (
             <Btn variant="ghost" size="sm" onClick={() => switchEditing(null)}>
@@ -317,18 +370,18 @@ export function IncomeSection({
           */}
           <Field label="Student name" hint="Search to link a student - feeds their total paid">
             <ComboBox
-              options={studentOptions}
+              options={nameOptions}
               nameText="studentName"
               nameValue="studentId"
               required
-              placeholder={studentOptions.length > 0 ? "Search or type who paid" : "Type who paid"}
+              placeholder={nameOptions.length > 0 ? "Search or type who paid" : "Type who paid"}
               defaultText={editing?.studentName ?? ""}
               defaultValue={editing?.studentId ?? ""}
               onStateChange={setStudentPick}
               emptyHint={
-                studentOptions.length > 0
+                nameOptions.length > 0
                   ? undefined
-                  : "No students on file yet - type the name, then tick “Create a student record” below."
+                  : "Nobody on file yet - type the name, then tick “Create a student record” below."
               }
             />
             {/*
@@ -376,7 +429,12 @@ export function IncomeSection({
             </>
           )}
           <Field label="Programme level">
-            <Select name="programLevel" options={levelOptions} defaultValue={editing?.programLevel ?? "GUIDED"} />
+            <Select
+              name="programLevel"
+              options={levelOptions}
+              defaultValue={editing?.programLevel ?? "GUIDED"}
+              onChange={(e) => setLevelChoice(e.currentTarget.value)}
+            />
           </Field>
           <Field label="Payment type">
             <Select
@@ -490,7 +548,38 @@ export function IncomeSection({
         </Card>
       )}
 
-      <DataTable rows={visibleRows} columns={columns} csvName="income" filterPlaceholder="Filter income…" />
+      {/* Clicking a row opens the whole record (notes, method, as-entered amounts, where it came
+          from) rather than only the part that fitted in a column. Edit and Delete still do their
+          own job - DataTable ignores a click that started on a control. */}
+      <DataTable
+        rows={visibleRows}
+        columns={columns}
+        csvName="income"
+        filterPlaceholder="Filter income…"
+        onRowClick={setViewing}
+      />
+
+      <IncomeDetailCard
+        row={viewing}
+        studentCode={viewing?.studentId ? studentCodeById[viewing.studentId] : null}
+        levelLabel={
+          viewing
+            ? levelOptions.find((o) => o.value === viewing.programLevel)?.label ??
+              PROGRAM_LEVEL_LABELS[viewing.programLevel] ??
+              viewing.programLevel
+            : ""
+        }
+        line={viewing ? levelLines[viewing.programLevel] : undefined}
+        upcoming={viewing ? upcomingFor(viewing) : undefined}
+        onEdit={(row) => {
+          setViewing(null);
+          switchEditing(row);
+          // The form is at the top of the tab; opening it from a row 40 deep otherwise looks
+          // like the click did nothing.
+          formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }}
+        onClose={() => setViewing(null)}
+      />
     </section>
   );
 }

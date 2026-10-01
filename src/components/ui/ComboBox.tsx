@@ -27,6 +27,13 @@ import {
  * on pick: `nameText` feeds Income.studentName, and appending a code there would corrupt
  * every stored name and break the name-matching that links payments to students.
  */
+/**
+ * `value` MAY be empty: an option that names something real but has no record behind it yet - a
+ * payer we have been paid by twice before anyone created their student record. Picking one fills
+ * the name and leaves the id blank, which is exactly what typing the same name by hand would do,
+ * except spelled the same way every time (and a name spelled the same way is what later links
+ * those payments to the record when it is finally created).
+ */
 export type ComboOption = { value: string; label: string; hint?: string };
 
 type Props = {
@@ -174,10 +181,12 @@ export function ComboBox({
               </div>
             ) : (
               matches.map((o, i) => {
-                const isSel = o.value === selected;
+                // `!!o.value`: an option with no record behind it must not read as "selected"
+                // merely because nothing is selected - that would tick every one of them.
+                const isSel = !!o.value && o.value === selected;
                 return (
                   <div
-                    key={o.value}
+                    key={o.value || `text:${o.label}`}
                     role="option"
                     aria-selected={isSel}
                     onPointerEnter={() => setActive(i)}

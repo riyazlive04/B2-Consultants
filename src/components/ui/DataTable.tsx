@@ -1,13 +1,10 @@
 "use client";
 
 import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
-import { Search, Download, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Inbox, SearchX } from "lucide-react";
+import { Search, Download, ArrowUp, ArrowDown, Inbox, SearchX } from "lucide-react";
 import { EmptyState } from "./kit";
 import { Btn } from "./controls";
-
-/** Page sizes offered under the table. The first is the default and the floor for showing the pager. */
-const PAGE_SIZES = [25, 50, 100] as const;
-const SMALLEST_PAGE = PAGE_SIZES[0];
+import { TablePager, usePaged } from "./pager";
 
 export type Column<T> = {
   key: string;
@@ -102,15 +99,6 @@ export function DataTable<T>({
   // even over a few thousand in-memory rows (INP): the input updates every keystroke
   // while `visible` recomputes at React's leisure.
   const deferredFilter = useDeferredValue(filter);
-  const [page, setPage] = useState(0);
-  /**
-   * How many rows a page holds. A choice rather than a constant: 25 suits a screen being read,
-   * but someone reconciling a month of income wants the lot on one page and Ctrl-F, and being
-   * forced through pages of 25 to find one row is the complaint this answers. "All" is capped
-   * only by what the server already sent.
-   */
-  const [pageSize, setPageSize] = useState<number>(25);
-  const PAGE_SIZE = pageSize;
 
   const raw = (row: T, col: Column<T>): string | number | null => {
     if (col.value) return col.value(row);
@@ -156,14 +144,12 @@ export function DataTable<T>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, columns, deferredFilter, sortKey, sortDir]);
 
-  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount - 1);
-  const paged = visible.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-  const firstOnPage = visible.length === 0 ? 0 : safePage * PAGE_SIZE + 1;
-  const lastOnPage = Math.min(visible.length, (safePage + 1) * PAGE_SIZE);
-  // The pager stays on screen whenever there is more than one page's worth to read, even after
-  // someone picks a bigger page - otherwise choosing "100" makes the control that chose it vanish.
-  const showPager = visible.length > SMALLEST_PAGE;
+  /**
+   * Paging is shared with every other table in the app (ui/pager.tsx) rather than owned here. The
+   * page size is a choice and not a constant: 25 suits a screen being read, but someone reconciling
+   * a month of income wants the lot on one page and Ctrl-F.
+   */
+  const { paged, pager } = usePaged(visible);
 
   // Select-all spans every filtered row, not just this page - see Selection's doc.
   const selectableVisible = useMemo(
@@ -217,7 +203,7 @@ export function DataTable<T>({
       // funnel, dates run earliest-first, IDs count up. Descending is one more click away.
       setSortDir("asc");
     }
-    setPage(0);
+    pager.setPage(0);
   };
 
   // CSV formula-injection guard: a cell starting with = + - @ (or a tab/CR) is
@@ -255,7 +241,7 @@ export function DataTable<T>({
       title="No matches"
       body={<>Nothing matches “{filter.trim()}”.</>}
       action={
-        <Btn variant="soft" size="sm" onClick={() => { setFilter(""); setPage(0); }}>
+        <Btn variant="soft" size="sm" onClick={() => { setFilter(""); pager.setPage(0); }}>
           Clear filter
         </Btn>
       }
@@ -273,7 +259,7 @@ export function DataTable<T>({
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} />
               <input
                 value={filter}
-                onChange={(e) => { setFilter(e.target.value); setPage(0); }}
+                onChange={(e) => { setFilter(e.target.value); pager.setPage(0); }}
                 placeholder={filterPlaceholder}
                 aria-label={filterPlaceholder}
                 className="h-10 w-full rounded-field border border-line-strong bg-surface-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary-soft"
@@ -467,52 +453,7 @@ export function DataTable<T>({
           </ul>
         )}
       </div>
-      {/* ── Pager ─────────────────────────────────────────────────────────────────────
-          Says WHICH rows are on screen, not just which page. "Page 2 of 2" leaves you counting;
-          "26-32 of 32" answers the question the number was asked for. The page size sits beside
-          it because the honest answer to "this is tedious to page through" is often "show me
-          more at once". */}
-      {showPager && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-2.5 text-sm">
-          <label className="flex items-center gap-2 text-xs text-muted">
-            Rows per page
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
-              className="h-9 rounded-btn border border-line bg-surface px-2 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-soft"
-            >
-              {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-              <option value={visible.length}>All</option>
-            </select>
-          </label>
-          <span className="text-xs text-muted tnum" aria-live="polite">
-            {firstOnPage}-{lastOnPage} of {visible.length}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={safePage === 0}
-              onClick={() => setPage(safePage - 1)}
-              className="inline-flex h-10 items-center gap-1 rounded-btn border border-line px-3 text-sm hover:bg-surface-2 disabled:bg-surface-2 disabled:text-ink-disabled disabled:hover:bg-surface-2"
-            >
-              <ChevronLeft size={15} /> Prev
-            </button>
-            <span className="whitespace-nowrap text-xs text-muted tnum">
-              Page {safePage + 1} of {pageCount}
-            </span>
-            <button
-              type="button"
-              disabled={safePage >= pageCount - 1}
-              onClick={() => setPage(safePage + 1)}
-              className="inline-flex h-10 items-center gap-1 rounded-btn border border-line px-3 text-sm hover:bg-surface-2 disabled:bg-surface-2 disabled:text-ink-disabled disabled:hover:bg-surface-2"
-            >
-              Next <ChevronRight size={15} />
-            </button>
-          </div>
-        </div>
-      )}
+      <TablePager {...pager} />
     </div>
   );
 }

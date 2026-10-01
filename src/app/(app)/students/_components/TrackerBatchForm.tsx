@@ -10,6 +10,7 @@ import { Btn } from "@/components/ui/controls";
 import { Select, TextInput } from "@/components/ui/form";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { toast } from "@/components/ui/feedback";
+import { TablePager, usePaged } from "@/components/ui/pager";
 
 /**
  * The weekly tracker round - every student a coach is updating, on one screen.
@@ -61,6 +62,15 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
   const router = useRouter();
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  /**
+   * Paged for READING only - every row stays mounted and merely hidden off-page.
+   *
+   * This table is one `<form>`: a row's inputs are what carry its values, so unmounting page 1
+   * to show page 2 would strip the edits made on page 1 out of the submit, and the server would
+   * see a touched row with every field blank. Hiding costs a little DOM and keeps the batch
+   * honest; `MAX_BATCH_ROWS` on the server is the real bound.
+   */
+  const { pager } = usePaged(rows);
 
   const markTouched = (id: string) =>
     setTouched((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
@@ -130,9 +140,10 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {rows.map((r, i) => {
                 const p = `${r.enrollmentId}__`;
                 const isTouched = touched.has(r.enrollmentId);
+                const onPage = i + 1 >= pager.firstOnPage && i + 1 <= pager.lastOnPage;
                 /**
                  * "Not seen in over a week" is the whole reason for a weekly round, so the row
                  * says it rather than making the coach compute it from a date.
@@ -142,7 +153,7 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
                   <tr
                     key={r.enrollmentId}
                     onChange={() => markTouched(r.enrollmentId)}
-                    className={`border-b border-line last:border-0 ${isTouched ? "bg-primary-soft/40" : ""}`}
+                    className={`border-b border-line last:border-0 ${isTouched ? "bg-primary-soft/40" : ""} ${onPage ? "" : "hidden"}`}
                   >
                     <td className="px-4 py-2.5 align-top">
                       <div className="font-medium text-ink">{r.studentName}</div>
@@ -204,6 +215,7 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
             </tbody>
           </table>
         </div>
+        <TablePager {...pager} />
       </Card>
     </form>
   );

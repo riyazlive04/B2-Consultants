@@ -3,6 +3,7 @@ import { AlertCircle, BarChart3, TrendingUp, Users, Wallet } from "lucide-react"
 import type { GnFounderStats } from "@/server/german-note-workshops";
 import { formatDate } from "@/lib/format";
 import { signedColor } from "@/lib/signals";
+import { PagedTable } from "@/components/ui/pager";
 import { inr, pct } from "./workshopFormat";
 
 /**
@@ -73,19 +74,17 @@ export function FounderStats({ stats }: { stats: GnFounderStats }) {
             Nobody owes money - every conversion is paid in full.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-caption text-muted">
-                  <th className="px-4 py-2 font-medium">Name</th>
-                  <th className="px-4 py-2 font-medium">Workshop</th>
-                  <th className="px-4 py-2 text-right font-medium">Owed</th>
-                  <th className="px-4 py-2 text-right font-medium">Paid / quoted</th>
-                  <th className="px-4 py-2 font-medium">Due</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dues.map((d) => (
+          <PagedTable
+            head={
+              <tr className="border-b border-line text-left text-caption text-muted">
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Workshop</th>
+                <th className="px-4 py-2 text-right font-medium">Owed</th>
+                <th className="px-4 py-2 text-right font-medium">Paid / quoted</th>
+                <th className="px-4 py-2 font-medium">Due</th>
+              </tr>
+            }
+            rows={dues.map((d) => (
                   <tr key={d.conversionId} className="border-b border-line last:border-0">
                     <td className="px-4 py-2.5 font-medium">
                       {d.fullName}
@@ -109,10 +108,8 @@ export function FounderStats({ stats }: { stats: GnFounderStats }) {
                       {d.paymentMethod ? ` · ${d.paymentMethod}` : ""}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            ))}
+          />
         )}
       </div>
     </section>

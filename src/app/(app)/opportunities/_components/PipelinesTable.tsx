@@ -12,6 +12,7 @@ import { Field, TextInput, SubmitButton, FormError } from "@/components/ui/form"
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { Card, EmptyState, Pill } from "@/components/ui/kit";
 import { DateText } from "@/components/ui/DateText";
+import { TablePager, usePaged } from "@/components/ui/pager";
 
 /**
  * The Pipelines management list.
@@ -57,6 +58,7 @@ export function PipelinesTable({ rows, canConfigure }: { rows: PipelineRow[]; ca
     const needle = q.trim().toLowerCase();
     return needle ? ordered.filter((r) => r.name.toLowerCase().includes(needle)) : ordered;
   }, [ordered, q]);
+  const { paged, pager } = usePaged(visible);
 
   /** Drop `dragId` onto `overId`'s slot. Reordering the FULL list, never the filtered view. */
   function onDropRow(overId: string) {
@@ -165,7 +167,7 @@ export function PipelinesTable({ rows, canConfigure }: { rows: PipelineRow[]; ca
                 </tr>
               </thead>
               <tbody>
-                {visible.map((row, i) => (
+                {paged.map((row, i) => (
                   <tr
                     key={row.id}
                     // Drag targets are wired even while a search is narrowing the table, because
@@ -189,7 +191,7 @@ export function PipelinesTable({ rows, canConfigure }: { rows: PipelineRow[]; ca
                         <span className="inline-block w-[15px]" />
                       )}
                     </td>
-                    <td className="px-2 py-2.5 tnum text-ink-3">{i + 1}</td>
+                    <td className="px-2 py-2.5 tnum text-ink-3">{pager.firstOnPage + i}</td>
                     <td className="px-2 py-2.5">
                       <Link
                         href={`/opportunities?pipeline=${row.id}`}
@@ -246,6 +248,7 @@ export function PipelinesTable({ rows, canConfigure }: { rows: PipelineRow[]; ca
             </table>
           </div>
         )}
+        <TablePager {...pager} />
       </Card>
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Create pipeline" size="sm">

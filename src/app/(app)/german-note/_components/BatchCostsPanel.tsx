@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PagedTable } from "@/components/ui/pager";
 import { Users } from "lucide-react";
 import type { BatchCostRow } from "@/server/pending-pool-metrics";
 
@@ -44,20 +45,26 @@ export function BatchCostsPanel({ rows }: { rows: BatchCostRow[] }) {
         .
       </p>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-line text-left text-caption uppercase text-ink-3">
-              <th className="py-2 pr-4 font-medium">Batch</th>
-              <th className="py-2 pr-4 font-medium">Level</th>
-              <th className="py-2 pr-4 font-medium">Students</th>
-              <th className="py-2 pr-4 font-medium">Band</th>
-              <th className="py-2 pr-4 font-medium">Rate / head</th>
-              <th className="py-2 font-medium">Tutor fee</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
+      <PagedTable
+        head={
+          <tr className="border-b border-line text-left text-caption uppercase text-ink-3">
+            <th className="py-2 pr-4 font-medium">Batch</th>
+            <th className="py-2 pr-4 font-medium">Level</th>
+            <th className="py-2 pr-4 font-medium">Students</th>
+            <th className="py-2 pr-4 font-medium">Band</th>
+            <th className="py-2 pr-4 font-medium">Rate / head</th>
+            <th className="py-2 font-medium">Tutor fee</th>
+          </tr>
+        }
+        foot={
+          <tr>
+            <td colSpan={5} className="py-2 pr-4 text-right text-caption font-semibold uppercase text-ink-3">
+              Total, active batches
+            </td>
+            <td className="py-2 font-semibold text-ink">{inr(total)}</td>
+          </tr>
+        }
+        rows={rows.map((r) => (
               <tr key={r.id} className="border-b border-line/60">
                 <td className="py-2 pr-4">
                   <Link href={`/german-note/${r.id}`} className="font-medium text-ink hover:underline">
@@ -88,18 +95,8 @@ export function BatchCostsPanel({ rows }: { rows: BatchCostRow[] }) {
                 <td className="py-2 pr-4 text-ink-2">{inr(r.ratePerHead)}</td>
                 <td className="py-2 font-semibold text-ink">{inr(r.tutorFeeTotal)}</td>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={5} className="py-2 pr-4 text-right text-caption font-semibold uppercase text-ink-3">
-                Total, active batches
-              </td>
-              <td className="py-2 font-semibold text-ink">{inr(total)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+        ))}
+      />
     </div>
   );
 }

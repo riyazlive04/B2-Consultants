@@ -11,6 +11,7 @@ import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Modal } from "@/components/ui/Modal";
+import { TablePager, usePaged } from "@/components/ui/pager";
 import { Trash2 } from "lucide-react";
 
 /**
@@ -45,6 +46,7 @@ export function PendingPoolPanel({
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { paged, pager } = usePaged(rows);
 
   async function add(form: FormData) {
     setError(null);
@@ -139,7 +141,7 @@ export function PendingPoolPanel({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {paged.map((r) => {
                 // Only offer batches at this joiner's level - the action re-checks anyway,
                 // but offering an impossible choice is a UI that lies.
                 const options = batchesWithRoom.filter((b) => b.level === r.level);
@@ -197,6 +199,7 @@ export function PendingPoolPanel({
           </table>
         </div>
       )}
+      <TablePager {...pager} bordered={false} />
 
       <Modal open={adding} onClose={() => setAdding(false)} title="Hold someone in the pool">
           <form action={add} className="space-y-4">

@@ -433,8 +433,58 @@ export default async function FinancePage({
 
         <FinanceKpis kpis={kpis} />
 
-        {/* Sits directly under the KPI row because it REFRAMES that row: every figure above is
-            cash, and this says how much of it has actually been earned yet. */}
+        {/* ENTRY FIRST - the day-to-day job here is typing a payment in, not reading a chart.
+            The tabbed forms and their tables sit directly under the KPI row so they are reachable
+            without scrolling past three annual charts; the charts are review material and follow. */}
+        <Tabs
+          initial={initialTab}
+          tabs={[
+            {
+              label: "Income",
+              content: (
+                <IncomeSection
+                  rows={incomes}
+                  today={today}
+                  studentOptions={studentOptions}
+                  studentCodeById={studentCodeById}
+                  levelOptions={levelOpts}
+                  fxRate={fxRate}
+                  fxStale={fx.stale}
+                  fxDate={fxDate}
+                  canCreateStudent={isAdmin}
+                  upcomingByStudent={upcomingByStudent}
+                  upcomingInstalments={upcomingInstalments}
+                />
+              ),
+            },
+            {
+              label: "Expenses",
+              content: <ExpenseSection rows={expenses} today={today} fxRate={fxRate} fxStale={fx.stale} fxDate={fxDate} />,
+            },
+            {
+              label: `Pending payments${pendings.some((p) => p.overdue) ? " ⚠" : ""}`,
+              content: <PendingSection rows={pendings} studentCodeById={studentCodeById} waStatus={waByPending} levelOptions={levelOpts} fxRate={fxRate} fxStale={fx.stale} fxDate={fxDate} />,
+            },
+            { label: "Commission", content: <CommissionSection report={commission} /> },
+            {
+              label: `Archived${archivedCount ? ` (${archivedCount})` : ""}`,
+              content: (
+                <ArchivedGroups
+                  canPurge={canPurge}
+                  groups={[
+                    { label: "Income", noun: "income entry", rows: archIncomes, restore: restoreIncome, purge: purgeIncome },
+                    { label: "Expenses", noun: "expense", rows: archExpenses, restore: restoreExpense, purge: purgeExpense },
+                    { label: "Pending payments", noun: "receivable", rows: archPendings, restore: restorePendingPayment, purge: purgePendingPayment },
+                  ]}
+                />
+              ),
+            },
+          ]}
+        />
+
+        {/* Reframes the KPI row above: every figure there is cash, and this says how much of it
+            has actually been earned yet. Reads after the entry tabs, with the rest of the review
+            material. */}
         <RecognitionCard
           monthLabel={monthLabel}
           cashInrMinor={recognition.cashInrMinor}
@@ -506,51 +556,6 @@ export default async function FinancePage({
         <ClientMovementChart months={clientMovement} />
       </Card>
 
-      <Tabs
-        initial={initialTab}
-        tabs={[
-          {
-            label: "Income",
-            content: (
-              <IncomeSection
-                rows={incomes}
-                today={today}
-                studentOptions={studentOptions}
-                studentCodeById={studentCodeById}
-                levelOptions={levelOpts}
-                fxRate={fxRate}
-                fxStale={fx.stale}
-                fxDate={fxDate}
-                canCreateStudent={isAdmin}
-                upcomingByStudent={upcomingByStudent}
-                upcomingInstalments={upcomingInstalments}
-              />
-            ),
-          },
-          {
-            label: "Expenses",
-            content: <ExpenseSection rows={expenses} today={today} fxRate={fxRate} fxStale={fx.stale} fxDate={fxDate} />,
-          },
-          {
-            label: `Pending payments${pendings.some((p) => p.overdue) ? " ⚠" : ""}`,
-            content: <PendingSection rows={pendings} studentCodeById={studentCodeById} waStatus={waByPending} levelOptions={levelOpts} fxRate={fxRate} fxStale={fx.stale} fxDate={fxDate} />,
-          },
-          { label: "Commission", content: <CommissionSection report={commission} /> },
-          {
-            label: `Archived${archivedCount ? ` (${archivedCount})` : ""}`,
-            content: (
-              <ArchivedGroups
-                canPurge={canPurge}
-                groups={[
-                  { label: "Income", noun: "income entry", rows: archIncomes, restore: restoreIncome, purge: purgeIncome },
-                  { label: "Expenses", noun: "expense", rows: archExpenses, restore: restoreExpense, purge: purgeExpense },
-                  { label: "Pending payments", noun: "receivable", rows: archPendings, restore: restorePendingPayment, purge: purgePendingPayment },
-                ]}
-              />
-            ),
-          },
-        ]}
-      />
       </FinanceCurrencyProvider>
     </div>
   );

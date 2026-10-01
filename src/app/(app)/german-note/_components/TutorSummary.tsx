@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PagedTable } from "@/components/ui/pager";
 import { BookOpen, GraduationCap, Users } from "lucide-react";
 import { Card, Hint } from "@/components/ui/kit";
 import { BOOK_ORDER_STATUS_LABELS } from "@/lib/labels";
@@ -66,17 +67,17 @@ export function TutorSummary({ desk }: { desk: TutorDesk }) {
 
       {desk.students.length > 0 && (
         <Card title="Your students" subtitle="ID beside each name - the reference the head coach asks for.">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-line-strong text-left">
-                  <th className="py-2 pr-3 font-semibold text-ink-2">Student</th>
-                  <th className="px-3 py-2 font-semibold text-ink-2">ID</th>
-                  <th className="py-2 pl-3 font-semibold text-ink-2">Batch</th>
-                </tr>
-              </thead>
-              <tbody>
-                {desk.students.map((s) => (
+          <PagedTable
+            minWidth={420}
+            className="border-collapse"
+            head={
+              <tr className="border-b border-line-strong text-left">
+                <th className="py-2 pr-3 font-semibold text-ink-2">Student</th>
+                <th className="px-3 py-2 font-semibold text-ink-2">ID</th>
+                <th className="py-2 pl-3 font-semibold text-ink-2">Batch</th>
+              </tr>
+            }
+            rows={desk.students.map((s) => (
                   <tr key={`${s.studentId}-${s.batchName}`} className="border-b border-line last:border-0">
                     <td className="py-2 pr-3">
                       <Link href={`/students/${s.studentId}`} className="font-medium text-ink hover:underline">
@@ -86,10 +87,8 @@ export function TutorSummary({ desk }: { desk: TutorDesk }) {
                     <td className="px-3 py-2 tnum text-muted">{s.studentCode ?? "-"}</td>
                     <td className="py-2 pl-3 text-muted">{s.batchName}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            ))}
+          />
         </Card>
       )}
     </div>

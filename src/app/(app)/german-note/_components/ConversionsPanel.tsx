@@ -16,6 +16,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
+import { TablePager, usePaged } from "@/components/ui/pager";
 import {
   CONV_STATUS_OPTIONS,
   DAY_TYPE_LABELS,
@@ -160,6 +161,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<GnConversionRow | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { paged, pager } = usePaged(conversions);
 
   const refresh = () => startTransition(() => router.refresh());
 
@@ -195,7 +197,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
               </tr>
             </thead>
             <tbody>
-              {conversions.map((c) => (
+              {paged.map((c) => (
                 <tr key={c.id} className="border-b border-line last:border-0 align-top hover:bg-surface-2">
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
@@ -253,6 +255,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
           </table>
         </div>
       )}
+      <TablePager {...pager} bordered={false} />
 
       <Modal open={creating} onClose={() => setCreating(false)} title="Add conversion" size="lg">
         <form

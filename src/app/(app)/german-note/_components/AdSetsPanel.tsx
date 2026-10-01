@@ -14,6 +14,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, SubmitButton, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
+import { TablePager, usePaged } from "@/components/ui/pager";
 import { inr, pct } from "./workshopFormat";
 
 const num = (n: number) => n.toLocaleString("en-IN");
@@ -54,6 +55,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<GnAdSetRow | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { paged, pager } = usePaged(adSets);
 
   const refresh = () => startTransition(() => router.refresh());
 
@@ -90,9 +92,9 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
               </tr>
             </thead>
             <tbody>
-              {adSets.map((s, i) => (
+              {paged.map((s, i) => (
                 <tr key={s.id} className="border-b border-line last:border-0 hover:bg-surface-2">
-                  <td className="px-3 py-2.5 font-medium text-ink">{s.label ?? `Ad-set ${i + 1}`}</td>
+                  <td className="px-3 py-2.5 font-medium text-ink">{s.label ?? `Ad-set ${pager.firstOnPage + i}`}</td>
                   <td className="px-3 py-2.5 text-right tnum">{inr(s.adSpend)}</td>
                   <td className="px-3 py-2.5 text-right tnum">{num(s.reach)}</td>
                   <td className="px-3 py-2.5 text-right tnum">{num(s.linkClicks)}</td>
@@ -149,6 +151,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
           </table>
         </div>
       )}
+      <TablePager {...pager} bordered={false} />
 
       <Modal open={creating} onClose={() => setCreating(false)} title="Add ad-set" size="md">
         <form

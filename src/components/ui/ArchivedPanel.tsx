@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { RotateCcw, Trash2, Archive } from "lucide-react";
 import { IconButton } from "@/components/ui/controls";
 import { EmptyState } from "@/components/ui/kit";
@@ -30,6 +30,13 @@ export function ArchivedPanel({
   noun: string;
 }) {
   const [rows, setRows] = useState(initialRows);
+  /**
+   * Resync when the server sends a fresh list. The local copy exists only so a restore or a purge
+   * can drop its row before the round trip finishes; without this it also SWALLOWS every later
+   * update, so archiving a record elsewhere on the page left this tab showing the old list until a
+   * full reload. Seeding state from a prop is a snapshot, not a subscription.
+   */
+  useEffect(() => setRows(initialRows), [initialRows]);
   const [pending, start] = useTransition();
 
   const drop = (id: string) => setRows((r) => r.filter((x) => x.id !== id));

@@ -3,6 +3,7 @@ import { FileSignature, Plus } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/kit";
 import { StudentName } from "@/components/ui/StudentName";
+import { PagedTable } from "@/components/ui/pager";
 import { requireSection } from "@/lib/rbac";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { effectiveAgreementStatus } from "@/lib/agreement";
@@ -83,20 +84,18 @@ export default async function AgreementsPage() {
             No agreements yet. Create one from a won lead.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="px-4 py-3 font-medium">Document</th>
-                  <th className="px-4 py-3 font-medium">Student</th>
-                  <th className="px-4 py-3 font-medium">Batch</th>
-                  <th className="px-4 py-3 text-right font-medium">Fee</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
+          <PagedTable
+            head={
+              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+                <th className="px-4 py-3 font-medium">Document</th>
+                <th className="px-4 py-3 font-medium">Student</th>
+                <th className="px-4 py-3 font-medium">Batch</th>
+                <th className="px-4 py-3 text-right font-medium">Fee</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Created</th>
+              </tr>
+            }
+            rows={rows.map((r) => {
                   const d = r.parsed.success ? r.parsed.data : null;
                   return (
                     <tr key={r.id} className="border-b border-line last:border-0 hover:bg-surface-2">
@@ -130,10 +129,8 @@ export default async function AgreementsPage() {
                       <td className="px-4 py-3 text-muted">{formatDate(r.createdAt)}</td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
+            })}
+          />
         )}
       </div>
     </div>

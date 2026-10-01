@@ -10,6 +10,7 @@ import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { Modal } from "@/components/ui/Modal";
+import { TablePager, usePaged } from "@/components/ui/pager";
 
 /**
  * Book orders with the publisher (spec §9.2, Part 2 §4):
@@ -86,6 +87,7 @@ export function BookOrdersPanel({
   const [editing, setEditing] = useState<BookOrderRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState<"live" | "dry" | null>(null);
+  const { paged, pager } = usePaged(rows);
 
   async function create(form: FormData) {
     setError(null);
@@ -183,7 +185,7 @@ export function BookOrdersPanel({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {paged.map((r) => (
                 <tr key={r.id} className="border-b border-line/60">
                   <td className="py-2 pr-4 font-medium text-ink">{r.studentName}</td>
                   <td className="py-2 pr-4 text-ink-2">{r.level}</td>
@@ -236,6 +238,7 @@ export function BookOrdersPanel({
           </table>
         </div>
       )}
+      <TablePager {...pager} bordered={false} />
 
       <Modal open={creating} onClose={() => setCreating(false)} title="New book order">
         <form action={create} className="space-y-4">

@@ -1,5 +1,6 @@
 import { PERFORMANCE_LABELS } from "@/lib/attribution";
 import type { AttributionRow } from "@/server/insights-metrics";
+import { PagedTable } from "@/components/ui/pager";
 
 /**
  * Campaign attribution (ER v2 Track F) - the diagram's `INSIGHT` entity, rendered rather
@@ -43,9 +44,10 @@ export default function AttributionTable({ rows }: { rows: AttributionRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-card border border-line bg-surface">
-      <table className="w-full text-sm">
-        <thead>
+    <div className="rounded-card border border-line bg-surface">
+      <PagedTable
+        bodyClassName="divide-y divide-line"
+        head={
           <tr className="border-b border-line text-left text-caption uppercase text-ink-3">
             <th className="px-4 py-3 font-medium">Campaign</th>
             <th className="px-4 py-3 text-right font-medium">Spend</th>
@@ -58,9 +60,8 @@ export default function AttributionTable({ rows }: { rows: AttributionRow[] }) {
             <th className="px-4 py-3 text-right font-medium">ROAS</th>
             <th className="px-4 py-3 font-medium">vs median</th>
           </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {rows.map((r) => (
+        }
+        rows={rows.map((r) => (
             <tr key={r.sourceId}>
               <td className="px-4 py-3">
                 <div className="font-medium text-ink">{r.campaign}</div>
@@ -82,9 +83,8 @@ export default function AttributionTable({ rows }: { rows: AttributionRow[] }) {
                 </span>
               </td>
             </tr>
-          ))}
-        </tbody>
-      </table>
+        ))}
+      />
       <p className="border-t border-line px-4 py-3 text-caption text-ink-3">
         Leads and spend are counted inside the window; revenue is not. A lead captured in March
         that enrolls in May earned its campaign that money - clipping revenue to the window

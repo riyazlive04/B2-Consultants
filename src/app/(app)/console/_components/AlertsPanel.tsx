@@ -13,6 +13,7 @@ import {
 } from "@/lib/config-schema";
 import { Field } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
+import { TablePager, usePaged } from "@/components/ui/pager";
 import {
   saveSpeedToLeadAlertConfig,
   saveDunningConfig,
@@ -186,10 +187,16 @@ type PreviewRow = {
   hasPhone: boolean;
 };
 
+/** Stable empty list, so "no preview yet" does not hand the pager a fresh array each render. */
+const EMPTY_PREVIEW: PreviewRow[] = [];
+
 function DunningCard({ config }: { config: DunningConfig }) {
   const { draft, setDraft, busy, error, dirty, commit } = useDraft(config, saveDunningConfig);
   const [preview, setPreview] = useState<PreviewRow[] | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  // The dunning preview used to be cut off at 25 rows with "…and 112 more" - which is exactly the
+  // list someone arming this needs to read in full before they arm it.
+  const { paged: pagedPreview, pager: previewPager } = usePaged(preview ?? EMPTY_PREVIEW);
 
   const stage = (
     key: "upcoming" | "missed" | "final",
@@ -311,7 +318,7 @@ function DunningCard({ config }: { config: DunningConfig }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {preview.slice(0, 25).map((r) => (
+                {pagedPreview.map((r) => (
                   <tr key={r.instalmentId}>
                     <td className="py-1.5 pr-4 text-ink">{r.studentName}</td>
                     <td className="py-1.5 pr-4 text-ink-2">{r.stage}</td>
@@ -331,9 +338,7 @@ function DunningCard({ config }: { config: DunningConfig }) {
                 ))}
               </tbody>
             </table>
-            {preview.length > 25 && (
-              <p className="mt-2 text-caption text-muted">…and {preview.length - 25} more.</p>
-            )}
+            <TablePager {...previewPager} bordered={false} />
           </div>
         )}
       </div>

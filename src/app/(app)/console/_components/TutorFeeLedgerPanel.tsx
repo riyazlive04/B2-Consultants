@@ -6,6 +6,7 @@ import type { TutorFeeStatus } from "@prisma/client";
 import { Card, Hint } from "@/components/ui/kit";
 import { toast } from "@/components/ui/feedback";
 import { Field } from "@/components/ui/form";
+import { TablePager, usePaged } from "@/components/ui/pager";
 import type { TutorFeeRow } from "@/server/tutor-fees";
 import { recomputeTutorFees, setTutorFeeStatus, setTutorFeeOverride } from "@/server/tutor-fee-actions";
 
@@ -36,6 +37,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { paged, pager } = usePaged(fees);
   const [editing, setEditing] = useState<string | null>(null);
 
   const totals = fees.reduce(
@@ -128,7 +130,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {fees.map((f) => (
+                {paged.map((f) => (
                   <tr key={f.id} className="align-top">
                     <td className="py-2 pr-4">
                       <div className="font-medium text-ink">{f.batchCode ?? f.batchName}</div>
@@ -234,6 +236,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
             </table>
           </div>
         )}
+        <TablePager {...pager} bordered={false} />
       </Card>
     </div>
   );

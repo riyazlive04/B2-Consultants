@@ -223,6 +223,33 @@ async function writeScore(
       },
     });
 
+    /**
+     * …and keep what this scoring said, for good.
+     *
+     * The columns above are the CURRENT reading and are overwritten every time someone opts in
+     * again, which is right for the number driving today's decisions and wrong for the question
+     * the desk asks about a returning prospect: what did they look like last time? A prospect who
+     * scored CANCEL in March and CONFIRM in September is a different conversation from one who
+     * has always scored CONFIRM - and the March reading used to be gone the moment September
+     * replaced it.
+     *
+     * Append-only, and inside the same transaction as the overwrite, so the history can never
+     * miss a reading the columns recorded.
+     */
+    await tx.leadScoreEvent.create({
+      data: {
+        leadId,
+        source: "OPT_IN",
+        budget: bant.bantBudget,
+        authority: bant.bantAuthority,
+        need: bant.bantNeed,
+        timeline: bant.bantTimeline,
+        score: bant.bantScore,
+        avg: bant.bantAvg,
+        verdict: bant.bantVerdict,
+      },
+    });
+
     // Replace, don't append. `LeadAnswer`'s @@unique is ([bookingRequestId, questionId]), and
     // Postgres treats NULLs as distinct - so for a lead-level answer (no booking) that unique
     // enforces nothing, and a redelivered webhook would stack a second copy of every answer.

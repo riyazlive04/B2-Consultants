@@ -700,6 +700,10 @@ model Lead {
   workflowEnrollments WorkflowEnrollment[]
   consents            ConsentRecord[]
   answers             LeadAnswer[]
+  /// Every address this person has ever given us - see LeadEmail.
+  emails              LeadEmail[]
+  /// BANT as it stood at each scoring, kept so a returning prospect can be read in context.
+  scoreEvents         LeadScoreEvent[]
   enrollments         Enrollment[]           @relation("EnrollmentLead")
   workshopRegistrations WorkshopRegistration[]
 
@@ -734,6 +738,75 @@ model LeadStageHistory {
   @@index([leadId])
   @@index([toStage, changedAt])
   @@map("lead_stage_history")
+}
+
+/// Every address a lead has ever given us.
+///
+/// `Lead.email` is one column, and intake filled it blanks-only: the FIRST address someone typed
+/// became permanent and every later one was parsed, validated and discarded. A prospect who opted
+/// in from a college address in March and came back from their work address in September went on
+/// being written to at the address they had stopped reading - no bounce, no log line, and from the
+/// desk it looked like someone who simply went quiet.
+///
+/// `Lead.email` is still the one we write to, and it now follows the person (newest wins, see
+/// lib/lead-emails). These rows are what makes that safe: nothing is forgotten, intake still
+/// recognises someone who comes back on an older address, and the desk can see which address
+/// reached them before.
+model LeadEmail {
+  id     String @id @default(cuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  /// Exactly as they typed it - what a human reads back off the screen.
+  email  String
+  /// Lower-cased and trimmed, which is ALL the folding `normalizeEmail` does. Gmail's dot and
+  /// `+` conventions are deliberately not applied: `a.b@yahoo.com` really is a different mailbox
+  /// from `ab@yahoo.com`, and folding them would merge two prospects into one record.
+  emailKey String
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  /// How many captures arrived on this address - the difference between one stray typo and the
+  /// address someone actually uses.
+  timesSeen   Int      @default(1)
+
+  /// One row per address per lead; a repeat sighting bumps `lastSeenAt`/`timesSeen` instead.
+  @@unique([leadId, emailKey])
+  /// Intake looks a submitted address up here to recognise a returning prospect.
+  @@index([emailKey])
+  @@map("lead_email")
+}
+
+/// A BANT score as it stood at one moment, kept for good.
+///
+/// The score on `Lead` is the CURRENT one and is overwritten on every re-score, which is correct
+/// for the column driving today's decisions and useless for the question the desk actually asks
+/// about a returning prospect: "what did they look like last time?". A prospect scoring CANCEL in
+/// March and CONFIRM in September is a different conversation from one who has always scored
+/// CONFIRM, and the March reading had been gone since the moment September overwrote it.
+///
+/// Append-only. Nothing updates or deletes a row here, so a re-weighted catalogue can never
+/// retroactively change what a prospect was judged on at the time.
+model LeadScoreEvent {
+  id     String @id @default(cuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  source  BantSource
+  budget    Boolean?
+  authority Boolean?
+  need      Boolean?
+  timeline  Boolean?
+  score     Int?
+  avg       Float?
+  verdict   BantVerdict?
+  /// Which question catalogue produced this, so a later re-tune is never mistaken for what this
+  /// prospect was actually scored under.
+  configVersion Int?
+
+  scoredAt DateTime @default(now())
+
+  @@index([leadId, scoredAt])
+  @@map("lead_score_event")
 }
 
 enum CallOutcome {

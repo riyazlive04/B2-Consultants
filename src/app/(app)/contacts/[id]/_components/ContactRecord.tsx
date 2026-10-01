@@ -11,6 +11,8 @@ import type { CustomFieldDefinition } from "@prisma/client";
 import type { ContactDetail } from "@/server/contacts-metrics";
 import type { AgreementSummary } from "@/lib/agreement-state";
 import { AgreementTaskCard } from "@/app/(app)/agreements/_components/AgreementTaskCard";
+import { ProspectHistoryCard } from "./ProspectHistoryCard";
+import type { ProspectHistory } from "@/lib/prospect-history";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Modal } from "@/components/ui/Modal";
 import { Field, TextInput, Select, TextArea, SubmitButton, FormError } from "@/components/ui/form";
@@ -59,6 +61,7 @@ export default function ContactRecord({
   allTags,
   customFields,
   agreement,
+  history,
   canConvert,
 }: {
   contact: ContactDetail;
@@ -67,6 +70,7 @@ export default function ContactRecord({
   allTags: string[];
   customFields: CustomFieldDefinition[];
   agreement: AgreementSummary;
+  history: ProspectHistory;
   canConvert: boolean;
 }) {
   const router = useRouter();
@@ -175,6 +179,9 @@ export default function ContactRecord({
 
           {/* How they qualified - the landing page's own answers. */}
           <BantCard contact={contact} />
+
+          {/* Everything we already knew: other addresses, earlier calls, how the score moved. */}
+          <ProspectHistoryCard history={history} />
 
           {/* Tags */}
           <Card title="Tags">

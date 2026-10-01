@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarClock, Check, CircleCheck } from "lucide-react";
+import { CalendarClock, Check, CircleCheck, History } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
 import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
@@ -32,6 +32,38 @@ const VERDICT_STYLE: Record<string, string> = {
  * unscored here while My Desk showed their score. `resolveBant` (applied server-side) answers
  * "which stored score do I show" once, for every surface.
  */
+/**
+ * The whole history as hover text, since the chip itself only has room for the headline.
+ *
+ * The addresses matter most and are listed first. "We were writing to old@college.edu" is the
+ * single most actionable thing on this row: it is why that prospect never answered an email.
+ */
+function historyTitle(h: NonNullable<BookingRow["history"]>): string {
+  const lines: string[] = [];
+  if (h.otherEmails.length > 0) {
+    lines.push(`Also used: ${h.otherEmails.join(", ")}`);
+  }
+  if (h.lastOutcome) {
+    lines.push(
+      `Last time: ${BOOKING_STATUS_LABELS[h.lastOutcome.status] ?? h.lastOutcome.status}` +
+        (h.lastOutcome.day ? ` on ${h.lastOutcome.day}` : ""),
+    );
+  }
+  if (h.previousCount > 0) {
+    lines.push(
+      `${h.previousCount} earlier booking${h.previousCount === 1 ? "" : "s"}: ` +
+        [
+          h.attended ? `${h.attended} attended` : "",
+          h.noShows ? `${h.noShows} no-show` : "",
+          h.cancelled ? `${h.cancelled} cancelled` : "",
+          h.upcoming ? `${h.upcoming} still upcoming` : "",
+        ].filter(Boolean).join(", "),
+    );
+  }
+  if (h.previousVerdict) lines.push(`Previous BANT verdict: ${h.previousVerdict}`);
+  return lines.join("\n");
+}
+
 function BantChips({ r }: { r: BookingRow }) {
   // Null is "nobody has scored them", NOT zero. Rendering 0.0/4 would rank a prospect nobody
   // asked alongside one who answered badly - see lib/bant-view.ts.
@@ -133,9 +165,30 @@ export function BookingsTable({
         <div className="min-w-0">
           <div className="font-medium text-ink">{r.name}</div>
           <div className="tnum text-xs text-muted">{r.phone}</div>
+          {/*
+            ── We have met this person before ──────────────────────────────────────
+            Only on a genuine repeat, so a first-time booking stays exactly as it was. Everything
+            here was already in the database and none of it was on screen: whoever was about to
+            dial a prospect who had booked twice and never turned up saw the same blank row as a
+            brand-new one, and opened with the same cold line.
+
+            Amber rather than red. A returning prospect is context to read before dialling, not a
+            problem - someone who no-showed once and came back is MORE interested than average,
+            not less.
+          */}
+          {r.history && (
+            <div
+              className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-watch-soft px-2 py-0.5 text-caption font-medium text-watch"
+              title={historyTitle(r.history)}
+            >
+              <History size={11} aria-hidden className="flex-none" />
+              <span className="truncate">{r.history.headline}</span>
+            </div>
+          )}
         </div>
       ),
-      value: (r) => r.name,
+      // The history joins the filter/CSV value, so "no-show" finds everyone who has missed one.
+      value: (r) => [r.name, r.history?.headline ?? ""].filter(Boolean).join(" "),
     },
     {
       key: "slot", header: "Call time",

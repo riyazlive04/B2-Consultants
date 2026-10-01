@@ -10,6 +10,9 @@ import { scoreLeadAtOptIn } from "./lead-qualification";
 import { sendIntroNow } from "./outreach-instant";
 import { announceReturningOptIn } from "./stage-messages";
 import { planReturningOptIn } from "@/lib/returning-opt-in";
+import { planEmailUpdate } from "@/lib/lead-emails";
+import { normalizeEmail } from "@/lib/outreach-engine";
+import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import { ensureDefaultOpportunity } from "./opportunity-sync";
 import { getPipelineConfig } from "./founder-config";
 
@@ -28,6 +31,31 @@ import { getPipelineConfig } from "./founder-config";
  * createdAt (set by the DB) is the speed-to-lead baseline; contactedAt is stamped later
  * when a setter marks the lead contacted (pipeline-actions.markLeadContacted).
  */
+
+/**
+ * Record the addresses a capture carried, and bump the ones we have seen before.
+ *
+ * Idempotent by (lead, emailKey), so a webhook redelivering the same submission bumps a counter
+ * instead of growing the table. Runs on its own connection rather than inside the caller's
+ * transaction: knowing which address someone used is worth having, but it is never worth failing
+ * a capture over - a prospect we could not write down at all is strictly worse than one whose
+ * address history has a gap.
+ */
+async function recordLeadEmails(leadId: string, emails: readonly string[]): Promise<void> {
+  for (const raw of emails) {
+    const key = normalizeEmail(raw);
+    if (!key) continue;
+    try {
+      await prisma.leadEmail.upsert({
+        where: { leadId_emailKey: { leadId, emailKey: key } },
+        create: { leadId, email: raw.trim(), emailKey: key },
+        update: { lastSeenAt: new Date(), timesSeen: { increment: 1 } },
+      });
+    } catch (err) {
+      console.error(`[lead-intake] recording email for lead ${leadId} failed:`, err);
+    }
+  }
+}
 
 export type IntakeLead = {
   name: string;
@@ -295,8 +323,28 @@ async function acceptReturningOptIn(
     hasUpcomingBooking: !!upcoming,
   });
 
+  /**
+   * ── The address follows the person ─────────────────────────────────────────────
+   * This was `existing.email ?? input.email`, i.e. fill-blanks-only, which meant the FIRST
+   * address someone ever typed was permanent. Every email after that went to a mailbox they had
+   * stopped reading, silently. See lib/lead-emails for the rule and why the redelivery branch
+   * below still fills blanks only.
+   *
+   * Everything else here stays fill-blanks: a city or an industry corrected by hand is a human's
+   * judgement about an unchanging fact, where the address is a choice the person just re-made.
+   */
+  const known = await prisma.leadEmail.findMany({
+    where: { leadId: existing.id },
+    select: { emailKey: true },
+  });
+  const emailPlan = planEmailUpdate({
+    currentPrimary: existing.email,
+    submitted: input.email,
+    known: known.map((e) => e.emailKey),
+  });
+
   const fillBlanks = {
-    email: existing.email ?? input.email ?? null,
+    email: emailPlan.primary,
     city: existing.city ?? input.city ?? null,
     industry: existing.industry ?? input.industry ?? null,
     utm: existing.utm === null && utm !== undefined ? utm : undefined,
@@ -306,9 +354,33 @@ async function acceptReturningOptIn(
     originDomain: existing.originDomain ?? input.originDomain ?? null,
   };
 
+  // Both branches below record the sighting. Done after the write, never inside it, so the
+  // history can never be the thing that fails a capture.
+  const settle = async (lead: Lead) => {
+    await recordLeadEmails(existing.id, [
+      ...emailPlan.record,
+      ...(input.email ? [input.email] : []),
+    ]);
+    if (emailPlan.changed) {
+      /**
+       * Worth a line in the activity log, because it changes where every future email goes and
+       * the desk has no other way to notice. `existing.email` is the address being displaced.
+       */
+      void logSystemActivity(SYSTEM_ACTORS.intake, {
+        action: "lead.email.changed",
+        section: "contacts",
+        entityType: "Lead",
+        entityId: existing.id,
+        summary: `${existing.name} opted in again with a new email - now writing to ${emailPlan.primary}`,
+        meta: { from: existing.email, to: emailPlan.primary },
+      });
+    }
+    return lead;
+  };
+
   if (!plan.reopened) {
     const lead = await prisma.lead.update({ where: { id: existing.id }, data: fillBlanks });
-    return { lead, reopened: false };
+    return { lead: await settle(lead), reopened: false };
   }
 
   // Same rotation the create path uses, and failing it must never break capture.
@@ -363,7 +435,7 @@ async function acceptReturningOptIn(
   // lead came back is the entire point of this branch.
   void notifyNewOptIn(lead.id);
 
-  return { lead, reopened: true };
+  return { lead: await settle(lead), reopened: true };
 }
 
 async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
@@ -389,6 +461,11 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
       // NOT a returning opt-in: same source AND same record id is the sender redelivering one
       // submission, not the person coming back. Re-opening on a retry would let a flaky webhook
       // resurrect leads nobody re-applied to.
+      //
+      // The address is RECORDED but never promoted here, which is the whole point of keeping this
+      // branch separate: a replay of March's submission must not drag March's address back over
+      // the one they gave us in September.
+      if (input.email) await recordLeadEmails(existing.id, [input.email]);
       return { lead: updated, created: false, deduped: "externalRef", reopened: false };
     }
   }
@@ -431,12 +508,36 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
       ? findLeadByNormalizedPhone(normalized, phone)
       : prisma.lead.findFirst({ where: { phone } });
 
+  /**
+   * Matched against the CURRENT address and every address this person has ever used.
+   *
+   * Looking only at `Lead.email` was right while that column never changed. Now that it follows
+   * the person, an older address would stop resolving: someone who opted in from college, came
+   * back from work, then filled a third form from their phone's old autofill would be a brand-new
+   * Lead - splitting the very history this change exists to keep together. The address history is
+   * the index that keeps all three on one record.
+   *
+   * The current column is still checked first and on its own: it is the common case, it is
+   * indexed, and it answers without a join for every lead captured before this table existed.
+   */
   const emailMatch: Promise<Lead | null> = !email
     ? Promise.resolve(null)
-    : prisma.lead.findFirst({
-        // Case-insensitive, the same folding findDuplicateLead and the booking form use.
-        where: { email: { equals: email, mode: "insensitive" } },
-      });
+    : prisma.lead
+        .findFirst({
+          // Case-insensitive, the same folding findDuplicateLead and the booking form use.
+          where: { email: { equals: email, mode: "insensitive" } },
+        })
+        .then(async (hit) => {
+          if (hit) return hit;
+          const seen = await prisma.leadEmail.findFirst({
+            where: { emailKey: normalizeEmail(email) ?? "" },
+            // Oldest first: if two records somehow share an address, the one that has had it
+            // longest is the one their history is on.
+            orderBy: { firstSeenAt: "asc" },
+            select: { lead: true },
+          });
+          return seen?.lead ?? null;
+        });
 
   // Auto-assign the first caller per the configured rotation (80/20 split, Saturday rule) - a
   // failure here must never block lead capture.
@@ -528,6 +629,10 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
   // E-Mail". Deliberately NOT awaited: capture is done and committed, and a slow or failing
   // Resend call must never delay (or fail) the webhook response. notifyNewOptIn swallows its own
   // errors, so this cannot produce an unhandled rejection.
+  // The first address starts the history, so a lead created today reads the same way as one
+  // that has come back three times.
+  if (input.email) await recordLeadEmails(lead.id, [input.email]);
+
   void notifyNewOptIn(lead.id);
 
   return { lead, created: true, deduped: null, reopened: false };

@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { prospectHistoryForBookings } from "./prospect-history";
 import { istMonthInstantRange, istToday } from "@/lib/dates";
 import { formatDateTimeInZone } from "@/lib/format";
 import { intakeLabel } from "@/lib/booking-intake";
@@ -87,6 +88,15 @@ export async function getBookingsOverview() {
     }),
   ]);
 
+  /**
+   * "Have we met them before?" for every row on screen, in three queries rather than three per
+   * row. A booking is excluded from its own history, so the first-time rows stay silent and only
+   * a genuine repeat says anything.
+   */
+  const history = await prospectHistoryForBookings(
+    bookings.map((b) => ({ bookingId: b.id, leadId: b.leadId })),
+  );
+
   const bookedThisMonth = monthBookings.length;
   const avgBant =
     bookedThisMonth > 0
@@ -173,6 +183,35 @@ export async function getBookingsOverview() {
       commitment: intakeLabel("commitment", b.commitment),
       status: b.status,
       createdAt: b.createdAt.toISOString(),
+      /**
+       * What we already knew about this person, when there is anything to know.
+       *
+       * Null on a first-time booking so the row stays quiet - a badge on every row is a badge
+       * nobody reads. All of this was already in the database and none of it was on screen: the
+       * caller about to dial a prospect who booked twice and never turned up saw the same blank
+       * row as a brand-new one.
+       */
+      history: (() => {
+        const h = history.get(b.id);
+        if (!h?.returning) return null;
+        return {
+          headline: h.headline,
+          previousCount: h.previous.length,
+          attended: h.attended,
+          noShows: h.noShows,
+          cancelled: h.cancelled,
+          upcoming: h.upcoming,
+          lastOutcome: h.lastOutcome
+            ? {
+                status: h.lastOutcome.status,
+                day: h.lastOutcome.at ? istDay.format(h.lastOutcome.at) : null,
+              }
+            : null,
+          /** Other addresses they have used - how you see the mail was going somewhere else. */
+          otherEmails: h.emails.filter((e) => !e.primary).map((e) => e.email),
+          previousVerdict: h.scores[1]?.verdict ?? null,
+        };
+      })(),
     })),
     openSlots: openSlotList.map((s) => ({
       id: s.id,

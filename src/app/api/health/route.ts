@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { channelStates } from "@/lib/env";
 import { cronHealth } from "@/server/uptime";
+import { deliveryHealth } from "@/server/delivery-health";
 import { errorCountLastHour, observabilityRuntime } from "@/lib/observability";
 
 /**
@@ -38,7 +39,7 @@ export async function GET() {
     // Cheapest possible round-trip that still proves the pooler is answering.
     await prisma.$queryRaw`SELECT 1`;
 
-    const crons = await cronHealth();
+    const [crons, delivery] = await Promise.all([cronHealth(), deliveryHealth()]);
     const obs = observabilityRuntime();
 
     return NextResponse.json({
@@ -56,6 +57,23 @@ export async function GET() {
         consecutiveFailures: c.consecutiveFailures,
       })),
       cronsStale: crons.filter((c) => c.stale || c.neverRun).map((c) => c.job),
+      /**
+       * Whether an ARMED channel is actually delivering - the half `channels` cannot answer,
+       * since it only reports whether a switch is on. This is what finally makes the October
+       * 2026 failure assertable from outside: `jq -e '.deliveryDead | length == 0'`.
+       *
+       * Counts and enums ONLY, never the provider's error string: this endpoint is public and
+       * unauthenticated, and those strings carry recipient numbers and account detail.
+       */
+      delivery: delivery.map((d) => ({
+        job: d.job,
+        channel: d.channel,
+        state: d.state,
+        attempted24h: d.attempted24h,
+        sent24h: d.sent24h,
+        failed24h: d.failed24h,
+      })),
+      deliveryDead: delivery.filter((d) => d.state === "dead").map((d) => d.job),
     });
   } catch {
     // 503 so Caddy/Docker mark the container unhealthy rather than routing to it.

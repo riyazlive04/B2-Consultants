@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Field, TextInput } from "@/components/ui/form";
+import { Field } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatDate, formatInrMinor } from "@/lib/format";
 
 /**
- * The ₹ / € amount boxes shared by every money form (income, expense, pending fee).
+ * The ₹ / € price boxes shared by every money form (income, expense, pending fee).
  *
  * TYPE IN ONE, SEE THE OTHER. Enter ₹75,000 and the € box fills in with the converted amount,
  * and vice versa - the conversion is visible in the field itself rather than as a hint the eye
  * skips.
+ *
+ * GROUPED AS YOU TYPE, each in its own convention: ₹1,25,000.50 (Indian grouping, dot decimal)
+ * and €125.000,50 (German grouping, comma decimal). See MoneyInput - the grouped text is display
+ * only, and a hidden input submits the plain `125000.50` the server actions have always read.
  *
  * ONLY THE ENTERED CURRENCY IS STORED, and that is not a detail. A record's aggregate is
  * `INR part + EUR part converted` (lib/money.ts `aggInrMinor`) - the two columns ADD. So a
@@ -24,17 +29,16 @@ import { formatDate, formatInrMinor } from "@/lib/format";
  */
 
 /**
- * Major-unit input ("25000.50") → number, or null when it isn't a usable amount.
- * `kind="money"` already strips separators as they're typed, so the box only ever holds
- * digits and one dot; the comma strip stays as a belt-and-braces for a programmatic default.
+ * Canonical major-unit string ("25000.50") → number, or null when it isn't a usable amount.
+ * `MoneyInput` hands up only digits and at most one dot, so there is nothing left to strip.
  */
 function parseMajor(value: string): number | null {
-  const n = Number(value.replace(/,/g, "").trim());
+  const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 const toMinor = (major: number) => Math.round(major * 100);
-/** Plain major-unit string for an input box - no grouping, so it round-trips through parseMajor. */
+/** Plain canonical string for the sibling box - it round-trips through parseMajor unchanged. */
 const toInput = (major: number) => (Math.round(major * 100) / 100).toFixed(2);
 
 type Source = "INR" | "EUR" | null;
@@ -72,7 +76,8 @@ export function AmountPair({
   className?: string;
   /**
    * The amounts WILL BE SUBMITTED, for a form that has to do arithmetic on them - the income
-   * form divides a fee across an instalment plan while it is being typed.
+   * form divides a fee across an instalment plan while it is being typed, and narrows the
+   * payment-method list to the rails the entered currency can arrive by.
    *
    * Reports "" for a currency that is being mirrored, because a derived box is `disabled` and so
    * never reaches FormData. Anything reading this is therefore working with the same two figures
@@ -182,16 +187,15 @@ export function AmountPair({
   return (
     <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${className}`}>
       <Field label={inrLabel} hint={inrDerived ? convertedHint : baseHint}>
-        <TextInput
+        <MoneyInput
           ref={inrRef}
+          currency="INR"
           name={inrName}
-          kind="money"
-          placeholder="0.00"
           value={inr}
           // `disabled`, not `readOnly`: a disabled control is omitted from FormData, which is
           // precisely what stops the mirrored figure being added on top of the real one.
           disabled={inrDerived}
-          onChange={(e) => onInr(e.currentTarget.value)}
+          onValueChange={onInr}
         />
       </Field>
       <Field
@@ -204,13 +208,12 @@ export function AmountPair({
               : undefined
         }
       >
-        <TextInput
+        <MoneyInput
+          currency="EUR"
           name={eurName}
-          kind="money"
-          placeholder="0.00"
           value={eur}
           disabled={eurDerived}
-          onChange={(e) => onEur(e.currentTarget.value)}
+          onValueChange={onEur}
         />
       </Field>
 

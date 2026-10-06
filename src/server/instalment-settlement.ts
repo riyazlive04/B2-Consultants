@@ -7,6 +7,8 @@ import {
   settleDecision,
   studentNameKey,
 } from "@/lib/instalment-plan";
+import { paymentTypeKind } from "@/lib/payment-types";
+import { getPaymentTypesConfig } from "./founder-config";
 
 /**
  * Keeps a receivable's instalment schedule in step with the incomes recorded against it
@@ -61,7 +63,8 @@ type IncomeForSettle = {
   studentId: string | null;
   studentName: string;
   programLevel: string;
-  paymentType: "FULL_PAYMENT" | "INSTALMENT";
+  /** PaymentTypeConfig.code. What matters is its KIND, resolved below, not the code itself. */
+  paymentType: string;
   amountInrMinor: bigint;
   amountEurMinor: bigint;
   fxRateUsed: Prisma.Decimal;
@@ -100,7 +103,18 @@ export const CREATED_PLAN_SETTLEMENT: SettlementRecord = record(false, "created-
  * pending_payment table.
  */
 export async function settleInstalmentsForIncome(tx: Tx, income: IncomeForSettle): Promise<SettlementRecord> {
-  if (income.paymentType !== "INSTALMENT") return record(true, "not-instalment");
+  /**
+   * Only an INSTALMENT-KIND payment settles a plan, and the kind comes from the founder's
+   * configured list - not from the literal code. A founder who adds their own instalment type
+   * must get the same chasing behaviour, and one who adds a SUBSCRIPTION must get none of it:
+   * a recurring charge has no agreed total, so there is nothing for it to pay off and marking a
+   * plan settled against it would silence a chase on a debt still owed.
+   *
+   * The config read is cached app-wide (founder-config), so this costs no round trip.
+   */
+  if (paymentTypeKind(await getPaymentTypesConfig(), income.paymentType) !== "INSTALMENT") {
+    return record(true, "not-instalment");
+  }
 
   /**
    * Candidates are narrowed by the SAME programme level as the payment - a Guided payment must not

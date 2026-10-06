@@ -87,7 +87,19 @@ services:
 
       EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # Without this, /api/resend/webhook answers 503 and NO email ever advances past SENT - so a
+      # hard bounce still reads "Sent" in Conversations. It is the Svix signing secret Resend
+      # issues when you create the endpoint, so create that first.
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+
+      # Error tracking + the dead-man's switch. These were specified in docs/OPERABILITY_PLAN.md
+      # and the code reads them, but they were never forwarded here - so filling them into
+      # .env.production did nothing at all and the error sink sat inert. SENTRY_DSN is read lazily
+      # on every capture, so arming it needs only `up -d`, never a rebuild.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      UPTIME_HEARTBEAT_URL: ${UPTIME_HEARTBEAT_URL:-}
 
       WATI_ENABLED: ${WATI_ENABLED:-false}
       WATI_API_ENDPOINT: ${WATI_API_ENDPOINT:-}

@@ -19,6 +19,7 @@ import {
   getScheduledReportConfig,
   getFinancePostingConfig,
   getInstalmentPlanConfig,
+  getPaymentTypesConfig,
   getBookingCalendars,
   getSssPatternConfig,
   getSssConfig,
@@ -46,6 +47,7 @@ import { DailyLogEodPanel } from "./_components/DailyLogEodPanel";
 import { AgreementWorkflowPanel } from "./_components/AgreementWorkflowPanel";
 import { TutorFeePanel } from "./_components/TutorFeePanel";
 import { InstalmentPlanPanel } from "./_components/InstalmentPlanPanel";
+import { PaymentTypesPanel } from "./_components/PaymentTypesPanel";
 import { TutorFeeLedgerPanel } from "./_components/TutorFeeLedgerPanel";
 import { QualificationPanel } from "./_components/QualificationPanel";
 import { CallDistributionPanel } from "./_components/CallDistributionPanel";
@@ -61,6 +63,7 @@ import type { AppRole } from "@/lib/sections";
 import { PerPersonPanel } from "./_components/PerPersonPanel";
 import { NotArmedPanel } from "./_components/NotArmedPanel";
 import { getNotArmedReport } from "@/server/not-armed";
+import { getDeliveryFailureReport } from "@/server/delivery-health";
 import { LeadWebhookPanel } from "./_components/LeadWebhookPanel";
 import { getLeadWebhookConfig, LEAD_WEBHOOK_NAME, LEAD_WEBHOOK_PATH } from "@/server/lead-webhook";
 import { readDeliveryStatuses } from "@/server/intake-route";
@@ -143,8 +146,13 @@ export default async function ConsolePage() {
       getNotArmedReport(),
     ]);
 
-  // Lead webhook switch - its own pair for the same reason as the tuple above.
-  const [leadWebhook, deliveries] = await Promise.all([getLeadWebhookConfig(), readDeliveryStatuses()]);
+  // Lead webhook switch - its own pair for the same reason as the tuple above. `deliveryFailures`
+  // is the other half of the Not-armed question: what is switched ON and still not delivering.
+  const [leadWebhook, deliveries, deliveryFailures] = await Promise.all([
+    getLeadWebhookConfig(),
+    readDeliveryStatuses(),
+    getDeliveryFailureReport(),
+  ]);
 
   /**
    * Resolve each person's EFFECTIVE capabilities - role defaults merged with their overrides -
@@ -172,6 +180,7 @@ export default async function ConsolePage() {
     bookingRules,
     bookableMembers,
     instalmentPlans,
+    paymentTypes,
     speedToLeadConfig,
     dunningConfig,
     attendanceConfig,
@@ -188,6 +197,7 @@ export default async function ConsolePage() {
     // hand-made path wouldn't.
     getBookableTeamMembers(),
     getInstalmentPlanConfig(),
+    getPaymentTypesConfig(),
     getSpeedToLeadAlertConfig(),
     getDunningConfig(),
     getAttendanceConfig(),
@@ -312,6 +322,9 @@ export default async function ConsolePage() {
                   // Next to Commission because it is the same kind of rule: a money figure the
                   // founder sets that Finance then applies to every new deal.
                   { label: "Instalment Plans", content: <InstalmentPlanPanel config={instalmentPlans} /> },
+                  // Beside it because the two answer one question between them: what kinds of
+                  // payment can be recorded, and what each kind costs.
+                  { label: "Payment Types", content: <PaymentTypesPanel config={paymentTypes} /> },
                   { label: "Tutor Fee", content: <TutorFeePanel config={tutorFee} /> },
                   {
                     label: `Tutor Fees${tutorFeeRows.filter((f) => f.status === "DRAFT").length ? ` (${tutorFeeRows.filter((f) => f.status === "DRAFT").length})` : ""}`,
@@ -448,8 +461,14 @@ export default async function ConsolePage() {
                   {
                     // FIRST in System, deliberately: it answers "what is built but switched off",
                     // which is the question behind most of what looks broken in this app.
-                    label: `Not armed${notArmed.filter((i) => !i.armed).length ? ` (${notArmed.filter((i) => !i.armed).length})` : ""}`,
-                    content: <NotArmedPanel items={notArmed} />,
+                    // One count for both lists: a channel that is armed and failing belongs on
+                    // the same badge as one nobody switched on - both mean "not working".
+                    label: `Not armed${
+                      notArmed.filter((i) => !i.armed).length + deliveryFailures.length
+                        ? ` (${notArmed.filter((i) => !i.armed).length + deliveryFailures.length})`
+                        : ""
+                    }`,
+                    content: <NotArmedPanel items={notArmed} failures={deliveryFailures} />,
                   },
                   {
                     // Its own tab rather than a section of Maintenance: these are the rules that

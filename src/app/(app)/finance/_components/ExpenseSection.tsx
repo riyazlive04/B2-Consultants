@@ -143,8 +143,8 @@ export function ExpenseSection({
             fxDate={fxDate}
             inrName="amountInr"
             eurName="amountEur"
-            inrLabel="Amount paid (₹)"
-            eurLabel="Amount paid (€)"
+            inrLabel="Price paid (₹)"
+            eurLabel="Price paid (€)"
             baseHint="INR, EUR, or both"
             defaultInr={editing ? minorToInput(editing.amountInrRaw) : ""}
             defaultEur={editing ? minorToInput(editing.amountEurRaw) : ""}

@@ -72,9 +72,22 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
    * A heartbeat older than two hours means the scheduler is not ticking, whatever the config says.
    */
   const beatAt = (() => {
+    // recordCronRun() writes a MAP of job -> { lastRunAt, lastOkAt, consecutiveFailures,
+    // lastError } (src/server/uptime.ts). It has never written a top-level `at` key, so the
+    // older read of one made this row permanently NOT ARMED with "the scheduler has never
+    // ticked" - an always-red light is exactly as uninformative as an always-green one.
+    // The newest lastRunAt across all jobs is the liveness signal: any job ticking at all
+    // proves the scheduler is alive, which is the only question this row asks.
     const v = heartbeat?.value;
-    const raw = v && typeof v === "object" && "at" in v ? (v as { at?: unknown }).at : null;
-    return typeof raw === "string" ? new Date(raw) : null;
+    if (!v || typeof v !== "object") return null;
+    let newest: number | null = null;
+    for (const entry of Object.values(v as Record<string, unknown>)) {
+      const raw = entry && typeof entry === "object" ? (entry as { lastRunAt?: unknown }).lastRunAt : null;
+      if (typeof raw !== "string") continue;
+      const t = new Date(raw).getTime();
+      if (Number.isFinite(t) && (newest === null || t > newest)) newest = t;
+    }
+    return newest === null ? null : new Date(newest);
   })();
   const cronAlive = Boolean(beatAt && Date.now() - beatAt.getTime() < 2 * 60 * 60 * 1000);
 

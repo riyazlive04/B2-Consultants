@@ -478,6 +478,11 @@ function monthAllIncomeRows(
     programLevel: i.programLevel,
     paymentType: i.paymentType,
     paymentMethod: i.paymentMethod,
+    // What "Other" meant, in the operator's words - the row is unreconcilable without it.
+    paymentMethodOther: i.paymentMethodOther,
+    // A recurring arrangement, for a SUBSCRIPTION-kind payment type. Null on every other kind.
+    recurrenceInterval: i.recurrenceInterval as string | null,
+    recurrenceNextDate: i.recurrenceNextDate ? i.recurrenceNextDate.toISOString() : null,
     instalmentCount: i.instalmentCount,
     instalmentExtraInrRaw: i.instalmentExtraInrMinor.toString(),
     instalmentExtraEurRaw: i.instalmentExtraEurMinor.toString(),

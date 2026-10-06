@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Server } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Server, ZapOff } from "lucide-react";
 import type { NotArmedItem } from "@/server/not-armed";
+import type { DeliveryFailureItem } from "@/server/delivery-health";
 import { Card, Hint } from "./kit";
 
 /**
@@ -19,8 +20,21 @@ import { Card, Hint } from "./kit";
  *
  * Every row names the CONSEQUENCE before the fix, because the consequence is what makes someone
  * act. "Slot pattern: disabled" is a status light; "no prospect can book a call" is a decision.
+ *
+ * ── The second list ─────────────────────────────────────────────────────────────
+ * Arm state was only ever half the question. In October 2026 WhatsApp was armed and configured
+ * and every send was bouncing off Meta's cap, so this panel read fully green while a prospect's
+ * messages went nowhere for three days. "Armed but not working" is that missing half, and it
+ * sits ABOVE the arm list because a switch that is on and failing is more urgent than one nobody
+ * has turned on yet.
  */
-export function NotArmedPanel({ items }: { items: NotArmedItem[] }) {
+export function NotArmedPanel({
+  items,
+  failures = [],
+}: {
+  items: NotArmedItem[];
+  failures?: DeliveryFailureItem[];
+}) {
   const off = items.filter((i) => !i.armed);
   const on = items.filter((i) => i.armed);
 
@@ -31,6 +45,43 @@ export function NotArmedPanel({ items }: { items: NotArmedItem[] }) {
         whether it is switched on. Anything in the top section is currently doing nothing -
         which is usually what &ldquo;that section looks broken&rdquo; turns out to mean.
       </Hint>
+
+      {failures.length > 0 && (
+        <Card
+          title={`Armed but not working (${failures.length})`}
+          subtitle="Switched on, and the provider is refusing. Nothing here is fixed by a toggle."
+        >
+          <ul className="space-y-3">
+            {failures.map((f) => (
+              <li
+                key={f.key}
+                className={
+                  f.state === "dead"
+                    ? "rounded-field border border-bad bg-bad-soft p-3.5"
+                    : "rounded-field border border-warn bg-warn-soft p-3.5"
+                }
+              >
+                <p
+                  className={`flex flex-wrap items-center gap-2 text-sm font-semibold ${
+                    f.state === "dead" ? "text-bad" : "text-warn"
+                  }`}
+                >
+                  <ZapOff size={15} className="flex-none" />
+                  {f.name}
+                  <span className="inline-flex items-center rounded-full bg-surface px-2 py-0.5 text-caption font-semibold text-ink-3">
+                    {f.state === "dead" ? `dead${f.since ? ` for ${f.since}` : ""}` : "degraded"}
+                  </span>
+                </p>
+                <p className={`mt-1 text-caption ${f.state === "dead" ? "text-bad" : "text-warn"}`}>
+                  {f.consequence}
+                </p>
+                {f.where && <p className="mt-1.5 text-caption font-medium text-ink-2">→ {f.where}</p>}
+                <p className="mt-1.5 text-caption text-ink-3">{f.evidence}</p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {off.length === 0 ? (
         <Card>

@@ -69,7 +69,7 @@ export default function SubscriptionsTab({
     },
     { key: "plan", header: "Plan", cell: (r) => r.productName ?? "-", value: (r) => r.productName },
     {
-      key: "amount", header: "Amount", align: "right",
+      key: "amount", header: "Price", align: "right",
       cell: (r) => (
         <>
           <span className="block font-medium text-ink">{r.amountDisplay}</span>
@@ -125,8 +125,8 @@ export default function SubscriptionsTab({
               fxStale={fxStale}
               inrName="amountInr"
               eurName="amountEur"
-              inrLabel="Amount (₹)"
-              eurLabel="Amount (€)"
+              inrLabel="Price (₹)"
+              eurLabel="Price (€)"
               baseHint="INR, EUR, or both"
             />
             <Field label="Next billing"><TextInput name="nextBillingDate" type="date" /></Field>

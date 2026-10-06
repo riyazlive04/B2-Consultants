@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Btn } from "@/components/ui/controls";
 import { TextInput } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { useFormReset } from "@/components/ui/use-form-reset";
 import { DUE_DATE_SCHEME_LABELS, dueDateSeries, type DueDateScheme } from "@/lib/instalment-dates";
 import type { MoneyText } from "@/lib/instalment-amounts";
@@ -274,21 +275,21 @@ export function InstalmentSchedule({
               value={r.dueDate}
               onChange={(e) => setRow(i, { dueDate: e.currentTarget.value })}
             />
-            <TextInput
-              kind="money"
-              aria-label={`Amount due in rupees for instalment ${i + 2}`}
-              placeholder="₹ amount"
+            {/* Grouped as typed and symbol-marked, like every other money box (MoneyInput).
+                The rows travel as canonical JSON, so what the action parses is unchanged. */}
+            <MoneyInput
+              currency="INR"
+              aria-label={`Price due in rupees for instalment ${i + 2}`}
               className="min-w-[7rem] flex-1"
               value={r.amountInr}
-              onChange={(e) => setRow(i, { amountInr: e.currentTarget.value })}
+              onValueChange={(v) => setRow(i, { amountInr: v })}
             />
-            <TextInput
-              kind="money"
-              aria-label={`Amount due in euros for instalment ${i + 2}`}
-              placeholder="€ amount"
+            <MoneyInput
+              currency="EUR"
+              aria-label={`Price due in euros for instalment ${i + 2}`}
               className="min-w-[7rem] flex-1"
               value={r.amountEur}
-              onChange={(e) => setRow(i, { amountEur: e.currentTarget.value })}
+              onValueChange={(v) => setRow(i, { amountEur: v })}
             />
             <button
               type="button"

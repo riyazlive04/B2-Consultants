@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Field, FormError, Select, TextArea, TextInput } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { toast } from "@/components/ui/feedback";
 import { Btn } from "@/components/ui/controls";
 import { type AgreementData } from "@/lib/agreement";
@@ -216,13 +217,13 @@ export function AgreementForm({
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
         <h2 className="mb-4 font-display text-h2 font-semibold">Payment (§7)</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Total programme fee (INR)">
-            <TextInput
-              kind="money"
+          <Field label="Total programme price (₹)">
+            <MoneyInput
+              currency="INR"
               value={total}
-              onChange={(e) => setTotal(e.target.value)}
+              onValueChange={setTotal}
               required
-              placeholder="69999"
+              placeholder="69,999"
             />
           </Field>
           <Field label="Payment option">
@@ -247,12 +248,12 @@ export function AgreementForm({
           <div className="mt-4 space-y-4">
             {inst.map((row, i) => (
               <div key={i} className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-                <Field label={`Instalment ${i + 1} amount (INR)`}>
-                  <TextInput
-                    kind="money"
+                <Field label={`Instalment ${i + 1} price (₹)`}>
+                  <MoneyInput
+                    currency="INR"
                     value={row.amount}
-                    onChange={(e) =>
-                      setInst((p) => p.map((r, j) => (j === i ? { ...r, amount: e.target.value } : r)))
+                    onValueChange={(v) =>
+                      setInst((p) => p.map((r, j) => (j === i ? { ...r, amount: v } : r)))
                     }
                     required
                   />

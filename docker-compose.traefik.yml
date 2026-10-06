@@ -81,6 +81,12 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
 
+      # Error tracking + dead-man's switch - see docker-compose.prod.yml for why these are here.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      UPTIME_HEARTBEAT_URL: ${UPTIME_HEARTBEAT_URL:-}
+
       WATI_ENABLED: ${WATI_ENABLED:-false}
       WATI_API_ENDPOINT: ${WATI_API_ENDPOINT:-}
       WATI_ACCESS_TOKEN: ${WATI_ACCESS_TOKEN:-}

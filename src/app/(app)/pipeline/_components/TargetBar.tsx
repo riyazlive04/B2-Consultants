@@ -7,6 +7,7 @@ import { formatInrMinor, formatPct } from "@/lib/format";
 import { toast } from "@/components/ui/feedback";
 import { Card, Pill } from "@/components/ui/kit";
 import { FormError, SubmitButton, TextInput } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 
 /**
  * Monthly revenue target bar. Bar colour follows the PRD1 §5.4 banding on % of
@@ -122,7 +123,7 @@ export function TargetBar({
             <form action={submit} className="flex flex-wrap items-center gap-2">
               <input type="hidden" name="month" value={month} />
               <div className="w-40">
-                <TextInput kind="money" name="targetInr" defaultValue={(targetInrMinor / 100).toFixed(0)} aria-label="Target (₹)" />
+                <MoneyInput currency="INR" name="targetInr" defaultValue={(targetInrMinor / 100).toFixed(0)} aria-label="Target (₹)" />
               </div>
               <SubmitButton>Set target</SubmitButton>
               <button type="button" className="text-sm text-muted hover:underline" onClick={() => setEditing(false)}>

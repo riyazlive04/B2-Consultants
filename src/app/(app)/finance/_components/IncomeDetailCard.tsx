@@ -6,7 +6,9 @@ import { Pill } from "@/components/ui/kit";
 import { StudentName } from "@/components/ui/StudentName";
 import type { IncomeRow } from "@/server/finance-metrics";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
-import { PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, SOURCE_LABELS } from "@/lib/labels";
+import { PAYMENT_METHOD_LABELS, SOURCE_LABELS } from "@/lib/labels";
+import { paymentTypeLabel, RECURRENCE_INTERVAL_LABELS } from "@/lib/payment-types";
+import type { PaymentTypesConfig } from "@/lib/config-schema";
 import { BUSINESS_LINE_LABELS, type BusinessLine } from "@/lib/business-line";
 import { moneyAlt, money } from "@/lib/money-display";
 import { useFinanceCcy } from "./FinanceCurrency";
@@ -40,6 +42,7 @@ export function IncomeDetailCard({
   levelLabel,
   line,
   upcoming,
+  paymentTypes,
   onEdit,
   onClose,
 }: {
@@ -50,6 +53,8 @@ export function IncomeDetailCard({
   line?: BusinessLine;
   /** The rest of this student's plan, if this payment started one. */
   upcoming?: { dueDate: string; inr: number; eur: number }[];
+  /** The founder's payment types - the row stores a code, this turns it back into their name. */
+  paymentTypes: PaymentTypesConfig;
   onEdit: (row: IncomeRow) => void;
   onClose: () => void;
 }) {
@@ -85,7 +90,7 @@ export function IncomeDetailCard({
       <div className="space-y-4">
         {/* The amount leads, because it is what anyone opening a payment came to check. */}
         <div className="rounded-field border border-line bg-surface-2 p-4">
-          <p className="text-label uppercase text-ink-2">Amount received</p>
+          <p className="text-label uppercase text-ink-2">Price received</p>
           <p className="tnum mt-1 font-display text-metric text-ink">{money(row.agg, ccy)}</p>
           <p className="tnum text-caption text-muted">{moneyAlt(row.agg, ccy)}</p>
           {asEntered.length > 0 && (
@@ -108,13 +113,24 @@ export function IncomeDetailCard({
             </span>
           </Row>
           <Row label="Payment type">
-            {PAYMENT_TYPE_LABELS[row.paymentType]}
+            {paymentTypeLabel(paymentTypes, row.paymentType)}
             {row.instalmentCount ? ` · ${row.instalmentCount}×` : ""}
             {extras.length > 0 && (
               <span className="block text-caption text-muted">+{extras.join(" + ")} extra</span>
             )}
           </Row>
-          <Row label="Method">{PAYMENT_METHOD_LABELS[row.paymentMethod]}</Row>
+          {/* "Other" alone cannot be reconciled - the typed answer stands in for it. */}
+          <Row label="Method">
+            {row.paymentMethod === "OTHER" && row.paymentMethodOther?.trim()
+              ? row.paymentMethodOther.trim()
+              : PAYMENT_METHOD_LABELS[row.paymentMethod] ?? row.paymentMethod}
+          </Row>
+          {row.recurrenceInterval && (
+            <Row label="Recurs">
+              {RECURRENCE_INTERVAL_LABELS[row.recurrenceInterval] ?? row.recurrenceInterval}
+              {row.recurrenceNextDate ? ` · next ${formatDate(row.recurrenceNextDate)}` : ""}
+            </Row>
+          )}
           {/* Where the record came from. A Razorpay row and a hand-typed one are the same money
               but not the same evidence, and only one of them can be mistyped. */}
           <Row label="Recorded">{SOURCE_LABELS[row.source] ?? row.source}</Row>

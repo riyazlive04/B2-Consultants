@@ -129,7 +129,7 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
               <Row label="WhatsApp">{data.student.phone}</Row>
               <Row label="Batch">{data.batch.number}</Row>
               <Row label="Starts">{formatGermanDate(data.batch.startDate)}</Row>
-              <Row label="Total fee">{formatInrMinor(BigInt(data.payment.totalInrMinor))}</Row>
+              <Row label="Total price (₹)">{formatInrMinor(BigInt(data.payment.totalInrMinor))}</Row>
               <Row label="Plan">
                 {data.payment.option === "FULL"
                   ? "Option A - full payment"

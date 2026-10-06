@@ -126,7 +126,10 @@ const EXPORTS: Record<string, ExportDef> = {
   income: {
     section: "finance",
     filename: (label) => `b2-income-${label}.csv`,
-    header: ["Date", "Student", "Level", "Amount INR", "Amount EUR", "Payment type", "Method", "Notes"],
+    header: [
+      "Date", "Student", "Level", "Price INR", "Price EUR", "Payment type", "Method",
+      "Recurs", "Next payment", "Notes",
+    ],
     run(_req, period) {
       const where: Prisma.IncomeWhereInput = {
         ...ACTIVE,
@@ -141,14 +144,20 @@ const EXPORTS: Record<string, ExportDef> = {
             select: {
               id: true, date: true, studentName: true, programLevel: true,
               amountInrMinor: true, amountEurMinor: true,
-              paymentType: true, paymentMethod: true, notes: true,
+              paymentType: true, paymentMethod: true, paymentMethodOther: true,
+              recurrenceInterval: true, recurrenceNextDate: true, notes: true,
             },
           }),
         (i) => [
           i.date.toISOString().slice(0, 10), i.studentName, i.programLevel,
           // Minor units → major, as a plain number so a spreadsheet can sum the column.
           Number(i.amountInrMinor) / 100, Number(i.amountEurMinor) / 100,
-          i.paymentType, i.paymentMethod, i.notes,
+          i.paymentType,
+          // The typed answer replaces a bare "OTHER" - that note is the only record of
+          // which rail the money came down, and a CSV is where reconciliation happens.
+          i.paymentMethod === "OTHER" && i.paymentMethodOther ? i.paymentMethodOther : i.paymentMethod,
+          i.recurrenceInterval, i.recurrenceNextDate?.toISOString().slice(0, 10) ?? null,
+          i.notes,
         ],
       );
     },
@@ -158,7 +167,7 @@ const EXPORTS: Record<string, ExportDef> = {
   expenses: {
     section: "finance",
     filename: (label) => `b2-expenses-${label}.csv`,
-    header: ["Date", "Category", "Vendor", "Amount INR", "Amount EUR", "Business line", "COGS", "Notes"],
+    header: ["Date", "Category", "Vendor", "Price INR", "Price EUR", "Business line", "COGS", "Notes"],
     run(_req, period) {
       const where: Prisma.ExpenseWhereInput = {
         ...ACTIVE,

@@ -203,7 +203,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
                           action={(fd) => saveOverride(f.id, fd)}
                           className="mt-3 grid gap-2 rounded-field border border-line bg-surface-2 p-3 sm:grid-cols-[8rem_1fr_auto] sm:items-end"
                         >
-                          <Field label="Amount (₹)">
+                          <Field label="Price (₹)">
                             <input
                               name="amountRupees"
                               inputMode="decimal"

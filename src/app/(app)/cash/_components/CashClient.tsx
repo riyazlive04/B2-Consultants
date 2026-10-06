@@ -8,6 +8,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { Card, Pill } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { EXPENSE_CATEGORY_LABELS, optionsFrom } from "@/lib/labels";
 
@@ -65,10 +66,10 @@ export function CashPositionSection({
             <TextInput type="date" name="date" required defaultValue={today} />
           </Field>
           <Field label="Business bank balance (₹)">
-            <TextInput kind="money" name="bankBalance" required placeholder="0.00" />
+            <MoneyInput currency="INR" name="bankBalance" required />
           </Field>
           <Field label="Personal savings (₹, optional)" hint="Planning only - never counted in runway">
-            <TextInput kind="money" name="personalSavings" placeholder="0.00" />
+            <MoneyInput currency="INR" name="personalSavings" />
           </Field>
           <Field label="Notes">
             <TextInput kind="text" name="notes" placeholder="Large payment made / expected…" />
@@ -144,7 +145,7 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
   const columns: Column<PayableRow>[] = [
     { key: "name", header: "Payable", cell: (r) => r.name, value: (r) => r.name },
     { key: "category", header: "Category", cell: (r) => EXPENSE_CATEGORY_LABELS[r.category], value: (r) => r.category },
-    { key: "amount", header: "Amount", align: "right", cell: (r) => formatInrMinor(r.amountInr), value: (r) => r.amountInr / 100 },
+    { key: "amount", header: "Price (₹)", align: "right", cell: (r) => formatInrMinor(r.amountInr), value: (r) => r.amountInr / 100 },
     { key: "freq", header: "Frequency", cell: (r) => FREQ_LABELS[r.frequency], value: (r) => r.frequency },
     { key: "due", header: "Next due", cell: (r) => (r.nextDueDate ? formatDate(r.nextDueDate) : "-"), value: (r) => r.nextDueDate?.slice(0, 10) ?? "" },
     { key: "cogs", header: "COGS", cell: (r) => (r.isCogs ? "Yes" : "No"), value: (r) => (r.isCogs ? "Yes" : "No") },
@@ -201,8 +202,8 @@ export function PayablesSection({ payables }: { payables: PayableRow[] }) {
             <Field label="Category">
               <Select name="category" options={optionsFrom(EXPENSE_CATEGORY_LABELS)} defaultValue={editing?.category ?? "TOOLS_SOFTWARE"} />
             </Field>
-            <Field label="Amount (₹)">
-              <TextInput kind="money" name="amountInr" required defaultValue={editing ? minorToInput(editing.amountInrRaw) : ""} />
+            <Field label="Price (₹)">
+              <MoneyInput currency="INR" name="amountInr" required defaultValue={editing ? minorToInput(editing.amountInrRaw) : ""} />
             </Field>
             {/* Keyed so switching which payable is being edited resets the schedule state
                 along with the rest of the form, rather than carrying the last one's frequency. */}

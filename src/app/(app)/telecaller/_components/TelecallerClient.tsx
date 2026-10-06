@@ -14,6 +14,7 @@ import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
 import { Card, CardTitle, Pill } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatEurMinor, formatInrMinor } from "@/lib/format";
 import { LOG_VARIANT_LABELS, PAYOUT_STATUS_LABELS, optionsFrom } from "@/lib/labels";
 
@@ -200,16 +201,16 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
               <TextInput type="month" name="month" required defaultValue={board.month} />
             </Field>
             <Field label="Bonus (₹)" hint="INR, EUR, or both">
-              <TextInput kind="money" name="bonusInr" placeholder="0.00" defaultValue={editing ? minorToInput(editing.bonusInrRaw) : ""} />
+              <MoneyInput currency="INR" name="bonusInr" defaultValue={editing ? minorToInput(editing.bonusInrRaw) : ""} />
             </Field>
             <Field label="Bonus (€)">
-              <TextInput kind="money" name="bonusEur" placeholder="0.00" defaultValue={editing ? minorToInput(editing.bonusEurRaw) : ""} />
+              <MoneyInput currency="EUR" name="bonusEur" defaultValue={editing ? minorToInput(editing.bonusEurRaw) : ""} />
             </Field>
             <Field label="Commission (₹)" hint="INR, EUR, or both">
-              <TextInput kind="money" name="commInr" placeholder="0.00" defaultValue={editing ? minorToInput(editing.commInrRaw) : ""} />
+              <MoneyInput currency="INR" name="commInr" defaultValue={editing ? minorToInput(editing.commInrRaw) : ""} />
             </Field>
             <Field label="Commission (€)">
-              <TextInput kind="money" name="commEur" placeholder="0.00" defaultValue={editing ? minorToInput(editing.commEurRaw) : ""} />
+              <MoneyInput currency="EUR" name="commEur" defaultValue={editing ? minorToInput(editing.commEurRaw) : ""} />
             </Field>
             {/* Free text - the reason is prose with numbers in it ("hit 40 appointments"). */}
             <Field label="Reason / criteria" hint="e.g. hit 40 appointments · good call QA">

@@ -16,7 +16,9 @@ import {
   coercePipelineConfig,
   coerceTutorFeeConfig,
   coerceInstalmentPlanConfig,
+  coercePaymentTypesConfig,
   instalmentPlanConfigSchema,
+  paymentTypesConfigSchema,
   coerceDailyLogEod,
   coerceDailyLogTargets,
   coerceGamificationConfig,
@@ -63,6 +65,8 @@ import {
   writePipelineConfig,
   writeTutorFeeConfig,
   writeInstalmentPlanConfig,
+  writePaymentTypesConfig,
+  PAYMENT_TYPES_KEY,
   writeDailyLogEod,
   writeDailyLogTargets,
   writeGamificationConfig,
@@ -787,6 +791,43 @@ export async function saveTutorFee(input: unknown): Promise<ActionResult> {
   }
   revalidatePath("/german-note");
   revalidatePath("/german-note/manage");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+/**
+ * The founder-editable "Payment type" list (Founder Console → Payment Types).
+ *
+ * Existing records are NOT touched. A type's code is what an Income row stores, so renaming the
+ * label changes every screen at once (which is the point) while deactivating one only stops it
+ * being offered - the historic rows keep reading correctly. The schema refuses to drop or re-kind
+ * FULL_PAYMENT and INSTALMENT for exactly that reason: the settlement engine branches on those
+ * two by name.
+ *
+ * Finance, the Quick Record modal and Cash all revalidate, because an operator who has just added
+ * "Subscription" is usually about to record one.
+ */
+export async function savePaymentTypesConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = paymentTypesConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const before = coercePaymentTypesConfig(await settingValue(PAYMENT_TYPES_KEY));
+  await writePaymentTypesConfig(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "console.payment-types.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: PAYMENT_TYPES_KEY,
+      summary: "Changed the payment types",
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  revalidatePath("/finance");
   revalidatePath("/console");
   return { ok: true };
 }

@@ -37,6 +37,8 @@ export type WhatsAppAdminData = {
   messages: WhatsAppMessageRow[];
   optOuts: { phone: string; reason: string | null; createdAt: string }[];
   counts: Record<WhatsAppStatus, number> & { total: number };
+  /** The window `counts` and `kindBreakdown` cover, so the page can say so on screen. */
+  windowDays: number;
   /** Top touchpoint kinds behind the Sent / Replied / Failed tiles, for their expand popups. */
   kindBreakdown: {
     sent: { label: string; value: number }[];
@@ -44,6 +46,16 @@ export type WhatsAppAdminData = {
     failed: { label: string; value: number }[];
   };
 };
+
+/**
+ * The volume tiles are a WINDOW, not a lifetime count.
+ *
+ * They used to group with no `where` at all, which made "Failed" a total that could only ever go
+ * up - so it could not distinguish "broken right now" from "was broken in August", and was useless
+ * as the health signal people reached for it as. Thirty days is long enough to show a trend and
+ * short enough that zero means zero.
+ */
+const WINDOW_DAYS = 30;
 
 export async function getWhatsAppAdminData(): Promise<WhatsAppAdminData> {
   const runtime = await getWatiRuntime();
@@ -60,7 +72,11 @@ export async function getWhatsAppAdminData(): Promise<WhatsAppAdminData> {
       },
     }),
     prisma.whatsAppOptOut.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.whatsAppMessage.groupBy({ by: ["status", "kind"], _count: { _all: true } }),
+    prisma.whatsAppMessage.groupBy({
+      by: ["status", "kind"],
+      _count: { _all: true },
+      where: { createdAt: { gte: new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000) } },
+    }),
   ]);
 
   const counts = {
@@ -114,6 +130,7 @@ export async function getWhatsAppAdminData(): Promise<WhatsAppAdminData> {
     })),
     optOuts: optOuts.map((o) => ({ phone: o.phone, reason: o.reason, createdAt: o.createdAt.toISOString() })),
     counts,
+    windowDays: WINDOW_DAYS,
     kindBreakdown: {
       sent: kindBreakdown(["SENT"]),
       replied: kindBreakdown(["REPLIED"]),

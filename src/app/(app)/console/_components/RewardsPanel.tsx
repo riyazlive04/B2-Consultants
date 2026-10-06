@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertTriangle, Gift, RefreshCw } from "lucide-react";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { Modal } from "@/components/ui/Modal";
 import { Tabs } from "@/components/ui/Tabs";
 import { deleteRewardRule, saveRewardRule, scanRewards, setGrantStatus } from "@/server/console-actions";
@@ -410,11 +411,11 @@ function RuleForm({
             </div>
           ) : (
             <>
-              <Field label="Amount ₹" hint="Leave blank if paying in EUR only">
-                <TextInput name="amountInr" kind="money" defaultValue={rule && Number(rule.amountInrMinor) > 0 ? moneyInput(rule.amountInrMinor) : ""} />
+              <Field label="Price (₹)" hint="Leave blank if paying in EUR only">
+                <MoneyInput currency="INR" name="amountInr" defaultValue={rule && Number(rule.amountInrMinor) > 0 ? moneyInput(rule.amountInrMinor) : ""} />
               </Field>
-              <Field label="Amount €">
-                <TextInput name="amountEur" kind="money" defaultValue={rule && Number(rule.amountEurMinor) > 0 ? moneyInput(rule.amountEurMinor) : ""} />
+              <Field label="Price (€)">
+                <MoneyInput currency="EUR" name="amountEur" defaultValue={rule && Number(rule.amountEurMinor) > 0 ? moneyInput(rule.amountEurMinor) : ""} />
               </Field>
             </>
           )}

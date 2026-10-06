@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { getActiveLevels } from "@/server/levels";
 import { levelOptions } from "@/lib/levels";
 import { toDateInputValue, istToday } from "@/lib/dates";
+import { getInstalmentPlanConfig, getPaymentTypesConfig } from "@/server/founder-config";
+import type { InstalmentPlanConfig, PaymentTypesConfig } from "@/lib/config-schema";
 
 /**
  * The dependencies the quick-record forms need - the live FX rate (so the ₹↔€ preview matches
@@ -23,16 +25,25 @@ export type RecordFormData = {
   fxDate: string;
   studentOptions: { value: string; label: string; hint?: string }[];
   levelOptions: { value: string; label: string }[];
+  /**
+   * The founder's payment types and instalment prices. Travel WITH the form data rather than
+   * being fetched per keystroke, so the quick form prices a plan as it is typed - the same rule
+   * the Finance page follows, and the reason the two forms cannot disagree about what a plan costs.
+   */
+  paymentTypes: PaymentTypesConfig;
+  instalmentPlans: InstalmentPlanConfig;
 };
 
 export async function getRecordFormData(): Promise<RecordFormData | null> {
   const { allowed } = await capabilityCheck("finance.write");
   if (!allowed) return null;
 
-  const [fx, students, levels] = await Promise.all([
+  const [fx, students, levels, paymentTypes, instalmentPlans] = await Promise.all([
     getTodayInrPerEur(),
     prisma.student.findMany({ orderBy: { fullName: "asc" }, select: { id: true, fullName: true, code: true } }),
     getActiveLevels(),
+    getPaymentTypesConfig(),
+    getInstalmentPlanConfig(),
   ]);
 
   return {
@@ -43,5 +54,7 @@ export async function getRecordFormData(): Promise<RecordFormData | null> {
     // Code rides as a searchable `hint`, never written into the name field (§6.1 / ComboBox).
     studentOptions: students.map((s) => ({ value: s.id, label: s.fullName, hint: s.code ?? undefined })),
     levelOptions: levelOptions(levels),
+    paymentTypes,
+    instalmentPlans,
   };
 }

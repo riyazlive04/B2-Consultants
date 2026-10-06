@@ -1,7 +1,7 @@
-import crypto from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import type { MessageStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { verifySvixSignature } from "@/lib/svix";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 import { htmlToText, isConfirmationReply } from "@/lib/confirmation-reply";
 import { markDiscoveryConfirmed } from "@/server/lead-stage-auto";
@@ -33,30 +33,6 @@ import { markDiscoveryConfirmed } from "@/server/lead-stage-auto";
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const TOLERANCE_SECONDS = 300;
-
-function verifySvixSignature(rawBody: string, svixId: string, svixTimestamp: string, svixSignature: string, secret: string): boolean {
-  const ts = Number(svixTimestamp);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > TOLERANCE_SECONDS) return false;
-
-  const secretBytes = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
-  const signedContent = `${svixId}.${svixTimestamp}.${rawBody}`;
-  const expected = crypto.createHmac("sha256", secretBytes).update(signedContent).digest();
-
-  // svix-signature carries space-separated "v1,<base64sig>" entries (one per active signing key,
-  // e.g. during secret rotation) - any match is valid.
-  return svixSignature.split(" ").some((entry) => {
-    const [version, sig] = entry.split(",");
-    if (version !== "v1" || !sig) return false;
-    try {
-      const given = Buffer.from(sig, "base64");
-      return given.length === expected.length && crypto.timingSafeEqual(given, expected);
-    } catch {
-      return false;
-    }
-  });
-}
 
 const STATUS_RANK: Record<MessageStatus, number> = { SKIPPED: 0, QUEUED: 1, SENT: 2, DELIVERED: 3, FAILED: 2 };
 

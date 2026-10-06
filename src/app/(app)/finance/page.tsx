@@ -18,6 +18,8 @@ import { PROGRAM_LEVEL_LABELS, PAYMENT_METHOD_LABELS, EXPENSE_CATEGORY_LABELS } 
 import { requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { getTodayInrPerEur } from "@/lib/fx";
+import { getInstalmentPlanConfig, getPaymentTypesConfig } from "@/server/founder-config";
+import { formatStudentCode, nextStudentNumber } from "@/lib/student-code";
 import { getFinanceOverview } from "@/server/finance-metrics";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { getCommissionReport } from "@/server/commission-metrics";
@@ -77,6 +79,8 @@ export default async function FinancePage({
     studentRows,
     activeLevels,
     line,
+    paymentTypes,
+    instalmentPlans,
   ] = await Promise.all([
     getFinanceOverview(period),
     getCommissionReport(),
@@ -95,6 +99,11 @@ export default async function FinancePage({
     // linking a colleague a specific view was a deliberate property of the old design
     // (Error Log E1/E4). See server/business-line-view.ts.
     resolveBusinessLine(searchParams?.line) as Promise<BusinessLineView>,
+    // The founder's payment types and instalment prices travel WITH the page rather than being
+    // fetched per keystroke by the forms below - both are cached app-wide, a handful of numbers,
+    // and no secret, so the income form can do its arithmetic as you type.
+    getPaymentTypesConfig(),
+    getInstalmentPlanConfig(),
   ]);
   const fxRate = Number(fx.rate);
   const fxDate = fx.date.toISOString();
@@ -109,6 +118,16 @@ export default async function FinancePage({
   // §6.1: the code rides as a `hint` - visible in the dropdown and searchable, but never
   // written into the name field (see ComboBox). `studentCodeById` lets the tables below
   // show the same code beside a denormalised studentName.
+  /**
+   * The next free student number in each series (§6.1), derived from the roster ALREADY read
+   * above rather than with a second query - it seeds the editable Student ID box on the income
+   * form, and a round trip for a suggestion is a round trip wasted.
+   */
+  const issuedCodes = studentRows.map((s) => s.code);
+  const nextStudentCodes = {
+    B2: formatStudentCode(nextStudentNumber(issuedCodes, "B2"), "B2"),
+    GERMAN_NOTE: formatStudentCode(nextStudentNumber(issuedCodes, "GERMAN_NOTE"), "GERMAN_NOTE"),
+  };
   const studentOptions = studentRows.map((s) => ({
     value: s.id,
     label: s.fullName,
@@ -489,6 +508,9 @@ export default async function FinancePage({
                   upcomingInstalments={upcomingInstalments}
                   levelLines={levelLines}
                   payerOptions={payerOptions}
+                  paymentTypes={paymentTypes}
+                  instalmentPlans={instalmentPlans}
+                  nextStudentCodes={nextStudentCodes}
                 />
               ),
             },
@@ -498,7 +520,7 @@ export default async function FinancePage({
             },
             {
               label: `Pending payments${pendings.some((p) => p.overdue) ? " ⚠" : ""}`,
-              content: <PendingSection rows={pendings} studentCodeById={studentCodeById} waStatus={waByPending} levelOptions={levelOpts} fxRate={fxRate} fxStale={fx.stale} fxDate={fxDate} />,
+              content: <PendingSection rows={pendings} studentCodeById={studentCodeById} waStatus={waByPending} levelOptions={levelOpts} fxRate={fxRate} fxStale={fx.stale} fxDate={fxDate} instalmentPlans={instalmentPlans} />,
             },
             { label: "Commission", content: <CommissionSection report={commission} /> },
             {

@@ -132,7 +132,8 @@ export default async function WhatsAppPage() {
         />
       )}
 
-      {/* Volume */}
+      {/* Volume - a window, not a lifetime count, so "Failed: 0" means nothing is failing now */}
+      <p className="text-xs text-muted">Last {data.windowDays} days</p>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard
           label="Sent"

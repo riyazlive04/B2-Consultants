@@ -302,7 +302,9 @@ export async function addNewMember(batchId: string, form: FormData): Promise<Act
     if (!seat.ok) return seat;
     const s = await tx.student.create({
       data: {
-        code: await allocateStudentCode(tx),
+        // Seated in a German Note batch, so they are numbered in the GN series (GN-0001…),
+        // never B2's - the two businesses issue their own student numbers.
+        code: await allocateStudentCode(tx, "GERMAN_NOTE"),
         fullName: d.fullName,
         email: d.email || null,
         phone: d.phone || null,

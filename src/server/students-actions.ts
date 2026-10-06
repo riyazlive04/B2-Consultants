@@ -10,7 +10,7 @@ import { parseDateInput } from "@/lib/dates";
 import { intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
-import { allocateStudentCode } from "./student-code";
+import { allocateStudentCode, lineForLevel } from "./student-code";
 import { normalizeStudentCode } from "@/lib/student-code";
 import { Prisma } from "@prisma/client";
 
@@ -104,13 +104,14 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
   const start = parseDateInput(e.data.enrollmentDate);
   const { duration, programEndDate } = derivedDuration(e.data.programLevel, start);
 
-  // Typed in wins; blank falls back to the next generated number, exactly as before.
+  // Typed in wins; blank falls back to the next generated number, exactly as before - in the
+  // series the programme level belongs to (B2-0001… or GN-0001…), derived not asked for.
   const typedCode = normalizeStudentCode(s.data.code);
   let student;
   try {
     student = await prisma.student.create({
       data: {
-        code: typedCode ?? (await allocateStudentCode()),
+        code: typedCode ?? (await allocateStudentCode(prisma, await lineForLevel(e.data.programLevel))),
         fullName: s.data.fullName,
         email: s.data.email || null,
         phone: s.data.phone || null,

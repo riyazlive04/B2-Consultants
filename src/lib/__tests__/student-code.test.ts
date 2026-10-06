@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatStudentCode, nextStudentNumber, normalizeStudentCode, parseStudentCode } from "../student-code";
+import {
+  formatStudentCode, nextStudentNumber, normalizeStudentCode, parseStudentCode,
+  parseStudentCodeParts,
+} from "../student-code";
 
 /**
  * The student number is now hand-editable, so `normalizeStudentCode` is what decides whether two
@@ -44,5 +47,50 @@ describe("the generator still ignores hand-edited codes", () => {
 
   it("round-trips its own format", () => {
     assert.equal(parseStudentCode(formatStudentCode(42)), 42);
+  });
+});
+
+/**
+ * ── TWO SERIES, ONE PER BUSINESS ──────────────────────────────────────────────────
+ * B2 and German Note issue their own student numbers, each with its own counter. The property
+ * that matters is that the counters do not see each other: seating German Note's third student
+ * must give GN-0003 even when 180 B2 students exist, or the number on a German Note agreement
+ * tracks B2's growth and means nothing.
+ */
+describe("the two student-number series", () => {
+  const roster = ["B2-0001", "B2-0184", "GN-0001", "GN-0002"];
+
+  it("counts each series independently", () => {
+    assert.equal(nextStudentNumber(roster, "B2"), 185);
+    assert.equal(nextStudentNumber(roster, "GERMAN_NOTE"), 3);
+  });
+
+  it("formats each series with its own prefix", () => {
+    assert.equal(formatStudentCode(3, "GERMAN_NOTE"), "GN-0003");
+    assert.equal(formatStudentCode(185, "B2"), "B2-0185");
+  });
+
+  it("starts a series that has issued nothing at 1", () => {
+    assert.equal(nextStudentNumber(["B2-0007"], "GERMAN_NOTE"), 1);
+    assert.equal(nextStudentNumber([], "B2"), 1);
+  });
+
+  it("defaults to B2, so every historic call site is unchanged", () => {
+    assert.equal(formatStudentCode(42), "B2-0042");
+    assert.equal(nextStudentNumber(["B2-0007", "GN-0099"]), 8);
+  });
+
+  it("reads a code back to the business that issued it", () => {
+    assert.deepEqual(parseStudentCodeParts("GN-0042"), {
+      line: "GERMAN_NOTE", prefix: "GN", number: 42,
+    });
+    assert.deepEqual(parseStudentCodeParts("b2-7"), { line: "B2", prefix: "B2", number: 7 });
+    assert.equal(parseStudentCodeParts("EXT/9912.A"), null);
+    assert.equal(parseStudentCodeParts(null), null);
+  });
+
+  it("still refuses a code from neither series as a counter input", () => {
+    assert.equal(parseStudentCode("GN-ABC"), null);
+    assert.equal(nextStudentNumber(["GN-0002", "SAP-9999"], "GERMAN_NOTE"), 3);
   });
 });

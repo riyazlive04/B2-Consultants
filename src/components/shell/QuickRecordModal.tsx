@@ -20,10 +20,15 @@ import { InstalmentSchedule } from "@/app/(app)/finance/_components/InstalmentSc
 import {
   optionsFrom,
   PAYMENT_METHOD_LABELS,
-  PAYMENT_TYPE_LABELS,
   EXPENSE_CATEGORY_LABELS,
   EXPENSE_BUSINESS_LINE_LABELS,
 } from "@/lib/labels";
+import {
+  paymentTypeKind, paymentTypeOptions, RECURRENCE_INTERVAL_LABELS, suggestNextBillingDate,
+} from "@/lib/payment-types";
+import { currenciesInPlay, defaultMethodFor, methodsForCurrencies } from "@/lib/payment-methods";
+import { instalmentExtraFor } from "@/lib/instalment-plan";
+import { minorToMajorString } from "@/lib/format";
 
 /**
  * The Record CTA's popup (this replaces the old menu that navigated to /finance): an Income and an
@@ -125,19 +130,38 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
   // follow up and the chasing ladder had nothing to chase. A payment plan agreed here is the
   // same plan agreed on the Finance page, and it has to be written down the same way.
   const [paymentType, setPaymentType] = useState("FULL_PAYMENT");
+  // The chosen type's KIND is what the form branches on - see IncomeSection / lib/payment-types.
+  const typeKind = paymentTypeKind(data.paymentTypes, paymentType);
   // Same three pieces as the Finance form: the plan's shape, where it starts, and whether every
   // due date is in. Kept in step so a plan agreed here is written down the same way.
   const [instalmentCount, setInstalmentCount] = useState<number | null>(null);
   const [entryDate, setEntryDate] = useState<string>(data.today);
   const [scheduleComplete, setScheduleComplete] = useState(false);
-  const blockSave = paymentType === "INSTALMENT" && !scheduleComplete;
+  const blockSave = typeKind === "INSTALMENT" && !scheduleComplete;
   // The fee and the plan surcharge, divided - exactly as on the Finance page, because a plan
   // agreed here is the same plan. See lib/instalment-amounts.
   const [feeAmount, setFeeAmount] = useState<MoneyText>({ inr: "", eur: "" });
   const [extraAmount, setExtraAmount] = useState<MoneyText>({ inr: "", eur: "" });
-  const planMode = paymentType === "INSTALMENT";
+  const planMode = typeKind === "INSTALMENT";
   const shares = planMode ? planShares(feeAmount, extraAmount, instalmentCount) : [];
   const banked = firstShare(shares);
+  /** The Console price for this plan length, filled in as you type - see IncomeSection. */
+  const feeCurrencies = currenciesInPlay(feeAmount);
+  const pricedExtra = instalmentExtraFor(instalmentCount ?? 0, data.instalmentPlans);
+  const extraDefaults = {
+    inr: feeCurrencies.includes("INR") && pricedExtra.inr > BigInt(0) ? minorToMajorString(pricedExtra.inr) : "",
+    eur: feeCurrencies.includes("EUR") && pricedExtra.eur > BigInt(0) ? minorToMajorString(pricedExtra.eur) : "",
+  };
+  const extraKey = `extra-${instalmentCount ?? 0}-${feeCurrencies.join("+") || "none"}`;
+  /** The method list narrows to the rails the entered currency can arrive by. */
+  const [methodChoice, setMethodChoice] = useState<string | null>(null);
+  const methodOptions = methodsForCurrencies(feeCurrencies).map((m) => ({
+    value: m,
+    label: PAYMENT_METHOD_LABELS[m] ?? m,
+  }));
+  const paymentMethod = defaultMethodFor(feeCurrencies, methodChoice ?? "UPI");
+  const [interval, setInterval] = useState("MONTHLY");
+  const [nextBilling, setNextBilling] = useState("");
   const { error, formRef, submit } = useQuickSubmit(
     async (fd) => {
       const res = await createIncome(fd);
@@ -160,6 +184,10 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
       setEntryDate(data.today);
       setScheduleComplete(false);
       setFeeAmount({ inr: "", eur: "" });
+      setExtraAmount({ inr: "", eur: "" });
+      setMethodChoice(null);
+      setInterval("MONTHLY");
+      setNextBilling("");
     };
     form.addEventListener("reset", onReset);
     return () => form.removeEventListener("reset", onReset);
@@ -205,8 +233,8 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
           fxDate={data.fxDate}
           inrName={planMode ? "planTotalInr" : "amountInr"}
           eurName={planMode ? "planTotalEur" : "amountEur"}
-          inrLabel={planMode ? "Total fee (₹)" : "Amount received (₹)"}
-          eurLabel={planMode ? "Total fee (€)" : "Amount received (€)"}
+          inrLabel={planMode ? "Total price (₹)" : "Price received (₹)"}
+          eurLabel={planMode ? "Total price (€)" : "Price received (€)"}
           baseHint={planMode ? "The whole fee - divided across the instalments below" : "INR, EUR, or both"}
           onAmountsChange={setFeeAmount}
         />
@@ -222,12 +250,37 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
         <Field label="Payment type">
           <Select
             name="paymentType"
-            options={optionsFrom(PAYMENT_TYPE_LABELS)}
-            defaultValue="FULL_PAYMENT"
+            options={paymentTypeOptions(data.paymentTypes)}
+            value={paymentType}
             onChange={(e) => setPaymentType(e.currentTarget.value)}
           />
         </Field>
-        {paymentType === "INSTALMENT" && (
+        {typeKind === "SUBSCRIPTION" && (
+          <>
+            <Field label="Bills every" hint="How often this payment repeats">
+              <Select
+                name="recurrenceInterval"
+                options={optionsFrom(RECURRENCE_INTERVAL_LABELS)}
+                value={interval}
+                onChange={(e) => {
+                  const next = e.currentTarget.value;
+                  setInterval(next);
+                  setNextBilling((cur) => cur || suggestNextBillingDate(entryDate, next));
+                }}
+              />
+            </Field>
+            <Field label="Next payment due" hint="Suggested from the interval - change it freely">
+              <TextInput
+                type="date"
+                name="recurrenceNextDate"
+                required
+                value={nextBilling || suggestNextBillingDate(entryDate, interval)}
+                onChange={(e) => setNextBilling(e.currentTarget.value)}
+              />
+            </Field>
+          </>
+        )}
+        {typeKind === "INSTALMENT" && (
           <>
             <Field label="Number of instalments" hint="How many instalments the fee is split into">
               <TextInput
@@ -242,14 +295,21 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
               />
             </Field>
             <AmountPair
+              key={extraKey}
               fxRate={data.fxRate}
               fxStale={data.fxStale}
               fxDate={data.fxDate}
               inrName="instalmentExtraInr"
               eurName="instalmentExtraEur"
-              inrLabel="Extra amount (₹)"
-              eurLabel="Extra amount (€)"
-              baseHint="Added to the fee for paying in instalments"
+              inrLabel="Extra price (₹)"
+              eurLabel="Extra price (€)"
+              baseHint={
+                extraDefaults.inr || extraDefaults.eur
+                  ? `The Console price for a ${instalmentCount}-part plan - change it if this one was agreed differently`
+                  : "Added to the fee for paying in instalments"
+              }
+              defaultInr={extraDefaults.inr}
+              defaultEur={extraDefaults.eur}
               onAmountsChange={setExtraAmount}
             />
             <InstalmentSchedule
@@ -262,9 +322,33 @@ function IncomeForm({ data, onClose }: { data: RecordFormData; onClose: () => vo
             />
           </>
         )}
-        <Field label="Payment method">
-          <Select name="paymentMethod" options={optionsFrom(PAYMENT_METHOD_LABELS)} defaultValue="UPI" />
+        {/* Narrowed to the rails the entered currency can arrive by - lib/payment-methods. */}
+        <Field
+          label="Payment method"
+          hint={
+            feeCurrencies.length === 1
+              ? `${feeCurrencies[0] === "EUR" ? "Euro" : "Rupee"} payment methods`
+              : undefined
+          }
+        >
+          <Select
+            name="paymentMethod"
+            options={methodOptions}
+            value={paymentMethod}
+            onChange={(e) => setMethodChoice(e.currentTarget.value)}
+          />
         </Field>
+        {paymentMethod === "OTHER" && (
+          <Field label="How did it arrive?" hint="Named on the row instead of “Other”">
+            <TextInput
+              kind="text"
+              name="paymentMethodOther"
+              required
+              maxLength={60}
+              placeholder="e.g. Wise, Revolut, demand draft"
+            />
+          </Field>
+        )}
         <div className="sm:col-span-2">
           <Field label="Notes (optional)">
             <TextInput kind="text" name="notes" placeholder="Any extra info" />
@@ -310,8 +394,8 @@ function ExpenseForm({ data, onClose }: { data: RecordFormData; onClose: () => v
           fxDate={data.fxDate}
           inrName="amountInr"
           eurName="amountEur"
-          inrLabel="Amount paid (₹)"
-          eurLabel="Amount paid (€)"
+          inrLabel="Price paid (₹)"
+          eurLabel="Price paid (€)"
           baseHint="INR, EUR, or both"
         />
         <Field label="Expense category">

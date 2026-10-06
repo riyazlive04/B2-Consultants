@@ -4,6 +4,7 @@ import { istWallToUtc } from "@/lib/dates";
 import { activityStamp } from "@/lib/activity-actions";
 import { formatDateTimeInZone } from "@/lib/format";
 import { callTimeNotice } from "@/lib/call-notice";
+import { emptyTally, tallySend, type DeliveryTally } from "@/lib/delivery-health";
 import { releasedSlotStatus } from "@/lib/booking-hold";
 import { getBookingRulesConfig } from "./founder-config";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
@@ -157,6 +158,8 @@ export type BookingAutomationRun = {
    * attached is the difference between "working" and "quietly doing nothing".
    */
   skippedNotReached: number;
+  /** Channel-health tally for the confirm-request sends, harvested by `cron-route.ts`. */
+  delivery: DeliveryTally;
 };
 
 /** Run the confirm-or-cancel cadence + promote-next once. Idempotent across ticks. */
@@ -167,13 +170,14 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
   let cancelled = 0;
   let promoted = 0;
   let skippedNotReached = 0;
+  const delivery = emptyTally();
 
   // Master switch. When off, the loop is entirely idle: no confirm-request messages leave, and
   // nothing is auto-cancelled - so "off by default" genuinely means nothing automatic happens to a
   // real prospect. The manual controls (block, postpone, mark-confirmed, cancel-with-promote) are
   // unaffected because they don't go through here.
   if (!rules.autoCancelEnabled) {
-    return { enabled: false, reason: "Confirmation loop is off - enable auto-cancel in Booking rules", ranAt, asked, cancelled, promoted, skippedNotReached };
+    return { enabled: false, reason: "Confirmation loop is off - enable auto-cancel in Booking rules", ranAt, asked, cancelled, promoted, skippedNotReached, delivery };
   }
 
   const now = Date.now();
@@ -203,6 +207,7 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
       await prisma.bookingRequest.update({ where: { id: b.id }, data: { confirmSentAt: new Date() } });
       const out = await sendBookingConfirmRequest(b.id);
       asked++;
+      tallySend(delivery, { sent: out.sent, failed: out.status === "FAILED", error: out.error });
       // `asked` counts the ask attempt (that's what the stamp records); the feed only claims a
       // message the prospect actually received - a SKIPPED send means WhatsApp is off or paused.
       if (out.sent && b.slot) {
@@ -333,5 +338,5 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
     }
   }
 
-  return { enabled: true, ranAt, asked, cancelled, promoted, skippedNotReached };
+  return { enabled: true, ranAt, asked, cancelled, promoted, skippedNotReached, delivery };
 }

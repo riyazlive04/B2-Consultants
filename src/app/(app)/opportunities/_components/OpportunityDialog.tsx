@@ -6,6 +6,7 @@ import { CalendarCheck, CheckSquare, ExternalLink, FileText, Plus, Square, Stick
 import { Btn } from "@/components/ui/controls";
 import { Modal } from "@/components/ui/Modal";
 import { Field, TextInput, Select, SubmitButton, FormError } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { toast } from "@/components/ui/feedback";
 import { DateText } from "@/components/ui/DateText";
 import { Pill } from "@/components/ui/kit";
@@ -162,7 +163,7 @@ export function OpportunityDialog({
                   <h3 className="mb-3 text-sm font-semibold text-ink">Opportunity details</h3>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field label="Opportunity name"><TextInput kind="text" name="name" required defaultValue={card.name} /></Field>
-                    <Field label="Value (₹)"><TextInput kind="money" name="valueInr" defaultValue={card.valueInr.replace(/[^\d.]/g, "")} /></Field>
+                    <Field label="Value (₹)"><MoneyInput currency="INR" name="valueInr" defaultValue={card.valueInr.replace(/[^\d.]/g, "")} /></Field>
                     <Field label="Pipeline">
                       <input className="h-10 w-full rounded-field border border-line bg-surface-2 px-3 text-sm text-ink-3" value={detail?.pipelineName ?? "…"} readOnly tabIndex={-1} />
                     </Field>

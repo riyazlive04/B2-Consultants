@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { Expense, Income, PendingPayment } from "@prisma/client";
+import type { Expense, Income, PendingPayment, RecurrenceInterval } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
 import { getTodayInrPerEur } from "@/lib/fx";
@@ -22,7 +22,12 @@ import {
   unsettleIncome,
   type SettlementRecord,
 } from "./instalment-settlement";
-import { allocateStudentCode } from "./student-code";
+import { allocateStudentCode, lineForLevel } from "./student-code";
+import { normalizeStudentCode } from "@/lib/student-code";
+import { getPaymentTypesConfig } from "./founder-config";
+import { RECURRENCE_INTERVALS } from "@/lib/payment-types";
+import { currenciesInPlay, methodsForCurrencies } from "@/lib/payment-methods";
+import type { PaymentTypeKind } from "@/lib/config-schema";
 
 /** Finance is Admin-only in every direction (PRD1 §4.1). All actions re-check. */
 
@@ -66,10 +71,31 @@ const incomeSchema = z.object({
   amountEur: moneyInput,
   // Any level code - validated against the live Level catalogue in the action (isKnownLevel).
   programLevel: z.string().trim().min(1, "Pick a program level"),
-  paymentType: z.enum(["FULL_PAYMENT", "INSTALMENT"]),
+  // Any configured code - validated against the live list in the action (`resolvePaymentType`),
+  // the same way programLevel is validated against the Level catalogue.
+  paymentType: z.string().trim().min(1, "Pick a payment type"),
   paymentMethod: z.enum([
     "BANK_TRANSFER_INR", "BANK_TRANSFER_EUR", "PAYPAL", "RAZORPAY", "CASH", "UPI", "CREDIT_CARD", "OTHER",
   ]),
+  /** What "Other" meant, in the operator's own words. Required when the method IS Other. */
+  paymentMethodOther: blankToUndefined(
+    z.string().trim().min(2, "Say how the payment arrived").max(60, "Keep this under 60 characters"),
+  ),
+  /** A recurring arrangement - asked only for a SUBSCRIPTION-kind type. */
+  recurrenceInterval: z.enum(RECURRENCE_INTERVALS).optional().or(z.literal("")),
+  recurrenceNextDate: z.string().optional(),
+  /**
+   * The student number to mint the new record under, typed on the form (§6.1). Blank falls back
+   * to the next generated number in the right series. Same rule as the Students form: a code may
+   * be carried over from other paperwork, so the format is checked but not imposed.
+   */
+  newStudentCode: z
+    .string()
+    .trim()
+    .max(24, "A student ID can be at most 24 characters")
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, "Use letters, numbers, dashes, dots or slashes")
+    .optional()
+    .or(z.literal("")),
   // Instalment plan - the count is required the moment INSTALMENT is picked (enforced in
   // instalmentFields below, where paymentType is known); the extra surcharge may be zero.
   instalmentCount: blankToUndefined(intInRange(2, 36, "Number of instalments must be")),
@@ -145,10 +171,12 @@ function parseSchedule(
  * full payment clears them rather than leaving a stale "3 instalments" on a full payment.
  * Returns the error string instead of throwing so the caller can hand it to the form.
  */
-function instalmentFields(d: z.infer<typeof incomeSchema>):
+function instalmentFields(d: z.infer<typeof incomeSchema>, kind: PaymentTypeKind):
   | { error: string }
   | { instalmentCount: number | null; instalmentExtraInrMinor: bigint; instalmentExtraEurMinor: bigint } {
-  if (d.paymentType !== "INSTALMENT") {
+  // Branches on the KIND, not the code: the founder may name an instalment type anything, and a
+  // type they later re-kind must stop asking for a schedule the same day.
+  if (kind !== "INSTALMENT") {
     return { instalmentCount: null, instalmentExtraInrMinor: BigInt(0), instalmentExtraEurMinor: BigInt(0) };
   }
   if (!d.instalmentCount) return { error: "Enter how many instalments the fee is split into" };
@@ -157,6 +185,60 @@ function instalmentFields(d: z.infer<typeof incomeSchema>):
     instalmentExtraInrMinor: d.instalmentExtraInr?.trim() ? majorStringToMinor(d.instalmentExtraInr) : BigInt(0),
     instalmentExtraEurMinor: d.instalmentExtraEur?.trim() ? majorStringToMinor(d.instalmentExtraEur) : BigInt(0),
   };
+}
+
+/**
+ * Validate a submitted payment type against the founder's live list, and hand back its KIND.
+ *
+ * The code is stored, but nothing branches on it - the kind does. An unconfigured code is refused
+ * rather than coerced: silently filing a payment as something the founder never offered is how a
+ * subscription ends up in the dunning ladder.
+ *
+ * A code that is configured but INACTIVE is accepted, because editing an older row must not
+ * re-file it as something else just because the type stopped being offered since.
+ */
+async function resolvePaymentType(
+  code: string,
+): Promise<{ error: string } | { kind: PaymentTypeKind }> {
+  const config = await getPaymentTypesConfig();
+  const row = config.types.find((t) => t.code === code);
+  if (!row) return { error: "That payment type no longer exists - pick another." };
+  return { kind: row.kind };
+}
+
+/**
+ * The method has to be a rail the entered currency can actually arrive by (lib/payment-methods).
+ *
+ * The form already narrows the dropdown; this is the server half of the same rule, because a
+ * server action is a public endpoint and the method is what a bank statement is reconciled
+ * against. A euro payment stored as UPI matches nothing, forever.
+ */
+function methodError(
+  method: string,
+  amounts: { inr?: string; eur?: string },
+  other?: string,
+): string | null {
+  const currencies = currenciesInPlay({ inr: amounts.inr ?? "", eur: amounts.eur ?? "" });
+  if (!methodsForCurrencies(currencies).includes(method)) {
+    return "That payment method isn't available for the currency entered - pick another.";
+  }
+  // "Other" with no note is a row nobody can reconcile later, which is the whole reason the
+  // free-text box exists.
+  if (method === "OTHER" && !other?.trim()) return "Say how the payment arrived";
+  return null;
+}
+
+/** The recurrence answers only mean something for a SUBSCRIPTION-kind type. */
+function recurrenceFields(
+  d: { recurrenceInterval?: string; recurrenceNextDate?: string },
+  kind: PaymentTypeKind,
+): { error: string } | { recurrenceInterval: RecurrenceInterval | null; recurrenceNextDate: Date | null } {
+  if (kind !== "SUBSCRIPTION") return { recurrenceInterval: null, recurrenceNextDate: null };
+  if (!d.recurrenceInterval) return { error: "Say how often this subscription bills" };
+  if (!d.recurrenceNextDate?.trim()) return { error: "Enter when the next payment is due" };
+  const next = parseDateInput(d.recurrenceNextDate);
+  if (Number.isNaN(next.getTime())) return { error: `${d.recurrenceNextDate} is not a date we can read` };
+  return { recurrenceInterval: d.recurrenceInterval as RecurrenceInterval, recurrenceNextDate: next };
 }
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -229,15 +311,21 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
   const d = parsed.data;
   const amountError = requireSomeAmount(d.amountInr, d.amountEur);
   if (amountError) return { ok: false, error: amountError };
-  const instalment = instalmentFields(d);
+  const type = await resolvePaymentType(d.paymentType);
+  if ("error" in type) return { ok: false, error: type.error };
+  const instalment = instalmentFields(d, type.kind);
   if ("error" in instalment) return { ok: false, error: instalment.error };
+  const recurrence = recurrenceFields(d, type.kind);
+  if ("error" in recurrence) return { ok: false, error: recurrence.error };
+  const methodProblem = methodError(d.paymentMethod, { inr: d.amountInr, eur: d.amountEur }, d.paymentMethodOther);
+  if (methodProblem) return { ok: false, error: methodProblem };
   if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
   const incomeDate = parseDateInput(d.date);
-  // Only an INSTALMENT entry carries a schedule; switching back to full payment discards any
+  // Only an INSTALMENT-kind entry carries a schedule; switching back to full payment discards any
   // dates left in the form rather than billing for a plan the founder just cancelled.
   const parsedSchedule = parseSchedule(
-    d.paymentType === "INSTALMENT" ? d.instalmentSchedule : undefined,
+    type.kind === "INSTALMENT" ? d.instalmentSchedule : undefined,
     incomeDate,
   );
   if ("error" in parsedSchedule) return { ok: false, error: parsedSchedule.error };
@@ -296,6 +384,14 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
    * and it still saves under the typed name exactly as it did before.
    */
   const mintStudent = form.get("createStudent") === "on" && !d.studentId && session.role === "ADMIN";
+  /**
+   * The ID the new student record gets. Typed in on the form if the operator edited it (§6.1 -
+   * the number is printed on agreements and read down a phone line, so the person minting the
+   * record is the one who should get to set it), otherwise generated in the series this
+   * payment's programme level belongs to: B2-0001… for a B2 level, GN-0001… for a German one.
+   */
+  const typedStudentCode = mintStudent ? normalizeStudentCode(d.newStudentCode) : null;
+  const mintLine = mintStudent ? await lineForLevel(d.programLevel) : "B2";
   let mintedStudent: { id: string; code: string | null; backfilled: number } | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
@@ -315,7 +411,16 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
           linkedStudentId = match.id;
         } else {
           const student = await tx.student.create({
-            data: { code: await allocateStudentCode(tx), fullName: d.studentName },
+            /**
+             * The student number is TYPED IN if the operator edited it on the form, and
+             * generated otherwise - in the series this payment's programme level belongs to
+             * (B2-0001… or GN-0001…). A duplicate is refused by the UNIQUE index below rather
+             * than by a read, so two people minting at once cannot both win.
+             */
+            data: {
+              code: typedStudentCode ?? (await allocateStudentCode(tx, mintLine)),
+              fullName: d.studentName,
+            },
           });
           linkedStudentId = student.id;
           mintedStudent = { id: student.id, code: student.code, backfilled: 0 };
@@ -332,6 +437,10 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
           programLevel: d.programLevel,
           paymentType: d.paymentType,
           paymentMethod: d.paymentMethod,
+          // Only ever stored alongside OTHER - a note left over from a method since changed
+          // would read as a contradiction on the row.
+          paymentMethodOther: d.paymentMethod === "OTHER" ? d.paymentMethodOther ?? null : null,
+          ...recurrence,
           ...instalment,
           studentId: linkedStudentId,
           notes: d.notes || null,
@@ -502,8 +611,14 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
   const d = parsed.data;
   const amountError = requireSomeAmount(d.amountInr, d.amountEur);
   if (amountError) return { ok: false, error: amountError };
-  const instalment = instalmentFields(d);
+  const type = await resolvePaymentType(d.paymentType);
+  if ("error" in type) return { ok: false, error: type.error };
+  const instalment = instalmentFields(d, type.kind);
   if ("error" in instalment) return { ok: false, error: instalment.error };
+  const recurrence = recurrenceFields(d, type.kind);
+  if ("error" in recurrence) return { ok: false, error: recurrence.error };
+  const methodProblem = methodError(d.paymentMethod, { inr: d.amountInr, eur: d.amountEur }, d.paymentMethodOther);
+  if (methodProblem) return { ok: false, error: methodProblem };
   if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
   const existing = await prisma.income.findUnique({ where: { id } });
@@ -524,6 +639,10 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
           programLevel: d.programLevel,
           paymentType: d.paymentType,
           paymentMethod: d.paymentMethod,
+          // Only ever stored alongside OTHER - a note left over from a method since changed
+          // would read as a contradiction on the row.
+          paymentMethodOther: d.paymentMethod === "OTHER" ? d.paymentMethodOther ?? null : null,
+          ...recurrence,
           ...instalment,
           studentId: d.studentId || null,
           notes: d.notes || null,

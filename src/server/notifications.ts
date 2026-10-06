@@ -16,6 +16,7 @@ import { getRunwaySnapshot } from "./cash-metrics";
 import { getTeamGame } from "./gamification";
 import { getMyStudentPortal } from "./student-portal";
 import { getAgreementTaskCounts } from "./agreement-state";
+import { deliveryNotifications } from "./delivery-health";
 import { MILESTONE_LABELS } from "@/lib/labels";
 
 /**
@@ -359,6 +360,18 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   // ── Head + Admin: student signals + early-warning radar ──
   if (role === "ADMIN" || role === "HEAD") {
     const fourteenDaysAgo = new Date(today.getTime() - 14 * 86400000);
+
+    /**
+     * An armed outbound channel that has stopped delivering (docs/ROAD_TO_10.md §6.1).
+     *
+     * This is the card that was missing in October 2026: WhatsApp was on, every send was being
+     * refused, and the only screen that would have said so was one nobody had reason to open.
+     * Admin/Head only - a telecaller cannot fix a revoked token, and an alarm you cannot act on
+     * is an alarm you learn to ignore. One AppSetting read, behind this function's existing memo.
+     */
+    for (const d of await deliveryNotifications()) {
+      items.push({ id: d.key, severity: d.severity, title: d.title, body: d.body, href: d.href });
+    }
 
     /**
      * Prospects the intake auto-disqualified in the last 24h (Error Log L8).

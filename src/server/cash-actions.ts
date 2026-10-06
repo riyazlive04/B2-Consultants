@@ -103,7 +103,7 @@ export async function savePayable(id: string | null, form: FormData): Promise<Ac
   const parsed = payableSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
-  if (!d.amountInr) return { ok: false, error: "Amount is required" };
+  if (!d.amountInr) return { ok: false, error: "Price is required" };
 
   const data = {
     name: d.name,

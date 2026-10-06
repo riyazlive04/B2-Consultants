@@ -15,6 +15,7 @@ import { standardBooksCost, standardTutorCost } from "@/lib/gn-workshop-pricing"
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { Modal } from "@/components/ui/Modal";
 import { TablePager, usePaged } from "@/components/ui/pager";
 import {
@@ -34,11 +35,12 @@ import {
 /** paise number → "1234.56" for a money text input. */
 const moneyInput = (minor: number) => minorToMajorString(BigInt(Math.round(minor)));
 
-function MoneyField({ label, name, defaultValue, hint, placeholder = "0.00" }: { label: string; name: string; defaultValue?: number; hint?: string; placeholder?: string }) {
+/** Every money box in this panel is rupees, so each carries the ₹ and groups as it is typed. */
+function MoneyField({ label, name, defaultValue, hint, placeholder }: { label: string; name: string; defaultValue?: number; hint?: string; placeholder?: string }) {
   return (
     <Field label={label} hint={hint}>
-      <TextInput
-        kind="money"
+      <MoneyInput
+        currency="INR"
         name={name}
         placeholder={placeholder}
         defaultValue={defaultValue ? moneyInput(defaultValue) : undefined}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PagedTable } from "@/components/ui/pager";
 import { Users } from "lucide-react";
-import type { BatchCostRow } from "@/server/pending-pool-metrics";
+import type { BatchCostRow } from "@/server/batch-costs-metrics";
 
 /**
  * What each active batch costs in tutor fees (spec Part 2 §5; test cases FIN-004/005).

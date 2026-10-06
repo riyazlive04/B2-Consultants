@@ -66,7 +66,7 @@ export const AGREEMENT_BANKS = [
 const minorUnits = z
   .string()
   .regex(/^\d{1,15}$/, "Enter a whole rupee amount")
-  .refine((v) => BigInt(v) > BigInt(0), "Amount must be greater than zero");
+  .refine((v) => BigInt(v) > BigInt(0), "Price must be greater than zero");
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date");
 

@@ -11,6 +11,7 @@ import { Btn, IconButton } from "@/components/ui/controls";
 import { Card, Pill, type Tone } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/Modal";
 import { Field, TextInput, Select, SubmitButton, FormError } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { fieldKindProps } from "@/components/ui/field-base";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { toast, askConfirm } from "@/components/ui/feedback";
@@ -300,7 +301,7 @@ export default function InvoiceEditor({
 
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" size="sm">
         <form action={pay} className="space-y-4">
-          <Field label="Amount (₹)"><TextInput kind="money" name="amountInr" required defaultValue={invoice ? invoice.balanceDisplay.replace(/[^\d.]/g, "") : ""} /></Field>
+          <Field label="Price (₹)"><MoneyInput currency="INR" name="amountInr" required defaultValue={invoice ? invoice.balanceDisplay.replace(/[^\d.]/g, "") : ""} /></Field>
           <Field label="Method"><Select name="method" options={[{ value: "cash", label: "Cash" }, { value: "upi", label: "UPI" }, { value: "bank", label: "Bank transfer" }, { value: "card", label: "Card" }, { value: "other", label: "Other" }]} defaultValue="upi" /></Field>
           <Field label="Reference (optional)"><TextInput kind="text" name="reference" placeholder="Txn id / note" /></Field>
           <FormError message={payError} />

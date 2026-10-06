@@ -687,6 +687,129 @@ export function coerceInstalmentPlanConfig(value: unknown): InstalmentPlanConfig
   return parsed.success ? parsed.data : DEFAULT_INSTALMENT_PLAN_CONFIG;
 }
 
+// ───────────────────────────── payment types ─────────────────────────────
+
+/**
+ * The "Payment type" offered on every money form, founder-editable via AppSetting("paymentTypes").
+ *
+ * This used to be a two-value Prisma enum - Full payment and Instalment - so the only way to
+ * record a student on a recurring arrangement was to file it as one of those two and lose what
+ * it actually was. A subscription is not an instalment plan: it has no agreed total, no finite
+ * schedule and nothing to chase when it ends, so the dunning ladder reading it as a plan is
+ * worse than not recording it at all.
+ *
+ * ── KIND IS WHAT THE CODE BRANCHES ON ─────────────────────────────────────────────
+ * `code` is the value stored on the row and `label` is what the founder calls it, but neither
+ * decides behaviour. `kind` does:
+ *
+ *   FULL          - the money is the whole of it. Nothing further is asked or expected.
+ *   INSTALMENT    - a finite plan: a count, a schedule, a receivable, and the chasing ladder.
+ *   SUBSCRIPTION  - a recurring charge: an interval and a next date, and NO receivable, because
+ *                   there is no agreed total to owe.
+ *
+ * So a founder adding "Deposit" picks a kind and gets the behaviour that goes with it; they
+ * cannot invent a kind, because a kind with no code behind it would be a type that silently
+ * does nothing.
+ */
+export const PAYMENT_TYPE_KINDS = ["FULL", "INSTALMENT", "SUBSCRIPTION"] as const;
+export type PaymentTypeKind = (typeof PAYMENT_TYPE_KINDS)[number];
+
+export const PAYMENT_TYPE_KIND_LABELS: Record<PaymentTypeKind, string> = {
+  FULL: "Paid in full - nothing further expected",
+  INSTALMENT: "Instalment plan - count, schedule and chasing",
+  SUBSCRIPTION: "Recurring - interval and next date, no receivable",
+};
+
+/**
+ * The two codes the rest of the app branches on by NAME, not only by kind.
+ *
+ * `instalment-settlement`, the autopost and the finance metrics were all written against the
+ * literal strings "FULL_PAYMENT" and "INSTALMENT", and every Income row ever recorded holds one
+ * of them. They may be relabelled and they may be deactivated (which only stops them being
+ * offered), but they can never be deleted or have their kind changed - that would orphan live
+ * data and silently change what a historic row means.
+ */
+export const LOCKED_PAYMENT_TYPES: { code: string; kind: PaymentTypeKind }[] = [
+  { code: "FULL_PAYMENT", kind: "FULL" },
+  { code: "INSTALMENT", kind: "INSTALMENT" },
+];
+
+const paymentTypeSchema = z.object({
+  /**
+   * The stored value. Upper snake case so it reads like the enum it replaces and is safe in a
+   * URL, a CSV cell and a filter box. Immutable once rows exist, which the Console enforces by
+   * never offering to edit the code of a type that is already in use.
+   */
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z][A-Z0-9_]{0,31}$/, "Use letters, numbers and underscores, starting with a letter"),
+  label: z.string().trim().min(1, "Every payment type needs a name").max(60, "That name is too long"),
+  kind: z.enum(PAYMENT_TYPE_KINDS),
+  /** Inactive types stay on historic rows and read back correctly; they just stop being offered. */
+  active: z.boolean(),
+});
+
+export type PaymentTypeOption = z.infer<typeof paymentTypeSchema>;
+
+export const paymentTypesConfigSchema = z
+  .object({
+    types: z.array(paymentTypeSchema).min(1, "Keep at least one payment type").max(24),
+  })
+  .superRefine((cfg, ctx) => {
+    const seen = new Set<string>();
+    for (const t of cfg.types) {
+      if (seen.has(t.code)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `There are two payment types coded ${t.code} - keep one`,
+        });
+        return;
+      }
+      seen.add(t.code);
+    }
+    // A form with nothing to offer cannot record a payment at all.
+    if (!cfg.types.some((t) => t.active)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one payment type has to stay active" });
+      return;
+    }
+    for (const locked of LOCKED_PAYMENT_TYPES) {
+      const row = cfg.types.find((t) => t.code === locked.code);
+      if (!row) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${locked.code} is used by existing records and can be renamed but not removed`,
+        });
+        return;
+      }
+      if (row.kind !== locked.kind) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${locked.code} has to stay a ${locked.kind} type - existing records depend on it`,
+        });
+        return;
+      }
+    }
+  });
+
+export type PaymentTypesConfig = z.infer<typeof paymentTypesConfigSchema>;
+
+export const DEFAULT_PAYMENT_TYPES_CONFIG: PaymentTypesConfig = {
+  types: [
+    { code: "FULL_PAYMENT", label: "Full payment", kind: "FULL", active: true },
+    { code: "INSTALMENT", label: "Instalment", kind: "INSTALMENT", active: true },
+    // The arrangement that prompted all of this. Shipped ACTIVE because it is the one the
+    // founder asked for by name; a founder who does not sell subscriptions unticks it.
+    { code: "SUBSCRIPTION", label: "Subscription", kind: "SUBSCRIPTION", active: true },
+  ],
+};
+
+export function coercePaymentTypesConfig(value: unknown): PaymentTypesConfig {
+  const parsed = paymentTypesConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_PAYMENT_TYPES_CONFIG;
+}
+
 // ───────────────────────────── book orders ─────────────────────────────
 
 /**

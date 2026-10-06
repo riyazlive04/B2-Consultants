@@ -1,37 +1,99 @@
 /**
- * Human-readable student numbers (§6.1) - "B2-0001".
+ * Human-readable student numbers (§6.1) - "B2-0001" for B2 Consultants, "GN-0001" for German Note.
  *
  * Duplicate names are the problem this solves: the roster already holds two "Anna Smith"
  * and two "Karthik", and a payment has been credited to the wrong one. A cuid cannot be
  * read down a phone line, so every screen that shows a student name shows this beside it.
  *
+ * ── TWO SERIES, ONE PER BUSINESS ──────────────────────────────────────────────────
+ * B2 and German Note are run as separate businesses (lib/business-line) with their own
+ * paperwork, and a single shared run of numbers made a student's identifier say nothing about
+ * which business issued it - "B2-0184" on a German Note agreement read as a mistake. Each line
+ * now has its OWN prefix and its OWN counter, so the two series are read and quoted
+ * independently and neither is perturbed by growth in the other.
+ *
+ * The line is never asked for: it is DERIVED from the programme level being recorded
+ * (`lineForKind`), the same way revenue is split, so a level added later lands on the right
+ * side with no backfill.
+ *
  * Pure and dependency-free so the backfill script, the server action and the UI all agree
  * on one format.
  */
 
-export const STUDENT_CODE_PREFIX = "B2";
+import type { BusinessLine } from "./business-line";
+
+/** Prefix per business line. Values are the literal text printed on agreements and invoices. */
+export const STUDENT_CODE_PREFIXES: Record<BusinessLine, string> = {
+  B2: "B2",
+  GERMAN_NOTE: "GN",
+};
+
+/** Kept as the historic export - "B2" is still the default series for anything unattributed. */
+export const STUDENT_CODE_PREFIX = STUDENT_CODE_PREFIXES.B2;
+
 const PAD = 4;
 
-/** 1 → "B2-0001". Numbers past 9999 simply grow ("B2-10000"); they never wrap or collide. */
-export function formatStudentCode(n: number): string {
-  return `${STUDENT_CODE_PREFIX}-${String(n).padStart(PAD, "0")}`;
+/** Every prefix we issue, longest first so a parse can't match a prefix that is another's stem. */
+const KNOWN_PREFIXES: { prefix: string; line: BusinessLine }[] = (
+  Object.entries(STUDENT_CODE_PREFIXES) as [BusinessLine, string][]
+)
+  .map(([line, prefix]) => ({ prefix, line }))
+  .sort((a, b) => b.prefix.length - a.prefix.length);
+
+export type StudentCodeParts = { line: BusinessLine; prefix: string; number: number };
+
+/**
+ * 1 → "B2-0001"; `(1, "GERMAN_NOTE")` → "GN-0001". Numbers past 9999 simply grow ("B2-10000");
+ * they never wrap or collide.
+ *
+ * `line` defaults to B2 so every historic call site keeps issuing exactly what it issued before.
+ */
+export function formatStudentCode(n: number, line: BusinessLine = "B2"): string {
+  return `${STUDENT_CODE_PREFIXES[line]}-${String(n).padStart(PAD, "0")}`;
 }
 
-/** "B2-0042" → 42. Anything not in our format → null, so a hand-edited code can't crash the generator. */
-export function parseStudentCode(code: string | null | undefined): number | null {
+/**
+ * "GN-0042" → { line: "GERMAN_NOTE", prefix: "GN", number: 42 }. Anything not in one of our
+ * formats → null, so a code carried over from another system can't crash the generator.
+ */
+export function parseStudentCodeParts(code: string | null | undefined): StudentCodeParts | null {
   if (!code) return null;
-  const m = /^B2-(\d+)$/.exec(code.trim().toUpperCase());
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
+  const v = code.trim().toUpperCase();
+  for (const { prefix, line } of KNOWN_PREFIXES) {
+    const m = new RegExp(`^${prefix}-(\\d+)$`).exec(v);
+    if (!m) continue;
+    const n = Number(m[1]);
+    if (!Number.isSafeInteger(n) || n <= 0) return null;
+    return { line, prefix, number: n };
+  }
+  return null;
 }
 
-/** The next free number given every code already issued. */
-export function nextStudentNumber(existing: Array<string | null | undefined>): number {
+/**
+ * The number inside one of our codes, ignoring which series it belongs to.
+ *
+ * Kept because callers that only want "is this one of ours, and what number is it" (the
+ * duplicate-code tests, the backfill log) never cared about the line.
+ */
+export function parseStudentCode(code: string | null | undefined): number | null {
+  return parseStudentCodeParts(code)?.number ?? null;
+}
+
+/**
+ * The next free number IN ONE SERIES, given every code already issued.
+ *
+ * Codes from the other series are skipped rather than counted, which is the whole point of
+ * separate counters: issuing German Note's 3rd student must give GN-0003 even when 180 B2
+ * students exist. `line` defaults to B2 to match `formatStudentCode`.
+ */
+export function nextStudentNumber(
+  existing: Array<string | null | undefined>,
+  line: BusinessLine = "B2",
+): number {
   let max = 0;
   for (const c of existing) {
-    const n = parseStudentCode(c);
-    if (n !== null && n > max) max = n;
+    const parts = parseStudentCodeParts(c);
+    if (parts && parts.line === line && parts.number > max) max = parts.number;
   }
   return max + 1;
 }

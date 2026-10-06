@@ -11,6 +11,7 @@ import type { BoardData } from "@/server/opportunities-metrics";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Modal } from "@/components/ui/Modal";
 import { Field, TextInput, Select, TextArea, SubmitButton, FormError } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { Avatar, EmptyState, Pill } from "@/components/ui/kit";
 import { HScroll, type HScrollHandle } from "@/components/ui/HScroll";
@@ -587,7 +588,7 @@ export default function Board({
           )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Stage"><Select name="stageId" options={stageOpts} defaultValue={stageOpts[0]?.value} /></Field>
-            <Field label="Value (₹)"><TextInput kind="money" name="valueInr" placeholder="150000" /></Field>
+            <Field label="Value (₹)"><MoneyInput currency="INR" name="valueInr" placeholder="1,50,000" /></Field>
             {/* Deal name is free text, not kind="name": "Level 2 - Q3 renewal" is a real deal. */}
             <Field label="Deal name"><TextInput kind="text" name="name" placeholder="Defaults to contact name" /></Field>
             <Field label="Source"><Select name="source" options={SOURCE_OPTS} defaultValue="" /></Field>

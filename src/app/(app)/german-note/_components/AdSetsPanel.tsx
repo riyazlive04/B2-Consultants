@@ -13,6 +13,7 @@ import { minorToMajorString } from "@/lib/format";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, SubmitButton, TextInput } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { Modal } from "@/components/ui/Modal";
 import { TablePager, usePaged } from "@/components/ui/pager";
 import { inr, pct } from "./workshopFormat";
@@ -28,7 +29,7 @@ function AdSetFields({ set }: { set?: GnAdSetRow }) {
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Ad spend (₹)">
-          <TextInput kind="money" name="adSpend" placeholder="0.00" defaultValue={set ? moneyInput(set.adSpend) : undefined} />
+          <MoneyInput currency="INR" name="adSpend" defaultValue={set ? moneyInput(set.adSpend) : undefined} />
         </Field>
         <Field label="Reach">
           <TextInput kind="int" name="reach" placeholder="0" defaultValue={set ? String(set.reach) : undefined} />

@@ -22,6 +22,7 @@ import {
   type Plan,
 } from "@/lib/outreach-engine";
 import { callTimeNotice, CALL_TIME_KINDS, mayRetryAutoSend } from "@/lib/call-notice";
+import { emptyTally, mergeTallies, tallySend, type DeliveryTally } from "@/lib/delivery-health";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { sendWhatsApp } from "./whatsapp";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
@@ -283,6 +284,11 @@ export type OutreachRun = {
   phaseChanges: number;
   checked: number;
   notes: string[];
+  /**
+   * Channel-health tally, harvested by `cron-route.ts`. This engine sends on BOTH channels, so
+   * it is the one seam that notices a Resend outage as well as a WATI one.
+   */
+  delivery: DeliveryTally;
 };
 
 /**
@@ -303,6 +309,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
     phaseChanges: 0,
     checked: 0,
     notes: [],
+    delivery: emptyTally(),
   };
 
   const cfg = await readOutreachConfig();
@@ -626,6 +633,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
     run.autoSent += sent.ok;
     run.autoFailed += sent.failed;
     run.notes.push(...sent.notes);
+    run.delivery = mergeTallies(run.delivery, sent.delivery);
   }
 
   return run;
@@ -643,8 +651,8 @@ async function autoSendDue(
   journeyId: string,
   cfg: OutreachConfig,
   now: Date,
-): Promise<{ ok: number; failed: number; notes: string[] }> {
-  const out = { ok: 0, failed: 0, notes: [] as string[] };
+): Promise<{ ok: number; failed: number; notes: string[]; delivery: DeliveryTally }> {
+  const out = { ok: 0, failed: 0, notes: [] as string[], delivery: emptyTally() };
 
   const row = await getJourney(journeyId);
   if (!row || isTerminal(row.phase)) return out;
@@ -695,6 +703,8 @@ async function autoSendDue(
     const res = isEmail
       ? await sopEmailSend(row, subject, body)
       : await sopWhatsAppSend(row, s.step, specialist, body);
+
+    tallySend(out.delivery, { sent: res.sent, failed: res.status === "FAILED", error: res.error });
 
     if (res.sent) {
       await markSent(s.id, body, null, res.messageId);

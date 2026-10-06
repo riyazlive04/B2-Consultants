@@ -15,6 +15,7 @@ import {
 } from "@/lib/whatsapp";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { CALL_TIME_KINDS, dueReminderRung } from "@/lib/call-notice";
+import { emptyTally, tallyLateFailures, tallySend, type DeliveryTally } from "@/lib/delivery-health";
 import { sopOwnsCallReminders } from "@/lib/outreach-engine";
 import { coerceOutreachConfig } from "@/lib/outreach-sop";
 import type { SectionKey } from "@/lib/sections";
@@ -344,7 +345,13 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
     parameters: (built as { ok: true; params: WatiParameter[] }).params,
   });
 
-  const status: WhatsAppStatus = result.ok ? "SENT" : "FAILED";
+  // `skipped` means the send layer declined to contact this recipient at all (the local
+  // OUTBOUND_ALLOWLIST). That is a SKIP, not a failure - outbound-allowlist.ts says so twice -
+  // and conflating the two mattered: a FAILED row counts against mayRetryAutoSend() and
+  // throttleOk()'s retry allowance, so a developer testing against the shared database was
+  // silently burning real prospects' retry budget.
+  const suppressed = result.skipped === true;
+  const status: WhatsAppStatus = result.ok ? "SENT" : suppressed ? "SKIPPED" : "FAILED";
   const messageId = await writeRow({
     kind,
     status,
@@ -366,7 +373,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
     messageId,
     status,
     sent: result.ok,
-    skipped: false,
+    skipped: suppressed,
     error: result.ok ? undefined : result.error,
   };
 }
@@ -436,7 +443,18 @@ export async function getWhatsAppStatusMap(
  * This pulls WATI's own message log and corrects our rows. It's the safety net that makes the
  * WhatsApp history trustworthy without depending on inbound webhooks.
  */
-export type ReconcileResult = { checked: number; updated: number; failed: number; error?: string };
+export type ReconcileResult = {
+  checked: number;
+  updated: number;
+  failed: number;
+  /**
+   * WATI's own reason for the last row this pass flipped to FAILED. Carried out so the delivery
+   * tally can CLASSIFY an asynchronous rejection - a Meta quality ban must not be mistaken for a
+   * revoked token, and a count alone cannot tell them apart.
+   */
+  lastFailedDetail?: string | null;
+  error?: string;
+};
 
 /** Non-terminal states worth re-checking. READ/REPLIED/FAILED are final for our purposes. */
 const RECONCILABLE: WhatsAppStatus[] = ["QUEUED", "SENT", "DELIVERED"];
@@ -463,6 +481,7 @@ export async function reconcileWhatsAppStatuses(withinHours = 72): Promise<Recon
 
   let updated = 0;
   let failed = 0;
+  let lastFailedDetail: string | null = null;
   const numbers = [...new Set(rows.map((r) => r.toNumber))];
 
   for (const number of numbers) {
@@ -489,10 +508,13 @@ export async function reconcileWhatsAppStatuses(withinHours = 72): Promise<Recon
         data: { status: mapped, watiMessageId: match.id, error: match.failedDetail },
       });
       updated++;
-      if (mapped === "FAILED") failed++;
+      if (mapped === "FAILED") {
+        failed++;
+        if (match.failedDetail) lastFailedDetail = match.failedDetail;
+      }
     }
   }
-  return { checked: rows.length, updated, failed };
+  return { checked: rows.length, updated, failed, lastFailedDetail };
 }
 
 // ───────────────────────── Throttle (idempotency / cadence) ─────────────────────────
@@ -558,6 +580,12 @@ export type ReminderRun = {
   ranAt: string;
   perKind: Partial<Record<WhatsAppKind, KindTally>>;
   total: KindTally;
+  /**
+   * Channel-health tally for this tick, harvested by `cron-route.ts` and folded into the
+   * heartbeat. Carried in the payload rather than written here so this engine stays free of
+   * observability concerns and the aggregation keeps costing zero extra queries.
+   */
+  delivery: DeliveryTally;
 };
 
 /**
@@ -567,9 +595,15 @@ export type ReminderRun = {
  */
 export async function runDueReminders(): Promise<ReminderRun> {
   const ranAt = new Date().toISOString();
+  const delivery = emptyTally();
   // Correct any stale "Sent" rows first - Meta may have rejected them after WATI accepted.
   // Cheap, and it keeps the history honest even when the inbound webhook never arrives.
-  await reconcileWhatsAppStatuses().catch(() => undefined);
+  //
+  // Its `failed` count is the ONLY way this engine learns about Meta's asynchronous rejections:
+  // WATI answers `result:true`, we count a send, and the rejection surfaces here a tick later.
+  // Without feeding it in, a quality ban would read as a perfectly healthy channel.
+  const reconciled = await reconcileWhatsAppStatuses().catch(() => undefined);
+  if (reconciled) tallyLateFailures(delivery, reconciled.failed, reconciled.lastFailedDetail);
   const runtime = await getWatiRuntime();
   const perKind: Partial<Record<WhatsAppKind, KindTally>> = {};
   const total: KindTally = { sent: 0, skipped: 0, failed: 0 };
@@ -580,7 +614,9 @@ export async function runDueReminders(): Promise<ReminderRun> {
       : runtime.paused
         ? "WhatsApp is paused in settings"
         : "WATI is not configured (endpoint/token missing)";
-    return { enabled: false, reason, ranAt, perKind, total };
+    // An unarmed channel is `not-armed.ts`'s job, never a delivery outage, so the tally stays
+    // empty here and classifies as `idle`.
+    return { enabled: false, reason, ranAt, perKind, total, delivery };
   }
 
   const cadence = runtime.settings.cadence;
@@ -609,6 +645,8 @@ export async function runDueReminders(): Promise<ReminderRun> {
     if (out.sent) { t.sent++; total.sent++; budget--; }
     else if (out.status === "FAILED") { t.failed++; total.failed++; budget--; }
     else { t.skipped++; total.skipped++; }
+
+    tallySend(delivery, { sent: out.sent, failed: out.status === "FAILED", error: out.error });
 
     if (!out.sent) return;
     await logSystemActivity(SYSTEM_ACTORS.reminders, {
@@ -892,7 +930,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
     }
   }
 
-  return { enabled: true, ranAt, perKind, total };
+  return { enabled: true, ranAt, perKind, total, delivery };
 }
 
 // ───────────────────────── Manual / event-driven wrappers ─────────────────────────
@@ -1165,7 +1203,9 @@ export async function sendFreeFormMessage(
     messageText: text,
   });
 
-  const status: WhatsAppStatus = result.ok ? "SENT" : "FAILED";
+  // Same allowlist-is-a-skip rule as the template path above.
+  const suppressed = result.skipped === true;
+  const status: WhatsAppStatus = result.ok ? "SENT" : suppressed ? "SKIPPED" : "FAILED";
   const messageId = await writeRow({
     kind: "MANUAL", status, toNumber: dest.number, templateName: null,
     body: (dest.redirected ? redirectedBodyPrefix(dest.intended) : "") + text.slice(0, 500),
@@ -1174,7 +1214,7 @@ export async function sendFreeFormMessage(
     error: result.ok ? null : result.error ?? "Send failed",
     sentById, target,
   });
-  return { messageId, status, sent: result.ok, skipped: false, error: result.ok ? undefined : result.error };
+  return { messageId, status, sent: result.ok, skipped: suppressed, error: result.ok ? undefined : result.error };
 }
 
 /**

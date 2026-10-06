@@ -5,7 +5,7 @@ import {
   createPendingPayment, deletePendingPayment, updatePendingPayment,
 } from "@/server/finance-actions";
 import {
-  clearInstalmentPlan, generateInstalmentPlan, previewInstalmentPlan, setInstalmentStatus,
+  clearInstalmentPlan, generateInstalmentPlan, setInstalmentStatus,
 } from "@/server/emi-actions";
 import type { PendingRow } from "@/server/finance-metrics";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
@@ -22,7 +22,8 @@ import { AmountPair } from "@/components/ui/AmountPair";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { formatDate } from "@/lib/format";
 import { money, moneyInline, moneyValue, type Ccy } from "@/lib/money-display";
-import { splitInstalments } from "@/lib/instalment-plan";
+import { instalmentExtraFor, splitInstalments } from "@/lib/instalment-plan";
+import type { InstalmentPlanConfig } from "@/lib/config-schema";
 import { optionsFrom, PENDING_STATUS_LABELS, PROGRAM_LEVEL_LABELS } from "@/lib/labels";
 import { StudentName } from "@/components/ui/StudentName";
 import { useFinanceCcy } from "./FinanceCurrency";
@@ -44,10 +45,13 @@ const INSTALMENT_STATUS_OPTIONS = [
 /** Structured EMI schedule (spec Module G): generate an N-instalment plan, mark each paid, or clear it. */
 function EmiScheduleModal({
   row,
+  config,
   onClose,
   onError,
 }: {
   row: PendingRow;
+  /** The Console's instalment prices, handed down - see the note on `plan` below. */
+  config: InstalmentPlanConfig;
   onClose: () => void;
   onError: (m: string | null) => void;
 }) {
@@ -55,36 +59,34 @@ function EmiScheduleModal({
   const has = row.instalments.length > 0;
   const paidCount = row.instalments.filter((i) => i.status === "PAID").length;
 
-  /**
-   * What this plan length costs, straight from the Console table. Fetched rather than hardcoded
-   * so the founder's pricing is the single source: type 3 and the ₹600 appears here, and the
-   * amount the schedule is built from is the amount shown.
-   */
   const [count, setCount] = useState(row.instalments.length || 2);
-  const [plan, setPlan] = useState<{ extraInr: number; extraEur: number; intervalDays: number } | null>(null);
-  const [intervalDays, setIntervalDays] = useState<number | null>(null);
+  const [intervalDays, setIntervalDays] = useState<number | null>(config.defaultIntervalDays);
 
-  useEffect(() => {
-    if (has) return; // an existing schedule is history - don't re-price it
-    let live = true;
-    previewInstalmentPlan(count)
-      .then((p) => {
-        if (!live) return;
-        setPlan({
-          extraInr: Number(BigInt(p.extraInrMinor)),
-          extraEur: Number(BigInt(p.extraEurMinor)),
-          intervalDays: p.intervalDays,
-        });
-        // Adopt the configured gap until the founder types their own.
-        setIntervalDays((cur) => cur ?? p.intervalDays);
-      })
-      .catch(() => {
-        /* the form still works; it just can't show the surcharge up front */
-      });
-    return () => {
-      live = false;
-    };
-  }, [count, has]);
+  /**
+   * ── What this plan length costs, priced AS YOU TYPE ───────────────────────────────
+   *
+   * Straight from the Console table, so the founder's pricing is the single source: type 3 and
+   * the ₹600 appears, and the amount the schedule is built from is the amount shown.
+   *
+   * It used to arrive by server action, one round trip per keystroke on the count - so against
+   * the Supabase pooler (~200ms) every figure in this panel lagged the digit that changed it,
+   * and typing "12" flashed the 1-instalment answer on the way past. The table now travels with
+   * the page and `instalmentExtraFor` runs here: the same function the server prices with, on
+   * the same config, with nothing between the keystroke and the number.
+   *
+   * An EXISTING schedule is never re-priced - it is history, and its surcharge was snapshotted
+   * when it was generated.
+   */
+  const plan = has
+    ? null
+    : (() => {
+        const extra = instalmentExtraFor(count, config);
+        return {
+          extraInr: Number(extra.inr),
+          extraEur: Number(extra.eur),
+          intervalDays: config.defaultIntervalDays,
+        };
+      })();
 
   // The schedule the current answers would produce - same split function the server uses.
   const previewTotal = {
@@ -257,6 +259,7 @@ export function PendingSection({
   fxRate,
   fxStale,
   fxDate,
+  instalmentPlans,
 }: {
   rows: PendingRow[];
   studentCodeById?: Record<string, string>;
@@ -265,6 +268,8 @@ export function PendingSection({
   fxRate: number;
   fxStale?: boolean;
   fxDate?: string;
+  /** The Console's instalment prices, so the EMI panel costs a plan without a server round trip. */
+  instalmentPlans: InstalmentPlanConfig;
 }) {
   const { ccy } = useFinanceCcy();
   const [editing, setEditing] = useState<PendingRow | null>(null);
@@ -506,7 +511,14 @@ export function PendingSection({
         rowClassName={(r) => (r.overdue ? "bg-risk-soft" : undefined)}
       />
 
-      {emiRow && <EmiScheduleModal row={emiRow} onClose={() => setEmiRowId(null)} onError={setError} />}
+      {emiRow && (
+        <EmiScheduleModal
+          row={emiRow}
+          config={instalmentPlans}
+          onClose={() => setEmiRowId(null)}
+          onError={setError}
+        />
+      )}
     </section>
   );
 }

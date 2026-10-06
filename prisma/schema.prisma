@@ -296,9 +296,17 @@ enum Signal {
 
 // ───────────────────────────── Phase 1 - Finance ─────────────────────────────
 
-enum PaymentType {
-  FULL_PAYMENT
-  INSTALMENT
+/**
+ * How often a recurring payment type (a SUBSCRIPTION) bills. Separate from `ProductInterval`,
+ * which prices a catalogue item - this describes a student's own arrangement, and the two
+ * lists are free to differ without one quietly rewriting the other's options.
+ */
+enum RecurrenceInterval {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
 }
 
 enum PaymentMethod {
@@ -354,8 +362,21 @@ model Income {
   amountEurMinor BigInt        @default(0) // cents
   fxRateUsed     Decimal       @db.Decimal(14, 6) // INR per 1 EUR on entry date
   programLevel   String // Level.code (was ProgramLevel enum)
-  paymentType    PaymentType
+  /// PaymentTypeConfig.code (was the PaymentType enum). Founder-configurable in the Console, so
+  /// "Subscription", "Deposit" or "Part payment" can be added without a migration - the same move
+  /// `programLevel` made when ProgramLevel became the Level catalogue. The two codes the rest of
+  /// the app BRANCHES on (FULL_PAYMENT, INSTALMENT) are locked in the config and cannot be
+  /// renamed away; everything else is the founder's to name.
+  paymentType    String
   paymentMethod  PaymentMethod
+  /// What "Other" meant, typed in free text. The enum cannot grow a value per bank or wallet
+  /// somebody is paid through, and "Other" with no note is a row nobody can reconcile later.
+  /// Only ever set when paymentMethod = OTHER.
+  paymentMethodOther String?
+  /// A recurring arrangement: how often it bills and when the next one falls. Asked only for a
+  /// payment type whose kind is SUBSCRIPTION, and null for every other kind.
+  recurrenceInterval RecurrenceInterval?
+  recurrenceNextDate DateTime?           @db.Date
   // Instalment plan details - asked only when paymentType = INSTALMENT. The count is how many
   // instalments the fee is split into; the extras are the surcharge added for choosing the plan
   // (informational - the received amounts above stay the money that actually arrived).
@@ -4070,6 +4091,11 @@ enum GnSlotPreference {
 /// A row here means "paid/committed, not yet seated". `assignedBatchId` is the exit: set when
 /// they finally get a seat, which keeps the history of how long they waited rather than
 /// deleting the evidence.
+/// RETAINED, NOT SURFACED. The Pending pool section was removed from the app, so nothing reads
+/// or writes this table any more. The rows are kept rather than dropped - they are the record of
+/// who waited and for how long, and a migration that deletes them cannot be undone. The level
+/// delete-guard (`levelUsageCount`) still counts them, so a level an old joiner references can
+/// never be deleted out from under them.
 model GnPendingJoiner {
   id        String       @id @default(cuid())
   studentId String

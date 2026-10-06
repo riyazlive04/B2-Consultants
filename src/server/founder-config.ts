@@ -23,6 +23,8 @@ import {
   coercePipelineConfig,
   coerceTutorFeeConfig,
   coerceInstalmentPlanConfig,
+  coercePaymentTypesConfig,
+  DEFAULT_PAYMENT_TYPES_CONFIG,
   coerceWorkflowSettings,
   coerceMaintenanceConfig,
   coerceScheduledReportConfig,
@@ -63,6 +65,7 @@ import {
   type PipelineConfig,
   type TutorFeeConfig,
   type InstalmentPlanConfig,
+  type PaymentTypesConfig,
   type WorkflowSettings,
   type MaintenanceConfig,
   type ScheduledReportConfig,
@@ -106,6 +109,7 @@ export const MAINTENANCE_KEY = "maintenanceConfig";
 export const SCHEDULED_REPORT_KEY = "scheduledReport";
 export const FINANCE_POSTING_KEY = "financePosting";
 export const INSTALMENT_PLAN_KEY = "instalmentPlans";
+export const PAYMENT_TYPES_KEY = "paymentTypes";
 export const SPEED_TO_LEAD_ALERT_KEY = "speedToLeadAlert";
 export const DUNNING_KEY = "dunning";
 export const ATTENDANCE_KEY = "attendance";
@@ -265,6 +269,28 @@ export const getInstalmentPlanConfig = cache(async (): Promise<InstalmentPlanCon
   const row = await readSetting(INSTALMENT_PLAN_KEY);
   return row ? coerceInstalmentPlanConfig(row.value) : DEFAULT_INSTALMENT_PLAN_CONFIG;
 });
+
+/**
+ * The founder-editable "Payment type" list (Console -> Payment Types), read by every money form.
+ *
+ * Shares the one tagged cache entry with the rest of the Console, so a save is visible on the
+ * very next render - which matters here more than for most config, because the operator who
+ * added "Subscription" is usually about to record one.
+ */
+export const getPaymentTypesConfig = cache(async (): Promise<PaymentTypesConfig> => {
+  const row = await readSetting(PAYMENT_TYPES_KEY);
+  return row ? coercePaymentTypesConfig(row.value) : DEFAULT_PAYMENT_TYPES_CONFIG;
+});
+
+export async function writePaymentTypesConfig(config: PaymentTypesConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: PAYMENT_TYPES_KEY },
+    create: { key: PAYMENT_TYPES_KEY, value },
+    update: { value },
+  });
+  revalidateFounderConfig();
+}
 
 export async function writeInstalmentPlanConfig(config: InstalmentPlanConfig): Promise<void> {
   const value = config as unknown as Prisma.InputJsonValue;

@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { clientIpFrom, takeToken, RATE_RULES, type RateRule } from "@/lib/rate-limit";
 import { captureException } from "@/lib/observability";
+import { classifyTick, collectDelivery, type DeliveryTally } from "@/lib/delivery-health";
 import { recordCronRun } from "./uptime";
 
 /**
@@ -70,10 +71,25 @@ export function cronRoute(
 
     try {
       const result = await run();
+      // An engine that sends anything puts a `delivery` tally somewhere in its payload. Harvested
+      // here rather than named per-engine, so a new engine is covered the moment it includes the
+      // field - and wrapped, because a reporting bug must never turn a successful tick into a 500.
+      let delivery: DeliveryTally | null = null;
+      try {
+        delivery = collectDelivery(result);
+      } catch {
+        delivery = null;
+      }
       // Awaited, unlike in a request path: nobody is waiting on this response, and losing the
       // heartbeat to process exit would defeat the point of having one.
-      await recordCronRun(job, { ok: true });
-      return NextResponse.json({ ok: true, run: result });
+      await recordCronRun(job, { ok: true, delivery });
+      // The verdict rides in the body so `docker compose logs cron` is diagnostic. The status
+      // stays 200: the scheduler did its job perfectly, it is the channel that failed.
+      return NextResponse.json({
+        ok: true,
+        run: result,
+        delivery: delivery ? { state: classifyTick(delivery), attempted: delivery.attempted, sent: delivery.sent, failed: delivery.failed } : null,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await captureException(err, { where: `cron:${job}` });

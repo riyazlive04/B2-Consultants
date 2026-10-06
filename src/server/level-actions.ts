@@ -6,13 +6,19 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
 import { CHART_OF_ACCOUNTS } from "@/lib/chart-of-accounts";
 import { normalizeLevelCode } from "@/lib/levels";
+import { lineForKind } from "@/lib/business-line";
+import type { SectionKey } from "@/lib/sections";
 import { LEVELS_CACHE_TAG } from "./levels";
 import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
 /**
- * Level catalogue admin (Admin-only). The founders add/edit German levels (C1, C2, …) and bundles
- * here; coaching tiers (SOLO/GUIDED/ELITE) and OTHER are seeded `locked` - label + GL account are
+ * Level catalogue admin (Admin-only), shared by BOTH halves of the catalogue: German Note >
+ * Manage > Levels edits the German levels and bundles, /programs edits the B2 coaching tiers.
+ * The UI splits by business line (see `LevelsPanel`); these actions do not care which surface
+ * called them, they only enforce what is true of a row.
+ *
+ * Coaching tiers (SOLO/GUIDED/ELITE) and OTHER are seeded `locked` - label + GL account are
  * editable but they cannot be renamed by code, re-kinded, deactivated or deleted.
  *
  * See docs/CONFIGURABLE_LEVELS_PLAN.md. `code` is an immutable natural key stored on every level
@@ -39,8 +45,14 @@ function parseMembers(raw: string | undefined): string[] {
   return [...new Set(raw.split(/[,\s]+/).map(normalizeLevelCode).filter(Boolean))];
 }
 
-function resolveIncomeAccount(code: string | undefined): string {
-  return code && INCOME_ACCOUNT_CODES.includes(code) ? code : "4030";
+/**
+ * The GL account the level posts to, falling back per business line rather than always to 4030.
+ * A B2 coaching tier that silently defaulted to "Income - German Note" would put B2 revenue on
+ * the other line's books, and `lineForKind` is what the finance screens segment on.
+ */
+function resolveIncomeAccount(code: string | undefined, kind: string): string {
+  if (code && INCOME_ACCOUNT_CODES.includes(code)) return code;
+  return lineForKind(kind) === "GERMAN_NOTE" ? "4030" : "4090";
 }
 
 /** Every bundle member must exist as a GERMAN_LEVEL. Returns an error message, or null when OK. */
@@ -55,9 +67,34 @@ async function assertMembersExist(members: string[]): Promise<string | null> {
   return missing.length ? `Bundle members not found as German levels: ${missing.join(", ")}` : null;
 }
 
+/**
+ * Both catalogue surfaces have to re-render after any level edit. A row is only EDITABLE from
+ * the side of the business it belongs to, but the German Note manage page also reads the
+ * catalogue for its batch pickers, so a new coaching tier still invalidates it.
+ */
+function revalidateLevelSurfaces() {
+  revalidatePath("/german-note/manage");
+  revalidatePath("/programs");
+  revalidateTag(LEVELS_CACHE_TAG); // bust the cross-request level cache immediately
+}
+
+/** Which section's activity log this level edit is filed under - the one that can make it. */
+const sectionForKind = (kind: string): SectionKey =>
+  lineForKind(kind) === "GERMAN_NOTE" ? "german-note" : "programs";
+
+const LEVEL_KINDS = ["GERMAN_LEVEL", "GERMAN_BUNDLE", "COACHING_TIER", "OTHER"] as const;
+
 const baseSchema = z.object({
   label: z.string().trim().min(1, "Label is required").max(80),
-  kind: z.enum(["GERMAN_LEVEL", "GERMAN_BUNDLE"], { message: "Pick a level kind" }),
+  /**
+   * Optional on purpose, and only on UPDATE (create re-requires it below).
+   *
+   * The edit form DISABLES the kind picker for a locked row, and a disabled control submits
+   * nothing - so a required `kind` rejected every attempt to edit a coaching tier with "Pick a
+   * level kind", which is the one thing those rows are supposed to allow. An absent kind now
+   * means "leave it as it is", which is also what `locked` already forced.
+   */
+  kind: z.enum(LEVEL_KINDS, { message: "Pick a level kind" }).optional(),
   incomeAccountCode: z.string().trim().optional(),
   booksCost: z.string().trim().optional(),
   tutorCost: z.string().trim().optional(),
@@ -68,7 +105,10 @@ const baseSchema = z.object({
 export async function createLevel(form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
   const parsed = baseSchema
-    .extend({ code: z.string().trim().min(1, "Code is required") })
+    .extend({
+      code: z.string().trim().min(1, "Code is required"),
+      kind: z.enum(LEVEL_KINDS, { message: "Pick a level kind" }),
+    })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -88,7 +128,7 @@ export async function createLevel(form: FormData): Promise<ActionResult> {
       label: d.label,
       kind: d.kind,
       order: d.order ?? 0,
-      incomeAccountCode: resolveIncomeAccount(d.incomeAccountCode),
+      incomeAccountCode: resolveIncomeAccount(d.incomeAccountCode, d.kind),
       booksCostInrMinor: rupeesToPaise(d.booksCost),
       tutorCostInrMinor: rupeesToPaise(d.tutorCost),
       bundleMembers: members,
@@ -96,14 +136,13 @@ export async function createLevel(form: FormData): Promise<ActionResult> {
   });
   await logActivity(session, {
     action: "level.create",
-    section: "german-note",
+    section: sectionForKind(level.kind),
     entityType: "Level",
     entityId: level.id,
     summary: `Added the level "${level.label}" (${level.code})`,
     meta: { code: level.code, kind: level.kind, incomeAccountCode: level.incomeAccountCode },
   });
-  revalidatePath("/german-note/manage");
-  revalidateTag(LEVELS_CACHE_TAG); // bust the cross-request level cache immediately
+  revalidateLevelSurfaces();
   return { ok: true };
 }
 
@@ -118,38 +157,51 @@ export async function updateLevel(id: string, form: FormData): Promise<ActionRes
   const before = await prisma.level.findUnique({ where: { id } });
   if (!before) return { ok: false, error: "Level not found" };
 
-  const members = d.kind === "GERMAN_BUNDLE" ? parseMembers(d.bundleMembers) : [];
+  // Locked rows (coaching tiers / OTHER): kind, active and bundle membership are frozen; only the
+  // label and GL account can move. An ABSENT kind means the form did not offer the field.
+  const kind = before.locked ? before.kind : (d.kind ?? before.kind);
+
+  /**
+   * A field the form never rendered is PRESERVED, not cleared.
+   *
+   * The B2 surface omits the books and tutor cost inputs - the schema documents both as null for
+   * coaching tiers - and an absent input must not null out a value the German surface set. An
+   * empty string still clears: that is a founder deliberately blanking the field.
+   */
+  const members =
+    kind === "GERMAN_BUNDLE"
+      ? d.bundleMembers === undefined
+        ? before.bundleMembers
+        : parseMembers(d.bundleMembers)
+      : [];
   const memberErr = await assertMembersExist(members);
   if (memberErr) return { ok: false, error: memberErr };
 
-  // Locked rows (coaching tiers / OTHER): kind, active and bundle membership are frozen; only the
-  // label and GL account can move.
   const active = before.locked ? before.active : d.active === undefined ? before.active : d.active === "true";
 
   const after = await prisma.level.update({
     where: { id },
     data: {
       label: d.label,
-      kind: before.locked ? before.kind : d.kind,
+      kind,
       order: d.order ?? before.order,
       active,
-      incomeAccountCode: resolveIncomeAccount(d.incomeAccountCode),
-      booksCostInrMinor: rupeesToPaise(d.booksCost),
-      tutorCostInrMinor: rupeesToPaise(d.tutorCost),
+      incomeAccountCode: resolveIncomeAccount(d.incomeAccountCode, kind),
+      booksCostInrMinor: d.booksCost === undefined ? before.booksCostInrMinor : rupeesToPaise(d.booksCost),
+      tutorCostInrMinor: d.tutorCost === undefined ? before.tutorCostInrMinor : rupeesToPaise(d.tutorCost),
       bundleMembers: before.locked ? before.bundleMembers : members,
     },
   });
   await logActivity(session, {
     action: "level.update",
-    section: "german-note",
+    section: sectionForKind(after.kind),
     entityType: "Level",
     entityId: id,
     summary: `Updated the level "${after.label}" (${after.code})`,
     // Hand-built meta (never diffFields on this row - its BigInt cost columns would throw).
     meta: { code: after.code, kind: after.kind, active: after.active, incomeAccountCode: after.incomeAccountCode },
   });
-  revalidatePath("/german-note/manage");
-  revalidateTag(LEVELS_CACHE_TAG); // bust the cross-request level cache immediately
+  revalidateLevelSurfaces();
   return { ok: true };
 }
 
@@ -177,14 +229,13 @@ export async function setLevelActive(id: string, active: boolean): Promise<Actio
   await prisma.level.update({ where: { id }, data: { active } });
   await logActivity(session, {
     action: "level.setActive",
-    section: "german-note",
+    section: sectionForKind(level.kind),
     entityType: "Level",
     entityId: id,
     summary: `${active ? "Reactivated" : "Deactivated"} the level "${level.label}"`,
     meta: { code: level.code, active },
   });
-  revalidatePath("/german-note/manage");
-  revalidateTag(LEVELS_CACHE_TAG); // bust the cross-request level cache immediately
+  revalidateLevelSurfaces();
   return { ok: true };
 }
 
@@ -209,13 +260,12 @@ export async function deleteLevel(id: string): Promise<ActionResult> {
   await prisma.level.delete({ where: { id } });
   await logActivity(session, {
     action: "level.delete",
-    section: "german-note",
+    section: sectionForKind(level.kind),
     entityType: "Level",
     entityId: id,
     summary: `Deleted the level "${level.label}" (${level.code})`,
     meta: { code: level.code },
   });
-  revalidatePath("/german-note/manage");
-  revalidateTag(LEVELS_CACHE_TAG); // bust the cross-request level cache immediately
+  revalidateLevelSurfaces();
   return { ok: true };
 }

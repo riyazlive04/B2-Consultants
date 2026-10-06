@@ -14,6 +14,15 @@ export type BusinessLine = "B2" | "GERMAN_NOTE";
 /** Including "ALL" - the combined view, which stays the default. */
 export type BusinessLineView = BusinessLine | "ALL";
 
+/**
+ * The two real lines, for a picker that must choose ONE of them.
+ *
+ * Deliberately not the keys of `BUSINESS_LINE_LABELS`: that map carries "ALL" for the reading
+ * filter, and a payment lands in exactly one book - there is no such thing as income recorded
+ * against "Combined".
+ */
+export const BUSINESS_LINES: readonly BusinessLine[] = ["B2", "GERMAN_NOTE"] as const;
+
 export const BUSINESS_LINE_LABELS: Record<BusinessLineView, string> = {
   ALL: "Combined",
   B2: "B2",

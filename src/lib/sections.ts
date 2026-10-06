@@ -25,7 +25,7 @@ export const SECTION_ICON_NAMES = [
   "map", "book-open", "message-circle", "trophy", "sliders", "target", "gift",
   "sparkles", "bar-chart", "shield", "layout-grid", "file-signature", "scale",
   "contact", "kanban", "file-text", "layout-template", "receipt", "inbox", "workflow",
-  "globe",
+  "globe", "layers",
 ] as const;
 export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];
 
@@ -283,6 +283,15 @@ export const SECTION_CATALOGUE = [
   // anyone else - which is exactly why "App Guide" was moved out of it and up to My Work.
   { key: "console", label: "Founder Console", href: "/console", phase: 1, icon: "sliders", group: "Admin", roles: ["ADMIN"], locked: true },
   { key: "people", label: "Users", href: "/people", phase: 2, icon: "users", group: "Admin", roles: ["ADMIN"] },
+  /**
+   * What B2 Consultants sells: the coaching tiers, and the GL account each one's revenue posts to.
+   *
+   * These lived on a tab inside German Note, which administered the WHOLE level catalogue from a
+   * screen about German courses - so the B2 tiers sat where nobody running B2 would look, and the
+   * two lists read as one list when they are different products. German Note keeps its own levels
+   * on its own Manage page; this is the other half. `src/lib/levels.ts` holds the split.
+   */
+  { key: "programs", label: "Programs", href: "/programs", phase: 1, icon: "layers", group: "Admin", roles: ["ADMIN"] },
   // Who did what, when - every write in the app, with an exact IST timestamp.
   // `locked`, for the same reason `console` is: this is the screen that shows whether the
   // access rules are being respected, so it must not be switchable-off or grantable to the

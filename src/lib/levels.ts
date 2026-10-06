@@ -10,6 +10,7 @@
  */
 
 import type { LevelKind } from "@prisma/client";
+import type { BusinessLine } from "./business-line";
 
 /** Serializable projection of a `Level` row (BigInt costs → number paise). Safe to cross to a client component. */
 export type LevelSummary = {
@@ -35,8 +36,27 @@ export const LEVEL_KIND_LABELS: Record<LevelKind, string> = {
   OTHER: "Other",
 };
 
-/** Kinds the admin UI may create/edit. Coaching tiers + OTHER are seeded and locked. */
-export const EDITABLE_LEVEL_KINDS: LevelKind[] = ["GERMAN_LEVEL", "GERMAN_BUNDLE"];
+/**
+ * The catalogue has two halves, and they are NOT the same product.
+ *
+ * German Note sells A1/A2/B1 courses and bundles of them; B2 Consultants sells coaching tiers
+ * (Solo/Guided/Elite). They were administered on one screen inside German Note, which put the
+ * B2 tiers somewhere nobody running B2 would look for them and implied the two level lists were
+ * one list. Each half now has its own admin surface - German Note -> Manage -> Levels, and the
+ * Programs section - and these are the kind sets that split them.
+ *
+ * The cut is the same one `business-line.ts` already makes when it segments revenue, so a level
+ * is administered on the side of the business whose line its money lands on. Keep them in step:
+ * `lineForKind` is the authority.
+ */
+export const GERMAN_LEVEL_KINDS: LevelKind[] = ["GERMAN_LEVEL", "GERMAN_BUNDLE"];
+export const B2_LEVEL_KINDS: LevelKind[] = ["COACHING_TIER", "OTHER"];
+
+/** The kind sets, by the business line that administers them. */
+export const LEVEL_KINDS_BY_LINE: Record<BusinessLine, LevelKind[]> = {
+  GERMAN_NOTE: GERMAN_LEVEL_KINDS,
+  B2: B2_LEVEL_KINDS,
+};
 
 export const isGermanLevel = (l: { kind: LevelKind }) => l.kind === "GERMAN_LEVEL";
 export const isBundle = (l: { kind: LevelKind }) => l.kind === "GERMAN_BUNDLE";

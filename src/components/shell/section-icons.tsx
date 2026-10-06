@@ -31,6 +31,7 @@ import {
   ReceiptText,
   Inbox,
   Workflow,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import type { SectionIconName } from "@/lib/sections";
@@ -73,6 +74,7 @@ export const SECTION_ICONS: Record<SectionIconName, LucideIcon> = {
   receipt: ReceiptText,
   inbox: Inbox,
   workflow: Workflow,
+  layers: Layers,
 };
 
 export const FallbackIcon = LayoutGrid;

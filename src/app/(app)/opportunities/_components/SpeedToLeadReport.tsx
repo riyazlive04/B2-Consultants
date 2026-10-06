@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
 import { Pill } from "@/components/ui/kit";
 import { Select } from "@/components/ui/form";
+import { TablePager, usePaged } from "@/components/ui/pager";
 import { firstCallVerdict, firstCallLabel, formatAge, type FirstCallState } from "@/lib/speed-to-lead";
 import { formatDateTimeInZone } from "@/lib/format";
 import { LEAD_STAGE_LABELS } from "@/lib/labels";
@@ -52,6 +53,13 @@ export function SpeedToLeadReport({ open, onClose }: { open: boolean; onClose: (
     { leads: 0, called: 0, withinFive: 0, overdue: 0 },
   );
   const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "-");
+  /**
+   * The per-lead table is the one list here that grows with the business: the per-setter table
+   * above it has a row per person and stops, but this has a row per lead in the period, so a
+   * busy 30 days is hundreds of rows inside a modal. Paged on the same control as every other
+   * table in the app. `?? []` keeps the hook unconditional while the report is still loading.
+   */
+  const { paged: pagedRows, pager } = usePaged(report?.rows ?? []);
 
   return (
     <Modal open={open} onClose={onClose} title="Speed to lead" subtitle="Time from opt-in to the first call - target 5 minutes" size="lg">
@@ -144,7 +152,7 @@ export function SpeedToLeadReport({ open, onClose }: { open: boolean; onClose: (
                 ) : report.rows.length === 0 ? (
                   <tr><td colSpan={5} className="px-3 py-4 text-center text-ink-3">No leads in this period.</td></tr>
                 ) : (
-                  report.rows.map((r) => {
+                  pagedRows.map((r) => {
                     const v = firstCallVerdict(new Date(r.optInAt), r.firstCallAt ? new Date(r.firstCallAt) : null, now);
                     return (
                       <tr key={r.leadId}>
@@ -163,6 +171,9 @@ export function SpeedToLeadReport({ open, onClose }: { open: boolean; onClose: (
               </tbody>
             </table>
           </div>
+          {/* Outside the scroll box: a pager that scrolled away with the rows would be
+              unreachable exactly when there are enough rows to need it. */}
+          <TablePager {...pager} bordered={false} />
         </section>
       </div>
     </Modal>

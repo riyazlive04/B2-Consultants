@@ -8,12 +8,21 @@ node_modules
 .pnp
 .pnp.js
 
-# Build output — regenerated inside the image
+# Build output — regenerated inside the image.
+# The glob matters: out-of-band verification builds (.next-verify, .next-local,
+# .next-localdemo, …) accumulate hundreds of MB each, and listing only `.next` and
+# `.next-prod` sent 1.46 GB of dead build output into the daemon on every build. On a
+# Windows host that is enough to get the BuildKit VM killed mid-`npm ci`, which surfaces
+# as the useless `rpc error: code = Unavailable … EOF` rather than as an out-of-memory.
 .next
-.next-prod
+.next-*
 out
 build
 tsconfig.tsbuildinfo
+
+# Generated artefacts — regenerable, and nothing in the image reads them
+sample-invoice-*.pdf
+*.log
 
 # Secrets & local environment — never ship these.
 # `.env.*` is what keeps the real .env.production (Supabase password, WATI token,

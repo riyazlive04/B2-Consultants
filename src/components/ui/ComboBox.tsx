@@ -34,7 +34,15 @@ import {
  * except spelled the same way every time (and a name spelled the same way is what later links
  * those payments to the record when it is finally created).
  */
-export type ComboOption = { value: string; label: string; hint?: string };
+/**
+ * `meta` is a second, muted line beneath the label - also searchable.
+ *
+ * Added for the student pickers, where "which programme is this person on" is both the thing
+ * that tells two same-named people apart and a thing people type to find somebody ("guided").
+ * Kept generic and optional: the control knows nothing about students or levels, it just shows
+ * and searches whatever second line the caller supplies.
+ */
+export type ComboOption = { value: string; label: string; hint?: string; meta?: string };
 
 type Props = {
   options: ComboOption[];
@@ -105,7 +113,10 @@ export function ComboBox({
   const matches = (
     q
       ? options.filter(
-          (o) => o.label.toLowerCase().includes(q) || (o.hint ?? "").toLowerCase().includes(q),
+          (o) =>
+            o.label.toLowerCase().includes(q) ||
+            (o.hint ?? "").toLowerCase().includes(q) ||
+            (o.meta ?? "").toLowerCase().includes(q),
         )
       : options
   ).slice(0, MAX_MATCHES);
@@ -197,7 +208,14 @@ export function ComboBox({
                       isSel ? "font-medium text-ink" : "",
                     ].join(" ")}
                   >
-                    <span className="min-w-0 flex-1 truncate" title={o.label}>{o.label}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="block truncate" title={o.label}>{o.label}</span>
+                      {o.meta && (
+                        <span className="block truncate text-caption text-ink-3" title={o.meta}>
+                          {o.meta}
+                        </span>
+                      )}
+                    </span>
                     {o.hint && (
                       <span className="tnum flex-none text-caption text-ink-3">{o.hint}</span>
                     )}

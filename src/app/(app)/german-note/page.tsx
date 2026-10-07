@@ -16,6 +16,10 @@ import { LevelChip, StatusChip } from "./_components/LevelChip";
 import { WorkshopsPanel } from "./_components/WorkshopsPanel";
 import { formatDateTimeInZone, formatPct } from "@/lib/format";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "German Note" };
+
 export const dynamic = "force-dynamic";
 
 export default async function GermanNotePage({
@@ -221,7 +225,10 @@ export default async function GermanNotePage({
       />
 
       {financialsPanel ? (
+        // `urlKey` keeps the open tab in the address, so a refresh (or a shared link) does not
+        // drop back to the first tab (issue 28).
         <Tabs
+          urlKey="tab"
           tabs={[
             { label: "Financials", content: financialsPanel },
             { label: "Community", content: communityPanel },

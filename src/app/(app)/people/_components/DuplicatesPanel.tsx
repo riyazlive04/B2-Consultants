@@ -11,6 +11,7 @@ import { Btn } from "@/components/ui/controls";
 import { Tabs } from "@/components/ui/Tabs";
 import { DateText } from "@/components/ui/DateText";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * "Who is in here twice?" - People → Duplicates.
@@ -48,7 +49,7 @@ function GroupCard({ group, mergeable }: { group: DuplicateGroup; mergeable: boo
     });
     if (!ok) return;
     setBusy(true);
-    const res = await mergeLeads(keepId, loseId);
+    const res = await safeAction(() => mergeLeads(keepId, loseId));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     toast(`Merged into ${keepName}`);

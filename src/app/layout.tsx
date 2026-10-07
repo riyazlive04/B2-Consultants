@@ -24,7 +24,19 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "B2 Consultants",
+  /**
+   * ── Each page names itself in the tab (issue 28) ────────────────────────────────
+   * Every page shared the title "B2 Consultants", so a person working across Finance, Cash
+   * Health and Payments had three identical browser tabs and no way to tell them apart - and
+   * browser history was a list of the same words.
+   *
+   * `template` lets a page export `title: "Finance"` and get "Finance · B2 Consultants";
+   * `default` is what a page that exports nothing still gets, so nothing regresses.
+   */
+  title: {
+    default: "B2 Consultants",
+    template: "%s · B2 Consultants",
+  },
   description: "Private internal dashboard for B2 Consultants",
   icons: { icon: "/icon.svg" },
   robots: { index: false, follow: false },

@@ -20,6 +20,7 @@ import {
   getFinancePostingConfig,
   getInstalmentPlanConfig,
   getPaymentTypesConfig,
+  getInvoiceSettings,
   getBookingCalendars,
   getSssPatternConfig,
   getSssConfig,
@@ -48,6 +49,7 @@ import { AgreementWorkflowPanel } from "./_components/AgreementWorkflowPanel";
 import { TutorFeePanel } from "./_components/TutorFeePanel";
 import { InstalmentPlanPanel } from "./_components/InstalmentPlanPanel";
 import { PaymentTypesPanel } from "./_components/PaymentTypesPanel";
+import { InvoicingPanel } from "./_components/InvoicingPanel";
 import { TutorFeeLedgerPanel } from "./_components/TutorFeeLedgerPanel";
 import { QualificationPanel } from "./_components/QualificationPanel";
 import { CallDistributionPanel } from "./_components/CallDistributionPanel";
@@ -67,6 +69,10 @@ import { getDeliveryFailureReport } from "@/server/delivery-health";
 import { LeadWebhookPanel } from "./_components/LeadWebhookPanel";
 import { getLeadWebhookConfig, LEAD_WEBHOOK_NAME, LEAD_WEBHOOK_PATH } from "@/server/lead-webhook";
 import { readDeliveryStatuses } from "@/server/intake-route";
+
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Founder Console" };
 
 export const dynamic = "force-dynamic";
 
@@ -181,6 +187,7 @@ export default async function ConsolePage() {
     bookableMembers,
     instalmentPlans,
     paymentTypes,
+    invoiceSettings,
     speedToLeadConfig,
     dunningConfig,
     attendanceConfig,
@@ -198,6 +205,7 @@ export default async function ConsolePage() {
     getBookableTeamMembers(),
     getInstalmentPlanConfig(),
     getPaymentTypesConfig(),
+    getInvoiceSettings(),
     getSpeedToLeadAlertConfig(),
     getDunningConfig(),
     getAttendanceConfig(),
@@ -325,6 +333,7 @@ export default async function ConsolePage() {
                   // Beside it because the two answer one question between them: what kinds of
                   // payment can be recorded, and what each kind costs.
                   { label: "Payment Types", content: <PaymentTypesPanel config={paymentTypes} /> },
+                  { label: "Invoicing", content: <InvoicingPanel config={invoiceSettings} /> },
                   { label: "Tutor Fee", content: <TutorFeePanel config={tutorFee} /> },
                   {
                     label: `Tutor Fees${tutorFeeRows.filter((f) => f.status === "DRAFT").length ? ` (${tutorFeeRows.filter((f) => f.status === "DRAFT").length})` : ""}`,

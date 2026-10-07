@@ -16,6 +16,7 @@ import {
 } from "@/lib/sections";
 import { FallbackIcon, SECTION_ICONS } from "@/components/shell/section-icons";
 import { Card, ColHead, ColRow, ColScroll, Hint, Picker, SaveBar, TextIn, Toggle, type Cols } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Every nav section: rename it, re-icon it, move it, group it, switch it off, and
@@ -107,7 +108,7 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
     };
     const form = new FormData();
     form.set("config", JSON.stringify(config));
-    const res = await saveSectionsConfig(form);
+    const res = await safeAction(() => saveSectionsConfig(form));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setDirty(false);
@@ -123,7 +124,7 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
     });
     if (!ok) return;
     setBusy(true);
-    const res = await resetSectionsConfig();
+    const res = await safeAction(() => resetSectionsConfig());
     setBusy(false);
     if (!res.ok) return setError(res.error);
     toast("Sections reset to defaults - reload to see them");

@@ -20,6 +20,10 @@ import ReportChart from "./_components/ReportChart";
 import ReportTable from "./_components/ReportTable";
 import AttributionTable from "./_components/AttributionTable";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Reports" };
+
 export const dynamic = "force-dynamic";
 
 /** What the money column means, per object - the same sum answers a different question each time. */

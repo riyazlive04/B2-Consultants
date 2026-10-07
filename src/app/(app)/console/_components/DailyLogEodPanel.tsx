@@ -13,6 +13,7 @@ import { Field } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { saveDailyLogEod } from "@/server/console-actions";
 import { Card, Hint, NumInput, SaveBar, TimeIn, Toggle } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * End-of-day rules editor (Founder Console → Daily Targets → EOD).
@@ -35,7 +36,7 @@ export function DailyLogEodPanel({ config, cronArmed }: { config: DailyLogEodCon
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveDailyLogEod(draft);
+    const res = await safeAction(() => saveDailyLogEod(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

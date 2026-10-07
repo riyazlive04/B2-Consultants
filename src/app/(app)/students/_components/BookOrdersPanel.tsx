@@ -7,10 +7,11 @@ import type { BookOrderRow, StudentOption, VendorRow } from "@/server/book-order
 import type { LevelOption } from "@/lib/levels";
 import { advanceBookOrder, createBookOrder, messagePublisher, upsertVendor } from "@/server/book-order-actions";
 import { Btn } from "@/components/ui/controls";
-import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { Field, FormError, NotesField, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { Modal } from "@/components/ui/Modal";
 import { TablePager, usePaged } from "@/components/ui/pager";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Book orders with the publisher (spec §9.2, Part 2 §4):
@@ -91,7 +92,7 @@ export function BookOrdersPanel({
 
   async function create(form: FormData) {
     setError(null);
-    const res = await createBookOrder(form);
+    const res = await safeAction(() => createBookOrder(form));
     if (!res.ok) return setError(res.error);
     setCreating(false);
     toast("Book order opened");
@@ -100,7 +101,7 @@ export function BookOrdersPanel({
 
   async function addVendor(form: FormData) {
     setError(null);
-    const res = await upsertVendor(null, form);
+    const res = await safeAction(() => upsertVendor(null, form));
     if (!res.ok) return setError(res.error);
     setAddingVendor(false);
     toast("Vendor saved");
@@ -110,7 +111,7 @@ export function BookOrdersPanel({
   async function advance(form: FormData) {
     if (!editing) return;
     setError(null);
-    const res = await advanceBookOrder(editing.id, form);
+    const res = await safeAction(() => advanceBookOrder(editing.id, form));
     if (!res.ok) return setError(res.error);
     setEditing(null);
     toast("Order updated");
@@ -125,7 +126,7 @@ export function BookOrdersPanel({
     if (!editing) return;
     setError(null);
     setSending(dryRun ? "dry" : "live");
-    const res = await messagePublisher(editing.id, { dryRun });
+    const res = await safeAction(() => messagePublisher(editing.id, { dryRun }));
     setSending(null);
     if (!res.ok) return setError(res.error);
     toast(dryRun ? "Dry run written to the WhatsApp log" : `Order sent to ${editing.vendorName}`);
@@ -275,7 +276,7 @@ export function BookOrdersPanel({
           <Field label="Phone" hint="The WhatsApp number the team sends orders to."><TextInput name="phone" /></Field>
           <Field label="Email"><TextInput name="email" /></Field>
           <Field label="Address"><TextInput name="address" /></Field>
-          <Field label="Notes"><TextInput name="notes" /></Field>
+          <NotesField label="Notes" />
           <FormError message={error} />
           <div className="flex justify-end gap-2">
             <Btn variant="ghost" onClick={() => setAddingVendor(false)}>Cancel</Btn>

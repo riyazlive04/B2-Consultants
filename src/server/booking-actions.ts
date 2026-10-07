@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { LeadSource, type LeadStage, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireSection } from "@/lib/rbac";
+import { requireSection, type AppSession } from "@/lib/rbac";
 import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { INTAKE_OPTIONS } from "@/lib/booking-intake";
@@ -914,22 +914,156 @@ export async function setSlotBlocked(id: string, blocked: boolean): Promise<Acti
 }
 
 /**
- * Postpone a booking onto another slot: free the old slot, claim the new OPEN one, and reset the
- * confirmation so the prospect re-confirms the NEW time (a fresh confirm-request goes out as that
- * slot approaches). The prospect is told the call moved. Concurrency-guarded against a double-book.
+ * What both reschedule paths need to know about the booking they are moving.
+ *
+ * `leadId` and the contact columns are here for the slot-LESS case: a call that was cancelled or
+ * written off as a no-show holds no slot, and giving it a new time has to carry the lead back onto
+ * the board and check the person has not booked again in the meantime.
+ */
+const BOOKING_MOVE_SELECT = {
+  id: true, slotId: true, status: true, name: true, leadId: true,
+  phone: true, whatsapp: true, email: true,
+  slot: { select: { startsAt: true, durationMins: true, assignedToId: true } },
+} satisfies Prisma.BookingRequestSelect;
+
+type BookingToMove = Prisma.BookingRequestGetPayload<{ select: typeof BOOKING_MOVE_SELECT }>;
+
+/** Whoever is doing the moving, as the slot-release log wants it. */
+function movedByName(session: AppSession): string {
+  return session.user.name?.trim() || session.user.email || "Unknown user";
+}
+
+/**
+ * Refuse to revive a dead booking when the same person already holds a live one.
+ *
+ * Only ever asked of a booking that is NOT live: a cancelled or no-show call can be given a new
+ * time weeks later, by which point the prospect may well have booked themselves back in - and two
+ * live bookings for one person is precisely what `booking-identity` exists to prevent: each runs
+ * its own confirmation and its own reminders, and nothing can say which appointment is real.
+ */
+async function otherLiveBookingBlocks(booking: BookingToMove): Promise<string | null> {
+  if (booking.status === "BOOKED") return null; // this booking IS the live one
+  const other = await liveBookingFor(prisma, {
+    phone: booking.phone,
+    whatsapp: booking.whatsapp,
+    email: booking.email,
+  });
+  if (other && other.id !== booking.id) {
+    return "This person already has another call booked - move that booking instead.";
+  }
+  return null;
+}
+
+/**
+ * The move itself, shared by both paths: point the booking at `newSlotId`, hand back whatever slot
+ * it was holding, and reset the confirmation so the prospect re-confirms the NEW time (a fresh
+ * confirm-request goes out as that slot approaches).
+ *
+ * The caller must already have claimed `newSlotId` inside the same transaction.
+ */
+async function moveBookingOntoSlot(
+  tx: Prisma.TransactionClient,
+  booking: BookingToMove,
+  newSlotId: string,
+  releasedByName: string,
+): Promise<void> {
+  await tx.bookingRequest.update({
+    where: { id: booking.id },
+    data: { slotId: newSlotId, status: "BOOKED", confirmedAt: null, confirmSentAt: null },
+  });
+
+  if (booking.slotId) {
+    // Hand back the old slot - OPEN only if it is still far enough out to be re-booked.
+    const rules = await getBookingRulesConfig();
+    const freed = releasedSlotStatus(booking.slot?.startsAt ?? null, rules.minNoticeHours);
+    await tx.appointmentSlot.update({ where: { id: booking.slotId }, data: { status: freed } });
+    // Recorded as POSTPONED, not cancelled: the call is still happening, just later. Without
+    // the row the vacated slot would appear on the calendar as one nobody ever booked.
+    await recordSlotRelease(tx, {
+      slotId: booking.slotId,
+      bookingRequestId: booking.id,
+      slotStartsAt: booking.slot?.startsAt ?? new Date(),
+      durationMins: booking.slot?.durationMins ?? 30,
+      prospectName: booking.name,
+      reason: "POSTPONED",
+      releasedStatus: freed,
+      releasedByName,
+    });
+  }
+
+  /**
+   * A call that was NOT live is coming back, so carry its lead back onto the board with it.
+   *
+   * Keyed on the status it is coming back FROM, not on whether a slot was held: a no-show can be
+   * marked without the slot ever being detached, so "holds no slot" would have missed exactly the
+   * rows this is for. The cancel (or the no-show) moved the card to Cancelled/No-show, and leaving
+   * it there while the calendar says the call is on is the drift that makes the board
+   * untrustworthy. Same HOLD-list guard as a fresh booking, so a prospect already further down the
+   * funnel is never dragged backwards.
+   */
+  if (booking.status !== "BOOKED" && booking.leadId) {
+    const fresh = await tx.lead.findUnique({ where: { id: booking.leadId }, select: { stage: true } });
+    if (fresh && !HOLDS_THROUGH_BOOKING.has(fresh.stage)) {
+      await tx.lead.update({ where: { id: booking.leadId }, data: { stage: "STRATEGY_CALL_BOOKED" } });
+      await tx.leadStageHistory.create({
+        data: { leadId: booking.leadId, fromStage: fresh.stage, toStage: "STRATEGY_CALL_BOOKED" },
+      });
+      await syncDefaultOpportunity(tx, booking.leadId, "STRATEGY_CALL_BOOKED");
+    }
+  }
+}
+
+/** Log it, tell the prospect their call moved, refresh the screens. Shared tail of both paths. */
+async function afterBookingMoved(
+  session: AppSession,
+  booking: BookingToMove,
+  newSlotId: string,
+  newStartsAt: Date,
+): Promise<void> {
+  const revived = booking.status !== "BOOKED";
+  await logActivity(session, {
+    action: "booking.reschedule",
+    section: "bookings",
+    entityType: "BookingRequest",
+    entityId: booking.id,
+    summary: revived
+      ? `Re-booked ${booking.name}'s call for ${activityStamp(newStartsAt)}`
+      : `Moved ${booking.name}'s call to ${activityStamp(newStartsAt)}`,
+    meta: {
+      changed: ["slotId"],
+      before: { slotId: booking.slotId, status: booking.status },
+      after: { slotId: newSlotId, status: "BOOKED" },
+    },
+  });
+
+  // Intimate the prospect their call moved (best-effort; silent when WhatsApp is off).
+  await sendBookingRescheduled(booking.id, session.user.id);
+  revalidatePath("/bookings");
+  revalidatePath("/pipeline");
+}
+
+/**
+ * Move a booking onto a slot ALREADY on the calendar: free the old slot, claim the new OPEN
+ * one, and reset the confirmation so the prospect re-confirms the NEW time (a fresh confirm-request
+ * goes out as that slot approaches). The prospect is told the call moved. Concurrency-guarded
+ * against a double-book.
+ *
+ * A booking that is no longer live (cancelled, or written off as a no-show) is re-bookable here
+ * too - it is revived to BOOKED. The team has to be able to put a call back on the calendar for
+ * someone who rings to say they can make Thursday after all: the public form refuses that person a
+ * second booking by design (`ALREADY_BOOKED_MESSAGE` tells them to ask us to move it), so if this
+ * screen cannot do it, nothing can.
  */
 export async function rescheduleBooking(bookingId: string, newSlotId: string): Promise<ActionResult> {
   const session = await requireSection("bookings");
   const booking = await prisma.bookingRequest.findUnique({
     where: { id: bookingId },
-    select: {
-      slotId: true, status: true, name: true,
-      slot: { select: { startsAt: true, durationMins: true } },
-    },
+    select: BOOKING_MOVE_SELECT,
   });
   if (!booking) return { ok: false, error: "Booking not found" };
-  if (booking.status === "CANCELLED") return { ok: false, error: "This booking is cancelled - it can't be moved" };
   if (booking.slotId === newSlotId) return { ok: false, error: "That's already this booking's slot" };
+  const blocked = await otherLiveBookingBlocks(booking);
+  if (blocked) return { ok: false, error: blocked };
 
   const target = await prisma.appointmentSlot.findUnique({ where: { id: newSlotId }, select: { status: true, startsAt: true } });
   if (!target) return { ok: false, error: "That slot no longer exists" };
@@ -943,29 +1077,9 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
         data: { status: "BOOKED" },
       });
       if (claim.count === 0) throw new Error("SLOT_TAKEN");
-      // Point the booking at the new slot first (moves the unique slotId off the old one)…
-      await tx.bookingRequest.update({
-        where: { id: bookingId },
-        data: { slotId: newSlotId, status: "BOOKED", confirmedAt: null, confirmSentAt: null },
-      });
-      // …then release the old slot - OPEN only if it is still far enough out to be re-booked.
-      if (booking.slotId) {
-        const rules = await getBookingRulesConfig();
-        const freed = releasedSlotStatus(booking.slot?.startsAt ?? null, rules.minNoticeHours);
-        await tx.appointmentSlot.update({ where: { id: booking.slotId }, data: { status: freed } });
-        // Recorded as POSTPONED, not cancelled: the call is still happening, just later. Without
-        // the row the vacated slot would appear on the calendar as one nobody ever booked.
-        await recordSlotRelease(tx, {
-          slotId: booking.slotId,
-          bookingRequestId: bookingId,
-          slotStartsAt: booking.slot?.startsAt ?? new Date(),
-          durationMins: booking.slot?.durationMins ?? 30,
-          prospectName: booking.name,
-          reason: "POSTPONED",
-          releasedStatus: freed,
-          releasedByName: session.user.name?.trim() || session.user.email || "Unknown user",
-        });
-      }
+      // Points the booking at the new slot first (moving the unique slotId off the old one), then
+      // releases the old one.
+      await moveBookingOntoSlot(tx, booking, newSlotId, movedByName(session));
     });
   } catch (e) {
     if (e instanceof Error && e.message === "SLOT_TAKEN") {
@@ -974,18 +1088,134 @@ export async function rescheduleBooking(bookingId: string, newSlotId: string): P
     throw e;
   }
 
-  await logActivity(session, {
-    action: "booking.reschedule",
-    section: "bookings",
-    entityType: "BookingRequest",
-    entityId: bookingId,
-    summary: `Moved ${booking.name}'s call to ${activityStamp(target.startsAt)}`,
-    meta: { changed: ["slotId"], before: { slotId: booking.slotId }, after: { slotId: newSlotId } },
-  });
+  await afterBookingMoved(session, booking, newSlotId, target.startsAt);
+  return { ok: true };
+}
 
-  // Intimate the prospect their call moved (best-effort; silent when WhatsApp is off).
-  await sendBookingRescheduled(bookingId, session.user.id);
-  revalidatePath("/bookings");
+const customTimeSchema = z.object({
+  bookingId: z.string().trim().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
+  time: z.string().regex(/^\d{2}:\d{2}$/, "Pick a time (HH:MM)"),
+  durationMins: z.coerce
+    .number()
+    .int()
+    .min(15, "A call has to be at least 15 minutes")
+    .max(240, "Keep the call under 4 hours"),
+  // Blank = leave the call unassigned, same as the slot generator's picker.
+  assignedToId: z.string().trim().max(64).optional(),
+});
+
+export type RescheduleToTimeInput = z.input<typeof customTimeSchema>;
+
+/**
+ * Reschedule onto a time the team TYPES, creating the slot as it goes.
+ *
+ * `rescheduleBooking` can only offer slots that already exist, which is the wrong shape for what
+ * actually happens: the prospect on the phone says "could we do Thursday at four?" and there is no
+ * Thursday-at-four slot on the calendar. The only answer then was to send whoever is on the call
+ * to the Availability screen to generate a block of slots - which publishes openings on the
+ * PUBLIC booking page that nobody meant to publish - and then come back here. In practice the
+ * call got cancelled and the prospect was told to book themselves in again, which the identity
+ * guard then refuses them.
+ *
+ * The slot is created BOOKED, never OPEN, so it is this prospect's time and nobody else's. An
+ * OPEN slot already sitting at exactly that instant and length is claimed instead of shadowed
+ * with a duplicate, so the calendar never shows the same time twice.
+ *
+ * The booking rules (minimum notice, maximum advance, buffer) deliberately do NOT apply here.
+ * They exist to stop a stranger on the public form taking a call that starts in ten minutes;
+ * this is a named member of the team moving one call by hand with the prospect on the phone, and
+ * "we can't do 6pm because the form says 8 hours' notice" is not a real constraint.
+ */
+export async function rescheduleBookingToTime(input: RescheduleToTimeInput): Promise<ActionResult> {
+  const session = await requireSection("bookings");
+  const parsed = customTimeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const d = parsed.data;
+
+  const booking = await prisma.bookingRequest.findUnique({
+    where: { id: d.bookingId },
+    select: BOOKING_MOVE_SELECT,
+  });
+  if (!booking) return { ok: false, error: "Booking not found" };
+  const blocked = await otherLiveBookingBlocks(booking);
+  if (blocked) return { ok: false, error: blocked };
+
+  // Typed in IST, stored as the UTC instant - the same conversion the slot generator uses, so a
+  // hand-made slot and a generated one at the same wall time are the same instant.
+  const startsAt = istWallToUtc(d.date, d.time);
+  if (Number.isNaN(startsAt.getTime())) return { ok: false, error: "That date and time don't make sense" };
+  if (startsAt.getTime() <= Date.now()) return { ok: false, error: "Pick a time in the future" };
+  if (startsAt.getTime() - Date.now() > 365 * 86_400_000) {
+    return { ok: false, error: "Pick a time within the next year" };
+  }
+  if (
+    booking.slot &&
+    booking.slot.startsAt.getTime() === startsAt.getTime() &&
+    booking.slot.durationMins === d.durationMins
+  ) {
+    return { ok: false, error: "That's already this booking's time" };
+  }
+
+  // Defaults to whoever owns the call today, so moving a time never silently unassigns it.
+  const assignedToId = d.assignedToId?.trim() ? d.assignedToId.trim() : null;
+  const endsAt = new Date(startsAt.getTime() + d.durationMins * 60_000);
+
+  /**
+   * Don't double-book a person. Prisma cannot express "startsAt + durationMins > :start" in SQL,
+   * so the candidates are pulled for a day either side (wider than any slot length the schema
+   * allows) and the overlap is decided here. Only for an ASSIGNED call: an unassigned slot
+   * belongs to nobody, so it has nobody's diary to clash with.
+   */
+  if (assignedToId) {
+    const near = await prisma.appointmentSlot.findMany({
+      where: {
+        assignedToId,
+        status: "BOOKED",
+        id: { not: booking.slotId ?? "" },
+        startsAt: { gt: new Date(startsAt.getTime() - 86_400_000), lt: endsAt },
+      },
+      select: { startsAt: true, durationMins: true },
+    });
+    const clash = near.find((s) => s.startsAt.getTime() + s.durationMins * 60_000 > startsAt.getTime());
+    if (clash) {
+      return { ok: false, error: `That clashes with their ${activityStamp(clash.startsAt)} call - pick another time.` };
+    }
+  }
+
+  let newSlotId = "";
+  try {
+    await prisma.$transaction(async (tx) => {
+      const published = await tx.appointmentSlot.findFirst({
+        where: { startsAt, durationMins: d.durationMins, status: "OPEN" },
+        select: { id: true },
+      });
+      if (published) {
+        // Only ever ADDS an owner: a published slot already belongs to whoever it was generated
+        // for, and "Unassigned" in the picker means "no view on it", not "take their name off".
+        const claim = await tx.appointmentSlot.updateMany({
+          where: { id: published.id, status: "OPEN" },
+          data: { status: "BOOKED", ...(assignedToId ? { assignedToId } : {}) },
+        });
+        if (claim.count === 0) throw new Error("SLOT_TAKEN");
+        newSlotId = published.id;
+      } else {
+        const made = await tx.appointmentSlot.create({
+          data: { startsAt, durationMins: d.durationMins, status: "BOOKED", assignedToId },
+          select: { id: true },
+        });
+        newSlotId = made.id;
+      }
+      await moveBookingOntoSlot(tx, booking, newSlotId, movedByName(session));
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "SLOT_TAKEN") {
+      return { ok: false, error: "That time was just taken - pick another one." };
+    }
+    throw e;
+  }
+
+  await afterBookingMoved(session, booking, newSlotId, startsAt);
   return { ok: true };
 }
 

@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/form";
 import { fieldKindProps } from "@/components/ui/field-base";
 import { formatDate } from "@/lib/format";
 import { optionsFrom, SPRINT_STATUS_LABELS } from "@/lib/labels";
+import { safeAction } from "@/lib/action-guard";
 
 type Enrollment = StudentDetail["enrollments"][number];
 type SprintWeekRow = Enrollment["sprintWeeks"][number];
@@ -50,7 +51,7 @@ export function SprintTracker({
 
   const saveRow = async (w: SprintWeekRow, form: FormData) => {
     setSaving(w.id);
-    const res = await saveSprintWeek(w.id, form);
+    const res = await safeAction(() => saveSprintWeek(w.id, form));
     setSaving(null);
     if (!res.ok) return toast(res.error, "error");
     toast(`Week ${w.weekIndex} saved`);
@@ -164,7 +165,7 @@ export function SprintTracker({
               type="button"
               className="ml-2 font-semibold text-accent hover:underline"
               onClick={async () => {
-                const res = await generateSprintPlan(enrollment.id);
+                const res = await safeAction(() => generateSprintPlan(enrollment.id));
                 if (!res.ok) return toast(res.error, "error");
                 toast(`${planWeeks}-week sprint plan created`);
               }}

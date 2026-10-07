@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/feedback";
 import { Hint } from "@/components/ui/kit";
 import { Btn, CheckCard, SegmentedControl, SubmitBtn, SwitchRow } from "@/components/ui/controls";
 import { inviteUser, resetUserAccess, updateUserAccess, type ListedUser } from "@/server/users-actions";
+import { safeAction } from "@/lib/action-guard";
 import {
   CAPABILITIES,
   effectiveCapabilities,
@@ -116,12 +117,12 @@ export function AccessDialog({
   const submit = async (form: FormData) => {
     setError(null);
     if (mode === "invite") {
-      const res = await inviteUser(form);
+      const res = await safeAction(() => inviteUser(form));
       if (!res.ok) return setError(res.error);
       onInvited({ url: res.inviteUrl, expiresInDays: res.expiresInDays });
       return;
     }
-    const res = await updateUserAccess(user!.id, form);
+    const res = await safeAction(() => updateUserAccess(user!.id, form));
     if (!res.ok) return setError(res.error);
     toast(`Access updated for ${name} - applies on their next page load`);
     onClose();
@@ -254,7 +255,7 @@ export function AccessDialog({
               type="button"
               className="mr-auto text-sm text-accent hover:underline"
               onClick={async () => {
-                const res = await resetUserAccess(user!.id);
+                const res = await safeAction(() => resetUserAccess(user!.id));
                 if (!res.ok) return setError(res.error);
                 toast("Access reset to role defaults");
                 onClose();

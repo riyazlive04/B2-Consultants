@@ -12,6 +12,7 @@ import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/c
 import { Modal } from "@/components/ui/Modal";
 import type { LevelOption } from "@/lib/levels";
 import { LevelChip, StatusChip } from "./LevelChip";
+import { safeAction } from "@/lib/action-guard";
 
 function BatchFields({
   batch,
@@ -97,7 +98,7 @@ export function BatchesPanel({
           className="rounded-card border border-line bg-surface p-4 shadow-card"
           action={async (form) => {
             setError(null);
-            const res = await createBatch(form);
+            const res = await safeAction(() => createBatch(form));
             if (!res.ok) return setError(res.error);
             setCreating(false);
             toast("Batch created");
@@ -155,7 +156,7 @@ export function BatchesPanel({
                   danger: true,
                 });
                 if (!ok) return;
-                const res = await deleteBatch(b.id);
+                const res = await safeAction(() => deleteBatch(b.id));
                 if (!res.ok) return toast(res.error, "error");
                 toast("Batch deleted");
                 refresh();
@@ -172,7 +173,7 @@ export function BatchesPanel({
           <form
             action={async (form) => {
               setError(null);
-              const res = await updateBatch(editing.id, form);
+              const res = await safeAction(() => updateBatch(editing.id, form));
               if (!res.ok) return setError(res.error);
               setEditing(null);
               toast("Batch updated");

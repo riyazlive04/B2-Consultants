@@ -18,6 +18,7 @@ import {
 } from "@/lib/whatsapp";
 import { formatDuration, formatDurationList } from "@/lib/duration";
 import type { BookingRulesConfig } from "@/lib/config-schema";
+import { safeAction } from "@/lib/action-guard";
 
 const inputCls =
   "w-full rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm outline-none transition-colors focus:border-accent focus:bg-surface";
@@ -121,7 +122,7 @@ export function WhatsAppSettingsForm({
 
   const submit = async (fd: FormData) => {
     setSaving(true);
-    const res = await saveWatiSettings(fd);
+    const res = await safeAction(() => saveWatiSettings(fd));
     setSaving(false);
     toast(res.message, res.ok ? "success" : "error");
     if (res.ok) setDirty(false);
@@ -130,7 +131,7 @@ export function WhatsAppSettingsForm({
   const refresh = async () => {
     if (refreshing) return;
     setRefreshing(true);
-    const res = await refreshWatiTemplates();
+    const res = await safeAction(() => refreshWatiTemplates());
     setRefreshing(false);
     toast(res.message, res.ok ? "success" : "error");
     if (res.ok) startNav(() => router.refresh());

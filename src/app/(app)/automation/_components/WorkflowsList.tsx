@@ -16,6 +16,7 @@ import { toast, askConfirm } from "@/components/ui/feedback";
 import { EmptyState, Pill } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { DateText } from "@/components/ui/DateText";
+import { safeAction } from "@/lib/action-guard";
 import {
   createWorkflow, deleteWorkflow, runWorkflowsNow, createFolder, renameFolder, deleteFolder,
   moveWorkflowsToFolder, restoreWorkflow, destroyWorkflow, bulkDeleteWorkflows,
@@ -60,30 +61,30 @@ export default function WorkflowsList({
 
   async function create(fd: FormData) {
     setError(null);
-    const res = await createWorkflow(fd);
+    const res = await safeAction(() => createWorkflow(fd));
     if (!res.ok) return setError(res.error);
     toast("Workflow created");
     setOpen(false);
   }
   async function addFolder(fd: FormData) {
     setFolderError(null);
-    const res = await createFolder(fd);
+    const res = await safeAction(() => createFolder(fd));
     if (!res.ok) return setFolderError(res.error);
     toast("Folder created");
     setFolderOpen(false);
   }
   async function remove(w: WorkflowRow) {
     if (!(await askConfirm({ title: `Delete “${w.name}”?`, body: "It moves to the Deleted tab and stops triggering. You can restore it.", danger: true }))) return;
-    const res = await deleteWorkflow(w.id);
+    const res = await safeAction(() => deleteWorkflow(w.id));
     toast(res.ok ? "Workflow deleted" : res.error, res.ok ? "success" : "error");
   }
   async function restore(w: WorkflowRow) {
-    const res = await restoreWorkflow(w.id);
+    const res = await safeAction(() => restoreWorkflow(w.id));
     toast(res.ok ? "Workflow restored" : res.error, res.ok ? "success" : "error");
   }
   async function destroy(w: WorkflowRow) {
     if (!(await askConfirm({ title: `Permanently delete “${w.name}”?`, body: "This cannot be undone, and it also deletes every enrollment record for this workflow.", danger: true }))) return;
-    const res = await destroyWorkflow(w.id);
+    const res = await safeAction(() => destroyWorkflow(w.id));
     toast(res.ok ? "Workflow permanently deleted" : res.error, res.ok ? "success" : "error");
   }
   async function runNow() {
@@ -94,7 +95,7 @@ export default function WorkflowsList({
   async function rename(f: FolderRow) {
     const next = window.prompt("Rename folder", f.name);
     if (next === null || next.trim() === f.name) return;
-    const res = await renameFolder(f.id, next);
+    const res = await safeAction(() => renameFolder(f.id, next));
     toast(res.ok ? "Folder renamed" : res.error, res.ok ? "success" : "error");
     if (res.ok) router.refresh();
   }
@@ -103,7 +104,7 @@ export default function WorkflowsList({
       ? `The ${f.workflowCount} workflow${f.workflowCount === 1 ? "" : "s"} inside will move back to Home, not be deleted.`
       : undefined;
     if (!(await askConfirm({ title: `Delete folder “${f.name}”?`, body, danger: true }))) return;
-    const res = await deleteFolder(f.id);
+    const res = await safeAction(() => deleteFolder(f.id));
     toast(res.ok ? "Folder deleted" : res.error, res.ok ? "success" : "error");
   }
 
@@ -115,7 +116,7 @@ export default function WorkflowsList({
     toast(okMsg);
   }
   async function bulkPublish(publish: boolean) {
-    const res = await bulkSetPublish(ids, publish);
+    const res = await safeAction(() => bulkSetPublish(ids, publish));
     if (!res.ok) return toast(res.error, "error");
     setSelected(new Set());
     toast(
@@ -133,7 +134,7 @@ export default function WorkflowsList({
   }
   async function move(fd: FormData) {
     const raw = String(fd.get("folderId") ?? "");
-    const res = await moveWorkflowsToFolder(ids, raw || null);
+    const res = await safeAction(() => moveWorkflowsToFolder(ids, raw || null));
     if (!res.ok) return toast(res.error, "error");
     setMoveOpen(false);
     setSelected(new Set());

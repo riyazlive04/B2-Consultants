@@ -17,6 +17,7 @@ import type { SlotRow, TeamMemberOption } from "@/server/booking-metrics";
 import type { BookingRulesConfig } from "@/lib/config-schema";
 import { toDateInputValue } from "@/lib/dates";
 import { formatDuration } from "@/lib/duration";
+import { safeAction } from "@/lib/action-guard";
 
 const WEEKDAY_OPTIONS: { value: string; label: string; defaultOn: boolean }[] = [
   { value: "MON", label: "Mon", defaultOn: true },
@@ -34,7 +35,7 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
 
   const save = async (form: FormData) => {
     setError(null);
-    const res = await updateBookingRules(form);
+    const res = await safeAction(() => updateBookingRules(form));
     if (!res.ok) return setError(res.error);
     toast("Booking rules saved");
   };
@@ -42,7 +43,7 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
   const runNow = async () => {
     if (runningEngine) return;
     setRunningEngine(true);
-    const res = await runBookingAutomationNow();
+    const res = await safeAction(() => runBookingAutomationNow());
     setRunningEngine(false);
     if (!res.ok) return toast(res.error, "error");
     toast(res.summary ? `Confirmation loop ran - ${res.summary}` : "Confirmation loop ran");
@@ -80,7 +81,7 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
             name="autoCancelEnabled"
             label="Enable the confirmation loop"
             defaultChecked={rules.autoCancelEnabled}
-            hint="Master switch. Off by default: when off, no confirm requests are sent and nothing is auto-cancelled. Manual controls (block, postpone, mark-confirmed) always work."
+            hint="Master switch. Off by default: when off, no confirm requests are sent and nothing is auto-cancelled. Manual controls (block, reschedule, mark-confirmed) always work."
           />
           <CheckboxField
             name="promoteNext"
@@ -330,7 +331,7 @@ export function SlotManager({
 
   const generate = async (form: FormData) => {
     setError(null);
-    const res = await generateSlots(form);
+    const res = await safeAction(() => generateSlots(form));
     if (!res.ok) return setError(res.error);
     toast("Slots added");
     formRef.current?.reset();
@@ -344,7 +345,7 @@ export function SlotManager({
       danger: true,
     });
     if (!ok) return;
-    const res = await deleteSlot(s.id);
+    const res = await safeAction(() => deleteSlot(s.id));
     if (!res.ok) return toast(res.error, "error");
     toast("Slot removed");
   };
@@ -352,7 +353,7 @@ export function SlotManager({
   const toggleBlock = async (s: SlotRow) => {
     if (s.status === "BOOKED") return toast("Cancel the booking first", "error");
     const block = s.status !== "BLOCKED";
-    const res = await setSlotBlocked(s.id, block);
+    const res = await safeAction(() => setSlotBlocked(s.id, block));
     if (!res.ok) return toast(res.error, "error");
     toast(block ? "Slot blocked" : "Slot unblocked");
   };

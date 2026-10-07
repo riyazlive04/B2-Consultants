@@ -12,6 +12,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { DateText } from "@/components/ui/DateText";
 import { AmountPair } from "@/components/ui/AmountPair";
 import { createSubscription, setSubscriptionStatus, deleteSubscription } from "@/server/payments-actions";
+import { safeAction } from "@/lib/action-guard";
 
 type Row = {
   id: string; customerName: string; contactId: string | null; productName: string | null;
@@ -40,25 +41,26 @@ export default function SubscriptionsTab({
 
   async function create(fd: FormData) {
     setError(null);
-    const res = await createSubscription(fd);
+    const res = await safeAction(() => createSubscription(fd));
     if (!res.ok) return setError(res.error);
     toast("Subscription created");
     setOpen(false);
   }
   async function cycle(r: Row) {
     const next = r.status === "ACTIVE" ? "PAUSED" : r.status === "PAUSED" ? "ACTIVE" : "ACTIVE";
-    const res = await setSubscriptionStatus(r.id, next);
+    const res = await safeAction(() => setSubscriptionStatus(r.id, next));
     if (res.ok) toast(`Set ${next.toLowerCase()}`);
   }
   async function cancel(r: Row) {
     if (!(await askConfirm({ title: "Cancel subscription?", danger: true }))) return;
-    const res = await setSubscriptionStatus(r.id, "CANCELLED");
+    const res = await safeAction(() => setSubscriptionStatus(r.id, "CANCELLED"));
     if (res.ok) toast("Cancelled");
   }
   async function remove(r: Row) {
-    if (!(await askConfirm({ title: "Delete subscription?", danger: true }))) return;
-    const res = await deleteSubscription(r.id);
-    toast(res.ok ? "Deleted" : res.error, res.ok ? "success" : "error");
+    // Archive, not delete (issue 26) - restorable, like every other record in this section.
+    if (!(await askConfirm({ title: "Archive this subscription?", body: "Billing stops and it moves out of the active list. It can be restored.", confirmLabel: "Archive", danger: true }))) return;
+    const res = await safeAction(() => deleteSubscription(r.id));
+    toast(res.ok ? "Archived" : res.error, res.ok ? "success" : "error");
   }
 
   const columns: Column<Row>[] = [
@@ -87,7 +89,7 @@ export default function SubscriptionsTab({
         <div className="flex items-center justify-end gap-1">
           {r.status !== "CANCELLED" && <Btn size="sm" variant="ghost" onClick={() => cycle(r)}>{r.status === "ACTIVE" ? "Pause" : "Resume"}</Btn>}
           {r.status !== "CANCELLED" && <Btn size="sm" variant="ghost" onClick={() => cancel(r)}>Cancel</Btn>}
-          {canDelete && <IconButton label="Delete subscription" onClick={() => remove(r)}><Trash2 size={16} /></IconButton>}
+          {canDelete && <IconButton label="Archive subscription" onClick={() => remove(r)}><Trash2 size={16} /></IconButton>}
         </div>
       ),
     },

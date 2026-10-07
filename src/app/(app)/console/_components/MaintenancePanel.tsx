@@ -22,6 +22,7 @@ import {
 import { runCommissionPayout } from "@/server/commission-actions";
 import { Btn, Card, Hint, NumInput, Picker, SaveBar, TextIn, TimeIn, Toggle } from "./kit";
 import { SystemHealthPanel, type CronRowView, type ErrorRowView } from "./SystemHealthPanel";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Founder Console → Maintenance. One screen for the automations the app never had a clock to run
@@ -81,7 +82,7 @@ function MaintenanceCard({ config }: { config: MaintenanceConfig }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveMaintenanceConfig(draft);
+    const res = await safeAction(() => saveMaintenanceConfig(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);
@@ -153,7 +154,7 @@ function PostingCard({ config }: { config: FinancePostingConfig }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveFinancePostingConfig(draft);
+    const res = await safeAction(() => saveFinancePostingConfig(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);
@@ -199,7 +200,7 @@ function ReportCard({ config }: { config: ScheduledReportConfig }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveScheduledReportConfig(draft);
+    const res = await safeAction(() => saveScheduledReportConfig(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);
@@ -293,7 +294,7 @@ function CommissionPayoutCard() {
 
   async function run() {
     setBusy(true);
-    const res = await runCommissionPayout();
+    const res = await safeAction(() => runCommissionPayout());
     setBusy(false);
     if (!res.ok) return toast(res.error);
     toast("This month's commission payout recorded");

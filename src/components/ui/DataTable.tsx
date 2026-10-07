@@ -63,6 +63,8 @@ export function DataTable<T>({
   hideFilter = false,
   defaultSort,
   onRowClick,
+  mobileCard,
+  rowLabel,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -99,6 +101,22 @@ export function DataTable<T>({
    * any link in a cell do their own job rather than also opening the record behind them.
    */
   onRowClick?: (row: T) => void;
+  /**
+   * The phone rendering of a row, when a generic key-value dump is the wrong shape for it.
+   *
+   * The default below prints every column as a labelled row, which is honest and works for a
+   * five-column ledger. On a record with a dozen columns and controls in three of them it is a
+   * wall of text with the actions crushed into the right-hand quarter - so a caller that knows
+   * which two facts matter and which action comes next may draw its own card instead. Desktop is
+   * untouched either way: the same `columns` still build the table.
+   */
+  mobileCard?: (row: T) => ReactNode;
+  /**
+   * The accessible name of a clickable row. Only read with `onRowClick`, where it replaces the
+   * generic "Open this record" - a screen reader moving down twenty rows otherwise hears the
+   * same four words twenty times and cannot tell whose record it is about to open.
+   */
+  rowLabel?: (row: T) => string;
 }) {
   const initialSort = typeof defaultSort === "string" ? { key: defaultSort, dir: "asc" as const } : defaultSort;
   const [sortKey, setSortKey] = useState<string | null>(initialSort?.key ?? null);
@@ -121,8 +139,23 @@ export function DataTable<T>({
     let out = rows;
     if (deferredFilter.trim()) {
       const q = deferredFilter.trim().toLowerCase();
+      /**
+       * ── Grouped digits match too (issue 25) ────────────────────────────────────
+       * The filter compares against the column's RAW value, so a money column holding the number
+       * 80000 matched "80000" and not "80,000" - which is the only form of it anybody has ever
+       * seen, because it is what the table prints. Both are now compared: the raw text, and the
+       * same text with its separators taken out, against a query with its separators taken out.
+       *
+       * Done by stripping rather than by formatting, so it needs no notion of which columns are
+       * money, which locale groups in which places, or whether the ₹/€ toggle is on €.
+       */
+      const bare = (v: string) => v.replace(/[,\u00A0\s]/g, "");
+      const qBare = bare(q);
       out = out.filter((row) =>
-        columns.some((col) => String(raw(row, col) ?? "").toLowerCase().includes(q)),
+        columns.some((col) => {
+          const v = String(raw(row, col) ?? "").toLowerCase();
+          return v.includes(q) || (qBare !== "" && bare(v).includes(qBare));
+        }),
       );
     }
     if (sortKey) {
@@ -186,7 +219,12 @@ export function DataTable<T>({
   };
   const rowOpenProps = (row: T) =>
     onRowClick
-      ? { onClick: openRow(row), onKeyDown: openOnKey(row), tabIndex: 0, "aria-label": "Open this record" }
+      ? {
+          onClick: openRow(row),
+          onKeyDown: openOnKey(row),
+          tabIndex: 0,
+          "aria-label": rowLabel ? rowLabel(row) : "Open this record",
+        }
       : {};
   const allSelected = selectableVisible.length > 0 && selectableVisible.every(isSelected);
   const someSelected = selectableVisible.some(isSelected);
@@ -252,7 +290,16 @@ export function DataTable<T>({
     const data = visible.map((row) =>
       Object.fromEntries(columns.map((col) => [col.header, csvSafe(raw(row, col))])),
     );
-    const csv = Papa.unparse(data);
+    /**
+     * ── An empty export still gets its header row (issue 23) ──────────────────────
+     * `Papa.unparse([])` returns an empty string, so exporting a table with nothing in it
+     * produced a file containing only the byte-order mark - no columns, no clue what it was
+     * meant to be - while the server-streamed exports always wrote their header. Same file,
+     * same columns, zero rows: the honest representation of "nothing matched".
+     */
+    const csv = data.length
+      ? Papa.unparse(data)
+      : Papa.unparse({ fields: columns.map((col) => String(col.header)), data: [] });
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -284,7 +331,7 @@ export function DataTable<T>({
   return (
     <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
-        <div className="flex flex-1 items-center gap-3">
+        <div className="flex flex-1 flex-wrap items-center gap-3">
           {!hideFilter && (
             <div className="relative w-full max-w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} />
@@ -462,8 +509,13 @@ export function DataTable<T>({
             {paged.map((row, i) => (
               <li
                 key={selection ? selection.rowKey(row) : i}
-                {...rowOpenProps(row)}
-                className={`space-y-2 p-4 ${onRowClick ? "cursor-pointer hover:bg-surface-2" : ""} ${
+                /**
+                 * A caller-drawn card carries its own labelled "open" control, so the <li> must
+                 * NOT also be one: a listitem with tabIndex and an aria-label is announced as a
+                 * list item, not a button, and it doubles every card's tab stops.
+                 */
+                {...(mobileCard ? {} : rowOpenProps(row))}
+                className={`${mobileCard ? "p-4" : "space-y-2 p-4"} ${onRowClick && !mobileCard ? "cursor-pointer hover:bg-surface-2" : ""} ${
                   isSelected(row) ? "bg-primary-soft/40" : ""
                 } ${rowClassName?.(row) ?? ""}`}
               >
@@ -479,14 +531,16 @@ export function DataTable<T>({
                     Select
                   </label>
                 )}
-                {columns.map((col) => (
-                  <div key={col.key} className="flex items-baseline justify-between gap-4">
-                    <span className="flex-none text-label uppercase text-ink-2">{col.header}</span>
-                    <span className={`min-w-0 text-sm ${col.align === "right" ? "tnum text-right" : ""}`}>
-                      {col.cell(row)}
-                    </span>
-                  </div>
-                ))}
+                {mobileCard
+                  ? mobileCard(row)
+                  : columns.map((col) => (
+                      <div key={col.key} className="flex items-baseline justify-between gap-4">
+                        <span className="flex-none text-label uppercase text-ink-2">{col.header}</span>
+                        <span className={`min-w-0 text-sm ${col.align === "right" ? "tnum text-right" : ""}`}>
+                          {col.cell(row)}
+                        </span>
+                      </div>
+                    ))}
               </li>
             ))}
           </ul>

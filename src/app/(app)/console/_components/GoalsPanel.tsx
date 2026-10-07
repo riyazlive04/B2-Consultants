@@ -10,6 +10,7 @@ import { GOAL_METRIC_LABELS, GOAL_METRICS, periodLabel, type GoalProgress } from
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { EmptyState, Pill, ProgressBar } from "@/components/ui/kit";
 import { Btn, Card, Hint } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Goals: what the team is steering towards. Progress is derived from the same history
@@ -66,7 +67,7 @@ export function GoalsPanel({ goals, people }: { goals: GoalProgress[]; people: G
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = await saveGoal(form);
+    const res = await safeAction(() => saveGoal(form));
     if (!res.ok) return setError(res.error);
     toast(current ? "Goal updated" : "Goal created");
     close();
@@ -80,7 +81,7 @@ export function GoalsPanel({ goals, people }: { goals: GoalProgress[]; people: G
       danger: true,
     });
     if (!ok) return;
-    const res = await deleteGoal(g.goal.id);
+    const res = await safeAction(() => deleteGoal(g.goal.id));
     if (!res.ok) return toast(res.error, "error");
     toast("Goal deleted");
   };

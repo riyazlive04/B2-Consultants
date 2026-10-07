@@ -4,6 +4,10 @@ import { GUIDES } from "@/lib/guide-content";
 import { PageHeader } from "@/components/ui/kit";
 import { requireSection, visibleSections } from "@/lib/rbac";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Guide" };
+
 export const dynamic = "force-dynamic";
 
 /** App Guide - short how-tos, filtered to the features this user can actually open. */

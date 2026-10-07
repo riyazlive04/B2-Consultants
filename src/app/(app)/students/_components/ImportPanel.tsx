@@ -8,6 +8,7 @@ import { commitStudentImport, previewStudentImport } from "@/server/student-impo
 import { Btn } from "@/components/ui/controls";
 import { FormError } from "@/components/ui/form";
 import { askConfirm, toast } from "@/components/ui/feedback";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Student import (spec Part 2 §9: "Export exists now; import is planned").
@@ -33,7 +34,7 @@ export function ImportPanel() {
     setCsv(text);
     setFileName(file.name);
     setBusy(true);
-    const res = await previewStudentImport(text);
+    const res = await safeAction(() => previewStudentImport(text));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setPlan(res.plan);
@@ -48,7 +49,7 @@ export function ImportPanel() {
     });
     if (!ok) return;
     setBusy(true);
-    const res = await commitStudentImport(csv);
+    const res = await safeAction(() => commitStudentImport(csv));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     toast(res.summary ?? "Imported");

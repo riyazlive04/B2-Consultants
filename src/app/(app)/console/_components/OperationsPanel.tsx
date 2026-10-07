@@ -13,6 +13,7 @@ import { Field } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { saveBookOrderConfig, savePipelineConfig } from "@/server/console-actions";
 import { Card, Hint, NumInput, Picker, SaveBar, Toggle } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Two small operational rules that share a tab (Founder Console → Operations):
@@ -52,7 +53,7 @@ function BookOrderSection({ config }: { config: BookOrderConfig }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveBookOrderConfig(draft);
+    const res = await safeAction(() => saveBookOrderConfig(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);
@@ -146,7 +147,7 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await savePipelineConfig(draft);
+    const res = await safeAction(() => savePipelineConfig(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

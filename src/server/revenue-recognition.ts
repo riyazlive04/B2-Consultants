@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { ACTIVE } from "@/lib/soft-delete";
-import { aggInrMinor } from "@/lib/money";
+import { aggEurMinor, aggInrMinor } from "@/lib/money";
 import {
   recogniseAll,
   endDateForDuration,
@@ -26,6 +26,23 @@ export type RecognitionView = {
   deferredInrMinor: number;
   /** Recognised minus cash. Negative means we collected more than we earned. */
   varianceInrMinor: number;
+  /**
+   * ── The same three figures in euro (not a conversion of the above) ─────────────
+   * This card used to be the one number on Finance that ignored the ₹/€ toggle, under a comment
+   * saying there was "no meaningful same number in euros to switch to". That was half right: you
+   * cannot convert the rupee total, but you do not have to. Every income row stores BOTH an
+   * `amountInrMinor` and an `amountEurMinor`, and the aggregate helpers pick a side; the
+   * straight-line spread is linear per row, so running it over the euro aggregate yields the
+   * euro answer directly.
+   *
+   * That is the rule the rest of the page follows: the toggle PICKS a stored aggregate, it never
+   * converts one. Two screens that each convert at their own moment is how they come to disagree
+   * about the same payment.
+   */
+  cashEurMinor: number;
+  recognisedEurMinor: number;
+  deferredEurMinor: number;
+  varianceEurMinor: number;
   itemCount: number;
   /**
    * Incomes with no service period to spread over, so taken in full on their payment date.
@@ -96,26 +113,39 @@ export const getRecognition = cache(
     });
 
     let unlinkedCount = 0;
-    const items: RecognisableAmount[] = rows.map((r) => {
+    /**
+     * The service period is a property of the ROW, not of a currency, so it is resolved once and
+     * the two runs differ only in which stored aggregate they spread. Doing it this way is what
+     * keeps the euro answer a real aggregate rather than the rupee one divided by a rate.
+     */
+    const periods = rows.map((r) => {
       if (!r.enrollment) unlinkedCount++;
-      const period = periodFor(r);
-      return {
-        // One currency for the whole calculation. The app's convention is that a mixed-currency
-        // aggregate is expressed in INR at the rate stored on the row, so recognition uses the
-        // same figure every other total on the Finance page does - a second convention here
-        // would make two screens disagree about the same payment.
-        amountMinor: Number(aggInrMinor(r.amountInrMinor, r.amountEurMinor, r.fxRateUsed as never)),
-        ...period,
-      };
+      return periodFor(r);
     });
 
-    const totals = recogniseAll(items, { from, to });
+    const itemsIn = (pick: "INR" | "EUR"): RecognisableAmount[] =>
+      rows.map((r, i) => ({
+        amountMinor: Number(
+          pick === "INR"
+            ? aggInrMinor(r.amountInrMinor, r.amountEurMinor, r.fxRateUsed as never)
+            : aggEurMinor(r.amountInrMinor, r.amountEurMinor, r.fxRateUsed as never),
+        ),
+        ...periods[i],
+      }));
+
+    const totals = recogniseAll(itemsIn("INR"), { from, to });
+    const eur = recogniseAll(itemsIn("EUR"), { from, to });
 
     return {
       cashInrMinor: totals.cashMinor,
       recognisedInrMinor: totals.recognisedMinor,
       deferredInrMinor: totals.deferredMinor,
       varianceInrMinor: totals.recognisedMinor - totals.cashMinor,
+      cashEurMinor: eur.cashMinor,
+      recognisedEurMinor: eur.recognisedMinor,
+      deferredEurMinor: eur.deferredMinor,
+      varianceEurMinor: eur.recognisedMinor - eur.cashMinor,
+      // Counted off the rupee run; both runs walk the same rows, so the counts are identical.
       itemCount: totals.itemCount,
       immediateCount: totals.immediateCount,
       unlinkedCount,

@@ -14,6 +14,10 @@ import Board from "./_components/Board";
 import { BoardFilterBar } from "./_components/BoardFilterBar";
 import { StageRulesCard } from "./_components/StageRulesCard";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Opportunities" };
+
 export const dynamic = "force-dynamic";
 
 export default async function OpportunitiesPage({

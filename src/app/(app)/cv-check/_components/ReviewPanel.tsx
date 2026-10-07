@@ -14,6 +14,7 @@ import { sortFindings, type AiReviewResult, type ReviewSeverity } from "@/lib/re
 import { enabledAtsRules, type ResumeTemplateConfig } from "@/lib/resume-template";
 import type { ResumeDetail, AiStatus } from "@/server/resume-metrics";
 import { runReview, deleteReview } from "@/server/resume-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The JD-driven ATS review. Paste the target job description, run it against the
@@ -58,7 +59,7 @@ export function ReviewPanel({
     setError(null);
     setNote(null);
     start(async () => {
-      const res = await runReview({ resumeId: resume.id, jdText: jd });
+      const res = await safeAction(() => runReview({ resumeId: resume.id, jdText: jd }));
       if (!res.ok) {
         setError(res.error);
         return;

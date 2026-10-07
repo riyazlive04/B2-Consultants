@@ -5,6 +5,9 @@ import { aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
 import { computeStudentJourney, type GamificationConfig, type StudentJourney } from "@/lib/gamification";
 import { getGamificationConfig } from "./founder-config";
+import { levelKinds, levelLabels } from "./levels";
+import { lineForKind, type BusinessLine } from "@/lib/business-line";
+import { parseStudentCodeParts } from "@/lib/student-code";
 
 /** Students dashboards (PRD2 §4): counts, 90/120 tracker, satisfaction, LTV. */
 
@@ -22,6 +25,91 @@ import { getGamificationConfig } from "./founder-config";
 export async function getStudentCodeMap(): Promise<Record<string, string>> {
   const rows = await prisma.student.findMany({ select: { id: true, code: true } });
   return Object.fromEntries(rows.flatMap((s) => (s.code ? [[s.id, s.code] as const] : [])));
+}
+
+/**
+ * A student as a pick-list row: who they are, how to tell them apart, and which book they are in.
+ *
+ * ── Why the line travels with the option ─────────────────────────────────────────
+ * The receivable form asks for a student and a programme level side by side, and the level
+ * decides the business. Offering the whole roster regardless meant scrolling German Note
+ * students while raising a B2 receivable - and worse, picking one, since two people can share a
+ * name and the only thing distinguishing them was a code the operator had no reason to read.
+ */
+export type StudentPickerOption = {
+  value: string;
+  label: string;
+  /** The student code (§6.1) - shown beside the name and searchable with it. */
+  hint?: string;
+  /** The levels they hold, shown muted beneath the name and searchable: "Guided · GN A1". */
+  meta?: string;
+  /**
+   * Which business(es) this student belongs to.
+   *
+   * EMPTY MEANS UNKNOWN, AND UNKNOWN MEANS SHOW THEM. Sixteen of the students on this install
+   * have no code and no history at all; excluding them because nothing is recorded would hide
+   * exactly the people a payer search exists to find, which is a far worse failure than the
+   * clutter being removed. A student is only ever filtered OUT on positive evidence that they
+   * belong to the other book.
+   */
+  lines: BusinessLine[];
+};
+
+/**
+ * Every student, with their books and levels resolved.
+ *
+ * A student counts as belonging to a line when EITHER their code series says so (B2-0007 was
+ * issued by B2) OR they hold a level sold by it - taken from enrolments, receivables and past
+ * payments together. The union is deliberate: somebody who buys German classes while being
+ * coached for a move to Germany is in both books, and must appear on both forms. Nobody on this
+ * install is in both today, which is precisely why it would have gone unnoticed until it bit.
+ */
+export async function getStudentPickerOptions(): Promise<StudentPickerOption[]> {
+  const [students, enrollments, pendings, incomes, kinds, labels] = await Promise.all([
+    prisma.student.findMany({
+      orderBy: { fullName: "asc" },
+      select: { id: true, fullName: true, code: true },
+    }),
+    prisma.enrollment.findMany({ select: { studentId: true, programLevel: true } }),
+    prisma.pendingPayment.findMany({
+      where: { ...ACTIVE, studentId: { not: null } },
+      select: { studentId: true, programLevel: true },
+    }),
+    prisma.income.findMany({
+      where: { ...ACTIVE, studentId: { not: null } },
+      select: { studentId: true, programLevel: true },
+      distinct: ["studentId", "programLevel"],
+    }),
+    levelKinds(),
+    levelLabels(),
+  ]);
+
+  /** studentId → the level codes they hold anywhere, in first-seen order. */
+  const levelsOf = new Map<string, string[]>();
+  for (const r of [...enrollments, ...pendings, ...incomes]) {
+    if (!r.studentId) continue;
+    const list = levelsOf.get(r.studentId) ?? [];
+    if (!list.includes(r.programLevel)) list.push(r.programLevel);
+    levelsOf.set(r.studentId, list);
+  }
+
+  return students.map((s) => {
+    const levels = levelsOf.get(s.id) ?? [];
+    const lines = new Set<BusinessLine>();
+    // The series that issued the code is evidence on its own - a GN-0001 with no history yet is
+    // still a German Note student, and is exactly the row somebody is about to raise a fee for.
+    const fromCode = parseStudentCodeParts(s.code);
+    if (fromCode) lines.add(fromCode.line);
+    for (const code of levels) lines.add(lineForKind(kinds.get(code)));
+
+    return {
+      value: s.id,
+      label: s.fullName,
+      hint: s.code ?? undefined,
+      meta: levels.length ? levels.map((c) => labels[c] ?? c).join(" · ") : undefined,
+      lines: [...lines],
+    };
+  });
 }
 
 const dayDiff = (a: Date, b: Date) => Math.floor((a.getTime() - b.getTime()) / 86400000);

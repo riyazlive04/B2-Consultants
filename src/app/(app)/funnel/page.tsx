@@ -8,6 +8,10 @@ import { SnapshotForm } from "./_components/SnapshotForm";
 import { FunnelMetricsTable, FunnelAttributionTable, FunnelSnapshotsTable } from "./_components/FunnelTables";
 import { FunnelTrend } from "./_components/FunnelTrend";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Conversion Funnel" };
+
 export const dynamic = "force-dynamic";
 
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);

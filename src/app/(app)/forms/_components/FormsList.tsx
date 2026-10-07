@@ -12,6 +12,7 @@ import { EmptyState, Pill } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { DateText } from "@/components/ui/DateText";
 import { createForm, deleteForm } from "@/server/forms-actions";
+import { safeAction } from "@/lib/action-guard";
 
 type StatusFilter = "published" | "draft";
 
@@ -23,7 +24,7 @@ export default function FormsList({ forms, canDelete }: { forms: FormListRow[]; 
 
   async function create(fd: FormData) {
     setError(null);
-    const res = await createForm(fd);
+    const res = await safeAction(() => createForm(fd));
     if (!res.ok) return setError(res.error);
     toast("Form created");
     setOpen(false);
@@ -46,7 +47,7 @@ export default function FormsList({ forms, canDelete }: { forms: FormListRow[]; 
 
   async function remove(f: FormListRow) {
     if (!(await askConfirm({ title: `Delete "${f.name}"?`, body: "Submissions are deleted too.", danger: true }))) return;
-    const res = await deleteForm(f.id);
+    const res = await safeAction(() => deleteForm(f.id));
     toast(res.ok ? "Form deleted" : res.error, res.ok ? "success" : "error");
   }
 

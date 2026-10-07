@@ -11,6 +11,7 @@ import { Card, CardTitle, Divider, Hint, Pill } from "@/components/ui/kit";
 import { Field, Select } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { saveWorkflowSettings } from "@/server/automation-actions";
+import { safeAction } from "@/lib/action-guard";
 
 const HOUR_OPTS = Array.from({ length: 24 }, (_, h) => ({
   value: String(h),
@@ -34,7 +35,7 @@ export default function WorkflowSettingsForm({ settings }: { settings: WorkflowS
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveWorkflowSettings(draft);
+    const res = await safeAction(() => saveWorkflowSettings(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

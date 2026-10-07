@@ -37,7 +37,10 @@ export default async function GnManagePage() {
 
       {/* Workshops moved to /german-note → Financials, where the money they make
           already lives. One home per thing. */}
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
       <Tabs
+        urlKey="tab"
         tabs={[
           { label: "Batches", content: <BatchesPanel batches={batches} tutors={tutors} levelOptions={germanLevelOptions} /> },
           { label: "Members", content: <MembersPanel batches={batches} students={students} /> },

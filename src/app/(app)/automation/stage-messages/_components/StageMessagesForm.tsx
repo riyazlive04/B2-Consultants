@@ -17,6 +17,7 @@ import { Card, CardTitle, Hint, Pill } from "@/components/ui/kit";
 import { Field, TextArea, TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { saveStageMessages } from "@/server/stage-messages-actions";
+import { safeAction } from "@/lib/action-guard";
 
 export default function StageMessagesForm({
   config,
@@ -38,7 +39,7 @@ export default function StageMessagesForm({
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveStageMessages(draft);
+    const res = await safeAction(() => saveStageMessages(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

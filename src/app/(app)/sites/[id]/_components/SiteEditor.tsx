@@ -18,6 +18,7 @@ import {
   updateSiteSettings,
 } from "@/server/sites-actions";
 import PageCard from "./PageCard";
+import { safeAction } from "@/lib/action-guard";
 
 const input =
   "h-9 w-full rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary";
@@ -124,7 +125,7 @@ export default function SiteEditor({ site, canManage }: { site: SiteDetail; canM
                   busy={busy}
                   onClick={() =>
                     run(async () => {
-                      const res = await createPage(site.id, newTitle, newPath || newTitle);
+                      const res = await safeAction(() => createPage(site.id, newTitle, newPath || newTitle));
                       if (res.ok) {
                         setNewTitle("");
                         setNewPath("");

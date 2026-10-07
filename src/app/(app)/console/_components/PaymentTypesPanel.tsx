@@ -13,6 +13,7 @@ import {
 import { isLockedPaymentType } from "@/lib/payment-types";
 import { toast } from "@/components/ui/feedback";
 import { savePaymentTypesConfig } from "@/server/console-actions";
+import { safeAction } from "@/lib/action-guard";
 import {
   Btn, Card, ColHead, ColRow, ColScroll, Hint, NameCell, Picker, RemoveCell, SaveBar, TextIn, Toggle,
 } from "./kit";
@@ -81,7 +82,7 @@ export function PaymentTypesPanel({ config }: { config: PaymentTypesConfig }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await savePaymentTypesConfig(draft);
+    const res = await safeAction(() => savePaymentTypesConfig(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

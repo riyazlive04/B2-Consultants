@@ -27,6 +27,7 @@ import {
 } from "@/lib/gamification";
 import { formatDate } from "@/lib/format";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { safeAction } from "@/lib/action-guard";
 import {
   Btn,
   Card,
@@ -158,7 +159,7 @@ export function GamificationPanel({ config }: { config: GamificationConfig }) {
     setError(null);
     const form = new FormData();
     form.set("config", JSON.stringify(draft));
-    const res = await saveGamificationConfig(form);
+    const res = await safeAction(() => saveGamificationConfig(form));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setDirty(false);
@@ -174,7 +175,7 @@ export function GamificationPanel({ config }: { config: GamificationConfig }) {
     });
     if (!ok) return;
     setBusy(true);
-    const res = await resetGamificationConfig();
+    const res = await safeAction(() => resetGamificationConfig());
     setBusy(false);
     if (!res.ok) return setError(res.error);
     toast("Gamification rules reset - reload to see them");

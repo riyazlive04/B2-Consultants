@@ -4,9 +4,10 @@ import { useState } from "react";
 import { logCall } from "@/server/call-log-actions";
 import { SETTER_NEXT_STAGES } from "@/lib/call-outcome";
 import { LEAD_STAGE_LABELS } from "@/lib/labels";
-import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { Field, FormError, NotesField, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/feedback";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * "Log outcome" - the one modal BOTH specialist desks use to record a call.
@@ -117,7 +118,7 @@ export function LogOutcomeModal({
           if (!online) return queueIt("you are offline");
 
           try {
-            const res = await logCall(lead.id, form);
+            const res = await safeAction(() => logCall(lead.id, form));
             // A rejection from the server is a real answer (bad input, missing lead) - the
             // request travelled, so queueing it would just fail again later.
             if (!res.ok) return setError(res.error);
@@ -166,9 +167,7 @@ export function LogOutcomeModal({
           </Field>
         )}
 
-        <Field label="Notes (optional)">
-          <TextInput kind="text" name="notes" maxLength={500} placeholder="What did they say?" />
-        </Field>
+        <NotesField label="Notes (optional)" placeholder="What did they say?" />
         <p className="text-caption text-muted">
           {autoCloses
             ? "This closes the lead automatically - no stage to set."

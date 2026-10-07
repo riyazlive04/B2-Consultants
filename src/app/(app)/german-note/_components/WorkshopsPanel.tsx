@@ -17,6 +17,7 @@ import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
 import { inr } from "./workshopFormat";
+import { safeAction } from "@/lib/action-guard";
 
 function WorkshopFields({ workshop }: { workshop?: GnWorkshopSummary }) {
   return (
@@ -105,7 +106,7 @@ export function WorkshopsPanel({
           className="rounded-card border border-line bg-surface p-4 shadow-card"
           action={async (form) => {
             setError(null);
-            const res = await createWorkshop(form);
+            const res = await safeAction(() => createWorkshop(form));
             if (!res.ok) return setError(res.error);
             setCreating(false);
             toast("Workshop created");
@@ -159,7 +160,7 @@ export function WorkshopsPanel({
                         danger: true,
                       });
                       if (!ok) return;
-                      const res = await deleteWorkshop(w.id);
+                      const res = await safeAction(() => deleteWorkshop(w.id));
                       if (!res.ok) return toast(res.error, "error");
                       toast("Workshop deleted");
                       refresh();
@@ -190,7 +191,7 @@ export function WorkshopsPanel({
           <form
             action={async (form) => {
               setError(null);
-              const res = await updateWorkshop(editing.id, form);
+              const res = await safeAction(() => updateWorkshop(editing.id, form));
               if (!res.ok) return setError(res.error);
               setEditing(null);
               toast("Workshop updated");

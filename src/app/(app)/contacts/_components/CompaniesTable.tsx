@@ -9,6 +9,7 @@ import { toast, askConfirm } from "@/components/ui/feedback";
 import { EmptyState } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { createCompany, updateCompany, deleteCompany } from "@/server/contacts-actions";
+import { safeAction } from "@/lib/action-guard";
 
 type Row = {
   id: string;
@@ -51,17 +52,20 @@ export default function CompaniesTable({
 
   async function submit(fd: FormData) {
     setError(null);
-    const res = editing ? await updateCompany(editing.id, fd) : await createCompany(fd);
+    const res = await safeAction(() =>
+      editing ? updateCompany(editing.id, fd) : createCompany(fd),
+    );
     if (!res.ok) return setError(res.error);
     toast(editing ? "Company updated" : "Company added");
     setOpen(false);
   }
 
   async function remove(r: Row) {
-    const ok = await askConfirm({ title: `Delete ${r.name}?`, body: "Contacts stay, but lose this company link.", danger: true });
+    // `deleteCompany` archives - the row is restorable, so the dialog must not say "delete".
+    const ok = await askConfirm({ title: `Archive ${r.name}?`, body: "Contacts stay, but lose this company link. The company can be restored.", confirmLabel: "Archive", danger: true });
     if (!ok) return;
-    const res = await deleteCompany(r.id);
-    toast(res.ok ? "Company deleted" : res.error, res.ok ? "success" : "error");
+    const res = await safeAction(() => deleteCompany(r.id));
+    toast(res.ok ? "Company archived" : res.error, res.ok ? "success" : "error");
   }
 
   const columns: Column<Row>[] = [
@@ -86,7 +90,7 @@ export default function CompaniesTable({
           <Btn size="sm" variant="ghost" onClick={() => openEdit(r)}>
             Edit
           </Btn>
-          {canDelete && <IconButton label="Delete company" onClick={() => remove(r)}><Trash2 size={16} /></IconButton>}
+          {canDelete && <IconButton label="Archive company" onClick={() => remove(r)}><Trash2 size={16} /></IconButton>}
         </div>
       ),
     },

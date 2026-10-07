@@ -27,6 +27,7 @@ import {
   createNote, deleteNote, toggleNotePin, createTask, toggleTask, deleteTask,
 } from "@/server/contacts-actions";
 import { convertLeadToStudent } from "@/server/students-actions";
+import { safeAction } from "@/lib/action-guard";
 
 const SOURCE_OPTS = [
   { value: "INSTAGRAM", label: "Instagram" }, { value: "YOUTUBE", label: "YouTube" },
@@ -83,7 +84,7 @@ export default function ContactRecord({
 
   async function saveDetails(fd: FormData) {
     setEditError(null);
-    const res = await updateContact(contact.id, fd);
+    const res = await safeAction(() => updateContact(contact.id, fd));
     if (!res.ok) return setEditError(res.error);
     toast("Contact updated");
     setEditOpen(false);
@@ -97,7 +98,7 @@ export default function ContactRecord({
       confirmLabel: "Convert",
     });
     if (!ok) return;
-    const res = await convertLeadToStudent(contact.id);
+    const res = await safeAction(() => convertLeadToStudent(contact.id));
     if (!res.ok) return toast(res.error, "error");
     toast("Converted to student");
     router.push("/students");
@@ -106,12 +107,12 @@ export default function ContactRecord({
   async function addTag() {
     const name = newTag.trim();
     if (!name) return;
-    const res = await addContactTag(contact.id, name);
+    const res = await safeAction(() => addContactTag(contact.id, name));
     if (res.ok) { toast("Tag added"); setNewTag(""); } else toast(res.error, "error");
   }
 
   async function saveCustomField(key: string) {
-    const res = await setContactCustomField(contact.id, key, cfValues[key] ?? "");
+    const res = await safeAction(() => setContactCustomField(contact.id, key, cfValues[key] ?? ""));
     if (res.ok) toast("Saved");
     else toast(res.error, "error");
   }
@@ -153,7 +154,7 @@ export default function ContactRecord({
                   aria-label="Owner"
                   defaultValue={contact.ownerId ?? ""}
                   onChange={async (e) => {
-                    const res = await setContactOwner(contact.id, e.target.value);
+                    const res = await safeAction(() => setContactOwner(contact.id, e.target.value));
                     if (res.ok) toast("Owner updated");
                   }}
                   options={ownerOpts}
@@ -329,7 +330,7 @@ function Notes({ contact }: { contact: ContactDetail }) {
   const [error, setError] = useState<string | null>(null);
   async function add(fd: FormData) {
     setError(null);
-    const res = await createNote(contact.id, fd);
+    const res = await safeAction(() => createNote(contact.id, fd));
     if (!res.ok) return setError(res.error);
     toast(res.mentionedCount ? `Note added - mentioned ${res.mentionedCount}` : "Note added");
     ref.current?.reset();
@@ -374,7 +375,7 @@ function ContactTasks({ contact, owners }: { contact: ContactDetail; owners: { i
   async function add(fd: FormData) {
     setError(null);
     fd.set("leadId", contact.id);
-    const res = await createTask(fd);
+    const res = await safeAction(() => createTask(fd));
     if (!res.ok) return setError(res.error);
     toast("Task added");
     ref.current?.reset();
@@ -402,7 +403,9 @@ function ContactTasks({ contact, owners }: { contact: ContactDetail; owners: { i
                 {t.assigneeName && ` · ${t.assigneeName}`}
               </p>
             </div>
-            <IconButton label="Delete task" onClick={async () => { if (await askConfirm({ title: "Delete task?", danger: true })) { const r = await deleteTask(t.id); if (r.ok) toast("Deleted"); } }}>
+            {/* Archive, not delete (issue 26 class): `deleteTask` soft-deletes, so the task is
+                recoverable. The note button beside it really does delete, and says so. */}
+            <IconButton label="Archive task" onClick={async () => { if (await askConfirm({ title: "Archive this task?", body: "It leaves the list and can be restored.", confirmLabel: "Archive", danger: true })) { const r = await deleteTask(t.id); if (r.ok) toast("Task archived"); } }}>
               <Trash2 size={14} />
             </IconButton>
           </div>

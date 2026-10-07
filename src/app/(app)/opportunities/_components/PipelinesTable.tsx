@@ -13,6 +13,7 @@ import { toast, askConfirm } from "@/components/ui/feedback";
 import { Card, EmptyState, Pill } from "@/components/ui/kit";
 import { DateText } from "@/components/ui/DateText";
 import { TablePager, usePaged } from "@/components/ui/pager";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The Pipelines management list.
@@ -85,7 +86,7 @@ export function PipelinesTable({ rows, canConfigure }: { rows: PipelineRow[]; ca
 
   async function add(form: FormData) {
     setAddError(null);
-    const res = await createPipeline(form);
+    const res = await safeAction(() => createPipeline(form));
     if (!res.ok) return setAddError(res.error);
     setAddOpen(false);
     toast("Pipeline created");
@@ -95,7 +96,7 @@ export function PipelinesTable({ rows, canConfigure }: { rows: PipelineRow[]; ca
   async function saveRename(form: FormData) {
     if (!renaming) return;
     setRenameError(null);
-    const res = await renamePipeline(renaming.id, String(form.get("name") ?? ""));
+    const res = await safeAction(() => renamePipeline(renaming.id, String(form.get("name") ?? "")));
     if (!res.ok) return setRenameError(res.error);
     setRenaming(null);
     toast("Pipeline renamed");
@@ -115,7 +116,7 @@ export function PipelinesTable({ rows, canConfigure }: { rows: PipelineRow[]; ca
       danger: true,
     });
     if (!ok) return;
-    const res = await deletePipeline(row.id);
+    const res = await safeAction(() => deletePipeline(row.id));
     if (!res.ok) return toast(res.error);
     toast("Pipeline deleted");
     router.refresh();

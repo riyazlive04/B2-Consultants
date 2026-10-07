@@ -32,6 +32,10 @@ import { parsePeriod, resolvePeriod } from "@/lib/period";
 import { getArchivedLeads } from "@/server/archive-metrics";
 import { restoreLead, purgeLead } from "@/server/contacts-actions";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Pipeline" };
+
 export const dynamic = "force-dynamic";
 
 export default async function PipelinePage({
@@ -497,8 +501,10 @@ export default async function PipelinePage({
           )}
         </>
       )}
-
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
       <Tabs
+        urlKey="tab"
         tabs={[
           // Board first when the founder has chosen drag-and-drop - the mode they picked
           // should be the one they land on, not a tab they have to go find.

@@ -15,6 +15,7 @@ const SignaturePad = dynamic(
 );
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
 import { collectReportedDevice } from "@/lib/device";
+import { safeAction } from "@/lib/action-guard";
 import {
   cloneAgreement,
   issueAgreement,
@@ -63,7 +64,7 @@ export function AgreementActions({
   function doIssueSaved() {
     setError(null);
     startTransition(async () => {
-      const res = await issueAgreementWithSavedSignature(id, collectReportedDevice());
+      const res = await safeAction(() => issueAgreementWithSavedSignature(id, collectReportedDevice()));
       if (!res.ok) return toast(res.error, "error");
       if (res.data!.kind === "needsSignature") {
         setSignOpen("save"); // nothing stored yet - draw once, then this sends
@@ -81,12 +82,12 @@ export function AgreementActions({
     setError(null);
     startTransition(async () => {
       if (signOpen === "save") {
-        const saved = await saveFounderSignature(signature.dataUrl, signature.device);
+        const saved = await safeAction(() => saveFounderSignature(signature.dataUrl, signature.device));
         if (!saved.ok) return setError(saved.error);
         toast("Signature saved - next time this is one tap.");
       }
       // The founder's own device is captured too: the certificate names both signatories.
-      const res = await issueAgreement(id, signature.dataUrl, signature.device);
+      const res = await safeAction(() => issueAgreement(id, signature.dataUrl, signature.device));
       if (!res.ok) {
         setError(res.error);
         return;
@@ -104,7 +105,7 @@ export function AgreementActions({
         danger: true,
       });
       if (!ok) return;
-      const res = await voidAgreement(id, "Voided by founder");
+      const res = await safeAction(() => voidAgreement(id, "Voided by founder"));
       if (!res.ok) return toast(res.error, "error");
       toast("Agreement voided");
       router.refresh();
@@ -113,7 +114,7 @@ export function AgreementActions({
 
   function doClone() {
     startTransition(async () => {
-      const res = await cloneAgreement(id);
+      const res = await safeAction(() => cloneAgreement(id));
       if (!res.ok) return toast(res.error, "error");
       toast("New draft created");
       router.push(`/agreements/${res.data!.id}`);
@@ -123,7 +124,7 @@ export function AgreementActions({
 
   function doResend() {
     startTransition(async () => {
-      const res = await resendAgreementLink(id);
+      const res = await safeAction(() => resendAgreementLink(id));
       if (!res.ok) return toast(res.error, "error");
       toast(res.data!.delivery);
       router.refresh();

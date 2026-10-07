@@ -4,6 +4,10 @@ import { ListHeader } from "@/components/ui/ListHeader";
 import { getFunnelsList } from "@/server/funnels-metrics";
 import FunnelsList from "./_components/FunnelsList";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Funnels" };
+
 export const dynamic = "force-dynamic";
 
 export default async function FunnelsPage() {

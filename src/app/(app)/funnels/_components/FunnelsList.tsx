@@ -12,6 +12,7 @@ import { EmptyState, Pill } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { DateText } from "@/components/ui/DateText";
 import { createFunnel, deleteFunnel } from "@/server/funnels-actions";
+import { safeAction } from "@/lib/action-guard";
 
 type StatusFilter = "published" | "draft";
 
@@ -23,7 +24,7 @@ export default function FunnelsList({ funnels, canDelete }: { funnels: FunnelLis
 
   async function create(fd: FormData) {
     setError(null);
-    const res = await createFunnel(fd);
+    const res = await safeAction(() => createFunnel(fd));
     if (!res.ok) return setError(res.error);
     toast("Funnel created");
     setOpen(false);
@@ -34,7 +35,7 @@ export default function FunnelsList({ funnels, canDelete }: { funnels: FunnelLis
   }
   async function remove(f: FunnelListRow) {
     if (!(await askConfirm({ title: `Delete "${f.name}"?`, body: "All steps are deleted.", danger: true }))) return;
-    const res = await deleteFunnel(f.id);
+    const res = await safeAction(() => deleteFunnel(f.id));
     toast(res.ok ? "Funnel deleted" : res.error, res.ok ? "success" : "error");
   }
 

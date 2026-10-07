@@ -8,6 +8,7 @@ import { Field, TextInput } from "@/components/ui/form";
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { normalizeDomain } from "@/lib/whatsapp";
 import { saveWhatsAppDomainGate } from "@/server/whatsapp-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Which domains WATI is allowed to serve.
@@ -63,7 +64,7 @@ export function WhatsAppDomainGate({
       if (!ok) return;
     }
     setBusy(true);
-    const res = await saveWhatsAppDomainGate({ enabled: on, domains: list });
+    const res = await safeAction(() => saveWhatsAppDomainGate({ enabled: on, domains: list }));
     setBusy(false);
     toast(res.message, res.ok ? "success" : "error");
     if (res.ok) router.refresh();

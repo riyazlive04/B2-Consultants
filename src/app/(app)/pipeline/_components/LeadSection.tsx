@@ -17,6 +17,7 @@ import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/c
 import { PhoneField } from "@/components/ui/PhoneField";
 import { formatDate, formatDuration } from "@/lib/format";
 import { signalForSpeedToLead } from "@/lib/signals";
+import { safeAction } from "@/lib/action-guard";
 import {
   LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, LEAD_STAGE_LABEL_ORDER, optionsFrom, PAYMENT_PLAN_LABELS, PROGRAM_LEVEL_LABELS,
 } from "@/lib/labels";
@@ -98,7 +99,9 @@ export function LeadSection({
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = editing ? await updateLead(editing.id, form) : await createLead(form);
+    const res = await safeAction(() =>
+      editing ? updateLead(editing.id, form) : createLead(form),
+    );
     if (!res.ok) return setError(res.error);
     toast(editing ? "Lead updated" : "Lead added to pipeline");
     setEditing(null);
@@ -110,16 +113,16 @@ export function LeadSection({
     // Delete IS a soft-delete (archive) - reversible - so it follows the Gmail undo-send
     // model instead of a blocking confirm: archive now, offer Undo for a grace window.
     // askConfirm stays reserved for the truly irreversible (permanent purge).
-    const res = await deleteLead(row.id);
+    const res = await safeAction(() => deleteLead(row.id));
     if (!res.ok) return toast(res.error, "error");
     toastUndo(`Archived ${row.name}`, async () => {
-      const r = await restoreLead(row.id);
+      const r = await safeAction(() => restoreLead(row.id));
       toast(r.ok ? `Restored ${row.name}` : r.error, r.ok ? "success" : "error");
     });
   };
 
   const contact = async (row: LeadRow) => {
-    const res = await markLeadContacted(row.id);
+    const res = await safeAction(() => markLeadContacted(row.id));
     if (!res.ok) return toast(res.error, "error");
     toast("Marked contacted");
   };
@@ -128,7 +131,7 @@ export function LeadSection({
     const prev = ownerOf(row);
     if (userId === prev) return;
     setAssignVal((m) => ({ ...m, [row.id]: userId })); // optimistic
-    const res = await assignLead(row.id, userId);
+    const res = await safeAction(() => assignLead(row.id, userId));
     if (!res.ok) {
       setAssignVal((m) => ({ ...m, [row.id]: prev })); // rollback the select
       return toast(res.error, "error");

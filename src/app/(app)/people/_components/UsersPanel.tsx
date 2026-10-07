@@ -20,6 +20,7 @@ import { Btn, CopyField, IconButton, SubmitBtn } from "@/components/ui/controls"
 import { formatDate } from "@/lib/format";
 import { effectiveSectionKeys, type AppRole, type ResolvedSection } from "@/lib/sections";
 import { AccessDialog, type Actor } from "./AccessDialog";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Team & access.
@@ -96,7 +97,7 @@ export function UsersPanel({
   };
 
   const onResend = async (u: ListedUser) => {
-    const res = await resendInvite(u.id);
+    const res = await safeAction(() => resendInvite(u.id));
     if (!res.ok) return toast(res.error, "error");
     setInvite({ url: res.inviteUrl, expiresInDays: res.expiresInDays });
   };
@@ -286,7 +287,7 @@ export function UsersPanel({
           <form
             action={async (form) => {
               setPwError(null);
-              const res = await setUserPassword(pwFor.id, form);
+              const res = await safeAction(() => setUserPassword(pwFor.id, form));
               if (!res.ok) return setPwError(res.error);
               toast(`Password updated for ${pwFor.name}`);
               setPwFor(null);

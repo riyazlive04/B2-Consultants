@@ -13,6 +13,7 @@ import { Pill } from "@/components/ui/kit";
 import { formatDateTimeInZone } from "@/lib/format";
 import { getOpportunityDetail, updateOpportunityContact, type OpportunityDetail } from "@/server/opportunities-actions";
 import { createTask, toggleTask } from "@/server/contacts-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The "Edit opportunity" dialog, laid out like Synamate's: a left rail of sections, the contact
@@ -89,7 +90,7 @@ export function OpportunityDialog({
     contactFd.set("name", String(fd.get("contactName") ?? ""));
     contactFd.set("phone", String(fd.get("contactPhone") ?? ""));
     contactFd.set("email", String(fd.get("contactEmail") ?? ""));
-    const c = await updateOpportunityContact(card.contactId, contactFd);
+    const c = await safeAction(() => updateOpportunityContact(card.contactId, contactFd));
     if (!c.ok) return setContactError(c.error);
     for (const k of ["contactName", "contactPhone", "contactEmail"]) fd.delete(k);
     await onSave(fd);
@@ -261,7 +262,7 @@ function TasksPanel({
   async function add(fd: FormData) {
     setErr(null);
     fd.set("leadId", leadId);
-    const res = await createTask(fd);
+    const res = await safeAction(() => createTask(fd));
     if (!res.ok) return setErr(res.error);
     toast("Task added");
     onChanged();
@@ -290,7 +291,7 @@ function TasksPanel({
                 disabled={busyId === t.id}
                 onClick={async () => {
                   setBusyId(t.id);
-                  const res = await toggleTask(t.id);
+                  const res = await safeAction(() => toggleTask(t.id));
                   setBusyId(null);
                   if (!res.ok) return toast(res.error, "error");
                   onChanged();

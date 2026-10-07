@@ -11,6 +11,7 @@ import { Select, TextInput } from "@/components/ui/form";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { toast } from "@/components/ui/feedback";
 import { TablePager, usePaged } from "@/components/ui/pager";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The weekly tracker round - every student a coach is updating, on one screen.
@@ -88,7 +89,7 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
   const submit = async (form: FormData) => {
     if (touched.size === 0) return toast("Nothing changed yet", "error");
     setBusy(true);
-    const res = await updateTrackerBatch(form);
+    const res = await safeAction(() => updateTrackerBatch(form));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
 

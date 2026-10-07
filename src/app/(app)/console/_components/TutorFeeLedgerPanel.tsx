@@ -9,6 +9,7 @@ import { Field } from "@/components/ui/form";
 import { TablePager, usePaged } from "@/components/ui/pager";
 import type { TutorFeeRow } from "@/server/tutor-fees";
 import { recomputeTutorFees, setTutorFeeStatus, setTutorFeeOverride } from "@/server/tutor-fee-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Tutor Fee ledger (Founder Console → Tutor Fees) - ER v2 Track C.
@@ -52,7 +53,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
 
   async function recompute() {
     setBusyId("recompute");
-    const res = await recomputeTutorFees();
+    const res = await safeAction(() => recomputeTutorFees());
     setBusyId(null);
     if (!res.ok) return toast(res.error);
     toast(res.summary ?? "Recomputed");
@@ -61,7 +62,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
 
   async function move(id: string, to: TutorFeeStatus) {
     setBusyId(id);
-    const res = await setTutorFeeStatus(id, to);
+    const res = await safeAction(() => setTutorFeeStatus(id, to));
     setBusyId(null);
     if (!res.ok) return toast(res.error);
     toast(`Fee ${to.toLowerCase()}`);
@@ -70,7 +71,7 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
 
   async function saveOverride(id: string, form: FormData) {
     setBusyId(id);
-    const res = await setTutorFeeOverride(id, form);
+    const res = await safeAction(() => setTutorFeeOverride(id, form));
     setBusyId(null);
     if (!res.ok) return toast(res.error);
     setEditing(null);

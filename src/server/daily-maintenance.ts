@@ -5,6 +5,7 @@ import { prewarmTodayFx } from "@/lib/fx";
 import { captureException } from "@/lib/observability";
 import { getMaintenanceConfig } from "./founder-config";
 import { runOverdueSweep } from "./overdue-sweep";
+import { runPendingStatusSweep } from "./pending-sweep";
 import { runRetentionSweep } from "./retention";
 import { runScheduledReport } from "./scheduled-report";
 import { backfillInvoiceIssuance } from "./invoice-posting";
@@ -67,6 +68,12 @@ export async function runDailyMaintenance(): Promise<DailyMaintenanceRun> {
   // The same treatment for the founder's SSS diary, which has never held a single row. Same
   // additive-only guarantees, same self-gating on a config that ships disabled.
   await safe("sssSlotTopUp", ensureSssSlots);
+
+  // Close receivables that have been collected in full (FIN-12 / issue 3). The table already
+  // DERIVES "Paid in full", so this is for everything that reads the stored column instead - the
+  // dunning candidate query above all, which would otherwise keep chasing a student who has paid.
+  // Idempotent, only ever moves a live status to PAID_IN_FULL, so it runs every tick.
+  await safe("pendingStatusSweep", runPendingStatusSweep);
 
   // Event-driven posting handles new invoices; this mops up legacy/flag-was-off ones. Cheap
   // (postEntryOnce short-circuits already-posted), so it can run every tick.

@@ -8,6 +8,7 @@ import type { GnTutorRow } from "@/server/german-note-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn } from "@/components/ui/controls";
 import { Field, FormError, SubmitButton, TextInput } from "@/components/ui/form";
+import { safeAction } from "@/lib/action-guard";
 
 /** Tutor accounts (Role.TUTOR): they see ONLY the German Note section. */
 export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
@@ -38,7 +39,7 @@ export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
           className="rounded-card border border-line bg-surface p-4 shadow-card"
           action={async (form) => {
             setError(null);
-            const res = await createTutorLogin(form);
+            const res = await safeAction(() => createTutorLogin(form));
             if (!res.ok) return setError(res.error);
             setCreating(false);
             toast("Tutor account created");
@@ -92,7 +93,7 @@ export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
                   danger: true,
                 });
                 if (!ok) return;
-                const res = await revokeTutorLogin(t.id);
+                const res = await safeAction(() => revokeTutorLogin(t.id));
                 if (!res.ok) return toast(res.error, "error");
                 toast("Tutor account removed");
                 refresh();

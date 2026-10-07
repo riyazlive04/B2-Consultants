@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { RotateCcw, Trash2, Archive } from "lucide-react";
-import { IconButton } from "@/components/ui/controls";
+import { Btn } from "@/components/ui/controls";
 import { EmptyState } from "@/components/ui/kit";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import type { ArchivedRow } from "@/server/archive-metrics";
@@ -106,26 +106,40 @@ export function ArchivedPanel({
               </span>
             </div>
           </div>
+          {/*
+            ── The words, not just the icons (issue 29) ───────────────────────────────
+            These were icon-only. The accessible name and the hover tooltip were both there, so a
+            screen reader and a patient mouse user were fine - but a sighted person scanning the
+            list had to guess which arrow restores and which bin destroys, on the one screen in
+            the app where those two are side by side and one of them is irreversible.
+
+            The label is hidden below `sm` only, where two words per button would wrap the row;
+            the tooltip and the accessible name carry it there, as before.
+          */}
           <div className="flex shrink-0 items-center gap-1">
-            <IconButton
-              label={`Restore ${row.primary}`}
-              tone="neutral"
+            <Btn
+              variant="ghost"
               size="sm"
+              icon={<RotateCcw size={15} />}
               onClick={() => doRestore(row)}
               disabled={pending}
+              title={`Restore ${row.primary}`}
             >
-              <RotateCcw size={15} />
-            </IconButton>
+              {/* `sr-only sm:not-sr-only`: the word is always in the accessible name, and becomes
+                  visible from `sm` up, where the row has the width for it. */}
+              <span className="sr-only sm:not-sr-only">Restore</span>
+            </Btn>
             {canPurge && (
-              <IconButton
-                label={`Delete ${row.primary} permanently`}
-                tone="danger"
+              <Btn
+                variant="danger"
                 size="sm"
+                icon={<Trash2 size={15} />}
                 onClick={() => doPurge(row)}
                 disabled={pending}
+                title={`Delete ${row.primary} permanently`}
               >
-                <Trash2 size={15} />
-              </IconButton>
+                <span className="sr-only sm:not-sr-only">Delete</span>
+              </Btn>
             )}
           </div>
         </li>

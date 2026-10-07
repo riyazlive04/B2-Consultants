@@ -6,7 +6,7 @@ import {
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Money } from "@/components/ui/CurrencyToggle";
 import { Card, CardTitle, EmptyState, SectionHeading, ViewAll } from "@/components/ui/kit";
-import { formatDate, formatPct } from "@/lib/format";
+import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { signedColor } from "@/lib/signals";
 import { getGnHomeSnapshot } from "@/server/german-note-metrics";
@@ -43,6 +43,15 @@ export async function GermanNoteDashboard() {
    */
   const rate = Number(fx.rate);
   const compact = (v: number) => <Money amount={{ inr: v, eur: rate > 0 ? v / rate : 0 }} />;
+  /**
+   * ── The same figure as TEXT (issue 12) ────────────────────────────────────────
+   * `compact` returns a React element, which is right in a value slot and nonsense inside a
+   * template string: `${compact(x)} quoted` rendered the literal "[object Object] quoted" on the
+   * card, where an amount should have been. The ₹/€ toggle cannot follow a plain string, so
+   * these captions show the rupee figure - which is the record for German Note anyway, every
+   * one of its fees, books and tutor payments being in rupees.
+   */
+  const compactText = (v: number) => formatInrMinor(BigInt(Math.round(v)), { compact: true });
 
   // Cash basis leads. Quoted revenue overstates profit on money that has not arrived - the
   // same rule the workshop screens already follow (docs F1 §6.7).
@@ -66,8 +75,8 @@ export async function GermanNoteDashboard() {
             value={compact(r.cashCollected)}
             secondary={
               collectedPct === null
-                ? `${compact(r.revenue)} quoted`
-                : `${formatPct(collectedPct)} of ${compact(r.revenue)} quoted`
+                ? `${compactText(r.revenue)} quoted`
+                : `${formatPct(collectedPct)} of ${compactText(r.revenue)} quoted`
             }
             tooltip="Money actually received across every workshop. The quoted figure is what was agreed - the gap is what is still owed."
             icon={<Wallet size={18} />}
@@ -83,7 +92,7 @@ export async function GermanNoteDashboard() {
           <MetricCard
             label="Net profit (cash)"
             value={compact(stats.netProfitCash)}
-            secondary={`${compact(r.netProfit)} on quoted · NP ${pctOrDash(r.npMargin)}`}
+            secondary={`${compactText(r.netProfit)} on quoted · NP ${pctOrDash(r.npMargin)}`}
             tooltip="Collected minus every cost - ads, books, tutor fees, referrals. The quoted-basis figure counts money that has not arrived, so it reads higher."
             icon={<TrendingUp size={18} />}
             href="/german-note/manage"
@@ -218,7 +227,10 @@ export async function GermanNoteDashboard() {
                     <p className="text-caption text-muted">
                       {w.rollup.conversions} conversion{w.rollup.conversions === 1 ? "" : "s"} ·{" "}
                       {compact(w.rollup.cashCollected)} collected
-                      {w.outstanding > 0 ? ` · ${compact(w.outstanding)} owed` : ""}
+                      {/* `compactText`, not `compact` - inside a template string the element
+                          renders as "[object Object] owed" (issue 12, the same bug as the two
+                          cards above; this per-workshop line was missed first time round). */}
+                      {w.outstanding > 0 ? ` · ${compactText(w.outstanding)} owed` : ""}
                     </p>
                   </div>
                   <span

@@ -12,6 +12,7 @@ import { Field, FormError, SubmitButton, TextArea, TextInput } from "@/component
 import { SIGNAL_META, signalForPercent } from "@/lib/signals";
 import { formatPct } from "@/lib/format";
 import { DAILY_LOG_FIELDS, LOG_FIELD_UNIT } from "@/lib/labels";
+import { safeAction } from "@/lib/action-guard";
 
 /** Compact donut ring for a single percentage. */
 function Donut({ pct, color, label }: { pct: number; color: string; label: string }) {
@@ -101,7 +102,7 @@ export function DailyLogClient({
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = await submitDailyLog(form);
+    const res = await safeAction(() => submitDailyLog(form));
     if (!res.ok) return setError(res.error);
     // Amending an auto-saved row isn't a new log - it doesn't extend a streak or pay XP again,
     // so a streak toast here would be a lie the Arena would then contradict.
@@ -223,7 +224,7 @@ export function DailyLogClient({
                   key={o.id}
                   action={async (form) => {
                     setOkrError(null);
-                    const res = await updateOwnOkrProgress(o.id, form);
+                    const res = await safeAction(() => updateOwnOkrProgress(o.id, form));
                     if (!res.ok) return setOkrError(res.error);
                     toast("OKR progress updated");
                   }}

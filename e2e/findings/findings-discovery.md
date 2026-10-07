@@ -17,14 +17,14 @@ Last full run (loaded server): 8 passed, 24 failed (22 = product defects via exp
 | DSC-06 | Med | WhatsApp YES confirms SSS but lead stays SSS_BOOKED | wati/webhook/route.ts:114-118 | Test |
 | DSC-09 | Med | 2 no-answer calls + WhatsApp -> call never cancelled, slot not freed | outreach-engine.ts:478-491,614-639 | Test |
 | DSC-10 | Med | Desk "No show" doesn't release slot | discovery-routing.ts:103-108 | Test |
-| DSC-11 | Med | Chase only after NO_SHOW recorded; lead who answers can't be routed, stays no-show, Postpone hidden | l2-desk-metrics.ts:223; BookingsTable.tsx:213 | Test |
+| DSC-11 | Med | Chase only after NO_SHOW recorded; lead who answers can't be routed, stays no-show. (Booking half FIXED Oct 2026: a no-show booking is re-bookable from its own row - see `rescheduleBooking`) | l2-desk-metrics.ts:223 | Test |
 | DSC-13 | Med | Calls booked counts only confirmed calls -> rates inflated | pipeline-metrics.ts:282 | Code |
 | DSC-15 | Med | SSS WhatsApp to +49 lead gives IST time with no zone | outreach.ts:248-253,808-811 | Code |
 | DSC-17 | Med | SSS booking in the past accepted; reminder raised for past time | sss-slots.ts:145-167 | Test |
 | DSC-18 | Med | PRD outcome form No show / Qualified doesn't move stage | pipeline-actions.ts:538-578 | Test |
 | DSC-21 | Med | Cancelled disco call: lead stays booked, confirm reminder stays DUE | booking-actions.ts:743-771; outreach.ts:716-722 | Test |
 | DSC-23 | Med | SSS calendar click hits hidden "Block slot" icon: slot ends BLOCKED instead of booked | SssCalendar.tsx:251,258-261 | Test |
-| DSC-16 | Low | Bookings shows "CET" in September (CEST); no DD/MM/YYYY | BookingsTable.tsx:145 | Test |
+| DSC-16 | Low | Bookings shows "CET" in September (CEST); no DD/MM/YYYY | booking-view.tsx (`CallTime`) | Test |
 | DSC-19 | Low | Highly Qualified permission enforced on PRD form, not desk | discovery-routing.ts:83 | Test |
 | DSC-20 | Low | SSS booked 11h ahead: 24h + 12h messages fire back to back; cancel waits to T-2h | outreach-engine.ts:494-511 | Test |
 

@@ -117,7 +117,21 @@ export function middleware(request: NextRequest) {
 
   const cookie = getSessionCookie(request);
   if (!cookie && !isLogin) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    /**
+     * ── Come back to where you were going (issue 28) ──────────────────────────────
+     * This redirected to a bare `/login`, so anybody who followed a link to /finance while
+     * signed out landed on the dashboard after signing in - the page they asked for forgotten,
+     * and the link they were sent effectively broken. The login form has honoured `?next=` all
+     * along (see LoginForm); nothing was passing it.
+     *
+     * Only the path and query of a request to THIS origin, so it cannot become an open redirect:
+     * the value is a relative path, and LoginForm additionally refuses anything not starting
+     * with a single "/".
+     */
+    const login = new URL("/login", request.url);
+    const next = `${pathname}${request.nextUrl.search}`;
+    if (next !== "/") login.searchParams.set("next", next);
+    return NextResponse.redirect(login);
   }
   // NOTE: no cookie-presence bounce off /login here - a stale cookie would loop
   // (/login → / → /login …). The login page itself validates the session and

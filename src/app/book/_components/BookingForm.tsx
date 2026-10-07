@@ -13,6 +13,7 @@ import { Btn } from "@/components/ui/controls";
 import { FormError, SubmitButton } from "@/components/ui/form";
 import { slotTypeLabel } from "@/lib/labels";
 import { SlotCalendar } from "./SlotCalendar";
+import { safeAction } from "@/lib/action-guard";
 
 const IST_ZONE = "Asia/Kolkata";
 
@@ -165,7 +166,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
   const submit = async (form: FormData) => {
     setError(null);
     if (!slotId) return setError("Please choose an available time for your call.");
-    const res = await submitBooking(form);
+    const res = await safeAction(() => submitBooking(form));
     if (!res.ok) return setError(res.error);
     setDone({ slot: chosen, declined: !!res.declined });
   };

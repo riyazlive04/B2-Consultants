@@ -25,7 +25,7 @@ Last full run (overloaded server, P1001/P2028 DB errors): 21 passed, 8 failed, 4
 | OUT-17 | Low | Allowlist-blocked sends logged FAILED not SKIPPED | whatsapp.ts:310 | Test |
 | OUT-20 | Low | Pipeline CSV dates YYYY-MM-DD | LeadSection.tsx:143 | Code |
 | OUT-21 | Low | Funnel drop-off alert redesigned vs PRD wording; absent without history | funnel-metrics.ts:161-192 | Test |
-| OUT-23 | Low | "CET" hardcoded (Sept is CEST) on Bookings + /book | BookingsTable.tsx:145 | Unconfirmed |
+| OUT-23 | Low | "CET" hardcoded (Sept is CEST) on Bookings + /book | booking-view.tsx (`CallTime`) | Unconfirmed |
 | OUT-24 | Low | Booking rate limit trusts first x-forwarded-for (bypassable unless proxy overwrites) | rate-limit.ts:163-167 | Code |
 | OUT-25 | Low | SOP engine has no quiet hours | outreach.ts | Code |
 | OUT-26 | Low | Funnel weeks use UTC midnight not IST | funnel-metrics.ts:44-60 | Code |

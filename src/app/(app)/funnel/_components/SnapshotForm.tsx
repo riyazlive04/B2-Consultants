@@ -7,6 +7,7 @@ import type { FunnelOverview } from "@/server/funnel-metrics";
 import { toast } from "@/components/ui/feedback";
 import { Field, FormError, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { safeAction } from "@/lib/action-guard";
 
 /** Weekly snapshot entry (PRD3 §3.2): auto-pulled fields pre-filled, Admin can override. */
 export function SnapshotForm({ entry }: { entry: FunnelOverview["entry"] }) {
@@ -17,7 +18,7 @@ export function SnapshotForm({ entry }: { entry: FunnelOverview["entry"] }) {
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = await saveWeeklySnapshot(form);
+    const res = await safeAction(() => saveWeeklySnapshot(form));
     if (!res.ok) return setError(res.error);
     toast("Weekly snapshot saved");
     router.refresh();

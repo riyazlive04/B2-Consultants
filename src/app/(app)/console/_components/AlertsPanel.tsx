@@ -21,6 +21,7 @@ import {
   previewDunningLadder,
 } from "@/server/maintenance-actions";
 import { Btn, Card, Hint, NumInput, Picker, SaveBar, TextIn, Toggle } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Founder Console → Alerts & chasing.
@@ -290,7 +291,7 @@ function DunningCard({ config }: { config: DunningConfig }) {
         <Btn
           onClick={async () => {
             setPreviewing(true);
-            const res = await previewDunningLadder();
+            const res = await safeAction(() => previewDunningLadder());
             setPreviewing(false);
             if (!res.ok) return toast(res.error, "error");
             setPreview(res.rows);

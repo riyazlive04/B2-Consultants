@@ -102,9 +102,12 @@ reconciled with the `BookingRequest` BANT.
 
 ### L. Data Transfer to Key Metrics (Step 12) — MISSING
 
-There is no Key Metrics surface. The generic bookings CSV covers ~6 of 14 columns and, notably,
-**drops the CET time from the export** — it renders on screen but the column's export value is
-IST-only ([BookingsTable.tsx:88-96](src/app/(app)/bookings/_components/BookingsTable.tsx#L88-L96)).
+There is no Key Metrics surface. The generic bookings CSV exports the columns the list shows
+(seven, since the Oct 2026 redesign moved the intake answers into each booking's detail dialog)
+and, notably, **drops the CET time from the export** — it renders on screen but the call-time
+column's export value is the raw instant
+([BookingsTable.tsx](src/app/(app)/bookings/_components/BookingsTable.tsx), the `slot` column's
+`value`).
 Missing entirely: Email, Phone, Qualified, Resp. for TOUCHPOINT, Resp. for DISCO, WhatsApp Sent,
 WhatsApp Confirmed, Sales Call Confirmed, Highly Qualified.
 

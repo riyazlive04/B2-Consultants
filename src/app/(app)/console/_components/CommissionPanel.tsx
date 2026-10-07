@@ -7,6 +7,7 @@ import { Field } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { saveCommissionRules } from "@/server/console-actions";
 import { Card, Hint, NumInput, SaveBar } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Commission rates editor (Founder Console → Commission).
@@ -56,7 +57,7 @@ export function CommissionPanel({ rules }: { rules: CommissionRulesConfig }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveCommissionRules(draft);
+    const res = await safeAction(() => saveCommissionRules(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

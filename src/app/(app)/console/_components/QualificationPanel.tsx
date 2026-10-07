@@ -9,6 +9,7 @@ import { DIMENSION_LABELS, type QuestionOption } from "@/lib/qualification";
 import { BANT_MAX } from "@/lib/booking-intake";
 import type { IntakeMappingReport } from "@/server/intake-inspection";
 import type { BantDimension, QuestionKind } from "@prisma/client";
+import { safeAction } from "@/lib/action-guard";
 import {
   createQualificationQuestion,
   updateQualificationQuestion,
@@ -78,7 +79,7 @@ function ScorerSwitch({ shadow, scorer }: { shadow: ShadowStatus; scorer: Scorer
 
   const flip = (next: ScorerMode) =>
     start(async () => {
-      const res = await setQualificationScorer(next);
+      const res = await safeAction(() => setQualificationScorer(next));
       if (!res.ok) return toast(res.error, "error");
       toast(next === "catalogue" ? "These questions now decide the verdict" : "Reverted to the shipped scoring tables");
       router.refresh();
@@ -277,7 +278,9 @@ export function QualificationPanel({
 
   async function submit(fd: FormData, id: string | null) {
     setBusy(true);
-    const res = id ? await updateQualificationQuestion(id, fd) : await createQualificationQuestion(fd);
+    const res = await safeAction(() =>
+      id ? updateQualificationQuestion(id, fd) : createQualificationQuestion(fd),
+    );
     setBusy(false);
     if (!res.ok) return toast(res.error);
     setEditing(null);
@@ -288,7 +291,7 @@ export function QualificationPanel({
 
   async function toggle(id: string, active: boolean) {
     setBusy(true);
-    const res = await setQualificationQuestionActive(id, active);
+    const res = await safeAction(() => setQualificationQuestionActive(id, active));
     setBusy(false);
     if (!res.ok) return toast(res.error);
     toast(active ? "Question restored" : "Question retired");

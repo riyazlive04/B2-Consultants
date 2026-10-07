@@ -17,6 +17,7 @@ import { toast } from "@/components/ui/feedback";
 import { DateText } from "@/components/ui/DateText";
 import { saveWorkflow, togglePublishWorkflow, restoreWorkflow } from "@/server/automation-actions";
 import WorkflowDryRun from "./WorkflowDryRun";
+import { safeAction } from "@/lib/action-guard";
 
 type Pickers = {
   forms: { id: string; name: string }[];
@@ -75,20 +76,20 @@ export default function WorkflowBuilder({ workflow, pickers }: { workflow: Workf
 
   async function save() {
     setSaving(true);
-    const res = await saveWorkflow(workflow.id, { name, triggerType, triggerConfig, actions, folderId: folderId || null });
+    const res = await safeAction(() => saveWorkflow(workflow.id, { name, triggerType, triggerConfig, actions, folderId: folderId || null }));
     setSaving(false);
     toast(res.ok ? "Workflow saved" : res.error, res.ok ? "success" : "error");
     if (res.ok) router.refresh();
   }
   async function publish() {
-    const res = await togglePublishWorkflow(workflow.id);
+    const res = await safeAction(() => togglePublishWorkflow(workflow.id));
     if (!res.ok) return toast(res.error, "error");
     setPublished((p) => !p);
     toast(published ? "Unpublished" : "Published - now live");
     router.refresh();
   }
   async function restore() {
-    const res = await restoreWorkflow(workflow.id);
+    const res = await safeAction(() => restoreWorkflow(workflow.id));
     toast(res.ok ? "Workflow restored" : res.error, res.ok ? "success" : "error");
     if (res.ok) router.refresh();
   }

@@ -7,6 +7,7 @@ import { Field, TextInput, SubmitButton } from "@/components/ui/form";
 import { Switch } from "@/components/ui/controls";
 import { toast } from "@/components/ui/feedback";
 import { saveEmailSettings, saveSmsSettings, sendTestEmail } from "@/server/messaging-actions";
+import { safeAction } from "@/lib/action-guard";
 
 type Settings = {
   email: { enabled: boolean; configured: boolean; envEnabled: boolean; paused: boolean; fromEmail: string; fromName: string };
@@ -29,16 +30,16 @@ export default function ChannelSettings({ settings }: { settings: Settings }) {
 
   async function saveEmail(fd: FormData) {
     if (emailPaused) fd.set("paused", "on");
-    const res = await saveEmailSettings(fd);
+    const res = await safeAction(() => saveEmailSettings(fd));
     toast(res.ok ? "Email settings saved" : res.error, res.ok ? "success" : "error");
   }
   async function testEmail(fd: FormData) {
-    const res = await sendTestEmail(fd);
+    const res = await safeAction(() => sendTestEmail(fd));
     toast(res.message, res.ok ? "success" : "error");
   }
   async function saveSms(fd: FormData) {
     if (smsPaused) fd.set("paused", "on");
-    const res = await saveSmsSettings(fd);
+    const res = await safeAction(() => saveSmsSettings(fd));
     toast(res.ok ? "SMS settings saved" : res.error, res.ok ? "success" : "error");
   }
 

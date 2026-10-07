@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { BarChart3 } from "lucide-react";
+import { useState } from "react";
+import { BarChart3, ChevronRight } from "lucide-react";
 import { Card, CardTitle, EmptyState } from "@/components/ui/kit";
 import { StudentName } from "@/components/ui/StudentName";
+import { ReceivableDetailModal } from "@/components/finance/ReceivableDetailModal";
 import { formatInrMinor } from "@/lib/format";
 import { AGE_BUCKETS, bucketForDaysOverdue, type AgeBucketKey } from "@/lib/ageing";
 
@@ -29,6 +30,13 @@ import { AGE_BUCKETS, bucketForDaysOverdue, type AgeBucketKey } from "@/lib/agei
  * "On schedule" is deliberately absent (G4). Money that is not late is not part of an ageing
  * analysis; it lives in the receivables list, and including it here made the one column nobody
  * needed dominate the chart.
+ *
+ * ── A bar opens the receivable (not the Finance page) ─────────────────────────────
+ * Each row used to link to `/finance?pending=<id>`. No page has ever read that parameter, so the
+ * click left Cash Health, landed on the Finance Income tab and highlighted nothing - you arrived
+ * somewhere else holding a name you now had to search for. A row opens
+ * `ReceivableDetailModal` instead: who this is, what they bought, what has actually been paid,
+ * and the controls to settle, reschedule or write the balance off without leaving this screen.
  */
 
 export type AgeRow = {
@@ -50,6 +58,9 @@ export function AgeAnalysis({
   rows: AgeRow[];
   studentCodeById?: Record<string, string>;
 }) {
+  /** The receivable whose detail panel is open, or null. */
+  const [openId, setOpenId] = useState<string | null>(null);
+
   // Only genuinely-late money, grouped by how late (G4).
   const byBucket = new Map<AgeBucketKey, AgeRow[]>();
   for (const r of rows) {
@@ -103,16 +114,19 @@ export function AgeAnalysis({
                     const frac = r.totalFeeInr > 0 ? Math.min(1, r.balanceInr / r.totalFeeInr) : 1;
                     return (
                       <li key={r.id}>
-                        <Link
-                          href={`/finance?pending=${r.id}`}
-                          className="group block rounded-field px-2 py-1.5 hover:bg-surface-2"
+                        <button
+                          type="button"
+                          onClick={() => setOpenId(r.id)}
+                          aria-haspopup="dialog"
+                          className="group block w-full rounded-field px-2 py-1.5 text-left hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                         >
                           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                            <span className="min-w-0 text-sm font-medium text-ink group-hover:underline">
+                            <span className="inline-flex min-w-0 items-center gap-1 text-sm font-medium text-ink group-hover:underline">
                               <StudentName
                                 name={r.studentName}
                                 code={r.studentId ? studentCodeById[r.studentId] : null}
                               />
+                              <ChevronRight size={13} className="flex-none text-muted" />
                             </span>
                             {/* Both figures, per G2 - the bar length is meaningless without them. */}
                             <span className="tnum flex-none text-caption text-muted">
@@ -133,7 +147,7 @@ export function AgeAnalysis({
                               style={{ width: `${frac * 100}%`, background: bucket.color }}
                             />
                           </div>
-                        </Link>
+                        </button>
                       </li>
                     );
                   })}
@@ -143,6 +157,7 @@ export function AgeAnalysis({
           })}
         </div>
       )}
+      <ReceivableDetailModal planId={openId} onClose={() => setOpenId(null)} />
     </Card>
   );
 }

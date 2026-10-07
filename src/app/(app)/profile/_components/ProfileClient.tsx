@@ -9,6 +9,7 @@ import { updateMyProfile } from "@/server/profile-actions";
 import { Field, FormError, TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { TimeZoneCard } from "./TimeZoneCard";
+import { safeAction } from "@/lib/action-guard";
 
 /** Resize an uploaded image to a square ~256px JPEG data URL - keeps the row small. */
 function resizeToDataUrl(file: File, size = 256): Promise<string> {
@@ -69,7 +70,7 @@ export function ProfileClient({
     const fd = new FormData();
     fd.set("name", name);
     fd.set("image", image ?? "");
-    const res = await updateMyProfile(fd);
+    const res = await safeAction(() => updateMyProfile(fd));
     setSaving(false);
     if (!res.ok) return setError(res.error);
     toast("Profile updated");

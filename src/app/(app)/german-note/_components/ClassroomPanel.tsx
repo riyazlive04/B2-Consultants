@@ -19,6 +19,7 @@ import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/c
 import { Modal } from "@/components/ui/Modal";
 import { formatDate, formatPct } from "@/lib/format";
 import { toDateInputValue } from "@/lib/dates";
+import { safeAction } from "@/lib/action-guard";
 
 /** Structured Classroom: recordings grouped into ordered modules, with course + per-module progress. */
 
@@ -103,7 +104,7 @@ function ModuleManager({ batchId, modules, onChanged }: { batchId: string; modul
               onClick={async () => {
                 const ok = await askConfirm({ title: `Delete module “${m.title}”?`, body: "Its lessons move to the default Class recordings section - they aren't deleted.", confirmLabel: "Delete module", danger: true });
                 if (!ok) return;
-                const r = await deleteGnModule(m.id);
+                const r = await safeAction(() => deleteGnModule(m.id));
                 if (!r.ok) return toast(r.error, "error");
                 toast("Module deleted");
                 onChanged();
@@ -117,7 +118,7 @@ function ModuleManager({ batchId, modules, onChanged }: { batchId: string; modul
       <form ref={addRef} className="mt-3 flex items-start gap-2"
         action={async (form) => {
           setError(null);
-          const r = await createGnModule(batchId, form);
+          const r = await safeAction(() => createGnModule(batchId, form));
           if (!r.ok) return setError(r.error);
           addRef.current?.reset();
           onChanged();
@@ -202,7 +203,7 @@ function LessonCard({ r, index, canManage, onEdit, onChanged }: {
                   onClick={async () => {
                     const ok = await askConfirm({ title: `Delete “${r.title}”?`, body: "The video stays on its platform - only the batch entry is removed.", confirmLabel: "Delete", danger: true });
                     if (!ok) return;
-                    const res = await deleteRecording(r.id);
+                    const res = await safeAction(() => deleteRecording(r.id));
                     if (!res.ok) return toast(res.error, "error");
                     toast("Recording deleted");
                     onChanged();
@@ -272,7 +273,7 @@ export function ClassroomPanel({ batchId, classroom, modules, canManage, recordi
         <form ref={addFormRef} className="rounded-card border border-line bg-surface p-4 shadow-card"
           action={async (form) => {
             setError(null);
-            const res = await postRecording(batchId, form);
+            const res = await safeAction(() => postRecording(batchId, form));
             if (!res.ok) return setError(res.error);
             addFormRef.current?.reset();
             setAdding(false);
@@ -324,7 +325,7 @@ export function ClassroomPanel({ batchId, classroom, modules, canManage, recordi
         {editing && (
           <form action={async (form) => {
             setError(null);
-            const res = await updateRecording(editing.id, form);
+            const res = await safeAction(() => updateRecording(editing.id, form));
             if (!res.ok) return setError(res.error);
             setEditing(null);
             toast("Recording updated");

@@ -70,7 +70,16 @@ function filterPhone(raw: string): string {
   return (plus ? "+" : "") + kept.replace(/\+/g, "");
 }
 
-const filterInt = (raw: string) => raw.replace(NOT_DIGIT, "");
+/**
+ * Digits only - but a decimal point TRUNCATES rather than vanishing (issue 18).
+ *
+ * It used to strip every non-digit, which spliced the digits back together: an instalment count
+ * typed as "2.5" became "25", so asking for two-and-a-half instalments silently bought
+ * twenty-five. Keeping only what precedes the point reads "2", which is at least what the typist
+ * meant to the nearest whole number, and `intSchema` refuses a point that arrives by any other
+ * route.
+ */
+const filterInt = (raw: string) => raw.split(".")[0].replace(NOT_DIGIT, "");
 
 /** Digits + at most one "." + at most `dp` decimals. Typing a 2nd "." is a no-op, not a reset. */
 function makeDecimalFilter(dp: number) {
@@ -170,12 +179,51 @@ const phoneSchema = z
     return d >= 7 && d <= 15;
   }, "Enter a valid phone number with country code");
 
+/**
+ * The widest amount the ledger accepts: 12 digits before the point, i.e. just under ₹1 lakh
+ * crore. Not a business rule about how big a fee may be - a hard ceiling so a mistyped or pasted
+ * number is refused with a sentence that names the real problem instead of being read as a
+ * character-set error.
+ */
+const MONEY_MAX_DIGITS = 12;
+const MONEY_MAX_LABEL = "9,99,99,99,99,999.99";
+
+/**
+ * ── One schema, four distinct complaints (issues 4, 17, 18) ────────────────────────
+ * This used to be a single regex whose message was "Enter an amount using numbers only" - so a
+ * 24-digit amount, whose digits were perfectly fine, was rejected for having the wrong
+ * characters. A person reading that correctly concludes the app is broken.
+ *
+ * The refinements are ordered from most to least specific because `firstError` shows the first
+ * issue zod reports, and "that number is too large" is more use than "that is not a number".
+ */
 const moneySchema = z
   .string()
   .trim()
-  .regex(/^\d{1,12}(\.\d{1,2})?$/, "Enter an amount using numbers only");
+  .refine(
+    (v) => !v.startsWith("-"),
+    "Amounts can't be negative. Record money going the other way as its own entry.",
+  )
+  .refine((v) => /^\d+(\.\d*)?$/.test(v), "Enter an amount using numbers only")
+  .refine(
+    (v) => (v.split(".")[1] ?? "").length <= 2,
+    "Amounts can have at most two decimal places (paise / cents).",
+  )
+  .refine(
+    (v) => v.split(".")[0].replace(/^0+(?=\d)/, "").length <= MONEY_MAX_DIGITS,
+    `Amount is too large - the most that can be recorded is ${MONEY_MAX_LABEL}.`,
+  );
 
-const intSchema = z.string().trim().regex(/^\d{1,9}$/, "Enter a whole number");
+/**
+ * A whole number. The message names the decimal point explicitly, because a count typed as "2.5"
+ * is the one mistake this field actually sees (`filterInt` keeps the digits before the point, so
+ * what reaches here is already "2" - this is the backstop for a value posted directly).
+ */
+const intSchema = z
+  .string()
+  .trim()
+  .refine((v) => !v.includes("."), "Enter a whole number, with no decimal point")
+  .refine((v) => /^\d{1,9}$/.test(v), "Enter a whole number");
 
 const rateSchema = z
   .string()

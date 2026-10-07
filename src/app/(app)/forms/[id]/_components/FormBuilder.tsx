@@ -29,6 +29,7 @@ import { ItemEditor } from "./ItemEditor";
 import { ResponsesPanel } from "./ResponsesPanel";
 import ElementDrawer from "./ElementDrawer";
 import FormCanvas from "./FormCanvas";
+import { safeAction } from "@/lib/action-guard";
 
 type Pickers = {
   pipelines: { id: string; name: string; stages: { id: string; name: string }[] }[];
@@ -142,12 +143,12 @@ export default function FormBuilder({ form, pickers }: { form: FormDetail; picke
 
   async function save() {
     setSaving(true);
-    const res = await saveForm(form.id, { name, fields: items, settings });
+    const res = await safeAction(() => saveForm(form.id, { name, fields: items, settings }));
     setSaving(false);
     toast(res.ok ? "Form saved" : res.error, res.ok ? "success" : "error");
   }
   async function publish() {
-    const res = await togglePublishForm(form.id);
+    const res = await safeAction(() => togglePublishForm(form.id));
     if (!res.ok) return toast(res.error, "error");
     setPublished((p) => !p);
     toast(published ? "Unpublished" : "Published");

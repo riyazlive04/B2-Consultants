@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useId } from "react";
+import { forwardRef, useId, useState } from "react";
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { useFormStatus } from "react-dom";
 import { Check, Loader2 } from "lucide-react";
@@ -258,5 +258,60 @@ export function FormError({ message }: { message: string | null }) {
     <p role="alert" className="rounded-field bg-risk-soft px-3 py-2 text-sm font-medium text-risk">
       {message}
     </p>
+  );
+}
+
+/**
+ * A notes box that says how much room is left (issue 18).
+ *
+ * `kind="text"` carries `maxLength: 2000`, which the browser enforces by SILENTLY discarding
+ * everything past the limit - so pasting a long note lost its tail with nothing on screen to say
+ * so, and the person had no way to know which half had been saved. A counter is the whole fix:
+ * the cap was never the problem, the silence was.
+ *
+ * Appears only once there is something to warn about (80% of the way), so an ordinary two-word
+ * note is not followed around by a number, and turns `--warn` over the last tenth.
+ */
+export function NotesField({
+  label = "Notes (optional)",
+  name = "notes",
+  defaultValue = "",
+  placeholder,
+  maxLength = 2000,
+  hint,
+}: {
+  label?: string;
+  name?: string;
+  defaultValue?: string;
+  placeholder?: string;
+  maxLength?: number;
+  hint?: string;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  const left = maxLength - value.length;
+  const showCount = value.length >= maxLength * 0.8;
+
+  return (
+    <Field label={label} hint={hint}>
+      <span className="block">
+        <TextInput
+          kind="text"
+          name={name}
+          maxLength={maxLength}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => setValue(e.currentTarget.value)}
+        />
+        {showCount && (
+          <span
+            // `aria-live` so somebody typing into it is told, not only shown.
+            aria-live="polite"
+            className={`mt-1 block text-right text-caption ${left <= maxLength * 0.1 ? "text-warn" : "text-muted"}`}
+          >
+            {left === 0 ? "Character limit reached" : `${left} characters left`}
+          </span>
+        )}
+      </span>
+    </Field>
   );
 }

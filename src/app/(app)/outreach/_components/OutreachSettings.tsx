@@ -5,6 +5,7 @@ import { AlertTriangle, Play, Power, RefreshCw } from "lucide-react";
 import type { OutreachConfig } from "@/lib/outreach-sop";
 import { OUTREACH_STEPS } from "@/lib/outreach-sop";
 import { saveOutreachConfig, runOutreachNow, backfillJourneys } from "@/server/outreach-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Admin controls for the SOP engine.
@@ -76,7 +77,7 @@ export function OutreachSettings({ config, watiLive }: { config: OutreachConfig;
       <form
         action={(f) =>
           start(async () => {
-            const res = await saveOutreachConfig(f);
+            const res = await safeAction(() => saveOutreachConfig(f));
             setMsg(res.ok ? "Saved." : res.error);
           })
         }

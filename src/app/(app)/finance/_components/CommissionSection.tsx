@@ -10,7 +10,14 @@ import type { CommissionReport, CommissionRow } from "@/server/commission-metric
  * Commission (client notes): 5% when one person worked both calls, 3% each on a split.
  * Everything is derived from payments + lead attribution - nothing extra to enter.
  */
-export function CommissionSection({ report }: { report: CommissionReport }) {
+export function CommissionSection({
+  report,
+  periodLabel = "this month",
+}: {
+  report: CommissionReport;
+  /** The window the figures cover, from the page's period switch (issue 20). */
+  periodLabel?: string;
+}) {
   const columns: Column<CommissionRow>[] = [
     { key: "date", header: "Payment date", cell: (r) => formatDate(r.date), value: (r) => r.date.slice(0, 10) },
     { key: "student", header: "Student", cell: (r) => r.studentName, value: (r) => r.studentName },
@@ -85,7 +92,7 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
   return (
     <section className="space-y-4">
       <Card
-        title="Commission - this month"
+        title={`Commission - ${periodLabel}`}
         actions={
           <span className="text-xs text-muted">
             One person on both calls = {report.rules.bothCallsPct}% · split calls = {report.rules.splitPct}% each
@@ -94,7 +101,7 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
       >
         {report.totals.length === 0 ? (
           <p className="text-sm text-muted">
-            No commissionable payments yet this month. A payment earns commission once it&apos;s
+            No commissionable payments in {periodLabel.toLowerCase()}. A payment earns commission once it&apos;s
             linked to a student whose lead has a first-caller and a discovery outcome.
           </p>
         ) : (
@@ -130,7 +137,7 @@ export function CommissionSection({ report }: { report: CommissionReport }) {
         columns={columns}
         csvName={`commission-${report.month}`}
         filterPlaceholder="Filter payments…"
-        emptyMessage="No student-linked payments this month."
+        emptyMessage={`No student-linked payments in ${periodLabel.toLowerCase()}.`}
       />
     </section>
   );

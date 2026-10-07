@@ -65,8 +65,31 @@ describe("toCanonicalMoney - everything a person can type", () => {
     assert.equal(toCanonicalMoney("1,25,000", "INR"), "125000");
   });
 
-  it("keeps at most two decimals", () => {
-    assert.equal(toCanonicalMoney("100.999", "INR"), "100.99");
+  it("ROUNDS a third decimal rather than chopping it off (issue 18)", () => {
+    // This used to truncate: 10.555 was stored as 10.55, silently, every time. The server's
+    // `majorStringToMinor` always rounded correctly - it just never saw the third digit.
+    assert.equal(toCanonicalMoney("10.555", "INR"), "10.56");
+    assert.equal(toCanonicalMoney("10.554", "INR"), "10.55");
+    // And the carry has to cross the point, not corrupt it.
+    assert.equal(toCanonicalMoney("100.999", "INR"), "101.00");
+    // In the euro box the DOT groups, so the carry case is written with a comma: 9,999 euro.
+    assert.equal(toCanonicalMoney("9,999", "EUR"), "10.00");
+    assert.equal(toCanonicalMoney("9.999", "EUR"), "9999", "a dot in the euro box still groups");
+  });
+
+  it("KEEPS a leading minus so the server can refuse it (issue 4)", () => {
+    // Stripping it here is what saved "-500" as +500 income with nothing said. The field's job
+    // is to carry what was typed; refusing it is `moneySchema`'s.
+    assert.equal(toCanonicalMoney("-500", "INR"), "-500");
+    assert.equal(toCanonicalMoney("-250.75", "EUR"), "-250.75");
+    assert.equal(toDisplayMoney("-125000", "INR"), "-1,25,000", "and it stays visible in the box");
+    // A minus mid-number is noise, exactly as it always was.
+    assert.equal(toCanonicalMoney("12-5", "INR"), "125");
+  });
+
+  it("survives a lone minus being typed, like a lone separator", () => {
+    assert.equal(toCanonicalMoney("-", "INR"), "-");
+    assert.equal(toDisplayMoney("-", "INR"), "-");
   });
 
   it("returns absence, not zero, for a box with no digits", () => {

@@ -25,6 +25,7 @@ import { TargetAttainment } from "./TargetAttainment";
 import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
 import { DialButton } from "@/components/calls/DialButton";
 import { useOfflineCalls } from "./useOfflineCalls";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Level 2 - Discovery Specialist desk (rebuild spec §7).
@@ -66,7 +67,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
       <form
         action={async (form) => {
           setError(null);
-          const res = await routeDiscoveryCall(form);
+          const res = await safeAction(() => routeDiscoveryCall(form));
           if (!res.ok) return setError(res.error);
           toast("Outcome recorded");
           onClose();

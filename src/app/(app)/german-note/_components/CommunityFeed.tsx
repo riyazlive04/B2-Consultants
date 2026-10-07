@@ -17,6 +17,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { FormError, Select, SubmitButton } from "@/components/ui/form";
 import { formatDuration } from "@/lib/format";
 import { MentionText, MentionTextArea } from "./Mentions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Skool-style feed: title + category posts with an optional image, flat
@@ -132,7 +133,7 @@ function CommentRow({
               onClick={async () => {
                 const ok = await askConfirm({ title: "Delete this comment?", confirmLabel: "Delete", danger: true });
                 if (!ok) return;
-                const res = await deleteGnComment(c.id);
+                const res = await safeAction(() => deleteGnComment(c.id));
                 if (!res.ok) return toast(res.error, "error");
                 onChanged();
               }}
@@ -154,7 +155,7 @@ function CommentRow({
             c.likedByMe ? "text-risk" : "text-muted hover:text-ink"
           } disabled:opacity-60`}
           onClick={async () => {
-            const res = await toggleGnCommentLike(c.id);
+            const res = await safeAction(() => toggleGnCommentLike(c.id));
             if (!res.ok) return toast(res.error, "error");
             onChanged();
           }}
@@ -184,7 +185,7 @@ function CommentBox({
       className="flex items-start gap-2"
       action={async (form) => {
         setError(null);
-        const res = await createGnComment(postId, form);
+        const res = await safeAction(() => createGnComment(postId, form));
         if (!res.ok) return setError(res.error);
         formRef.current?.reset();
         onDone();
@@ -248,7 +249,7 @@ export function CommunityFeed({
           className="rounded-card border border-line bg-surface p-4 shadow-card"
           action={async (form) => {
             setPostError(null);
-            const res = await createGnPost(form);
+            const res = await safeAction(() => createGnPost(form));
             if (!res.ok) return setPostError(res.error);
             composerRef.current?.reset();
             setImage(null);
@@ -365,7 +366,7 @@ export function CommunityFeed({
                   type="button"
                   className={`inline-flex items-center gap-1.5 font-medium transition-colors ${post.likedByMe ? "text-risk" : "hover:text-ink"}`}
                   onClick={async () => {
-                    const res = await toggleGnLike(post.id);
+                    const res = await safeAction(() => toggleGnLike(post.id));
                     if (!res.ok) return toast(res.error, "error");
                     refresh();
                   }}
@@ -390,7 +391,7 @@ export function CommunityFeed({
                       title={post.pinned ? "Unpin" : "Pin to top"}
                       className="inline-flex items-center gap-1 font-medium hover:text-ink"
                       onClick={async () => {
-                        const res = await toggleGnPin(post.id);
+                        const res = await safeAction(() => toggleGnPin(post.id));
                         if (!res.ok) return toast(res.error, "error");
                         toast(post.pinned ? "Unpinned" : "Pinned to top");
                         refresh();
@@ -412,7 +413,7 @@ export function CommunityFeed({
                           danger: true,
                         });
                         if (!ok) return;
-                        const res = await deleteGnPost(post.id);
+                        const res = await safeAction(() => deleteGnPost(post.id));
                         if (!res.ok) return toast(res.error, "error");
                         toast("Post deleted");
                         refresh();

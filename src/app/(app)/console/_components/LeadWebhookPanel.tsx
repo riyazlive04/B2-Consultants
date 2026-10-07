@@ -7,6 +7,7 @@ import { SwitchRow } from "@/components/ui/controls";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { regenerateLeadWebhookKey, setLeadWebhookEnabled } from "@/server/lead-webhook-actions";
 import { Btn, Card, Hint } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Founder Console → Sales ops → Lead Webhook.
@@ -44,7 +45,7 @@ export function LeadWebhookPanel({
       if (!ok) return;
     }
     setBusy(true);
-    const res = await setLeadWebhookEnabled(next);
+    const res = await safeAction(() => setLeadWebhookEnabled(next));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     toast(next ? "Lead webhook is on" : "Lead webhook is off");
@@ -60,7 +61,7 @@ export function LeadWebhookPanel({
     });
     if (!ok) return;
     setBusy(true);
-    const res = await regenerateLeadWebhookKey();
+    const res = await safeAction(() => regenerateLeadWebhookKey());
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     toast("New key generated - update your outside pages");

@@ -7,12 +7,15 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Card } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 import { askConfirm, toast } from "@/components/ui/feedback";
-import { CheckboxField, Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { guardAction } from "@/lib/action-guard";
+import { CheckboxField, Field, FormError, NotesField, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { useUnsavedGuard } from "@/components/ui/use-unsaved-guard";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import { moneyInline, moneyValue } from "@/lib/money-display";
 import { EXPENSE_BUSINESS_LINE_LABELS, EXPENSE_CATEGORY_LABELS, optionsFrom } from "@/lib/labels";
 import { AmountPair } from "@/components/ui/AmountPair";
 import { useFinanceCcy } from "./FinanceCurrency";
+import { safeAction } from "@/lib/action-guard";
 
 const minorToInput = (raw: string) => {
   const v = BigInt(raw);
@@ -25,25 +28,50 @@ export function ExpenseSection({
   fxRate,
   fxStale,
   fxDate,
+  defaultBusinessLine = "SHARED",
 }: {
   rows: ExpenseRow[];
   today: string;
   fxRate: number;
   fxStale?: boolean;
   fxDate?: string;
+  /**
+   * What a new cost is tagged with when nobody says otherwise - the page's business-line switch,
+   * or "SHARED" on the Combined view.
+   *
+   * An expense carries its line as a STORED column (unlike income, which derives it from the
+   * level), so this is the whole of the fix here: filter the page to German Note and the next
+   * cost you type is already a German Note cost. "Shared" remains the honest default for
+   * Combined, because rent and tools genuinely do belong to both.
+   */
+  defaultBusinessLine?: string;
 }) {
   const { ccy } = useFinanceCcy();
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Warn before a refresh or a tab close throws away a half-typed entry.
+  useUnsavedGuard(formRef);
   // Optimistic delete: hide the row immediately, put it back if the archive fails. Survives the
   // server action's revalidatePath (the row is simply gone from `rows` by then).
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const visibleRows = rows.filter((r) => !removedIds.has(r.id));
 
+  /** Load a row into the form and take the eye there too (issue 21). */
+  const startEdit = (row: ExpenseRow) => {
+    setEditing(row);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   const submit = async (form: FormData) => {
     setError(null);
-    const res = editing ? await updateExpense(editing.id, form) : await createExpense(form);
+    // Guarded so an offline submit keeps what was typed instead of taking the page down with
+    // it (issue 10) - see lib/action-guard.
+    const guarded = await guardAction(() =>
+      editing ? updateExpense(editing.id, form) : createExpense(form),
+    );
+    if (!guarded.ok) return setError(guarded.error);
+    const res = guarded.value;
     if (!res.ok) return setError(res.error);
     toast(editing ? "Expense updated" : "Expense added");
     setEditing(null);
@@ -59,7 +87,7 @@ export function ExpenseSection({
     });
     if (!ok) return;
     setRemovedIds((s) => new Set(s).add(row.id)); // optimistic
-    const res = await deleteExpense(row.id);
+    const res = await safeAction(() => deleteExpense(row.id));
     if (!res.ok) {
       setRemovedIds((s) => {
         const n = new Set(s);
@@ -105,8 +133,13 @@ export function ExpenseSection({
       key: "actions", header: "", sortable: false,
       cell: (r) => (
         <span className="flex gap-2 whitespace-nowrap">
-          <Btn variant="ghost" size="sm" onClick={() => setEditing(r)}>Edit</Btn>
-          <Btn variant="danger" size="sm" onClick={() => remove(r)}>Delete</Btn>
+          {/* Scrolls to the form and tints the row (issue 21) - opening the editor from a row
+              far down the table otherwise looked like a click that did nothing. */}
+          <Btn variant="ghost" size="sm" onClick={() => startEdit(r)}>Edit</Btn>
+          {/* "Archive" - the dialog already said so, the button did not (issue 26). The row moves
+              to the Archived tab and can be restored for 90 days; "Delete permanently" lives
+              there, on the only control that really destroys anything. */}
+          <Btn variant="danger" size="sm" onClick={() => remove(r)}>Archive</Btn>
         </span>
       ),
       value: () => null,
@@ -159,16 +192,15 @@ export function ExpenseSection({
             <Select
               name="businessLine"
               options={optionsFrom(EXPENSE_BUSINESS_LINE_LABELS)}
-              defaultValue={editing?.businessLine ?? "SHARED"}
+              defaultValue={editing?.businessLine ?? defaultBusinessLine}
             />
           </Field>
           {/* Not kind="name": a vendor is a company ("3M", "Zoho One"), not a person. */}
           <Field label="Paid to (vendor)">
             <TextInput kind="text" name="vendor" required placeholder="Who received this payment" defaultValue={editing?.vendor ?? ""} />
           </Field>
-          <Field label="Notes (optional)">
-            <TextInput kind="text" name="notes" placeholder="Any extra info" defaultValue={editing?.notes ?? ""} />
-          </Field>
+          {/* Counts down the last characters instead of silently swallowing them (issue 18). */}
+          <NotesField placeholder="Any extra info" defaultValue={editing?.notes ?? ""} key={`notes-${editing?.id ?? "new"}`} />
           <div className="flex items-end pb-1">
             <CheckboxField
               name="isCogs"
@@ -190,7 +222,14 @@ export function ExpenseSection({
         </form>
       </Card>
 
-      <DataTable rows={visibleRows} columns={columns} csvName="expenses" filterPlaceholder="Filter expenses…" />
+      <DataTable
+        rows={visibleRows}
+        columns={columns}
+        csvName="expenses"
+        filterPlaceholder="Filter expenses…"
+        // The row currently loaded into the form at the top of the tab (issue 21).
+        rowClassName={(r) => (r.id === editing?.id ? "bg-accent-soft" : undefined)}
+      />
     </section>
   );
 }

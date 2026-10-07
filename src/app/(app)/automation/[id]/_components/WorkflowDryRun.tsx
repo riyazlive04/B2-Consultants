@@ -127,7 +127,7 @@ export default function WorkflowDryRun({
       {dirty && (
         <p className="mb-4 flex items-start gap-2 rounded-field border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-          You have unsaved edits. This previews what's on screen - save before publishing, or you'll arm the older version.
+          You have unsaved edits. This previews what&apos;s on screen - save before publishing, or you&apos;ll arm the older version.
         </p>
       )}
 
@@ -171,7 +171,7 @@ function Results({
         <p className="flex items-start gap-2 rounded-field border border-risk bg-risk-soft px-3 py-2 text-sm text-risk">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           The automation engine is switched off globally, so nothing is running right now - this is what would happen
-          once it's back on. <Link href="/automation/settings" className="underline">Settings</Link>
+          once it&apos;s back on. <Link href="/automation/settings" className="underline">Settings</Link>
         </p>
       )}
 

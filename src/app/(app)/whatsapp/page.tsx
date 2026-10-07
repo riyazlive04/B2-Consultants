@@ -14,6 +14,10 @@ import { WhatsAppDomainGate } from "./_components/WhatsAppDomainGate";
 import { prisma } from "@/lib/prisma";
 import { normalizeDomain } from "@/lib/whatsapp";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "WhatsApp" };
+
 export const dynamic = "force-dynamic";
 
 function Chip({ ok, label }: { ok: boolean; label: string }) {
@@ -169,8 +173,10 @@ export default async function WhatsAppPage() {
           detail={{ rows: data.kindBreakdown.failed }}
         />
       </div>
-
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
       <Tabs
+        urlKey="tab"
         tabs={[
           { label: `History${counts.total ? ` (${counts.total})` : ""}`, content: <WhatsAppHistory rows={data.messages} /> },
           { label: "Settings", content: <WhatsAppSettingsForm settings={data.settings} rules={bookingRules} catalog={data.catalog} /> },

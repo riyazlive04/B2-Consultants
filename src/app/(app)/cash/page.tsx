@@ -22,11 +22,16 @@ import { signalForRunway } from "@/lib/signals";
 import { requireSection } from "@/lib/rbac";
 import { getCashOverview } from "@/server/cash-metrics";
 import { getStudentCodeMap } from "@/server/students-metrics";
+import { getTodayInrPerEur } from "@/lib/fx";
 import { AgeAnalysis } from "./_components/AgeAnalysis";
 import { CashChart } from "./_components/CashChart";
 import { CashPeriodSwitch } from "./_components/CashPeriodSwitch";
-import { CashPositionSection, GrowthOverrideForm, PayablesSection } from "./_components/CashClient";
+import { CashPositionForm, CashPositionHistory, GrowthOverrideForm, PayablesSection } from "./_components/CashClient";
 import { TopReceivablesTable, ReceivablesTable } from "./_components/CashTables";
+
+/** Names itself in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout supplies the "· B2 Consultants" suffix. */
+export const metadata = { title: "Cash Health" };
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +41,12 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
   await requireSection("cash"); // Admin-only (PRD3 §2)
   // F6: chart window from the URL, defaulting to the 12 weeks this page always showed.
   const period = parseCashPeriod(searchParams?.period);
-  const [data, studentCodeById] = await Promise.all([getCashOverview(period), getStudentCodeMap()]);
+  const [data, studentCodeById, fx] = await Promise.all([
+    getCashOverview(period),
+    getStudentCodeMap(),
+    // For the payables form's ₹/€ pair - the preview has to use the rate the server will stamp.
+    getTodayInrPerEur(),
+  ]);
   const { runway, receivables, commitments } = data;
   const today = toDateInputValue(istToday());
   const asOf = formatDate(istToday().toISOString());
@@ -171,6 +181,13 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
           </div>
         </div>
       </Card>
+
+      {/*
+        Directly under the strip, because the strip is where "Cash in Hand" announces that it has
+        gone stale - and this is the only thing that un-stales it. It used to live three screens
+        down inside the "Cash position" tab; its history still does.
+      */}
+      <CashPositionForm today={today} stale={runway.cashStale} />
 
       {/* Runway - THE number, as a gauge (PRD3 §4.4) */}
       <Card>
@@ -310,12 +327,14 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
           )}
         </div>
       </div>
-
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
       <Tabs
+        urlKey="tab"
         tabs={[
           {
             label: "Cash position",
-            content: <CashPositionSection positions={data.positions} today={today} stale={runway.cashStale} />,
+            content: <CashPositionHistory positions={data.positions} />,
           },
           {
             label: `Receivables${receivables.oldestOverdue && receivables.oldestOverdue.daysOverdue > 14 ? " ⚠" : ""}`,
@@ -389,7 +408,17 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
               </div>
             ),
           },
-          { label: "Payables", content: <PayablesSection payables={data.payables} /> },
+          {
+            label: "Payables",
+            content: (
+              <PayablesSection
+                payables={data.payables}
+                fxRate={Number(fx.rate)}
+                fxStale={fx.stale}
+                fxDate={fx.date.toISOString()}
+              />
+            ),
+          },
         ]}
       />
     </div>

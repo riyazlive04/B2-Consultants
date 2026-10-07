@@ -17,6 +17,7 @@ import { MoneyInput } from "@/components/ui/MoneyInput";
 import { Modal } from "@/components/ui/Modal";
 import { TablePager, usePaged } from "@/components/ui/pager";
 import { inr, pct } from "./workshopFormat";
+import { safeAction } from "@/lib/action-guard";
 
 const num = (n: number) => n.toLocaleString("en-IN");
 const moneyInput = (minor: number) => minorToMajorString(BigInt(Math.round(minor)));
@@ -118,7 +119,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
                         onClick={async () => {
                           const ok = await askConfirm({ title: "Delete this ad-set?", confirmLabel: "Delete", danger: true });
                           if (!ok) return;
-                          const res = await deleteAdSet(s.id);
+                          const res = await safeAction(() => deleteAdSet(s.id));
                           if (!res.ok) return toast(res.error, "error");
                           toast("Ad-set deleted");
                           refresh();
@@ -158,7 +159,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
         <form
           action={async (form) => {
             setError(null);
-            const res = await createAdSet(workshopId, form);
+            const res = await safeAction(() => createAdSet(workshopId, form));
             if (!res.ok) return setError(res.error);
             setCreating(false);
             toast("Ad-set added");
@@ -178,7 +179,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
           <form
             action={async (form) => {
               setError(null);
-              const res = await updateAdSet(editing.id, form);
+              const res = await safeAction(() => updateAdSet(editing.id, form));
               if (!res.ok) return setError(res.error);
               setEditing(null);
               toast("Ad-set updated");

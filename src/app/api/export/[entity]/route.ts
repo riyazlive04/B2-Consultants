@@ -6,7 +6,12 @@ import { csvStreamResponse } from "@/lib/csv";
 import { ACTIVE } from "@/lib/soft-delete";
 import { parsePeriod, resolvePeriod } from "@/lib/period";
 import { contactsWhere } from "@/server/contacts-metrics";
-import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS } from "@/lib/labels";
+import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/labels";
+import { BUSINESS_LINE_LABELS, lineForKind } from "@/lib/business-line";
+import { aggInrMinor } from "@/lib/money";
+import { paymentTypeLabel, RECURRENCE_INTERVAL_LABELS } from "@/lib/payment-types";
+import { levelKinds, levelLabels } from "@/server/levels";
+import { getPaymentTypesConfig } from "@/server/founder-config";
 import { answerToText, isStaticItem, normaliseItems, type FormAnswers } from "@/lib/sites-types";
 import { logActivity } from "@/server/activity-log";
 
@@ -46,7 +51,15 @@ type ExportDef = {
    */
   header: string[] | ((req: NextRequest) => Promise<string[]>);
   filename: (label: string) => string;
-  run: (req: NextRequest, period: { start: Date; endExclusive: Date }) => AsyncIterable<unknown[][]>;
+  /**
+   * May be async: an export that needs the founder's configured labels (the income one does, to
+   * print "Full payment" rather than FULL_PAYMENT) has to resolve them before it can start
+   * yielding rows. Awaited once by the caller, so a synchronous `run` is unaffected.
+   */
+  run: (
+    req: NextRequest,
+    period: { start: Date; endExclusive: Date },
+  ) => AsyncIterable<unknown[][]> | Promise<AsyncIterable<unknown[][]>>;
 };
 
 /** Keyset pagination over `id` - stable, index-backed, and unaffected by rows inserted mid-export. */
@@ -126,15 +139,33 @@ const EXPORTS: Record<string, ExportDef> = {
   income: {
     section: "finance",
     filename: (label) => `b2-income-${label}.csv`,
+    /**
+     * ── Readable, and reconcilable (issue 22) ─────────────────────────────────────
+     * The file used to come out full of raw enum codes - FULL_PAYMENT, GUIDED - with no business
+     * line, no student code, and a "Price INR" column reading 0 for a euro payment because it
+     * printed the raw INR field rather than the aggregate. A reconciliation file that needs the
+     * schema open beside it to be read is not a reconciliation file.
+     *
+     * Added: the student code (the identifier printed on agreements and quoted on the phone, so
+     * the one a row can be matched on), the business line, and the aggregate rupee value - the
+     * figure every total on screen is built from. The as-entered INR and EUR columns are kept
+     * beside it, because what arrived in which currency is the record and the aggregate is a
+     * view of it.
+     */
     header: [
-      "Date", "Student", "Level", "Price INR", "Price EUR", "Payment type", "Method",
-      "Recurs", "Next payment", "Notes",
+      "Date", "Student code", "Student", "Level", "Business line",
+      "Received INR", "Received EUR", "Value INR", "FX rate",
+      "Payment type", "Method", "Recurs", "Next payment", "Settles receivable", "Notes",
     ],
-    run(_req, period) {
+    async run(_req, period) {
       const where: Prisma.IncomeWhereInput = {
         ...ACTIVE,
         date: { gte: period.start, lt: period.endExclusive },
       };
+      // The founder's own labels for the configured lists, resolved ONCE for the whole file
+      // rather than per row - both are cached app-wide, but a 50k-row loop should not ask.
+      const [levels, types] = await Promise.all([levelLabels(), getPaymentTypesConfig()]);
+      const kindByLevel = await levelKinds();
       return batched(
         (cursorId, take) =>
           prisma.income.findMany({
@@ -143,20 +174,37 @@ const EXPORTS: Record<string, ExportDef> = {
             take,
             select: {
               id: true, date: true, studentName: true, programLevel: true,
-              amountInrMinor: true, amountEurMinor: true,
+              amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,
               paymentType: true, paymentMethod: true, paymentMethodOther: true,
               recurrenceInterval: true, recurrenceNextDate: true, notes: true,
+              student: { select: { code: true } },
+              pendingPayment: { select: { programLevel: true } },
             },
           }),
         (i) => [
-          i.date.toISOString().slice(0, 10), i.studentName, i.programLevel,
-          // Minor units → major, as a plain number so a spreadsheet can sum the column.
-          Number(i.amountInrMinor) / 100, Number(i.amountEurMinor) / 100,
-          i.paymentType,
+          i.date.toISOString().slice(0, 10),
+          i.student?.code ?? "",
+          i.studentName,
+          levels[i.programLevel] ?? i.programLevel,
+          BUSINESS_LINE_LABELS[lineForKind(kindByLevel.get(i.programLevel))],
+          // Minor units → major, as plain numbers so a spreadsheet can sum the columns.
+          Number(i.amountInrMinor) / 100,
+          Number(i.amountEurMinor) / 100,
+          // The aggregate: the INR part plus the EUR part at this row's own stamped rate. This
+          // is the figure every total on screen adds up, and it is what used to read 0 on a
+          // euro-only payment.
+          Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)) / 100,
+          i.fxRateUsed.toString(),
+          paymentTypeLabel(types, i.paymentType),
           // The typed answer replaces a bare "OTHER" - that note is the only record of
           // which rail the money came down, and a CSV is where reconciliation happens.
-          i.paymentMethod === "OTHER" && i.paymentMethodOther ? i.paymentMethodOther : i.paymentMethod,
-          i.recurrenceInterval, i.recurrenceNextDate?.toISOString().slice(0, 10) ?? null,
+          i.paymentMethod === "OTHER" && i.paymentMethodOther
+            ? i.paymentMethodOther
+            : PAYMENT_METHOD_LABELS[i.paymentMethod] ?? i.paymentMethod,
+          i.recurrenceInterval ? RECURRENCE_INTERVAL_LABELS[i.recurrenceInterval] ?? i.recurrenceInterval : null,
+          i.recurrenceNextDate?.toISOString().slice(0, 10) ?? null,
+          // Which receivable this payment pays off, where one was named (FIN-12).
+          i.pendingPayment ? levels[i.pendingPayment.programLevel] ?? i.pendingPayment.programLevel : "",
           i.notes,
         ],
       );
@@ -282,5 +330,6 @@ export async function GET(req: NextRequest, { params }: { params: { entity: stri
   });
 
   const header = typeof def.header === "function" ? await def.header(req) : def.header;
-  return csvStreamResponse(def.filename(label), header, def.run(req, period));
+  // `run` may be async (see its type) - awaited here so the stream starts from a real iterable.
+  return csvStreamResponse(def.filename(label), header, await def.run(req, period));
 }

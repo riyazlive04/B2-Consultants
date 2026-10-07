@@ -40,8 +40,18 @@ type Payout = {
   notEligible?: string;
 };
 
-export async function getCommissionReport() {
-  const month = istMonthRange(istToday());
+/**
+ * @param period Which window to report commission for (issue 20).
+ *
+ *   This was hardcoded to the current IST month, with no argument and no way to pass one, so the
+ *   Commission tab showed this month's report however the page's period was set - and an earlier
+ *   month, which is when commission is actually reconciled and paid, could not be opened at all.
+ *   Defaults to the current month, so any caller that has no period still behaves as before.
+ */
+export async function getCommissionReport(period?: { start: Date; endExclusive: Date }) {
+  const month = period
+    ? { start: period.start, end: period.endExclusive }
+    : istMonthRange(istToday());
   const rules = await getCommissionRulesConfig();
 
   const incomes = await prisma.income.findMany({

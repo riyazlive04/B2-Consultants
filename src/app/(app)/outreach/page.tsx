@@ -11,6 +11,10 @@ import { QueueList } from "./_components/QueueList";
 import { KeyMetricsTable } from "./_components/KeyMetricsTable";
 import { OutreachSettings } from "./_components/OutreachSettings";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Outreach" };
+
 export const dynamic = "force-dynamic";
 
 const CHANNEL_LABELS: Record<string, string> = { WHATSAPP: "WhatsApp", CALL: "Call", SYSTEM: "System" };
@@ -121,8 +125,10 @@ export default async function OutreachPage() {
           }}
         />
       </div>
-
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
       <Tabs
+        urlKey="tab"
         tabs={[
           {
             label: `Due now (${queue.counts.due})`,

@@ -17,6 +17,7 @@ import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatEurMinor, formatInrMinor } from "@/lib/format";
 import { LOG_VARIANT_LABELS, PAYOUT_STATUS_LABELS, optionsFrom } from "@/lib/labels";
+import { safeAction } from "@/lib/action-guard";
 
 const ZERO = BigInt(0);
 
@@ -47,7 +48,9 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = editing ? await updatePayout(editing.id, form) : await createPayout(form);
+    const res = await safeAction(() =>
+      editing ? updatePayout(editing.id, form) : createPayout(form),
+    );
     if (!res.ok) return setError(res.error);
     toast(editing ? "Payout updated" : "Payout assigned");
     if (!editing) celebrate(); // money going out the door to a telecaller - small win

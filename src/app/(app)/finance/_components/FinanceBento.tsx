@@ -89,6 +89,8 @@ export type TopPayment = {
 export type PriorityReceivable = {
   id: string;
   studentName: string;
+  /** Null when there is no number to send a reminder to - the control says so (issue 5). */
+  studentPhone: string | null;
   studentCode?: string | null;
   levelLabel: string;
   balance: MoneyAgg;
@@ -321,12 +323,21 @@ export function FinanceBento({
                 </span>
                 <span className="flex flex-none items-center gap-2">
                   {p.wa && <WhatsAppStatusBadge status={p.wa.status} kind={p.wa.kind} at={p.wa.at} />}
-                  <SendWhatsAppButton
-                    action={() => sendPaymentReminderMsg(p.id)}
-                    label="Remind"
-                    variant="button"
-                    lastSentAt={p.wa?.at ?? null}
-                  />
+                  {/* Same three rules as the Pending table (issue 5): confirm with the recipient
+                      named, "Sent" only for a message that really went, and no button at all
+                      where there is no number to send to. */}
+                  {p.studentPhone ? (
+                    <SendWhatsAppButton
+                      action={() => sendPaymentReminderMsg(p.id)}
+                      label="Remind"
+                      variant="button"
+                      confirmTitle={`Send ${p.studentName} a payment reminder?`}
+                      confirmBody={`A WhatsApp message goes to ${p.studentPhone} asking for the ${money(p.balance, ccy, c)} still outstanding.`}
+                      lastSentAt={p.wa?.sentAt ?? null}
+                    />
+                  ) : (
+                    <span className="text-caption text-muted">No phone number</span>
+                  )}
                 </span>
               </li>
             ))}

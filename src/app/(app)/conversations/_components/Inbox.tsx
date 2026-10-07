@@ -9,6 +9,7 @@ import { Avatar, EmptyState, Pill } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 import { toast } from "@/components/ui/feedback";
 import { Select } from "@/components/ui/form";
+import { safeAction } from "@/lib/action-guard";
 import {
   sendEmailAction,
   sendSmsAction,
@@ -175,7 +176,7 @@ function AssignSelect({ leadId, users, assignedToId }: { leadId: string; users: 
     setValue(next);
     const fd = new FormData();
     fd.set("userId", next);
-    const res = await assignThread(leadId, fd);
+    const res = await safeAction(() => assignThread(leadId, fd));
     if (!res.ok) {
       toast(res.error, "error");
       setValue(prev);

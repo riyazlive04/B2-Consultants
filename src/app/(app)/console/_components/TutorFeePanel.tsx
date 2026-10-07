@@ -13,6 +13,7 @@ import { Field } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { saveTutorFee } from "@/server/console-actions";
 import { Card, Hint, NumInput, SaveBar } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Trainer-fee editor (Founder Console → Tutor Fee), spec Part 2 §5.
@@ -44,7 +45,7 @@ export function TutorFeePanel({ config }: { config: TutorFeeConfig }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveTutorFee(draft);
+    const res = await safeAction(() => saveTutorFee(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

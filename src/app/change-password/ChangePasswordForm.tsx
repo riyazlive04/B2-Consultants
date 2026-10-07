@@ -6,6 +6,7 @@ import { KeyRound, Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { BrandLogo } from "@/components/shell/BrandLogo";
 import { changeOwnPassword } from "@/server/account-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Same two-pane shell as ResetPasswordForm - but this user IS signed in (with a password an admin
@@ -30,7 +31,7 @@ export default function ChangePasswordForm() {
     }
     setBusy(true);
     setError(null);
-    const res = await changeOwnPassword(form);
+    const res = await safeAction(() => changeOwnPassword(form));
     if (!res.ok) {
       setBusy(false);
       setError(res.error);

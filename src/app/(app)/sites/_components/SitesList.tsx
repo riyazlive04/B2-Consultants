@@ -9,6 +9,7 @@ import { Card, EmptyState, Pill } from "@/components/ui/kit";
 import { toast } from "@/components/ui/feedback";
 import { createSite } from "@/server/sites-actions";
 import type { SiteListRow } from "@/server/sites-metrics";
+import { safeAction } from "@/lib/action-guard";
 
 export default function SitesList({
   sites,
@@ -26,7 +27,7 @@ export default function SitesList({
     setBusy(true);
     const fd = new FormData();
     fd.set("name", name.trim());
-    const res = await createSite(fd);
+    const res = await safeAction(() => createSite(fd));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     toast("Website created");

@@ -11,6 +11,7 @@ import { SLOT_RELEASE_REASON_LABELS } from "@/lib/labels";
 import type { BookingRulesConfig } from "@/lib/config-schema";
 import type { SlotReleaseRow } from "@/server/slot-release";
 import { Btn, Card, Hint, SaveBar, TextIn, Toggle } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Founder Console → Sales ops → Confirm-or-cancel.
@@ -75,7 +76,7 @@ export function ConfirmLoopPanel({
     fd.set("confirmRequestLead", draft.confirmRequestLead);
     fd.set("autoCancelWindow", draft.autoCancelWindow);
     fd.set("confirmReplyGrace", draft.confirmReplyGrace);
-    const res = await saveConfirmLoopRules(fd);
+    const res = await safeAction(() => saveConfirmLoopRules(fd));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);
@@ -86,7 +87,7 @@ export function ConfirmLoopPanel({
   async function runNow() {
     if (running) return;
     setRunning(true);
-    const res = await runBookingAutomationNow();
+    const res = await safeAction(() => runBookingAutomationNow());
     setRunning(false);
     if (!res.ok) return toast(res.error, "error");
     toast(res.summary ? `Confirmation loop ran - ${res.summary}` : "Confirmation loop ran");
@@ -136,7 +137,7 @@ export function ConfirmLoopPanel({
             <p className={`text-caption ${draft.autoCancelEnabled ? "text-risk" : "text-muted"}`}>
               {draft.autoCancelEnabled
                 ? "On: real bookings are cancelled and the prospect is told their slot was released."
-                : "Off: nobody is asked to confirm, and a slot nobody confirmed is never released. Manual block, postpone and mark-confirmed still work."}
+                : "Off: nobody is asked to confirm, and a slot nobody confirmed is never released. Manual block, reschedule and mark-confirmed still work."}
             </p>
           </div>
 

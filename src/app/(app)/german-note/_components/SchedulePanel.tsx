@@ -11,6 +11,7 @@ import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
 import { formatDateTimeInZone } from "@/lib/format";
+import { safeAction } from "@/lib/action-guard";
 
 /** Calendar of scheduled live classes: upcoming (with join link) + past; tutor/admin manage. */
 
@@ -78,7 +79,7 @@ function EventCard({ e, canManage, onEdit, onChanged, onTakeRegister }: {
               onClick={async () => {
                 const ok = await askConfirm({ title: `Delete “${e.title}”?`, confirmLabel: "Delete", danger: true });
                 if (!ok) return;
-                const r = await deleteGnEvent(e.id);
+                const r = await safeAction(() => deleteGnEvent(e.id));
                 if (!r.ok) return toast(r.error, "error");
                 toast("Class removed");
                 onChanged();
@@ -139,7 +140,7 @@ export function SchedulePanel({ batchId, events, canManage }: { batchId: string;
             <form ref={addRef} className="mt-3 rounded-card border border-line bg-surface p-4 shadow-card"
               action={async (form) => {
                 setError(null);
-                const r = await scheduleGnEvent(batchId, form);
+                const r = await safeAction(() => scheduleGnEvent(batchId, form));
                 if (!r.ok) return setError(r.error);
                 addRef.current?.reset();
                 setAdding(false);
@@ -179,7 +180,7 @@ export function SchedulePanel({ batchId, events, canManage }: { batchId: string;
         {editing && (
           <form action={async (form) => {
             setError(null);
-            const r = await updateGnEvent(editing.id, form);
+            const r = await safeAction(() => updateGnEvent(editing.id, form));
             if (!r.ok) return setError(r.error);
             setEditing(null);
             toast("Class updated");

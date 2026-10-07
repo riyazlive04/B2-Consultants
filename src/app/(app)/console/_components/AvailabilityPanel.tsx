@@ -9,6 +9,7 @@ import { Field } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { saveBookingCalendars, saveSssPatternConfig } from "@/server/console-actions";
 import { Card, Hint, NumInput, Picker, SaveBar, TextIn, TimeIn, Toggle } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Founder Console → Availability. The standing weekly patterns the cron replays forward so
@@ -127,7 +128,7 @@ function CalendarsSection({
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveBookingCalendars({ calendars: draft });
+    const res = await safeAction(() => saveBookingCalendars({ calendars: draft }));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

@@ -41,6 +41,13 @@ import { logActivity, diffFields } from "./activity-log";
 
 export type WhatsAppActionResult = { ok: boolean; message: string; status?: WhatsAppStatus };
 
+/**
+ * One clear outcome per attempt (issue 5): Sent, or the reason it was not.
+ *
+ * `ok` is strictly "the message reached WATI". A skip is NOT a success wearing a different hat -
+ * the screen used to be able to show a green "sent" toast next to a Skipped badge, which taught
+ * people to distrust both.
+ */
 function toResult(o: SendOutcome, successMsg: string): WhatsAppActionResult {
   if (o.sent) return { ok: true, message: successMsg, status: o.status };
   return { ok: false, message: o.error ?? "Message was not sent", status: o.status };
@@ -124,20 +131,33 @@ export async function sendBookingReminderMsg(bookingId: string): Promise<WhatsAp
 export async function sendPaymentReminderMsg(pendingPaymentId: string): Promise<WhatsAppActionResult> {
   const session = await requireSection("finance");
   const out = await sendPaymentReminderFor(pendingPaymentId, session.user.id);
-  if (out.sent && out.messageId) {
-    const payment = await prisma.pendingPayment.findUnique({
-      where: { id: pendingPaymentId },
-      select: { studentName: true },
-    });
-    await logActivity(session, {
-      action: "whatsapp.send",
-      section: "finance",
-      entityType: "WhatsAppMessage",
-      entityId: out.messageId,
-      summary: `Sent ${payment?.studentName ?? "a student"} a payment reminder on WhatsApp`,
-      meta: { pendingPaymentId, kind: "PAYMENT_REMINDER", status: out.status },
-    });
-  }
+  /**
+   * ── Every attempt is logged, not just the ones that landed (issues 5 and 6) ─────
+   * This used to be `if (out.sent)`, so pressing Remind and having nothing happen left no trace
+   * anywhere a person would look: the student has no phone number, the message is skipped, and
+   * the activity log stays silent about the fact that somebody tried. An attempt that failed is
+   * more worth recording than one that worked - it is the one that needs doing again.
+   *
+   * The WhatsAppMessage row itself has always been written (with its reason) for a manual send;
+   * what was missing was this, the trail of who pressed the button and what came back.
+   */
+  const payment = await prisma.pendingPayment.findUnique({
+    where: { id: pendingPaymentId },
+    select: { studentName: true },
+  });
+  const who = payment?.studentName ?? "a student";
+  await logActivity(session, {
+    action: out.sent ? "whatsapp.send" : "whatsapp.send.failed",
+    section: "finance",
+    entityType: "WhatsAppMessage",
+    // A skip can be refused before a row exists at all (the system is off), so the plan is the
+    // fallback subject - an activity entry pointing at nothing is not an entry.
+    entityId: out.messageId ?? pendingPaymentId,
+    summary: out.sent
+      ? `Sent ${who} a payment reminder on WhatsApp`
+      : `Payment reminder to ${who} was not sent - ${out.error ?? "no reason given"}`,
+    meta: { pendingPaymentId, kind: "PAYMENT_REMINDER", status: out.status, error: out.error ?? null },
+  });
   revalidatePath("/finance");
   return toResult(out, "Payment reminder sent");
 }

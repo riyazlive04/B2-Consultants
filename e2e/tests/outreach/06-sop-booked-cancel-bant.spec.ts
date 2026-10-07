@@ -138,12 +138,16 @@ test.describe("A. booked straight after opt-in, BANT 1.6, never confirms → can
 });
 
 test.describe("B. call confirmed on the Bookings page", () => {
-  test("Bookings → Confirm marks the booking confirmed and moves the card to Pre-Qualified & Confirmed", async ({ browser, request, page }) => {
+  test("Bookings → Mark confirmed moves the card to Pre-Qualified & Confirmed", async ({ browser, request, page }) => {
     await freshOptInAndBook(browser, request, BANT_HIGH, "06B bookings-confirm");
     await page.goto("/bookings");
+    // The confirm toggle moved off the row into the booking's own dialog, where it can say whose
+    // call it confirms - a row control could only ever be called "Confirm", twenty times over.
     const row = page.locator("table tbody tr:visible").filter({ hasText: P.phone }).first();
-    await row.getByTitle("Mark this call confirmed").click();
-    await expect(page.getByText("Confirmed").first()).toBeVisible();
+    await row.getByRole("button", { name: /^Open .*booking$/ }).click();
+    const dlg = page.getByRole("dialog").last();
+    await dlg.getByRole("button", { name: "Mark confirmed" }).click();
+    await expect(dlg.getByText("Confirmed", { exact: true }).first()).toBeVisible();
     const b = await eventually(async () => (await bookingsFor(leadId)).find((x) => x.confirmedAt), "confirmedAt");
     expect(b.status).toBe("BOOKED");
     // `confirmedAt` and the stage move are two transactions by design (advanceLeadStage owns its

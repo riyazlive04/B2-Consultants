@@ -24,6 +24,7 @@ import {
   saveFunnelChrome, createVariant, setStepWeight, resetVariantViews,
 } from "@/server/funnels-actions";
 import type { StepCalendars } from "@/server/booking-calendars";
+import { safeAction } from "@/lib/action-guard";
 
 // Grouped the way the builder offers them: bands and layout first (a page is built out of
 // containers), then content, then the escape hatch.
@@ -135,7 +136,7 @@ export default function FunnelBuilder({
   // ── persistence ──
   async function saveStep() {
     if (!activeId) return;
-    const res = await saveStepBlocks(activeId, { blocks: draft.blocks, name: draft.name, seoTitle: draft.seoTitle, seoDescription: draft.seoDescription });
+    const res = await safeAction(() => saveStepBlocks(activeId, { blocks: draft.blocks, name: draft.name, seoTitle: draft.seoTitle, seoDescription: draft.seoDescription }));
     if (!res.ok) return toast(res.error, "error");
     toast("Step saved");
     router.refresh();
@@ -201,7 +202,7 @@ export default function FunnelBuilder({
     setSaveState("dirty");
     const t = setTimeout(async () => {
       setSaveState("saving");
-      const res = await saveFunnelChrome(funnel.id, slot, blocks);
+      const res = await safeAction(() => saveFunnelChrome(funnel.id, slot, blocks));
       if (res.ok) setSaveState("saved");
       else { setSaveState("error"); toast(res.error, "error"); }
     }, 1500);
@@ -209,7 +210,7 @@ export default function FunnelBuilder({
   }, [chrome, slot, funnel.id, funnel.headerBlocks, funnel.footerBlocks]);
 
   async function publish() {
-    const res = await togglePublishFunnel(funnel.id);
+    const res = await safeAction(() => togglePublishFunnel(funnel.id));
     if (!res.ok) return toast(res.error, "error");
     setPublished((p) => !p);
     toast(published ? "Unpublished" : "Published");
@@ -217,13 +218,13 @@ export default function FunnelBuilder({
   }
   async function saveName() {
     if (name.trim() === funnel.name) return;
-    const res = await renameFunnel(funnel.id, name);
+    const res = await safeAction(() => renameFunnel(funnel.id, name));
     if (res.ok) { toast("Renamed"); router.refresh(); } else toast(res.error, "error");
   }
   async function doAddStep(templateId?: string, templateName?: string) {
     const stepName = newStepName.trim() || templateName || "";
     if (!stepName) return toast("Give the step a name first", "error");
-    const res = await addStep(funnel.id, stepName, templateId);
+    const res = await safeAction(() => addStep(funnel.id, stepName, templateId));
     if (res.ok) { toast(templateId ? "Step added from template" : "Step added"); setNewStepName(""); router.refresh(); } else toast(res.error, "error");
   }
   async function doDeleteStep(step: EditorStep) {
@@ -235,7 +236,7 @@ export default function FunnelBuilder({
       danger: true,
     });
     if (!ok) return;
-    const res = await deleteStep(step.id);
+    const res = await safeAction(() => deleteStep(step.id));
     if (res.ok) { toast("Step deleted"); router.refresh(); } else toast(res.error, "error");
   }
   async function moveStep(i: number, dir: -1 | 1) {
@@ -243,22 +244,22 @@ export default function FunnelBuilder({
     const j = i + dir;
     if (j < 0 || j >= ids.length) return;
     [ids[i], ids[j]] = [ids[j], ids[i]];
-    const res = await reorderSteps(funnel.id, ids);
+    const res = await safeAction(() => reorderSteps(funnel.id, ids));
     if (res.ok) router.refresh();
   }
 
   // ── A/B ──
   async function doAddVariant(stepId: string) {
-    const res = await createVariant(stepId);
+    const res = await safeAction(() => createVariant(stepId));
     if (res.ok) { toast("Variant created - edit it, then set the split"); router.refresh(); } else toast(res.error, "error");
   }
   async function doSetWeight(stepId: string, weight: number) {
-    const res = await setStepWeight(stepId, weight);
+    const res = await safeAction(() => setStepWeight(stepId, weight));
     if (res.ok) router.refresh(); else toast(res.error, "error");
   }
   async function doResetViews(stepId: string) {
     if (!(await askConfirm({ title: "Reset the view counts?", body: "Both arms go back to zero, so the comparison starts fresh." }))) return;
-    const res = await resetVariantViews(stepId);
+    const res = await safeAction(() => resetVariantViews(stepId));
     if (res.ok) { toast("View counts reset"); router.refresh(); } else toast(res.error, "error");
   }
 
@@ -268,7 +269,7 @@ export default function FunnelBuilder({
   }
   async function removeChrome(which: "header" | "footer") {
     if (!(await askConfirm({ title: `Remove the global ${which}?`, body: "Every step loses it at once.", danger: true }))) return;
-    const res = await saveFunnelChrome(funnel.id, which, null);
+    const res = await safeAction(() => saveFunnelChrome(funnel.id, which, null));
     if (!res.ok) return toast(res.error, "error");
     setChrome((c) => ({ ...c, [which]: null }));
     setSaveState("saved");

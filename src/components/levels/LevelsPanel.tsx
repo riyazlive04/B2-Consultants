@@ -13,6 +13,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Level catalogue admin (Admin-only), for ONE business line at a time.
@@ -216,7 +217,7 @@ export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: Busi
           className="rounded-card border border-line bg-surface p-4 shadow-card"
           action={async (form) => {
             setError(null);
-            const res = await createLevel(form);
+            const res = await safeAction(() => createLevel(form));
             if (!res.ok) return setError(res.error);
             setCreating(false);
             toast("Level added");
@@ -258,7 +259,7 @@ export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: Busi
                 <Btn
                   variant="ghost"
                   onClick={async () => {
-                    const res = await setLevelActive(l.id, !l.active);
+                    const res = await safeAction(() => setLevelActive(l.id, !l.active));
                     if (!res.ok) return toast(res.error, "error");
                     toast(l.active ? "Level deactivated" : "Level reactivated");
                     refresh();
@@ -283,7 +284,7 @@ export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: Busi
                       danger: true,
                     });
                     if (!ok) return;
-                    const res = await deleteLevel(l.id);
+                    const res = await safeAction(() => deleteLevel(l.id));
                     if (!res.ok) return toast(res.error, "error");
                     toast("Level deleted");
                     refresh();
@@ -302,7 +303,7 @@ export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: Busi
           <form
             action={async (form) => {
               setError(null);
-              const res = await updateLevel(editing.id, form);
+              const res = await safeAction(() => updateLevel(editing.id, form));
               if (!res.ok) return setError(res.error);
               setEditing(null);
               toast("Level updated");

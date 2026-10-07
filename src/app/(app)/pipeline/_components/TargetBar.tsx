@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/feedback";
 import { Card, Pill } from "@/components/ui/kit";
 import { FormError, SubmitButton, TextInput } from "@/components/ui/form";
 import { MoneyInput } from "@/components/ui/MoneyInput";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Monthly revenue target bar. Bar colour follows the PRD1 §5.4 banding on % of
@@ -45,7 +46,7 @@ export function TargetBar({
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = await setMonthlyTarget(form);
+    const res = await safeAction(() => setMonthlyTarget(form));
     if (!res.ok) return setError(res.error);
     toast("Monthly target updated");
     setEditing(false);
@@ -53,7 +54,7 @@ export function TargetBar({
 
   const submitFee = async (form: FormData) => {
     setFeeError(null);
-    const res = await setPipelineAvgFee(form);
+    const res = await safeAction(() => setPipelineAvgFee(form));
     if (!res.ok) return setFeeError(res.error);
     toast("Average program fee updated");
   };

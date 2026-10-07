@@ -2,7 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { cashPeriodStart, istMonthRange, istToday, kpiDateRange, type CashPeriodKey, type KpiRangeKey } from "@/lib/dates";
-import { aggInrMinor } from "@/lib/money";
+import { Prisma } from "@prisma/client";
+import { aggEurMinor, aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
 import { isRecurring, monthlyEquivalentMinor, nextOccurrence } from "@/lib/payable-frequency";
 import { getPendingRows } from "./finance-metrics";
@@ -14,9 +15,25 @@ import { getPendingRows } from "./finance-metrics";
  *  - break-even  ← active payables, normalised to monthly
  */
 
+/**
+ * What a payable is worth, in rupees, whichever currency it was agreed in.
+ *
+ * Payables used to be read straight off `amountInrMinor`, which was the whole of the model. Now
+ * that a bill can be entered in euro, reading that column alone would value a €300 subscription
+ * at zero - and it feeds break-even, burn and the runway badge in the top bar, so it would read
+ * as a cost the business does not have.
+ */
+const payableInr = (p: { amountInrMinor: bigint; amountEurMinor: bigint; fxRateUsed: Prisma.Decimal }): number =>
+  Number(aggInrMinor(p.amountInrMinor, p.amountEurMinor, p.fxRateUsed));
+
 /** Monthly-equivalent of a payable (quarterly/3, annual/12; one-time excluded). */
-function monthlyEquivalentInr(p: { amountInrMinor: bigint; frequency: string }): number {
-  return monthlyEquivalentMinor(p.amountInrMinor, p.frequency);
+function monthlyEquivalentInr(p: {
+  amountInrMinor: bigint;
+  amountEurMinor: bigint;
+  fxRateUsed: Prisma.Decimal;
+  frequency: string;
+}): number {
+  return monthlyEquivalentMinor(BigInt(Math.round(payableInr(p))), p.frequency);
 }
 
 /**
@@ -160,7 +177,7 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
    */
   const committedOneTimeInr = activePayables
     .filter((p) => !isRecurring(p.frequency))
-    .reduce((a, p) => a + Number(p.amountInrMinor), 0);
+    .reduce((a, p) => a + payableInr(p), 0);
   const cashAfterCommitmentsInr =
     runway.cashInr === null ? null : runway.cashInr - committedOneTimeInr;
   const runwayAfterCommitmentsMonths =
@@ -178,8 +195,13 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
     id: p.id,
     name: p.name,
     category: p.category,
-    amountInr: Number(p.amountInrMinor),
+    // The aggregate, so a euro bill sorts and totals beside a rupee one.
+    amountInr: payableInr(p),
+    amountEur: Number(aggEurMinor(p.amountInrMinor, p.amountEurMinor, p.fxRateUsed)),
+    // The raw sides, which are what the edit form re-opens on - a form must reload the figure
+    // that was typed, not the converted mirror of it.
     amountInrRaw: p.amountInrMinor.toString(),
+    amountEurRaw: p.amountEurMinor.toString(),
     frequency: p.frequency,
     // H5: a recurring payable's stored date is the ANCHOR it was set up with, not its next
     // occurrence - a monthly payable entered in January still read "15 Jan" in July. Rolled
@@ -192,7 +214,7 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
       p.status === "ACTIVE" && !!dueOf(p) &&
       dueOf(p)!.getTime() - today.getTime() <= 7 * 86400000 &&
       dueOf(p)!.getTime() >= today.getTime() &&
-      runway.cashInr !== null && runway.cashInr < 2 * Number(p.amountInrMinor), // red rule (PRD3 §4.3)
+      runway.cashInr !== null && runway.cashInr < 2 * payableInr(p), // red rule (PRD3 §4.3)
   }));
 
   // ── Revenue vs break-even + months to ₹8L (PRD3 §4.4) ──
@@ -254,7 +276,7 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
       })),
     receivables,
     payables: payableRows,
-    dueThisMonthInr: dueThisMonth.reduce((a, p) => a + Number(p.amountInrMinor), 0),
+    dueThisMonthInr: dueThisMonth.reduce((a, p) => a + payableInr(p), 0),
     /** Promised, non-recurring, and not yet paid - see the note at the computation. */
     commitments: {
       oneTimeInr: committedOneTimeInr,

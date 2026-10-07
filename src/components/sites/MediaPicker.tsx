@@ -6,6 +6,7 @@ import { Btn, IconButton } from "@/components/ui/controls";
 import { Hint } from "@/components/ui/kit";
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { deleteMedia, listMedia, updateMediaAlt, type MediaRow } from "@/server/media-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The media library, as a modal picker.
@@ -164,7 +165,7 @@ export default function MediaPicker({
                       defaultValue={m.alt ?? ""}
                       onBlur={async (e) => {
                         if (e.target.value === (m.alt ?? "")) return;
-                        const res = await updateMediaAlt(m.id, e.target.value);
+                        const res = await safeAction(() => updateMediaAlt(m.id, e.target.value));
                         if (!res.ok) toast(res.error, "error");
                       }}
                     />
@@ -172,7 +173,7 @@ export default function MediaPicker({
                       label="Remove from library"
                       onClick={async () => {
                         if (!(await askConfirm({ title: `Remove "${m.filename}"?`, danger: true }))) return;
-                        const res = await deleteMedia(m.id);
+                        const res = await safeAction(() => deleteMedia(m.id));
                         if (!res.ok) return toast(res.error, "error");
                         toast("Removed");
                         void refresh();

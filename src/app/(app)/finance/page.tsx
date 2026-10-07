@@ -35,9 +35,14 @@ import { RecognitionCard } from "./_components/RecognitionCard";
 import { getRecognition, recognitionConfidence } from "@/server/revenue-recognition";
 import { ArchivedGroups } from "@/components/ui/ArchivedGroups";
 import { getArchivedIncomes, getArchivedExpenses, getArchivedPendingPayments } from "@/server/archive-metrics";
+import { getStudentPickerOptions } from "@/server/students-metrics";
 import {
   restoreIncome, purgeIncome, restoreExpense, purgeExpense, restorePendingPayment, purgePendingPayment,
 } from "@/server/finance-actions";
+
+/** Names itself in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout supplies the "· B2 Consultants" suffix. */
+export const metadata = { title: "Finance" };
 
 export const dynamic = "force-dynamic";
 
@@ -77,13 +82,15 @@ export default async function FinancePage({
     archExpenses,
     archPendings,
     studentRows,
+    studentPickerOptions,
     activeLevels,
     line,
     paymentTypes,
     instalmentPlans,
   ] = await Promise.all([
     getFinanceOverview(period),
-    getCommissionReport(),
+    // Follows the page's period switch (issue 20) - the tab used to ignore it entirely.
+    getCommissionReport(period),
     // Same rate the server actions stamp on save, so the form's ₹↔€ preview
     // matches what actually gets stored.
     getTodayInrPerEur(),
@@ -94,6 +101,8 @@ export default async function FinancePage({
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true, code: true },
     }),
+    // Name + code + the programmes they are on + which book(s) they are in, for the pickers.
+    getStudentPickerOptions(),
     getActiveLevels(),
     // Sticky across navigation via cookie, but an explicit `?line=` in the URL still wins -
     // linking a colleague a specific view was a deliberate property of the old design
@@ -128,11 +137,14 @@ export default async function FinancePage({
     B2: formatStudentCode(nextStudentNumber(issuedCodes, "B2"), "B2"),
     GERMAN_NOTE: formatStudentCode(nextStudentNumber(issuedCodes, "GERMAN_NOTE"), "GERMAN_NOTE"),
   };
-  const studentOptions = studentRows.map((s) => ({
-    value: s.id,
-    label: s.fullName,
-    hint: s.code ?? undefined,
-  }));
+  /**
+   * Name, student code, the programmes they are on, and which book(s) they belong to - so the
+   * pickers can be searched by any of the three and narrowed to one business. See
+   * server/students-metrics#getStudentPickerOptions.
+   */
+  const studentOptions = studentPickerOptions;
+  /** Level code → kind, so a client form can derive the business a level belongs to. */
+  const levelKindByCode = Object.fromEntries(activeLevels.map((l) => [l.code, l.kind as string]));
   /**
    * ── Payers with no student record ────────────────────────────────────────────────
    * The "Student name" box only ever offered rows from the `Student` table, so on an install
@@ -174,6 +186,7 @@ export default async function FinancePage({
    * exactly how the balance maths already pairs a payment with its receivable.
    */
   const upcomingByStudent: Record<string, { dueDate: string; inr: number; eur: number }[]> = {};
+  const upcomingByPlan: Record<string, { dueDate: string; inr: number; eur: number }[]> = {};
   for (const p of pendings) {
     if (p.status === "PAID_IN_FULL" || p.status === "DROPPED") continue;
     const due = p.instalments
@@ -181,6 +194,9 @@ export default async function FinancePage({
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
       .map((i) => ({ dueDate: i.dueDate, inr: i.inr, eur: i.eur }));
     if (!due.length) continue;
+    // Keyed by plan as well, so an income row that NAMES its receivable gets that receivable's
+    // own tail rather than every instalment the student has anywhere (issue 24).
+    upcomingByPlan[p.id] = due;
     const key = p.studentId ?? p.studentName.trim().toLowerCase().replace(/\s+/g, " ");
     upcomingByStudent[key] = [...(upcomingByStudent[key] ?? []), ...due];
   }
@@ -217,6 +233,24 @@ export default async function FinancePage({
    */
   const levelLines = Object.fromEntries(levelOpts.map((o) => [o.value, lineOfLevel(o.value)]));
   const seg = line === "ALL" ? null : metrics.segments[line];
+  /**
+   * ── The tables obey the business-line switch too (issue 11) ────────────────────
+   * The cards above them already split by line; the tables below listed everything, so picking
+   * "German Note" changed the totals and left a table full of B2 rows under them. The period is
+   * applied in `getFinanceOverview` (one query each, bounded); the line is applied here, because
+   * it is a property of the level and the level→line map is built on this page.
+   *
+   * Receivables are deliberately NOT period-filtered - an open balance is a standing fact, not
+   * an event that happened in a window - but they are line-filtered, because a German Note
+   * receivable has no business on a B2 screen.
+   */
+  const lineIncomes = incomes.filter((i) => (line === "ALL" ? true : lineOfLevel(i.programLevel) === line));
+  const lineExpenses = expenses.filter((e) =>
+    // SHARED expenses belong to both books, so they show on either view rather than vanishing
+    // from both - the same rule the P&L segments use.
+    line === "ALL" ? true : e.businessLine === line || e.businessLine === "SHARED",
+  );
+  const linePendings = pendings.filter((p) => (line === "ALL" ? true : lineOfLevel(p.programLevel) === line));
   const { start: monthStart, endExclusive: monthEndExclusive } = period;
   const monthEndInclusive = new Date(monthEndExclusive.getTime() - 86_400_000);
   const [waByPending, annual, clientMovement, recognition] = await Promise.all([
@@ -431,7 +465,10 @@ export default async function FinancePage({
       key: "ytd", label: "Yearly revenue to date", iconName: "calendar",
       inrMinor: view.ytdRevenue.inr, eurMinor: view.ytdRevenue.eur,
       detailTitle: "Revenue this year to date",
-      detailNote: "Programme-level revenue mix (this month).",
+      // Says which window the breakdown covers (issue 27). The headline is year-to-date and the
+      // rows underneath are the selected period's mix - true, and previously unsaid, so the two
+      // read as one figure split up.
+      detailNote: `Programme-level revenue mix - ${period.label.toLowerCase()}, not the full year.`,
       detailRows: levelItems.length
         ? levelItems.map((l) => ({ label: l.label, inrMinor: l.amount.inr, eurMinor: l.amount.eur }))
         : [{ label: "No revenue yet", text: "-" }],
@@ -489,14 +526,21 @@ export default async function FinancePage({
             The tabbed forms and their tables sit directly under the KPI row so they are reachable
             without scrolling past three annual charts; the charts are review material and follow. */}
         <Tabs
+          // Keeps the open tab in the address, so a refresh does not drop back to Income
+          // (issue 28) - and so a colleague can be sent a link to the tab being discussed.
+          urlKey="tab"
           initial={initialTab}
           tabs={[
             {
               label: "Income",
               content: (
                 <IncomeSection
-                  rows={incomes}
+                  rows={lineIncomes}
                   today={today}
+                  /* The switch at the top of the page also answers the form below it: filter to
+                     German Note and a new entry opens on German Note, with German levels. "ALL"
+                     is a view of both books and says nothing about where new money belongs. */
+                  defaultLine={line === "ALL" ? null : line}
                   studentOptions={studentOptions}
                   studentCodeById={studentCodeById}
                   levelOptions={levelOpts}
@@ -505,6 +549,24 @@ export default async function FinancePage({
                   fxDate={fxDate}
                   canCreateStudent={isAdmin}
                   upcomingByStudent={upcomingByStudent}
+                  upcomingByPlan={upcomingByPlan}
+                  /*
+                    Every receivable still owed something, so a payment can name the plan it pays
+                    off (FIN-12). Built from the rows already loaded - the form narrows the list
+                    to the person being typed, client-side, so there is no round trip per
+                    keystroke.
+                  */
+                  openPlans={pendings
+                    .filter((p) => p.balance.inr > 0 || p.balance.eur > 0)
+                    .map((p) => ({
+                      id: p.id,
+                      studentId: p.studentId,
+                      studentName: p.studentName,
+                      programLevel: p.programLevel,
+                      levelLabel: PROGRAM_LEVEL_LABELS[p.programLevel] ?? p.programLevel,
+                      balanceInr: p.balance.inr,
+                      nextDueDate: p.nextDueDate,
+                    }))}
                   upcomingInstalments={upcomingInstalments}
                   levelLines={levelLines}
                   payerOptions={payerOptions}
@@ -516,13 +578,24 @@ export default async function FinancePage({
             },
             {
               label: "Expenses",
-              content: <ExpenseSection rows={expenses} today={today} fxRate={fxRate} fxStale={fx.stale} fxDate={fxDate} />,
+              content: (
+                <ExpenseSection
+                  rows={lineExpenses}
+                  today={today}
+                  fxRate={fxRate}
+                  fxStale={fx.stale}
+                  fxDate={fxDate}
+                  // Same rule as income. "Shared" on Combined - rent and tools really do
+                  // belong to both books, and that is the honest answer when none is picked.
+                  defaultBusinessLine={line === "ALL" ? "SHARED" : line}
+                />
+              ),
             },
             {
-              label: `Pending payments${pendings.some((p) => p.overdue) ? " ⚠" : ""}`,
-              content: <PendingSection rows={pendings} studentCodeById={studentCodeById} waStatus={waByPending} levelOptions={levelOpts} fxRate={fxRate} fxStale={fx.stale} fxDate={fxDate} instalmentPlans={instalmentPlans} />,
+              label: `Pending payments${linePendings.some((p) => p.overdue) ? " ⚠" : ""}`,
+              content: <PendingSection rows={linePendings} studentOptions={studentOptions} levelKinds={levelKindByCode} studentCodeById={studentCodeById} waStatus={waByPending} levelOptions={levelOpts} fxRate={fxRate} fxStale={fx.stale} fxDate={fxDate} instalmentPlans={instalmentPlans} />,
             },
-            { label: "Commission", content: <CommissionSection report={commission} /> },
+            { label: "Commission", content: <CommissionSection report={commission} periodLabel={period.label} /> },
             {
               label: `Archived${archivedCount ? ` (${archivedCount})` : ""}`,
               content: (
@@ -547,6 +620,9 @@ export default async function FinancePage({
           cashInrMinor={recognition.cashInrMinor}
           recognisedInrMinor={recognition.recognisedInrMinor}
           deferredInrMinor={recognition.deferredInrMinor}
+          cashEurMinor={recognition.cashEurMinor}
+          recognisedEurMinor={recognition.recognisedEurMinor}
+          deferredEurMinor={recognition.deferredEurMinor}
           confidence={recognitionConfidence(recognition)}
         />
 
@@ -573,6 +649,9 @@ export default async function FinancePage({
           priorityReceivables={priorityReceivables.map((p) => ({
             id: p.id,
             studentName: p.studentName,
+            // Where a reminder would go. The Remind control names it in its confirmation and
+            // stands down entirely when it is null (issue 5).
+            studentPhone: p.studentPhone,
             studentCode: p.studentId ? studentCodeById[p.studentId] ?? null : null,
             levelLabel: PROGRAM_LEVEL_LABELS[p.programLevel] ?? p.programLevel,
             balance: p.balance,

@@ -10,6 +10,10 @@ import { effectiveAgreementStatus } from "@/lib/agreement";
 import { getAgreementCounts, listAgreements } from "@/server/agreement-metrics";
 import { StatusBadge } from "./_components/StatusBadge";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Agreements" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AgreementsPage() {

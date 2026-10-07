@@ -8,6 +8,10 @@ import { requireSection } from "@/lib/rbac";
 import { getTelecallerBoard } from "@/server/telecaller-metrics";
 import { TelecallerClient } from "./_components/TelecallerClient";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Telecaller Pay" };
+
 export const dynamic = "force-dynamic";
 
 export default async function TelecallerPage({

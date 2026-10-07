@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { aggEurMinor, aggInrMinor } from "@/lib/money";
+import { allocatePayments } from "@/lib/payment-allocation";
 import {
   isPlanPaidInFull,
   pickPlanForPayment,
@@ -65,6 +66,13 @@ type IncomeForSettle = {
   programLevel: string;
   /** PaymentTypeConfig.code. What matters is its KIND, resolved below, not the code itself. */
   paymentType: string;
+  /**
+   * The plan this payment NAMES, when the operator picked one (FIN-12). Set, it removes the
+   * guesswork below entirely: the money settles that plan's ladder and no other, even where the
+   * student has two plans at the same level - the case `pickPlanForPayment` could only ever
+   * decline to touch.
+   */
+  pendingPaymentId: string | null;
   amountInrMinor: bigint;
   amountEurMinor: bigint;
   fxRateUsed: Prisma.Decimal;
@@ -117,6 +125,26 @@ export async function settleInstalmentsForIncome(tx: Tx, income: IncomeForSettle
   }
 
   /**
+   * ── The operator said which plan this is for ──────────────────────────────────────
+   * Then there is nothing to infer. Locked the same way as the search below, and still required
+   * to be a LIVE plan: a payment pointed at an archived or already-closed receivable settles
+   * nothing rather than reopening it. The level is deliberately NOT re-checked here - the person
+   * recording the money chose this plan, and second-guessing them is what the ambiguity skip did.
+   */
+  if (income.pendingPaymentId) {
+    const named = await tx.$queryRaw<LockedPlan[]>`
+      SELECT "id", "studentId", "studentName", "status"::text AS "status",
+             "totalFeeInrMinor", "totalFeeEurMinor", "planExtraInrMinor", "planExtraEurMinor", "fxRateUsed"
+        FROM "pending_payment"
+       WHERE "id" = ${income.pendingPaymentId}
+         AND "deletedAt" IS NULL
+         AND "status" IN ('ACTIVE', 'OVERDUE')
+       FOR UPDATE`;
+    if (named.length === 0) return record(true, "no-plan");
+    return settleAgainst(tx, income, named[0]);
+  }
+
+  /**
    * Candidates are narrowed by the SAME programme level as the payment - a Guided payment must not
    * pay off an A1 schedule - and by the student rule below. `FOR UPDATE` locks the matched plans so
    * two payments recorded at the same moment queue up, and the second one sees the instalment the
@@ -139,6 +167,16 @@ export async function settleInstalmentsForIncome(tx: Tx, income: IncomeForSettle
   const pick = pickPlanForPayment(income, plans);
   if ("skip" in pick) return record(true, pick.skip);
   const plan = plans.find((p) => p.id === pick.planId)!;
+  return settleAgainst(tx, income, plan);
+}
+
+/**
+ * Pay off as much of one plan's ladder as this money covers.
+ *
+ * Split out of the function above so the named-plan path and the inferred-plan path cannot drift:
+ * whichever way the plan was chosen, what happens to its instalments is this code.
+ */
+async function settleAgainst(tx: Tx, income: IncomeForSettle, plan: LockedPlan): Promise<SettlementRecord> {
 
   const instalments = await tx.instalment.findMany({
     where: { pendingPaymentId: plan.id },
@@ -184,7 +222,7 @@ export async function settleInstalmentsForIncome(tx: Tx, income: IncomeForSettle
         eur: aggEurMinor(plan.totalFeeInrMinor, plan.totalFeeEurMinor, plan.fxRateUsed)
           + aggEurMinor(plan.planExtraInrMinor, plan.planExtraEurMinor, plan.fxRateUsed),
       },
-      paid: await paidTowardsPlan(tx, plan, income.programLevel),
+      paid: await paidTowardsPlan(tx, plan),
     });
   }
 
@@ -206,34 +244,78 @@ export async function settleInstalmentsForIncome(tx: Tx, income: IncomeForSettle
 }
 
 /**
- * What the student has paid towards THIS plan, for the paid-in-full check.
+ * What has been paid towards THIS plan, for the paid-in-full check.
  *
- * Same student rule as the balance on screen (id-linked plans by id only, unlinked by name), but
- * narrowed to the plan's own level. The on-screen balance is not narrowed (FIN-12, a known
- * cross-credit of other-level payments), so this figure is never larger than what the table
- * credits: whenever this says "nothing left", the table says so too, and an old payment for a
- * different course can never be what closes a plan.
+ * ── Why this reads every plan, not just the one being settled (FIN-12) ─────────────
+ * It used to sum the student's payments AT THIS LEVEL and call that the plan's own total, which
+ * was the same per-student cross-credit the on-screen balance had: a second plan at the same
+ * level was closed by the first one's money. It now runs the SHARED allocator - the identical
+ * function `getPendingRows` uses - over all of that student's live plans, and takes this plan's
+ * share. So the figure that closes a plan here and the figure the table shows are one figure,
+ * by construction rather than by agreement.
  */
-async function paidTowardsPlan(tx: Tx, plan: LockedPlan, programLevel: string) {
-  const incomes = await tx.income.findMany({
-    where: {
-      deletedAt: null,
-      programLevel,
-      ...(plan.studentId
-        ? { studentId: plan.studentId }
-        : { studentName: { equals: plan.studentName.trim(), mode: "insensitive" as const } }),
-    },
-    select: { studentName: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
-  });
+async function paidTowardsPlan(tx: Tx, plan: LockedPlan) {
+  const [plans, incomes] = await Promise.all([
+    tx.pendingPayment.findMany({
+      where: {
+        deletedAt: null,
+        ...(plan.studentId
+          ? { studentId: plan.studentId }
+          : { studentId: null, studentName: { equals: plan.studentName.trim(), mode: "insensitive" as const } }),
+      },
+      select: {
+        id: true, studentName: true, createdAt: true,
+        totalFeeInrMinor: true, totalFeeEurMinor: true,
+        planExtraInrMinor: true, planExtraEurMinor: true, fxRateUsed: true,
+      },
+    }),
+    tx.income.findMany({
+      where: {
+        deletedAt: null,
+        ...(plan.studentId
+          ? { studentId: plan.studentId }
+          : { studentId: null, studentName: { equals: plan.studentName.trim(), mode: "insensitive" as const } }),
+      },
+      select: {
+        studentName: true, pendingPaymentId: true,
+        amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,
+      },
+    }),
+  ]);
+
+  // A name-matched set is re-filtered in JS: `mode: "insensitive"` folds case but not the
+  // repeated whitespace that `studentNameKey` folds, so "Anna  Smith" would slip through.
   const key = studentNameKey(plan.studentName);
-  let inr = BigInt(0);
-  let eur = BigInt(0);
-  for (const i of incomes) {
-    if (!plan.studentId && studentNameKey(i.studentName) !== key) continue;
-    inr += aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed);
-    eur += aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed);
-  }
-  return { inr, eur };
+  const mine = <T extends { studentName: string }>(rows: T[]) =>
+    plan.studentId ? rows : rows.filter((r) => studentNameKey(r.studentName) === key);
+
+  const result = allocatePayments(
+    mine(plans).map((p) => ({
+      id: p.id,
+      createdAt: p.createdAt.getTime(),
+      toCollect: {
+        inr:
+          Number(aggInrMinor(p.totalFeeInrMinor, p.totalFeeEurMinor, p.fxRateUsed)) +
+          Number(aggInrMinor(p.planExtraInrMinor, p.planExtraEurMinor, p.fxRateUsed)),
+        eur:
+          Number(aggEurMinor(p.totalFeeInrMinor, p.totalFeeEurMinor, p.fxRateUsed)) +
+          Number(aggEurMinor(p.planExtraInrMinor, p.planExtraEurMinor, p.fxRateUsed)),
+      },
+    })),
+    mine(incomes).map((i) => ({
+      pendingPaymentId: i.pendingPaymentId,
+      amount: {
+        inr: Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
+        eur: Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
+      },
+    })),
+  );
+
+  const share = result.byPlan.get(plan.id);
+  return {
+    inr: BigInt(Math.round(share?.paid.inr ?? 0)),
+    eur: BigInt(Math.round(share?.paid.eur ?? 0)),
+  };
 }
 
 /**

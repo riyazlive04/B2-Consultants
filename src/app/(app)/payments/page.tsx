@@ -17,6 +17,10 @@ import { ArchivedGroups } from "@/components/ui/ArchivedGroups";
 import { getArchivedInvoices, getArchivedProducts } from "@/server/archive-metrics";
 import { restoreInvoice, purgeInvoice, restoreProduct, purgeProduct } from "@/server/payments-actions";
 
+/** Names itself in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout supplies the "· B2 Consultants" suffix. */
+export const metadata = { title: "Payments" };
+
 export const dynamic = "force-dynamic";
 
 export default async function PaymentsPage({
@@ -108,10 +112,23 @@ export default async function PaymentsPage({
       </Grid>
 
       <Tabs
+        // The open tab survives a refresh and travels in a shared link (issue 28).
+        urlKey="tab"
         tabs={[
           { label: `Invoices (${invoices.length})`, content: <InvoicesTab rows={invoices} kind="INVOICE" /> },
           { label: `Estimates (${estimates.length})`, content: <InvoicesTab rows={estimates} kind="ESTIMATE" /> },
-          { label: `Products (${products.length})`, content: <ProductsTab rows={products} canDelete={canDelete} fxRate={fxRate} fxStale={fx.stale} /> },
+          {
+            label: `Products (${products.rows.length})`,
+            content: (
+              <ProductsTab
+                rows={products.rows}
+                unpriced={products.unpriced}
+                canDelete={canDelete}
+                fxRate={fxRate}
+                fxStale={fx.stale}
+              />
+            ),
+          },
           { label: `Subscriptions (${subs.length})`, content: <SubscriptionsTab rows={subs} pickers={pickers} canDelete={canDelete} fxRate={fxRate} fxStale={fx.stale} /> },
           {
             label: `Archived${archivedCount ? ` (${archivedCount})` : ""}`,

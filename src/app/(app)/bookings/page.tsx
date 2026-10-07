@@ -29,6 +29,10 @@ import { BookingsTable } from "./_components/BookingsTable";
 import { CancelledSlotsTable } from "./_components/CancelledSlotsTable";
 import { SssCalendar } from "./_components/SssCalendar";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Bookings" };
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -533,16 +537,19 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
           "Bookings" inside a page called "Bookings", sitting under a calendar that also shows
           bookings, read as the same thing three times. It is not: the calendar shows SLOTS
           (including empty and blocked ones), this shows BOOKING REQUESTS - the prospect's form,
-          their BANT answers, their WhatsApp confirmation state and the confirm/postpone/cancel
+          their BANT answers, their WhatsApp confirmation state and the confirm/reschedule/cancel
           actions. Renaming it says so.
 
           "Availability" left the strip entirely. It is a SETUP screen - generate slots for a
           date range - not something anyone opens daily, and giving it equal billing with the two
           working views is what made this page feel like a pile of panels. It now lives behind
           "Manage availability" beside the week navigation. */}
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
       <Tabs
+        urlKey="tab"
         tabs={[
-          { label: `Booking requests${bookings.length ? ` (${bookings.length})` : ""}`, content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} /> },
+          { label: `Booking requests${bookings.length ? ` (${bookings.length})` : ""}`, content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} canExport={canConfigure} /> },
           {
             /**
              * The slots we gave back. Its own view because a release is the one booking event with

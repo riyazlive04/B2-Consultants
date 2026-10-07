@@ -6,6 +6,7 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, Clo
 import { submitBooking } from "@/server/booking-actions";
 import { FormError, SubmitButton } from "@/components/ui/form";
 import { BookingIntakeFields } from "./BookingIntakeFields";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The embedded discovery-call booker - a month grid, that day's times, then the questionnaire.
@@ -236,7 +237,7 @@ export function BookingCalendar({
   const submit = async (form: FormData) => {
     setError(null);
     if (!slotId) return setError("Please choose a time for your call.");
-    const res = await submitBooking(form);
+    const res = await safeAction(() => submitBooking(form));
     if (!res.ok) return setError(res.error);
     if (redirectTo) {
       /**

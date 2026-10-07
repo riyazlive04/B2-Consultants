@@ -7,6 +7,7 @@ import { toast } from "@/components/ui/feedback";
 import { Field, FormError, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate } from "@/lib/format";
 import { SPRINT_STATUS_LABELS } from "@/lib/labels";
+import { safeAction } from "@/lib/action-guard";
 
 export type PortalSprintWeek = {
   id: string;
@@ -70,7 +71,7 @@ export function SprintCheckIn({ weeks }: { weeks: PortalSprintWeek[] }) {
         <form
           action={async (form) => {
             setError(null);
-            const res = await submitMySprintCheckIn(todayTarget.id, form);
+            const res = await safeAction(() => submitMySprintCheckIn(todayTarget.id, form));
             if (!res.ok) return setError(res.error);
             toast("Check-in submitted - great job showing up 💪");
           }}

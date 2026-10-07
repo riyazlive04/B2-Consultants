@@ -4,6 +4,10 @@ import { requireSection } from "@/lib/rbac";
 import { listResumes, getResumeTemplate, getAiStatus, resumeScope } from "@/server/resume-metrics";
 import { CvStudio } from "./_components/CvStudio";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "CV Studio" };
+
 export const dynamic = "force-dynamic";
 
 /**

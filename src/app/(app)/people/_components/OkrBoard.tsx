@@ -10,6 +10,7 @@ import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/c
 import { SignalDot } from "@/components/ui/SignalBadge";
 import { signalForPercent } from "@/lib/signals";
 import { formatPct } from "@/lib/format";
+import { safeAction } from "@/lib/action-guard";
 
 type Okr = MemberRow["okrs"][number];
 
@@ -21,7 +22,7 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = await saveOkr(editing?.okr?.id ?? null, form);
+    const res = await safeAction(() => saveOkr(editing?.okr?.id ?? null, form));
     if (!res.ok) return setError(res.error);
     toast(editing?.okr ? "OKR updated" : "OKR created");
     setEditing(null);

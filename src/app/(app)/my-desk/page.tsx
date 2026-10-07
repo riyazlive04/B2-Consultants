@@ -12,6 +12,10 @@ import { L2Desk } from "./_components/L2Desk";
 import { OwnerDesk } from "./_components/OwnerDesk";
 import { OwnCommission } from "./_components/OwnCommission";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "My Desk" };
+
 export const dynamic = "force-dynamic";
 
 /**

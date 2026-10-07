@@ -15,6 +15,7 @@ import { toast } from "@/components/ui/feedback";
 import { saveInstalmentPlanConfig } from "@/server/console-actions";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import { Btn, Card, ColHead, ColRow, ColScroll, Hint, NameCell, NumInput, RemoveCell, SaveBar } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Instalment plan pricing (Founder Console → Instalment Plans).
@@ -81,7 +82,7 @@ export function InstalmentPlanPanel({ config }: { config: InstalmentPlanConfig }
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveInstalmentPlanConfig(draft);
+    const res = await safeAction(() => saveInstalmentPlanConfig(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

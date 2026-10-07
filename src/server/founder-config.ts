@@ -25,6 +25,8 @@ import {
   coerceInstalmentPlanConfig,
   coercePaymentTypesConfig,
   DEFAULT_PAYMENT_TYPES_CONFIG,
+  coerceInvoiceSettings,
+  DEFAULT_INVOICE_SETTINGS,
   coerceWorkflowSettings,
   coerceMaintenanceConfig,
   coerceScheduledReportConfig,
@@ -66,6 +68,7 @@ import {
   type TutorFeeConfig,
   type InstalmentPlanConfig,
   type PaymentTypesConfig,
+  type InvoiceSettings,
   type WorkflowSettings,
   type MaintenanceConfig,
   type ScheduledReportConfig,
@@ -110,6 +113,7 @@ export const SCHEDULED_REPORT_KEY = "scheduledReport";
 export const FINANCE_POSTING_KEY = "financePosting";
 export const INSTALMENT_PLAN_KEY = "instalmentPlans";
 export const PAYMENT_TYPES_KEY = "paymentTypes";
+export const INVOICE_SETTINGS_KEY = "invoiceSettings";
 export const SPEED_TO_LEAD_ALERT_KEY = "speedToLeadAlert";
 export const DUNNING_KEY = "dunning";
 export const ATTENDANCE_KEY = "attendance";
@@ -287,6 +291,22 @@ export async function writePaymentTypesConfig(config: PaymentTypesConfig): Promi
   await prisma.appSetting.upsert({
     where: { key: PAYMENT_TYPES_KEY },
     create: { key: PAYMENT_TYPES_KEY, value },
+    update: { value },
+  });
+  revalidateFounderConfig();
+}
+
+/** Who the invoice is from, and what tax it charges per currency (Console → Money → Invoicing). */
+export const getInvoiceSettings = cache(async (): Promise<InvoiceSettings> => {
+  const row = await readSetting(INVOICE_SETTINGS_KEY);
+  return row ? coerceInvoiceSettings(row.value) : DEFAULT_INVOICE_SETTINGS;
+});
+
+export async function writeInvoiceSettings(config: InvoiceSettings): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: INVOICE_SETTINGS_KEY },
+    create: { key: INVOICE_SETTINGS_KEY, value },
     update: { value },
   });
   revalidateFounderConfig();

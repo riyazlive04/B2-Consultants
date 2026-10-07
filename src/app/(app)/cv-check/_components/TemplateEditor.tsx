@@ -16,6 +16,7 @@ import {
 } from "@/lib/resume-template";
 import type { AiStatus } from "@/server/resume-metrics";
 import { saveResumeTemplate, saveAiSettings, resetResumeTemplate } from "@/server/resume-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /** Model choices mirrored from lib/anthropic (kept here so this client file needn't import the server-only module). */
 const MODEL_OPTIONS = [
@@ -73,7 +74,7 @@ export function TemplateEditor({ template, aiStatus }: { template: ResumeTemplat
   const saveTpl = () =>
     start(async () => {
       setError(null);
-      const res = await saveResumeTemplate(cfg);
+      const res = await safeAction(() => saveResumeTemplate(cfg));
       if (!res.ok) setError(res.error);
       else router.refresh();
     });
@@ -81,7 +82,7 @@ export function TemplateEditor({ template, aiStatus }: { template: ResumeTemplat
   const saveAi = () =>
     start(async () => {
       setError(null);
-      const res = await saveAiSettings(ai);
+      const res = await safeAction(() => saveAiSettings(ai));
       if (!res.ok) setError(res.error);
       else router.refresh();
     });

@@ -7,6 +7,7 @@ import {
   ArrowLeft, Plus, Trash2, Send, Download, Link2, Ban, CheckCircle2, ArrowRightLeft,
 } from "lucide-react";
 import type { InvoiceDetail } from "@/server/payments-metrics";
+import type { InvoiceTaxConfig } from "@/lib/config-schema";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Card, Pill, type Tone } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/Modal";
@@ -15,19 +16,50 @@ import { MoneyInput } from "@/components/ui/MoneyInput";
 import { fieldKindProps } from "@/components/ui/field-base";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { toast, askConfirm } from "@/components/ui/feedback";
-import { formatInrMinor } from "@/lib/format";
+import {
+  CURRENCY_LABELS,
+  CURRENCY_SYMBOLS,
+  computeInvoiceTotals,
+  convertMinorPreview,
+  formatMinor,
+  otherCurrency,
+  taxLine,
+  type InvoiceCurrencyCode,
+} from "@/lib/invoice-money";
+import { safeAction } from "@/lib/action-guard";
 import {
   createInvoice, updateInvoice, setInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, convertEstimate,
 } from "@/server/payments-actions";
 
+/**
+ * The invoice / estimate editor.
+ *
+ * ── IT IS PRICED IN ONE CURRENCY, AND YOU CHOOSE WHICH ────────────────────────────
+ * Every figure typed below is in the invoice's own currency. The sidebar shows the converted
+ * total underneath as a courtesy, labelled as a conversion - never as a second amount owed.
+ *
+ * ── EVERY LINE CAN NAME ITS PROGRAMME ─────────────────────────────────────────────
+ * Picking a programme fills the description and the price from the catalogue and, more
+ * importantly, carries the level onto the saved line - which is what lets a paid invoice post its
+ * Income against the real programme instead of a generic "Other". A hand-typed line is still a
+ * line: not everything invoiced is a programme.
+ *
+ * ── THE PREVIEW IS THE SAME ARITHMETIC THE SERVER WILL DO ─────────────────────────
+ * `computeInvoiceTotals` is the one both run, so the number watched on screen and the number
+ * stored cannot drift. The server still recomputes authoritatively - this is a preview, not a
+ * submission of totals.
+ */
+
 type Pickers = {
   contacts: { id: string; name: string; email: string | null; phone: string | null }[];
-  products: { id: string; name: string; priceInr: string }[];
+  products: {
+    id: string; name: string; levelCode: string | null; lineLabel: string | null;
+    priceInr: string; priceEur: string;
+  }[];
 };
-type Item = { description: string; quantity: number; unitPriceInr: string };
+type Item = { description: string; quantity: number; unitPrice: string; levelCode: string | null };
 
 const inputCls = "h-9 w-full rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary";
-const toPaise = (s: string) => Math.round((parseFloat(s || "0") || 0) * 100);
 const today = () => new Date().toISOString().slice(0, 10);
 
 function statusTone(s: string): Tone {
@@ -41,15 +73,21 @@ export default function InvoiceEditor({
   invoice,
   kind,
   pickers,
+  tax,
+  fxRate,
 }: {
   invoice: InvoiceDetail | null;
   kind: "INVOICE" | "ESTIMATE";
   pickers: Pickers;
+  /** The founder's per-currency defaults. A new invoice opens on the one for its currency. */
+  tax: InvoiceTaxConfig;
+  /** INR per EUR, for the sidebar's converted figure only - the server stamps its own. */
+  fxRate: number;
 }) {
   const router = useRouter();
-  const isNew = !invoice;
   const noun = kind === "ESTIMATE" ? "Estimate" : "Invoice";
 
+  const [currency, setCurrency] = useState<InvoiceCurrencyCode>(invoice?.currency ?? "INR");
   const [leadId, setLeadId] = useState(invoice?.leadId ?? "");
   const [customerName, setCustomerName] = useState(invoice?.customerName ?? "");
   const [customerEmail, setCustomerEmail] = useState(invoice?.customerEmail ?? "");
@@ -57,12 +95,18 @@ export default function InvoiceEditor({
   const [issueDate, setIssueDate] = useState(invoice?.issueDate || today());
   const [dueDate, setDueDate] = useState(invoice?.dueDate ?? "");
   const [items, setItems] = useState<Item[]>(
-    invoice?.items.map((i) => ({ description: i.description, quantity: i.quantity, unitPriceInr: i.unitPriceInr })) ?? [
-      { description: "", quantity: 1, unitPriceInr: "" },
-    ],
+    invoice?.items.map((i) => ({
+      description: i.description, quantity: i.quantity, unitPrice: i.unitPrice, levelCode: i.levelCode,
+    })) ?? [{ description: "", quantity: 1, unitPrice: "", levelCode: null }],
   );
-  const [discountInr, setDiscountInr] = useState(invoice?.discountInr ?? "");
-  const [taxPercent, setTaxPercent] = useState(invoice?.taxPercent ?? 0);
+  const [discount, setDiscount] = useState(invoice?.discount ?? "");
+  /**
+   * An EXISTING invoice keeps the rate it charged; a new one opens on the founder's default for
+   * its currency. Re-reading the config onto a saved invoice would silently re-tax a document
+   * that has already been sent.
+   */
+  const [taxPercent, setTaxPercent] = useState(invoice?.taxPercent ?? tax[invoice?.currency ?? "INR"].percent);
+  const [taxLabel, setTaxLabel] = useState(invoice?.taxLabel ?? tax[invoice?.currency ?? "INR"].label);
   const [notes, setNotes] = useState(invoice?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -75,15 +119,14 @@ export default function InvoiceEditor({
   const nameField = fieldKindProps<HTMLInputElement>("name", (e) => setCustomerName(e.target.value));
   const emailField = fieldKindProps<HTMLInputElement>("email", (e) => setCustomerEmail(e.target.value));
   const phoneField = fieldKindProps<HTMLInputElement>("phone", (e) => setCustomerPhone(e.target.value));
-  const discountField = fieldKindProps<HTMLInputElement>("money", (e) => setDiscountInr(e.target.value));
   const notesField = fieldKindProps<HTMLTextAreaElement>("text", (e) => setNotes(e.target.value));
 
-  // client-side totals (server recomputes authoritatively)
-  const subtotal = items.reduce((a, it) => a + toPaise(it.unitPriceInr) * Math.max(1, it.quantity), 0);
-  const discount = toPaise(discountInr);
-  const taxable = Math.max(0, subtotal - discount);
-  const tax = Math.round((taxable * taxPercent) / 100);
-  const total = taxable + tax;
+  // Client-side preview, from the same pure functions the server action uses.
+  const totals = computeInvoiceTotals(items, discount, taxPercent);
+  const sym = CURRENCY_SYMBOLS[currency];
+  const other = otherCurrency(currency);
+  const convertedTotal = convertMinorPreview(totals.totalMinor, fxRate, currency, other);
+  const taxRow = taxLine(taxLabel, taxPercent);
 
   function setItem(i: number, patch: Partial<Item>) {
     setItems((its) => its.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
@@ -97,9 +140,39 @@ export default function InvoiceEditor({
       setCustomerPhone(c.phone ?? "");
     }
   }
+  /** The product's price in THIS invoice's currency - never the rupee figure pasted into a euro line. */
+  const priceOf = (p: Pickers["products"][number]) => (currency === "EUR" ? p.priceEur : p.priceInr);
+
   function addProduct(id: string) {
     const p = pickers.products.find((x) => x.id === id);
-    if (p) setItems((its) => [...its, { description: p.name, quantity: 1, unitPriceInr: p.priceInr }]);
+    if (!p) return;
+    setItems((its) => {
+      const line: Item = { description: p.name, quantity: 1, unitPrice: priceOf(p), levelCode: p.levelCode };
+      // An untouched opening line is REPLACED rather than left above the one just added - a blank
+      // first row is the editor's starting state, not a line somebody wrote.
+      const blank = its.length === 1 && !its[0].description.trim() && !its[0].unitPrice.trim();
+      return blank ? [line] : [...its, line];
+    });
+  }
+
+  /** Fill a line from a programme in place - the per-line version of "add from product". */
+  function setLineProduct(i: number, productId: string) {
+    const p = pickers.products.find((x) => x.id === productId);
+    if (!p) return setItem(i, { levelCode: null });
+    setItem(i, { description: p.name, unitPrice: priceOf(p), levelCode: p.levelCode });
+  }
+
+  /**
+   * Switching currency re-reads the tax DEFAULT, because the rate is the other country's now.
+   * The amounts typed are deliberately left alone: they are what somebody meant to charge, and
+   * silently multiplying them by ~90 is not a conversion anyone asked for.
+   */
+  function switchCurrency(next: InvoiceCurrencyCode) {
+    setCurrency(next);
+    if (!invoice) {
+      setTaxPercent(tax[next].percent);
+      setTaxLabel(tax[next].label);
+    }
   }
 
   async function save() {
@@ -107,9 +180,11 @@ export default function InvoiceEditor({
     setSaving(true);
     const payload = {
       kind, leadId: leadId || undefined, customerName, customerEmail, customerPhone,
-      issueDate, dueDate: dueDate || undefined, items, discountInr, taxPercent, notes,
+      issueDate, dueDate: dueDate || undefined, currency, items, discount, taxPercent, taxLabel, notes,
     };
-    const res = invoice ? await updateInvoice(invoice.id, payload) : await createInvoice(payload);
+    const res = await safeAction(() =>
+      invoice ? updateInvoice(invoice.id, payload) : createInvoice(payload),
+    );
     setSaving(false);
     if (!res.ok) return setError(res.error);
     toast(invoice ? "Saved" : `${noun} created`);
@@ -119,29 +194,42 @@ export default function InvoiceEditor({
 
   async function status(s: string, label: string) {
     if (!invoice) return;
-    const res = await setInvoiceStatus(invoice.id, s);
+    const res = await safeAction(() => setInvoiceStatus(invoice.id, s));
     if (res.ok) { toast(label); router.refresh(); } else toast(res.error, "error");
   }
   async function send() {
     if (!invoice) return;
-    const res = await sendInvoice(invoice.id);
+    const res = await safeAction(() => sendInvoice(invoice.id));
     if (res.ok) { toast(res.message); router.refresh(); } else toast(res.error, "error");
   }
   async function convert() {
     if (!invoice) return;
-    const res = await convertEstimate(invoice.id);
+    const res = await safeAction(() => convertEstimate(invoice.id));
     if (res.ok) { toast("Converted to invoice"); router.push("/payments"); } else toast(res.error, "error");
   }
   async function remove() {
     if (!invoice) return;
-    if (!(await askConfirm({ title: `Delete ${invoice.number}?`, danger: true }))) return;
-    const res = await deleteInvoice(invoice.id);
-    if (res.ok) { toast("Deleted"); router.push("/payments"); } else toast(res.error, "error");
+    /*
+      Archive, not delete (issue 26). The record is soft-deleted and restorable for 90 days, and
+      calling that "Delete" taught people the number was gone - which matters most for an invoice,
+      whose number is quoted to a customer and must never be reissued.
+    */
+    if (
+      !(await askConfirm({
+        title: `Archive ${invoice.number}?`,
+        body: "It moves to the Archived list and can be restored. The invoice number stays reserved.",
+        confirmLabel: "Archive",
+        danger: true,
+      }))
+    )
+      return;
+    const res = await safeAction(() => deleteInvoice(invoice.id));
+    if (res.ok) { toast("Archived"); router.push("/payments"); } else toast(res.error, "error");
   }
   async function pay(fd: FormData) {
     if (!invoice) return;
     setPayError(null);
-    const res = await recordPayment(invoice.id, fd);
+    const res = await safeAction(() => recordPayment(invoice.id, fd));
     if (!res.ok) return setPayError(res.error);
     toast("Payment recorded");
     setPayOpen(false);
@@ -154,33 +242,42 @@ export default function InvoiceEditor({
   }
 
   const canShare = invoice && invoice.status !== "DRAFT" && invoice.status !== "VOID";
+  const productOpts = pickers.products.map((p) => ({
+    value: p.id,
+    label: p.lineLabel ? `${p.name} · ${p.lineLabel}` : p.name,
+  }));
 
   return (
     <div className="space-y-5">
       <Link href="/payments" className="inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-primary"><ArrowLeft size={16} /> Payments</Link>
 
+      {/*
+        The save button used to live up here, alone above the sidebar, which put the one action
+        that commits the document as far from the figures it commits as the layout allowed. It now
+        sits under the summary it is confirming; this row keeps only the actions that act on an
+        invoice that already exists.
+      */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-display-l font-bold text-ink">{invoice ? invoice.number : `New ${noun.toLowerCase()}`}</h1>
           {invoice && <Pill tone={statusTone(invoice.status)}>{invoice.status}</Pill>}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {invoice && (
-            <>
-              {invoice.status === "DRAFT" && <Btn variant="soft" icon={<Send size={15} />} onClick={send}>Send</Btn>}
-              {canShare && <Btn variant="ghost" icon={<Link2 size={15} />} onClick={copyLink}>Link</Btn>}
-              {canShare && <a href={`/i/${invoice.publicToken}/pdf?download=1`} target="_blank" rel="noreferrer"><Btn variant="ghost" icon={<Download size={15} />}>PDF</Btn></a>}
-              {kind === "INVOICE" && invoice.status !== "PAID" && invoice.status !== "VOID" && <Btn variant="soft" icon={<CheckCircle2 size={15} />} onClick={() => setPayOpen(true)}>Record payment</Btn>}
-              {kind === "ESTIMATE" && invoice.status !== "ACCEPTED" && <Btn variant="soft" icon={<ArrowRightLeft size={15} />} onClick={convert}>Convert to invoice</Btn>}
-              {invoice.status !== "VOID" && <IconButton label="Void" onClick={() => status("VOID", "Voided")}><Ban size={16} /></IconButton>}
-              <IconButton label="Delete" onClick={remove}><Trash2 size={16} /></IconButton>
-            </>
-          )}
-          <Btn onClick={save} busy={saving}>{invoice ? "Save" : `Create ${noun.toLowerCase()}`}</Btn>
-        </div>
+        {invoice && (
+          <div className="flex flex-wrap items-center gap-2">
+            {invoice.status === "DRAFT" && <Btn variant="soft" icon={<Send size={15} />} onClick={send}>Send</Btn>}
+            {canShare && <Btn variant="ghost" icon={<Link2 size={15} />} onClick={copyLink}>Link</Btn>}
+            {canShare && <a href={`/i/${invoice.publicToken}/pdf?download=1`} target="_blank" rel="noreferrer"><Btn variant="ghost" icon={<Download size={15} />}>PDF</Btn></a>}
+            {kind === "INVOICE" && invoice.status !== "PAID" && invoice.status !== "VOID" && <Btn variant="soft" icon={<CheckCircle2 size={15} />} onClick={() => setPayOpen(true)}>Record payment</Btn>}
+            {kind === "ESTIMATE" && invoice.status !== "ACCEPTED" && <Btn variant="soft" icon={<ArrowRightLeft size={15} />} onClick={convert}>Convert to invoice</Btn>}
+            {invoice.status !== "VOID" && <IconButton label="Void" onClick={() => status("VOID", "Voided")}><Ban size={16} /></IconButton>}
+            <IconButton label="Archive invoice" onClick={remove}><Trash2 size={16} /></IconButton>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
+      {/* `items-start` is what lets the sticky sidebar work: a stretched grid item is as tall as
+          the row, so there is nothing for `sticky` to travel within. */}
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-5">
           <Card title="Customer">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -209,37 +306,104 @@ export default function InvoiceEditor({
             </div>
           </Card>
 
-          <Card title="Line items" actions={
-            <Select
-              size="sm"
-              className="w-48"
-              value=""
-              onChange={(e) => e.target.value && addProduct(e.target.value)}
-              options={[
-                { value: "", label: "+ Add from product" },
-                ...pickers.products.map((p) => ({ value: p.id, label: p.name })),
-              ]}
-            />
-          }>
-            <div className="space-y-2">
-              <div className="flex gap-2 text-caption font-semibold uppercase text-ink-3">
-                <span className="flex-1">Description</span><span className="w-14 text-right">Qty</span><span className="w-28 text-right">Unit ₹</span><span className="w-28 text-right">Amount</span><span className="w-6" />
-              </div>
+          <Card
+            title="Line items"
+            actions={
+              <Select
+                size="sm"
+                className="w-52"
+                value=""
+                onChange={(e) => e.target.value && addProduct(e.target.value)}
+                options={[{ value: "", label: "+ Add a programme" }, ...productOpts]}
+              />
+            }
+          >
+            <div className="space-y-3">
+              {/*
+                ── A LINE IS A BLOCK, NOT A ROW OF BOXES ───────────────────────────────
+                The old layout was one flex row per line with the description on `flex-1`. Beside
+                a fixed sidebar it had barely any width left, so the row wrapped and the three
+                fields stacked under unlabelled headers - a column header saying "QTY" with the
+                quantity box two lines below it, which is the screenshot that prompted this.
+                Each line is now a small grid that reflows honestly, carries its own labels, and
+                has room for the thing that was missing: what the line actually sells.
+              */}
               {items.map((it, i) => {
                 // Per-row, inside the map: fieldKindProps calls no hooks, so this is safe.
-                const price = fieldKindProps<HTMLInputElement>("money", (e) => setItem(i, { unitPriceInr: e.target.value }));
+                const price = fieldKindProps<HTMLInputElement>("money", (e) => setItem(i, { unitPrice: e.target.value }));
+                const lineTotal = totals.subtotalMinor === 0n && !it.unitPrice
+                  ? 0n
+                  : computeInvoiceTotals([it], "", 0).subtotalMinor;
+                const matchedProduct = pickers.products.find((p) => p.levelCode && p.levelCode === it.levelCode);
                 return (
-                <div key={i} className="flex items-center gap-2">
-                  {/* Description stays free text - "Level 2 Bundle" is a legitimate line item. */}
-                  <input className={`${inputCls} flex-1`} placeholder="Item description" value={it.description} onChange={(e) => setItem(i, { description: e.target.value })} />
-                  <input className={`${inputCls} w-14 text-right`} type="number" min={1} value={it.quantity} onChange={(e) => setItem(i, { quantity: Number(e.target.value) || 1 })} />
-                  <input {...price.attrs} className={`${inputCls} w-28 text-right`} value={it.unitPriceInr} onChange={price.onChange} />
-                  <span className="w-28 text-right text-sm text-ink-2">{formatInrMinor(toPaise(it.unitPriceInr) * Math.max(1, it.quantity))}</span>
-                  <IconButton label="Remove line" onClick={() => setItems((its) => its.filter((_, idx) => idx !== i))}><Trash2 size={15} /></IconButton>
-                </div>
+                  <div key={i} className="rounded-card border border-line bg-surface-2/40 p-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+                      <label className="text-caption font-semibold uppercase text-ink-3 sm:col-span-5">
+                        Programme
+                        <div className="mt-1 font-normal normal-case">
+                          <Select
+                            size="sm"
+                            value={matchedProduct?.id ?? ""}
+                            onChange={(e) =>
+                              e.target.value ? setLineProduct(i, e.target.value) : setItem(i, { levelCode: null })
+                            }
+                            options={[{ value: "", label: "Custom line (no programme)" }, ...productOpts]}
+                          />
+                        </div>
+                      </label>
+                      <label className="text-caption font-semibold uppercase text-ink-3 sm:col-span-7">
+                        Description
+                        <input
+                          className={`${inputCls} mt-1 font-normal normal-case`}
+                          placeholder="What the customer is being charged for"
+                          value={it.description}
+                          onChange={(e) => setItem(i, { description: e.target.value })}
+                        />
+                      </label>
+
+                      <label className="text-caption font-semibold uppercase text-ink-3 sm:col-span-2">
+                        Qty
+                        <input
+                          className={`${inputCls} mt-1 text-right font-normal normal-case`}
+                          type="number"
+                          min={1}
+                          value={it.quantity}
+                          onChange={(e) => setItem(i, { quantity: Number(e.target.value) || 1 })}
+                        />
+                      </label>
+                      <label className="text-caption font-semibold uppercase text-ink-3 sm:col-span-4">
+                        Unit price ({sym})
+                        <input
+                          {...price.attrs}
+                          className={`${inputCls} mt-1 text-right font-normal normal-case`}
+                          value={it.unitPrice}
+                          onChange={price.onChange}
+                        />
+                      </label>
+                      <div className="flex items-end justify-between gap-2 sm:col-span-6">
+                        <div className="min-w-0">
+                          <span className="block text-caption font-semibold uppercase text-ink-3">Amount</span>
+                          <span className="block text-sm font-semibold text-ink">{formatMinor(lineTotal, currency)}</span>
+                        </div>
+                        <IconButton
+                          label={`Remove line ${i + 1}`}
+                          onClick={() => setItems((its) => (its.length === 1 ? its : its.filter((_, idx) => idx !== i)))}
+                        >
+                          <Trash2 size={15} />
+                        </IconButton>
+                      </div>
+                    </div>
+                  </div>
                 );
               })}
-              <Btn size="sm" variant="ghost" icon={<Plus size={14} />} onClick={() => setItems((its) => [...its, { description: "", quantity: 1, unitPriceInr: "" }])}>Add line</Btn>
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon={<Plus size={14} />}
+                onClick={() => setItems((its) => [...its, { description: "", quantity: 1, unitPrice: "", levelCode: null }])}
+              >
+                Add line
+              </Btn>
             </div>
           </Card>
 
@@ -248,9 +412,27 @@ export default function InvoiceEditor({
           </Card>
         </div>
 
-        <div className="space-y-5">
+        {/*
+          The sidebar FOLLOWS THE PAGE. On a long invoice the totals and the save button used to
+          scroll away, so the figures you were checking and the button that commits them were
+          never on screen together. `top-20` clears the sticky app header.
+        */}
+        <div className="space-y-4 lg:sticky lg:top-20">
           <Card title="Details">
             <div className="space-y-3">
+              <label className="block text-caption font-semibold uppercase text-ink-3">Currency
+                <div className="mt-1 font-normal normal-case">
+                  <Select
+                    size="sm"
+                    value={currency}
+                    onChange={(e) => switchCurrency(e.target.value as InvoiceCurrencyCode)}
+                    options={[
+                      { value: "INR", label: CURRENCY_LABELS.INR },
+                      { value: "EUR", label: CURRENCY_LABELS.EUR },
+                    ]}
+                  />
+                </div>
+              </label>
               <label className="block text-caption font-semibold uppercase text-ink-3">Issue date
                 <div className="mt-1 font-normal normal-case">
                   <DatePicker size="sm" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
@@ -261,26 +443,75 @@ export default function InvoiceEditor({
                   <DatePicker size="sm" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                 </div>
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-caption font-semibold uppercase text-ink-3">Discount ₹
-                  <input {...discountField.attrs} className={inputCls} value={discountInr} onChange={discountField.onChange} />
+              <label className="block text-caption font-semibold uppercase text-ink-3">Discount ({sym})
+                <div className="mt-1 font-normal normal-case">
+                  <MoneyInput
+                    size="sm"
+                    currency={currency}
+                    value={discount}
+                    onValueChange={setDiscount}
+                    placeholder="0"
+                  />
+                </div>
+              </label>
+              <div className="grid grid-cols-[1fr_5.5rem] gap-2">
+                <label className="text-caption font-semibold uppercase text-ink-3">Tax name
+                  <input
+                    className={`${inputCls} mt-1 font-normal normal-case`}
+                    value={taxLabel}
+                    placeholder={currency === "EUR" ? "VAT" : "GST"}
+                    onChange={(e) => setTaxLabel(e.target.value)}
+                  />
                 </label>
-                <label className="text-caption font-semibold uppercase text-ink-3">Tax %
-                  <input className={inputCls} type="number" min={0} value={taxPercent} onChange={(e) => setTaxPercent(Number(e.target.value) || 0)} />
+                <label className="text-caption font-semibold uppercase text-ink-3">Rate %
+                  <input
+                    className={`${inputCls} mt-1 text-right font-normal normal-case`}
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.5"
+                    value={taxPercent}
+                    onChange={(e) => setTaxPercent(Number(e.target.value) || 0)}
+                  />
                 </label>
               </div>
+              {/* Nothing is charged at 0, and the document says nothing about tax at all. */}
+              <p className="text-caption text-ink-3">
+                {taxRow ? `Charged as “${taxRow}”.` : "No tax on this invoice — the tax line is left off the document."}
+                {taxPercent > 0 && (
+                  <>
+                    {" "}
+                    <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setTaxPercent(0)}>
+                      Remove tax
+                    </button>
+                  </>
+                )}
+              </p>
             </div>
           </Card>
 
           <Card title="Summary">
             <div className="space-y-1.5 text-sm">
-              <Line label="Subtotal" value={formatInrMinor(subtotal)} />
-              <Line label="Discount" value={`-${formatInrMinor(discount)}`} />
-              <Line label={`Tax (${taxPercent}%)`} value={formatInrMinor(tax)} />
-              <div className="flex justify-between border-t border-line pt-2 text-base font-bold text-ink"><span>Total</span><span>{formatInrMinor(total)}</span></div>
+              <Line label="Subtotal" value={formatMinor(totals.subtotalMinor, currency)} />
+              {totals.discountMinor > 0n && <Line label="Discount" value={`-${formatMinor(totals.discountMinor, currency)}`} />}
+              {taxRow && <Line label={taxRow} value={formatMinor(totals.taxMinor, currency)} />}
+              <div className="flex justify-between border-t border-line pt-2 text-base font-bold text-ink"><span>Total</span><span>{formatMinor(totals.totalMinor, currency)}</span></div>
+              {/* A conversion, said to be one. Never a second amount owed. */}
+              <div className="flex justify-between text-caption text-ink-3">
+                <span>approx. {formatMinor(convertedTotal, other)}</span>
+                <span>at today&rsquo;s rate</span>
+              </div>
               {invoice && <div className="flex justify-between text-caption text-ink-3"><span>Paid {invoice.amountPaidDisplay}</span><span>Balance {invoice.balanceDisplay}</span></div>}
             </div>
           </Card>
+
+          {/* The commit button, directly under the figures it commits. */}
+          <div className="space-y-2">
+            <Btn className="w-full justify-center" onClick={save} busy={saving}>
+              {invoice ? "Save changes" : `Create ${noun.toLowerCase()}`}
+            </Btn>
+            <FormError message={error} />
+          </div>
 
           {invoice && invoice.payments.length > 0 && (
             <Card title="Payments">
@@ -297,12 +528,21 @@ export default function InvoiceEditor({
         </div>
       </div>
 
-      <FormError message={error} />
-
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" size="sm">
         <form action={pay} className="space-y-4">
-          <Field label="Price (₹)"><MoneyInput currency="INR" name="amountInr" required defaultValue={invoice ? invoice.balanceDisplay.replace(/[^\d.]/g, "") : ""} /></Field>
-          <Field label="Method"><Select name="method" options={[{ value: "cash", label: "Cash" }, { value: "upi", label: "UPI" }, { value: "bank", label: "Bank transfer" }, { value: "card", label: "Card" }, { value: "other", label: "Other" }]} defaultValue="upi" /></Field>
+          {/* Paid in the currency the invoice was raised in - the server values it at the rate
+              that invoice was stamped with, not today's. */}
+          <Field label={`Amount (${sym})`}>
+            <MoneyInput
+              currency={currency}
+              name="amountInr"
+              required
+              // The canonical balance, not the formatted one: re-parsing "125.000,50" back into
+              // a number is exactly the trap MoneyInput's hidden field exists to avoid.
+              defaultValue={invoice?.balance ?? ""}
+            />
+          </Field>
+          <Field label="Method"><Select name="method" options={[{ value: "cash", label: "Cash" }, { value: "upi", label: "UPI" }, { value: "bank", label: "Bank transfer" }, { value: "card", label: "Card" }, { value: "other", label: "Other" }]} defaultValue={currency === "EUR" ? "bank" : "upi"} /></Field>
           <Field label="Reference (optional)"><TextInput kind="text" name="reference" placeholder="Txn id / note" /></Field>
           <FormError message={payError} />
           <div className="flex justify-end gap-2"><Btn variant="ghost" type="button" onClick={() => setPayOpen(false)}>Cancel</Btn><SubmitButton>Record</SubmitButton></div>

@@ -18,7 +18,7 @@ import { authFile } from "../../helpers/roles";
 import { HAS_DB } from "../../helpers/target";
 import {
   openDesk, deskCallRow, recordOutcomeOnDesk, submitRouteModal, waitForNextStep, clickStepAction, queueCard, openOutreach,
-  installPopupHandlers, pickOption, bookingsRow,
+  installPopupHandlers, bookingsRow, rescheduleToSlot,
 } from "../../helpers/discovery-ui";
 import {
   seedDiscoveryCall, seedDiscoSlot, atMinutesFromNow, minutesLeftTodayIst, leadRow, bookingRow, slotRow, stepMap, journeyRow,
@@ -125,23 +125,14 @@ test("interested but not now: reschedule to a new slot - old slot freed, stage a
   const newSlot = await seedDiscoSlot({ startsAt: newAt, status: "OPEN" });
 
   await page.goto("/bookings");
-  let row = await bookingsRow(page, call.lead.name);
-  // A NO_SHOW booking offers no "Postpone": the status must be put back to Booked first.
-  const postponeVisible = await row.getByRole("button", { name: /Postpone/ }).count();
-  expect.soft(postponeVisible, "DSC-11: a no-show booking cannot be rescheduled directly - Postpone is hidden until the status is set back to Booked").toBe(1);
-  if (!postponeVisible) {
-    await pickOption(page, row.getByRole("button", { name: "Booking status" }), "Booked");
-    await expect.poll(async () => (await bookingRow(call.bookingId)).status, { timeout: 20_000 }).toBe("BOOKED");
-    await page.reload();
-    row = await bookingsRow(page, call.lead.name);
-    await expect(row.getByRole("button", { name: /Postpone/ })).toBeVisible({ timeout: 15_000 });
-  }
-  await row.getByRole("button", { name: /Postpone/ }).click();
-  const dlg = page.getByRole("dialog").filter({ hasText: "Postpone call" });
+  const row = await bookingsRow(page, call.lead.name);
+  // DSC-11, booking half: a no-show booking is re-bookable straight from its own row now.
+  // The outcome no longer has to be put back to Booked first for the option to appear - the
+  // public form refuses that prospect a second booking by design, so this row is the only
+  // way back onto the calendar.
+  await expect(row.getByRole("button", { name: /Re-book .* call/ })).toHaveCount(1);
   const label = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }).format(newAt);
-  await pickOption(page, dlg.getByRole("button", { name: /Pick an open slot/ }), new RegExp(`${label.replace(/\s*(am|pm)$/i, "")}.*IST.*Asma`, "i"));
-  await dlg.getByRole("button", { name: "Postpone call" }).click();
-  await expect(dlg).toBeHidden({ timeout: 20_000 });
+  await rescheduleToSlot(page, call.lead.name, new RegExp(`${label.replace(/\s*(am|pm)$/i, "")}.*IST.*Asma`, "i"));
 
   const b = await bookingRow(call.bookingId);
   expect(b.slotId, "booking moved to the new slot").toBe(newSlot);

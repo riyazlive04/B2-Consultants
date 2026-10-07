@@ -144,9 +144,63 @@ export function sssSlotCell(page: Page, timeIst: string) {
 export async function bookingsRow(page: Page, name: string) {
   await installPopupHandlers(page);
   if (!/\/bookings/.test(page.url())) await page.goto("/bookings");
-  const filter = page.getByPlaceholder("Filter bookings…");
+  // "All" first: the list opens on All, but a previous step in the same test may have left a
+  // quick filter on, and a cancelled booking is not under "Upcoming".
+  const all = page.getByRole("button", { name: /^All \(/ });
+  if (await all.count()) await all.first().click();
+  const filter = page.getByPlaceholder("Search bookings…");
   await filter.fill(name);
   const row = page.locator("tr").filter({ hasText: name }).first();
   await expect(row).toBeVisible();
   return row;
+}
+
+/** Regex-safe: seeded prospect names carry punctuation that would otherwise be a pattern. */
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+
+/**
+ * One booking's detail dialog.
+ *
+ * The list redesign split the two jobs: the table holds the facts you scan, and every action
+ * that CHANGES something - the outcome, the confirmation, a WhatsApp send - lives in here, where
+ * the dialog's own title says whose booking it is. Row controls could not be labelled that way
+ * (twenty buttons called "Booking status" are indistinguishable to a screen reader), which is
+ * what this dialog exists to fix.
+ */
+export async function openBookingDetail(page: Page, name: string) {
+  const row = await bookingsRow(page, name);
+  await row.getByRole("button", { name: `Open ${name}'s booking` }).click();
+  const dlg = page.getByRole("dialog").filter({ hasText: name }).last();
+  await expect(dlg).toBeVisible();
+  return dlg;
+}
+
+/**
+ * Set a booking's outcome through the detail dialog, answering the confirm that a slot-freeing
+ * outcome (Cancelled / No show) now raises - it hands the slot back, so it asks first.
+ */
+export async function setBookingOutcome(page: Page, name: string, label: string) {
+  const dlg = await openBookingDetail(page, name);
+  await pickOption(page, dlg.getByRole("button", { name: "Outcome" }), label);
+  const confirm = page.getByRole("dialog").last().getByRole("button", { name: new RegExp(`^Mark ${label}$`, "i") });
+  if (await confirm.count()) await confirm.first().click();
+  // The dialog closes itself on a successful change, which is the signal the write landed.
+  await expect(dlg).toBeHidden({ timeout: 30_000 });
+}
+
+/** The reschedule (live call) / re-book (cancelled or no-show call) dialog, opened from the row. */
+export async function openRescheduleDialog(page: Page, name: string) {
+  const row = await bookingsRow(page, name);
+  await row.getByRole("button", { name: new RegExp(`(Reschedule|Re-book) ${escapeRe(name)}'s call`) }).click();
+  const dlg = page.getByRole("dialog").filter({ hasText: /Reschedule call|Re-book call/ }).last();
+  await expect(dlg).toBeVisible();
+  return dlg;
+}
+
+/** Move a booking onto an existing OPEN slot, picked by its row label in the "Move to" list. */
+export async function rescheduleToSlot(page: Page, name: string, slotLabel: RegExp) {
+  const dlg = await openRescheduleDialog(page, name);
+  await pickOption(page, dlg.getByRole("button", { name: "Move to" }), slotLabel);
+  await dlg.getByRole("button", { name: /^(Move call|Re-book call)$/ }).click();
+  await expect(dlg).toBeHidden({ timeout: 30_000 });
 }

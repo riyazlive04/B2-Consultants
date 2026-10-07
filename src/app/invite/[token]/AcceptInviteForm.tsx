@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { acceptInvite } from "@/server/invite-actions";
 import { Field, FormError, SubmitButton, TextInput } from "@/components/ui/form";
+import { safeAction } from "@/lib/action-guard";
 
 export function AcceptInviteForm({ token }: { token: string }) {
   const router = useRouter();
@@ -13,7 +14,7 @@ export function AcceptInviteForm({ token }: { token: string }) {
     <form
       action={async (form) => {
         setError(null);
-        const res = await acceptInvite(form);
+        const res = await safeAction(() => acceptInvite(form));
         if (!res.ok) return setError(res.error);
         // acceptInvite signed us in, so go straight to the dashboard. ?onboarding=1
         // triggers the one-time role-scoped walkthrough (OnboardingWalkthrough) -

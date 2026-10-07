@@ -8,6 +8,7 @@ import { fieldKindProps } from "@/components/ui/field-base";
 import { sendTestWhatsApp, setWhatsAppOptOut, sendFreeFormWhatsApp } from "@/server/whatsapp-actions";
 import { WHATSAPP_KINDS, WHATSAPP_KIND_LABELS, type WatiTemplateMap } from "@/lib/whatsapp";
 import { formatDate } from "@/lib/format";
+import { safeAction } from "@/lib/action-guard";
 
 const inputCls =
   "w-full rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm outline-none transition-colors focus:border-accent focus:bg-surface";
@@ -37,14 +38,14 @@ export function WhatsAppTools({
 
   const sendTest = async (fd: FormData) => {
     setTesting(true);
-    const res = await sendTestWhatsApp(fd);
+    const res = await safeAction(() => sendTestWhatsApp(fd));
     setTesting(false);
     toast(res.message, res.ok ? "success" : "error");
   };
 
   const sendFree = async (fd: FormData) => {
     setFreeSending(true);
-    const res = await sendFreeFormWhatsApp(fd);
+    const res = await safeAction(() => sendFreeFormWhatsApp(fd));
     setFreeSending(false);
     toast(res.message, res.ok ? "success" : "error");
   };
@@ -52,7 +53,7 @@ export function WhatsAppTools({
   const addOptOut = async () => {
     if (!optPhone.trim() || busy) return;
     setBusy(true);
-    const res = await setWhatsAppOptOut(optPhone.trim(), true);
+    const res = await safeAction(() => setWhatsAppOptOut(optPhone.trim(), true));
     setBusy(false);
     toast(res.message, res.ok ? "success" : "error");
     if (res.ok) setOptPhone("");
@@ -65,7 +66,7 @@ export function WhatsAppTools({
       confirmLabel: "Remove opt-out",
     });
     if (!ok) return;
-    const res = await setWhatsAppOptOut(phone, false);
+    const res = await safeAction(() => setWhatsAppOptOut(phone, false));
     toast(res.message, res.ok ? "success" : "error");
   };
 

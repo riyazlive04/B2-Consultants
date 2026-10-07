@@ -17,6 +17,7 @@ import type { SiteBlock, SiteBlockType, SiteSectionBlock } from "@/lib/site-type
 import type { PageDetail } from "@/server/sites-metrics";
 import { restoreRevision, savePageSections, togglePublishPage, updatePageMeta } from "@/server/sites-actions";
 import { BlockInspector, SectionInspector } from "./Inspector";
+import { safeAction } from "@/lib/action-guard";
 
 const input =
   "h-9 w-full rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary";
@@ -67,7 +68,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
     const snapshot = JSON.stringify(sections);
     if (snapshot === savedRef.current) return;
     setSaving(true);
-    const res = await savePageSections(page.id, sections);
+    const res = await safeAction(() => savePageSections(page.id, sections));
     setSaving(false);
     if (!res.ok) return toast(res.error, "error");
     // Stamped from the SNAPSHOT that was sent, not from current state: an edit made while the
@@ -225,7 +226,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
                   // Publishing the state on screen, not the state on the server: publishing while
                   // an edit is still pending would put the previous version live.
                   await save();
-                  const res = await togglePublishPage(page.id);
+                  const res = await safeAction(() => togglePublishPage(page.id));
                   if (!res.ok) return toast(res.error, "error");
                   toast(page.published ? "Unpublished" : "Published");
                   router.refresh();
@@ -258,7 +259,7 @@ export default function PageBuilder({ page, canManage }: { page: PageDetail; can
                       variant="ghost"
                       onClick={async () => {
                         if (!(await askConfirm({ title: "Restore this version?" }))) return;
-                        const res = await restoreRevision(r.id);
+                        const res = await safeAction(() => restoreRevision(r.id));
                         if (!res.ok) return toast(res.error, "error");
                         toast("Restored");
                         router.refresh();
@@ -475,7 +476,7 @@ function PageMetaCard({ page }: { page: PageDetail }) {
           busy={busy}
           onClick={async () => {
             setBusy(true);
-            const res = await updatePageMeta(page.id, { title, path, seoTitle, seoDescription, noIndex });
+            const res = await safeAction(() => updatePageMeta(page.id, { title, path, seoTitle, seoDescription, noIndex }));
             setBusy(false);
             if (!res.ok) return toast(res.error, "error");
             toast("Details saved");

@@ -32,6 +32,7 @@ import {
   saveFounderSignature,
 } from "@/server/agreement-actions";
 import { AgreementStateBadge } from "./AgreementStateBadge";
+import { safeAction } from "@/lib/action-guard";
 
 // This card renders on every contact profile. The canvas pad is only needed the one time the
 // founder stores a signature, so keep it out of the profile's initial bundle.
@@ -100,7 +101,7 @@ export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
     if (!signature) return setError("Draw your signature before saving.");
     setError(null);
     startTransition(async () => {
-      const res = await saveFounderSignature(signature.dataUrl, signature.device);
+      const res = await safeAction(() => saveFounderSignature(signature.dataUrl, signature.device));
       if (!res.ok) return setError(res.error);
       setSignOpen(false);
       toast("Signature saved - sending from now on is one tap.");

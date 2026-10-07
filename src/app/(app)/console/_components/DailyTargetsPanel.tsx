@@ -7,6 +7,7 @@ import { Field } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { saveDailyLogTargets } from "@/server/console-actions";
 import { Card, Hint, NumInput, SaveBar } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Daily-log targets editor (Founder Console → Daily Targets).
@@ -36,7 +37,7 @@ export function DailyTargetsPanel({ targets }: { targets: DailyLogTargets }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveDailyLogTargets(draft);
+    const res = await safeAction(() => saveDailyLogTargets(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

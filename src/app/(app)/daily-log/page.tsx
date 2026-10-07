@@ -10,6 +10,10 @@ import { LevelRing, XpBar, BadgeStrip } from "@/components/ui/gamification";
 import { PageHeader } from "@/components/ui/kit";
 import { DailyLogClient } from "./_components/DailyLogClient";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Daily Log" };
+
 export const dynamic = "force-dynamic";
 
 export default async function DailyLogPage() {

@@ -18,6 +18,7 @@ import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextIn
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { Modal } from "@/components/ui/Modal";
 import { TablePager, usePaged } from "@/components/ui/pager";
+import { safeAction } from "@/lib/action-guard";
 import {
   CONV_STATUS_OPTIONS,
   DAY_TYPE_LABELS,
@@ -241,7 +242,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
                             danger: true,
                           });
                           if (!ok) return;
-                          const res = await deleteConversion(c.id);
+                          const res = await safeAction(() => deleteConversion(c.id));
                           if (!res.ok) return toast(res.error, "error");
                           toast("Conversion deleted");
                           refresh();
@@ -263,7 +264,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
         <form
           action={async (form) => {
             setError(null);
-            const res = await createConversion(workshopId, form);
+            const res = await safeAction(() => createConversion(workshopId, form));
             if (!res.ok) return setError(res.error);
             setCreating(false);
             toast("Conversion added");
@@ -283,7 +284,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
           <form
             action={async (form) => {
               setError(null);
-              const res = await updateConversion(editing.id, form);
+              const res = await safeAction(() => updateConversion(editing.id, form));
               if (!res.ok) return setError(res.error);
               setEditing(null);
               toast("Conversion updated");

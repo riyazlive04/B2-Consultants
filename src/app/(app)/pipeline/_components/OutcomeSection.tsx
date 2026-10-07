@@ -11,6 +11,7 @@ import { Btn } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate } from "@/lib/format";
 import { CALL_OUTCOME_LABELS, optionsFrom } from "@/lib/labels";
+import { safeAction } from "@/lib/action-guard";
 import {
   BANT_LABELS,
   LOW_CONFIDENCE,
@@ -118,7 +119,9 @@ export function OutcomeSection({
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = editing ? await updateOutcome(editing.id, form) : await createOutcome(form);
+    const res = await safeAction(() =>
+      editing ? updateOutcome(editing.id, form) : createOutcome(form),
+    );
     if (!res.ok) return setError(res.error);
     toast(editing ? "Outcome updated" : "Call outcome recorded");
     setEditing(null);
@@ -132,7 +135,7 @@ export function OutcomeSection({
     if (!current.notes.trim()) return toast("Write the call note first", "error");
 
     setExtracting(true);
-    const res = await suggestOutcomeFromNote({ note: current.notes, callDate: current.callDate });
+    const res = await safeAction(() => suggestOutcomeFromNote({ note: current.notes, callDate: current.callDate }));
     setExtracting(false);
     if (!res.ok) return toast(res.error, "error");
 

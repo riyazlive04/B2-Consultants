@@ -11,6 +11,7 @@ import { Btn, IconButton } from "@/components/ui/controls";
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { deleteSnippet, saveSnippet } from "@/server/snippets-actions";
 import SiteBlocks from "@/components/sites/SiteBlocks";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The section library and page templates, as the builder sees them.
@@ -70,7 +71,7 @@ export function SnippetPicker({
 
   async function remove(s: SnippetRow) {
     if (!(await askConfirm({ title: `Delete "${s.name}" from the library?`, body: "Pages already using it keep their copy - only the saved original goes.", danger: true }))) return;
-    const res = await deleteSnippet(s.id);
+    const res = await safeAction(() => deleteSnippet(s.id));
     if (res.ok) { toast("Removed from the library"); router.refresh(); } else toast(res.error, "error");
   }
 
@@ -153,7 +154,7 @@ export function SaveSnippetDialog({
 
   async function submit() {
     setBusy(true);
-    const res = await saveSnippet({ name, category, scope, blocks });
+    const res = await safeAction(() => saveSnippet({ name, category, scope, blocks }));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     toast(scope === "PAGE" ? "Saved to templates" : "Saved to the section library");

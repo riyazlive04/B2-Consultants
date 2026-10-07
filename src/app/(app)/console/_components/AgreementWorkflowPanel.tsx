@@ -7,6 +7,7 @@ import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { toast } from "@/components/ui/feedback";
 import { saveAgreementWorkflow } from "@/server/console-actions";
 import { Card, Hint, SaveBar } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * When the Agreement module starts nudging (Founder Console → Agreements).
@@ -55,7 +56,7 @@ export function AgreementWorkflowPanel({ config }: { config: AgreementWorkflowCo
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await saveAgreementWorkflow(draft);
+    const res = await safeAction(() => saveAgreementWorkflow(draft));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);

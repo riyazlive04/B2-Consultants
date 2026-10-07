@@ -25,6 +25,7 @@ import { APP_ROLES, type AppRole } from "@/lib/sections";
 import { formatDate, formatEurMinor, formatInrMinor, minorToMajorString } from "@/lib/format";
 import { EmptyState, Pill, type Tone } from "@/components/ui/kit";
 import { Btn, Card, Hint, NumInput, Picker, Toggle } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Reward rules and the grants they produce.
@@ -154,7 +155,7 @@ function ScanButton() {
       busy={busy}
       onClick={async () => {
         setBusy(true);
-        const res = await scanRewards();
+        const res = await safeAction(() => scanRewards());
         setBusy(false);
         if (!res.ok) return toast(res.error, "error");
         toast(
@@ -207,7 +208,7 @@ function GrantsTable({ grants, empty }: { grants: GrantView[]; empty: string }) 
 function GrantActions({ grant }: { grant: GrantView }) {
   const act = async (status: GrantView["status"], confirm?: { title: string; body: string; danger?: boolean }) => {
     if (confirm && !(await askConfirm({ ...confirm, confirmLabel: "Confirm" }))) return;
-    const res = await setGrantStatus(grant.id, status);
+    const res = await safeAction(() => setGrantStatus(grant.id, status));
     if (!res.ok) return toast(res.error, "error");
     toast(`Marked ${status.toLowerCase()}`);
   };
@@ -272,7 +273,7 @@ function RulesTab({
       danger: true,
     });
     if (!ok) return;
-    const res = await deleteRewardRule(r.id);
+    const res = await safeAction(() => deleteRewardRule(r.id));
     if (!res.ok) return toast(res.error, "error");
     toast("Rule deleted");
   };
@@ -376,7 +377,7 @@ function RuleForm({
     setError(null);
     form.set("trigger", JSON.stringify(trigger));
     form.set("roles", roles.join(","));
-    const res = await saveRewardRule(form);
+    const res = await safeAction(() => saveRewardRule(form));
     if (!res.ok) return setError(res.error);
     toast(rule ? "Rule updated - scan to find new qualifiers" : "Rule created - scan to find qualifiers");
     onClose();

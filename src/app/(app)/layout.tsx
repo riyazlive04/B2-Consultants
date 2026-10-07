@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { FeedbackHost } from "@/components/ui/feedback";
+import { UnsavedNavGuard } from "@/components/shell/UnsavedNavGuard";
 import { AccessDeniedToast } from "@/components/shell/AccessDeniedToast";
 import { NotificationBell } from "@/components/shell/NotificationBell";
 import { RunwayBadge } from "@/components/shell/RunwayBadge";
@@ -136,6 +137,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {children}
       </AppShell>
       <FeedbackHost />
+      {/* Asks with the app's own dialog before a link throws away a half-typed form.
+          Mounted beside FeedbackHost because that is what renders the dialog it asks with. */}
+      <UnsavedNavGuard />
       {/* useSearchParams() must sit under a Suspense boundary to keep the layout
           from opting every child page out of static rendering. */}
       <Suspense fallback={null}>

@@ -2,11 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { Prisma, type Invoice, type InvoiceKind, type InvoiceStatus, type Product, type ProductInterval } from "@prisma/client";
+import { Prisma, type Invoice, type InvoiceCurrency, type InvoiceKind, type InvoiceStatus, type Product, type ProductInterval } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSection, capabilityCheck } from "@/lib/rbac";
-import { getTodayInrPerEur, inrMinorToEurMinor } from "@/lib/fx";
+import { getTodayInrPerEur, eurMinorToInrMinor, inrMinorToEurMinor } from "@/lib/fx";
 import { formatEurMinor, formatInrMinor, majorStringToMinor } from "@/lib/format";
+import {
+  asInvoiceCurrency,
+  computeInvoiceTotals,
+  dominantLevelCode,
+  formatMinor,
+  type InvoiceCurrencyCode,
+} from "@/lib/invoice-money";
 import { parseDateInput } from "@/lib/dates";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { emitTrigger } from "./automation";
@@ -14,6 +21,7 @@ import { afterResponse } from "./after-response";
 import { appendAudit, LedgerError, postEntry } from "./ledger";
 import { paymentEntryDraft } from "./finance-posting";
 import { getInvoicePdfData } from "./payments-metrics";
+import { getActiveLevels, getLevels } from "./levels";
 import { renderInvoicePdf } from "@/documents/invoice-pdf";
 import { brandEmailHeader, getEmailRuntime, sendResendEmail } from "@/lib/email";
 import { logActivity, diffFields } from "./activity-log";
@@ -64,7 +72,24 @@ function productDiffShape(row: Product) {
     priceEurMinor: row.priceEurMinor.toString(),
     interval: row.interval as string,
     active: row.active,
+    levelCode: row.levelCode,
   };
+}
+
+/**
+ * An invoice's total as the DOCUMENT states it - in the currency it was issued in.
+ *
+ * Every activity line, email and toast about an invoice quotes this rather than the rupee
+ * column, because "€1,400" and "₹1,34,000" are the same invoice and only one of them is what the
+ * customer was asked for. The rupee side stays the one the dashboards total.
+ */
+function invoiceTotalDisplay(row: {
+  currency: InvoiceCurrency;
+  totalInrMinor: bigint;
+  totalEurMinor: bigint;
+}): string {
+  const c = asInvoiceCurrency(row.currency);
+  return formatMinor(c === "EUR" ? row.totalEurMinor : row.totalInrMinor, c);
 }
 
 function invoiceDiffShape(row: Invoice) {
@@ -74,10 +99,13 @@ function invoiceDiffShape(row: Invoice) {
     customerPhone: row.customerPhone,
     issueDate: row.issueDate,
     dueDate: row.dueDate,
+    currency: row.currency as string,
     subtotalInrMinor: row.subtotalInrMinor.toString(),
     discountInrMinor: row.discountInrMinor.toString(),
     taxPercent: row.taxPercent,
+    taxLabel: row.taxLabel,
     totalInrMinor: row.totalInrMinor.toString(),
+    totalEurMinor: row.totalEurMinor.toString(),
     leadId: row.leadId,
     notes: row.notes,
   };
@@ -86,6 +114,15 @@ function invoiceDiffShape(row: Invoice) {
 // ─────────────────────────── Products ───────────────────────────
 
 const productSchema = z.object({
+  /**
+   * WHICH PROGRAMME this product sells - a `Level.code`, or blank for a one-off item.
+   *
+   * The products list used to be free text with nothing behind it, so an invoice line read
+   * "A1 course" only because somebody typed those words, and no part of the app could tell that
+   * the money belonged to German Note. A product that names its programme carries the level onto
+   * the invoice line, and from there onto the Income row and the GL account that level posts to.
+   */
+  levelCode: z.string().trim().optional(),
   // Free text, not rule("name"): "Level 2 Bundle" is a product, not a person.
   name: rule("text").pipe(z.string().min(1, "Product name is required")),
   description: optionalRule("text"),
@@ -95,15 +132,58 @@ const productSchema = z.object({
   active: z.string().optional(),
 });
 
+/**
+ * Settle a submitted product onto a programme.
+ *
+ * The code is checked against the LIVE catalogue rather than trusted, because the form is a
+ * public RPC boundary once it leaves the browser, and a level column holding a code no `Level`
+ * row answers to is a row that prices nothing and posts nowhere. An inactive programme is
+ * refused too: it has been withdrawn from sale, and the founder withdrawing it should not find
+ * it quietly back on the next invoice.
+ *
+ * The NAME follows the programme's label. Two names for one programme - "GN A1" in the
+ * catalogue, "German A1 course" on the invoice - is how a catalogue stops being a catalogue.
+ * A one-off product keeps whatever was typed.
+ */
+async function resolveProductProgramme(
+  levelCodeRaw: string | undefined,
+  typedName: string,
+): Promise<{ levelCode: string | null; name: string } | { error: string }> {
+  const code = levelCodeRaw?.trim();
+  if (!code) return { levelCode: null, name: typedName };
+  const level = (await getActiveLevels()).find((l) => l.code === code);
+  if (!level) return { error: "That programme is no longer on the catalogue - pick another" };
+  return { levelCode: level.code, name: level.label };
+}
+
+/** The programme already priced by another product - so "one product per programme" fails kindly. */
+async function programmeTakenBy(levelCode: string, exceptId?: string): Promise<string | null> {
+  const clash = await prisma.product.findFirst({
+    where: { levelCode, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+    select: { name: true, deletedAt: true },
+  });
+  if (!clash) return null;
+  return clash.deletedAt
+    ? `"${clash.name}" already prices that programme - restore it from Archived instead of adding a second one`
+    : `"${clash.name}" already prices that programme - edit it instead of adding a second one`;
+}
+
 export async function createProduct(form: FormData): Promise<ActionResult> {
   const session = await requireSection("payments");
   const parsed = productSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
+  const programme = await resolveProductProgramme(d.levelCode, d.name);
+  if ("error" in programme) return { ok: false, error: programme.error };
+  if (programme.levelCode) {
+    const taken = await programmeTakenBy(programme.levelCode);
+    if (taken) return { ok: false, error: taken };
+  }
   const fx = await getTodayInrPerEur();
   const row = await prisma.product.create({
     data: {
-      name: d.name,
+      levelCode: programme.levelCode,
+      name: programme.name,
       description: d.description || null,
       priceInrMinor: d.priceInr?.trim() ? majorStringToMinor(d.priceInr) : 0n,
       priceEurMinor: d.priceEur?.trim() ? majorStringToMinor(d.priceEur) : 0n,
@@ -136,12 +216,19 @@ export async function updateProduct(id: string, form: FormData): Promise<ActionR
   const parsed = productSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
+  const programme = await resolveProductProgramme(d.levelCode, d.name);
+  if ("error" in programme) return { ok: false, error: programme.error };
+  if (programme.levelCode) {
+    const taken = await programmeTakenBy(programme.levelCode, id);
+    if (taken) return { ok: false, error: taken };
+  }
   const fx = await getTodayInrPerEur();
   const existing = await prisma.product.findUnique({ where: { id } });
   const row = await prisma.product.update({
     where: { id },
     data: {
-      name: d.name,
+      levelCode: programme.levelCode,
+      name: programme.name,
       description: d.description || null,
       priceInrMinor: d.priceInr?.trim() ? majorStringToMinor(d.priceInr) : 0n,
       priceEurMinor: d.priceEur?.trim() ? majorStringToMinor(d.priceEur) : 0n,
@@ -237,24 +324,63 @@ export type InvoicePayload = {
   customerPhone?: string;
   issueDate: string;
   dueDate?: string;
-  items: { description: string; quantity: number; unitPriceInr: string }[];
-  discountInr?: string;
+  /** Which currency the figures below are typed in. See `lib/invoice-money`. */
+  currency?: InvoiceCurrencyCode;
+  items: { description: string; quantity: number; unitPrice: string; levelCode?: string | null }[];
+  discount?: string;
   taxPercent?: number;
+  /** What the tax is called on this document. Ignored when the rate is 0 - see `taxLine`. */
+  taxLabel?: string;
   notes?: string;
 };
 
-function computeTotals(
-  items: { quantity: number; unitPriceInr: string }[],
-  discountInrMinor: bigint,
+/**
+ * Every figure on an invoice, in BOTH currencies.
+ *
+ * The ladder (subtotal → discount → taxable → tax → total) is computed in the currency the
+ * invoice was TYPED in, by the same pure functions the editor previews with, and only the
+ * finished figures are converted across. Doing it the other way - rupee math, euros derived per
+ * line - is what makes a euro tax line come out a cent short of rate × base, and a tax line that
+ * does not equal its own arithmetic is a defective document.
+ *
+ * The converted side is stored, not computed on read, so the KPI cards and the ageing can keep
+ * totalling in rupees without the whole back catalogue re-pricing every time the euro moves.
+ */
+function invoiceMoney(
+  currency: InvoiceCurrencyCode,
+  items: { quantity: number; unitPrice: string }[],
+  discount: string | undefined,
   taxPercent: number,
   rate: Prisma.Decimal,
 ) {
-  const subtotal = items.reduce((a, it) => a + majorStringToMinor(it.unitPriceInr) * BigInt(Math.max(1, it.quantity)), 0n);
-  const taxableRaw = subtotal - discountInrMinor;
-  const taxable = taxableRaw > 0n ? taxableRaw : 0n;
-  const taxInr = BigInt(Math.round((Number(taxable) * taxPercent) / 100));
-  const total = taxable + taxInr;
-  return { subtotal, taxInr, total, totalEur: inrMinorToEurMinor(total, rate) };
+  const t = computeInvoiceTotals(items, discount, taxPercent);
+  /** The same figure in the other currency, at the rate being stamped on this invoice. */
+  const across = (minor: bigint): bigint =>
+    currency === "INR" ? inrMinorToEurMinor(minor, rate) : eurMinorToInrMinor(minor, rate);
+  const pair = (minor: bigint) =>
+    currency === "INR"
+      ? { inr: minor, eur: across(minor) }
+      : { inr: across(minor), eur: minor };
+
+  const subtotal = pair(t.subtotalMinor);
+  const discountPair = pair(t.discountMinor);
+  const tax = pair(t.taxMinor);
+  const total = pair(t.totalMinor);
+  return {
+    // `total` in the ENTERED currency - what the "an invoice is a demand for money" check reads,
+    // so a €0 invoice is refused on its own terms rather than on a converted rupee figure.
+    enteredTotalMinor: t.totalMinor,
+    subtotalInrMinor: subtotal.inr,
+    subtotalEurMinor: subtotal.eur,
+    discountInrMinor: discountPair.inr,
+    discountEurMinor: discountPair.eur,
+    taxInrMinor: tax.inr,
+    taxEurMinor: tax.eur,
+    totalInrMinor: total.inr,
+    totalEurMinor: total.eur,
+    /** Each line's unit price on both sides, in submitted order. */
+    lineUnitPrices: items.map((it) => pair(majorStringToMinor(it.unitPrice || "0"))),
+  };
 }
 
 async function nextNumber(tx: TxClient, kind: InvoiceKind): Promise<string> {
@@ -283,25 +409,47 @@ const invoicePayloadSchema = z.object({
   customerPhone: optionalRule("phone"),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid issue date"),
   dueDate: z.string().trim().optional(),
+  currency: z.enum(["INR", "EUR"]).default("INR"),
   items: z
     .array(
       z.object({
         // Free text, not rule("name"): "Level 2 Bundle" is a legitimate line item.
         description: rule("text").pipe(z.string().min(1, "Every line item needs a description")),
         quantity: z.coerce.number().int().min(1, "Quantity must be at least 1").max(9999),
-        // `?? ""` so the type stays a plain string - computeTotals/majorStringToMinor take one.
-        unitPriceInr: optionalRule("money").transform((v) => v ?? ""),
+        // `?? ""` so the type stays a plain string - invoiceMoney/majorStringToMinor take one.
+        unitPrice: optionalRule("money").transform((v) => v ?? ""),
+        /** The programme this line sells, when it came from a programme product. Checked below. */
+        levelCode: z.string().trim().optional().nullable(),
       }),
     )
     .min(1, "Add at least one line item"),
-  discountInr: optionalRule("money"),
+  discount: optionalRule("money"),
   taxPercent: z.coerce
     .number()
     .min(0, "Tax % can't be negative")
     .max(100, "Tax % must be 100 or less")
     .optional(),
+  taxLabel: optionalRule("text"),
   notes: optionalRule("text"),
 });
+
+/**
+ * Keep only line-level programme codes the catalogue actually answers to.
+ *
+ * Checked against EVERY level, not just the active ones: a programme withdrawn from sale is
+ * still what an existing invoice sold, and re-saving that invoice must not quietly strip the
+ * attribution off its lines. A code that matches nothing becomes null - the line still invoices
+ * for exactly what it says, it simply isn't attributed to a programme that does not exist.
+ */
+async function sanitizeLineLevels(
+  items: { levelCode?: string | null }[],
+): Promise<(string | null)[]> {
+  const wanted = items.map((it) => it.levelCode?.trim() || null);
+  if (!wanted.some(Boolean)) return wanted;
+  const known = new Set((await getLevels()).map((l) => l.code));
+  return wanted.map((code) => (code && known.has(code) ? code : null));
+}
+
 
 export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> {
   const session = await requireSection("payments");
@@ -309,8 +457,25 @@ export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> 
   if (!parsedPayload.success) return { ok: false, error: firstError(parsedPayload.error) };
   const payload = parsedPayload.data;
   const fx = await getTodayInrPerEur();
-  const discount = payload.discountInr?.trim() ? majorStringToMinor(payload.discountInr) : 0n;
-  const t = computeTotals(payload.items, discount, payload.taxPercent ?? 0, fx.rate);
+  const currency = payload.currency;
+  const taxPercent = payload.taxPercent ?? 0;
+  const t = invoiceMoney(currency, payload.items, payload.discount, taxPercent, fx.rate);
+  const lineLevels = await sanitizeLineLevels(payload.items);
+  /**
+   * ── An invoice is a demand for money (issue 15) ─────────────────────────────────
+   * A total of ₹0.00 was created without complaint: every line priced at nothing, or a discount
+   * that cancelled the lot. It then went out, or sat in the list, as a document asking the
+   * customer for nothing - and counted as one more unpaid invoice in the ageing.
+   *
+   * Checked on the TOTAL rather than per line, so a genuinely free line beside a priced one (a
+   * bundled book, a waived sitting) is still allowed.
+   */
+  if (t.enteredTotalMinor <= BigInt(0)) {
+    return {
+      ok: false,
+      error: "This comes to 0 - price at least one line, or reduce the discount, before saving it.",
+    };
+  }
 
   let created: Invoice | null = null;
   await prisma.$transaction(async (tx) => {
@@ -326,12 +491,19 @@ export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> 
         customerPhone: payload.customerPhone?.trim() || null,
         issueDate: parseDateInput(payload.issueDate),
         dueDate: payload.dueDate?.trim() ? parseDateInput(payload.dueDate) : null,
-        subtotalInrMinor: t.subtotal,
-        discountInrMinor: discount,
-        taxPercent: new Prisma.Decimal(payload.taxPercent ?? 0),
-        taxInrMinor: t.taxInr,
-        totalInrMinor: t.total,
-        totalEurMinor: t.totalEur,
+        currency,
+        subtotalInrMinor: t.subtotalInrMinor,
+        subtotalEurMinor: t.subtotalEurMinor,
+        discountInrMinor: t.discountInrMinor,
+        discountEurMinor: t.discountEurMinor,
+        taxPercent: new Prisma.Decimal(taxPercent),
+        // A 0% invoice carries NO tax line at all, so it carries no tax name either - a label
+        // left behind on a tax-free invoice reads as a charge that was made and came to nothing.
+        taxLabel: taxPercent > 0 ? payload.taxLabel?.trim() || "Tax" : null,
+        taxInrMinor: t.taxInrMinor,
+        taxEurMinor: t.taxEurMinor,
+        totalInrMinor: t.totalInrMinor,
+        totalEurMinor: t.totalEurMinor,
         fxRateUsed: fx.rate,
         notes: payload.notes?.trim() || null,
         createdById: session.user.id,
@@ -339,7 +511,9 @@ export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> 
           create: payload.items.map((it, i) => ({
             description: it.description.trim(),
             quantity: Math.max(1, it.quantity),
-            unitPriceInrMinor: it.unitPriceInr?.trim() ? majorStringToMinor(it.unitPriceInr) : 0n,
+            unitPriceInrMinor: t.lineUnitPrices[i].inr,
+            unitPriceEurMinor: t.lineUnitPrices[i].eur,
+            levelCode: lineLevels[i],
             position: i,
           })),
         },
@@ -354,7 +528,7 @@ export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> 
       section: "payments",
       entityType: "Invoice",
       entityId: row.id,
-      summary: `Created ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} - ${formatInrMinor(row.totalInrMinor)}`,
+      summary: `Created ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} - ${invoiceTotalDisplay(row)}`,
       meta: {
         kind: row.kind,
         number: row.number,
@@ -374,8 +548,25 @@ export async function updateInvoice(id: string, raw: InvoicePayload): Promise<Ac
   if (!parsedPayload.success) return { ok: false, error: firstError(parsedPayload.error) };
   const payload = parsedPayload.data;
   const fx = await getTodayInrPerEur();
-  const discount = payload.discountInr?.trim() ? majorStringToMinor(payload.discountInr) : 0n;
-  const t = computeTotals(payload.items, discount, payload.taxPercent ?? 0, fx.rate);
+  const currency = payload.currency;
+  const taxPercent = payload.taxPercent ?? 0;
+  const t = invoiceMoney(currency, payload.items, payload.discount, taxPercent, fx.rate);
+  const lineLevels = await sanitizeLineLevels(payload.items);
+  /**
+   * ── An invoice is a demand for money (issue 15) ─────────────────────────────────
+   * A total of ₹0.00 was created without complaint: every line priced at nothing, or a discount
+   * that cancelled the lot. It then went out, or sat in the list, as a document asking the
+   * customer for nothing - and counted as one more unpaid invoice in the ageing.
+   *
+   * Checked on the TOTAL rather than per line, so a genuinely free line beside a priced one (a
+   * bundled book, a waived sitting) is still allowed.
+   */
+  if (t.enteredTotalMinor <= BigInt(0)) {
+    return {
+      ok: false,
+      error: "This comes to 0 - price at least one line, or reduce the discount, before saving it.",
+    };
+  }
 
   const existing = await prisma.invoice.findUnique({ where: { id } });
   let updated: Invoice | null = null;
@@ -390,19 +581,28 @@ export async function updateInvoice(id: string, raw: InvoicePayload): Promise<Ac
         customerPhone: payload.customerPhone?.trim() || null,
         issueDate: parseDateInput(payload.issueDate),
         dueDate: payload.dueDate?.trim() ? parseDateInput(payload.dueDate) : null,
-        subtotalInrMinor: t.subtotal,
-        discountInrMinor: discount,
-        taxPercent: new Prisma.Decimal(payload.taxPercent ?? 0),
-        taxInrMinor: t.taxInr,
-        totalInrMinor: t.total,
-        totalEurMinor: t.totalEur,
+        currency,
+        subtotalInrMinor: t.subtotalInrMinor,
+        subtotalEurMinor: t.subtotalEurMinor,
+        discountInrMinor: t.discountInrMinor,
+        discountEurMinor: t.discountEurMinor,
+        taxPercent: new Prisma.Decimal(taxPercent),
+        // A 0% invoice carries NO tax line at all, so it carries no tax name either - a label
+        // left behind on a tax-free invoice reads as a charge that was made and came to nothing.
+        taxLabel: taxPercent > 0 ? payload.taxLabel?.trim() || "Tax" : null,
+        taxInrMinor: t.taxInrMinor,
+        taxEurMinor: t.taxEurMinor,
+        totalInrMinor: t.totalInrMinor,
+        totalEurMinor: t.totalEurMinor,
         fxRateUsed: fx.rate,
         notes: payload.notes?.trim() || null,
         items: {
           create: payload.items.map((it, i) => ({
             description: it.description.trim(),
             quantity: Math.max(1, it.quantity),
-            unitPriceInrMinor: it.unitPriceInr?.trim() ? majorStringToMinor(it.unitPriceInr) : 0n,
+            unitPriceInrMinor: t.lineUnitPrices[i].inr,
+            unitPriceEurMinor: t.lineUnitPrices[i].eur,
+            levelCode: lineLevels[i],
             position: i,
           })),
         },
@@ -421,7 +621,7 @@ export async function updateInvoice(id: string, raw: InvoicePayload): Promise<Ac
         section: "payments",
         entityType: "Invoice",
         entityId: row.id,
-        summary: `Edited ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} - now ${formatInrMinor(row.totalInrMinor)}`,
+        summary: `Edited ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} - now ${invoiceTotalDisplay(row)}`,
         meta: diff,
       });
     }
@@ -485,7 +685,7 @@ export async function deleteInvoice(id: string): Promise<ActionResult> {
     section: "payments",
     entityType: "Invoice",
     entityId: row.id,
-    summary: `Archived ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} - ${formatInrMinor(row.totalInrMinor)}`,
+    summary: `Archived ${row.kind === "ESTIMATE" ? "estimate" : "invoice"} ${row.number} for ${row.customerName} - ${invoiceTotalDisplay(row)}`,
     meta: { kind: row.kind, number: row.number, totalInrMinor: row.totalInrMinor.toString(), status: row.status },
   });
   revalidatePath("/payments");
@@ -643,6 +843,27 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
 }
 
 /**
+ * What `recordPayment` carries out of its transaction, for the log and the Income mirror.
+ *
+ * Named rather than inlined because TypeScript cannot see an assignment made inside the
+ * transaction callback: `typeof recorded` narrows to `null` afterwards, and every field read off
+ * it becomes an error on `never`. The explicit annotation at the point of use is what re-widens
+ * it - the same shape the previous version of this function declared inline for the same reason.
+ */
+type RecordedPayment = {
+  paymentId: string;
+  number: string;
+  customerName: string;
+  status: InvoiceStatus;
+  currency: InvoiceCurrencyCode;
+  amountInrMinor: bigint;
+  amountEurMinor: bigint;
+  fxRateUsed: Prisma.Decimal;
+  leadId: string | null;
+  levelCode: string | null;
+};
+
+/**
  * Post every payment to the real ledger in the SAME transaction as the InvoicePayment row
  * (BUILD_CHECKLIST §7 - copies finance-actions.ts's createIncome/createExpense pattern
  * exactly). Before this, Payments and Finance were two disconnected books for the same
@@ -651,6 +872,9 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
  */
 export async function recordPayment(invoiceId: string, form: FormData): Promise<ActionResult> {
   const session = await requireSection("payments");
+  // `amountInr` is the field's historic name; what it carries is an amount in the INVOICE's
+  // currency, which the modal labels accordingly. Renaming the field would break nothing but
+  // would also tell no one anything - the currency is the invoice's, never the typist's choice.
   const amount = rule("money").safeParse(String(form.get("amountInr") ?? ""));
   if (!amount.success) return { ok: false, error: firstError(amount.error) };
   const amountRaw = amount.data;
@@ -658,20 +882,47 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
   const ref = optionalRule("text").safeParse(String(form.get("reference") ?? ""));
   if (!ref.success) return { ok: false, error: firstError(ref.error) };
   const reference = ref.data ?? null;
-  const amountInrMinor = majorStringToMinor(amountRaw);
+  const enteredMinor = majorStringToMinor(amountRaw);
 
   let paidLeadId: string | null = null;
-  let recorded: { paymentId: string; number: string; customerName: string; status: InvoiceStatus } | null = null;
+  let recorded: RecordedPayment | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       const inv = await tx.invoice.findUnique({
         where: { id: invoiceId },
-        include: { payments: { select: { amountInrMinor: true } } },
+        include: {
+          payments: { select: { amountInrMinor: true } },
+          items: { select: { levelCode: true, quantity: true, unitPriceInrMinor: true } },
+        },
       });
       if (!inv) throw new LedgerError("Invoice not found");
 
+      /**
+       * The receipt is valued in the invoice's own currency, and its other side is derived once
+       * at the rate the invoice was raised at - NOT today's.
+       *
+       * A euro invoice settled three months later would otherwise be converted at whatever the
+       * euro was worth on the day somebody got round to recording it, so the rupee books would
+       * show a receipt that never matched the receivable it cleared, and the difference would
+       * sit in accounts receivable forever as a balance nobody could pay off.
+       */
+      const currency = asInvoiceCurrency(inv.currency);
+      const amountInrMinor =
+        currency === "INR" ? enteredMinor : eurMinorToInrMinor(enteredMinor, inv.fxRateUsed);
+      const amountEurMinor =
+        currency === "EUR" ? enteredMinor : inrMinorToEurMinor(enteredMinor, inv.fxRateUsed);
+
       const payment = await tx.invoicePayment.create({
-        data: { invoiceId, amountInrMinor, method, reference, recordedById: session.user.id },
+        data: {
+          invoiceId,
+          amountInrMinor,
+          amountEurMinor,
+          currency: currency as InvoiceCurrency,
+          fxRateUsed: inv.fxRateUsed,
+          method,
+          reference,
+          recordedById: session.user.id,
+        },
       });
 
       const entryId = await postEntry(
@@ -701,33 +952,70 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
         data: { status, ...(status === "PAID" ? { paidAt: new Date() } : {}) },
       });
       if (status === "PAID" && inv.leadId) paidLeadId = inv.leadId;
-      recorded = { paymentId: payment.id, number: inv.number, customerName: inv.customerName, status };
+      recorded = {
+        paymentId: payment.id,
+        number: inv.number,
+        customerName: inv.customerName,
+        status,
+        currency,
+        amountInrMinor,
+        amountEurMinor,
+        fxRateUsed: inv.fxRateUsed,
+        leadId: inv.leadId,
+        // What this invoice mainly sells, so the Income row lands against the real programme -
+        // and therefore in the right business line's book - instead of a generic "Other".
+        levelCode: dominantLevelCode(
+          inv.items.map((it) => ({
+            levelCode: it.levelCode,
+            quantity: it.quantity,
+            unitPriceMinor: it.unitPriceInrMinor,
+          })),
+        ),
+      };
     });
   });
   if (!result.ok) return result;
 
   if (recorded) {
-    const r: { paymentId: string; number: string; customerName: string; status: InvoiceStatus } = recorded;
+    const r: RecordedPayment = recorded;
     await logActivity(session, {
       action: "payments.payment.record",
       section: "payments",
       entityType: "InvoicePayment",
       entityId: r.paymentId,
-      summary: `Recorded a ${formatInrMinor(amountInrMinor)} payment from ${r.customerName} against invoice ${r.number} - now ${r.status.toLowerCase()}`,
+      summary: `Recorded a ${formatMinor(r.currency === "EUR" ? r.amountEurMinor : r.amountInrMinor, r.currency)} payment from ${r.customerName} against invoice ${r.number} - now ${r.status.toLowerCase()}`,
       meta: {
         invoiceId,
         number: r.number,
-        amountInrMinor: amountInrMinor.toString(),
+        currency: r.currency,
+        amountInrMinor: r.amountInrMinor.toString(),
+        amountEurMinor: r.amountEurMinor.toString(),
         method,
         reference,
         invoiceStatus: r.status,
       },
     });
 
-    // Auto-post the collection to Finance as Income (user request) so it lands on the P&L / LTV.
-    const fx = await getTodayInrPerEur();
+    /**
+     * Auto-post the collection to Finance as Income, so it lands on the P&L and on the
+     * customer's own payment history.
+     *
+     * The rate is the INVOICE's, not today's: the two amounts were converted from each other at
+     * that rate a moment ago, and stamping a different one on the Income row would make its own
+     * two columns disagree with each other.
+     */
     await syncPaymentIncome(
-      { id: r.paymentId, amountInrMinor, fxRateUsed: fx.rate, studentName: r.customerName, method, paidOn: new Date() },
+      {
+        id: r.paymentId,
+        amountInrMinor: r.amountInrMinor,
+        amountEurMinor: r.amountEurMinor,
+        fxRateUsed: r.fxRateUsed,
+        studentName: r.customerName,
+        method,
+        paidOn: new Date(),
+        leadId: r.leadId,
+        levelCode: r.levelCode,
+      },
       r.paymentId,
     );
 
@@ -769,16 +1057,33 @@ export async function convertEstimate(id: string): Promise<ActionResult> {
         customerEmail: est.customerEmail,
         customerPhone: est.customerPhone,
         issueDate: new Date(),
+        // The quoted figures carry over EXACTLY, both currencies and the rate they were quoted
+        // at: converting an accepted quote at today's rate would bill a different number from
+        // the one the customer accepted.
+        currency: est.currency,
         subtotalInrMinor: est.subtotalInrMinor,
+        subtotalEurMinor: est.subtotalEurMinor,
         discountInrMinor: est.discountInrMinor,
+        discountEurMinor: est.discountEurMinor,
         taxPercent: est.taxPercent,
+        taxLabel: est.taxLabel,
         taxInrMinor: est.taxInrMinor,
+        taxEurMinor: est.taxEurMinor,
         totalInrMinor: est.totalInrMinor,
         totalEurMinor: est.totalEurMinor,
         fxRateUsed: est.fxRateUsed,
         notes: est.notes,
         createdById: session.user.id,
-        items: { create: est.items.map((it, i) => ({ description: it.description, quantity: it.quantity, unitPriceInrMinor: it.unitPriceInrMinor, position: i })) },
+        items: {
+          create: est.items.map((it, i) => ({
+            description: it.description,
+            quantity: it.quantity,
+            unitPriceInrMinor: it.unitPriceInrMinor,
+            unitPriceEurMinor: it.unitPriceEurMinor,
+            levelCode: it.levelCode,
+            position: i,
+          })),
+        },
       },
     });
     await tx.invoice.update({ where: { id }, data: { status: "ACCEPTED" } });
@@ -792,7 +1097,7 @@ export async function convertEstimate(id: string): Promise<ActionResult> {
       section: "payments",
       entityType: "Invoice",
       entityId: row.id,
-      summary: `Converted estimate ${est.number} into invoice ${row.number} for ${row.customerName} - ${formatInrMinor(row.totalInrMinor)}`,
+      summary: `Converted estimate ${est.number} into invoice ${row.number} for ${row.customerName} - ${invoiceTotalDisplay(row)}`,
       meta: {
         number: row.number,
         fromEstimate: est.number,

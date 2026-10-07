@@ -38,7 +38,10 @@ export default async function GnBatchPage({ params }: { params: { batchId: strin
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_240px]">
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
         <Tabs
+          urlKey="tab"
           tabs={[
             {
               label: "Classroom",

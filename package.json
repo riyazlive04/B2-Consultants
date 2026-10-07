@@ -18,6 +18,7 @@
     "db:backup": "node --env-file=.env scripts/backup-verify.mjs",
     "db:backup:dump-only": "node --env-file=.env scripts/backup-verify.mjs --no-verify",
     "backfill:opps": "node --conditions=react-server --import tsx scripts/backfill-opportunities.ts",
+    "sample:invoice": "node -e \"process.env.TSX_TSCONFIG_PATH='tsconfig.scripts.json';require('child_process').execFileSync(process.execPath,['--import','tsx','scripts/sample-invoice.ts'],{stdio:'inherit',env:process.env})\"",
     "db:seed": "tsx prisma/seed.ts",
     "db:ledger": "tsx prisma/seed-ledger.ts",
     "db:verify-ledger": "tsx prisma/verify-ledger.ts",

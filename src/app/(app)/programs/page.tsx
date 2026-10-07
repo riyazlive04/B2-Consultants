@@ -4,6 +4,10 @@ import { getAdminLevels } from "@/server/levels";
 import { LevelsPanel } from "@/components/levels/LevelsPanel";
 import { PageHeader } from "@/components/ui/kit";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Programs" };
+
 /**
  * Programs - the B2 Consultants half of the level catalogue.
  *

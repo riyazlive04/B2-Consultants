@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { istMonthRange, istToday, istYearRange } from "@/lib/dates";
 import { aggEurMinor, aggInrMinor, sumAgg } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
+import {
+  allocatePayments, isSettled, studentKey, type PlanInput, type PaymentInput,
+} from "@/lib/payment-allocation";
 import { levelKinds } from "./levels";
 import { lineForKind, type BusinessLine } from "@/lib/business-line";
 
@@ -20,13 +23,23 @@ const toMoney2 = (v: { inr: bigint; eur: bigint }): Money2 => ({
   eur: Number(v.eur),
 });
 
-/** Match incomes to a pending-payment row: linked studentId wins, else exact name (case/space-insensitive). */
-const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-
 /**
  * Pending-payment rows with computed paid-so-far / balance / overdue.
- * SHARED: Finance tab (Phase 1) and Cash Health receivables (Phase 3) both read
- * this - the PRD3 "auto-pull, no duplicate entry" connection is this one function.
+ *
+ * SHARED: Finance tab (Phase 1) and Cash Health receivables (Phase 3) both read this - the PRD3
+ * "auto-pull, no duplicate entry" connection is this one function.
+ *
+ * ── Paid-so-far is PER PLAN (FIN-12) ───────────────────────────────────────────────
+ * It used to be summed per student and handed to every plan that student had, so four plans each
+ * claimed the whole payment history and each read "still to collect 0" while their own
+ * instalments were plainly still due. The receivables total, the overdue badge and the dashboard
+ * alert all came out lower than reality - and the rule was not even consistent, because an
+ * id-linked plan ignored a payment typed under the same name while an unlinked plan counted it.
+ *
+ * `lib/payment-allocation` now places each payment ONCE: on the plan it names, or - for the rows
+ * that predate the link - across that student's plans oldest first, each capped at its own
+ * balance. The cap is what makes the summary strip close: "Total to collect - Collected = Still
+ * to collect" is now an identity rather than a coincidence.
  */
 export const getPendingRows = cache(async () => {
   const today = istToday();
@@ -34,31 +47,62 @@ export const getPendingRows = cache(async () => {
     prisma.pendingPayment.findMany({
       where: ACTIVE,
       orderBy: { nextDueDate: "asc" },
-      include: { instalments: { orderBy: { seq: "asc" } } },
+      include: {
+        instalments: { orderBy: { seq: "asc" } },
+        // The number a reminder would actually go to, so the Remind control can NAME the
+        // recipient before sending and can say "no phone number" instead of offering a click
+        // whose only possible outcome is a skip (issue 5).
+        student: { select: { phone: true } },
+      },
     }),
     prisma.income.findMany({
       where: ACTIVE,
       select: {
-        studentId: true, studentName: true,
+        studentId: true, studentName: true, pendingPaymentId: true,
         amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,
       },
     }),
   ]);
 
-  const paidByStudentId = new Map<string, { inr: number; eur: number }>();
-  const paidByName = new Map<string, { inr: number; eur: number }>();
+  /** Fee + plan surcharge: the figure a plan's balance is measured from. */
+  const toCollectOf = (p: (typeof allPendings)[number]): Money2 => ({
+    inr:
+      Number(aggInrMinor(p.totalFeeInrMinor, p.totalFeeEurMinor, p.fxRateUsed)) +
+      Number(aggInrMinor(p.planExtraInrMinor, p.planExtraEurMinor, p.fxRateUsed)),
+    eur:
+      Number(aggEurMinor(p.totalFeeInrMinor, p.totalFeeEurMinor, p.fxRateUsed)) +
+      Number(aggEurMinor(p.planExtraInrMinor, p.planExtraEurMinor, p.fxRateUsed)),
+  });
+
+  /**
+   * One allocation per STUDENT, not one per plan: a plan's share can only be worked out
+   * alongside its siblings, because what the older plan takes is what the newer one cannot.
+   */
+  const plansByStudent = new Map<string, PlanInput[]>();
+  for (const p of allPendings) {
+    const key = studentKey(p.studentId, p.studentName);
+    const list = plansByStudent.get(key) ?? [];
+    list.push({ id: p.id, toCollect: toCollectOf(p), createdAt: p.createdAt.getTime() });
+    plansByStudent.set(key, list);
+  }
+
+  const paymentsByStudent = new Map<string, PaymentInput[]>();
   for (const i of allIncomes) {
-    const agg = {
-      inr: Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
-      eur: Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
-    };
-    if (i.studentId) {
-      const cur = paidByStudentId.get(i.studentId) ?? { inr: 0, eur: 0 };
-      paidByStudentId.set(i.studentId, { inr: cur.inr + agg.inr, eur: cur.eur + agg.eur });
-    }
-    const key = nameKey(i.studentName);
-    const cur = paidByName.get(key) ?? { inr: 0, eur: 0 };
-    paidByName.set(key, { inr: cur.inr + agg.inr, eur: cur.eur + agg.eur });
+    const key = studentKey(i.studentId, i.studentName);
+    const list = paymentsByStudent.get(key) ?? [];
+    list.push({
+      pendingPaymentId: i.pendingPaymentId,
+      amount: {
+        inr: Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
+        eur: Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
+      },
+    });
+    paymentsByStudent.set(key, list);
+  }
+
+  const allocation = new Map<string, ReturnType<typeof allocatePayments>>();
+  for (const [key, plans] of plansByStudent) {
+    allocation.set(key, allocatePayments(plans, paymentsByStudent.get(key) ?? []));
   }
 
   const todayMs = today.getTime();
@@ -78,29 +122,57 @@ export const getPendingRows = cache(async () => {
       eur: Number(aggEurMinor(p.planExtraInrMinor, p.planExtraEurMinor, p.fxRateUsed)),
     };
     const toCollect = { inr: fee.inr + planExtra.inr, eur: fee.eur + planExtra.eur };
-    // Id-linked rows NEVER fall back to name matching: two students sharing a
-    // name would otherwise cross-credit payments and silently zero a real
-    // receivable. Name matching is only for rows with no student link at all.
-    const paid = p.studentId
-      ? paidByStudentId.get(p.studentId) ?? { inr: 0, eur: 0 }
-      : paidByName.get(nameKey(p.studentName)) ?? { inr: 0, eur: 0 };
-    const balance = {
-      inr: Math.max(0, toCollect.inr - paid.inr),
-      eur: Math.max(0, toCollect.eur - paid.eur),
+    const alloc = allocation.get(studentKey(p.studentId, p.studentName));
+    const share = alloc?.byPlan.get(p.id) ?? {
+      paid: { inr: 0, eur: 0 },
+      balance: toCollect,
+      overpaid: { inr: 0, eur: 0 },
     };
+    const paid = share.paid;
+    const balance = share.balance;
+    const unpaidInstalments = p.instalments.filter((i) => i.status !== "PAID").length;
+    /**
+     * Collected in full, DERIVED - so the figure on screen and the status beside it can never
+     * disagree. The stored column is caught up by the daily sweep (server/pending-sweep.ts), but
+     * a plan paid off at 11am does not have to wait for midnight to say so.
+     */
+    const settled = isSettled({
+      balance,
+      instalmentCount: p.instalments.length,
+      unpaidInstalments,
+      // Which side the founder actually typed. The other is this row's own FX rate applied to it,
+      // and a converted figure must never be what keeps a settled debt open - see isSettled.
+      quotedIn:
+        p.totalFeeInrMinor > BigInt(0) && p.totalFeeEurMinor > BigInt(0)
+          ? "BOTH"
+          : p.totalFeeEurMinor > BigInt(0)
+            ? "EUR"
+            : "INR",
+    });
+    /**
+     * What the Status column shows. PAID_IN_FULL and DROPPED are decisions somebody made and are
+     * never overridden; the live statuses defer to the arithmetic.
+     */
+    const effectiveStatus =
+      p.status === "DROPPED" || p.status === "PAID_IN_FULL"
+        ? p.status
+        : settled
+          ? ("PAID_IN_FULL" as const)
+          : p.status;
     // A receivable is overdue when it is still owed and past its due date. It used to require
     // status === "ACTIVE", which is backwards: once the nightly sweep (or a manual edit) escalated
     // a row to the OVERDUE *status*, this flag flipped to FALSE, so the most-overdue payments
     // silently dropped out of the red badge, the KPI count and the dashboard alert (§8.4 -
     // "overdue numbers look wrong"). Both live statuses that can still owe money count; PAID_IN_FULL
-    // and DROPPED never do. `balance.inr > 0` guards the case where the money is in but the status
-    // simply hasn't been reconciled yet.
-    const owing = p.status === "ACTIVE" || p.status === "OVERDUE";
+    // and DROPPED never do.
+    const owing = effectiveStatus === "ACTIVE" || effectiveStatus === "OVERDUE";
     const overdue = owing && balance.inr > 0 && !!p.nextDueDate && p.nextDueDate.getTime() < todayMs;
     return {
       id: p.id,
       studentName: p.studentName,
       studentId: p.studentId,
+      /** Where a reminder would go. Null means a reminder cannot go anywhere. */
+      studentPhone: p.student?.phone ?? null,
       programLevel: p.programLevel,
       totalFee: fee,
       totalFeeInrRaw: p.totalFeeInrMinor.toString(),
@@ -113,8 +185,23 @@ export const getPendingRows = cache(async () => {
       intervalDays: p.intervalDays,
       paidSoFar: paid,
       balance,
+      /**
+       * Money credited to THIS plan beyond its own total - only ever from a payment that named
+       * it. Surfaced on the row because `paidSoFar` above is capped and would otherwise be
+       * quietly less than the money that actually arrived.
+       */
+      overpaid: share.overpaid,
+      /**
+       * This student's money that fits on none of their plans. A student-level figure, carried on
+       * each of their rows so the table can say so where somebody is looking.
+       */
+      unapplied: alloc?.unapplied ?? { inr: 0, eur: 0 },
       nextDueDate: p.nextDueDate?.toISOString() ?? null,
-      status: p.status,
+      /** What the table shows - the arithmetic, where the stored column has not caught up. */
+      status: effectiveStatus,
+      /** What an admin last chose, before the arithmetic had its say. */
+      storedStatus: p.status,
+      settled,
       overdue, // display rule: red row (PRD1 §4.4)
       notes: p.notes,
       instalments: p.instalments.map((it) => ({
@@ -181,12 +268,28 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
         select: { amountInrMinor: true, amountEurMinor: true, fxRateUsed: true, programLevel: true },
       }),
       getPendingRows(),
-      // Table rows fetched alongside the aggregates - not as extra serial round-trips. The cap
-      // exists so a huge roster can't blow up the payload; it's set well above realistic lifetime
-      // volume so the visible table (and its CSV export) don't silently drop older rows the way a
-      // 500-cap did. The real scoping fix is the date/course filter (issue 3.10) below.
-      prisma.income.findMany({ where: ACTIVE, orderBy: { date: "desc" }, take: 5000 }),
-      prisma.expense.findMany({ where: ACTIVE, orderBy: { date: "desc" }, take: 5000 }),
+      /**
+       * ── The tables obey the period too (issue 11) ────────────────────────────────
+       * These used to be `where: ACTIVE` with no date bound at all, so the cards and totals moved
+       * when you picked Week or a month while the table underneath went on listing every record
+       * ever - the row count read "22 records" whatever was selected. Two numbers on one screen,
+       * computed over different spans, with nothing saying so: the most quietly misleading state
+       * in the section, and the reason the comment here used to promise this fix.
+       *
+       * Fetched alongside the aggregates rather than as extra serial round-trips. The cap stays
+       * as a payload guard; now that the window is bounded it will never be the thing that
+       * truncates a view.
+       */
+      prisma.income.findMany({
+        where: { ...ACTIVE, date: { gte: month.start, lt: month.end } },
+        orderBy: { date: "desc" },
+        take: 5000,
+      }),
+      prisma.expense.findMany({
+        where: { ...ACTIVE, date: { gte: month.start, lt: month.end } },
+        orderBy: { date: "desc" },
+        take: 5000,
+      }),
       prisma.income.findMany({
         where: { ...ACTIVE, date: { gte: prevMonthStart, lt: prevSameDayEnd } },
         // `programLevel` rides along so revenue-by-level can be compared month over month.
@@ -469,6 +572,8 @@ function monthAllIncomeRows(
     date: i.date.toISOString(),
     studentName: i.studentName,
     studentId: i.studentId,
+    /** The receivable this payment settles, where the operator named one (FIN-12). */
+    pendingPaymentId: i.pendingPaymentId,
     agg: {
       inr: Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),
       eur: Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed)),

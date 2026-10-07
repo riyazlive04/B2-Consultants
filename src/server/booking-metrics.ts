@@ -79,7 +79,7 @@ export async function getBookingsOverview() {
         },
       },
     }),
-    // Upcoming OPEN slots - the pool the "Postpone to…" picker draws from.
+    // Upcoming OPEN slots - the pool the reschedule dialog's "Move to" picker draws from.
     prisma.appointmentSlot.findMany({
       where: { status: "OPEN", startsAt: { gt: now } },
       orderBy: { startsAt: "asc" },

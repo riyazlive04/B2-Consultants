@@ -5,13 +5,14 @@ import { z } from "zod";
 import type { Expense, Income, PendingPayment, RecurrenceInterval } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
-import { getTodayInrPerEur } from "@/lib/fx";
+import { getInrPerEurOn, getTodayInrPerEur } from "@/lib/fx";
 import { formatDate, formatEurMinor, formatInrMinor, majorStringToMinor } from "@/lib/format";
 import { istToday, parseDateInput } from "@/lib/dates";
 import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { appendAudit, LedgerError, postEntry, restatedDate, voidEntryForSource } from "./ledger";
 import { expenseEntryDraft, incomeEntryDraft } from "./finance-posting";
 import { isKnownLevel, levelIncomeAccounts } from "./levels";
+import { getPendingRows } from "./finance-metrics";
 import { logActivity, diffFields } from "./activity-log";
 import { ACTIVE, archiveData, restoreData } from "@/lib/soft-delete";
 import {
@@ -104,8 +105,38 @@ const incomeSchema = z.object({
   /** The remaining due dates, as JSON from InstalmentSchedule. See parseSchedule below. */
   instalmentSchedule: z.string().optional(),
   studentId: z.string().optional(), // optional link → student LTV (CONTEXT §7)
+  /**
+   * WHICH RECEIVABLE this payment pays off (FIN-12). Optional: most payments have no plan, and
+   * the 23k rows that predate the field still allocate by `lib/payment-allocation`. When it IS
+   * set it is decisive - the money settles that plan's ladder and counts against that plan's
+   * balance, even where the student has two plans at the same level.
+   */
+  pendingPaymentId: z.string().optional(),
   notes: optionalRule("text"),
 });
+
+/**
+ * How far from today an entry date may sit before it is refused (issue 19).
+ *
+ * Income dated in 2027, or in the year 2000, was accepted without a murmur - and a date is the
+ * one field on this form whose mistake is invisible afterwards, because the row simply files
+ * itself into a month nobody is looking at. Generous on purpose: a year back covers any genuine
+ * catch-up of old paperwork, and a month forward covers a post-dated receipt. Beyond that is a
+ * typo, and the message says which direction it went.
+ */
+const DATE_PAST_LIMIT_DAYS = 366 * 3;
+const DATE_FUTURE_LIMIT_DAYS = 31;
+
+function dateWithinLimits(d: Date, today: Date, label: string): string | null {
+  const days = Math.round((d.getTime() - today.getTime()) / 86_400_000);
+  if (days > DATE_FUTURE_LIMIT_DAYS) {
+    return `That ${label} is ${days} days in the future - check the year.`;
+  }
+  if (days < -DATE_PAST_LIMIT_DAYS) {
+    return `That ${label} is more than three years ago - check the year.`;
+  }
+  return null;
+}
 
 /** One agreed future payment: when it is due and how much of the fee it covers. */
 type ScheduledInstalment = { dueDate: Date; inrMinor: bigint; eurMinor: bigint };
@@ -249,6 +280,19 @@ function firstError(e: z.ZodError): string {
 
 function requireSomeAmount(inr?: string, eur?: string): string | null {
   if (!inr?.trim() && !eur?.trim()) return "Enter an amount in INR, EUR, or both";
+  /**
+   * ── Zero is not an amount (issue 16) ────────────────────────────────────────────
+   * A box holding "0" is not empty, so this check used to pass it straight through to the
+   * ledger - which refused it, correctly, with "A journal entry needs at least two lines",
+   * because an entry with no money in it has no lines to post. True, and meaningless to
+   * anybody who has not read the posting engine. The entry was rejected either way; what
+   * changes here is that the reason is now about the thing the person typed.
+   *
+   * An amount smaller than the smallest unit (0.004) is the same mistake in a different
+   * disguise, and rounds to the same nothing, so it gets the same sentence.
+   */
+  const zeroish = (v?: string) => !v?.trim() || majorStringToMinor(v) === BigInt(0);
+  if (zeroish(inr) && zeroish(eur)) return "Enter an amount greater than 0";
   return null;
 }
 
@@ -303,23 +347,50 @@ function pendingDiffShape(row: PendingPayment) {
   };
 }
 
-export async function createIncome(form: FormData): Promise<ActionResult> {
-  const { allowed, denied, session } = await capabilityCheck("finance.write");
-  if (!allowed) return denied;
+/**
+ * STEP 1 of recording a payment: PARSE AND CHECK, before anything is written.
+ *
+ * ── Why this is its own step ──────────────────────────────────────────────────────
+ * `createIncome` had grown to do eighteen things in one function - validate, resolve a payment
+ * type, build instalment and recurrence fields, check the method against the currency, check the
+ * level still exists, parse a JSON schedule, reconcile the schedule against the count, refuse a
+ * duplicate plan, bound the date, resolve the FX rate, mint a student, write the income, create
+ * the receivable, create its instalments, backfill older rows, settle instalments, post to the
+ * ledger, audit, log and revalidate. Every question the form grew was bolted into the same body,
+ * which is how it reached three hundred lines with no seam to read it at.
+ *
+ * Splitting on the natural boundary - everything that can REFUSE the entry, before anything that
+ * CHANGES anything - means a reader can see at a glance that no write happens until every check
+ * has passed, which is the property that actually matters here.
+ *
+ * Returns the validated bundle, or the first thing wrong with it in words the operator can act
+ * on. Reads config and the receivable table; writes nothing.
+ */
+type PreparedIncome = {
+  d: z.infer<typeof incomeSchema>;
+  /** The payment type's KIND - what the rest of the flow branches on, not the code. */
+  kind: PaymentTypeKind;
+  instalment: Record<string, unknown>;
+  recurrence: Record<string, unknown>;
+  incomeDate: Date;
+  schedule: ScheduledInstalment[];
+};
+
+async function prepareIncome(form: FormData): Promise<{ error: string } | PreparedIncome> {
   const parsed = incomeSchema.safeParse(Object.fromEntries(form));
-  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  if (!parsed.success) return { error: firstError(parsed.error) };
   const d = parsed.data;
   const amountError = requireSomeAmount(d.amountInr, d.amountEur);
-  if (amountError) return { ok: false, error: amountError };
+  if (amountError) return { error: amountError };
   const type = await resolvePaymentType(d.paymentType);
-  if ("error" in type) return { ok: false, error: type.error };
+  if ("error" in type) return { error: type.error };
   const instalment = instalmentFields(d, type.kind);
-  if ("error" in instalment) return { ok: false, error: instalment.error };
+  if ("error" in instalment) return { error: instalment.error };
   const recurrence = recurrenceFields(d, type.kind);
-  if ("error" in recurrence) return { ok: false, error: recurrence.error };
+  if ("error" in recurrence) return { error: recurrence.error };
   const methodProblem = methodError(d.paymentMethod, { inr: d.amountInr, eur: d.amountEur }, d.paymentMethodOther);
-  if (methodProblem) return { ok: false, error: methodProblem };
-  if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
+  if (methodProblem) return { error: methodProblem };
+  if (!(await isKnownLevel(d.programLevel))) return { error: "That program level no longer exists - pick another." };
 
   const incomeDate = parseDateInput(d.date);
   // Only an INSTALMENT-kind entry carries a schedule; switching back to full payment discards any
@@ -328,7 +399,7 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
     type.kind === "INSTALMENT" ? d.instalmentSchedule : undefined,
     incomeDate,
   );
-  if ("error" in parsedSchedule) return { ok: false, error: parsedSchedule.error };
+  if ("error" in parsedSchedule) return { error: parsedSchedule.error };
   const schedule = parsedSchedule.schedule;
 
   /**
@@ -341,7 +412,6 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
     const expected = instalment.instalmentCount - 1;
     if (schedule.length !== expected) {
       return {
-        ok: false,
         error:
           `A ${instalment.instalmentCount}-instalment plan needs ${expected} more due date${expected === 1 ? "" : "s"} after this payment - there ${schedule.length === 1 ? "is 1" : `are ${schedule.length}`}.`,
       };
@@ -366,14 +436,39 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
     });
     if (existing) {
       return {
-        ok: false,
         error:
           `${d.studentName} already has an instalment plan for this level. Clear the due dates to record just this payment, and edit the plan under Pending payments.`,
       };
     }
   }
 
-  const fx = await getTodayInrPerEur();
+  const dateError = dateWithinLimits(incomeDate, istToday(), "payment date");
+  if (dateError) return { error: dateError };
+
+  return { d, kind: type.kind, instalment, recurrence, incomeDate, schedule };
+}
+
+export async function createIncome(form: FormData): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
+
+  // ── STEP 1: parse and check. Nothing is written until this has passed. ─────────
+  const prep = await prepareIncome(form);
+  if ("error" in prep) return { ok: false, error: prep.error };
+  // `kind` is not read here - every branch that needed it ran inside prepareIncome, which is
+  // the point of the split.
+  const { d, instalment, recurrence, incomeDate, schedule } = prep;
+
+  // ── STEP 2: resolve what the write needs - the day's rate, the ledger accounts ─
+  /**
+   * ── The rate for the DAY THE MONEY ARRIVED (issue 14) ───────────────────────────
+   * This was `getTodayInrPerEur()`, so a €100 payment dated 16 January was stored at today's
+   * rate: ₹10,789 rather than January's figure. Stamping `fxRateUsed` per row exists precisely
+   * so history cannot shift under us, and feeding it today's rate defeated that for every
+   * back-dated entry. `getInrPerEurOn` caches each day in `fx_rate`, so a month of catch-up
+   * entry costs one lookup per distinct date, not one per row.
+   */
+  const fx = await getInrPerEurOn(incomeDate);
   const incomeAccounts = await levelIncomeAccounts();
   let created: Income | null = null;
   /**
@@ -427,6 +522,7 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
         }
       }
 
+      // ── STEP 3: WRITE. The payment itself, which is what the operator came to record. ─
       const income = await tx.income.create({
         data: {
           date: incomeDate,
@@ -443,6 +539,11 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
           ...recurrence,
           ...instalment,
           studentId: linkedStudentId,
+          /**
+           * Blank means "no plan named", not "the empty-string plan" - a `""` would fail the
+           * foreign key and take the whole payment down with it.
+           */
+          pendingPaymentId: d.pendingPaymentId?.trim() || null,
           notes: d.notes || null,
           enteredById: session.user.id,
         },
@@ -467,6 +568,8 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
        * `intervalDays` stays null too: these dates were chosen one at a time, so "every 30 days"
        * would describe a rhythm this plan does not have.
        */
+      // ── STEP 4: EFFECTS. Everything that follows from the payment having happened:
+      //    the receivable it agrees, the instalments it settles, the ledger entry it posts.
       if (schedule.length > 0) {
         const scheduledInr = schedule.reduce((a, s) => a + s.inrMinor, BigInt(0));
         const scheduledEur = schedule.reduce((a, s) => a + s.eurMinor, BigInt(0));
@@ -565,6 +668,8 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
   });
   if (!result.ok) return result;
 
+  // ── STEP 5: RECORD WHO DID IT, outside the transaction. A failure to log must never
+  //    roll back money that genuinely arrived - see server/activity-log.
   if (created) {
     const row: Income = created;
     await logActivity(session, {
@@ -597,7 +702,16 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
     });
   }
 
+  /**
+   * ── Cash Health reads this money too (and was never told) ──────────────────────
+   * Receivables, runway and the age analysis on /cash are computed from the very rows these
+   * actions write, but only /finance was ever revalidated - so recording a payment left Cash
+   * Health showing the balance it had before, until something else happened to rebuild it.
+   * Invisible while /cash was read-only; not invisible now that an overdue balance can be
+   * settled from the panel on that page and has to stop being overdue in front of you.
+   */
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/students");
   revalidatePath("/ledger");
   return { ok: true };
@@ -624,6 +738,10 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
   const existing = await prisma.income.findUnique({ where: { id } });
   if (!existing) return { ok: false, error: "Record not found" };
 
+  const editedDate = parseDateInput(d.date);
+  const editDateError = dateWithinLimits(editedDate, istToday(), "payment date");
+  if (editDateError) return { ok: false, error: editDateError };
+
   const incomeAccounts = await levelIncomeAccounts();
   let updated: Income | null = null;
   const result = await withLedgerErrors(async () => {
@@ -645,6 +763,10 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
           ...recurrence,
           ...instalment,
           studentId: d.studentId || null,
+          // Re-pointing a payment at a different receivable is a legitimate correction: it is
+          // how a payment filed against the wrong plan gets moved. `unsettleIncome` below has
+          // already reversed what the OLD link settled, so the two can never both be credited.
+          pendingPaymentId: d.pendingPaymentId?.trim() || null,
           notes: d.notes || null,
           manualOverride: existing.source !== "MANUAL" ? true : existing.manualOverride,
         },
@@ -719,6 +841,7 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/students");
   revalidatePath("/ledger");
   return { ok: true };
@@ -781,6 +904,7 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/students");
   revalidatePath("/ledger");
   return { ok: true };
@@ -828,6 +952,7 @@ export async function restoreIncome(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/students");
   revalidatePath("/ledger");
   return { ok: true };
@@ -850,6 +975,7 @@ export async function purgeIncome(id: string): Promise<ActionResult> {
     meta: { hard: true },
   });
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/students");
   revalidatePath("/ledger");
   return { ok: true };
@@ -881,7 +1007,12 @@ export async function createExpense(form: FormData): Promise<ActionResult> {
   const amountError = requireSomeAmount(d.amountInr, d.amountEur);
   if (amountError) return { ok: false, error: amountError };
 
-  const fx = await getTodayInrPerEur();
+  const expenseDate = parseDateInput(d.date);
+  const expDateError = dateWithinLimits(expenseDate, istToday(), "expense date");
+  if (expDateError) return { ok: false, error: expDateError };
+
+  // The rate for the day it was paid, not for today (issue 14) - same reason as income.
+  const fx = await getInrPerEurOn(expenseDate);
   let created: Expense | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
@@ -930,6 +1061,7 @@ export async function createExpense(form: FormData): Promise<ActionResult> {
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/ledger");
   return { ok: true };
 }
@@ -996,6 +1128,7 @@ export async function updateExpense(id: string, form: FormData): Promise<ActionR
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/ledger");
   return { ok: true };
 }
@@ -1043,6 +1176,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/ledger");
   return { ok: true };
 }
@@ -1084,6 +1218,7 @@ export async function restoreExpense(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/ledger");
   return { ok: true };
 }
@@ -1105,12 +1240,29 @@ export async function purgeExpense(id: string): Promise<ActionResult> {
     meta: { hard: true },
   });
   revalidatePath("/finance");
+  revalidatePath("/cash");
   revalidatePath("/ledger");
   return { ok: true };
 }
 
 const pendingSchema = z.object({
   studentName: rule("name"),
+  /**
+   * ── The receivable now LINKS to the student record (and could not before) ──────
+   * This form's name field was a plain text box: no roster behind it, no id submitted, so every
+   * receivable raised here was name-only. That is not a cosmetic gap. The phone a payment
+   * reminder is sent to comes from `student.phone` through this id, so a receivable raised on
+   * this tab could never be chased by WhatsApp - the row simply read "No phone number", and the
+   * detail panel said "Not on the record" for a student plainly on the roster.
+   *
+   * It also cost the duplicate-plan check its best signal: with no id it had to fall back to
+   * matching the typed name, which is exactly the comparison the student code exists to replace
+   * (two "Anna Smith" are one person to a string and two people to this business).
+   *
+   * Optional, because a receivable for somebody not yet on the roster is legitimate and must
+   * stay possible - the same rule the income form follows.
+   */
+  studentId: z.string().trim().optional(),
   // Any level code - validated against the live Level catalogue in the action (isKnownLevel).
   programLevel: z.string().trim().min(1, "Pick a program level"),
   totalFeeInr: moneyInput,
@@ -1120,25 +1272,113 @@ const pendingSchema = z.object({
   notes: optionalRule("text"),
 });
 
+/**
+ * ── One live receivable per student per level (issue 7) ───────────────────────────
+ * The Pending form accepted a second plan for the same student and level, so the same debt could
+ * be entered twice and counted twice in the receivables total. The income form's instalment path
+ * has refused this all along - the rule was known, it just was not applied here.
+ *
+ * Only LIVE plans collide: a PAID_IN_FULL or DROPPED plan for the same level is history, and a
+ * student legitimately retaking a level has to be able to owe for it again.
+ *
+ * @param exceptId the row being edited, which must not collide with itself.
+ */
+async function duplicatePlanError(
+  d: { studentName: string; programLevel: string },
+  studentId: string | null,
+  exceptId?: string,
+): Promise<string | null> {
+  const clash = await prisma.pendingPayment.findFirst({
+    where: {
+      ...ACTIVE,
+      status: { in: ["ACTIVE", "OVERDUE"] },
+      programLevel: d.programLevel,
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+      ...(studentId
+        ? { studentId }
+        : { studentName: { equals: d.studentName.trim(), mode: "insensitive" as const } }),
+    },
+    select: { id: true },
+  });
+  return clash
+    ? `${d.studentName} already has an open receivable for this level. Edit that one instead - two plans for the same debt would be collected twice.`
+    : null;
+}
+
+/**
+ * ── "Paid in full" has to be true (issue 8) ───────────────────────────────────────
+ * The status was a free choice, so a plan could be saved as collected while ₹1,665 was still
+ * outstanding - and, being PAID_IN_FULL, it then dropped out of the receivables total and out of
+ * the dunning ladder's reach. The balance decides; the daily sweep sets the status on its own
+ * once it reaches zero, so nobody needs to set it by hand anyway.
+ */
+async function statusError(
+  status: string,
+  planId: string | null,
+): Promise<string | null> {
+  if (status !== "PAID_IN_FULL") return null;
+  if (!planId) {
+    return "A brand-new receivable can't start out paid in full - save it, then record the payment against it.";
+  }
+  const rows = await getPendingRows();
+  const row = rows.find((r) => r.id === planId);
+  if (!row) return null;
+  if (row.balance.inr > 0 || row.balance.eur > 0) {
+    return `${formatInrMinor(BigInt(Math.round(row.balance.inr)))} is still outstanding on this plan, so it can't be marked paid in full. Record the payment and the status will follow on its own.`;
+  }
+  return null;
+}
+
 export async function createPendingPayment(form: FormData): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
   const parsed = pendingSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
+  /**
+   * A fee of 0 was accepted, which put a receivable on the books for nothing and then chased it.
+   * `requireSomeAmount` now refuses a zero as well as a blank (issue 8), so the message it
+   * returns is the one to show - the old blanket sentence hid the difference between "you left
+   * it empty" and "you typed nothing in it".
+   */
   const amountError = requireSomeAmount(d.totalFeeInr, d.totalFeeEur);
-  if (amountError) return { ok: false, error: "Enter the total fee in INR, EUR, or both" };
+  if (amountError) {
+    return {
+      ok: false,
+      error: amountError === "Enter an amount greater than 0"
+        ? "The total fee has to be more than 0 - that is the amount being collected."
+        : "Enter the total fee in INR, EUR, or both",
+    };
+  }
   if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
+
+  // The id when one was picked, so the duplicate check compares records rather than spellings.
+  const studentId = d.studentId?.trim() || null;
+  const dupe = await duplicatePlanError(d, studentId);
+  if (dupe) return { ok: false, error: dupe };
+  const statusProblem = await statusError(d.status, null);
+  if (statusProblem) return { ok: false, error: statusProblem };
+
+  const dueDate = d.nextDueDate?.trim() ? parseDateInput(d.nextDueDate) : null;
+  if (dueDate) {
+    // A due date is allowed to sit well in the future - that is what a schedule IS - so only the
+    // "check the year" end of the range applies.
+    const far = Math.round((istToday().getTime() - dueDate.getTime()) / 86_400_000);
+    if (far > DATE_PAST_LIMIT_DAYS) {
+      return { ok: false, error: "That due date is more than three years ago - check the year." };
+    }
+  }
 
   const fx = await getTodayInrPerEur();
   const row = await prisma.pendingPayment.create({
     data: {
       studentName: d.studentName,
+      studentId,
       programLevel: d.programLevel,
       totalFeeInrMinor: d.totalFeeInr?.trim() ? majorStringToMinor(d.totalFeeInr) : BigInt(0),
       totalFeeEurMinor: d.totalFeeEur?.trim() ? majorStringToMinor(d.totalFeeEur) : BigInt(0),
       fxRateUsed: fx.rate,
-      nextDueDate: d.nextDueDate?.trim() ? parseDateInput(d.nextDueDate) : null,
+      nextDueDate: dueDate,
       status: d.status,
       notes: d.notes || null,
     },
@@ -1159,6 +1399,7 @@ export async function createPendingPayment(form: FormData): Promise<ActionResult
   });
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   return { ok: true };
 }
 
@@ -1169,14 +1410,30 @@ export async function updatePendingPayment(id: string, form: FormData): Promise<
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
   const amountError = requireSomeAmount(d.totalFeeInr, d.totalFeeEur);
-  if (amountError) return { ok: false, error: "Enter the total fee in INR, EUR, or both" };
+  if (amountError) {
+    return {
+      ok: false,
+      error: amountError === "Enter an amount greater than 0"
+        ? "The total fee has to be more than 0 - that is the amount being collected."
+        : "Enter the total fee in INR, EUR, or both",
+    };
+  }
   if (!(await isKnownLevel(d.programLevel))) return { ok: false, error: "That program level no longer exists - pick another." };
 
   const existing = await prisma.pendingPayment.findUnique({ where: { id } });
+  if (!existing) return { ok: false, error: "Receivable not found" };
+  // What the form now says, falling back to the link the row already had - so an edit that does
+  // not touch the name box cannot silently unlink a receivable from its student.
+  const studentId = d.studentId?.trim() || existing.studentId;
+  const dupeOnEdit = await duplicatePlanError(d, studentId, id);
+  if (dupeOnEdit) return { ok: false, error: dupeOnEdit };
+  const statusOnEdit = await statusError(d.status, id);
+  if (statusOnEdit) return { ok: false, error: statusOnEdit };
   const row = await prisma.pendingPayment.update({
     where: { id },
     data: {
       studentName: d.studentName,
+      studentId,
       programLevel: d.programLevel,
       totalFeeInrMinor: d.totalFeeInr?.trim() ? majorStringToMinor(d.totalFeeInr) : BigInt(0),
       totalFeeEurMinor: d.totalFeeEur?.trim() ? majorStringToMinor(d.totalFeeEur) : BigInt(0),
@@ -1186,7 +1443,8 @@ export async function updatePendingPayment(id: string, form: FormData): Promise<
     },
   });
 
-  if (existing) {
+  {
+    // `existing` is non-null - the early return above guarantees it.
     const diff = diffFields(pendingDiffShape(existing), pendingDiffShape(row));
     if (diff.changed.length) {
       await logActivity(session, {
@@ -1201,6 +1459,70 @@ export async function updatePendingPayment(id: string, form: FormData): Promise<
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
+  return { ok: true };
+}
+
+/**
+ * ── Resolve a receivable WHERE IT IS BEING LOOKED AT ──────────────────────────────
+ *
+ * The three answers somebody actually has after opening an overdue balance: it is settled /
+ * it is written off / it is still coming but on a new date, plus the sentence saying why.
+ *
+ * Deliberately NOT `updatePendingPayment`. That action takes the whole pending form -
+ * student name, level and the agreed fee - because it backs a form that asks for all of them.
+ * Driving it from a detail panel would mean shipping those fields as hidden inputs and posting
+ * them back unchanged, which turns any drift between the two into a silent rewrite of the fee.
+ * This one can only move the three things the panel offers; the fee and the level stay where
+ * they were set, and changing those remains an edit on the Finance page.
+ *
+ * `statusError` still has the last word on "paid in full": the balance decides that, not a
+ * dropdown (issue 8).
+ */
+const resolveSchema = z.object({
+  status: z.enum(["ACTIVE", "PAID_IN_FULL", "OVERDUE", "DROPPED"]),
+  nextDueDate: z.string().optional(),
+  notes: optionalRule("text"),
+});
+
+export async function resolveReceivable(id: string, form: FormData): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
+  const parsed = resolveSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const d = parsed.data;
+
+  const existing = await prisma.pendingPayment.findUnique({ where: { id } });
+  if (!existing) return { ok: false, error: "Receivable not found" };
+
+  const statusOnResolve = await statusError(d.status, id);
+  if (statusOnResolve) return { ok: false, error: statusOnResolve };
+
+  const row = await prisma.pendingPayment.update({
+    where: { id },
+    data: {
+      nextDueDate: d.nextDueDate?.trim() ? parseDateInput(d.nextDueDate) : null,
+      status: d.status,
+      notes: d.notes || null,
+    },
+  });
+
+  {
+    const diff = diffFields(pendingDiffShape(existing), pendingDiffShape(row));
+    if (diff.changed.length) {
+      await logActivity(session, {
+        action: "finance.pendingPayment.resolve",
+        section: "finance",
+        entityType: "PendingPayment",
+        entityId: row.id,
+        summary: `Updated ${row.studentName}'s overdue receivable - now ${row.status}`,
+        meta: diff,
+      });
+    }
+  }
+
+  revalidatePath("/finance");
+  revalidatePath("/cash");
   return { ok: true };
 }
 
@@ -1224,6 +1546,7 @@ export async function deletePendingPayment(id: string): Promise<ActionResult> {
   });
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   return { ok: true };
 }
 
@@ -1245,6 +1568,7 @@ export async function restorePendingPayment(id: string): Promise<ActionResult> {
   });
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   return { ok: true };
 }
 
@@ -1267,5 +1591,6 @@ export async function purgePendingPayment(id: string): Promise<ActionResult> {
   });
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
   return { ok: true };
 }

@@ -8,6 +8,7 @@ import { capabilityCheck } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
 import { formatDate, formatInrMinor, majorStringToMinor } from "@/lib/format";
 import { optionalRule, rule } from "@/lib/field-rules";
+import { getTodayInrPerEur } from "@/lib/fx";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
@@ -77,7 +78,16 @@ const payableSchema = z.object({
     "MARKETING", "TOOLS_SOFTWARE", "TEAM_SALARIES", "CONTENT_CREATION",
     "EVENTS_OFFLINE", "OPERATIONS", "COGS_DIRECT_DELIVERY", "OTHER",
   ]),
+  /**
+   * ── Either currency, or both ────────────────────────────────────────────────────
+   * `amountInr` was the only money field, because the form had the only rupee box. A euro
+   * subscription - and this business has them - could be entered only by converting it by hand
+   * at whatever rate the person guessed that day, after which the converted figure read as if it
+   * had been agreed in rupees. Both sides are optional and at least one must be given, which is
+   * the rule income and expenses already follow.
+   */
   amountInr: moneyInput,
+  amountEur: moneyInput,
   frequency: z.enum(["MONTHLY", "QUARTERLY", "ANNUAL", "ONE_TIME"]),
   nextDueDate: z.string().optional(),
   isCogs: z.string().optional(),
@@ -90,6 +100,7 @@ function payableDiffShape(row: Payable) {
     name: row.name,
     category: row.category as string,
     amountInrMinor: row.amountInrMinor.toString(),
+    amountEurMinor: row.amountEurMinor.toString(),
     frequency: row.frequency as string,
     nextDueDate: row.nextDueDate,
     isCogs: row.isCogs,
@@ -103,12 +114,27 @@ export async function savePayable(id: string | null, form: FormData): Promise<Ac
   const parsed = payableSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
-  if (!d.amountInr) return { ok: false, error: "Price is required" };
+  if (!d.amountInr?.trim() && !d.amountEur?.trim()) {
+    return { ok: false, error: "Enter the price in INR, EUR, or both" };
+  }
+
+  /**
+   * The rate in force now, frozen onto the row - the same thing income and expenses do. A payable
+   * is a standing commitment, so this matters more here than anywhere: without a stamped rate the
+   * euro value of an agreed bill would drift every time the FX table refreshed, and break-even
+   * would move underneath a figure nobody had changed.
+   *
+   * An EDIT re-stamps it, because an edit is a restatement of the amount; leaving the old rate
+   * against a new figure would pair a number with the rate of a different agreement.
+   */
+  const fx = await getTodayInrPerEur();
 
   const data = {
     name: d.name,
     category: d.category,
-    amountInrMinor: majorStringToMinor(d.amountInr),
+    amountInrMinor: d.amountInr?.trim() ? majorStringToMinor(d.amountInr) : BigInt(0),
+    amountEurMinor: d.amountEur?.trim() ? majorStringToMinor(d.amountEur) : BigInt(0),
+    fxRateUsed: fx.rate,
     frequency: d.frequency,
     nextDueDate: d.nextDueDate?.trim() ? parseDateInput(d.nextDueDate) : null,
     isCogs: d.isCogs === "on",

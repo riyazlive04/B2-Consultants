@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RefreshCw, CheckCheck } from "lucide-react";
 import { toast } from "@/components/ui/feedback";
 import { runRemindersNow, syncWhatsAppStatuses } from "@/server/whatsapp-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Two header actions: trigger the reminder schedule, and reconcile our statuses against WATI's own
@@ -20,7 +21,7 @@ export function RunRemindersButton() {
     if (running) return;
     setRunning(true);
     try {
-      const res = await runRemindersNow();
+      const res = await safeAction(() => runRemindersNow());
       toast(res.message, res.ok ? "success" : "error");
       startNav(() => router.refresh());
     } catch {
@@ -34,7 +35,7 @@ export function RunRemindersButton() {
     if (syncing) return;
     setSyncing(true);
     try {
-      const res = await syncWhatsAppStatuses();
+      const res = await safeAction(() => syncWhatsAppStatuses());
       toast(res.message, res.ok ? "success" : "error");
       startNav(() => router.refresh());
     } catch {

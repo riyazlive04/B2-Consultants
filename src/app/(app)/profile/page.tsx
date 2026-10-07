@@ -6,6 +6,10 @@ import { BadgeStrip, LevelRing, XpBar } from "@/components/ui/gamification";
 import { Card, PageHeader } from "@/components/ui/kit";
 import { ProfileClient } from "./_components/ProfileClient";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Profile" };
+
 export const dynamic = "force-dynamic";
 
 const ROLE_LABELS: Record<string, string> = {

@@ -15,6 +15,7 @@ import { SignaturePad, type SignatureValue } from "@/components/ui/SignaturePad"
 import { describeDevice, type SigningDevice } from "@/lib/device";
 import { declineAgreement, requestSignOtp, signAgreement } from "@/server/agreement-sign";
 import { SignedCopyLinks } from "./SignedCopyLinks";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The student's signing ceremony, in the order a signature has to happen:
@@ -60,7 +61,7 @@ export function SignCeremony({
   function sendCode() {
     setError(null);
     startTransition(async () => {
-      const res = await requestSignOtp(token);
+      const res = await safeAction(() => requestSignOtp(token));
       if (!res.ok) return setError(res.error);
       setDevCode(res.data?.devCode ?? null);
       setStep(1);
@@ -87,7 +88,7 @@ export function SignCeremony({
   function decline() {
     setError(null);
     startTransition(async () => {
-      const res = await declineAgreement(token, declineReason);
+      const res = await safeAction(() => declineAgreement(token, declineReason));
       if (!res.ok) return setError(res.error);
       window.location.reload();
     });

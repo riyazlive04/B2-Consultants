@@ -8,6 +8,7 @@ import { moveLeadStage } from "@/server/pipeline-actions";
 import { toast } from "@/components/ui/feedback";
 import { SelectMenu } from "@/components/ui/SelectMenu";
 import { useNewLeadPoll } from "./useNewLeadPoll";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The drag-and-drop pipeline (spec Part 2 §9, offered as an alternative to rules-driven).
@@ -61,7 +62,7 @@ export function KanbanBoard({ leads, stages }: { leads: KanbanLead[]; stages: st
     }
     const before = rows;
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, stage: toStage } : r)));
-    const res = await moveLeadStage(id, toStage);
+    const res = await safeAction(() => moveLeadStage(id, toStage));
     if (!res.ok) {
       setRows(before); // put it back where it really is
       toast(res.error, "error");

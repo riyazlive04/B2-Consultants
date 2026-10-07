@@ -95,7 +95,11 @@ test("a Europe/Berlin browser still sees IST times on the desk and DD/MM/YYYY da
     const zoneLabel = berlinZone === "GMT+2" ? "CEST" : berlinZone === "GMT+1" ? "CET" : berlinZone;
     expect.soft(await row.innerText(), `DSC-16: Berlin time must be labelled ${zoneLabel} on ${at.toISOString()}`).toContain(` ${zoneLabel}`);
     if (zoneLabel === "CEST") expect.soft(await row.innerText(), "DSC-16: summer time labelled CET").not.toMatch(/CET/);
-    expect.soft(await row.locator("td").nth(1).innerText(), "DSC-16: call date should read DD/MM/YYYY").toMatch(/\d{2}\/\d{2}\/\d{4}/);
+    // By the column's own position in the header, not a hard-coded index: the list was redesigned
+    // once already and `td.nth(1)` only still landed on the right cell by luck.
+    const callTimeCol = await row.page().locator("thead th").allInnerTexts()
+      .then((hs) => hs.findIndex((h) => /Call time/i.test(h)));
+    expect.soft(await row.locator("td").nth(callTimeCol).innerText(), "DSC-16: call date should read DD/MM/YYYY").toMatch(/\d{2}\/\d{2}\/\d{4}/);
   } finally {
     await ctx.close();
   }

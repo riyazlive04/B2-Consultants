@@ -23,6 +23,7 @@ import {
 import { fieldKindProps } from "@/components/ui/field-base";
 import type { FieldKind } from "@/lib/field-rules";
 import { submitPublicForm } from "@/server/forms-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * The public face of a form - Google Forms' respondent view.
@@ -227,7 +228,7 @@ export default function PublicForm({
     // mounted, not when it was submitted, so it measures how long the page was actually open.
     fd.set("form_started_at", String(mountedAt.current));
 
-    const res = await submitPublicForm(form.slug, fd);
+    const res = await safeAction(() => submitPublicForm(form.slug, fd));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     if (res.redirectUrl) {

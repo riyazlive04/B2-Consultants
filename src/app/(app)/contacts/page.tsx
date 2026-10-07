@@ -22,6 +22,10 @@ import {
   restoreLead, purgeLead, restoreCompany, purgeCompany, restoreTask, purgeTask,
 } from "@/server/contacts-actions";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Contacts" };
+
 export const dynamic = "force-dynamic";
 
 type ContactsSearchParams = {
@@ -93,7 +97,10 @@ export default async function ContactsPage({
           </>
         }
       />
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
       <Tabs
+        urlKey="tab"
         tabs={[
           {
             label: "Contacts",

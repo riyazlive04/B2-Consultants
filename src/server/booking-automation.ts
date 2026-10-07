@@ -174,7 +174,7 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
 
   // Master switch. When off, the loop is entirely idle: no confirm-request messages leave, and
   // nothing is auto-cancelled - so "off by default" genuinely means nothing automatic happens to a
-  // real prospect. The manual controls (block, postpone, mark-confirmed, cancel-with-promote) are
+  // real prospect. The manual controls (block, reschedule, mark-confirmed, cancel-with-promote) are
   // unaffected because they don't go through here.
   if (!rules.autoCancelEnabled) {
     return { enabled: false, reason: "Confirmation loop is off - enable auto-cancel in Booking rules", ranAt, asked, cancelled, promoted, skippedNotReached, delivery };

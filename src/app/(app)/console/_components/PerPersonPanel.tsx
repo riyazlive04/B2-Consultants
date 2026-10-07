@@ -6,6 +6,7 @@ import { CAPABILITIES, type CapabilityKey } from "@/lib/capabilities";
 import { setUserCapability } from "@/server/users-actions";
 import { toast } from "@/components/ui/feedback";
 import { Card, Hint, Toggle } from "./kit";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Console → Per-person rules.
@@ -62,7 +63,7 @@ export function PerPersonPanel({ people }: { people: PersonRow[] }) {
   const toggle = async (userId: string, key: CapabilityKey, next: boolean) => {
     const cell = `${userId}:${key}`;
     setBusy(cell);
-    const res = await setUserCapability(userId, key, next);
+    const res = await safeAction(() => setUserCapability(userId, key, next));
     setBusy(null);
     if (!res.ok) return toast(res.error, "error");
     toast(next ? "Granted" : "Removed");

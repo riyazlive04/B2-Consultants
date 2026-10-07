@@ -358,6 +358,19 @@ model Income {
   student        Student?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
   enrollmentId   String?
   enrollment     Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  /// WHICH RECEIVABLE THIS PAYMENT SETTLES (FIN-12).
+  ///
+  /// Paid-so-far used to be summed per STUDENT, so a student with four plans had every one of
+  /// them credited with her whole payment history: four plans each reading "nothing left to
+  /// collect" while their instalments were still due, and a receivables total below reality.
+  /// A payment belongs to one plan, so it says so here.
+  ///
+  /// Nullable because it has to be: 23k rows predate the column, and a payment can legitimately
+  /// arrive before any plan exists. An unlinked payment is still credited to the student's plans
+  /// (oldest first, each capped at its own balance) by `lib/payment-allocation` - but it is
+  /// credited ONCE, which is the part that was broken.
+  pendingPaymentId String?
+  pendingPayment   PendingPayment? @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
   amountInrMinor BigInt        @default(0) // paise
   amountEurMinor BigInt        @default(0) // cents
   fxRateUsed     Decimal       @db.Decimal(14, 6) // INR per 1 EUR on entry date
@@ -398,6 +411,7 @@ model Income {
   @@unique([source, externalRef])
   @@index([date])
   @@index([studentId])
+  @@index([pendingPaymentId])
   @@index([programLevel, date])
   @@index([deletedAt])
   @@map("income")
@@ -477,6 +491,8 @@ model PendingPayment {
 
   whatsappMessages WhatsAppMessage[]
   instalments      Instalment[]
+  /// The payments credited to THIS plan. See Income.pendingPaymentId.
+  incomes          Income[]
 
   @@index([status, nextDueDate])
   @@index([enrollmentId])
@@ -1453,6 +1469,18 @@ model Product {
   id            String          @id @default(cuid())
   name          String
   description   String?
+  /// WHICH PROGRAMME THIS SELLS - `Level.code`, or null for a one-off item.
+  ///
+  /// The products list used to be free text with no relationship to anything the business
+  /// actually sells, so an invoice line said "A1 course" only because somebody typed it, and
+  /// nothing downstream could tell that the money was German Note's. A product that names its
+  /// programme carries the level onto the invoice line, and from there onto the Income row and
+  /// the GL account the level posts to (`Level.incomeAccountCode`).
+  ///
+  /// UNIQUE: one priced product per programme. Two "GN A1" products at different prices is a
+  /// question nobody can answer at invoicing time. One-off items leave it null, and Postgres
+  /// allows any number of NULLs in a unique index.
+  levelCode     String?         @unique
   priceInrMinor BigInt          @default(0)
   priceEurMinor BigInt          @default(0)
   fxRateUsed    Decimal?        @db.Decimal(14, 6) // INR per 1 EUR when the EUR price was last set
@@ -1472,6 +1500,16 @@ model Product {
 enum InvoiceKind {
   INVOICE
   ESTIMATE
+}
+
+/// The currency an invoice is ISSUED in - what its line prices, discount, tax and total are
+/// typed and printed in. B2 Consultants bills out of Reichelsheim as well as India, so a German
+/// client's invoice has to be a euro document rather than a rupee one with a euro footnote.
+/// Both sides are stored on every row regardless (see `lib/invoice-money`); this says which one
+/// was entered, and therefore which one is the truth.
+enum InvoiceCurrency {
+  INR
+  EUR
 }
 
 enum InvoiceStatus {
@@ -1497,10 +1535,21 @@ model Invoice {
   customerPhone    String?
   issueDate        DateTime          @db.Date
   dueDate          DateTime?         @db.Date
+  /// Which currency this invoice was priced in. Everything below is stored on BOTH sides so the
+  /// KPI cards, the ageing and the ledger can keep aggregating in rupees without re-converting
+  /// at today's rate; the entered side is the one the document prints.
+  currency         InvoiceCurrency   @default(INR)
   subtotalInrMinor BigInt            @default(0)
+  subtotalEurMinor BigInt            @default(0)
   discountInrMinor BigInt            @default(0)
+  discountEurMinor BigInt            @default(0)
   taxPercent       Decimal           @default(0) @db.Decimal(6, 3)
+  /// What the tax is CALLED on this document - "GST", "VAT", or null when the invoice carries no
+  /// tax at all. Snapshotted from the Console's per-currency setting at save, because a later
+  /// change to the rate must never rewrite what an issued invoice says it charged.
+  taxLabel         String?
   taxInrMinor      BigInt            @default(0)
+  taxEurMinor      BigInt            @default(0)
   totalInrMinor    BigInt            @default(0)
   totalEurMinor    BigInt            @default(0)
   fxRateUsed       Decimal           @db.Decimal(14, 6)
@@ -1532,9 +1581,15 @@ model InvoiceLineItem {
   description       String
   quantity          Int     @default(1)
   unitPriceInrMinor BigInt  @default(0)
+  unitPriceEurMinor BigInt  @default(0)
+  /// The programme this line sells (`Level.code`), when it came from a programme product rather
+  /// than being typed by hand. This is what lets a paid invoice post its Income against the real
+  /// level - and therefore into German Note's book rather than a generic "Other" bucket.
+  levelCode         String?
   position          Int     @default(0)
 
   @@index([invoiceId])
+  @@index([levelCode])
   @@map("invoice_line_item")
 }
 
@@ -1543,6 +1598,11 @@ model InvoicePayment {
   invoiceId      String
   invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   amountInrMinor BigInt
+  amountEurMinor BigInt   @default(0)
+  /// Which currency the amount was typed in - the invoice's, normally. The other side is derived
+  /// once at `fxRateUsed` and stored, so a euro receipt never re-prices when the euro moves.
+  currency       InvoiceCurrency @default(INR)
+  fxRateUsed     Decimal? @db.Decimal(14, 6)
   method         String // cash / upi / bank / razorpay / stripe (free text until a processor is wired)
   reference      String?
   provider       String? // future: "razorpay" | "stripe"
@@ -2463,7 +2523,12 @@ model Payable {
   id             String           @id @default(cuid())
   name           String
   category       ExpenseCategory
+  /// Dual currency with a stamped rate, exactly like Income and Expense. A bill that arrives in
+  /// euro is entered in euro; the rate is fixed at entry, so re-pricing the FX table never moves
+  /// a commitment that was already agreed.
   amountInrMinor BigInt           @default(0)
+  amountEurMinor BigInt           @default(0)
+  fxRateUsed     Decimal          @default(0) @db.Decimal(14, 6)
   frequency      PayableFrequency @default(MONTHLY)
   nextDueDate    DateTime?        @db.Date
   isCogs         Boolean          @default(false)

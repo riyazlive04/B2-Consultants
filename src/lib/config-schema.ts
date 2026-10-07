@@ -810,6 +810,120 @@ export function coercePaymentTypesConfig(value: unknown): PaymentTypesConfig {
   return parsed.success ? parsed.data : DEFAULT_PAYMENT_TYPES_CONFIG;
 }
 
+// ───────────────────────────── invoice tax ─────────────────────────────
+
+/**
+ * What tax an invoice charges, per currency - part of AppSetting("invoiceSettings").
+ *
+ * ONE RATE PER CURRENCY, because the two halves of this business are taxed by different countries.
+ * A rupee invoice carries India's GST; a euro invoice billed out of Reichelsheim carries German
+ * VAT. A single shared "Tax %" box could only ever be right for one of them, and the person
+ * invoicing had to remember which - so the rate that applies is chosen by the currency the
+ * invoice is issued in, and it is only ever typed once, here.
+ *
+ * SHIPPED AT 0%, deliberately. A default rate invented by this file would print on a real
+ * document sent to a real customer as a tax demand nobody authorised - the one kind of mistake
+ * an invoice must not make. Zero means "no tax line at all" (see `taxLine`), which is also how
+ * an invoice that genuinely carries no tax is produced: the label is kept so the founder's own
+ * wording survives, and an invoice with a 0% rate simply prints nothing.
+ *
+ * The RATE IS A DEFAULT, not a lock: it is copied onto a new invoice, which can then be changed
+ * (including to 0) before it is issued, and each invoice snapshots the label and percent it
+ * actually charged - so editing this never rewrites a document already sent.
+ */
+export const invoiceTaxRateSchema = z.object({
+  /** What it is CALLED on the document: "GST", "VAT", "IGST"… Blank falls back to "Tax". */
+  label: z
+    .string()
+    .trim()
+    .max(24, "Keep the tax name under 24 characters")
+    .default("Tax"),
+  /** Decimals allowed - 7.5% is a real rate. Capped at 100: a tax that exceeds the fee is a typo. */
+  percent: z
+    .number()
+    .min(0, "A tax rate can't be negative")
+    .max(100, "A tax rate over 100% is a typo")
+    .default(0),
+});
+
+export type InvoiceTaxRate = z.infer<typeof invoiceTaxRateSchema>;
+
+export const invoiceTaxConfigSchema = z.object({
+  INR: invoiceTaxRateSchema,
+  EUR: invoiceTaxRateSchema,
+});
+
+export type InvoiceTaxConfig = z.infer<typeof invoiceTaxConfigSchema>;
+
+/**
+ * WHO THE INVOICE IS FROM - the registered identity printed at the top of every document.
+ *
+ * An invoice is a legal instrument, and the details that make it one (the registered name, the
+ * full postal address, the tax registration it charges tax under) are facts about a company that
+ * no source file can know. They were hard-coded as "B2 Consultants / Reichelsheim, Germany" in
+ * two separate files, which is both too little to be a valid invoice header and in the wrong
+ * place to be corrected by the person who knows it.
+ *
+ * EVERY FIELD IS OPTIONAL AND EVERY EMPTY FIELD IS OMITTED from the document, rather than
+ * printing a placeholder. A tax number nobody typed is not a tax number, and an invoice carrying
+ * an invented one is worse than an invoice carrying none.
+ */
+export const invoiceIssuerSchema = z.object({
+  /** The registered trading name. The one field with a default, because the app has one. */
+  name: z.string().trim().max(120).default("B2 Consultants"),
+  /** Street / building, one line per entry - addresses do not share a shape across countries. */
+  addressLines: z.array(z.string().trim().max(120)).max(5).default([]),
+  city: z.string().trim().max(80).default(""),
+  postcode: z.string().trim().max(24).default(""),
+  country: z.string().trim().max(80).default(""),
+  email: z.string().trim().max(160).default(""),
+  phone: z.string().trim().max(40).default(""),
+  website: z.string().trim().max(160).default(""),
+  /** VAT / GSTIN / USt-IdNr - whatever the invoice charges its tax under. */
+  taxId: z.string().trim().max(60).default(""),
+  /** Company registration number, where one is required on an invoice. */
+  registrationNo: z.string().trim().max(60).default(""),
+  /** Bank details, printed under "How to pay" when filled in. */
+  bankDetails: z.string().trim().max(600).default(""),
+  /** Standing terms printed on every invoice ("Payable within 14 days"). */
+  paymentTerms: z.string().trim().max(600).default(""),
+});
+
+export type InvoiceIssuer = z.infer<typeof invoiceIssuerSchema>;
+
+export const invoiceSettingsSchema = z.object({
+  issuer: invoiceIssuerSchema,
+  tax: invoiceTaxConfigSchema,
+});
+
+export type InvoiceSettings = z.infer<typeof invoiceSettingsSchema>;
+
+export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
+  issuer: {
+    name: "B2 Consultants",
+    addressLines: [],
+    city: "Reichelsheim",
+    postcode: "",
+    country: "Germany",
+    email: "",
+    phone: "",
+    website: "",
+    taxId: "",
+    registrationNo: "",
+    bankDetails: "",
+    paymentTerms: "",
+  },
+  tax: {
+    INR: { label: "GST", percent: 0 },
+    EUR: { label: "VAT", percent: 0 },
+  },
+};
+
+export function coerceInvoiceSettings(value: unknown): InvoiceSettings {
+  const parsed = invoiceSettingsSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_INVOICE_SETTINGS;
+}
+
 // ───────────────────────────── book orders ─────────────────────────────
 
 /**

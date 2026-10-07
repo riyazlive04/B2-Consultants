@@ -6,6 +6,7 @@ import { Power, PowerOff } from "lucide-react";
 import { Btn } from "@/components/ui/controls";
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { setWhatsAppPaused } from "@/server/whatsapp-actions";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Admin master switch for outbound WhatsApp.
@@ -51,7 +52,7 @@ export function WhatsAppMasterSwitch({
     }
 
     setBusy(true);
-    const res = await setWhatsAppPaused(!paused);
+    const res = await safeAction(() => setWhatsAppPaused(!paused));
     setBusy(false);
     toast(res.message, res.ok ? "success" : "error");
     if (res.ok) router.refresh();

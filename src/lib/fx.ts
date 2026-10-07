@@ -90,3 +90,68 @@ export function eurMinorToInrMinor(eurMinor: bigint, inrPerEur: Prisma.Decimal):
   const inr = new Prisma.Decimal(eurMinor.toString()).mul(inrPerEur);
   return BigInt(inr.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP).toFixed(0));
 }
+
+/**
+ * The rate for a GIVEN date - what a back-dated payment has to be valued at (issue 14).
+ *
+ * A euro payment dated 16 January was being stored at TODAY'S rate, because every entry action
+ * called `getTodayInrPerEur()` regardless of the date on the form. €100 in January came out as
+ * ₹10,789 because that is what a euro is worth now, and the aggregate rupee figure for a past
+ * month therefore moved every time the euro did - which is the exact thing stamping `fxRateUsed`
+ * on each row was meant to prevent.
+ *
+ * Resolution order, cheapest first:
+ *   1. today        → `getTodayInrPerEur()`, memo and all.
+ *   2. a stored day → the `fx_rate` row for that date (one row per day, already indexed).
+ *   3. the API      → frankfurter's historical endpoint for that exact day, then cached.
+ *   4. fallback     → the newest stored rate AT OR BEFORE that date, flagged stale; failing
+ *                     that, today's. A market holiday has no rate of its own, so "the rate in
+ *                     force on that day" is the last one published before it - which is also
+ *                     what the ECB means by it.
+ *
+ * A FUTURE date resolves to today's rate: there is no such rate yet, and refusing the entry
+ * would block a legitimately post-dated receipt. `stale` is true whenever the answer is not the
+ * rate actually published for the day asked for, so the form can say so.
+ */
+export async function getInrPerEurOn(date: Date): Promise<FxResult> {
+  const day = utcDateOnly(date);
+  const today = utcDateOnly();
+  if (day.getTime() >= today.getTime()) return getTodayInrPerEur();
+
+  const cached = await prisma.fxRate.findUnique({ where: { date: day } });
+  if (cached) return { rate: cached.inrPerEur, date: cached.date, stale: false };
+
+  const ymd = day.toISOString().slice(0, 10);
+  try {
+    // Same 4s bound as the live call: this sits on a path a person is waiting on, and a slow
+    // historical lookup must not hold an entry form open.
+    const res = await fetch(`${FX_API_URL}/${ymd}?from=EUR&to=INR`, {
+      next: { revalidate: 0 },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) throw new Error(`FX API ${res.status}`);
+    const data = (await res.json()) as { rates: { INR: number }; date: string };
+    const rate = new Prisma.Decimal(data.rates.INR.toFixed(6));
+    /**
+     * Stored under the date ASKED FOR, not the date the API answered with.
+     *
+     * Frankfurter answers a weekend or a holiday with the previous business day's figures, so
+     * keying the row by `data.date` would leave the requested day uncached and re-fetch it on
+     * every single entry for that date, forever.
+     */
+    const row = await prisma.fxRate.upsert({
+      where: { date: day },
+      update: { inrPerEur: rate },
+      create: { date: day, inrPerEur: rate },
+    });
+    return { rate: row.inrPerEur, date: row.date, stale: false };
+  } catch {
+    const before = await prisma.fxRate.findFirst({
+      where: { date: { lte: day } },
+      orderBy: { date: "desc" },
+    });
+    if (before) return { rate: before.inrPerEur, date: before.date, stale: true };
+    const now = await getTodayInrPerEur();
+    return { ...now, stale: true };
+  }
+}

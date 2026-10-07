@@ -58,9 +58,18 @@ function groupDigits(digits: string, sep: Separators): string {
  */
 export function toCanonicalMoney(raw: string, currency: MoneyCurrency): string {
   const sep = SEPARATORS[currency];
+  /**
+   * ── The minus sign is KEPT (issue 4) ──────────────────────────────────────────────
+   * It used to be stripped along with the currency symbols, so typing "-500" saved +500 income
+   * and "-250" saved a +250 expense - no error, no hint that the value had changed, and a ledger
+   * entry pointing the wrong way. The parse is not where that gets decided: the field carries the
+   * minus through, and `moneySchema` refuses it with a sentence saying refunds get their own
+   * entry. Only a LEADING minus counts; one typed mid-number is noise, as it always was.
+   */
+  const negative = raw.trimStart().startsWith("-");
   // Strip currency symbols, spaces and the group separator; keep digits and the decimal mark.
   let s = raw.replace(/[^\d.,]/g, "");
-  if (s === "") return "";
+  if (s === "") return negative ? "-" : "";
   /**
    * WHICH MARK IS THE DECIMAL POINT. The currency's own convention leads, but a value typed with
    * the other one is still read correctly when it cannot be anything else: "125000.50" in the
@@ -83,13 +92,34 @@ export function toCanonicalMoney(raw: string, currency: MoneyCurrency): string {
   s = s.split(groupMark).join("");
   const parts = s.split(decimalMark);
   const whole = (parts.shift() ?? "").replace(/\D/g, "");
-  const frac = parts.join("").replace(/\D/g, "").slice(0, 2);
-  if (whole === "" && frac === "") return "";
+  const fracRaw = parts.join("").replace(/\D/g, "");
+  /**
+   * ── A third decimal ROUNDS, it is not chopped off (issue 18) ──────────────────────
+   * `.slice(0, 2)` turned 10.555 into 10.55, losing half a paisa per entry with nothing said.
+   * `majorStringToMinor` on the server has always rounded correctly - it simply never saw the
+   * third digit, because this ran first. Half-up, the convention the server already uses, so the
+   * two agree on every value.
+   *
+   * The carry is deliberate: 9.999 rounds to 10.00, not to 9.100.
+   */
+  let frac = fracRaw.slice(0, 2);
+  let carried = whole;
+  if (fracRaw.length > 2 && Number(fracRaw[2]) >= 5) {
+    const bumped = (Number(frac.padEnd(2, "0")) + 1).toString();
+    if (bumped.length > 2) {
+      carried = (BigInt(whole || "0") + BigInt(1)).toString();
+      frac = "00";
+    } else {
+      frac = bumped.padStart(2, "0");
+    }
+  }
+  if (carried === "" && frac === "") return negative ? "-" : "";
+  const sign = negative ? "-" : "";
   // Keep a trailing separator the typist is mid-way through ("125." → "125.") so the next
   // keystroke lands in the decimals rather than being swallowed.
   const typingDecimals = parts.length > 0 || raw.trimEnd().endsWith(decimalMark);
-  if (!typingDecimals) return whole || "0";
-  return `${whole || "0"}.${frac}`;
+  if (!typingDecimals) return `${sign}${carried || "0"}`;
+  return `${sign}${carried || "0"}.${frac}`;
 }
 
 /**
@@ -102,11 +132,17 @@ export function toCanonicalMoney(raw: string, currency: MoneyCurrency): string {
 export function toDisplayMoney(canonical: string, currency: MoneyCurrency): string {
   if (canonical === "") return "";
   const sep = SEPARATORS[currency];
-  const [whole = "", frac] = canonical.split(".");
+  // The sign survives the round trip, so a typed "-" stays visible in the box until the server
+  // explains why it cannot be saved (issue 4). A lone "-" is a legitimate half-typed state.
+  const negative = canonical.startsWith("-");
+  const body = negative ? canonical.slice(1) : canonical;
+  if (body === "") return "-";
+  const [whole = "", frac] = body.split(".");
   const digits = whole.replace(/\D/g, "");
   const head = groupDigits(digits === "" ? "0" : digits, sep);
-  // `canonical.includes(".")` rather than `frac` so a half-typed "125." keeps its point.
-  return canonical.includes(".") ? `${head}${sep.decimal}${frac ?? ""}` : head;
+  const sign = negative ? "-" : "";
+  // `body.includes(".")` rather than `frac` so a half-typed "125." keeps its point.
+  return body.includes(".") ? `${sign}${head}${sep.decimal}${frac ?? ""}` : `${sign}${head}`;
 }
 
 /**

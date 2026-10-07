@@ -13,7 +13,7 @@ import { test, expect } from "@playwright/test";
 import * as fs from "fs";
 import { authFile } from "../../helpers/roles";
 import { HAS_DB, IS_PROD } from "../../helpers/target";
-import { bookingsRow, pickOption } from "../../helpers/discovery-ui";
+import { bookingsRow, setBookingOutcome } from "../../helpers/discovery-ui";
 import { dq, closeDiscoveryDb } from "../../helpers/discovery-db";
 
 test.use({ storageState: authFile("admin") });
@@ -39,10 +39,10 @@ test("cancel still-booked discovery bookings through the Bookings UI", async ({ 
   for (const t of targets) {
     const row = await bookingsRow(page, t.label).catch(() => null);
     if (!row) continue;
-    const trigger = row.getByRole("button", { name: "Booking status" });
-    if ((await trigger.innerText()).trim() !== "Booked") continue;
-    await pickOption(page, trigger, "Cancelled");
-    await page.waitForTimeout(1500);
+    // Only a LIVE booking is ours to close, and the outcome is a badge in the row now - the
+    // control that changes it lives in the booking's own dialog.
+    if (!(await row.getByText("Booked", { exact: true }).count())) continue;
+    await setBookingOutcome(page, t.label, "Cancelled");
     if (HAS_DB && t.id) {
       await expect.poll(async () => (await dq(`select status from booking_request where id = $1`, [t.id]))[0]?.status, { timeout: 20_000 }).toBe("CANCELLED");
     }

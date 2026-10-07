@@ -29,6 +29,10 @@ import { levelOptions } from "@/lib/levels";
 import { TrackerTable } from "./_components/TrackerTable";
 import { TrackerBatchForm } from "./_components/TrackerBatchForm";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Students" };
+
 export const dynamic = "force-dynamic";
 
 export default async function StudentsPage() {
@@ -249,8 +253,10 @@ export default async function StudentsPage() {
           </ul>
         </Card>
       )}
-
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
       <Tabs
+        urlKey="tab"
         tabs={[
           {
             label: `90/120-day tracker${tracker.some((t) => t.signalColour === "RED") ? " ⚠" : ""}`,

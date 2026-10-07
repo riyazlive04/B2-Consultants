@@ -14,6 +14,10 @@ import { OkrBoard } from "./_components/OkrBoard";
 import { OrgChart } from "./_components/OrgChart";
 import { UsersPanel } from "./_components/UsersPanel";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "People" };
+
 export const dynamic = "force-dynamic";
 
 export default async function PeoplePage() {
@@ -62,8 +66,10 @@ export default async function PeoplePage() {
         title="Users"
         subtitle="Team profiles, OKRs and daily activity - what everyone did today without asking on WhatsApp."
       />
-
+        {/* Keeps the open tab in the address, so a refresh (or a shared link) does not drop
+            back to the first tab (issue 28). */}
       <Tabs
+        urlKey="tab"
         tabs={[
           {
             label: `Daily logs${anyMissing ? " ⚠" : ""}`,

@@ -4,6 +4,7 @@ import { CRON_SECRET, RUN } from "./app";
 import { authFile } from "./roles";
 import { FENCE, HAS_DB, IS_PROD, assertFenced, recordCreated } from "./target";
 import { one, q } from "./db";
+import { setBookingOutcome } from "./discovery-ui";
 import { types } from "pg";
 
 // Prisma stores `timestamp without time zone` columns as UTC wall-clock. node-pg would parse them in the
@@ -360,6 +361,14 @@ export async function purgePerson(page: Page, phone: string) {
   return removed;
 }
 
+/**
+ * Set a booking's outcome through the UI, for cleanup between scenarios.
+ *
+ * The outcome moved off the row and into the booking's detail dialog with the list redesign:
+ * a `<select>` repeated down a column could not be labelled per row, and one mis-click on it
+ * cancelled a live call. `setBookingOutcome` drives the dialog (and answers the confirm that a
+ * slot-freeing outcome raises); everything here is the retry loop and the DB proof around it.
+ */
 export async function setBookingStatusUi(page: Page, name: string, phone: string, label: string) {
   const statusKey = label.toUpperCase().replace(/ /g, "_");
   const bookedIds = HAS_DB ? (await q<{ id: string }>(
@@ -367,15 +376,12 @@ export async function setBookingStatusUi(page: Page, name: string, phone: string
     [`%${phone.replace(/\D/g, "").slice(-10)}`])).map((r) => r.id) : [];
   for (let attempt = 0; attempt < 3; attempt++) {
     await gotoRetry(page, "/bookings");
-    const row = page.locator("table tbody tr:visible").filter({ hasText: phone }).filter({ has: page.getByRole("button", { name: "Booking status" }) })
-      .filter({ has: page.locator("button[aria-label='Booking status']", { hasText: "Booked" }) }).first();
+    // Nothing left to close - the previous attempt landed, or it was never booked.
+    const row = page.locator("table tbody tr:visible").filter({ hasText: phone })
+      .filter({ has: page.getByText("Booked", { exact: true }) }).first();
     if (!(await row.count())) break;
-    await row.getByRole("button", { name: "Booking status" }).click();
-    await page.getByRole("option", { name: label, exact: true }).click();
-    if (!HAS_DB) {
-      await expect(page.getByText(new RegExp(`Marked ${label}`, "i")).first()).toBeVisible();
-      return;
-    }
+    await setBookingOutcome(page, name, label);
+    if (!HAS_DB) return;
     const ok = await eventually(async () => {
       const r = await q<{ n: number }>(`select count(*)::int n from booking_request where id = any($1) and status::text = $2`, [bookedIds, statusKey]);
       return r[0].n > 0 ? true : null;

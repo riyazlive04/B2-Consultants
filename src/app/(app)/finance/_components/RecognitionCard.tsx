@@ -1,6 +1,9 @@
+"use client";
+
 import { CalendarClock, Info } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/kit";
-import { formatInrMinor } from "@/lib/format";
+import { money } from "@/lib/money-display";
+import { useFinanceCcy } from "./FinanceCurrency";
 
 /**
  * Cash collected vs revenue earned, for the current month.
@@ -15,24 +18,42 @@ import { formatInrMinor } from "@/lib/format";
  * same error in the opposite direction, and would also disagree with the founders' bank balance -
  * which is how a finance screen loses its reader for good.
  *
- * INR ONLY, deliberately. This sits outside the ₹/€ toggle because recognition is computed over a
- * mixed-currency set aggregated at each row's stored rate; there is no meaningful "the same number
- * in euros" to switch to, and offering one would invent a figure.
+ * IT FOLLOWS THE ₹/€ TOGGLE, like every other figure on the page. It used to be the one card that
+ * did not, on the grounds that recognition is computed over a mixed-currency set and there was no
+ * "same number in euros" to switch to. The premise was wrong: each income row stores both
+ * amounts, so the spread is simply run over the euro aggregate as well (see server/revenue-
+ * recognition). Nothing is converted - the toggle picks a side, as it does everywhere else.
  */
 export function RecognitionCard({
   monthLabel,
   cashInrMinor,
   recognisedInrMinor,
   deferredInrMinor,
+  cashEurMinor,
+  recognisedEurMinor,
+  deferredEurMinor,
   confidence,
 }: {
   monthLabel: string;
   cashInrMinor: number;
   recognisedInrMinor: number;
   deferredInrMinor: number;
+  cashEurMinor: number;
+  recognisedEurMinor: number;
+  deferredEurMinor: number;
   confidence: { level: "HIGH" | "PARTIAL" | "LOW"; note: string };
 }) {
-  const variance = recognisedInrMinor - cashInrMinor;
+  const { ccy } = useFinanceCcy();
+  const cash = { inr: cashInrMinor, eur: cashEurMinor };
+  const recognised = { inr: recognisedInrMinor, eur: recognisedEurMinor };
+  const deferred = { inr: deferredInrMinor, eur: deferredEurMinor };
+  const variance = {
+    inr: recognisedInrMinor - cashInrMinor,
+    eur: recognisedEurMinor - cashEurMinor,
+  };
+  // The sign is read off the selected currency, so the sentence below and the figures above are
+  // always talking about the same side of the ledger.
+  const varianceValue = ccy === "INR" ? variance.inr : variance.eur;
 
   return (
     <Card>
@@ -42,14 +63,16 @@ export function RecognitionCard({
         <div>
           <dt className="text-caption text-muted">Cash collected</dt>
           <dd className="font-display text-xl font-bold tabular-nums text-ink">
-            {formatInrMinor(cashInrMinor)}
+            {money(cash, ccy)}
           </dd>
-          <p className="mt-0.5 text-caption text-muted">Money that arrived this month.</p>
+          {/* Follows the heading's own period (issue 27). It read "this month" under an
+              "All time" title, which is the caption contradicting the card it sits on. */}
+          <p className="mt-0.5 text-caption text-muted">Money that arrived in {monthLabel.toLowerCase()}.</p>
         </div>
         <div>
           <dt className="text-caption text-muted">Revenue earned</dt>
           <dd className="font-display text-xl font-bold tabular-nums text-ink">
-            {formatInrMinor(recognisedInrMinor)}
+            {money(recognised, ccy)}
           </dd>
           <p className="mt-0.5 text-caption text-muted">
             Spread straight-line across each program&apos;s length.
@@ -58,22 +81,23 @@ export function RecognitionCard({
         <div>
           <dt className="text-caption text-muted">Deferred</dt>
           <dd className="font-display text-xl font-bold tabular-nums text-ink">
-            {formatInrMinor(deferredInrMinor)}
+            {money(deferred, ccy)}
           </dd>
           <p className="mt-0.5 text-caption text-muted">Collected, not yet delivered.</p>
         </div>
       </dl>
 
-      {variance !== 0 && (
+      {varianceValue !== 0 && (
         <p className="mt-4 text-sm text-ink-2">
-          {variance < 0 ? (
+          {varianceValue < 0 ? (
             <>
-              You collected <strong>{formatInrMinor(-variance)}</strong> more than you earned this
-              month - that difference is delivery you still owe.
+              You collected{" "}
+              <strong>{money({ inr: -variance.inr, eur: -variance.eur }, ccy)}</strong> more than
+              you earned this month - that difference is delivery you still owe.
             </>
           ) : (
             <>
-              You earned <strong>{formatInrMinor(variance)}</strong> more than you collected -
+              You earned <strong>{money(variance, ccy)}</strong> more than you collected -
               revenue from programs sold in earlier months.
             </>
           )}

@@ -11,6 +11,7 @@ import { Btn } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
 import { LevelChip, StatusChip } from "./LevelChip";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Batch membership + portal logins. Students can be added BEFORE they have a
@@ -100,7 +101,7 @@ export function MembersPanel({
                         danger: true,
                       });
                       if (!ok) return;
-                      const res = await revokeStudentLogin(m.studentId);
+                      const res = await safeAction(() => revokeStudentLogin(m.studentId));
                       if (!res.ok) return toast(res.error, "error");
                       toast("Login revoked");
                       refresh();
@@ -130,7 +131,7 @@ export function MembersPanel({
                       danger: true,
                     });
                     if (!ok) return;
-                    const res = await removeBatchMember(m.id);
+                    const res = await safeAction(() => removeBatchMember(m.id));
                     if (!res.ok) return toast(res.error, "error");
                     toast("Member removed");
                     refresh();
@@ -148,7 +149,7 @@ export function MembersPanel({
               className="rounded-card border border-line bg-surface p-4 shadow-card"
               action={async (form) => {
                 setError(null);
-                const res = await addExistingMember(batch.id, form);
+                const res = await safeAction(() => addExistingMember(batch.id, form));
                 if (!res.ok) return setError(res.error);
                 toast("Member added");
                 refresh();
@@ -179,7 +180,7 @@ export function MembersPanel({
               className="rounded-card border border-line bg-surface p-4 shadow-card"
               action={async (form) => {
                 setError(null);
-                const res = await addNewMember(batch.id, form);
+                const res = await safeAction(() => addNewMember(batch.id, form));
                 if (!res.ok) return setError(res.error);
                 toast("Learner created and added");
                 refresh();
@@ -221,7 +222,7 @@ export function MembersPanel({
           <form
             action={async (form) => {
               setError(null);
-              const res = await createStudentLogin(loginFor.studentId, form);
+              const res = await safeAction(() => createStudentLogin(loginFor.studentId, form));
               if (!res.ok) return setError(res.error);
               setLoginFor(null);
               toast("Portal login created");

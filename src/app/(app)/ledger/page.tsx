@@ -16,6 +16,10 @@ import { getJournal, getTrialBalance, verifyAuditChain } from "@/server/ledger";
 import { JournalList } from "./_components/JournalList";
 import { JournalSearch } from "./_components/JournalSearch";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Ledger" };
+
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 25;

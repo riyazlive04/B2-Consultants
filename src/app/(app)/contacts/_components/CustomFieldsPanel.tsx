@@ -10,6 +10,7 @@ import { toast, askConfirm } from "@/components/ui/feedback";
 import { Chip, EmptyState, Hint } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { createCustomField, deleteCustomField } from "@/server/contacts-actions";
+import { safeAction } from "@/lib/action-guard";
 
 const TYPE_OPTS = [
   { value: "TEXT", label: "Text" },
@@ -37,7 +38,7 @@ export default function CustomFieldsPanel({ defs, canManage }: { defs: CustomFie
 
   async function submit(fd: FormData) {
     setError(null);
-    const res = await createCustomField(fd);
+    const res = await safeAction(() => createCustomField(fd));
     if (!res.ok) return setError(res.error);
     toast("Custom field created");
     setOpen(false);
@@ -48,7 +49,7 @@ export default function CustomFieldsPanel({ defs, canManage }: { defs: CustomFie
   async function remove(d: CustomFieldDefinition) {
     const ok = await askConfirm({ title: `Delete "${d.name}"?`, body: "Existing values on contacts are kept but hidden.", danger: true });
     if (!ok) return;
-    const res = await deleteCustomField(d.id);
+    const res = await safeAction(() => deleteCustomField(d.id));
     toast(res.ok ? "Field deleted" : res.error, res.ok ? "success" : "error");
   }
 

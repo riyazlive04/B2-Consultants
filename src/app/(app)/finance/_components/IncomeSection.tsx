@@ -1,14 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createIncome, deleteIncome, updateIncome } from "@/server/finance-actions";
 import type { IncomeRow } from "@/server/finance-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Card } from "@/components/ui/kit";
 import { Btn } from "@/components/ui/controls";
 import { askConfirm, celebrate, toast } from "@/components/ui/feedback";
-import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { guardAction } from "@/lib/action-guard";
+import type { IncomeFormCatalogues, IncomeFormEditing } from "@/lib/income-form";
+import { useIncomeDraft } from "@/components/finance/useIncomeDraft";
+import { IncomeFields } from "@/components/finance/IncomeFields";
+import { Field, FormError, NotesField, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { ComboBox } from "@/components/ui/ComboBox";
+import { useUnsavedGuard } from "@/components/ui/use-unsaved-guard";
 import { InstalmentSchedule } from "./InstalmentSchedule";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import {
@@ -21,7 +26,7 @@ import {
 } from "@/lib/payment-types";
 import { currenciesInPlay, defaultMethodFor, methodsForCurrencies } from "@/lib/payment-methods";
 import { instalmentExtraFor } from "@/lib/instalment-plan";
-import { minorToMajorString } from "@/lib/format";
+import { majorStringToMinor, minorToMajorString } from "@/lib/format";
 import { AmountPair } from "@/components/ui/AmountPair";
 import {
   firstShare, planShares, remainingShares, type MoneyText,
@@ -31,6 +36,7 @@ import { money, moneyAlt, moneyInline, moneyValue } from "@/lib/money-display";
 import { useFinanceCcy } from "./FinanceCurrency";
 import { IncomeDetailCard } from "./IncomeDetailCard";
 import { BUSINESS_LINE_LABELS, BUSINESS_LINES, type BusinessLine } from "@/lib/business-line";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Whole days from `today` (an IST YYYY-MM-DD) to a due date. Compared as calendar dates, not
@@ -76,8 +82,11 @@ export function IncomeSection({
   fxDate,
   canCreateStudent = false,
   upcomingByStudent = {},
+  upcomingByPlan = {},
+  openPlans = [],
   upcomingInstalments = [],
   levelLines = {},
+  defaultLine = null,
   payerOptions = [],
   paymentTypes,
   instalmentPlans,
@@ -95,6 +104,25 @@ export function IncomeSection({
   canCreateStudent?: boolean;
   /** Instalment dates still to come, keyed by student id or normalised name (see the page). */
   upcomingByStudent?: Record<string, { dueDate: string; inr: number; eur: number }[]>;
+  /** Keyed by receivable - what a payment that names its plan should show (issue 24). */
+  upcomingByPlan?: Record<string, { dueDate: string; inr: number; eur: number }[]>;
+  /**
+   * Every receivable still owed something, so a payment can say WHICH ONE it pays off (FIN-12).
+   *
+   * Without this the form could only ever record a payment against a student, and the balance
+   * maths had to guess which of their plans the money was for - which is how four plans came to
+   * share one payment history. The whole list travels with the page (it is small, and scoped
+   * client-side as the name is typed) rather than a round trip per keystroke.
+   */
+  openPlans?: {
+    id: string;
+    studentId: string | null;
+    studentName: string;
+    programLevel: string;
+    levelLabel: string;
+    balanceInr: number;
+    nextDueDate: string | null;
+  }[];
   /** Flat, date-ordered list for the reminder strip - overdue first, then soonest. */
   upcomingInstalments?: { studentName: string; dueDate: string; inr: number; eur: number }[];
   /**
@@ -103,6 +131,8 @@ export function IncomeSection({
    * the right side with no backfill.
    */
   levelLines?: Record<string, BusinessLine>;
+  /** The page's Combined / B2 / German Note switch, when it is on one of the two businesses. */
+  defaultLine?: BusinessLine | null;
   /**
    * Names we have been paid by that have no `Student` row behind them (built on the server from
    * the income history already on this page). They carry no id, so picking one fills the name and
@@ -134,208 +164,171 @@ export function IncomeSection({
   const [editing, setEditing] = useState<IncomeRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  // Which payment type the form currently shows - the instalment questions render only for
-  // INSTALMENT. null = "follow the row being edited (or the default)", so entering/leaving
-  // edit mode resets the answer along with the rest of the re-keyed form.
-  const [paymentTypeChoice, setPaymentTypeChoice] = useState<string | null>(null);
-  const paymentType = paymentTypeChoice ?? editing?.paymentType ?? "FULL_PAYMENT";
-  /**
-   * What the chosen type MEANS. The founder names the types; the kind is what this form branches
-   * on, so a type they called "EMI" asks the instalment questions and one they called
-   * "Membership" asks the recurring ones, with no code change here.
-   */
-  const typeKind = paymentTypeKind(paymentTypes, paymentType);
-  /**
-   * The two answers the schedule below is drawn from: how many instalments there are, and the
-   * date this first one was paid. Held here rather than read off the DOM because the schedule
-   * has to re-fill the moment either changes.
-   */
-  const [instalmentCount, setInstalmentCount] = useState<number | null>(
-    editing?.instalmentCount ?? null,
-  );
-  const [entryDate, setEntryDate] = useState<string>(editing ? editing.date.slice(0, 10) : today);
-  /**
-   * Whether every due date has been filled in. An instalment plan saved with a blank date drops
-   * that receivable on the floor - nothing chases a date nobody wrote down - so the save is held
-   * until they are all there, and the button says so rather than failing on click.
-   */
-  const [scheduleComplete, setScheduleComplete] = useState(false);
-  const needsSchedule = typeKind === "INSTALMENT" && !editing;
-  const blockSave = needsSchedule && !scheduleComplete;
-  /**
-   * ── The fee, and how it is divided ────────────────────────────────────────────────
-   * On an instalment plan the top box is the WHOLE agreed fee, not the money in hand: the fee
-   * plus the plan surcharge is cut into equal instalments, the first of which is what is being
-   * recorded today. So the label changes with the payment type, and the figures below are
-   * derived rather than typed - see lib/instalment-amounts for why that matters.
-   *
-   * Editing never does this. The schedule of a plan already under way is not something an income
-   * edit may silently redraw; that belongs in the receivable itself, under Pending.
-   */
-  const [feeAmount, setFeeAmount] = useState<MoneyText>({ inr: "", eur: "" });
-  const [extraAmount, setExtraAmount] = useState<MoneyText>({ inr: "", eur: "" });
-  const planMode = needsSchedule;
-  const shares = planMode ? planShares(feeAmount, extraAmount, instalmentCount) : [];
-  const banked = firstShare(shares);
-  /**
-   * ── The surcharge, priced in the Console and filled in HERE, as you type ──────────
-   *
-   * The founder prices each plan length once (Console → Instalment Plans: "3 → ₹600"), and this
-   * form made the operator remember the figure and type it again - so the number the student was
-   * quoted and the number recorded could differ by whatever anybody misremembered.
-   *
-   * Pre-filled now, from the same table and the same function the server prices with
-   * (`instalmentExtraFor`), computed in the browser so it lands on the keystroke rather than a
-   * round trip later. Still editable: a plan discounted on a call is a real thing, and the boxes
-   * stay the operator's.
-   *
-   * Only the currency the fee was agreed in is filled. A rupee surcharge sitting beside a euro
-   * fee would be ADDED to it (lib/money - the two columns sum), inventing a charge nobody made.
-   */
-  const feeCurrencies = currenciesInPlay(feeAmount);
-  const pricedExtra = instalmentExtraFor(instalmentCount ?? 0, instalmentPlans);
-  const extraDefaults = {
-    inr: feeCurrencies.includes("INR") && pricedExtra.inr > BigInt(0) ? minorToMajorString(pricedExtra.inr) : "",
-    eur: feeCurrencies.includes("EUR") && pricedExtra.eur > BigInt(0) ? minorToMajorString(pricedExtra.eur) : "",
-  };
-  /**
-   * Re-keyed on the plan LENGTH and the currency - the two answers that re-price the surcharge -
-   * so the box adopts the new figure. Deliberately NOT on the fee itself: the surcharge is flat,
-   * and remounting on every digit would fight whoever is typing.
-   */
-  const extraKey = `extra-${instalmentCount ?? 0}-${feeCurrencies.join("+") || "none"}`;
+  // Warn before a refresh or a tab close throws away a half-typed entry.
+  useUnsavedGuard(formRef);
 
   /**
-   * ── The method, narrowed to the rails the money could have arrived by ─────────────
-   * Held in state rather than read off the DOM because the list it is chosen from CHANGES with
-   * the currency: pick UPI, then type a euro amount, and UPI is no longer offered. Letting the
-   * control show a value absent from its own options is how a form submits something other than
-   * what is on screen (lib/payment-methods `defaultMethodFor`).
-   */
-  const [methodChoice, setMethodChoice] = useState<string | null>(null);
-  const methodOptions = methodsForCurrencies(feeCurrencies).map((m) => ({
-    value: m,
-    label: PAYMENT_METHOD_LABELS[m] ?? m,
-  }));
-  const paymentMethod = defaultMethodFor(
-    feeCurrencies,
-    methodChoice ?? editing?.paymentMethod ?? "UPI",
-  );
-
-  /**
-   * How often a recurring arrangement bills. The next date is SUGGESTED from the interval and
-   * the entry date and then left alone - real subscriptions bill on the 1st, or on the day the
-   * card was set up, and overwriting a date somebody typed is worse than suggesting none.
-   */
-  const [interval, setInterval] = useState<string>(editing?.recurrenceInterval ?? "MONTHLY");
-  const [nextBilling, setNextBilling] = useState<string>(
-    editing?.recurrenceNextDate?.slice(0, 10) ?? "",
-  );
-  /**
-   * ── Which book this payment lands in ──────────────────────────────────────────────
-   * The programme level decides it: a German level or bundle credits German Note, anything else
-   * credits B2 (lib/business-line, and `incomeAccountFor` for the matching ledger account). It is
-   * worth saying out loud on the form, because the Finance page above has its own Combined / B2 /
-   * German Note switch and the two are NOT the same thing - the switch filters what you are
-   * reading, the level decides where the money you are typing actually goes. Someone recording a
-   * payment while the page is filtered to German Note would otherwise have no way to notice the
-   * level still said Guided.
-   */
-  const [levelChoice, setLevelChoice] = useState<string | null>(null);
-  /**
-   * ── Which business, asked OUT LOUD ────────────────────────────────────────────────
-   * The line is still derived from the level - nothing about it is stored, and it could not be,
-   * because an income row has only a level column. What changed is the order you are asked in:
-   * the operator used to have to KNOW that "Guided" means B2 and "GN A2" means German Note, and
-   * read the answer back off the heading after the fact. Now the business is the first choice,
-   * and it narrows the level list to the levels that business actually sells - so the two can
-   * never disagree, and the common mistake (recording a German payment against Guided because
-   * Guided was the default) stops being reachable rather than merely being labelled.
+   * ── The form's answers, as ONE object ───────────────────────────────────────────
+   * This was thirteen `useState` hooks and five `xChoice ?? editing?.x ?? default` triples, each
+   * needing a hand-written reset in TWO places - and the two places had already drifted apart:
+   * `switchEditing` cleared eight of them, the post-submit path cleared a different eleven, and
+   * `mintStudent` was cleared by neither. The visible consequence was that clicking Edit
+   * part-way through a new instalment plan carried that plan's fee across, which then narrowed
+   * the payment-method list of the row being edited to the abandoned draft's currency.
    *
-   * null = "follow the row being edited", so entering and leaving edit mode re-reads it.
+   * One object, one reset, one derivation. The rules live in `lib/income-form` - pure, and
+   * covered by 43 tests that need no browser - and they are the SAME rules the top-bar Quick
+   * Record runs, which is what stops the two forms diverging again.
    */
-  const [lineChoice, setLineChoice] = useState<BusinessLine | null>(null);
-  const rowLevel = editing?.programLevel ?? "GUIDED";
-  const line: BusinessLine = lineChoice ?? levelLines[rowLevel] ?? "B2";
-  /** Only the levels this business sells. */
-  const lineLevelOptions = levelOptions.filter((o) => (levelLines[o.value] ?? "B2") === line);
-  const wantedLevel = levelChoice ?? rowLevel;
-  /**
-   * COERCED into the business on screen. A select showing a value that is not among its own
-   * options submits something other than what is on screen (the same trap `defaultMethodFor`
-   * guards above), and switching B2 → German Note leaves "Guided" selected against a list that
-   * no longer contains it. Falls back to the business's first level, or to "" when a business
-   * has no active level at all - which the field says, rather than silently posting a level
-   * belonging to the other book.
-   */
-  const programLevel = lineLevelOptions.some((o) => o.value === wantedLevel)
-    ? wantedLevel
-    : (lineLevelOptions[0]?.value ?? "");
-  const entryLine: BusinessLine = levelLines[programLevel] ?? line;
-  const lineLabel = BUSINESS_LINE_LABELS[entryLine];
-  /** The next free number in THIS payment's series - what the editable ID box opens on. */
-  const suggestedCode = nextStudentCodes[entryLine] ?? nextStudentCodes.B2;
+  const catalogues: IncomeFormCatalogues = useMemo(
+    () => ({
+      levelOptions, levelLines, paymentTypes, instalmentPlans,
+      studentOptions, openPlans, nextStudentCodes, today, defaultLine,
+    }),
+    [levelOptions, levelLines, paymentTypes, instalmentPlans, studentOptions, openPlans, nextStudentCodes, today, defaultLine],
+  );
+  /** The edited row, reduced to the fields the rules read off it. */
+  const editingForForm: IncomeFormEditing = useMemo(
+    () =>
+      editing
+        ? {
+            id: editing.id,
+            date: editing.date,
+            studentName: editing.studentName,
+            studentId: editing.studentId,
+            programLevel: editing.programLevel,
+            paymentType: editing.paymentType,
+            paymentMethod: editing.paymentMethod,
+            pendingPaymentId: editing.pendingPaymentId,
+            instalmentCount: editing.instalmentCount,
+            recurrenceInterval: editing.recurrenceInterval,
+            recurrenceNextDate: editing.recurrenceNextDate,
+          }
+        : null,
+    [editing],
+  );
+  const { draft, patch, reset, derived } = useIncomeDraft(editingForForm, catalogues);
+  const {
+    line, lineLevelOptions, programLevel, entryLine, lineLabel,
+    paymentType, typeKind, needsSchedule, blockSave, blockSaveReason, planMode,
+    shares, banked, methodOptions, paymentMethod, extraDefaults, extraKey,
+    plansForPayer, planOptions, pendingPaymentId, newStudentName, suggestedCode,
+  } = derived;
+  // Local aliases so the markup below reads as it always did.
+  const entryDate = derived.date;
+  const feeCurrencies = derived.feeCurrencies;
+  const interval = derived.recurrenceInterval;
+  const nextBilling = derived.recurrenceNextDate;
+  const instalmentCount = draft.instalmentCount;
+  const mintStudent = draft.mintStudent;
+
   /** The row whose full record is open. Reading, not editing - see IncomeDetailCard. */
   const [viewing, setViewing] = useState<IncomeRow | null>(null);
+  /** Load a row into the form AND take the eye there (issue 21). */
+  const startEdit = (row: IncomeRow) => {
+    switchEditing(row);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
   const switchEditing = (row: IncomeRow | null) => {
     setEditing(row);
-    setPaymentTypeChoice(null);
-    setLineChoice(null);
-    setLevelChoice(null);
-    setMethodChoice(null);
-    setInterval(row?.recurrenceInterval ?? "MONTHLY");
-    setNextBilling(row?.recurrenceNextDate?.slice(0, 10) ?? "");
-    setStudentPick({ text: row?.studentName ?? "", value: row?.studentId ?? "" });
+    /**
+     * Every answer back to "not answered", so the derivation re-reads the row (or the defaults).
+     * The student box is the one answer with nothing to re-read - it is typed into freely - so it
+     * is seeded. This line replaces eight setters that had drifted out of step with the eleven
+     * on the submit path.
+     */
+    reset({ student: { text: row?.studentName ?? "", value: row?.studentId ?? "" } });
+    setError(null);
   };
-  /**
-   * What the student box currently holds. `value` is the resolved student id, so an empty one
-   * beside non-empty text is exactly the case the "create this student" offer exists for.
-   * Compared on the same normalisation the server links names with (case + spacing), so an
-   * existing "anna  smith" is never offered as a new record.
-   */
-  const [studentPick, setStudentPick] = useState({ text: "", value: "" });
-  /**
-   * Whether this entry is also minting a student record. Controlled (it used to be
-   * `defaultChecked`) because the ID box below only exists while it is ticked - an uncontrolled
-   * box would leave the field on screen with nothing deciding whether it applies.
-   */
-  const [mintStudent, setMintStudent] = useState(true);
   const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-  /** The dates still to come for the plan this row belongs to, soonest first. */
-  const upcomingFor = (r: IncomeRow) => upcomingByStudent[r.studentId ?? nameKey(r.studentName)] ?? [];
-  const typedName = studentPick.text.trim();
-  const newStudentName =
-    typedName && !studentPick.value && !studentOptions.some((o) => nameKey(o.label) === nameKey(typedName))
-      ? typedName
-      : "";
+  /**
+   * The dates still to come for the plan this row belongs to, soonest first.
+   *
+   * ── Per PLAN where the row names one (issue 24) ─────────────────────────────────
+   * This only ever looked up by student, so a row whose plan had one instalment left read "10
+   * more after" - it was counting every unpaid instalment the student had, across all of their
+   * plans. A payment that names its receivable now gets that receivable's own tail; one that
+   * does not falls back to the student-wide list, which is the best answer available for a row
+   * recorded before the link existed.
+   */
+  const upcomingFor = (r: IncomeRow) =>
+    (r.pendingPaymentId ? upcomingByPlan[r.pendingPaymentId] : undefined) ??
+    upcomingByStudent[r.studentId ?? nameKey(r.studentName)] ??
+    [];
   // Optimistic delete: hide the row at once, restore it if the archive fails.
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const visibleRows = rows.filter((r) => !removedIds.has(r.id));
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = editing ? await updateIncome(editing.id, form) : await createIncome(form);
+    /**
+     * ── Minting a student is confirmed, not assumed (issue 13) ────────────────────
+     * The tick box has always been visible, but it defaults to ON - which is right for the
+     * common case (a first payment from somebody new) and wrong for the one that matters (a
+     * mistyped name, which silently added a student and burned a B2 number). The dialog names
+     * the student about to be created, so a typo is caught by reading rather than by noticing.
+     */
+    if (!editing && mintStudent && newStudentName) {
+      const ok = await askConfirm({
+        title: `Create a new student called "${newStudentName}"?`,
+        body: `Nobody on the roster matches that name, so a new student record will be created with ID ${suggestedCode}. If this is somebody who already exists, close this and pick them from the list instead.`,
+        confirmLabel: "Create and record",
+      });
+      if (!ok) return;
+    }
+    /**
+     * ── An identical payment is confirmed, not silently doubled ───────────────────
+     * Two payments with the same date, student and amount are accepted without a murmur, and
+     * sometimes that is genuinely what happened - two siblings, two levels, a part payment
+     * repeated. But it is also exactly what a double-submitted form looks like, and the ledger
+     * has no way to tell them apart afterwards.
+     *
+     * So: a prompt, never a block. The person recording it knows which of the two this is; the
+     * app does not.
+     */
+    if (!editing) {
+      const typedInr = String(form.get("amountInr") ?? "").trim();
+      const typedEur = String(form.get("amountEur") ?? "").trim();
+      const twin = rows.find(
+        (r) =>
+          r.date.slice(0, 10) === String(form.get("date") ?? "") &&
+          nameKey(r.studentName) === nameKey(String(form.get("studentName") ?? "")) &&
+          // Compared in MINOR units, because the form's canonical "500" and the stored
+          // "50000" paise are the same amount written two ways.
+          r.amountInrRaw === majorStringToMinor(typedInr || "0").toString() &&
+          r.amountEurRaw === majorStringToMinor(typedEur || "0").toString(),
+      );
+      if (twin) {
+        const ok = await askConfirm({
+          title: "There is already an identical payment",
+          body: `${twin.studentName} already has a payment of the same amount recorded on ${formatDate(twin.date)}. Save this one as well only if the money really arrived twice.`,
+          confirmLabel: "Yes, record both",
+        });
+        if (!ok) return;
+      }
+    }
+    /**
+     * ── A dead network no longer costs the whole form (issue 10) ──────────────────
+     * This was a bare await, so submitting while offline threw past the form to the route error
+     * boundary: the page replaced by "Finance couldn't load" and every field lost. See
+     * lib/action-guard.
+     */
+    const guarded = await guardAction(() =>
+      editing ? updateIncome(editing.id, form) : createIncome(form),
+    );
+    if (!guarded.ok) return setError(guarded.error);
+    const res = guarded.value;
     if (!res.ok) return setError(res.error);
     toast(editing ? "Income entry updated" : "Payment recorded");
     if (!editing) celebrate(); // money in the door - worth confetti (edits stay quiet)
+    /**
+     * `form.reset()` restores the native boxes; `switchEditing(null)` clears every React-held
+     * answer, because `form.reset()` fires no change event and those would otherwise carry the
+     * last payment's plan into the next one. Two lines where there were thirteen - and it is the
+     * SAME two lines `switchEditing` runs, so they can no longer drift apart.
+     */
     switchEditing(null);
     formRef.current?.reset();
-    /**
-     * `form.reset()` restores the native boxes, but these four are React state fed by `onChange`
-     * - and reset fires no change event. Left alone they carried the last payment's plan into
-     * the next one: the schedule kept its dates, and the save button stayed open on a count that
-     * was no longer typed anywhere.
-     */
-    setInstalmentCount(null);
-    setEntryDate(today);
-    setScheduleComplete(false);
-    setFeeAmount({ inr: "", eur: "" });
-    setExtraAmount({ inr: "", eur: "" });
-    setLineChoice(null);
-    setLevelChoice(null);
-    setMethodChoice(null);
-    setInterval("MONTHLY");
-    setNextBilling("");
   };
 
   const remove = async (row: IncomeRow) => {
@@ -347,7 +340,7 @@ export function IncomeSection({
     });
     if (!ok) return;
     setRemovedIds((s) => new Set(s).add(row.id)); // optimistic
-    const res = await deleteIncome(row.id);
+    const res = await safeAction(() => deleteIncome(row.id));
     if (!res.ok) {
       setRemovedIds((s) => {
         const n = new Set(s);
@@ -471,8 +464,17 @@ export function IncomeSection({
       key: "actions", header: "", sortable: false,
       cell: (r) => (
         <span className="flex gap-2 whitespace-nowrap">
-          <Btn variant="ghost" size="sm" onClick={() => switchEditing(r)}>Edit</Btn>
-          <Btn variant="danger" size="sm" onClick={() => remove(r)}>Delete</Btn>
+          {/*
+            Scrolls to the form, like the detail drawer's Edit already did (issue 21). The form
+            is at the top of the tab, so opening it from a row forty deep otherwise looked exactly
+            like a click that did nothing - and the row being edited is tinted, so there is no
+            doubt about which one is loaded.
+          */}
+          <Btn variant="ghost" size="sm" onClick={() => startEdit(r)}>Edit</Btn>
+          {/* "Archive" - the dialog already said so, the button did not (issue 26). The row moves
+              to the Archived tab and can be restored for 90 days; "Delete permanently" lives
+              there, on the only control that really destroys anything. */}
+          <Btn variant="danger" size="sm" onClick={() => remove(r)}>Archive</Btn>
         </span>
       ),
       value: () => null,
@@ -503,292 +505,38 @@ export function IncomeSection({
         }
       >
         <form ref={formRef} action={submit} key={editing?.id ?? "new"}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Date">
-            {/* On a NEW entry the browser fills in ITS today (FIN-02): the server default is
-                India's date, which is already tomorrow for anyone recording from Germany after
-                20:30. Editing keeps the date the row was saved with. */}
-            <TextInput
-              type="date"
-              name="date"
-              required
-              defaultValue={editing ? editing.date.slice(0, 10) : today}
-              defaultToday={!editing}
-              onChange={(e) => setEntryDate(e.currentTarget.value)}
-            />
-          </Field>
-          {/*
-            ── Student name ──────────────────────────────────────────────────────────────
-            Searchable ALWAYS, even with an empty roster. The box used to fall back to a plain
-            text input whenever no student existed, which is the state a new install is in: the
-            operator saw an ordinary "Who paid" field, nothing ever auto-populated, and every
-            payment was filed under a typed name that reached no student's payment history -
-            with nothing on screen saying why. An empty roster is now something the field SAYS,
-            and offers to fix.
-          */}
-          <Field label="Student name" hint="Search to link a student - feeds their total paid">
-            <ComboBox
-              options={nameOptions}
-              nameText="studentName"
-              nameValue="studentId"
-              required
-              placeholder={nameOptions.length > 0 ? "Search or type who paid" : "Type who paid"}
-              defaultText={editing?.studentName ?? ""}
-              defaultValue={editing?.studentId ?? ""}
-              onStateChange={setStudentPick}
-              emptyHint={
-                nameOptions.length > 0
-                  ? undefined
-                  : "Nobody on file yet - type the name, then tick “Create a student record” below."
-              }
-            />
-            {/*
-              Offered only when the typed name resolved to nobody. Ticking it mints the student
-              record with this payment, which is the only way a first payment can ever reach a
-              payment history: until a Student row exists there is nothing for it to attach to.
-            */}
-            {canCreateStudent && !editing && newStudentName && (
-              <>
-                <label className="mt-2 flex items-start gap-2">
-                  <input
-                    name="createStudent"
-                    type="checkbox"
-                    checked={mintStudent}
-                    onChange={(e) => setMintStudent(e.currentTarget.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-line"
-                  />
-                  <span className="text-caption">
-                    Create a student record for “{newStudentName}”
-                    <span className="block text-muted">
-                      Links this payment - and any earlier one under the same name - to their history.
-                      You can fill in the rest under Students.
-                    </span>
-                  </span>
-                </label>
-                {/*
-                  ── The student ID, editable while it is being minted ──────────────────────
-                  Generated as the next free number in the series this payment's programme level
-                  belongs to - B2-0001… for a B2 level, GN-0001… for a German one - and offered
-                  for editing HERE, which is the only moment it can be set without a second trip
-                  to the Students screen. The number is printed on agreements and read down a
-                  phone line, so a record carried over from other paperwork has to be able to
-                  keep its own identifier. Blank falls back to the generated one; a duplicate is
-                  refused by the database, not by a guess.
-                */}
-                {mintStudent && (
-                  <Field
-                    label="Student ID"
-                    hint={`Next free ${entryLine === "GERMAN_NOTE" ? "German Note" : "B2"} number - edit it if this student already has one`}
-                  >
-                    <TextInput
-                      name="newStudentCode"
-                      // Re-keyed on the level's business line so switching Guided → A1 adopts the
-                      // other series instead of leaving a B2 number on a German Note student.
-                      key={`code-${entryLine ?? "B2"}`}
-                      maxLength={24}
-                      spellCheck={false}
-                      placeholder={suggestedCode}
-                      defaultValue={suggestedCode}
-                    />
-                  </Field>
-                )}
-              </>
-            )}
-          </Field>
-          {/*
-            The boxes are RENAMED on a plan, not just relabelled. `amountInr` is what gets
-            banked, and on a plan that is one instalment - so the typed total goes to a name the
-            action does not read, and the hidden pair below carries the first share instead.
-            Renaming rather than quietly submitting something other than what is on screen is
-            the whole point: the two halves of the field agree about what they mean.
-          */}
-          <AmountPair
+          <IncomeFields
+            draft={draft}
+            patch={patch}
+            derived={derived}
+            editing={editingForForm}
+            catalogues={catalogues}
+            nameOptions={nameOptions}
+            canCreateStudent={canCreateStudent}
             fxRate={fxRate}
             fxStale={fxStale}
             fxDate={fxDate}
-            inrName={planMode ? "planTotalInr" : "amountInr"}
-            eurName={planMode ? "planTotalEur" : "amountEur"}
-            inrLabel={planMode ? "Total price (₹)" : "Price received (₹)"}
-            eurLabel={planMode ? "Total price (€)" : "Price received (€)"}
-            baseHint={planMode ? "The whole fee - divided across the instalments below" : "INR, EUR, or both"}
-            defaultInr={editing ? minorToInput(editing.amountInrRaw) : ""}
-            defaultEur={editing ? minorToInput(editing.amountEurRaw) : ""}
-            onAmountsChange={setFeeAmount}
+            notesDefault={editing?.notes ?? ""}
+            methodOtherDefault={editing?.paymentMethodOther ?? ""}
+            amountDefaults={{
+              inr: editing ? minorToInput(editing.amountInrRaw) : "",
+              eur: editing ? minorToInput(editing.amountEurRaw) : "",
+            }}
+            surchargeDefaults={{
+              inr: editing ? minorToInput(editing.instalmentExtraInrRaw) : "",
+              eur: editing ? minorToInput(editing.instalmentExtraEurRaw) : "",
+            }}
           />
-          {planMode && (
-            <>
-              <input type="hidden" name="amountInr" value={banked.inr} />
-              <input type="hidden" name="amountEur" value={banked.eur} />
-            </>
-          )}
-          {/*
-            Carries no `name`: the business is NOT submitted, because nothing stores it. It is a
-            filter on the question below, and the server re-derives the line from the level it
-            is sent - one authority (lib/business-line), not a second field that could disagree.
-          */}
-          <Field label="Business" hint="Which book this payment lands in - it narrows the levels below.">
-            <Select
-              options={BUSINESS_LINES.map((l) => ({ value: l, label: BUSINESS_LINE_LABELS[l] }))}
-              value={line}
-              onChange={(e) => {
-                setLineChoice(e.currentTarget.value as BusinessLine);
-                // Drop the old level rather than carry it across: it belongs to the other book.
-                setLevelChoice(null);
-              }}
-            />
-          </Field>
-          <Field
-            label="Programme level"
-            hint={lineLevelOptions.length === 0 ? `No active ${lineLabel} level - add one first.` : undefined}
-          >
-            <Select
-              name="programLevel"
-              options={lineLevelOptions}
-              value={programLevel}
-              placeholder={lineLevelOptions.length === 0 ? "Nothing to choose" : undefined}
-              onChange={(e) => setLevelChoice(e.currentTarget.value)}
-            />
-          </Field>
-          {/* The list is the founder's (Console → Payment Types), and the chosen type's KIND is
-              what decides which questions appear below - instalment, recurring, or none. */}
-          <Field label="Payment type">
-            <Select
-              name="paymentType"
-              options={paymentTypeOptions(paymentTypes, editing?.paymentType)}
-              value={paymentType}
-              onChange={(e) => setPaymentTypeChoice(e.currentTarget.value)}
-            />
-          </Field>
-          {/* ── A recurring arrangement ────────────────────────────────────────────────
-              A subscription has no agreed total and no finite schedule, so it asks two questions
-              instead of a plan's four - and raises NO receivable, which is the whole reason it
-              could not simply be filed as an instalment plan. */}
-          {typeKind === "SUBSCRIPTION" && (
-            <>
-              <Field label="Bills every" hint="How often this payment repeats">
-                <Select
-                  name="recurrenceInterval"
-                  options={optionsFrom(RECURRENCE_INTERVAL_LABELS)}
-                  value={interval}
-                  onChange={(e) => {
-                    const next = e.currentTarget.value;
-                    setInterval(next);
-                    // Suggested, never imposed: only filled while the box is still untouched.
-                    setNextBilling((cur) => cur || suggestNextBillingDate(entryDate, next));
-                  }}
-                />
-              </Field>
-              <Field label="Next payment due" hint="Suggested from the interval - change it freely">
-                <TextInput
-                  type="date"
-                  name="recurrenceNextDate"
-                  required
-                  value={nextBilling || suggestNextBillingDate(entryDate, interval)}
-                  onChange={(e) => setNextBilling(e.currentTarget.value)}
-                />
-              </Field>
-            </>
-          )}
-          {/* Instalment plans carry two more answers: how many instalments the fee is split
-              into, and the surcharge added for choosing the plan. Asked only when it applies -
-              a full payment keeps the short form. */}
-          {typeKind === "INSTALMENT" && (
-            <>
-              <Field label="Number of instalments" hint="How many instalments the fee is split into">
-                <TextInput
-                  kind="int"
-                  name="instalmentCount"
-                  required
-                  placeholder="e.g. 3"
-                  defaultValue={editing?.instalmentCount ? String(editing.instalmentCount) : ""}
-                  onChange={(e) => {
-                    const n = Number.parseInt(e.currentTarget.value, 10);
-                    setInstalmentCount(Number.isFinite(n) && n > 0 ? n : null);
-                  }}
-                />
-              </Field>
-              <AmountPair
-                // Re-keyed so the Console's price for THIS plan length is adopted the instant
-                // the count changes - see `extraKey`.
-                key={editing ? "extra-edit" : extraKey}
-                fxRate={fxRate}
-                fxStale={fxStale}
-                fxDate={fxDate}
-                inrName="instalmentExtraInr"
-                eurName="instalmentExtraEur"
-                inrLabel="Extra price (₹)"
-                eurLabel="Extra price (€)"
-                baseHint={
-                  !editing && (extraDefaults.inr || extraDefaults.eur)
-                    ? `The Console price for a ${instalmentCount}-part plan - change it if this one was agreed differently`
-                    : "Added to the fee for paying in instalments"
-                }
-                defaultInr={editing ? minorToInput(editing.instalmentExtraInrRaw) : extraDefaults.inr}
-                defaultEur={editing ? minorToInput(editing.instalmentExtraEurRaw) : extraDefaults.eur}
-                onAmountsChange={setExtraAmount}
-              />
-              {/* Only on a NEW entry. Editing an income row must not silently rewrite a schedule
-                  the student has already agreed to and may have started paying against - that
-                  edit belongs in the receivable itself, under Pending. */}
-              {!editing && (
-                <InstalmentSchedule
-                  count={instalmentCount}
-                  anchorDate={entryDate}
-                  shares={remainingShares(shares)}
-                  bankedToday={banked}
-                  onCompleteChange={setScheduleComplete}
-                />
-              )}
-            </>
-          )}
-          {/* ── Only the rails the entered currency can arrive by ──────────────────────
-              A euro payment cannot have come in by UPI and a rupee one cannot have come in by
-              PayPal, and the method is what a bank statement is reconciled against - so the list
-              follows the currency typed above (lib/payment-methods). A genuine split payment
-              shows both sets, because then both rails were used. */}
-          <Field
-            label="Payment method"
-            hint={
-              feeCurrencies.length === 1
-                ? `${feeCurrencies[0] === "EUR" ? "Euro" : "Rupee"} payment methods`
-                : undefined
-            }
-          >
-            <Select
-              name="paymentMethod"
-              options={methodOptions}
-              value={paymentMethod}
-              onChange={(e) => setMethodChoice(e.currentTarget.value)}
-            />
-          </Field>
-          {paymentMethod === "OTHER" && (
-            <Field label="How did it arrive?" hint="Named on the row instead of “Other”">
-              <TextInput
-                kind="text"
-                name="paymentMethodOther"
-                required
-                maxLength={60}
-                placeholder="e.g. Wise, Revolut, demand draft"
-                defaultValue={editing?.paymentMethodOther ?? ""}
-              />
-            </Field>
-          )}
-          <Field label="Notes (optional)">
-            <TextInput kind="text" name="notes" placeholder="Any extra info" defaultValue={editing?.notes ?? ""} />
-          </Field>
-        </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <SubmitButton
-            disabled={blockSave}
-            title="Every instalment needs a due date before this can be saved"
-          >
+          {/*
+            The reason comes from the derivation, so the button and the sentence beside it can
+            never disagree - and a plan with no COUNT yet now says so, where both used to talk
+            about due dates regardless.
+          */}
+          <SubmitButton disabled={blockSave} title={blockSaveReason ?? undefined}>
             {editing ? "Save changes" : "Add income"}
           </SubmitButton>
-          {blockSave && (
-            <p className="text-caption text-muted">
-              Fill in every due date above to save this plan.
-            </p>
-          )}
+          {blockSaveReason && <p className="text-caption text-muted">{blockSaveReason}</p>}
           <FormError message={error} />
         </div>
         </form>
@@ -838,6 +586,8 @@ export function IncomeSection({
         csvName="income"
         filterPlaceholder="Filter income…"
         onRowClick={setViewing}
+        // The row currently loaded into the form at the top of the tab (issue 21).
+        rowClassName={(r) => (r.id === editing?.id ? "bg-accent-soft" : undefined)}
       />
 
       <IncomeDetailCard

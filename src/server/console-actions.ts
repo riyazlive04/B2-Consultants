@@ -17,6 +17,8 @@ import {
   coerceTutorFeeConfig,
   coerceInstalmentPlanConfig,
   coercePaymentTypesConfig,
+  coerceInvoiceSettings,
+  invoiceSettingsSchema,
   instalmentPlanConfigSchema,
   paymentTypesConfigSchema,
   coerceDailyLogEod,
@@ -67,6 +69,8 @@ import {
   writeInstalmentPlanConfig,
   writePaymentTypesConfig,
   PAYMENT_TYPES_KEY,
+  writeInvoiceSettings,
+  INVOICE_SETTINGS_KEY,
   writeDailyLogEod,
   writeDailyLogTargets,
   writeGamificationConfig,
@@ -828,6 +832,43 @@ export async function savePaymentTypesConfig(input: unknown): Promise<ActionResu
     });
   }
   revalidatePath("/finance");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+/**
+ * Who invoices are FROM, and what tax they charge per currency (Console → Money → Invoicing).
+ *
+ * The tax rate is a DEFAULT, not a repricing. Each invoice snapshots the label and percent it
+ * actually charged, so changing a rate here never rewrites a document already sent to a customer
+ * - it only changes what the next new invoice starts with. Setting a rate to 0 removes the tax
+ * line altogether, which is how a customer who should not be taxed is invoiced.
+ *
+ * The issuer block is the opposite: it is read at print time, so correcting a typo in the
+ * registered address fixes it on every document, including ones already issued. That is the
+ * behaviour you want for an address and emphatically not for a tax rate.
+ */
+export async function saveInvoiceSettings(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = invoiceSettingsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const before = coerceInvoiceSettings(await settingValue(INVOICE_SETTINGS_KEY));
+  await writeInvoiceSettings(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "console.invoicing.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: INVOICE_SETTINGS_KEY,
+      summary: `Changed invoicing settings - ₹ ${parsed.data.tax.INR.label} ${parsed.data.tax.INR.percent}%, € ${parsed.data.tax.EUR.label} ${parsed.data.tax.EUR.percent}%`,
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  revalidatePath("/payments");
   revalidatePath("/console");
   return { ok: true };
 }

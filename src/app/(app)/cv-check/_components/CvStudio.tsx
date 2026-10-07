@@ -38,6 +38,7 @@ import { ResumePreview } from "./ResumePreview";
 import { ReviewPanel } from "./ReviewPanel";
 import { TemplateEditor } from "./TemplateEditor";
 import { CvCheckClient } from "./CvCheckClient";
+import { safeAction } from "@/lib/action-guard";
 
 // Heavy form editor - code-split out of the initial CV Studio bundle (BUILD_CHECKLIST.md §12).
 const ResumeEditor = dynamic(() => import("./ResumeEditor").then((m) => m.ResumeEditor), {
@@ -129,7 +130,7 @@ function Builder({
       if (!detail || !draft) return resolve(false);
       start(async () => {
         setError(null);
-        const res = await updateResume({ id: detail.id, title, language, data: draft });
+        const res = await safeAction(() => updateResume({ id: detail.id, title, language, data: draft }));
         if (!res.ok) {
           setError(res.error);
           resolve(false);
@@ -153,7 +154,7 @@ function Builder({
   const create = (t: string, lang: string, data?: ResumeData) =>
     start(async () => {
       setError(null);
-      const res = await createResume({ title: t, language: lang, data });
+      const res = await safeAction(() => createResume({ title: t, language: lang, data }));
       if (!res.ok || !res.id) {
         setError(res.ok ? "Couldn't create the CV." : res.error);
         return;
@@ -174,7 +175,10 @@ function Builder({
         const res = await fetch("/api/cv-extract", { method: "POST", body: fd });
         const j = (await res.json().catch(() => null)) as { text?: string; error?: string } | null;
         if (!res.ok || !j?.text) throw new Error(j?.error ?? "Couldn't read that file.");
-        const parsed = await importResumeFromText(j.text);
+        // Hoisted: inside the closure TS can no longer see the narrowing above, because a
+        // closure might run later than the check that narrowed it.
+        const text = j.text;
+        const parsed = await safeAction(() => importResumeFromText(text));
         if (!parsed.ok || !parsed.data) throw new Error(parsed.ok ? "Import failed." : parsed.error);
         const name = parsed.data.header.fullName?.trim();
         create(name ? `${name} - CV` : file.name.replace(/\.[^.]+$/, ""), "EN", parsed.data);

@@ -4,6 +4,7 @@ import { istToday } from "@/lib/dates";
 import { postEntryOnce, voidEntryForSource } from "./ledger";
 import { invoiceIssuanceEntryDraft } from "./finance-posting";
 import { getFinancePostingConfig } from "./founder-config";
+import { dominantLevelCode } from "@/lib/invoice-money";
 
 /**
  * Invoice-issuance ledger posting (audit §C #22).
@@ -48,6 +49,7 @@ export async function syncInvoiceIssuance(invoiceId: string, actorId?: string | 
           totalInrMinor: true,
           deletedAt: true,
           lead: { select: { wonLevel: true } },
+          items: { select: { levelCode: true, quantity: true, unitPriceInrMinor: true } },
         },
       });
       // Estimates never post; a zero-total invoice has nothing to book.
@@ -62,7 +64,20 @@ export async function syncInvoiceIssuance(invoiceId: string, actorId?: string | 
           totalInrMinor: inv.totalInrMinor,
           number: inv.number,
           customerName: inv.customerName,
-          programLevel: inv.lead?.wonLevel ?? null,
+          /**
+           * The programme this invoice is FOR, which decides the income account the credit side
+           * lands in. Its own line items answer that now that a product names its programme, so
+           * they are asked first; the contact's `wonLevel` stays as the fallback for an invoice
+           * built entirely from hand-typed lines, exactly as before.
+           */
+          programLevel:
+            dominantLevelCode(
+              inv.items.map((it) => ({
+                levelCode: it.levelCode,
+                quantity: it.quantity,
+                unitPriceMinor: it.unitPriceInrMinor,
+              })),
+            ) ?? inv.lead?.wonLevel ?? null,
           issuedById: actorId ?? null,
         });
         await postEntryOnce(tx, { ...draft, sourceId: inv.id });

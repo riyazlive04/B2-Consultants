@@ -152,9 +152,18 @@ describe("money - digits and at most one dot", () => {
 });
 
 describe("int / rate", () => {
-  test("int keeps digits only", () => {
-    assert.equal(filter("int")("4a2.5-"), "425");
+  test("int keeps digits only, and TRUNCATES at a decimal point (issue 18)", () => {
+    // It used to strip the point and splice the digits back together, so an instalment count
+    // typed as "2.5" became "25" - asking for two-and-a-half instalments bought twenty-five.
+    assert.equal(filter("int")("2.5"), "2");
+    assert.equal(filter("int")("10.555"), "10");
+    assert.equal(filter("int")("4a2.5-"), "42", "junk still goes, the point still cuts");
     assert.equal(accepts("int", "-1"), false);
+    assert.equal(
+      messageFor("int", "2.5"),
+      "Enter a whole number, with no decimal point",
+      "and a point that arrives by any other route is refused by name",
+    );
   });
 
   test("rate is capped at 100", () => {

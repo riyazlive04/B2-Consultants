@@ -13,6 +13,7 @@ import { Plus, Download } from "lucide-react";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { LEAD_SOURCE_LABELS, optionsFrom } from "@/lib/labels";
 import { StudentName } from "@/components/ui/StudentName";
+import { safeAction } from "@/lib/action-guard";
 
 const B2_LEVEL_OPTIONS = [
   { value: "SOLO", label: "Solo (lifetime, self-paced)" },
@@ -41,7 +42,7 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = await createStudent(form);
+    const res = await safeAction(() => createStudent(form));
     if (!res.ok) return setError(res.error);
     setAdding(false);
     formRef.current?.reset();

@@ -13,6 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/feedback";
 import { NewLeadWatcher } from "./NewLeadWatcher";
 import { LEAD_STAGE_LABELS, LEAD_SOURCE_LABELS } from "@/lib/labels";
+import { safeAction } from "@/lib/action-guard";
 
 /** Outcomes in the order a telecaller actually meets them - connected first. */
 const OUTCOME_OPTIONS = [
@@ -60,7 +61,7 @@ function LogCallModal({ lead, onClose }: { lead: DeskLead; onClose: () => void }
       <form
         action={async (form) => {
           setError(null);
-          const res = await logCall(lead.id, form);
+          const res = await safeAction(() => logCall(lead.id, form));
           if (!res.ok) return setError(res.error);
           toast("Call logged");
           onClose();

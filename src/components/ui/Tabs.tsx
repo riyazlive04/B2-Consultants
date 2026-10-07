@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 /**
  * Segmented tabs - full ARIA tab/tabpanel wiring with roving focus and
@@ -21,13 +22,59 @@ export function Tabs({
   tabs,
   variant = "pill",
   initial = 0,
+  urlKey,
 }: {
   tabs: { label: string; content: ReactNode }[];
   variant?: TabsVariant;
   /** Which tab is open on first render (e.g. a deep-link landing on "Expenses"). */
   initial?: number;
+  /**
+   * Keep the open tab in the URL under this query key (issue 28).
+   *
+   * Without it the tab lives in React state alone, so refreshing the page - or sharing the
+   * address, or coming back through the browser's history - always reopened the first tab. On
+   * Finance that meant any refresh while working on Expenses or Pending payments silently
+   * returned you to Income.
+   *
+   * Opt-in by key rather than automatic, because a page may host more than one strip and two
+   * of them writing the same parameter would fight.
+   */
+  urlKey?: string;
 }) {
-  const [active, setActive] = useState(initial);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  /**
+   * The URL is the source of truth when `urlKey` is set, with local state as the fallback for a
+   * strip that does not want to be addressable. Reading it on every render (rather than syncing
+   * it into state) is what makes Back and Forward move the tabs.
+   */
+  const fromUrl = urlKey ? Number(searchParams.get(urlKey)) : NaN;
+  const [localActive, setLocalActive] = useState(initial);
+  const active =
+    urlKey && Number.isInteger(fromUrl) && fromUrl >= 0 && fromUrl < tabs.length
+      ? fromUrl
+      : localActive;
+
+  const setActive = useCallback(
+    (i: number) => {
+      setLocalActive(i);
+      if (!urlKey) return;
+      const params = new URLSearchParams(searchParams.toString());
+      // Tab 0 is the default, so it is left OUT of the address rather than written as "=0" -
+      // the common case keeps a clean URL, and a shared link means what it looks like.
+      if (i === 0) params.delete(urlKey);
+      else params.set(urlKey, String(i));
+      const q = params.toString();
+      /**
+       * `scroll: false` because switching tab must not jump the page to the top - the strip is
+       * often well down a long screen, and the panel that just opened is what the person is
+       * looking at.
+       */
+      router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams, urlKey],
+  );
   const baseId = useId();
   const listRef = useRef<HTMLDivElement>(null);
   // Until the first measurement lands, the indicator must not animate - otherwise it

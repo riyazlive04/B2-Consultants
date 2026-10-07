@@ -17,6 +17,7 @@ import { SignalBadge } from "@/components/ui/SignalBadge";
 import { SprintTracker } from "./SprintTracker";
 import { signalForStudent } from "@/lib/signals";
 import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
+import { safeAction } from "@/lib/action-guard";
 import {
   LEAD_SOURCE_LABELS, MILESTONE_LABELS, optionsFrom, OUTCOME_ACHIEVED_LABELS,
   PROGRAM_LEVEL_LABELS, SIGNAL_LABELS, STUDENT_STATUS_LABELS, TASK_COMPLETION_LABELS,
@@ -154,7 +155,7 @@ function JobApplications({
                     options={JOB_APP_STATUS_OPTIONS}
                     onChange={async (ev) => {
                       onError(null);
-                      const res = await updateJobApplicationStatus(a.id, ev.target.value);
+                      const res = await safeAction(() => updateJobApplicationStatus(a.id, ev.target.value));
                       if (!res.ok) onError(res.error);
                       else toast("Application updated");
                     }}
@@ -176,7 +177,7 @@ function JobApplications({
                       });
                       if (!ok) return;
                       onError(null);
-                      const res = await deleteJobApplication(a.id);
+                      const res = await safeAction(() => deleteJobApplication(a.id));
                       if (!res.ok) onError(res.error);
                     }}
                   >
@@ -193,7 +194,7 @@ function JobApplications({
         <form
           action={async (form) => {
             onError(null);
-            const res = await createJobApplication(enrollmentId, form);
+            const res = await safeAction(() => createJobApplication(enrollmentId, form));
             if (!res.ok) return onError(res.error);
             setAdding(false);
             toast("Application added");
@@ -282,7 +283,7 @@ export function StudentDetailClient({
           <form
             action={async (form) => {
               setError(null);
-              const res = await updateStudent(student.id, form);
+              const res = await safeAction(() => updateStudent(student.id, form));
               if (!res.ok) return setError(res.error);
               setEditingProfile(false);
             }}
@@ -343,7 +344,7 @@ export function StudentDetailClient({
                     setError(null);
                     const fd = new FormData();
                     fd.set("status", next);
-                    const res = await setEnrollmentStatus(e.id, fd);
+                    const res = await safeAction(() => setEnrollmentStatus(e.id, fd));
                     if (!res.ok) {
                       setError(res.error);
                     } else {
@@ -372,7 +373,7 @@ export function StudentDetailClient({
                   aria-label="Deal closer"
                   onChange={async (ev) => {
                     setError(null);
-                    const res = await setEnrollmentCloser(e.id, ev.target.value);
+                    const res = await safeAction(() => setEnrollmentCloser(e.id, ev.target.value));
                     if (!res.ok) setError(res.error);
                     else toast("Closer updated - commission split recalculated");
                   }}
@@ -417,7 +418,7 @@ export function StudentDetailClient({
             <form
               action={async (form) => {
                 setError(null);
-                const res = await updateTracker(e.id, form);
+                const res = await safeAction(() => updateTracker(e.id, form));
                 if (!res.ok) return setError(res.error);
                 const nextMilestone = String(form.get("currentMilestone") ?? "");
                 if (
@@ -542,7 +543,7 @@ export function StudentDetailClient({
                   });
                   if (!ok) return;
                   setError(null);
-                  const res = await revokeStudentLogin(student.id);
+                  const res = await safeAction(() => revokeStudentLogin(student.id));
                   if (!res.ok) return setError(res.error);
                   toast("Portal access revoked");
                 }}
@@ -554,7 +555,7 @@ export function StudentDetailClient({
             <form
               action={async (form) => {
                 setError(null);
-                const res = await createStudentLogin(student.id, form);
+                const res = await safeAction(() => createStudentLogin(student.id, form));
                 if (!res.ok) return setError(res.error);
                 toast("Portal login created - share the password securely");
               }}
@@ -586,7 +587,7 @@ export function StudentDetailClient({
             <form
               action={async (form) => {
                 setError(null);
-                const res = await addEnrollment(student.id, form);
+                const res = await safeAction(() => addEnrollment(student.id, form));
                 if (!res.ok) return setError(res.error);
                 setAddingEnrollment(false);
               }}
@@ -627,7 +628,7 @@ export function StudentDetailClient({
           <form
             action={async (form) => {
               setError(null);
-              const res = await addSatisfactionScore(student.id, form);
+              const res = await safeAction(() => addSatisfactionScore(student.id, form));
               if (!res.ok) setError(res.error);
             }}
             className="mt-4 grid grid-cols-1 gap-4 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-4"
@@ -670,7 +671,7 @@ export function StudentDetailClient({
               if (!incomeId) return;
               const fd = new FormData();
               fd.set("studentId", student.id);
-              const res = await linkIncomeToStudent(incomeId, fd);
+              const res = await safeAction(() => linkIncomeToStudent(incomeId, fd));
               if (!res.ok) setError(res.error);
             }}
             className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4"

@@ -15,6 +15,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { DateText } from "@/components/ui/DateText";
 import { createContact, bulkAddTag } from "@/server/contacts-actions";
 import { ContactsFilterBar } from "./ContactsFilterBar";
+import { safeAction } from "@/lib/action-guard";
 
 const SOURCE_OPTS = [
   { value: "INSTAGRAM", label: "Instagram" }, { value: "YOUTUBE", label: "YouTube" },
@@ -134,13 +135,13 @@ export default function ContactsTable({ page, filters }: { page: ContactsListRes
 
   async function addContact(fd: FormData) {
     setAddError(null);
-    const res = await createContact(fd);
+    const res = await safeAction(() => createContact(fd));
     if (!res.ok) return setAddError(res.error);
     toast("Contact added"); setAddOpen(false); addForm.current?.reset();
   }
   async function applyBulkTag() {
     const name = bulkTag.trim(); if (!name) return;
-    const res = await bulkAddTag([...selected], name);
+    const res = await safeAction(() => bulkAddTag([...selected], name));
     if (!res.ok) return toast(res.error, "error");
     toast(`Tagged ${selected.size} contact${selected.size === 1 ? "" : "s"} "${name}"`);
     setSelected(new Set()); setBulkTag("");

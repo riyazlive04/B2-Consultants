@@ -12,6 +12,7 @@ import { Btn } from "@/components/ui/controls";
 import { FormError, SubmitButton, TextInput } from "@/components/ui/form";
 import { formatDate, formatMonth } from "@/lib/format";
 import { LOG_FIELD_SHORT } from "@/lib/labels";
+import { safeAction } from "@/lib/action-guard";
 
 /** Admin daily-log board: today's roster (live 7PM badge), the team activity feed, and rollups. */
 export function LogsBoard({
@@ -73,7 +74,7 @@ export function LogsBoard({
           <form
             action={async (form) => {
               setError(null);
-              const res = await addLogCorrection(correcting.id, form);
+              const res = await safeAction(() => addLogCorrection(correcting.id, form));
               if (!res.ok) return setError(res.error);
               setCorrecting(null);
               router.refresh();

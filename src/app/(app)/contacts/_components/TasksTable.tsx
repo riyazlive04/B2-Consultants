@@ -11,6 +11,7 @@ import { EmptyState, Pill } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { DateText } from "@/components/ui/DateText";
 import { createTask, toggleTask, deleteTask } from "@/server/contacts-actions";
+import { safeAction } from "@/lib/action-guard";
 
 type Row = {
   id: string;
@@ -34,7 +35,7 @@ export default function TasksTable({ rows, owners }: { rows: Row[]; owners: { id
 
   async function submit(fd: FormData) {
     setError(null);
-    const res = await createTask(fd);
+    const res = await safeAction(() => createTask(fd));
     if (!res.ok) return setError(res.error);
     toast("Task created");
     setOpen(false);
@@ -42,14 +43,14 @@ export default function TasksTable({ rows, owners }: { rows: Row[]; owners: { id
   }
 
   async function complete(r: Row) {
-    const res = await toggleTask(r.id);
+    const res = await safeAction(() => toggleTask(r.id));
     if (res.ok) toast(r.status === "OPEN" ? "Task completed" : "Task reopened");
   }
 
   async function remove(r: Row) {
     const ok = await askConfirm({ title: "Delete task?", body: r.title, danger: true });
     if (!ok) return;
-    const res = await deleteTask(r.id);
+    const res = await safeAction(() => deleteTask(r.id));
     if (res.ok) toast("Task deleted");
   }
 

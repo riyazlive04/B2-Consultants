@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
-import { parseDateInput } from "@/lib/dates";
+import { istToday, parseDateInput } from "@/lib/dates";
 import { formatDate, formatInrMinor } from "@/lib/format";
 import { instalmentDueDates, instalmentExtraFor, splitInstalments } from "@/lib/instalment-plan";
 import { logActivity, diffFields } from "./activity-log";
 import { getInstalmentPlanConfig } from "./founder-config";
+import { syncInstalmentIncome } from "./finance-autopost";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -60,6 +61,19 @@ export async function generateInstalmentPlan(pendingPaymentId: string, form: For
     inr: pp.totalFeeInrMinor + extra.inr,
     eur: pp.totalFeeEurMinor + extra.eur,
   };
+  /**
+   * ── A plan has to be for something (issue 8) ──────────────────────────────────
+   * A receivable with a fee of 0 generated a schedule anyway, built entirely out of the
+   * Console's plan surcharge: six instalments billing the student ₹100 each for the privilege
+   * of paying nothing in instalments. The fee is checked rather than the total for exactly that
+   * reason - the surcharge is not what is being collected.
+   */
+  if (pp.totalFeeInrMinor <= BigInt(0) && pp.totalFeeEurMinor <= BigInt(0)) {
+    return {
+      ok: false,
+      error: "This receivable has no fee on it yet. Set the total fee first, then split it into instalments.",
+    };
+  }
   const amounts = splitInstalments(total, count);
   const start = parseDateInput(firstDueDate);
   const dueDates = instalmentDueDates(start, count, intervalDays);
@@ -146,15 +160,49 @@ export async function setInstalmentStatus(id: string, status: string): Promise<A
       seq: true,
       status: true,
       amountInrMinor: true,
-      pendingPayment: { select: { studentName: true } },
+      amountEurMinor: true,
+      fxRateUsed: true,
+      pendingPayment: {
+        select: { studentName: true, studentId: true, programLevel: true },
+      },
     },
   });
   if (!inst) return { ok: false, error: "Instalment not found" };
 
+  const paidDate = parsed.data === "PAID" ? istToday() : null;
   await prisma.instalment.update({
     where: { id },
-    data: { status: parsed.data, paidDate: parsed.data === "PAID" ? new Date() : null },
+    data: { status: parsed.data, paidDate },
   });
+
+  /**
+   * ── Marking an instalment paid now moves the MONEY too ──────────────────────────
+   * It used to move only the ladder: the status changed, "next due" advanced, and the balance
+   * stayed exactly where it was - because the balance is computed from Income rows and nothing
+   * wrote one. The receivable then insisted the student still owed money its own schedule said
+   * they had paid.
+   *
+   * The mirror is keyed on the instalment, so un-marking it voids the entry and removes the row.
+   * Best-effort by design (see syncInstalmentIncome): the status the operator just set is never
+   * rolled back over a posting hiccup.
+   */
+  await syncInstalmentIncome(
+    session.user.id,
+    parsed.data === "PAID"
+      ? {
+          id,
+          amountInrMinor: inst.amountInrMinor,
+          amountEurMinor: inst.amountEurMinor,
+          fxRateUsed: inst.fxRateUsed,
+          paidDate: paidDate ?? istToday(),
+          programLevel: inst.pendingPayment.programLevel,
+          studentName: inst.pendingPayment.studentName,
+          studentId: inst.pendingPayment.studentId,
+          pendingPaymentId: inst.pendingPaymentId,
+        }
+      : null,
+    id,
+  );
 
   // Advance the receivable's headline next-due to the earliest still-unpaid instalment.
   const nextDue = await prisma.instalment.findFirst({
@@ -180,6 +228,8 @@ export async function setInstalmentStatus(id: string, status: string): Promise<A
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
+  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -189,6 +239,21 @@ export async function clearInstalmentPlan(pendingPaymentId: string): Promise<Act
     where: { id: pendingPaymentId },
     select: { studentName: true },
   });
+  /**
+   * The instalments that were marked paid each left an auto-posted Income row behind them
+   * (syncInstalmentIncome). Deleting the schedule without reversing those would strand them:
+   * keyed on an instalment id that no longer exists, there would be no way left to undo them,
+   * and the plan's collected figure would stay inflated by money whose record had been deleted.
+   *
+   * Read first, reverse, then delete - so a failure part-way leaves instalments to try again
+   * from rather than incomes with nothing pointing at them.
+   */
+  const paidRows = await prisma.instalment.findMany({
+    where: { pendingPaymentId, status: "PAID" },
+    select: { id: true },
+  });
+  for (const row of paidRows) await syncInstalmentIncome(session.user.id, null, row.id);
+
   const { count } = await prisma.instalment.deleteMany({ where: { pendingPaymentId } });
 
   // deleteMany reports success on an empty schedule - only log a plan that actually existed.
@@ -199,10 +264,12 @@ export async function clearInstalmentPlan(pendingPaymentId: string): Promise<Act
       entityType: "PendingPayment",
       entityId: pendingPaymentId,
       summary: `Cleared the ${count}-instalment plan for ${pp.studentName}`,
-      meta: { count },
+      meta: { count, autoPostedIncomesReversed: paidRows.length },
     });
   }
 
   revalidatePath("/finance");
+  revalidatePath("/cash");
+  revalidatePath("/ledger");
   return { ok: true };
 }

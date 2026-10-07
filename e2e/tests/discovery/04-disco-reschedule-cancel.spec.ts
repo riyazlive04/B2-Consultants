@@ -1,6 +1,6 @@
 /**
  * SOP: "Reschedule the call" (back to "Start discovery call") and "Cancel the Discovery call",
- * as the specialist does them on /bookings (Postpone, Status -> Cancelled), and what that does to the
+ * as the specialist does them on /bookings (Reschedule, Outcome -> Cancelled), and what that does to the
  * reminders the engine armed for the ORIGINAL time.
  *
  * Local driver only: seeded booking + journey, runCron("outreach"), DB time travel.
@@ -10,7 +10,7 @@
 import { test, expect } from "@playwright/test";
 import { authFile } from "../../helpers/roles";
 import { HAS_DB } from "../../helpers/target";
-import { bookingsRow, pickOption } from "../../helpers/discovery-ui";
+import { rescheduleToSlot, setBookingOutcome } from "../../helpers/discovery-ui";
 import {
   seedDiscoveryCall, seedDiscoSlot, seedBooking, atMinutesFromNow, leadRow, bookingRow, slotRow, stepMap, journeyRow, stageHistory,
   ensureOutreachEngineEnabledLocal, runOutreachCron, timeTravelJourney, closeDiscoveryDb, H, M,
@@ -28,12 +28,9 @@ const hm = (d: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolka
 
 async function postpone(page: import("@playwright/test").Page, name: string, to: Date) {
   await page.goto("/bookings");
-  const row = await bookingsRow(page, name);
-  await row.getByRole("button", { name: /Postpone/ }).click();
-  const dlg = page.getByRole("dialog").filter({ hasText: "Postpone call" });
-  await pickOption(page, dlg.getByRole("button", { name: /Pick an open slot/ }), new RegExp(`${hm(to)}\\s*(am|pm) IST.*Asma`, "i"));
-  await dlg.getByRole("button", { name: "Postpone call" }).click();
-  await expect(dlg).toBeHidden({ timeout: 30_000 });
+  // One call site for the whole move now: the row's Reschedule button, the "Move to" list,
+  // and "Move call" - see rescheduleToSlot.
+  await rescheduleToSlot(page, name, new RegExp(`${hm(to)}\\s*(am|pm) IST.*Asma`, "i"));
 }
 
 test("reschedule: old slot freed, new slot booked, confirmation reminders re-armed for the new time", async ({ page, request }) => {
@@ -72,10 +69,10 @@ test("cancel then rebook: stage walks back, stale reminders are withdrawn, the n
   await runOutreachCron(request);
   expect((await stepMap(call.journeyId!)).DISCO_CONFIRM_1?.status).toBe("DUE");
 
-  // Specialist cancels the call from Bookings.
+  // Specialist cancels the call from Bookings - the outcome lives in the booking's own dialog now,
+  // and a slot-freeing outcome asks before it lets the slot go.
   await page.goto("/bookings");
-  const row = await bookingsRow(page, call.lead.name);
-  await pickOption(page, row.getByRole("button", { name: "Booking status" }), "Cancelled");
+  await setBookingOutcome(page, call.lead.name, "Cancelled");
   await expect.poll(async () => (await bookingRow(call.bookingId)).status, { timeout: 20_000 }).toBe("CANCELLED");
   expect((await slotRow(call.slotId)).status, "cancel frees the slot").toBe("OPEN");
 

@@ -8,6 +8,7 @@ import { Field, TextInput, TextArea, Select, SubmitButton, FormError } from "@/c
 import { toast, askConfirm } from "@/components/ui/feedback";
 import { EmptyState, Pill, TableShell, Td, Th, Tr } from "@/components/ui/kit";
 import { createTemplate, updateTemplate, deleteTemplate } from "@/server/messaging-actions";
+import { safeAction } from "@/lib/action-guard";
 
 type Template = { id: string; channel: "EMAIL" | "SMS"; name: string; subject: string | null; body: string };
 
@@ -22,14 +23,16 @@ export default function TemplatesPanel({ templates }: { templates: Template[] })
 
   async function submit(fd: FormData) {
     setError(null);
-    const res = editing ? await updateTemplate(editing.id, fd) : await createTemplate(fd);
+    const res = await safeAction(() =>
+      editing ? updateTemplate(editing.id, fd) : createTemplate(fd),
+    );
     if (!res.ok) return setError(res.error);
     toast(editing ? "Template updated" : "Template created");
     setOpen(false);
   }
   async function remove(t: Template) {
     if (!(await askConfirm({ title: `Delete "${t.name}"?`, danger: true }))) return;
-    const res = await deleteTemplate(t.id);
+    const res = await safeAction(() => deleteTemplate(t.id));
     if (res.ok) toast("Template deleted");
   }
 

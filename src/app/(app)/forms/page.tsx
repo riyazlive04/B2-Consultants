@@ -4,6 +4,10 @@ import { ListHeader } from "@/components/ui/ListHeader";
 import { getFormsList } from "@/server/forms-metrics";
 import FormsList from "./_components/FormsList";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Forms" };
+
 export const dynamic = "force-dynamic";
 
 export default async function FormsPage() {

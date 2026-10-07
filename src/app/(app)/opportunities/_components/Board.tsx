@@ -32,6 +32,7 @@ import { SpeedToLeadReport } from "./SpeedToLeadReport";
 import { DialButton } from "@/components/calls/DialButton";
 import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
 import { firstCallVerdict, firstCallLabel, type FirstCallState } from "@/lib/speed-to-lead";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Band score at or above which a booked prospect reads green, on the 0-4 scale.
@@ -281,7 +282,7 @@ export default function Board({
     const prev = stages;
     const optimistic = moveCardLocally(id, toStageId, toIndex);
     if (optimistic) setStages(optimistic);
-    const res = await moveOpportunity(id, toStageId, toIndex);
+    const res = await safeAction(() => moveOpportunity(id, toStageId, toIndex));
     if (!res.ok) {
       setStages(prev);
       toast(res.error, "error");
@@ -300,7 +301,7 @@ export default function Board({
     if (board.activePipelineId) fd.set("pipelineId", board.activePipelineId);
     if (addMode === "existing") { fd.delete("newName"); fd.delete("newPhone"); }
     else fd.delete("leadId");
-    const res = await createOpportunity(fd);
+    const res = await safeAction(() => createOpportunity(fd));
     if (!res.ok) return setAddError(res.error);
     toast("Opportunity created");
     setAddOpen(false);
@@ -316,7 +317,7 @@ export default function Board({
     } else {
       fd.delete("stageId");
     }
-    const res = await updateOpportunity(editCard.id, fd);
+    const res = await safeAction(() => updateOpportunity(editCard.id, fd));
     if (!res.ok) {
       if (rollback) setStages(rollback);
       return setEditError(res.error);
@@ -336,7 +337,7 @@ export default function Board({
       danger: true,
     });
     if (!ok) return;
-    const res = await deleteOpportunity(editCard.id);
+    const res = await safeAction(() => deleteOpportunity(editCard.id));
     if (res.ok) { toast("Opportunity and lead archived"); setEditCard(null); }
     else toast(res.error, "error");
   }
@@ -359,7 +360,7 @@ export default function Board({
           <Modal open={createFirstOpen} onClose={() => setCreateFirstOpen(false)} title="Create pipeline" size="sm">
             <form
               action={async (fd) => {
-                const r = await createPipeline(fd);
+                const r = await safeAction(() => createPipeline(fd));
                 if (r.ok) { toast("Pipeline created"); setCreateFirstOpen(false); router.refresh(); }
                 else toast(r.error, "error");
               }}
@@ -917,7 +918,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
     const next = [...order];
     [next[idx], next[swapWith]] = [next[swapWith], next[idx]];
     setOrder(next);
-    const r = await reorderStages(board.activePipelineId!, next);
+    const r = await safeAction(() => reorderStages(board.activePipelineId!, next));
     if (!r.ok) { setOrder(prev); toast(r.error, "error"); }
     else router.refresh();
   }
@@ -965,7 +966,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
                       aria-label={`Lead lifecycle stage for ${s.name}`}
                       options={activeIsDefault ? LIFECYCLE_OPTS_REQUIRED : LIFECYCLE_OPTS}
                       onChange={async (e) => {
-                        const r = await setStageLegacyStage(id, e.target.value, s.paymentPlan);
+                        const r = await safeAction(() => setStageLegacyStage(id, e.target.value, s.paymentPlan));
                         if (r.ok) {
                           toast(e.target.value ? `Mapped to "${LEAD_STAGE_LABELS[e.target.value] ?? e.target.value}"` : "Sync cleared");
                           router.refresh();
@@ -982,7 +983,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
                         aria-label={`Payment plan for ${s.name}`}
                         options={PLAN_OPTS}
                         onChange={async (e) => {
-                          const r = await setStageLegacyStage(id, s.legacyStage, e.target.value);
+                          const r = await safeAction(() => setStageLegacyStage(id, s.legacyStage, e.target.value));
                           if (r.ok) { toast("Payment plan set"); router.refresh(); }
                           else toast(r.error, "error");
                         }}
@@ -1008,7 +1009,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
                 icon={<Plus size={15} />}
                 onClick={async () => {
                   if (!newStage.trim()) return;
-                  const r = await addStage(board.activePipelineId!, newStage, newStageLegacy);
+                  const r = await safeAction(() => addStage(board.activePipelineId!, newStage, newStageLegacy));
                   if (r.ok) { toast("Stage added"); setNewStage(""); setNewStageLegacy(""); router.refresh(); }
                   else toast(r.error, "error");
                 }}
@@ -1036,7 +1037,7 @@ function ManageBoard({ board, open, onClose }: { board: BoardData; open: boolean
                     title: "Restore the Synamate columns?",
                     body: `The board goes back to the ${SYNAMATE_STAGES.length} standard columns and every card is re-filed into the column its contact's stage belongs to. Columns you added are removed once they're empty; nothing is deleted with cards still in it.`,
                   }))) return;
-                  const r = await restoreSynamateStages(board.activePipelineId!);
+                  const r = await safeAction(() => restoreSynamateStages(board.activePipelineId!));
                   if (r.ok) { toast("Synamate columns restored"); router.refresh(); }
                   else toast(r.error, "error");
                 }}
@@ -1100,7 +1101,7 @@ function OpportunityNotesPanel({ opportunityId }: { opportunityId: string }) {
 
   async function add(fd: FormData) {
     setAddError(null);
-    const res = await createOpportunityNote(opportunityId, fd);
+    const res = await safeAction(() => createOpportunityNote(opportunityId, fd));
     if (!res.ok) return setAddError(res.error);
     toast(res.mentionedCount ? `Note added - mentioned ${res.mentionedCount}` : "Note added");
     formRef.current?.reset();
@@ -1108,7 +1109,7 @@ function OpportunityNotesPanel({ opportunityId }: { opportunityId: string }) {
   }
 
   async function togglePin(note: OpportunityNote) {
-    const res = await toggleOpportunityNotePin(note.id);
+    const res = await safeAction(() => toggleOpportunityNotePin(note.id));
     if (!res.ok) return toast(res.error, "error");
     toast(note.pinned ? "Unpinned" : "Pinned");
     setNotes((prev) => prev?.map((n) => (n.id === note.id ? { ...n, pinned: !n.pinned } : n)) ?? prev);
@@ -1116,7 +1117,7 @@ function OpportunityNotesPanel({ opportunityId }: { opportunityId: string }) {
 
   async function remove(id: string) {
     if (!(await askConfirm({ title: "Delete note?", danger: true }))) return;
-    const res = await deleteOpportunityNote(id);
+    const res = await safeAction(() => deleteOpportunityNote(id));
     if (!res.ok) return toast(res.error, "error");
     toast("Note deleted");
     setNotes((prev) => prev?.filter((n) => n.id !== id) ?? prev);

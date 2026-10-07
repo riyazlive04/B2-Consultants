@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The app leaves JSX to Next ("preserve"); a plain node script has no such compiler after it,
+    // so esbuild falls back to classic React.createElement and the document modules - which never
+    // import React - blow up with "React is not defined". The automatic runtime fixes that without
+    // touching a single document file.
+    "jsx": "react-jsx"
+  }
+}

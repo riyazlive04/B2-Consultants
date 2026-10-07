@@ -4,6 +4,10 @@ import { requireSection } from "@/lib/rbac";
 import { getTeamGame } from "@/server/gamification";
 import { ArenaClient } from "./_components/ArenaClient";
 
+/** Its own name in the browser tab, rather than sharing one title with every other page
+ *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
+export const metadata = { title: "Arena" };
+
 export const dynamic = "force-dynamic";
 
 /**

@@ -13,6 +13,7 @@ import { Btn, IconButton } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { formatDate } from "@/lib/format";
 import { LOG_VARIANT_LABELS, optionsFrom, TEAM_STATUS_LABELS } from "@/lib/labels";
+import { safeAction } from "@/lib/action-guard";
 
 const ROLE_OPTIONS = [
   { value: "ADMIN", label: "Admin" },
@@ -42,21 +43,21 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
 
   async function openOffboarding(m: MemberRow) {
     setLoadingReport(m.id);
-    const res = await loadTerminationReport(m.id);
+    const res = await safeAction(() => loadTerminationReport(m.id));
     setLoadingReport(null);
     if (!res.ok) return toast(res.error, "error");
     setOffboarding(res.report);
   }
 
   async function bringBack(m: MemberRow) {
-    const res = await reinstateTeamMember(m.id);
+    const res = await safeAction(() => reinstateTeamMember(m.id));
     if (!res.ok) return toast(res.error, "error");
     toast(`${m.fullName} is back on the team`);
   }
 
   const submit = async (form: FormData) => {
     setError(null);
-    const res = await saveTeamProfile(editing?.id ?? null, form);
+    const res = await safeAction(() => saveTeamProfile(editing?.id ?? null, form));
     if (!res.ok) return setError(res.error);
     toast(editing ? "Profile saved" : "Team member created");
     setEditing(null);

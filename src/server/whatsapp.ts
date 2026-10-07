@@ -419,7 +419,21 @@ export async function getLastWhatsAppByTarget(
   return map;
 }
 
-export type WhatsAppStatusCell = { status: WhatsAppStatus; kind: WhatsAppKind; at: string };
+export type WhatsAppStatusCell = {
+  status: WhatsAppStatus;
+  kind: WhatsAppKind;
+  /** When the last ATTEMPT was made, whatever became of it. */
+  at: string;
+  /**
+   * When a message last actually went out, or null if none ever has (issue 5).
+   *
+   * `at` above is the last attempt of any kind, and handing it to a control whose label reads
+   * "Sent · just now" is why a row could show the badge "Skipped" and the words "Sent just now"
+   * side by side - one describing the outcome, the other merely the timestamp. The resend guard
+   * wants this field; the badge wants `status`.
+   */
+  sentAt: string | null;
+};
 
 /** Serializable version of getLastWhatsAppByTarget - safe to pass from a server page to a client table. */
 export async function getWhatsAppStatusMap(
@@ -428,7 +442,15 @@ export async function getWhatsAppStatusMap(
 ): Promise<Record<string, WhatsAppStatusCell>> {
   const m = await getLastWhatsAppByTarget(field, ids);
   const out: Record<string, WhatsAppStatusCell> = {};
-  for (const [id, v] of m) out[id] = { status: v.status, kind: v.kind, at: v.createdAt.toISOString() };
+  for (const [id, v] of m) {
+    out[id] = {
+      status: v.status,
+      kind: v.kind,
+      at: v.createdAt.toISOString(),
+      // SENT and DELIVERED both mean it left the building. SKIPPED and FAILED never did.
+      sentAt: v.status === "SENT" || v.status === "DELIVERED" ? v.createdAt.toISOString() : null,
+    };
+  }
   return out;
 }
 

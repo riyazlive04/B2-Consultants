@@ -10,6 +10,7 @@ import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { BrandLogo } from "@/components/shell/BrandLogo";
 import { fieldKindProps } from "@/components/ui/field-base";
 import { submitAccessRequest } from "@/server/access-requests";
+import { safeAction } from "@/lib/action-guard";
 
 /**
  * Auth screen from the design file: brand panel on the sky gradient, form pane
@@ -158,7 +159,7 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
     const trimmed = passwordWasTrimmed(password);
 
     if (mode === "signup") {
-      const res = await submitAccessRequest({ name, email: cleanEmail, role: reqRole, note });
+      const res = await safeAction(() => submitAccessRequest({ name, email: cleanEmail, role: reqRole, note }));
       setBusy(false);
       if (!res.ok) return setError(res.error);
       setMode("login");

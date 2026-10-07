@@ -120,9 +120,13 @@ export default async function Home({
   const inrOnly = (inr: number) => ({ inr, eur: Number(fx.rate) > 0 ? inr / Number(fx.rate) : 0 });
 
   // Overdue receivables - money already earned that hasn't arrived (Admin only).
-  const overdueRows = (pendingRows ?? []).filter(
-    (p) => p.status === "ACTIVE" && p.overdue && p.balance.inr > 0,
-  );
+  /**
+   * `p.overdue` already means "still owed, and past its due date" (see getPendingRows), so
+   * requiring the status to be ACTIVE on top of it only ever EXCLUDED rows - the ones escalated
+   * to the OVERDUE status, i.e. the most overdue receivables there are, dropped out of the alert
+   * that exists to raise them. Same inversion the overdue flag itself used to have.
+   */
+  const overdueRows = (pendingRows ?? []).filter((p) => p.overdue && p.balance.inr > 0);
   // Both aggregates: this card follows the ₹/€ toggle, and every receivable already carries
   // its EUR figure from its own stamped rate - so nothing is converted at read time.
   const overdue = overdueRows.reduce(

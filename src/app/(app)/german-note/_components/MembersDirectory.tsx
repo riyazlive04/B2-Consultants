@@ -6,6 +6,7 @@ import { loadGnMemberProfile } from "@/server/german-note-actions";
 import type { GnMemberProfile, GnMemberRow } from "@/server/german-note-metrics";
 import { Modal } from "@/components/ui/Modal";
 import { formatDate } from "@/lib/format";
+import { safeAction } from "@/lib/action-guard";
 
 function roleChip(role: string) {
   if (role === "TUTOR") return { label: "Tutor", fg: "var(--ink)", bg: "color-mix(in srgb, var(--lvl-gn) 14%, transparent)" };
@@ -49,7 +50,7 @@ export function MembersDirectory({ members }: { members: GnMemberRow[] }) {
     setOpenId(userId);
     setProfile(null);
     setLoading(true);
-    const res = await loadGnMemberProfile(userId);
+    const res = await safeAction(() => loadGnMemberProfile(userId));
     setLoading(false);
     if (res.ok) setProfile(res.profile);
   };

@@ -1,108 +1,75 @@
 "use client";
 
-import { useState } from "react";
-import { CalendarClock, Check, CircleCheck, History } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CalendarClock, ChevronRight } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/DataTable";
-import { SendWhatsAppButton } from "@/components/ui/SendWhatsAppButton";
-import { WhatsAppStatusBadge } from "@/components/ui/WhatsAppStatusBadge";
-import { Modal } from "@/components/ui/Modal";
-import { toast } from "@/components/ui/feedback";
+import { BantChip, BantDimensions } from "@/components/ui/BantChip";
+import { IconButton, SegmentedControl } from "@/components/ui/controls";
 import { Select } from "@/components/ui/form";
-import { setBookingStatus, setBookingConfirmed, rescheduleBooking } from "@/server/booking-actions";
-import { sendBookingConfirmationMsg, sendBookingReminderMsg } from "@/server/whatsapp-actions";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
-import { BANT_VERDICT_LABELS, BOOKING_STATUS_LABELS, SLOT_RELEASE_REASON_LABELS } from "@/lib/labels";
-import { BANT_ORIGIN_LABELS } from "@/lib/bant-view";
-import { formatDate } from "@/lib/format";
+import { BANT_VERDICT_LABELS, BOOKING_STATUS_LABELS } from "@/lib/labels";
 import type { BookingRow, OpenSlotOption, TeamMemberOption } from "@/server/booking-metrics";
+import { BookingDetail } from "./BookingDetail";
+import { RescheduleDialog } from "./RescheduleDialog";
+import { CallTime, ConfirmPill, HistoryChip, StatusPill, VerdictPill } from "./booking-view";
 
-const STATUS_OPTIONS = ["BOOKED", "COMPLETED", "NO_SHOW", "CANCELLED"] as const;
+/**
+ * Booking requests, as a list that works on a phone.
+ *
+ * ── What was wrong with the table this replaces ───────────────────────────────────
+ * Fourteen columns, four of them holding controls. On a laptop it scrolled sideways, and what
+ * scrolled off first was the right-hand edge where the actions lived. On a phone the shared
+ * table fell back to its generic key-value dump - fourteen labelled rows per booking, with a
+ * `<select>`, a chip and three links crushed into the right-hand column at `text-xs`, none of
+ * them near the 40px hit-target floor (§7). And the meaning was carried almost entirely by
+ * `title` attributes: the BANT letters, the "we have met them before" history and the WhatsApp
+ * state each said what they meant on hover only - which is to say never, on the device most of
+ * this team works from. Two columns had no header at all, so their cells were announced as
+ * nothing.
+ *
+ * ── The shape now ─────────────────────────────────────────────────────────────────
+ * Columns that fit, holding what you scan: who, when, who with, how qualified, where it stands.
+ * Everything else - the intake answers, the full history, the messaging state, and every action
+ * that CHANGES something - moved into `BookingDetail`, one tap away, where the dialog's title
+ * supplies the context that twenty identically-named row controls never could. The phone gets a
+ * card of its own rather than the generic dump, with two real buttons.
+ *
+ * Quick filters sit above it because the first question here is not "show me everything", it is
+ * "who do I have to confirm today".
+ */
 
-const VERDICT_STYLE: Record<string, string> = {
-  CONFIRM: "bg-ok-soft text-ok",
-  DOUBT: "bg-watch-soft text-watch",
-  CANCEL: "bg-risk-soft text-risk",
+type QuickFilter = "all" | "upcoming" | "unconfirmed" | "done" | "lost";
+
+const FILTER_LABELS: Record<QuickFilter, string> = {
+  all: "All",
+  upcoming: "Upcoming",
+  unconfirmed: "To confirm",
+  done: "Completed",
+  lost: "Cancelled & no-shows",
 };
 
 /**
- * Reads the ONE resolved snapshot, not the raw columns.
- *
- * This used to render `bantAvg ?? bantScore` straight off the BookingRequest, so a prospect who
- * answered the qualification questions on the landing page but not on the booking form appeared
- * unscored here while My Desk showed their score. `resolveBant` (applied server-side) answers
- * "which stored score do I show" once, for every surface.
+ * "Upcoming" is decided by the SLOT, not by the status: a BOOKED row whose time has passed with
+ * no outcome recorded is not something anyone is waiting for, and filing it under today's work is
+ * how a stale row gets chased instead of closed.
  */
-/**
- * The whole history as hover text, since the chip itself only has room for the headline.
- *
- * The addresses matter most and are listed first. "We were writing to old@college.edu" is the
- * single most actionable thing on this row: it is why that prospect never answered an email.
- */
-function historyTitle(h: NonNullable<BookingRow["history"]>): string {
-  const lines: string[] = [];
-  if (h.otherEmails.length > 0) {
-    lines.push(`Also used: ${h.otherEmails.join(", ")}`);
-  }
-  if (h.lastOutcome) {
-    lines.push(
-      `Last time: ${BOOKING_STATUS_LABELS[h.lastOutcome.status] ?? h.lastOutcome.status}` +
-        (h.lastOutcome.day ? ` on ${h.lastOutcome.day}` : ""),
-    );
-  }
-  if (h.previousCount > 0) {
-    lines.push(
-      `${h.previousCount} earlier booking${h.previousCount === 1 ? "" : "s"}: ` +
-        [
-          h.attended ? `${h.attended} attended` : "",
-          h.noShows ? `${h.noShows} no-show` : "",
-          h.cancelled ? `${h.cancelled} cancelled` : "",
-          h.upcoming ? `${h.upcoming} still upcoming` : "",
-        ].filter(Boolean).join(", "),
-    );
-  }
-  if (h.previousVerdict) lines.push(`Previous BANT verdict: ${h.previousVerdict}`);
-  return lines.join("\n");
+function isFuture(row: BookingRow): boolean {
+  return !!row.slotStartsAt && new Date(row.slotStartsAt).getTime() > Date.now();
 }
 
-function BantChips({ r }: { r: BookingRow }) {
-  // Null is "nobody has scored them", NOT zero. Rendering 0.0/4 would rank a prospect nobody
-  // asked alongside one who answered badly - see lib/bant-view.ts.
-  if (!r.bant) {
-    return (
-      <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-caption font-medium text-muted" title="Nobody has scored this prospect yet">
-        Not scored
-      </span>
-    );
+function matchesFilter(row: BookingRow, f: QuickFilter): boolean {
+  switch (f) {
+    case "upcoming":
+      return row.status === "BOOKED" && isFuture(row);
+    case "unconfirmed":
+      return row.status === "BOOKED" && isFuture(row) && !row.confirmed;
+    case "done":
+      return row.status === "COMPLETED";
+    case "lost":
+      return row.status === "CANCELLED" || row.status === "NO_SHOW";
+    default:
+      return true;
   }
-  const b = r.bant;
-  const dims: [string, boolean][] = [
-    ["B", b.budget], ["A", b.authority], ["N", b.need], ["T", b.timeline],
-  ];
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span
-        title={`Weighted average ${b.avg.toFixed(1)}/4 · ${BANT_ORIGIN_LABELS[b.origin]}`}
-        className={`tnum rounded-full px-1.5 py-0.5 text-caption font-semibold ${
-          b.avg > 3 ? "bg-ok-soft text-ok" : b.avg >= 2 ? "bg-watch-soft text-watch" : "bg-risk-soft text-risk"
-        }`}
-      >
-        {b.avg.toFixed(1)}/4
-      </span>
-      <span className="hidden gap-0.5 sm:inline-flex">
-        {dims.map(([k, on]) => (
-          <span
-            key={k}
-            title={k}
-            className={`grid h-4 w-4 place-items-center rounded text-caption font-bold ${
-              on ? "bg-accent text-on-accent" : "bg-surface-2 text-muted"
-            }`}
-          >
-            {k}
-          </span>
-        ))}
-      </span>
-    </span>
-  );
 }
 
 export function BookingsTable({
@@ -110,292 +77,266 @@ export function BookingsTable({
   waStatus = {},
   teamMembers = [],
   openSlots = [],
+  canExport = false,
 }: {
   rows: BookingRow[];
   waStatus?: Record<string, WhatsAppStatusCell>;
   teamMembers?: TeamMemberOption[];
   openSlots?: OpenSlotOption[];
+  /** §5.6: the CSV button is Admin-only. The page knows the role; this list does not. */
+  canExport?: boolean;
 }) {
   const [teamFilter, setTeamFilter] = useState("");
-  // The booking currently being postponed (drives the reschedule modal), + the chosen target slot.
-  const [postponeFor, setPostponeFor] = useState<BookingRow | null>(null);
-  const [targetSlot, setTargetSlot] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [quick, setQuick] = useState<QuickFilter>("all");
+  /**
+   * The record being READ, and the one being given a new time. Separate states, because the
+   * detail dialog hands over to the reschedule one and closes itself: two stacked dialogs trap
+   * focus in the wrong panel and leave the reader guessing what Escape will close.
+   */
+  const [detailFor, setDetailFor] = useState<BookingRow | null>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<BookingRow | null>(null);
 
-  const changeStatus = async (r: BookingRow, status: string) => {
-    if (status === r.status) return;
-    const res = await setBookingStatus(r.id, status);
-    if (!res.ok) return toast(res.error, "error");
-    toast(`Marked ${BOOKING_STATUS_LABELS[status]}`);
-  };
+  const counts = useMemo(() => {
+    const out: Record<QuickFilter, number> = { all: rows.length, upcoming: 0, unconfirmed: 0, done: 0, lost: 0 };
+    for (const r of rows) {
+      if (matchesFilter(r, "upcoming")) out.upcoming++;
+      if (matchesFilter(r, "unconfirmed")) out.unconfirmed++;
+      if (matchesFilter(r, "done")) out.done++;
+      if (matchesFilter(r, "lost")) out.lost++;
+    }
+    return out;
+  }, [rows]);
 
-  const toggleConfirm = async (r: BookingRow) => {
-    const res = await setBookingConfirmed(r.id, !r.confirmed);
-    if (!res.ok) return toast(res.error, "error");
-    toast(r.confirmed ? "Marked unconfirmed" : "Confirmed");
-  };
+  const visibleRows = useMemo(
+    () => rows.filter((r) => matchesFilter(r, quick) && (!teamFilter || r.assignedToId === teamFilter)),
+    [rows, quick, teamFilter],
+  );
 
-  const openPostpone = (r: BookingRow) => {
-    setTargetSlot("");
-    setPostponeFor(r);
-  };
+  /** What a screen reader hears before opening a row, instead of "Open this record" three hundred times. */
+  const rowLabel = (r: BookingRow) =>
+    `Open ${r.name}'s booking - ${BOOKING_STATUS_LABELS[r.status] ?? r.status}` +
+    (r.slotDay !== "-" ? `, ${r.slotDay} ${r.slotTime} IST` : "");
 
-  const submitPostpone = async () => {
-    if (!postponeFor || !targetSlot || busy) return;
-    setBusy(true);
-    const res = await rescheduleBooking(postponeFor.id, targetSlot);
-    setBusy(false);
-    if (!res.ok) return toast(res.error, "error");
-    toast("Call postponed - prospect notified");
-    setPostponeFor(null);
-  };
-
-  // Slots offered for a postpone: future OPEN slots of the SAME call length, so a 60-min strategy
-  // call is never dropped into a 30-min opening. Matches on duration when the booking has one.
-  const slotChoices = postponeFor
-    ? openSlots.filter((s) => !postponeFor.slotDurationMins || s.durationMins === postponeFor.slotDurationMins)
-    : [];
-
-  const visibleRows = teamFilter ? rows.filter((r) => r.assignedToId === teamFilter) : rows;
+  const actionLabel = (r: BookingRow) => (r.status === "BOOKED" ? "Reschedule" : "Re-book");
 
   const columns: Column<BookingRow>[] = [
     {
-      key: "name", header: "Prospect",
+      key: "name",
+      header: "Prospect",
       cell: (r) => (
-        <div className="min-w-0">
-          <div className="font-medium text-ink">{r.name}</div>
-          <div className="tnum text-xs text-muted">{r.phone}</div>
-          {/*
-            ── We have met this person before ──────────────────────────────────────
-            Only on a genuine repeat, so a first-time booking stays exactly as it was. Everything
-            here was already in the database and none of it was on screen: whoever was about to
-            dial a prospect who had booked twice and never turned up saw the same blank row as a
-            brand-new one, and opened with the same cold line.
-
-            Amber rather than red. A returning prospect is context to read before dialling, not a
-            problem - someone who no-showed once and came back is MORE interested than average,
-            not less.
-          */}
-          {r.history && (
-            <div
-              className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-watch-soft px-2 py-0.5 text-caption font-medium text-watch"
-              title={historyTitle(r.history)}
-            >
-              <History size={11} aria-hidden className="flex-none" />
-              <span className="truncate">{r.history.headline}</span>
-            </div>
-          )}
+        <div className="min-w-0 max-w-[13rem] space-y-1">
+          <p className="truncate font-medium text-ink" title={r.name}>
+            {r.name}
+          </p>
+          <p className="tnum text-caption text-muted">{r.phone}</p>
+          {r.history && <HistoryChip history={r.history} />}
         </div>
       ),
       // The history joins the filter/CSV value, so "no-show" finds everyone who has missed one.
-      value: (r) => [r.name, r.history?.headline ?? ""].filter(Boolean).join(" "),
+      value: (r) => [r.name, r.phone, r.jobTitle, r.history?.headline ?? ""].filter(Boolean).join(" "),
     },
     {
-      key: "slot", header: "Call time",
-      /**
-       * A booking that let its slot go shows the time it USED to have, struck through.
-       *
-       * Releasing a slot NULLS `slotId` - it has to, the column is unique and the slot must be
-       * re-bookable - so every cancelled row printed a bare "-" here. That is the column where the
-       * question "when was this call?" lives, and it was the one row where the answer mattered
-       * most. Struck through, not plain: the time is history, and it must not read as an
-       * appointment somebody still has.
-       */
-      cell: (r) =>
-        r.slotDay === "-" && r.released ? (
-          <div className="whitespace-nowrap">
-            <div className="text-muted line-through">
-              {r.released.day} <span className="tnum">· {r.released.time} IST</span>
-            </div>
-            <div className="text-xs text-muted">
-              {SLOT_RELEASE_REASON_LABELS[r.released.reason] ?? r.released.reason}
-              {r.released.promotedName ? ` · ${r.released.promotedName} moved in` : ""}
-            </div>
-          </div>
-        ) : (
-          <div className="whitespace-nowrap">
-            <div>{r.slotDay} {r.slotTime && <span className="tnum">· {r.slotTime} IST</span>}</div>
-            {r.slotCet && <div className="text-xs text-muted">{r.slotCet} CET</div>}
-          </div>
-        ),
+      key: "slot",
+      header: "Call time",
+      cell: (r) => <CallTime row={r} />,
       // Sorted and exported on whichever time the row actually has, so a cancelled call is not
       // dumped at one end of the sort for want of a value.
-      value: (r) =>
-        r.slotDay === "-" && r.released
-          ? `${r.released.day} ${r.released.time} (released)`
-          : `${r.slotDay} ${r.slotTime}`,
+      value: (r) => r.slotStartsAt ?? (r.released ? `${r.released.day} ${r.released.time} (released)` : ""),
     },
     {
-      key: "assigned", header: "Assigned to",
-      cell: (r) => <span className="whitespace-nowrap text-xs text-muted">{r.assignedToName ?? "-"}</span>,
+      key: "assigned",
+      header: "With",
+      cell: (r) => <span className="text-sm text-ink-2">{r.assignedToName ?? "-"}</span>,
       value: (r) => r.assignedToName ?? "",
     },
-    { key: "role", header: "Role", cell: (r) => r.jobTitle || "-", value: (r) => r.jobTitle },
-    { key: "when", header: "Wants to start", cell: (r) => r.whenStart, value: (r) => r.whenStart },
-    { key: "invest", header: "Budget", cell: (r) => r.readyToInvest, value: (r) => r.readyToInvest },
     {
-      key: "bant", header: "BANT",
-      cell: (r) => <BantChips r={r} />,
+      key: "bant",
+      header: "Qualification",
+      cell: (r) => (
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          <BantChip bant={r.bant} />
+          <BantDimensions bant={r.bant} />
+        </span>
+      ),
       // -1 for unscored, so a sort puts "not scored" below a genuine 0.0 rather than tying with
       // it. They are different facts and the ordering should say so.
       value: (r) => r.bant?.avg ?? -1,
     },
     {
-      key: "verdict", header: "Verdict",
-      cell: (r) =>
-        r.bant ? (
-          <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-caption font-semibold ${VERDICT_STYLE[r.bant.verdict]}`}>
-            {BANT_VERDICT_LABELS[r.bant.verdict]}
-          </span>
-        ) : (
-          <span className="text-xs text-muted">-</span>
-        ),
+      key: "verdict",
+      header: "Verdict",
+      cell: (r) => <VerdictPill row={r} />,
       value: (r) => (r.bant ? BANT_VERDICT_LABELS[r.bant.verdict] : ""),
     },
     {
-      key: "status", header: "Status", sortable: false,
+      key: "status",
+      header: "Status",
       cell: (r) => (
-        <Select
-          size="sm"
-          aria-label="Booking status"
-          defaultValue={r.status}
-          onChange={(e) => changeStatus(r, e.target.value)}
-          options={STATUS_OPTIONS.map((s) => ({ value: s, label: BOOKING_STATUS_LABELS[s] }))}
-        />
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          <StatusPill status={r.status} />
+          <ConfirmPill row={r} />
+        </span>
       ),
-      value: (r) => BOOKING_STATUS_LABELS[r.status],
+      value: (r) => BOOKING_STATUS_LABELS[r.status] ?? r.status,
+      // The funnel order of an outcome, not the alphabet - see Column.order.
+      order: ["BOOKED", "RESCHEDULED", "COMPLETED", "NO_SHOW", "CANCELLED"],
     },
     {
-      key: "confirm", header: "Confirm", sortable: false,
-      cell: (r) =>
-        r.status === "BOOKED" ? (
-          <button
-            type="button"
-            onClick={() => toggleConfirm(r)}
-            title={r.confirmed ? "Confirmed - click to clear" : "Mark this call confirmed"}
-            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-caption font-semibold transition-colors ${
-              r.confirmed ? "bg-ok-soft text-ok" : "bg-surface-2 text-muted hover:text-ink"
-            }`}
+      /**
+       * `actions` by convention, which is what pins this column against the right edge whatever
+       * the table is doing (DataTable's `stickyKey`) - the actions being the one thing that must
+       * never be the part that scrolls out of reach.
+       */
+      key: "actions",
+      header: "Actions",
+      sortable: false,
+      align: "right",
+      cell: (r) => (
+        <span className="flex items-center justify-end gap-1">
+          {/*
+            The prospect's NAME is in every label - twenty buttons all called "Reschedule" are
+            twenty buttons a screen-reader user cannot tell apart - and a disabled one SAYS why,
+            rather than leaving grey as the only cue (§7).
+          */}
+          <IconButton
+            label={
+              r.status === "COMPLETED"
+                ? `${r.name}'s call has happened - it cannot be moved`
+                : `${actionLabel(r)} ${r.name}'s call`
+            }
+            onClick={() => setRescheduleFor(r)}
+            disabled={r.status === "COMPLETED"}
           >
-            {r.confirmed ? <CircleCheck size={13} /> : <Check size={13} />}
-            {r.confirmed ? "Confirmed" : "Mark"}
-          </button>
-        ) : (
-          <span className="text-xs text-muted">-</span>
-        ),
-      value: (r) => (r.confirmed ? "Confirmed" : ""),
-    },
-    {
-      key: "postpone", header: "", sortable: false,
-      cell: (r) =>
-        r.slotId && r.status === "BOOKED" ? (
-          <button
-            type="button"
-            onClick={() => openPostpone(r)}
-            className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-accent hover:underline"
-          >
-            <CalendarClock size={13} /> Postpone
-          </button>
-        ) : null,
-      value: () => null,
-    },
-    { key: "booked", header: "Booked on", cell: (r) => formatDate(r.createdAt), value: (r) => r.createdAt.slice(0, 10) },
-    {
-      key: "whatsapp", header: "WhatsApp", sortable: false,
-      cell: (r) => {
-        const w = waStatus[r.id];
-        return (
-          <span className="flex items-center gap-2 whitespace-nowrap">
-            {w && <WhatsAppStatusBadge status={w.status} kind={w.kind} at={w.at} />}
-            <SendWhatsAppButton action={() => sendBookingReminderMsg(r.id)} label="Remind" />
-            <SendWhatsAppButton action={() => sendBookingConfirmationMsg(r.id)} label="Confirm" />
-          </span>
-        );
-      },
-      value: (r) => waStatus[r.id]?.status ?? "",
-    },
-    {
-      key: "lead", header: "", sortable: false,
-      cell: (r) => (r.leadId ? <a href="/pipeline" className="text-xs text-accent hover:underline">Pipeline →</a> : null),
+            <CalendarClock size={16} aria-hidden />
+          </IconButton>
+          <IconButton label={`Open ${r.name}'s booking`} onClick={() => setDetailFor(r)}>
+            <ChevronRight size={16} aria-hidden />
+          </IconButton>
+        </span>
+      ),
       value: () => null,
     },
   ];
 
   return (
     <div className="space-y-3">
-      {teamMembers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
+      {/* ── Filters. They WRAP on a narrow screen rather than scrolling sideways. ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <SegmentedControl
+          value={quick}
+          onChange={setQuick}
+          ariaLabel="Filter bookings by what needs doing"
+          options={(Object.keys(FILTER_LABELS) as QuickFilter[]).map((f) => ({
+            value: f,
+            label: `${FILTER_LABELS[f]} (${counts[f]})`,
+          }))}
+        />
+        {teamMembers.length > 0 && (
           <Select
-            size="sm"
             value={teamFilter}
             onChange={(e) => setTeamFilter(e.target.value)}
             aria-label="Filter by team member"
-            options={[{ value: "", label: "All team members" }, ...teamMembers.map((u) => ({ value: u.id, label: u.name }))]}
+            options={[
+              { value: "", label: "All team members" },
+              ...teamMembers.map((u) => ({ value: u.id, label: u.name ?? "Unnamed" })),
+            ]}
           />
-        </div>
-      )}
+        )}
+      </div>
+
       <DataTable
         rows={visibleRows}
         columns={columns}
-        csvName="bookings"
-        filterPlaceholder="Filter bookings…"
-        emptyMessage="No bookings yet. Share your /book link to start receiving them."
-      />
-
-      <Modal
-        open={!!postponeFor}
-        onClose={() => setPostponeFor(null)}
-        title="Postpone call"
-        subtitle={
-          postponeFor
-            ? `${postponeFor.name}${postponeFor.slotDay !== "-" ? ` · currently ${postponeFor.slotDay} ${postponeFor.slotTime} IST` : ""}`
-            : undefined
+        csvName={canExport ? "bookings" : undefined}
+        filterPlaceholder="Search bookings…"
+        defaultSort={{ key: "slot", dir: "desc" }}
+        onRowClick={setDetailFor}
+        rowLabel={rowLabel}
+        emptyMessage={
+          quick === "all"
+            ? "No bookings yet. Share your /book link to start receiving them."
+            : `No bookings are ${FILTER_LABELS[quick].toLowerCase()}`
         }
-        size="md"
-      >
-        {slotChoices.length === 0 ? (
-          <p className="text-sm text-muted">
-            No open slots of the same length are available. Add availability in the Availability tab,
-            then postpone.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium">Move to</span>
-              <Select
-                value={targetSlot}
-                onChange={(e) => setTargetSlot(e.target.value)}
-                placeholder="Pick an open slot…"
-                options={slotChoices.map((s) => ({
-                  value: s.id,
-                  label: `${s.day} · ${s.time} IST${s.assignedToName ? ` · ${s.assignedToName}` : ""}`,
-                }))}
-              />
-            </label>
-            <p className="text-caption text-muted">
-              The old slot is freed and the prospect is told their call moved and asked to confirm the
-              new time.
-            </p>
-            <div className="flex items-center justify-end gap-2">
+        /**
+         * ── The phone card ────────────────────────────────────────────────────────────
+         * Name, when, how qualified, where it stands - the four things that decide whether you
+         * act on this row - and then two full-width buttons. Everything else is one tap away in
+         * the dialog, which is a better home for it than a fourteen-row key-value list nobody
+         * scrolls to the bottom of.
+         */
+        mobileCard={(r) => (
+          <div className="space-y-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-ink">{r.name}</p>
+                <p className="tnum text-caption text-muted">{r.phone}</p>
+              </div>
+              <StatusPill status={r.status} />
+            </div>
+
+            <CallTime row={r} />
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <BantChip bant={r.bant} />
+              <BantDimensions bant={r.bant} />
+              <ConfirmPill row={r} />
+            </div>
+
+            {r.assignedToName && <p className="text-caption text-muted">With {r.assignedToName}</p>}
+            {r.history && <HistoryChip history={r.history} />}
+
+            <div className="flex gap-2 pt-0.5">
               <button
                 type="button"
-                onClick={() => setPostponeFor(null)}
-                className="h-10 rounded-btn px-3 text-sm text-muted hover:text-ink"
+                onClick={() => setRescheduleFor(r)}
+                disabled={r.status === "COMPLETED"}
+                aria-label={
+                  r.status === "COMPLETED"
+                    ? `${r.name}'s call has happened - it cannot be moved`
+                    : `${actionLabel(r)} ${r.name}'s call`
+                }
+                className="press inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-btn border border-line-strong bg-surface text-sm font-semibold text-ink transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:border-transparent disabled:bg-surface-2 disabled:text-ink-disabled"
               >
-                Cancel
+                <CalendarClock size={15} aria-hidden />
+                {actionLabel(r)}
               </button>
               <button
                 type="button"
-                onClick={submitPostpone}
-                disabled={!targetSlot || busy}
-                className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong disabled:opacity-60"
+                onClick={() => setDetailFor(r)}
+                aria-label={`Open ${r.name}'s booking`}
+                className="press inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-btn bg-primary text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong"
               >
-                {busy ? "Moving…" : "Postpone call"}
+                Details
+                <ChevronRight size={15} aria-hidden />
               </button>
             </div>
           </div>
         )}
-      </Modal>
+      />
+
+      {detailFor && (
+        <BookingDetail
+          key={detailFor.id}
+          booking={detailFor}
+          whatsapp={waStatus[detailFor.id]}
+          onReschedule={() => {
+            const row = detailFor;
+            setDetailFor(null);
+            setRescheduleFor(row);
+          }}
+          onClose={() => setDetailFor(null)}
+        />
+      )}
+
+      {rescheduleFor && (
+        <RescheduleDialog
+          key={rescheduleFor.id}
+          booking={rescheduleFor}
+          openSlots={openSlots}
+          teamMembers={teamMembers}
+          onClose={() => setRescheduleFor(null)}
+        />
+      )}
     </div>
   );
 }

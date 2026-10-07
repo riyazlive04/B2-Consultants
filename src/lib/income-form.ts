@@ -145,15 +145,21 @@ export type IncomeFormCatalogues = {
 };
 
 export type DerivedIncomeForm = {
-  /** The business whose levels are on offer. */
-  line: BusinessLine;
-  /** Only the levels that business actually sells. */
+  /**
+   * The business whose levels are on offer, or NULL when nobody has said yet.
+   *
+   * Null is a real state, not a missing value: under the page's "Combined" view a new entry
+   * belongs to neither book until someone chooses, and the form says so rather than guessing.
+   */
+  line: BusinessLine | null;
+  /** Only the levels that business actually sells. Empty until a business is chosen. */
   lineLevelOptions: { value: string; label: string }[];
-  /** Coerced to be one of `lineLevelOptions`, or "" when the business sells nothing. */
+  /** Coerced to be one of `lineLevelOptions`, or "" when there is nothing to choose. */
   programLevel: string;
   /** The line the CHOSEN level belongs to - what the money will really credit. */
-  entryLine: BusinessLine;
-  lineLabel: string;
+  entryLine: BusinessLine | null;
+  /** Null while no business is chosen, so nothing on screen can name the wrong book. */
+  lineLabel: string | null;
   paymentType: string;
   typeKind: ReturnType<typeof paymentTypeKind>;
   /** True when this entry is agreeing a NEW plan, so the schedule questions apply. */
@@ -216,12 +222,23 @@ export function deriveIncomeForm(
    * must never reach into an entry already saved and move it to the other book - that would
    * rewrite history as a side effect of a view. So `defaultLine` applies to new entries only.
    */
-  const line: BusinessLine =
+  /**
+   * ── "COMBINED" MUST NOT MEAN "B2" ──────────────────────────────────────────────
+   * A new entry used to fall back to the line of `rowLevel`, which is "GUIDED" - a B2 coaching
+   * tier - so with the page on Combined the form opened fully answered as B2: the Business box
+   * read B2, the level list was pre-filtered to B2 levels with Guided selected, and the heading
+   * announced "Recorded against B2". Combined is a view of BOTH books and says nothing about
+   * where new money belongs, so every German Note payment entered from that view was filed to
+   * the wrong book unless the operator noticed and changed two fields.
+   *
+   * Null instead, and the form asks. The page filter still pre-answers it when it is on one of
+   * the two businesses - that is the one case where the view really does say where money goes.
+   */
+  const line: BusinessLine | null =
     draft.businessLine ??
-    (editing
-      ? (cat.levelLines[rowLevel] ?? "B2")
-      : (cat.defaultLine ?? cat.levelLines[rowLevel] ?? "B2"));
-  const lineLevelOptions = cat.levelOptions.filter((o) => (cat.levelLines[o.value] ?? "B2") === line);
+    (editing ? (cat.levelLines[rowLevel] ?? "B2") : (cat.defaultLine ?? null));
+  const lineLevelOptions =
+    line === null ? [] : cat.levelOptions.filter((o) => (cat.levelLines[o.value] ?? "B2") === line);
   const wantedLevel = draft.programLevel ?? rowLevel;
   /**
    * COERCED into the business on screen. A select showing a value absent from its own options
@@ -233,7 +250,7 @@ export function deriveIncomeForm(
   const programLevel = lineLevelOptions.some((o) => o.value === wantedLevel)
     ? wantedLevel
     : (lineLevelOptions[0]?.value ?? "");
-  const entryLine: BusinessLine = cat.levelLines[programLevel] ?? line;
+  const entryLine: BusinessLine | null = programLevel ? (cat.levelLines[programLevel] ?? line) : line;
 
   // ── The fee, and how it divides ────────────────────────────────────────────────
   // Editing never redraws a schedule: the plan of a receivable already under way is not
@@ -329,20 +346,26 @@ export function deriveIncomeForm(
    * chases a date nobody wrote down - so the save is held until they are all there, and the
    * reason is stated rather than discovered on click.
    */
-  const blockSaveReason = !needsSchedule
-    ? null
-    : !draft.instalmentCount
-      ? "Enter how many instalments the fee is split into"
-      : !draft.scheduleComplete
-        ? "Fill in every due date so the rest of the plan can be chased"
-        : null;
+  const blockSaveReason =
+    // Nothing else matters until the money has a book to land in. An income row carries exactly
+    // one programme level, and that level is what decides which business is credited - so there
+    // is no honest way to save this while the question is unanswered.
+    line === null
+      ? "Pick which business this payment belongs to"
+      : !needsSchedule
+        ? null
+        : !draft.instalmentCount
+          ? "Enter how many instalments the fee is split into"
+          : !draft.scheduleComplete
+            ? "Fill in every due date so the rest of the plan can be chased"
+            : null;
 
   return {
     line,
     lineLevelOptions,
     programLevel,
     entryLine,
-    lineLabel: BUSINESS_LINE_LABELS[entryLine],
+    lineLabel: entryLine ? BUSINESS_LINE_LABELS[entryLine] : null,
     paymentType,
     typeKind,
     needsSchedule,
@@ -360,7 +383,7 @@ export function deriveIncomeForm(
     planOptions,
     pendingPaymentId,
     newStudentName,
-    suggestedCode: cat.nextStudentCodes[entryLine] ?? cat.nextStudentCodes.B2 ?? "",
+    suggestedCode: (entryLine ? cat.nextStudentCodes[entryLine] : null) ?? cat.nextStudentCodes.B2 ?? "",
     date: draft.date ?? editing?.date.slice(0, 10) ?? cat.today,
     recurrenceInterval: draft.recurrenceInterval ?? editing?.recurrenceInterval ?? "MONTHLY",
     recurrenceNextDate: draft.recurrenceNextDate ?? editing?.recurrenceNextDate?.slice(0, 10) ?? "",

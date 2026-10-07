@@ -169,7 +169,13 @@ export function IncomeFields({
               {mintStudent && (
                 <Field
                   label="Student ID"
-                  hint={`Next free ${entryLine === "GERMAN_NOTE" ? "German Note" : "B2"} number - edit it if this student already has one`}
+                  // Names a series only once a business is chosen; before that there is no
+                  // "next free number" to promise, and naming B2's would be a guess on screen.
+                  hint={
+                    entryLine
+                      ? `Next free ${entryLine === "GERMAN_NOTE" ? "German Note" : "B2"} number - edit it if this student already has one`
+                      : "Pick a business to see the next free number - or type the student's own"
+                  }
                 >
                   <TextInput
                     name="newStudentCode"
@@ -217,10 +223,24 @@ export function IncomeFields({
           filter on the question below, and the server re-derives the line from the level it
           is sent - one authority (lib/business-line), not a second field that could disagree.
         */}
-        <Field label="Business" hint="Which book this payment lands in - it narrows the levels below.">
+        {/*
+          UNANSWERED until somebody answers it. Under the page's "Combined" view this opens
+          empty rather than pre-selecting B2 - see the note in lib/income-form. An empty select
+          is the honest rendering of a question nobody has answered, and the save is held until
+          it is.
+        */}
+        <Field
+          label="Business"
+          hint={
+            line === null
+              ? "Which book this payment lands in. Pick one to see its programme levels."
+              : "Which book this payment lands in - it narrows the levels below."
+          }
+        >
           <Select
             options={BUSINESS_LINES.map((l) => ({ value: l, label: BUSINESS_LINE_LABELS[l] }))}
-            value={line}
+            value={line ?? ""}
+            placeholder="Pick a business"
             onChange={(e) => {
               // Both in ONE update: the level is cleared with the business, so the select
               // never renders a value absent from its own options even for a frame.
@@ -230,13 +250,27 @@ export function IncomeFields({
         </Field>
         <Field
           label="Programme level"
-          hint={lineLevelOptions.length === 0 ? `No active ${lineLabel} level - add one first.` : undefined}
+          hint={
+            // "No active X level" would be a lie while no business has been picked - there is
+            // nothing to list yet because nobody has said which list.
+            line === null
+              ? "Pick a business first."
+              : lineLevelOptions.length === 0
+                ? `No active ${lineLabel} level - add one first.`
+                : undefined
+          }
         >
           <Select
             name="programLevel"
             options={lineLevelOptions}
             value={programLevel}
-            placeholder={lineLevelOptions.length === 0 ? "Nothing to choose" : undefined}
+            placeholder={
+              line === null
+                ? "Pick a business first"
+                : lineLevelOptions.length === 0
+                  ? "Nothing to choose"
+                  : undefined
+            }
             onChange={(e) => patch({ programLevel: e.currentTarget.value })}
           />
         </Field>

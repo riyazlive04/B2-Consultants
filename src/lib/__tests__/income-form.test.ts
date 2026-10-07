@@ -34,6 +34,14 @@ const CAT: IncomeFormCatalogues = {
   openPlans: [],
   nextStudentCodes: { B2: "B2-0004", GERMAN_NOTE: "GN-0002" },
   today: TODAY,
+  /**
+   * The page's Combined / B2 / German Note switch, parked on B2 - so the tests below that are
+   * about payment types and schedules have the business question already answered and can stay
+   * about what they are about. The null ("Combined") case has its own block further down, and
+   * it is the one that matters: nothing had ever exercised it, which is exactly how a form that
+   * silently filed German Note money to B2 shipped.
+   */
+  defaultLine: "B2",
 };
 
 const draft = (over: Partial<IncomeFormDraft> = {}): IncomeFormDraft => ({
@@ -76,13 +84,57 @@ const EDITING: NonNullable<IncomeFormEditing> = {
 
 // ════════════════════════════════════════════════════════════════════════════════════
 describe("the business narrows the levels, and the level decides the book", () => {
-  test("a fresh form offers only B2 levels and defaults to the first", () => {
+  test("with the page on B2, a fresh form offers only B2 levels and defaults to the first", () => {
     const d = derive();
     assert.equal(d.line, "B2");
     assert.deepEqual(d.lineLevelOptions.map((o) => o.value), ["GUIDED", "SELF_PACED"]);
     assert.equal(d.programLevel, "GUIDED");
     assert.equal(d.entryLine, "B2");
     assert.equal(d.lineLabel, "B2");
+  });
+
+  /**
+   * ── "COMBINED" IS NOT A BUSINESS ───────────────────────────────────────────────
+   * The page's Combined view is a view of BOTH books and says nothing about where new money
+   * belongs. The form used to fall back to the line of its placeholder level ("GUIDED", a B2
+   * tier), so under Combined it opened fully answered as B2 - Business box, pre-filtered level
+   * list, and a heading reading "Recorded against B2". Every German Note payment entered from
+   * that view was filed to the wrong book unless the operator noticed and changed two fields.
+   */
+  test("under Combined the form picks NO business, and says so rather than guessing", () => {
+    const d = derive({}, null, { defaultLine: null });
+    assert.equal(d.line, null, "not B2 - nobody said B2");
+    assert.deepEqual(d.lineLevelOptions, [], "no business, so no level list to offer");
+    assert.equal(d.programLevel, "", "and nothing pre-selected to submit");
+    assert.equal(d.entryLine, null);
+    assert.equal(d.lineLabel, null, "nothing on screen may name a book nobody chose");
+  });
+
+  test("under Combined the save is held until a business is named", () => {
+    const d = derive({}, null, { defaultLine: null });
+    assert.equal(d.blockSave, true);
+    assert.match(d.blockSaveReason ?? "", /business/i);
+  });
+
+  test("answering the question under Combined unblocks it and narrows the levels", () => {
+    const d = derive({ businessLine: "GERMAN_NOTE" }, null, { defaultLine: null });
+    assert.equal(d.line, "GERMAN_NOTE");
+    assert.deepEqual(d.lineLevelOptions.map((o) => o.value), ["GN_A1", "GN_A2"]);
+    assert.equal(d.programLevel, "GN_A1");
+    assert.equal(d.lineLabel, "German Note");
+    assert.equal(d.blockSave, false);
+  });
+
+  /**
+   * A page filter is about what you are LOOKING AT. Reaching into a saved row and moving it to
+   * the other book would rewrite history as a side effect of a view.
+   */
+  test("an existing row keeps its own book even under Combined", () => {
+    // EDITING is a German Note row (GN_A2).
+    const d = derive({}, EDITING, { defaultLine: null });
+    assert.equal(d.line, "GERMAN_NOTE");
+    assert.equal(d.entryLine, "GERMAN_NOTE");
+    assert.equal(d.programLevel, "GN_A2", "its own level, untouched by the view");
   });
 
   test("switching business COERCES a level the new business does not sell", () => {

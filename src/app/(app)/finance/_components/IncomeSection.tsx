@@ -492,10 +492,16 @@ export function IncomeSection({
         title={
           <h2 className="flex flex-wrap items-baseline gap-x-2 font-display text-h3 text-ink">
             <span>{editing ? `Edit income - ${editing.studentName}` : "Income entry"}</span>
-            <span className="text-body text-muted">- {lineLabel}</span>
+            {/* Named only once there IS a book. Under "Combined" this used to read "- B2",
+                which announced a destination nobody had chosen. */}
+            {lineLabel && <span className="text-body text-muted">- {lineLabel}</span>}
           </h2>
         }
-        subtitle={`Recorded against ${lineLabel} - pick the business below, then its programme level.`}
+        subtitle={
+          lineLabel
+            ? `Recorded against ${lineLabel} - pick the business below, then its programme level.`
+            : "Pick the business this payment belongs to below, then its programme level."
+        }
         actions={
           editing ? (
             <Btn variant="ghost" size="sm" onClick={() => switchEditing(null)}>

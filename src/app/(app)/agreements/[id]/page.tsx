@@ -71,6 +71,25 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
         <AgreementActions id={row.id} status={status} studentName={data.student.fullName} />
       </div>
 
+      {/*
+        Why the student said no. The reason was stored on decline (and in the DECLINED event) but
+        rendered nowhere, so the founder saw "Declined" and had to ask the student again - the one
+        piece of feedback the signing page exists to collect.
+      */}
+      {row.declinedAt && (
+        <div className="rounded-card border border-risk/40 bg-surface p-5 shadow-card">
+          <h2 className="font-display text-h2 font-semibold">Declined by the student</h2>
+          <p className="mt-1 text-xs text-muted">{ist(row.declinedAt)}</p>
+          {row.declineReason ? (
+            <blockquote className="mt-3 whitespace-pre-wrap border-l-2 border-risk/60 pl-3 text-sm text-ink">
+              {row.declineReason}
+            </blockquote>
+          ) : (
+            <p className="mt-3 text-sm text-muted">No reason was given.</p>
+          )}
+        </div>
+      )}
+
       {/* The signed-but-not-a-student gap. Only after signing: before that there is nothing to
           enrol from, and the agreement's own terms can still change. */}
       {isSigned && (
@@ -208,6 +227,9 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
                       {ist(e.createdAt)}
                       {e.ip && ` · ${e.ip}`}
                     </p>
+                    {e.type === "DECLINED" && declineReasonOf(e.meta) && (
+                      <p className="mt-0.5 whitespace-pre-wrap text-xs text-ink-2">“{declineReasonOf(e.meta)}”</p>
+                    )}
                   </div>
                 </li>
               ))}
@@ -249,6 +271,13 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
       )}
     </div>
   );
+}
+
+/** The reason a DECLINED event carries in its meta - `{ reason }`, written by `declineAgreement`. */
+function declineReasonOf(meta: unknown): string | null {
+  if (!meta || typeof meta !== "object") return null;
+  const reason = (meta as { reason?: unknown }).reason;
+  return typeof reason === "string" && reason.trim() ? reason.trim() : null;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

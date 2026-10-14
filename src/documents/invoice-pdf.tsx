@@ -36,6 +36,8 @@ export type InvoicePdfData = {
   currency: "INR" | "EUR";
   issuer: {
     name: string;
+    /** The sole trader's own name - required beside the trading name (§14 Abs. 4 Nr. 1 UStG). */
+    ownerName: string;
     addressLines: string[];
     city: string;
     postcode: string;
@@ -53,6 +55,14 @@ export type InvoicePdfData = {
   customerName: string;
   customerEmail: string | null;
   customerPhone: string | null;
+  customerAddressLines: string[];
+  /** "01.11.2026 - 30.04.2027" or a single date - when the service is supplied. */
+  servicePeriod: string | null;
+  /** The coaching agreement this bills under, and its payment terms to print. */
+  agreementRef: string | null;
+  agreementTerms: string[];
+  /** What the customer writes on the transfer - the invoice number. */
+  paymentReference: string | null;
   issuedByName: string | null;
   items: { description: string; quantity: number; unitPriceDisplay: string; lineTotalDisplay: string }[];
   subtotalDisplay: string;
@@ -61,6 +71,8 @@ export type InvoicePdfData = {
   /** e.g. "VAT (19%)", or null when the invoice carries no tax at all. */
   taxLineLabel: string | null;
   taxDisplay: string | null;
+  /** Why no tax is charged, printed under the totals in place of a tax line. */
+  taxNote: string | null;
   totalDisplay: string;
   convertedTotalDisplay: string;
   convertedRateNote: string;
@@ -86,7 +98,9 @@ const s = StyleSheet.create({
     lineHeight: 1.45, flexDirection: "column",
   },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  brand: { fontSize: 18, fontFamily: "Helvetica-Bold", color: BRAND_INDIGO },
+  // An explicit lineHeight for the same reason as `title`: without it the 18pt name's line box
+  // was shorter than its capitals and the "Proprietor" line below printed into it.
+  brand: { fontSize: 18, fontFamily: "Helvetica-Bold", color: BRAND_INDIGO, lineHeight: 1.25 },
   // An explicit lineHeight, because the page's 1.45 does NOT reach a Text with its own font
   // size here: without it the title's line box was shorter than its own 24pt capitals and the
   // invoice number printed straight through the bottom of the word "INVOICE".
@@ -94,14 +108,14 @@ const s = StyleSheet.create({
   muted: { color: MUTED },
   label: { color: MUTED, fontSize: 7.5, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
   bold: { fontFamily: "Helvetica-Bold" },
-  rule: { borderBottomWidth: 1, borderColor: LINE, marginTop: 18 },
+  rule: { borderBottomWidth: 1, borderColor: LINE, marginTop: 14 },
 
-  parties: { flexDirection: "row", marginTop: 22 },
+  parties: { flexDirection: "row", marginTop: 16 },
   party: { flex: 1, paddingRight: 16 },
   meta: { width: 170 },
   metaRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 1.5 },
 
-  th: { flexDirection: "row", backgroundColor: "#F4F7FC", paddingVertical: 6, paddingHorizontal: 8, marginTop: 24 },
+  th: { flexDirection: "row", backgroundColor: "#F4F7FC", paddingVertical: 6, paddingHorizontal: 8, marginTop: 18 },
   td: { flexDirection: "row", borderBottomWidth: 1, borderColor: LINE_SOFT, paddingVertical: 7, paddingHorizontal: 8 },
   cDesc: { flex: 5 },
   cQty: { flex: 1, textAlign: "right" },
@@ -117,7 +131,11 @@ const s = StyleSheet.create({
   },
   grandText: { fontFamily: "Helvetica-Bold", fontSize: 12 },
 
-  blocks: { flexDirection: "row", marginTop: 26 },
+  blocks: { flexDirection: "row", marginTop: 18 },
+  // Small and tight: three clauses must fit beside a full invoice on ONE page - the footer is
+  // pushed by them, and a second page carrying only a footer is what the first draft printed.
+  terms: { marginTop: 12, paddingTop: 8, borderTopWidth: 1, borderColor: LINE_SOFT },
+  termLine: { fontSize: 7.5, color: MUTED, marginBottom: 1.5, lineHeight: 1.3 },
   block: { flex: 1, paddingRight: 16 },
 
   footer: {
@@ -167,6 +185,7 @@ function InvoiceDoc({ inv }: { inv: InvoicePdfData }) {
             <View style={{ marginLeft: 11 }}>
               <Text style={s.brand}>{iss.name}</Text>
               <View style={{ marginTop: 2 }}>
+                <Line style={s.muted}>{iss.ownerName ? `Proprietor: ${iss.ownerName}` : null}</Line>
                 {iss.addressLines.map((l, i) => (
                   <Text key={i} style={s.muted}>{l}</Text>
                 ))}
@@ -189,6 +208,9 @@ function InvoiceDoc({ inv }: { inv: InvoicePdfData }) {
           <View style={s.party}>
             <Text style={s.label}>Bill to</Text>
             <Text style={s.bold}>{inv.customerName}</Text>
+            {inv.customerAddressLines.map((l, i) => (
+              <Text key={i} style={s.muted}>{l}</Text>
+            ))}
             <Line style={s.muted}>{inv.customerEmail}</Line>
             <Line style={s.muted}>{inv.customerPhone}</Line>
           </View>
@@ -207,6 +229,18 @@ function InvoiceDoc({ inv }: { inv: InvoicePdfData }) {
               <View style={s.metaRow}>
                 <Text style={s.muted}>Due</Text>
                 <Text style={s.bold}>{inv.dueDate}</Text>
+              </View>
+            ) : null}
+            {inv.servicePeriod ? (
+              <View style={s.metaRow}>
+                <Text style={s.muted}>{inv.servicePeriod.includes(" - ") ? "Service period" : "Service date"}</Text>
+                <Text>{inv.servicePeriod}</Text>
+              </View>
+            ) : null}
+            {inv.agreementRef ? (
+              <View style={s.metaRow}>
+                <Text style={s.muted}>Agreement</Text>
+                <Text>{inv.agreementRef}</Text>
               </View>
             ) : null}
             <View style={s.metaRow}>
@@ -273,6 +307,8 @@ function InvoiceDoc({ inv }: { inv: InvoicePdfData }) {
             <Text style={[s.muted, { fontSize: 7.5 }]}>Total {inv.totalDisplay}</Text>
           </View>
           <Text style={[s.muted, { fontSize: 7, textAlign: "right" }]}>{inv.convertedRateNote}</Text>
+          {/* The legal reason no tax line appears - a bare absence of tax is not one. */}
+          {inv.taxNote ? <Text style={{ fontSize: 8, marginTop: 6 }}>{inv.taxNote}</Text> : null}
           {inv.amountPaidDisplay && !inv.settled ? (
             <View style={s.totalRow}>
               <Text style={[s.muted, { fontSize: 7.5 }]}>Paid to date</Text>
@@ -283,10 +319,31 @@ function InvoiceDoc({ inv }: { inv: InvoicePdfData }) {
 
         {/* ── How to pay, the terms, and anything written on this one ── */}
         <View style={s.blocks}>
-          {!inv.settled ? <Block label="How to pay" text={iss.bankDetails} /> : null}
+          {!inv.settled ? (
+            <Block
+              label="How to pay"
+              text={
+                iss.bankDetails && inv.paymentReference
+                  ? `${iss.bankDetails}
+
+Payment reference: ${inv.paymentReference}`
+                  : iss.bankDetails
+              }
+            />
+          ) : null}
           <Block label="Terms" text={iss.paymentTerms} />
           <Block label="Notes" text={inv.notes} />
         </View>
+
+        {/* The agreement's own payment terms, clause by clause, when this bills under one. */}
+        {inv.agreementTerms.length ? (
+          <View style={s.terms} wrap={false}>
+            <Text style={s.label}>Terms of agreement {inv.agreementRef}</Text>
+            {inv.agreementTerms.map((t, i) => (
+              <Text key={i} style={s.termLine}>{t}</Text>
+            ))}
+          </View>
+        ) : null}
 
         <View style={s.footer}>
           <Text>

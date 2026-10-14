@@ -36,6 +36,7 @@ export default async function PublicInvoicePage({ params }: { params: { token: s
             <div className="text-sm">
               <p className="font-display text-h3 text-primary">{iss.name}</p>
               <div className="mt-1 text-caption text-ink-3">
+                {iss.ownerName && <p>Proprietor: {iss.ownerName}</p>}
                 {iss.addressLines.map((l, i) => <p key={i}>{l}</p>)}
                 {cityLine && <p>{cityLine}</p>}
                 {iss.country && <p>{iss.country}</p>}
@@ -48,10 +49,13 @@ export default async function PublicInvoicePage({ params }: { params: { token: s
             <div className="text-right text-sm">
               <p className="text-label uppercase text-ink-3">Bill to</p>
               <p className="font-semibold text-ink">{inv.customerName}</p>
+              {inv.customerAddressLines.map((l, i) => <p key={i} className="text-ink-3">{l}</p>)}
               {inv.customerEmail && <p className="text-ink-3">{inv.customerEmail}</p>}
               {inv.customerPhone && <p className="text-ink-3">{inv.customerPhone}</p>}
               <p className="mt-2 text-caption text-ink-3">Issued <DateText date={inv.issueDate} /></p>
               {inv.dueDate && <p className="text-caption text-ink-3">Due <DateText date={inv.dueDate} /></p>}
+              {inv.servicePeriod && <p className="text-caption text-ink-3">Service {inv.servicePeriod}</p>}
+              {inv.agreementRef && <p className="text-caption text-ink-3">Agreement {inv.agreementRef}</p>}
               <p className="text-caption text-ink-3">Currency {inv.currency}</p>
             </div>
           </div>
@@ -92,6 +96,7 @@ export default async function PublicInvoicePage({ params }: { params: { token: s
                 <span>Total {inv.totalDisplay}</span>
               </div>
               <p className="text-right text-caption text-ink-3">{inv.convertedRateNote}</p>
+              {inv.taxNote && <p className="pt-1 text-caption text-ink-2">{inv.taxNote}</p>}
               {!inv.settled && (
                 <div className="flex justify-between text-caption text-ink-3">
                   <span>Paid to date</span><span>{inv.amountPaidDisplay}</span>
@@ -103,11 +108,46 @@ export default async function PublicInvoicePage({ params }: { params: { token: s
           {/* How to pay, the standing terms, and anything written on this one. */}
           {(!inv.settled && iss.bankDetails) || iss.paymentTerms || inv.notes ? (
             <div className="grid gap-6 border-t border-line p-6 text-sm text-ink-2 sm:grid-cols-3">
-              {!inv.settled && iss.bankDetails && <Note label="How to pay" text={iss.bankDetails} />}
+              {!inv.settled && iss.bankDetails && (
+                <Note
+                  label="How to pay"
+                  text={inv.paymentReference ? `${iss.bankDetails}
+
+Payment reference: ${inv.paymentReference}` : iss.bankDetails}
+                />
+              )}
               {iss.paymentTerms && <Note label="Terms" text={iss.paymentTerms} />}
               {inv.notes && <Note label="Notes" text={inv.notes} />}
             </div>
           ) : null}
+
+          {inv.agreementTerms.length > 0 && (
+            <div className="border-t border-line p-6 text-caption text-ink-2">
+              <p className="text-label uppercase text-ink-3">Terms of agreement {inv.agreementRef}</p>
+              <ul className="mt-1 space-y-1">
+                {inv.agreementTerms.map((t, i) => <li key={i}>{t}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {/* A receipt for every payment received - the written confirmation the agreement promises. */}
+          {inv.receipts.length > 0 && (
+            <div className="border-t border-line p-6 text-sm">
+              <p className="text-label uppercase text-ink-3">Payment receipts</p>
+              <ul className="mt-2 space-y-1.5">
+                {inv.receipts.map((r) => (
+                  <li key={r.number} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-ink-2">
+                      {r.number} · <DateText date={r.paidAt} /> · {r.amountDisplay}
+                    </span>
+                    <a href={`/i/${params.token}/receipt/${encodeURIComponent(r.number)}?download=1`} className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
+                      <Download size={14} /> Download
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-surface-2 px-6 py-3 text-caption text-ink-3">
             <span>{inv.issuedByName ? `Issued by ${inv.issuedByName}` : iss.name}</span>

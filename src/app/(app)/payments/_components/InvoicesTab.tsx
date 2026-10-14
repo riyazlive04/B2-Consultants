@@ -9,6 +9,7 @@ import { Btn } from "@/components/ui/controls";
 import { EmptyState, Pill } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { DateText } from "@/components/ui/DateText";
+import { isProvisionalNumber } from "@/lib/invoice-compliance";
 
 function statusTone(s: string): Tone {
   if (s === "PAID" || s === "ACCEPTED") return "good";
@@ -38,7 +39,7 @@ export default function InvoicesTab({ rows, kind }: { rows: InvoiceRow[]; kind: 
   );
 
   const columns: Column<InvoiceRow>[] = [
-    { key: "number", header: "Number", cell: (r) => <Link href={`/payments/${r.id}`} className="font-mono text-sm font-semibold text-ink hover:text-primary">{r.number}</Link>, value: (r) => r.number },
+    { key: "number", header: "Number", cell: (r) => <Link href={`/payments/${r.id}`} className="font-mono text-sm font-semibold text-ink hover:text-primary">{isProvisionalNumber(r.number) ? <span className="font-sans font-medium text-ink-3">Draft</span> : r.number}</Link>, value: (r) => r.number },
     { key: "customer", header: "Customer", cell: (r) => r.customerName, value: (r) => r.customerName },
     { key: "status", header: "Status", cell: (r) => <Pill tone={statusTone(r.status)}>{r.status}</Pill>, value: (r) => r.status },
     { key: "total", header: "Total", align: "right", cell: (r) => <span className="font-medium text-ink">{r.totalDisplay}</span>, value: (r) => amountValue(r.totalDisplay) },

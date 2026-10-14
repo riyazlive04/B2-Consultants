@@ -86,6 +86,12 @@ export type SendWhatsAppInput = WhatsAppTarget & {
    * means "this would have sent", not "this might have".
    */
   dryRun?: boolean;
+  /**
+   * Variables that are SENT but never STORED - a temporary password. Every outbound row keeps its
+   * variables in `params` for the history view, which would otherwise leave the password readable
+   * in the database by anyone with WhatsApp access. Listed names are logged as "••••••".
+   */
+  secretVars?: readonly string[];
 };
 
 export type SendOutcome = {
@@ -200,7 +206,13 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
   const number = normalizeWhatsappNumber(to, runtime.settings.defaultCountry);
   const label = WHATSAPP_KIND_LABELS[kind];
   const body = input.bodySummary ?? label;
-  const paramsJson = { template: template?.name ?? null, vars } as Prisma.InputJsonValue;
+  // What the LOG keeps: the real values minus any secret ones. `vars` itself still carries them,
+  // because the template parameters are built from it below.
+  const secret = new Set(input.secretVars ?? []);
+  const loggedVars = secret.size
+    ? Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, secret.has(k) && v ? "••••••" : v]))
+    : vars;
+  const paramsJson = { template: template?.name ?? null, vars: loggedVars } as Prisma.InputJsonValue;
 
   // Reasons the message can't actually go out. The first three are "system off" - for
   // event-driven callers (logSkips=false) we stay silent rather than spamming SKIPPED rows.
@@ -316,7 +328,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
   const dest = resolveDestination(number!, runtime.settings.testRecipient);
   const loggedBody = dest.redirected ? redirectedBodyPrefix(dest.intended) + body : body;
   const loggedParams = (
-    dest.redirected ? { template: template?.name ?? null, vars, redirectedFrom: dest.intended } : paramsJson
+    dest.redirected ? { template: template?.name ?? null, vars: loggedVars, redirectedFrom: dest.intended } : paramsJson
   ) as Prisma.InputJsonValue;
 
   // Would have sent. Rehearsal stops exactly here - after every check has passed for real,
@@ -1311,6 +1323,10 @@ async function sampleVars(): Promise<Record<string, string>> {
     student_name: "Test Student",
     ship_to: "Test address",
     ship_phone: "+910000000000",
+    login_url: `${base}/login`,
+    login_email: "student@example.com",
+    // Never a real password - a test send of the login template must not mint a usable one.
+    temp_password: "Sample-Pass-123",
   };
 }
 

@@ -710,6 +710,38 @@ export const TEMPLATES: Tpl[] = [
       text: "Approved 3 Aug 2026 and live in the app: Students → Book orders → Update → “Send to publisher”. {{publisher_name}} comes from the Vendor, {{order_ref}} is allocated as BO-YYYY-NNNN on first send, {{level}} is the level's display label, and {{student_name}}/{{ship_to}}/{{ship_phone}} come from the order's snapshot - not live off the Student, so a later address edit cannot rewrite where a past parcel went. Sending is MANUAL by design; a status change never places an order. The publisher's number must be opted-in for a business-initiated template to deliver.",
     },
   },
+
+  // ── H · Portal accounts ──
+  {
+    area: "H · Portal accounts",
+    name: "b2_login_credentials",
+    kind: "LOGIN_CREDENTIALS",
+    sub: "Portal login details",
+    category: "UTILITY",
+    fires:
+      "When an admin creates a student's portal login, reinstates one, or resets a password - with “Send the login details” ticked (the default). The same details go by email at the same moment.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "login_url", sample: "https://b2app.sirahagents.com/login" },
+      { name: "login_email", sample: "priya.nair@example.com" },
+      { name: "temp_password", sample: "Journey-2026" },
+    ],
+    body:
+      "Hi {{name}}, your B2 Consultants portal login is ready.\n\n" +
+      "Sign in: {{login_url}}\n" +
+      "Login email: {{login_email}}\n" +
+      "Temporary password: {{temp_password}}\n\n" +
+      "You will be asked to set your own password the first time you sign in. From now on, all your " +
+      "updates - classes, progress, payments, receipts and documents - are in the portal.",
+    note: {
+      tag: "Password is never stored",
+      text:
+        "The app logs this message with {{temp_password}} redacted, so the password exists only in the delivered " +
+        "message and the email. If Meta rejects the template for carrying a password, resubmit it WITHOUT " +
+        "{{temp_password}} (“Your temporary password has been emailed to {{login_email}}”): the app still offers the " +
+        "variable, an unused one is simply not sent, and the email carries the password on its own.",
+    },
+  },
 ];
 
 // ─────────────────────────────── small builders ───────────────────────────────

@@ -24,12 +24,16 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { renderInvoicePdf, type InvoicePdfData } from "../src/documents/invoice-pdf";
+import { renderReceiptPdf } from "../src/documents/receipt-pdf";
 import { formatMinorForDocument, taxLine, type InvoiceCurrencyCode } from "../src/lib/invoice-money";
+import { AGREEMENT_INVOICE_TERMS, AGREEMENT_RECEIPT_TERM } from "../src/lib/agreement";
+import { amountInWords } from "../src/lib/invoice-compliance";
 
 const RATE = 92.4; // INR per EUR, as an invoice would have stamped it
 
 const issuer: InvoicePdfData["issuer"] = {
   name: "B2 Consultants",
+  ownerName: "Erika Mustermann",
   addressLines: ["Beispielstraße 12"],
   city: "Reichelsheim",
   postcode: "64385",
@@ -52,14 +56,18 @@ function sample(opts: {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  customerAddress: string[];
   issueDate: string;
   dueDate: string;
+  servicePeriod: string;
+  agreementRef: string | null;
   lines: SampleLine[];
   discountMinor: bigint;
   taxLabel: string;
   taxPercent: number;
   paidMinor: bigint;
   notes: string | null;
+  taxNote?: string;
 }): InvoicePdfData {
   const { currency } = opts;
   const money = (m: bigint) => formatMinorForDocument(m, currency);
@@ -85,6 +93,12 @@ function sample(opts: {
     customerName: opts.customerName,
     customerEmail: opts.customerEmail,
     customerPhone: opts.customerPhone,
+    customerAddressLines: opts.customerAddress,
+    servicePeriod: opts.servicePeriod,
+    agreementRef: opts.agreementRef,
+    agreementTerms: opts.agreementRef ? [...AGREEMENT_INVOICE_TERMS] : [],
+    paymentReference: opts.number,
+    taxNote: opts.taxPercent > 0 ? null : opts.taxNote ?? null,
     issuedByName: "Ameen Khan",
     items: opts.lines.map((l) => ({
       description: l.description,
@@ -107,32 +121,39 @@ function sample(opts: {
 }
 
 const inr = sample({
-  number: "INV-0042",
+  number: "INV-260042",
   currency: "INR",
   customerName: "Priya Nair",
   customerEmail: "priya.nair@example.com",
   customerPhone: "+91 98765 43210",
+  customerAddress: ["12 MG Road, Indiranagar", "Bengaluru 560038", "India"],
   issueDate: "07/10/2026",
   dueDate: "21/10/2026",
+  servicePeriod: "02/11/2026 - 31/01/2027",
+  agreementRef: "B2-GM-2026-0042",
   lines: [
     { description: "Guided - 90-day placement coaching", quantity: 1, unitMinor: 15_000_000n },
     { description: "Resume & LinkedIn rebuild (add-on)", quantity: 1, unitMinor: 500_000n },
   ],
   discountMinor: 500_000n,
   taxLabel: "GST",
-  taxPercent: 18,
+  taxPercent: 0,
+  taxNote: "Example only - the reason no tax is charged, as set in Console > Money > Invoicing.",
   paidMinor: 5_000_000n,
   notes: "Instalment 1 of 3 received. The balance falls due on the date above.",
 });
 
 const eur = sample({
-  number: "INV-0043",
+  number: "INV-260043",
   currency: "EUR",
   customerName: "Lukas Brandt",
   customerEmail: "lukas.brandt@example.de",
   customerPhone: "+49 151 0000000",
+  customerAddress: ["Hauptstraße 5", "60311 Frankfurt am Main", "Germany"],
   issueDate: "07/10/2026",
   dueDate: "21/10/2026",
+  servicePeriod: "01/11/2026",
+  agreementRef: null,
   lines: [
     { description: "German Note - GN A1 course", quantity: 1, unitMinor: 49_000n },
     { description: "German Note - GN A2 course", quantity: 1, unitMinor: 54_000n },
@@ -158,6 +179,31 @@ async function main(): Promise<void> {
     await writeFile(out, bytes);
     console.log(`${out}  (${(bytes.length / 1024).toFixed(1)} KB)`);
   }
+  const receipt = await renderReceiptPdf({
+    receiptNumber: "RCT-260017",
+    receiptDate: "08/10/2026",
+    issuer,
+    currency: "INR",
+    customerName: inr.customerName,
+    customerAddressLines: inr.customerAddressLines,
+    customerEmail: inr.customerEmail,
+    amountDisplay: formatMinorForDocument(5_000_000n, "INR"),
+    amountWords: amountInWords(5_000_000n, "INR"),
+    method: "Bank transfer",
+    reference: "UTR 412345678901",
+    invoiceNumber: inr.number,
+    invoiceDate: inr.issueDate,
+    invoiceTotalDisplay: inr.totalDisplay,
+    paidToDateDisplay: inr.amountPaidDisplay,
+    balanceDisplay: inr.balanceDisplay,
+    settled: false,
+    agreementRef: inr.agreementRef,
+    agreementTerm: AGREEMENT_RECEIPT_TERM,
+    recordedByName: "Ameen Khan",
+  });
+  const receiptOut = path.join(root, "sample-receipt-inr.pdf");
+  await writeFile(receiptOut, receipt);
+  console.log(`${receiptOut}  (${(receipt.length / 1024).toFixed(1)} KB)`);
 }
 
 main().catch((err) => {

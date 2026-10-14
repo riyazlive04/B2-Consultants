@@ -57,6 +57,32 @@ export const AGREEMENT_BANKS = [
   },
 ] as const;
 
+/** The banks above as the plain text an invoice's "How to pay" block prints. */
+export const AGREEMENT_BANK_DETAILS_TEXT = AGREEMENT_BANKS.map(
+  (b) => `${b.title}\nAccount holder: ${b.holder}\nIBAN: ${b.iban} · BIC: ${b.bic}`,
+).join("\n\n");
+
+/**
+ * The agreement's money terms (§7.3, §7.4, §8), restated for the invoice and the receipt.
+ *
+ * Kept HERE, beside the clauses they summarise, so a change to the contract's payment terms is
+ * made in the same file as the documents that quote them. Each line names its clause: the
+ * invoice does not restate the contract, it points the student back to what they signed. The
+ * wording follows guided-v3 and guided-v4, which agree on all three clauses.
+ *
+ * What these terms rule OUT matters as much as what they say: §7.3 promises "no penalty fee
+ * for late payment", so no invoice or reminder may ever add late fees or interest.
+ */
+export const AGREEMENT_INVOICE_TERMS = [
+  "§7.3 Missed payments: if a payment is not received by its due date, the Student may not attend the live sessions in the unpaid period; recordings of those sessions are released once the payment is received and confirmed. No penalty fee is charged for late payment.",
+  "§7.4 Payment method: bank transfer or credit card. Card payments carry a 2.5% processing fee, payable in addition to the amount due. Every payment received is confirmed in writing.",
+  "§8 Refunds: all payments are strictly non-refundable and non-transferable. Withdrawal, discontinuation or early termination does not entitle the Student to a refund.",
+] as const;
+
+/** The one line a receipt carries from §8 - money received under the agreement stays received. */
+export const AGREEMENT_RECEIPT_TERM =
+  "Payments under the coaching agreement are non-refundable and non-transferable (Agreement §8).";
+
 // ───────────────────────────────── Field schema ─────────────────────────────────
 
 /**

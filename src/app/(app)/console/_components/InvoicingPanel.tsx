@@ -97,7 +97,9 @@ export function InvoicingPanel({ config }: { config: InvoiceSettings }) {
         >
           <div className="space-y-1.5">
             <ColHead cols={FIELD_COLS} labels={["Field", "Value"]} />
-            <Row index={0} label="Registered name" value={issuer.name} placeholder="B2 Consultants" onChange={(name) => patchIssuer({ name })} />
+            <Row index={0} label="Trading name" value={issuer.name} placeholder="B2 Consultants" onChange={(name) => patchIssuer({ name })} />
+            {/* A sole trader's invoice must carry the owner's own full name - required to issue. */}
+            <Row index={0} label="Owner's legal name" value={issuer.ownerName} placeholder="First and last name" onChange={(ownerName) => patchIssuer({ ownerName })} />
             <ColRow cols={FIELD_COLS} index={1}>
               <NameCell className="font-medium">Street address</NameCell>
               <textarea
@@ -121,7 +123,7 @@ export function InvoicingPanel({ config }: { config: InvoiceSettings }) {
             <Row index={5} label="Email" value={issuer.email} placeholder="billing@…" onChange={(email) => patchIssuer({ email })} />
             <Row index={6} label="Phone" value={issuer.phone} placeholder="+49 …" onChange={(phone) => patchIssuer({ phone })} />
             <Row index={7} label="Website" value={issuer.website} placeholder="b2consultants.…" onChange={(website) => patchIssuer({ website })} />
-            <Row index={8} label="Tax ID" value={issuer.taxId} placeholder="VAT / GSTIN / USt-IdNr" onChange={(taxId) => patchIssuer({ taxId })} />
+            <Row index={8} label="Tax ID" value={issuer.taxId} placeholder="Steuernummer or USt-IdNr - required to issue" onChange={(taxId) => patchIssuer({ taxId })} />
             <Row index={9} label="Registration no." value={issuer.registrationNo} placeholder="Company register number" onChange={(registrationNo) => patchIssuer({ registrationNo })} />
             <ColRow cols={FIELD_COLS} index={10}>
               <NameCell className="font-medium">How to pay</NameCell>
@@ -158,13 +160,16 @@ export function InvoicingPanel({ config }: { config: InvoiceSettings }) {
               Each invoice keeps the name and rate it actually charged, so changing these never
               rewrites a document already sent &ndash; and whoever raises an invoice can still
               override it. <strong>A rate of 0 prints no tax line at all</strong>, which is how a
-              customer who should not be taxed is invoiced.
+              customer who should not be taxed is invoiced &ndash; and then the invoice must say
+              why. <strong>Which reason applies is for your tax adviser to confirm</strong>: the
+              small-business rule (§ 19 UStG), a service not taxable in Germany (§ 3a UStG), or an
+              exemption.
             </Hint>
           }
         >
           <ColScroll>
             <div className="space-y-1.5">
-              <ColHead cols={TAX_COLS} labels={["Currency", "Called", "Rate %", "On the invoice"]} />
+              <ColHead cols={TAX_COLS} labels={["Currency", "Called", "Rate %", "On the invoice / why no tax"]} />
               {INVOICE_CURRENCIES.map((currency, i) => {
                 const row = draft.tax[currency];
                 const line = taxLine(row.label, row.percent);
@@ -184,9 +189,18 @@ export function InvoicingPanel({ config }: { config: InvoiceSettings }) {
                       max={100}
                       onChange={(percent) => patchTax(currency, { percent })}
                     />
-                    <NameCell className="text-ink-3">
-                      {line ? <span className="text-ink-2">{line}</span> : "No tax line"}
-                    </NameCell>
+                    {line ? (
+                      <NameCell className="text-ink-2">{line}</NameCell>
+                    ) : (
+                      // No tax line means the invoice must say WHY (§14 Abs. 4 Nr. 8 UStG) - a 0%
+                      // invoice without this note cannot be issued.
+                      <TextIn
+                        ariaLabel={`Why no tax is charged on ${currency} invoices`}
+                        value={row.note}
+                        placeholder="Required at 0% - e.g. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."
+                        onChange={(note) => patchTax(currency, { note })}
+                      />
+                    )}
                   </ColRow>
                 );
               })}

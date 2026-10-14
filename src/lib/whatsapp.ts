@@ -26,6 +26,7 @@ export const WHATSAPP_KINDS = [
   "AGREEMENT_REMINDER",
   "AGREEMENT_COPY",
   "STUDENT_WELCOME",
+  "LOGIN_CREDENTIALS",
   "MANUAL",
   "SOP_INTRO",
   "SOP_FOLLOWUP",
@@ -57,6 +58,7 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   PAYMENT_REMINDER: "Payment reminder",
   EMI_PRE_DUE: "EMI due-soon reminder",
   STUDENT_WELCOME: "Student welcome",
+  LOGIN_CREDENTIALS: "Login details",
   CHECKIN_NUDGE: "Check-in nudge",
   SPRINT_MISS_NUDGE: "Sprint-miss nudge",
   AGREEMENT_SEND: "Agreement signing link",
@@ -95,6 +97,8 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   EMI_PRE_DUE: "An instalment falls due in the next few days - lands BEFORE the due date, unlike the overdue reminder.",
   STUDENT_WELCOME:
     "Sent ONCE when a student is seated in a batch - names their tutor, their first class and where to follow their own progress.",
+  LOGIN_CREDENTIALS:
+    "A portal login was created (or its password reset) - the sign-in link, the login email and the temporary password, which they must change on first sign-in.",
   CHECKIN_NUDGE: "A student whose coaching check-in date has arrived / passed.",
   SPRINT_MISS_NUDGE: "A student who missed a sprint-week target.",
   AGREEMENT_SEND: "The founder countersigned an agreement - carries the tokenized signing link.",
@@ -184,6 +188,13 @@ const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
    * booking variants do. The plain template stays approved as the fallback.
    */
   STUDENT_WELCOME: ["name", "program", "tutor_name", "first_class", "portal_url"],
+  /**
+   * Portal login details. `temp_password` is SECRET: the sender passes it in `secretVars`, so the
+   * message log stores "••••••" in its place - the password exists in the delivered message and
+   * nowhere in our database. It is temporary twice over: `mustChangePassword` forces a new one at
+   * the first sign-in.
+   */
+  LOGIN_CREDENTIALS: ["name", "login_url", "login_email", "temp_password"],
   CHECKIN_NUDGE: ["name"],
   SPRINT_MISS_NUDGE: ["name"],
   // `sign_url` is the full tokenized link. If the approved template puts the token in a dynamic

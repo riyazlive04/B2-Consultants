@@ -129,6 +129,11 @@ export default async function AgreementsPage() {
                       <td className="px-4 py-3">
                         {/* Derived, not raw: an elapsed TTL is never written back to the row. */}
                         <StatusBadge status={effectiveAgreementStatus(r)} />
+                        {r.declineReason && (
+                          <p className="mt-1 max-w-[16rem] truncate text-xs text-muted" title={r.declineReason}>
+                            “{r.declineReason}”
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-muted">{formatDate(r.createdAt)}</td>
                     </tr>

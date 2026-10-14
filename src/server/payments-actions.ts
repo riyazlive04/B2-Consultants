@@ -15,13 +15,14 @@ import {
   formatMinor,
   type InvoiceCurrencyCode,
 } from "@/lib/invoice-money";
-import { parseDateInput } from "@/lib/dates";
+import { IST_ZONE, parseDateInput, ymdInZone } from "@/lib/dates";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { emitTrigger } from "./automation";
 import { afterResponse } from "./after-response";
 import { appendAudit, LedgerError, postEntry } from "./ledger";
 import { paymentEntryDraft } from "./finance-posting";
-import { getInvoicePdfData } from "./payments-metrics";
+import { getInvoicePdfData, getReceiptPdfData } from "./payments-metrics";
+import { renderReceiptPdf } from "@/documents/receipt-pdf";
 import { getActiveLevels, getLevels } from "./levels";
 import { renderInvoicePdf } from "@/documents/invoice-pdf";
 import { brandEmailHeader, getEmailRuntime, sendResendEmail } from "@/lib/email";
@@ -30,6 +31,8 @@ import { syncPaymentIncome } from "./finance-autopost";
 import { syncInvoiceIssuance } from "./invoice-posting";
 import type { ActionResult } from "./finance-actions";
 import { archiveData, restoreData } from "@/lib/soft-delete";
+import { getInvoiceSettings } from "./founder-config";
+import { InvoiceNotIssuable, issueInvoice, mintProvisionalNumber, nextDocumentNumber } from "./document-numbers";
 
 /** Payments (Synamate "Payments"): products, invoices/estimates, manual payments, subscriptions.
  *  No processor is wired - statuses advance manually. Gated to the `payments` section; deletes
@@ -347,8 +350,17 @@ export type InvoicePayload = {
   customerName: string;
   customerEmail?: string;
   customerPhone?: string;
+  /** Postal address of the recipient - required to issue (§14 Abs. 4 Nr. 1 UStG). */
+  customerAddress?: string;
   issueDate: string;
   dueDate?: string;
+  /** Date or period of the service, YYYY-MM-DD - required to issue (§14 Abs. 4 Nr. 6 UStG). */
+  servicePeriodStart?: string;
+  servicePeriodEnd?: string;
+  /** The coaching agreement billed under (its documentNo), which prints its payment terms. */
+  agreementRef?: string;
+  /** Why no tax is charged, on a 0% invoice. Blank takes the Console's note at issue. */
+  taxNote?: string;
   /** Which currency the figures below are typed in. See `lib/invoice-money`. */
   currency?: InvoiceCurrencyCode;
   items: { description: string; quantity: number; unitPrice: string; levelCode?: string | null }[];
@@ -408,16 +420,6 @@ function invoiceMoney(
   };
 }
 
-async function nextNumber(tx: TxClient, kind: InvoiceKind): Promise<string> {
-  const prefix = kind === "INVOICE" ? "INV" : "EST";
-  const rows = await tx.invoice.findMany({ where: { kind }, select: { number: true } });
-  let max = 0;
-  for (const r of rows) {
-    const m = r.number.match(/(\d+)\s*$/);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
-  }
-  return `${prefix}-${String(max + 1).padStart(4, "0")}`;
-}
 
 /**
  * createInvoice/updateInvoice take a JSON payload rather than FormData, so NOTHING here has been
@@ -432,8 +434,14 @@ const invoicePayloadSchema = z.object({
   customerName: rule("name"),
   customerEmail: optionalRule("email"),
   customerPhone: optionalRule("phone"),
+  // Free text, not rule("text"): an address legitimately carries commas, slashes and newlines.
+  customerAddress: z.string().trim().max(300, "Keep the address under 300 characters").optional(),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid issue date"),
   dueDate: z.string().trim().optional(),
+  servicePeriodStart: z.union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid service date")]).optional(),
+  servicePeriodEnd: z.union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid service end date")]).optional(),
+  agreementRef: z.string().trim().max(40).optional(),
+  taxNote: z.string().trim().max(300, "Keep the tax note under 300 characters").optional(),
   currency: z.enum(["INR", "EUR"]).default("INR"),
   items: z
     .array(
@@ -475,6 +483,44 @@ async function sanitizeLineLevels(
   return wanted.map((code) => (code && known.has(code) ? code : null));
 }
 
+/**
+ * The compliance fields both create and update write, checked: a service period that ends before
+ * it starts is a typo, and an agreement reference that names no agreement would print a contract
+ * number - and that contract's refund terms - onto an invoice that is not under it.
+ */
+async function complianceFields(payload: z.infer<typeof invoicePayloadSchema>): Promise<
+  | {
+      ok: true;
+      data: {
+        customerAddress: string | null;
+        servicePeriodStart: Date | null;
+        servicePeriodEnd: Date | null;
+        agreementRef: string | null;
+        taxNote: string | null;
+      };
+    }
+  | { ok: false; error: string }
+> {
+  const start = payload.servicePeriodStart?.trim() || "";
+  const end = payload.servicePeriodEnd?.trim() || "";
+  if (end && !start) return { ok: false, error: "Add the service start date, or clear the end date." };
+  if (start && end && end < start) return { ok: false, error: "The service period ends before it starts." };
+  const agreementRef = payload.agreementRef?.trim() || null;
+  if (agreementRef) {
+    const found = await prisma.agreement.findUnique({ where: { documentNo: agreementRef }, select: { id: true } });
+    if (!found) return { ok: false, error: `No agreement ${agreementRef} exists - check the reference or clear it.` };
+  }
+  return {
+    ok: true,
+    data: {
+      customerAddress: payload.customerAddress?.trim() || null,
+      servicePeriodStart: start ? parseDateInput(start) : null,
+      servicePeriodEnd: end && end !== start ? parseDateInput(end) : null,
+      agreementRef,
+      taxNote: payload.taxNote?.trim() || null,
+    },
+  };
+}
 
 export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> {
   const session = await requireSection("payments");
@@ -502,11 +548,20 @@ export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> 
     };
   }
 
+  const compliance = await complianceFields(payload);
+  if (!compliance.ok) return compliance;
+
   let created: Invoice | null = null;
   await prisma.$transaction(async (tx) => {
-    const number = await nextNumber(tx, payload.kind as InvoiceKind);
+    // An estimate is numbered now - it is not a tax document, and its number is what the customer
+    // quotes back. An invoice is a DRAFT reference until it is issued (see document-numbers.ts).
+    const number =
+      payload.kind === "ESTIMATE"
+        ? await nextDocumentNumber(tx, "EST", parseDateInput(payload.issueDate).getUTCFullYear())
+        : mintProvisionalNumber();
     created = await tx.invoice.create({
       data: {
+        ...compliance.data,
         kind: payload.kind as InvoiceKind,
         number,
         publicToken: mintPublicToken(),
@@ -595,12 +650,27 @@ export async function updateInvoice(id: string, raw: InvoicePayload): Promise<Ac
   }
 
   const existing = await prisma.invoice.findUnique({ where: { id } });
+  if (!existing) return { ok: false, error: "Invoice not found" };
+  /**
+   * An issued invoice is a record, not a draft. Editing one rewrote what the customer already holds
+   * - and re-stamped it at TODAY's exchange rate, so a paid euro invoice silently changed its rupee
+   * side. A mistake is corrected by voiding it and issuing a new one, which keeps both on file.
+   */
+  if (existing.kind === "INVOICE" && existing.issuedAt) {
+    return {
+      ok: false,
+      error: `${existing.number} has been issued and can't be edited. Void it and raise a new invoice instead.`,
+    };
+  }
+  const compliance = await complianceFields(payload);
+  if (!compliance.ok) return compliance;
   let updated: Invoice | null = null;
   await prisma.$transaction(async (tx) => {
     await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
     updated = await tx.invoice.update({
       where: { id },
       data: {
+        ...compliance.data,
         leadId: payload.leadId || null,
         customerName: payload.customerName.trim(),
         customerEmail: payload.customerEmail?.trim() || null,
@@ -659,19 +729,39 @@ export async function updateInvoice(id: string, raw: InvoicePayload): Promise<Ac
 }
 
 const STATUSES = ["DRAFT", "SENT", "PAID", "PARTIAL", "OVERDUE", "VOID", "ACCEPTED", "DECLINED"] as const;
+/** The statuses that put an invoice in a customer's hands - reaching one issues it. */
+const ISSUING_STATUSES = ["SENT", "PAID", "PARTIAL", "OVERDUE"] as const;
 
 export async function setInvoiceStatus(id: string, status: string): Promise<ActionResult> {
   const session = await requireSection("payments");
   if (!(STATUSES as readonly string[]).includes(status)) return { ok: false, error: "Invalid status" };
   const existing = await prisma.invoice.findUnique({ where: { id } });
-  const row = await prisma.invoice.update({
-    where: { id },
-    data: {
-      status: status as InvoiceStatus,
-      ...(status === "SENT" ? { sentAt: new Date() } : {}),
-      ...(status === "PAID" ? { paidAt: new Date() } : {}),
-    },
-  });
+  if (!existing) return { ok: false, error: "Invoice not found" };
+  if (existing.kind === "INVOICE" && existing.issuedAt && status === "DRAFT") {
+    return { ok: false, error: `${existing.number} has been issued - it can be voided, but not turned back into a draft.` };
+  }
+  const settings = await getInvoiceSettings();
+  let row: Invoice;
+  try {
+    row = await prisma.$transaction(async (tx) => {
+      // Leaving DRAFT for any live state IS issuing it - it draws its number here. Voiding a draft
+      // does not: a draft that was never sent was never an invoice.
+      if (existing.kind === "INVOICE" && (ISSUING_STATUSES as readonly string[]).includes(status)) {
+        await issueInvoice(tx, id, settings);
+      }
+      return tx.invoice.update({
+        where: { id },
+        data: {
+          status: status as InvoiceStatus,
+          ...(status === "SENT" ? { sentAt: new Date() } : {}),
+          ...(status === "PAID" ? { paidAt: new Date() } : {}),
+        },
+      });
+    });
+  } catch (err) {
+    if (err instanceof InvoiceNotIssuable) return { ok: false, error: err.message };
+    throw err;
+  }
 
   if (existing) {
     const diff = diffFields({ status: existing.status as string }, { status: row.status as string });
@@ -751,9 +841,17 @@ export async function restoreInvoice(id: string): Promise<ActionResult> {
 export async function purgeInvoice(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
-  const existing = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true } });
+  const existing = await prisma.invoice.findUnique({
+    where: { id },
+    select: { deletedAt: true, kind: true, issuedAt: true, number: true },
+  });
   if (!existing) return { ok: false, error: "Invoice not found" };
   if (!existing.deletedAt) return { ok: false, error: "Archive it first" };
+  // An issued invoice is a tax record: it must be kept (8 years in Germany) and its number must
+  // never come free. It can sit in the archive indefinitely; it cannot be destroyed.
+  if (existing.kind === "INVOICE" && existing.issuedAt) {
+    return { ok: false, error: `${existing.number} was issued, so it is a tax record and must be kept. It stays archived.` };
+  }
   const payments = await prisma.invoicePayment.findMany({ where: { invoiceId: id }, select: { id: true } });
   const row = await prisma.invoice.delete({ where: { id } });
   for (const p of payments) await syncPaymentIncome(null, p.id);
@@ -804,6 +902,15 @@ export type SendInvoiceResult = { ok: true; message: string } | { ok: false; err
  */
 export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
   const session = await requireSection("payments");
+  // Issue BEFORE rendering: the PDF that goes out must carry the real number, and an invoice the
+  // law would reject must not reach the customer at all.
+  const settings = await getInvoiceSettings();
+  try {
+    await prisma.$transaction((tx) => issueInvoice(tx, id, settings));
+  } catch (err) {
+    if (err instanceof InvoiceNotIssuable) return { ok: false, error: err.message };
+    throw err;
+  }
   const inv = await prisma.invoice.findUnique({
     where: { id },
     select: {
@@ -909,6 +1016,7 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
   if (!ref.success) return { ok: false, error: firstError(ref.error) };
   const reference = ref.data ?? null;
   const enteredMinor = majorStringToMinor(amountRaw);
+  const settings = await getInvoiceSettings();
 
   let paidLeadId: string | null = null;
   let recorded: RecordedPayment | null = null;
@@ -922,6 +1030,22 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
         },
       });
       if (!inv) throw new LedgerError("Invoice not found");
+      if (inv.kind !== "INVOICE") throw new LedgerError("Payments are recorded against invoices, not estimates.");
+      if (inv.status === "VOID") throw new LedgerError("This invoice is void - raise a new one to take payment against.");
+
+      // Money taken against a draft means the draft is in the customer's hands: issue it, so the
+      // receipt can name a real invoice number. Same checks as sending it.
+      try {
+        const issued = await issueInvoice(tx, invoiceId, settings);
+        inv.number = issued.number;
+      } catch (err) {
+        if (err instanceof InvoiceNotIssuable) throw new LedgerError(err.message);
+        throw err;
+      }
+      // The written confirmation §7.4 of the agreement promises - numbered in the same
+      // transaction, so a payment and its receipt number exist together or not at all.
+      const paidAt = new Date();
+      const receiptNumber = await nextDocumentNumber(tx, "RCT", Number(ymdInZone(paidAt, IST_ZONE).slice(0, 4)));
 
       /**
        * The receipt is valued in the invoice's own currency, and its other side is derived once
@@ -947,6 +1071,8 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
           fxRateUsed: inv.fxRateUsed,
           method,
           reference,
+          paidAt,
+          receiptNumber,
           recordedById: session.user.id,
         },
       });
@@ -1063,6 +1189,66 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
   return { ok: true };
 }
 
+/**
+ * Email a payment's receipt to the customer - the written confirmation §7.4 of the agreement
+ * promises. Deliberately a button, not automatic on recordPayment: a payment recorded by mistake
+ * (or a test) must not land in a real student's inbox before anyone has looked at it.
+ */
+export async function sendReceipt(paymentId: string): Promise<SendInvoiceResult> {
+  const session = await requireSection("payments");
+  const payment = await prisma.invoicePayment.findUnique({
+    where: { id: paymentId },
+    select: {
+      id: true, receiptNumber: true, invoiceId: true,
+      invoice: { select: { customerName: true, customerEmail: true, publicToken: true } },
+    },
+  });
+  if (!payment) return { ok: false, error: "Payment not found" };
+  if (!payment.receiptNumber) return { ok: false, error: "This payment predates receipts and has no receipt number." };
+  const to = payment.invoice.customerEmail?.trim();
+  if (!to) return { ok: false, error: "No email on this invoice - download the receipt and hand it over instead." };
+
+  const rt = await getEmailRuntime();
+  if (!rt.enabled) {
+    return { ok: false, error: rt.configured ? "Email is paused - nothing was sent." : "Email isn't configured - nothing was sent." };
+  }
+  const data = await getReceiptPdfData(paymentId);
+  if (!data) return { ok: false, error: "Receipt not found" };
+
+  const origin = (process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "");
+  const url = `${origin}/i/${payment.invoice.publicToken}/receipt/${encodeURIComponent(data.receiptNumber)}`;
+  const first = (payment.invoice.customerName || "").trim().split(/\s+/)[0] || "there";
+  const from = rt.fromName ? `${rt.fromName} <${rt.fromEmail}>` : rt.fromEmail;
+  const res = await sendResendEmail({
+    apiKey: rt.apiKey!,
+    from,
+    to,
+    subject: `Payment receipt ${data.receiptNumber} from B2 Consultants`,
+    html: `<div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#16203A;line-height:1.6">
+    ${brandEmailHeader()}
+    <p>Hi ${first},</p>
+    <p>Thank you - we have received your payment of <strong>${data.amountDisplay}</strong> against invoice <strong>${data.invoiceNumber}</strong>. Your receipt <strong>${data.receiptNumber}</strong> is attached.</p>
+    <p>Balance outstanding: ${data.settled ? "nil - this invoice is paid in full" : data.balanceDisplay}.</p>
+    <p>You can also download it here: <a href="${url}" style="color:#003C8C">${url}</a></p>
+    <p>B2 Consultants</p>
+  </div>`,
+    attachments: [{ filename: `${data.receiptNumber}.pdf`, content: (await renderReceiptPdf(data)).toString("base64") }],
+  });
+  if (!res.ok) return { ok: false, error: `The email failed (${res.error})` };
+
+  await prisma.invoicePayment.update({ where: { id: paymentId }, data: { receiptSentAt: new Date() } });
+  await logActivity(session, {
+    action: "payments.receipt.send",
+    section: "payments",
+    entityType: "InvoicePayment",
+    entityId: paymentId,
+    summary: `Emailed receipt ${data.receiptNumber} (${data.amountDisplay}) to ${payment.invoice.customerName}`,
+    meta: { receiptNumber: data.receiptNumber, invoiceNumber: data.invoiceNumber, to },
+  });
+  revalidatePath(`/payments/${payment.invoiceId}`);
+  return { ok: true, message: `Receipt emailed to ${to}` };
+}
+
 /** Estimate → Invoice: copies customer + line items into a new draft invoice, marks the estimate accepted. */
 export async function convertEstimate(id: string): Promise<ActionResult> {
   const session = await requireSection("payments");
@@ -1072,11 +1258,16 @@ export async function convertEstimate(id: string): Promise<ActionResult> {
 
   let converted: Invoice | null = null;
   await prisma.$transaction(async (tx) => {
-    const number = await nextNumber(tx, "INVOICE");
     converted = await tx.invoice.create({
       data: {
         kind: "INVOICE",
-        number,
+        // A draft like any other: it draws its real number when it is issued.
+        number: mintProvisionalNumber(),
+        customerAddress: est.customerAddress,
+        servicePeriodStart: est.servicePeriodStart,
+        servicePeriodEnd: est.servicePeriodEnd,
+        agreementRef: est.agreementRef,
+        taxNote: est.taxNote,
         publicToken: mintPublicToken(),
         status: "DRAFT",
         leadId: est.leadId,

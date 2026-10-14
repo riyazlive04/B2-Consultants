@@ -29,6 +29,8 @@ const LIST_SELECT = {
   signedAt: true,
   expiresAt: true,
   pdfSha256: true,
+  // Shown under a Declined badge - the student's answer is the point of the decline button.
+  declineReason: true,
   // `code` rides along so the table can show "B2-0042" beside the name (Error Log I1).
   // An agreement is the document that binds a fee to a person; getting the person wrong here
   // is the most expensive version of the duplicate-name problem, not the cheapest.
@@ -83,7 +85,6 @@ export async function getAgreementDetail(id: string) {
       founderDevice: true,
       signerDevice: true,
       declinedAt: true,
-      declineReason: true,
       voidedAt: true,
       events: { orderBy: { createdAt: "asc" } },
       whatsappMessages: {

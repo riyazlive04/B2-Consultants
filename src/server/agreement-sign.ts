@@ -341,7 +341,11 @@ export async function declineAgreement(token: string, reason: string): Promise<A
       section: "agreements",
       entityType: "Agreement",
       entityId: found.row.id,
-      summary: `${declinedBy} declined agreement ${found.row.documentNo}`,
+      // The reason in the summary itself: the activity feed shows summaries, not meta, so a
+      // reason kept only in meta was invisible to everyone reading the feed.
+      summary: `${declinedBy} declined agreement ${found.row.documentNo}${
+        reason.trim() ? ` - "${reason.trim().slice(0, 200)}"` : " - no reason given"
+      }`,
       meta: { documentNo: found.row.documentNo, reason: reason.slice(0, 200) || null },
     },
   );

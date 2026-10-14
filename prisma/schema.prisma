@@ -1552,48 +1552,65 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id               String            @id @default(cuid())
-  kind             InvoiceKind       @default(INVOICE)
-  number           String            @unique // INV-0001 / EST-0001
-  status           InvoiceStatus     @default(DRAFT)
-  leadId           String?
-  lead             Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  customerName     String
-  customerEmail    String?
-  customerPhone    String?
-  issueDate        DateTime          @db.Date
-  dueDate          DateTime?         @db.Date
+  id                 String            @id @default(cuid())
+  kind               InvoiceKind       @default(INVOICE)
+  /// INV-yy9999 / EST-yy9999 (lib/invoice-compliance). An INVOICE carries a provisional
+  /// DRAFT-xxxxxxxx until it is issued and draws its real number then; INV-0001…0007 are the
+  /// pre-October 2026 format and keep the numbers they were sent with.
+  number             String            @unique
+  status             InvoiceStatus     @default(DRAFT)
+  leadId             String?
+  lead               Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  customerName       String
+  customerEmail      String?
+  customerPhone      String?
+  /// The recipient's postal address - §14 Abs. 4 Nr. 1 UStG; required to issue.
+  customerAddress    String?
+  issueDate          DateTime          @db.Date
+  dueDate            DateTime?         @db.Date
+  /// The date (start only) or period of the service - §14 Abs. 4 Nr. 6 UStG; required to issue.
+  servicePeriodStart DateTime?         @db.Date
+  servicePeriodEnd   DateTime?         @db.Date
+  /// The coaching agreement this invoice bills under (Agreement.documentNo, snapshotted). When
+  /// set, the agreement's payment and refund terms (§7.3, §7.4, §8) print on the invoice.
+  agreementRef       String?
+  /// When the invoice drew its real number. Non-null = issued = locked: no edit, no return to
+  /// DRAFT, no permanent delete. Always null on an estimate.
+  issuedAt           DateTime?
   /// Which currency this invoice was priced in. Everything below is stored on BOTH sides so the
   /// KPI cards, the ageing and the ledger can keep aggregating in rupees without re-converting
   /// at today's rate; the entered side is the one the document prints.
-  currency         InvoiceCurrency   @default(INR)
-  subtotalInrMinor BigInt            @default(0)
-  subtotalEurMinor BigInt            @default(0)
-  discountInrMinor BigInt            @default(0)
-  discountEurMinor BigInt            @default(0)
-  taxPercent       Decimal           @default(0) @db.Decimal(6, 3)
+  currency           InvoiceCurrency   @default(INR)
+  subtotalInrMinor   BigInt            @default(0)
+  subtotalEurMinor   BigInt            @default(0)
+  discountInrMinor   BigInt            @default(0)
+  discountEurMinor   BigInt            @default(0)
+  taxPercent         Decimal           @default(0) @db.Decimal(6, 3)
   /// What the tax is CALLED on this document - "GST", "VAT", or null when the invoice carries no
   /// tax at all. Snapshotted from the Console's per-currency setting at save, because a later
   /// change to the rate must never rewrite what an issued invoice says it charged.
-  taxLabel         String?
-  taxInrMinor      BigInt            @default(0)
-  taxEurMinor      BigInt            @default(0)
-  totalInrMinor    BigInt            @default(0)
-  totalEurMinor    BigInt            @default(0)
-  fxRateUsed       Decimal           @db.Decimal(14, 6)
-  notes            String?
-  publicToken      String            @unique @default(cuid())
-  sentAt           DateTime?
-  paidAt           DateTime?
-  createdById      String?
-  createdBy        User?             @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  deletedAt        DateTime?
-  deletedById      String?
-  deletedBy        User?             @relation("InvoiceArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
-  items            InvoiceLineItem[]
-  payments         InvoicePayment[]
+  taxLabel           String?
+  /// Why no tax is charged, printed in place of a tax line on a 0% invoice ("Gemäß § 19 UStG…").
+  /// Snapshotted at issue from the Console's per-currency note when the invoice has none.
+  taxNote            String?
+  taxInrMinor        BigInt            @default(0)
+  taxEurMinor        BigInt            @default(0)
+  totalInrMinor      BigInt            @default(0)
+  totalEurMinor      BigInt            @default(0)
+  fxRateUsed         Decimal           @db.Decimal(14, 6)
+  notes              String?
+  publicToken        String            @unique @default(cuid())
+  sentAt             DateTime?
+  paidAt             DateTime?
+  createdById        String?
+  createdBy          User?             @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  deletedAt          DateTime?
+  deletedById        String?
+  deletedBy          User?             @relation("InvoiceArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  items              InvoiceLineItem[]
+  payments           InvoicePayment[]
 
   @@index([status])
   @@index([kind, createdAt])
@@ -1636,12 +1653,26 @@ model InvoicePayment {
   provider       String? // future: "razorpay" | "stripe"
   externalId     String? // future: processor payment id
   paidAt         DateTime        @default(now())
+  /// RCT-yy9999 - the written confirmation of payment the agreement promises (§7.4). Drawn in
+  /// the same transaction as the payment; null only on payments recorded before receipts existed.
+  receiptNumber  String?         @unique
+  receiptSentAt  DateTime?
   recordedById   String?
   recordedBy     User?           @relation("InvoicePaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([recordedById])
   @@map("invoice_payment")
+}
+
+/// One counter per document series and year ("INV-26", "EST-26", "RCT-26"), incremented inside
+/// the transaction that issues the document - see server/document-numbers.ts.
+model DocumentSequence {
+  key       String   @id
+  last      Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("document_sequence")
 }
 
 enum SubscriptionStatus {
@@ -3493,6 +3524,9 @@ enum WhatsAppKind {
   /// has signed, paid and joined. Until this existed there was no enrolment message of any kind:
   /// the next automated thing a new student heard was a payment reminder.
   STUDENT_WELCOME
+  /// A portal login was created or its password reset: link, login email, temporary password.
+  /// The password is redacted from the logged params (sendWhatsApp `secretVars`).
+  LOGIN_CREDENTIALS
   CHECKIN_NUDGE // student coaching check-in due
   SPRINT_MISS_NUDGE // student missed a sprint-week target
   AGREEMENT_SEND // coaching agreement is ready - carries the tokenized signing link

@@ -1,5 +1,6 @@
 "use client";
 
+import { PhoneField } from "@/components/ui/PhoneField";
 import { useState } from "react";
 import {
   addEnrollment, addSatisfactionScore, createStudentLogin, linkIncomeToStudent,
@@ -396,7 +397,7 @@ export function StudentDetailClient({
               <TextInput name="code" defaultValue={student.code ?? ""} placeholder="B2-0042" />
             </Field>
             <Field label="Email"><TextInput kind="email" name="email" defaultValue={student.email ?? ""} /></Field>
-            <Field label="Phone"><TextInput kind="phone" name="phone" defaultValue={student.phone ?? ""} /></Field>
+            <Field label="Phone"><PhoneField name="phone" defaultValue={student.phone ?? ""} /></Field>
             <Field label="Industry"><TextInput name="industry" defaultValue={student.industry ?? ""} /></Field>
             <Field label="Target role"><TextInput name="targetRole" defaultValue={student.targetRole ?? ""} /></Field>
             <Field label="Lead source">
@@ -665,7 +666,7 @@ export function StudentDetailClient({
                 setError(null);
                 const res = await safeAction(() => createStudentLogin(student.id, form));
                 if (!res.ok) return setError(res.error);
-                toast("Portal login created - share the password securely");
+                toast(res.message ? `Portal login created. ${res.message}` : "Portal login created - share the password securely");
               }}
               className="mt-3 flex flex-wrap items-end gap-3"
             >
@@ -678,6 +679,14 @@ export function StudentDetailClient({
                 <Field label="Temporary password" hint="Min 8 characters">
                   <TextInput name="password" required minLength={8} defaultValue="" placeholder="e.g. journey-2026" />
                 </Field>
+              </div>
+              <div className="w-full">
+                <CheckboxField
+                  name="notify"
+                  defaultChecked
+                  label="Send the login details by email and WhatsApp"
+                  hint="Sign-in link, login email and this temporary password - they set their own at first sign-in."
+                />
               </div>
               <SubmitButton>Create portal login</SubmitButton>
             </form>

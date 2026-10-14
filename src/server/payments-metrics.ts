@@ -17,6 +17,9 @@ import { ACTIVE } from "@/lib/soft-delete";
 import { toDateInputValue } from "@/lib/dates";
 import type { InvoiceKind, Prisma } from "@prisma/client";
 import type { InvoicePdfData } from "@/documents/invoice-pdf";
+import type { ReceiptPdfData } from "@/documents/receipt-pdf";
+import { AGREEMENT_INVOICE_TERMS, AGREEMENT_RECEIPT_TERM, agreementDataSchema } from "@/lib/agreement";
+import { amountInWords, isProvisionalNumber } from "@/lib/invoice-compliance";
 
 /** Read layer for Payments (Synamate "Payments": Invoices, Estimates, Products, Subscriptions). */
 
@@ -135,8 +138,17 @@ export type InvoiceDetail = {
   customerName: string;
   customerEmail: string | null;
   customerPhone: string | null;
+  customerAddress: string;
   issueDate: string; // YYYY-MM-DD
   dueDate: string;
+  servicePeriodStart: string; // YYYY-MM-DD or ""
+  servicePeriodEnd: string;
+  agreementRef: string;
+  taxNote: string;
+  /** Issued = numbered and locked. Always false on an estimate. */
+  issued: boolean;
+  /** Still carrying its DRAFT-xxxx placeholder rather than a real INV- number. */
+  provisional: boolean;
   currency: InvoiceCurrencyCode;
   items: InvoiceItemEdit[];
   discount: string;
@@ -153,7 +165,15 @@ export type InvoiceDetail = {
   balanceDisplay: string;
   /** Canonical major string ("1500.50") - what the record-payment box opens pre-filled with. */
   balance: string;
-  payments: { id: string; amountDisplay: string; method: string; reference: string | null; paidAt: Date }[];
+  payments: {
+    id: string;
+    amountDisplay: string;
+    method: string;
+    reference: string | null;
+    paidAt: Date;
+    receiptNumber: string | null;
+    receiptSentAt: Date | null;
+  }[];
 };
 
 export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
@@ -181,8 +201,15 @@ export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
     customerName: i.customerName,
     customerEmail: i.customerEmail,
     customerPhone: i.customerPhone,
+    customerAddress: i.customerAddress ?? "",
     issueDate: toDateInputValue(i.issueDate),
     dueDate: i.dueDate ? toDateInputValue(i.dueDate) : "",
+    servicePeriodStart: i.servicePeriodStart ? toDateInputValue(i.servicePeriodStart) : "",
+    servicePeriodEnd: i.servicePeriodEnd ? toDateInputValue(i.servicePeriodEnd) : "",
+    agreementRef: i.agreementRef ?? "",
+    taxNote: i.taxNote ?? "",
+    issued: i.kind === "INVOICE" && !!i.issuedAt,
+    provisional: isProvisionalNumber(i.number),
     currency,
     items: i.items.map((it) => {
       const unit = own(it.unitPriceInrMinor, it.unitPriceEurMinor);
@@ -217,6 +244,8 @@ export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
       method: p.method,
       reference: p.reference,
       paidAt: p.paidAt,
+      receiptNumber: p.receiptNumber,
+      receiptSentAt: p.receiptSentAt,
     })),
   };
 }
@@ -238,11 +267,17 @@ async function invoiceDocument(i: {
   customerName: string;
   customerEmail: string | null;
   customerPhone: string | null;
+  customerAddress: string | null;
   issueDate: Date;
   dueDate: Date | null;
+  servicePeriodStart: Date | null;
+  servicePeriodEnd: Date | null;
+  agreementRef: string | null;
+  issuedAt: Date | null;
   notes: string | null;
   taxPercent: Prisma.Decimal;
   taxLabel: string | null;
+  taxNote: string | null;
   fxRateUsed: Prisma.Decimal;
   subtotalInrMinor: bigint; subtotalEurMinor: bigint;
   discountInrMinor: bigint; discountEurMinor: bigint;
@@ -250,7 +285,13 @@ async function invoiceDocument(i: {
   totalInrMinor: bigint; totalEurMinor: bigint;
   createdBy: { name: string | null; email: string } | null;
   items: { description: string; quantity: number; unitPriceInrMinor: bigint; unitPriceEurMinor: bigint }[];
-  payments: { amountInrMinor: bigint; amountEurMinor: bigint }[];
+  payments: {
+    amountInrMinor: bigint;
+    amountEurMinor: bigint;
+    receiptNumber: string | null;
+    paidAt: Date;
+    method: string;
+  }[];
 }, opts?: {
   /**
    * Format money WITHOUT its symbol ("1,25,000.50 INR"), for the PDF.
@@ -280,8 +321,20 @@ async function invoiceDocument(i: {
     customerName: i.customerName,
     customerEmail: i.customerEmail,
     customerPhone: i.customerPhone,
+    /** One line per line typed - §14 UStG requires the recipient's address, not just a name. */
+    customerAddressLines: (i.customerAddress ?? "").split("\n").map((l) => l.trim()).filter(Boolean),
     issueDate: i.issueDate,
     dueDate: i.dueDate,
+    /** The date or period the service is supplied - §14 Abs. 4 Nr. 6 UStG. */
+    servicePeriod: servicePeriodText(i.servicePeriodStart, i.servicePeriodEnd),
+    agreementRef: i.agreementRef,
+    /**
+     * The agreement's own payment terms, when this invoice bills under one - so the invoice and the
+     * contract cannot state different refund or late-payment rules.
+     */
+    agreementTerms: i.agreementRef ? [...AGREEMENT_INVOICE_TERMS] : [],
+    /** What to write on the transfer, so the money can be matched to this invoice. */
+    paymentReference: isProvisionalNumber(i.number) ? null : i.number,
     notes: i.notes,
     /** Who raised it. An invoice is somebody's act, and a document that says so can be queried. */
     issuedByName: i.createdBy?.name?.trim() || i.createdBy?.email || null,
@@ -300,6 +353,22 @@ async function invoiceDocument(i: {
     /** null when the invoice carries no tax at all, which removes the row entirely. */
     taxLineLabel: taxLine(i.taxLabel, percent),
     taxDisplay: percent > 0 ? money(own(i.taxInrMinor, i.taxEurMinor), currency) : null,
+    /**
+     * Why no tax is charged, in place of the tax line. An issued invoice prints the note it was
+     * issued with; a draft preview shows what it WOULD take from the Console.
+     */
+    taxNote:
+      percent > 0
+        ? null
+        : i.taxNote?.trim() || (i.issuedAt ? null : settings.tax[currency].note.trim() || null),
+    /** Every payment's receipt, for the public page to link. */
+    receipts: i.payments
+      .filter((p) => p.receiptNumber)
+      .map((p) => ({
+        number: p.receiptNumber as string,
+        paidAt: p.paidAt,
+        amountDisplay: money(own(p.amountInrMinor, p.amountEurMinor), currency),
+      })),
     totalDisplay: money(total, currency),
     convertedTotalDisplay: money(eur ? i.totalInrMinor : i.totalEurMinor, otherCurrency(currency)),
     convertedRateNote: `Converted at 1 EUR = ${Number(i.fxRateUsed).toFixed(2)} INR on the issue date`,
@@ -315,9 +384,18 @@ export type InvoiceDocument = Awaited<ReturnType<typeof invoiceDocument>>;
 /** The shape both document surfaces select - keep in step with `invoiceDocument`'s parameter. */
 const DOCUMENT_INCLUDE = {
   items: { orderBy: { position: "asc" } },
-  payments: { select: { amountInrMinor: true, amountEurMinor: true } },
+  payments: {
+    select: { amountInrMinor: true, amountEurMinor: true, receiptNumber: true, paidAt: true, method: true },
+    orderBy: { paidAt: "asc" },
+  },
   createdBy: { select: { name: true, email: true } },
 } as const;
+
+/** "01.11.2026 - 30.04.2027", or the one date, or null when none was set. */
+function servicePeriodText(start: Date | null, end: Date | null): string | null {
+  if (!start) return null;
+  return end ? `${formatDate(start)} - ${formatDate(end)}` : formatDate(start);
+}
 
 export async function getPublicInvoice(token: string): Promise<InvoiceDocument | null> {
   const i = await prisma.invoice.findUnique({
@@ -360,6 +438,87 @@ export async function getInvoicePdfData(id: string): Promise<InvoicePdfData | nu
   const i = await prisma.invoice.findUnique({ where: { id }, include: DOCUMENT_INCLUDE });
   if (!i) return null;
   return asPdfData(await invoiceDocument(i, { plainMoney: true }));
+}
+
+// ─────────────────────────── Receipts ───────────────────────────
+
+const METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  upi: "UPI",
+  bank: "Bank transfer",
+  card: "Credit / debit card",
+  razorpay: "Razorpay",
+  stripe: "Stripe",
+  other: "Other",
+};
+
+/**
+ * The receipt for one payment - the written confirmation of payment the agreement promises
+ * (§7.4), as a document the student can keep.
+ *
+ * "Paid to date" and "balance" are as at THIS payment, counting only the payments up to and
+ * including it. A receipt re-downloaded a month later must still say what was outstanding on the
+ * day it was issued, not what is outstanding now.
+ */
+async function receiptDocument(paymentId: string): Promise<ReceiptPdfData | null> {
+  const p = await prisma.invoicePayment.findUnique({
+    where: { id: paymentId },
+    include: {
+      recordedBy: { select: { name: true, email: true } },
+      invoice: {
+        include: { payments: { select: { id: true, paidAt: true, amountInrMinor: true, amountEurMinor: true } } },
+      },
+    },
+  });
+  if (!p || !p.receiptNumber) return null;
+  const inv = p.invoice;
+  const settings = await getInvoiceSettings();
+  const currency = asInvoiceCurrency(inv.currency);
+  const own = (inr: bigint, e: bigint) => (currency === "EUR" ? e : inr);
+  const amount = own(p.amountInrMinor, p.amountEurMinor);
+  const total = own(inv.totalInrMinor, inv.totalEurMinor);
+  const paidToDate = inv.payments
+    .filter((x) => x.paidAt < p.paidAt || (x.paidAt.getTime() === p.paidAt.getTime() && x.id <= p.id))
+    .reduce((a, x) => a + own(x.amountInrMinor, x.amountEurMinor), 0n);
+  const balance = total - paidToDate;
+  const money = formatMinorForDocument;
+
+  return {
+    receiptNumber: p.receiptNumber,
+    receiptDate: formatDate(p.paidAt),
+    issuer: settings.issuer,
+    currency,
+    customerName: inv.customerName,
+    customerAddressLines: (inv.customerAddress ?? "").split("\n").map((l) => l.trim()).filter(Boolean),
+    customerEmail: inv.customerEmail,
+    amountDisplay: money(amount, currency),
+    amountWords: amountInWords(amount, currency),
+    method: METHOD_LABELS[p.method] ?? p.method,
+    reference: p.reference,
+    invoiceNumber: inv.number,
+    invoiceDate: formatDate(inv.issueDate),
+    invoiceTotalDisplay: money(total, currency),
+    paidToDateDisplay: money(paidToDate, currency),
+    balanceDisplay: money(balance > 0n ? balance : 0n, currency),
+    settled: balance <= 0n,
+    agreementRef: inv.agreementRef,
+    agreementTerm: inv.agreementRef ? AGREEMENT_RECEIPT_TERM : null,
+    recordedByName: p.recordedBy?.name?.trim() || p.recordedBy?.email || null,
+  };
+}
+
+/** The public receipt, addressed by its invoice's token AND its own number - one alone is not enough. */
+export async function getPublicReceiptPdfData(token: string, receiptNumber: string): Promise<ReceiptPdfData | null> {
+  const p = await prisma.invoicePayment.findFirst({
+    where: { receiptNumber, invoice: { publicToken: token } },
+    select: { id: true },
+  });
+  return p ? receiptDocument(p.id) : null;
+}
+
+/** Same receipt by payment id, for the staff side (download + email). */
+export async function getReceiptPdfData(paymentId: string): Promise<ReceiptPdfData | null> {
+  return receiptDocument(paymentId);
 }
 
 // ─────────────────────────── Products & subscriptions ───────────────────────────
@@ -468,8 +627,31 @@ export async function getInvoicePickers() {
     getLevels(),
   ]);
   const byCode = new Map(levels.map((l) => [l.code, l]));
+
+  /*
+   * Each contact's SIGNED agreement, newest first - the contract an invoice for them bills under.
+   * Picking the contact fills the invoice's postal address from it (the address the student
+   * signed with) and its reference, which prints the agreement's payment terms on the invoice.
+   * Only signed ones: an unsigned or declined agreement binds nobody to its terms.
+   */
+  const agreements = await prisma.agreement.findMany({
+    where: { leadId: { in: contacts.map((c) => c.id) }, status: "SIGNED" },
+    select: { leadId: true, documentNo: true, data: true },
+    orderBy: { signedAt: "desc" },
+  });
+  const signedFor = new Map<string, { documentNo: string; address: string | null }>();
+  for (const a of agreements) {
+    if (!a.leadId || signedFor.has(a.leadId)) continue;
+    const parsed = agreementDataSchema.safeParse(a.data);
+    signedFor.set(a.leadId, { documentNo: a.documentNo, address: parsed.success ? parsed.data.student.address : null });
+  }
+
   return {
-    contacts,
+    contacts: contacts.map((c) => ({
+      ...c,
+      agreementNo: signedFor.get(c.id)?.documentNo ?? null,
+      address: signedFor.get(c.id)?.address ?? null,
+    })),
     products: products.map((p) => {
       const level = p.levelCode ? byCode.get(p.levelCode) : undefined;
       return {

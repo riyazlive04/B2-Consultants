@@ -8,10 +8,11 @@ import { createStudentLogin, revokeStudentLogin } from "@/server/students-action
 import type { GnManageBatch, GnStudentOption } from "@/server/german-note-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn } from "@/components/ui/controls";
-import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { CheckboxField, Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/Modal";
 import { LevelChip, StatusChip } from "./LevelChip";
 import { safeAction } from "@/lib/action-guard";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 /**
  * Batch membership + portal logins. Students can be added BEFORE they have a
@@ -198,7 +199,7 @@ export function MembersPanel({
                     <TextInput kind="email" name="email" />
                   </Field>
                   <Field label="Phone (optional)">
-                    <TextInput kind="phone" name="phone" />
+                    <PhoneField name="phone" />
                   </Field>
                 </div>
               </div>
@@ -225,7 +226,7 @@ export function MembersPanel({
               const res = await safeAction(() => createStudentLogin(loginFor.studentId, form));
               if (!res.ok) return setError(res.error);
               setLoginFor(null);
-              toast("Portal login created");
+              toast(res.message ? `Portal login created. ${res.message}` : "Portal login created");
               refresh();
             }}
             className="space-y-3"
@@ -233,9 +234,10 @@ export function MembersPanel({
             <Field label="Login email">
               <TextInput kind="email" name="email" required defaultValue={loginFor.email ?? ""} />
             </Field>
-            <Field label="Password" hint="At least 8 characters - share it with the student privately.">
+            <Field label="Password" hint="At least 8 characters - a temporary one; they set their own at first sign-in.">
               <TextInput name="password" type="password" required minLength={8} />
             </Field>
+            <CheckboxField name="notify" defaultChecked label="Send the login details by email and WhatsApp" />
             <div className="flex items-center justify-between gap-3">
               <FormError message={error} />
               <span className="ml-auto"><SubmitButton>Create login</SubmitButton></span>

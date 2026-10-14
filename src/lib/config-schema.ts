@@ -34,6 +34,7 @@ import { GOAL_METRICS } from "./goals";
 import { REWARD_WINDOWS, type RewardTrigger } from "./rewards";
 import { DEFAULT_CALLBACK_CHASE } from "./callback-chase";
 import { MAX_WINDOW_MINUTES } from "./duration";
+import { AGREEMENT_BANK_DETAILS_TEXT, AGREEMENT_PROVIDER } from "./agreement";
 
 const DATE_KEY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD date");
 const slug = z.string().trim().min(1).max(60).regex(/^[a-zA-Z0-9._-]+$/, "Letters, numbers, dot, dash and underscore only");
@@ -907,6 +908,14 @@ export const invoiceTaxRateSchema = z.object({
     .min(0, "A tax rate can't be negative")
     .max(100, "A tax rate over 100% is a typo")
     .default(0),
+  /**
+   * What the invoice says INSTEAD of a tax line when the rate is 0 - the legal reason no tax is
+   * charged ("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", or "not taxable in Germany -
+   * place of supply outside the EU"). §14 Abs. 4 UStG requires the reason, so a 0% invoice with no
+   * note cannot be issued. Blank by default: which reason applies is the tax adviser's call, not
+   * this file's.
+   */
+  note: z.string().trim().max(300, "Keep the tax note under 300 characters").default(""),
 });
 
 export type InvoiceTaxRate = z.infer<typeof invoiceTaxRateSchema>;
@@ -934,6 +943,12 @@ export type InvoiceTaxConfig = z.infer<typeof invoiceTaxConfigSchema>;
 export const invoiceIssuerSchema = z.object({
   /** The registered trading name. The one field with a default, because the app has one. */
   name: z.string().trim().max(120).default("B2 Consultants"),
+  /**
+   * The owner's full legal name. B2 Consultants is a sole trader, and for a sole trader the
+   * "full name of the supplier" an invoice must carry (§14 Abs. 4 Nr. 1 UStG) is the person's
+   * own name - the trading name alone does not satisfy it.
+   */
+  ownerName: z.string().trim().max(120).default(""),
   /** Street / building, one line per entry - addresses do not share a shape across countries. */
   addressLines: z.array(z.string().trim().max(120)).max(5).default([]),
   city: z.string().trim().max(80).default(""),
@@ -961,24 +976,36 @@ export const invoiceSettingsSchema = z.object({
 
 export type InvoiceSettings = z.infer<typeof invoiceSettingsSchema>;
 
+/**
+ * The defaults ARE the business's real details, taken from the agreement's fixed party block
+ * (`AGREEMENT_PROVIDER` / `AGREEMENT_BANKS`) - the same name, address and accounts every student
+ * already signed against. Before this, a never-saved config printed "B2 Consultants / Reichelsheim"
+ * and nothing else, which is how the first two live invoices went out. The tax number is still
+ * blank, deliberately: it is the one fact no file here knows, and an invoice cannot be issued
+ * until the founder enters it.
+ */
+const [providerStreet, providerCityLine] = AGREEMENT_PROVIDER.address.split(",").map((p) => p.trim());
+const [providerPostcode, ...providerCity] = (providerCityLine ?? "").split(" ");
+
 export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   issuer: {
-    name: "B2 Consultants",
-    addressLines: [],
-    city: "Reichelsheim",
-    postcode: "",
+    name: AGREEMENT_PROVIDER.entity,
+    ownerName: AGREEMENT_PROVIDER.name,
+    addressLines: providerStreet ? [providerStreet] : [],
+    city: providerCity.join(" "),
+    postcode: providerPostcode ?? "",
     country: "Germany",
-    email: "",
-    phone: "",
-    website: "",
+    email: AGREEMENT_PROVIDER.email,
+    phone: AGREEMENT_PROVIDER.mobile,
+    website: AGREEMENT_PROVIDER.website,
     taxId: "",
     registrationNo: "",
-    bankDetails: "",
+    bankDetails: AGREEMENT_BANK_DETAILS_TEXT,
     paymentTerms: "",
   },
   tax: {
-    INR: { label: "GST", percent: 0 },
-    EUR: { label: "VAT", percent: 0 },
+    INR: { label: "GST", percent: 0, note: "" },
+    EUR: { label: "VAT", percent: 0, note: "" },
   },
 };
 

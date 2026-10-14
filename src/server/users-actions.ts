@@ -26,6 +26,7 @@ import { getOwnershipInventory, migrateOwnership, type LeadDestination } from ".
 import { getTerminationReport, type TerminationReport } from "./termination-report";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
+import { sendLoginCredentials } from "./login-credentials";
 
 /**
  * Team & access. Guarded by the `users.manage` capability rather than a bare Admin
@@ -751,13 +752,16 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
 }
 
 /** Admin fallback for someone who can't use their invite link. */
-export async function setUserPassword(userId: string, form: FormData): Promise<ActionResult> {
+export async function setUserPassword(
+  userId: string,
+  form: FormData,
+): Promise<ActionResult & { message?: string }> {
   const { allowed, denied, session } = await capabilityCheck("users.manage");
   if (!allowed) return denied;
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, role: true, capabilities: true },
+    select: { id: true, name: true, email: true, role: true, capabilities: true },
   });
   if (!target) return { ok: false, error: "That user no longer exists" };
   const rail = privilegeError(session, target, target.role, {});
@@ -794,8 +798,37 @@ export async function setUserPassword(userId: string, form: FormData): Promise<A
     summary: `Set a new password for ${target.name} (they must change it on next sign-in)`,
     meta: { role: target.role },
   });
+
+  // Tell them - by email, and on WhatsApp when the account is a student's (the only accounts
+  // that carry a phone number, on their Student row).
+  let message: string | undefined;
+  if (form.get("notify") === "on") {
+    const student =
+      target.role === "STUDENT"
+        ? await prisma.student.findFirst({ where: { userId }, select: { id: true, phone: true } })
+        : null;
+    const sent = await sendLoginCredentials({
+      name: target.name,
+      email: target.email,
+      password,
+      phone: student?.phone ?? null,
+      studentId: student?.id ?? null,
+      sentById: session.user.id,
+      audience: target.role === "STUDENT" ? "student" : "team",
+      reset: true,
+    });
+    message = sent.summary;
+    await logActivity(session, {
+      action: "user.login.notify",
+      section: "people",
+      entityType: "User",
+      entityId: userId,
+      summary: `Sent ${target.name} their new login details - ${sent.summary}`,
+      meta: { emailed: sent.emailed, whatsapped: sent.whatsapped },
+    });
+  }
   revalidatePath("/people");
-  return { ok: true };
+  return { ok: true, message };
 }
 
 // ───────────────────────────── read ─────────────────────────────

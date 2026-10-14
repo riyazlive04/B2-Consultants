@@ -10,6 +10,7 @@ import { parseDateInput } from "@/lib/dates";
 import { intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
+import { sendLoginCredentials } from "./login-credentials";
 import { allocateStudentCode, lineForLevel } from "./student-code";
 import { getDeliveryDefaults } from "./founder-config";
 import { normalizeStudentCode } from "@/lib/student-code";
@@ -677,8 +678,45 @@ const studentLoginSchema = z.object({
 });
 
 /** Create a portal login for a student and link it. The account sees ONLY /my-journey + CV check. */
-export async function createStudentLogin(studentId: string, form: FormData): Promise<ActionResult> {
+/**
+ * Send the student their login - email + WhatsApp - when the admin left "send the login details"
+ * ticked. Logs WHICH channels worked, never the password (see server/login-credentials.ts).
+ */
+async function notifyStudentLogin(
+  session: Awaited<ReturnType<typeof requireAdmin>>,
+  student: { id: string; fullName: string; phone: string | null },
+  userId: string,
+  email: string,
+  password: string,
+  reset: boolean,
+): Promise<string> {
+  const sent = await sendLoginCredentials({
+    name: student.fullName,
+    email,
+    password,
+    phone: student.phone,
+    studentId: student.id,
+    sentById: session.user.id,
+    audience: "student",
+    reset,
+  });
+  await logActivity(session, {
+    action: "student.login.notify",
+    section: "students",
+    entityType: "User",
+    entityId: userId,
+    summary: `Sent ${student.fullName} their portal login details - ${sent.summary}`,
+    meta: { studentId: student.id, emailed: sent.emailed, whatsapped: sent.whatsapped },
+  });
+  return sent.summary;
+}
+
+export async function createStudentLogin(
+  studentId: string,
+  form: FormData,
+): Promise<ActionResult & { message?: string }> {
   const session = await requireAdmin();
+  const notify = form.get("notify") === "on";
   const parsed = studentLoginSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -716,9 +754,14 @@ export async function createStudentLogin(studentId: string, form: FormData): Pro
       summary: `Reinstated ${student.fullName}'s portal login (${existing.email})`,
       meta: { studentId },
     });
+    // The reinstated account keeps its ORIGINAL email - that is what they sign in with.
+    const message =
+      notify && existing?.email
+        ? await notifyStudentLogin(session, student, student.userId, existing.email, d.password, true)
+        : undefined;
     revalidatePath(`/students/${studentId}`);
     revalidatePath("/people");
-    return { ok: true };
+    return { ok: true, message };
   }
 
   const existing = await prisma.user.findUnique({ where: { email: d.email } });
@@ -767,9 +810,15 @@ export async function createStudentLogin(studentId: string, form: FormData): Pro
     console.error("createStudentLogin failed", e);
     return { ok: false, error: "Could not create the login - please try again" };
   }
+  // Outside the try on purpose: the login exists now, and a failed email or WhatsApp must not be
+  // mistaken for a failed signup and roll the account back.
+  const message =
+    notify && createdUserId
+      ? await notifyStudentLogin(session, student, createdUserId, d.email, d.password, false)
+      : undefined;
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/people");
-  return { ok: true };
+  return { ok: true, message };
 }
 
 /**

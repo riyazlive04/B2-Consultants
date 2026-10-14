@@ -13,7 +13,7 @@ import {
 } from "@/server/users-actions";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Modal } from "@/components/ui/Modal";
-import { Field, FormError, TextInput } from "@/components/ui/form";
+import { CheckboxField, Field, FormError, TextInput } from "@/components/ui/form";
 import { Card, Chip, Hint, PersonCell, Pill, Toolbar, type Tone } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Btn, CopyField, IconButton, SubmitBtn } from "@/components/ui/controls";
@@ -289,7 +289,7 @@ export function UsersPanel({
               setPwError(null);
               const res = await safeAction(() => setUserPassword(pwFor.id, form));
               if (!res.ok) return setPwError(res.error);
-              toast(`Password updated for ${pwFor.name}`);
+              toast(res.message ? `Password updated for ${pwFor.name}. ${res.message}` : `Password updated for ${pwFor.name}`);
               setPwFor(null);
             }}
             className="space-y-4"
@@ -297,6 +297,8 @@ export function UsersPanel({
             <Field label="New password" hint="At least 8 characters">
               <TextInput type="password" name="password" required minLength={8} autoComplete="new-password" />
             </Field>
+            {/* Students also get it on WhatsApp; team accounts have no number, so email only. */}
+            <CheckboxField name="notify" defaultChecked label="Send them the new login details by email (and WhatsApp for students)" />
             <div className="flex items-center gap-3">
               <SubmitBtn>Set password</SubmitBtn>
               <Btn variant="ghost" onClick={() => setPwFor(null)}>

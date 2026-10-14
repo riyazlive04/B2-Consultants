@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Trash2, Send, Download, Link2, Ban, CheckCircle2, ArrowRightLeft,
+  ArrowLeft, Plus, Trash2, Send, Download, Link2, Ban, CheckCircle2, ArrowRightLeft, Lock, Mail,
 } from "lucide-react";
 import type { InvoiceDetail } from "@/server/payments-metrics";
 import type { InvoiceTaxConfig } from "@/lib/config-schema";
@@ -29,6 +29,7 @@ import {
 import { safeAction } from "@/lib/action-guard";
 import {
   createInvoice, updateInvoice, setInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, convertEstimate,
+  sendReceipt,
 } from "@/server/payments-actions";
 
 /**
@@ -51,7 +52,11 @@ import {
  */
 
 type Pickers = {
-  contacts: { id: string; name: string; email: string | null; phone: string | null }[];
+  contacts: {
+    id: string; name: string; email: string | null; phone: string | null;
+    /** From the contact's signed agreement, when there is one. */
+    address: string | null; agreementNo: string | null;
+  }[];
   products: {
     id: string; name: string; levelCode: string | null; lineLabel: string | null;
     priceInr: string; priceEur: string;
@@ -92,8 +97,13 @@ export default function InvoiceEditor({
   const [customerName, setCustomerName] = useState(invoice?.customerName ?? "");
   const [customerEmail, setCustomerEmail] = useState(invoice?.customerEmail ?? "");
   const [customerPhone, setCustomerPhone] = useState(invoice?.customerPhone ?? "");
+  const [customerAddress, setCustomerAddress] = useState(invoice?.customerAddress ?? "");
   const [issueDate, setIssueDate] = useState(invoice?.issueDate || today());
   const [dueDate, setDueDate] = useState(invoice?.dueDate ?? "");
+  const [serviceStart, setServiceStart] = useState(invoice?.servicePeriodStart ?? "");
+  const [serviceEnd, setServiceEnd] = useState(invoice?.servicePeriodEnd ?? "");
+  const [agreementRef, setAgreementRef] = useState(invoice?.agreementRef ?? "");
+  const [taxNote, setTaxNote] = useState(invoice?.taxNote ?? "");
   const [items, setItems] = useState<Item[]>(
     invoice?.items.map((i) => ({
       description: i.description, quantity: i.quantity, unitPrice: i.unitPrice, levelCode: i.levelCode,
@@ -138,6 +148,10 @@ export default function InvoiceEditor({
       setCustomerName(c.name);
       setCustomerEmail(c.email ?? "");
       setCustomerPhone(c.phone ?? "");
+      // The address the student signed their agreement with, and that agreement - whose payment
+      // terms then print on the invoice. Only filled, never cleared: a typed address survives.
+      if (c.address) setCustomerAddress(c.address);
+      if (c.agreementNo) setAgreementRef(c.agreementNo);
     }
   }
   /** The product's price in THIS invoice's currency - never the rupee figure pasted into a euro line. */
@@ -179,8 +193,9 @@ export default function InvoiceEditor({
     setError(null);
     setSaving(true);
     const payload = {
-      kind, leadId: leadId || undefined, customerName, customerEmail, customerPhone,
-      issueDate, dueDate: dueDate || undefined, currency, items, discount, taxPercent, taxLabel, notes,
+      kind, leadId: leadId || undefined, customerName, customerEmail, customerPhone, customerAddress,
+      issueDate, dueDate: dueDate || undefined, servicePeriodStart: serviceStart, servicePeriodEnd: serviceEnd,
+      agreementRef, taxNote, currency, items, discount, taxPercent, taxLabel, notes,
     };
     const res = await safeAction(() =>
       invoice ? updateInvoice(invoice.id, payload) : createInvoice(payload),
@@ -235,6 +250,10 @@ export default function InvoiceEditor({
     setPayOpen(false);
     router.refresh();
   }
+  async function emailReceipt(paymentId: string) {
+    const res = await safeAction(() => sendReceipt(paymentId));
+    if (res.ok) { toast(res.message); router.refresh(); } else toast(res.error, "error");
+  }
   async function copyLink() {
     if (!invoice) return;
     await navigator.clipboard.writeText(`${window.location.origin}/i/${invoice.publicToken}`).catch(() => {});
@@ -242,6 +261,8 @@ export default function InvoiceEditor({
   }
 
   const canShare = invoice && invoice.status !== "DRAFT" && invoice.status !== "VOID";
+  /** Issued = numbered and locked. Everything below renders read-only. */
+  const locked = !!invoice?.issued;
   const productOpts = pickers.products.map((p) => ({
     value: p.id,
     label: p.lineLabel ? `${p.name} · ${p.lineLabel}` : p.name,
@@ -259,8 +280,13 @@ export default function InvoiceEditor({
       */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="font-display text-display-l font-bold text-ink">{invoice ? invoice.number : `New ${noun.toLowerCase()}`}</h1>
+          <h1 className="font-display text-display-l font-bold text-ink">
+            {invoice ? (invoice.provisional ? "Draft invoice" : invoice.number) : `New ${noun.toLowerCase()}`}
+          </h1>
           {invoice && <Pill tone={statusTone(invoice.status)}>{invoice.status}</Pill>}
+          {invoice?.provisional && (
+            <span className="text-caption text-ink-3">Gets its INV number when it is sent</span>
+          )}
         </div>
         {invoice && (
           <div className="flex flex-wrap items-center gap-2">
@@ -275,10 +301,20 @@ export default function InvoiceEditor({
         )}
       </div>
 
+      {locked && (
+        <div className="flex items-start gap-2 rounded-card border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
+          <Lock size={16} className="mt-0.5 flex-none text-ink-3" />
+          <p>
+            <strong className="text-ink">{invoice?.number} has been issued, so it can&rsquo;t be changed.</strong>{" "}
+            The customer holds this version. To correct it, void it and raise a new invoice &ndash; both stay on record.
+          </p>
+        </div>
+      )}
+
       {/* `items-start` is what lets the sticky sidebar work: a stretched grid item is as tall as
           the row, so there is nothing for `sticky` to travel within. */}
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_340px]">
-        <div className="space-y-5">
+        <fieldset disabled={locked} className="min-w-0 space-y-5">
           <Card title="Customer">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="text-caption font-semibold uppercase text-ink-3 sm:col-span-2">Existing contact
@@ -302,6 +338,17 @@ export default function InvoiceEditor({
               </label>
               <label className="text-caption font-semibold uppercase text-ink-3">Phone
                 <input {...phoneField.attrs} className={inputCls} value={customerPhone} onChange={phoneField.onChange} />
+              </label>
+              {/* Required to issue: an invoice names the recipient's address, not just a name. */}
+              <label className="text-caption font-semibold uppercase text-ink-3 sm:col-span-2">Postal address
+                <textarea
+                  className="mt-1 w-full rounded-field border border-line bg-surface px-3 py-2 text-sm font-normal normal-case outline-none focus:border-primary"
+                  rows={2}
+                  maxLength={300}
+                  value={customerAddress}
+                  placeholder={"Street and number\nPostcode, city, country"}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                />
               </label>
             </div>
           </Card>
@@ -408,9 +455,9 @@ export default function InvoiceEditor({
           </Card>
 
           <Card title="Notes">
-            <textarea {...notesField.attrs} className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary" rows={3} value={notes} onChange={notesField.onChange} placeholder="Payment terms, bank details, thank-you note…" />
+            <textarea {...notesField.attrs} className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary" rows={3} value={notes} onChange={notesField.onChange} placeholder="Anything specific to this invoice - e.g. Instalment 2 of 4" />
           </Card>
-        </div>
+        </fieldset>
 
         {/*
           The sidebar FOLLOWS THE PAGE. On a long invoice the totals and the save button used to
@@ -419,7 +466,7 @@ export default function InvoiceEditor({
         */}
         <div className="space-y-4 lg:sticky lg:top-20">
           <Card title="Details">
-            <div className="space-y-3">
+            <fieldset disabled={locked} className="min-w-0 space-y-3">
               <label className="block text-caption font-semibold uppercase text-ink-3">Currency
                 <div className="mt-1 font-normal normal-case">
                   <Select
@@ -442,6 +489,30 @@ export default function InvoiceEditor({
                 <div className="mt-1 font-normal normal-case">
                   <DatePicker size="sm" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                 </div>
+              </label>
+              {/* Required to issue: when the service is supplied - a date, or a period for a programme. */}
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-caption font-semibold uppercase text-ink-3">Service from
+                  <div className="mt-1 font-normal normal-case">
+                    <DatePicker size="sm" value={serviceStart} onChange={(e) => setServiceStart(e.target.value)} />
+                  </div>
+                </label>
+                <label className="block text-caption font-semibold uppercase text-ink-3">to (optional)
+                  <div className="mt-1 font-normal normal-case">
+                    <DatePicker size="sm" value={serviceEnd} onChange={(e) => setServiceEnd(e.target.value)} />
+                  </div>
+                </label>
+              </div>
+              <label className="block text-caption font-semibold uppercase text-ink-3">Agreement
+                <input
+                  className={`${inputCls} mt-1 font-normal normal-case`}
+                  value={agreementRef}
+                  placeholder="B2-GM-2026-0001"
+                  onChange={(e) => setAgreementRef(e.target.value)}
+                />
+                <span className="mt-1 block text-caption font-normal normal-case text-ink-3">
+                  Prints the agreement&rsquo;s payment &amp; refund terms (§7.3, §7.4, §8) on the invoice.
+                </span>
               </label>
               <label className="block text-caption font-semibold uppercase text-ink-3">Discount ({sym})
                 <div className="mt-1 font-normal normal-case">
@@ -487,7 +558,20 @@ export default function InvoiceEditor({
                   </>
                 )}
               </p>
-            </div>
+              {/* A 0% invoice must say WHY no tax is charged. Blank takes the Console's wording. */}
+              {!taxRow && (
+                <label className="block text-caption font-semibold uppercase text-ink-3">Why no tax
+                  <textarea
+                    className="mt-1 w-full rounded-field border border-line bg-surface px-3 py-2 text-sm font-normal normal-case outline-none focus:border-primary"
+                    rows={2}
+                    maxLength={300}
+                    value={taxNote}
+                    placeholder={tax[currency].note || "Set the default in Console → Money → Invoicing"}
+                    onChange={(e) => setTaxNote(e.target.value)}
+                  />
+                </label>
+              )}
+            </fieldset>
           </Card>
 
           <Card title="Summary">
@@ -506,20 +590,46 @@ export default function InvoiceEditor({
           </Card>
 
           {/* The commit button, directly under the figures it commits. */}
-          <div className="space-y-2">
-            <Btn className="w-full justify-center" onClick={save} busy={saving}>
-              {invoice ? "Save changes" : `Create ${noun.toLowerCase()}`}
-            </Btn>
-            <FormError message={error} />
-          </div>
+          {!locked && (
+            <div className="space-y-2">
+              <Btn className="w-full justify-center" onClick={save} busy={saving}>
+                {invoice ? "Save changes" : `Create ${noun.toLowerCase()}`}
+              </Btn>
+              <FormError message={error} />
+            </div>
+          )}
 
           {invoice && invoice.payments.length > 0 && (
             <Card title="Payments">
               <div className="space-y-2">
                 {invoice.payments.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between text-sm">
-                    <span className="text-ink-2">{p.method}{p.reference ? ` · ${p.reference}` : ""}</span>
-                    <span className="font-medium text-ink">{p.amountDisplay}</span>
+                  <div key={p.id} className="space-y-1 border-b border-line pb-2 text-sm last:border-0 last:pb-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink-2">{p.method}{p.reference ? ` · ${p.reference}` : ""}</span>
+                      <span className="font-medium text-ink">{p.amountDisplay}</span>
+                    </div>
+                    {/* The written confirmation the agreement promises (§7.4). */}
+                    {p.receiptNumber && (
+                      <div className="flex items-center justify-between gap-2 text-caption text-ink-3">
+                        <span>
+                          {p.receiptNumber}
+                          {p.receiptSentAt ? " · emailed" : ""}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <a
+                            href={`/i/${invoice.publicToken}/receipt/${encodeURIComponent(p.receiptNumber)}?download=1`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+                          >
+                            <Download size={13} /> Receipt
+                          </a>
+                          <IconButton label={`Email receipt ${p.receiptNumber}`} onClick={() => emailReceipt(p.id)}>
+                            <Mail size={14} />
+                          </IconButton>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

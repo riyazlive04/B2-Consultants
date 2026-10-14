@@ -12,6 +12,7 @@ import {
   WHATSAPP_KIND_LABELS,
   WHATSAPP_KIND_HINTS,
   WHATSAPP_AVAILABLE_VARS,
+  positionalVarMap,
   COUNTRY_OPTIONS,
   type WatiSettings,
   type WatiTemplateSummary,
@@ -426,7 +427,17 @@ export function WhatsAppSettingsForm({
             const current = params[kind] ?? "";
             const declared = current.split(",").map((p) => p.trim()).filter(Boolean);
             const available = WHATSAPP_AVAILABLE_VARS[kind] as readonly string[];
-            const unsupported = declared.filter((p) => !available.includes(p));
+            /**
+             * A POSITIONAL template declares `{{1}}`, `{{2}}` - names no touchpoint can ever
+             * "supply" - so judging it against `available` painted every one of them red and told
+             * the founder to unbind a template that sends perfectly well. Ask the same translator
+             * the sender uses: when it maps, the declaration is fine and the sources are what to
+             * check; when it refuses, the raw names are the honest thing to show.
+             */
+            const positional = positionalVarMap(kind, declared);
+            const unsupported = (positional ? Object.values(positional) : declared).filter(
+              (p) => !available.includes(p),
+            );
             const picked = t?.name ? byName.get(t.name) : undefined;
 
             return (

@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { positionalVarMap, WHATSAPP_TEMPLATE_VAR_ORDER } from "../whatsapp";
+import {
+  positionalVarMap,
+  WHATSAPP_AVAILABLE_VARS,
+  WHATSAPP_KINDS,
+  WHATSAPP_TEMPLATE_VAR_ORDER,
+} from "../whatsapp";
 
 /**
  * Positional WhatsApp templates ({{1}}, {{2}}, {{3}}).
@@ -57,4 +62,40 @@ test("the order used for mapping is the authored list, never the lead-facing sup
   // WHATSAPP_AVAILABLE_VARS unions the shared lead variables in for lead-facing kinds. If that
   // were the source, this would be longer than 3 and the booking case above would refuse.
   assert.deepEqual(WHATSAPP_TEMPLATE_VAR_ORDER.BOOKING_CONFIRM_REQUEST, ["name", "slot_time", "booking_url"]);
+});
+
+/**
+ * The agreement signing code. A one-time passcode is Meta's AUTHENTICATION category: the body is
+ * fixed at a single placeholder (the code) and the category has no named parameters at all, so the
+ * approved `b2_agreement_otp` declares ["1"] while the touchpoint offers ["name", "code"]. The
+ * arity check refused, `buildParameters` fell back to looking up a variable called "1", found
+ * nothing, and skipped - so the signing page could only ever say "we could not send your code".
+ */
+test("a one-placeholder authentication template maps to the code, not the name", () => {
+  assert.deepEqual(positionalVarMap("AGREEMENT_OTP", ["1"]), { "1": "code" });
+});
+
+test("a two-placeholder OTP template still maps to the canonical order", () => {
+  // The alternates must not shadow the authored list: a template that genuinely greets the student
+  // and then gives the code is name-then-code, exactly as before.
+  assert.deepEqual(positionalVarMap("AGREEMENT_OTP", ["1", "2"]), { "1": "name", "2": "code" });
+});
+
+test("a named OTP template is still left alone", () => {
+  assert.equal(positionalVarMap("AGREEMENT_OTP", ["code"]), null);
+});
+
+test("every alternate positional layout is a subset of what its touchpoint offers", () => {
+  // An alternate naming a variable the touchpoint cannot supply would map the placeholder onto a
+  // value that is never populated - the same silent skip, moved one layer down.
+  for (const kind of WHATSAPP_KINDS) {
+    const offered = new Set(WHATSAPP_AVAILABLE_VARS[kind]);
+    for (let n = 1; n <= 12; n++) {
+      const map = positionalVarMap(kind, Array.from({ length: n }, (_, i) => String(i + 1)));
+      if (!map) continue;
+      for (const source of Object.values(map)) {
+        assert.ok(offered.has(source), `${kind} maps a placeholder to {{${source}}}, which it does not offer`);
+      }
+    }
+  }
 });

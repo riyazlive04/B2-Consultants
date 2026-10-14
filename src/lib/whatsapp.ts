@@ -249,6 +249,25 @@ const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
 export const WHATSAPP_TEMPLATE_VAR_ORDER: Record<WhatsAppKind, readonly string[]> = BASE_AVAILABLE_VARS;
 
 /**
+ * Shorter positional layouts a touchpoint also accepts, tried in order when the canonical list
+ * above does not match the placeholder COUNT.
+ *
+ * WHY. `positionalVarMap` matches by arity, which assumes an approved template uses everything the
+ * touchpoint offers. AGREEMENT_OTP breaks that assumption by construction: a one-time passcode is
+ * Meta's AUTHENTICATION category, whose body is fixed at a single placeholder - the code - and
+ * which has no named parameters at all. So the approved template declares ["1"] against a canonical
+ * ["name", "code"], the counts differ, and the map refused: every signing code was skipped, which
+ * is exactly how "the code is not being sent" looks from the signing page.
+ *
+ * `name` stays on offer (dropping it would refuse a named template that greets the student), and
+ * each entry here must be a subset of the kind's offered variables - a test asserts both.
+ */
+const POSITIONAL_ALT_ORDERS: Partial<Record<WhatsAppKind, readonly (readonly string[])[]>> = {
+  // AUTHENTICATION: {{1}} is the code and nothing else can be in the body.
+  AGREEMENT_OTP: [["code"]],
+};
+
+/**
  * Which variable fills each placeholder of a POSITIONAL template - one whose parameters are
  * `{{1}}`, `{{2}}`, `{{3}}` rather than named.
  *
@@ -261,8 +280,9 @@ export const WHATSAPP_TEMPLATE_VAR_ORDER: Record<WhatsAppKind, readonly string[]
  * Returns null when it must not guess, in which case the caller keeps the old by-name behaviour
  * and fails closed:
  *   · the template is named, not positional - nothing to translate;
- *   · the counts differ, so which variable goes where is genuinely unknown. Guessing there would
- *     deliver real values into the wrong sentence, which is worse than sending nothing.
+ *   · the counts differ against every layout the kind accepts, so which variable goes where is
+ *     genuinely unknown. Guessing there would deliver real values into the wrong sentence, which
+ *     is worse than sending nothing.
  *
  * Sending the DECLARED names with the right values is correct whichever way WATI resolves
  * parameters - by name it matches, by position it is already in order.
@@ -273,12 +293,17 @@ export function positionalVarMap(
 ): Record<string, string> | null {
   if (declared.length === 0) return null;
   if (!declared.every((p) => /^\d+$/.test(p))) return null;
+  // The canonical list first, so a template that does use every offered variable keeps mapping
+  // exactly as before; the alternates only rescue arities the canonical list cannot explain.
   const canonical = WHATSAPP_TEMPLATE_VAR_ORDER[kind] ?? [];
-  if (canonical.length !== declared.length) return null;
+  const order = [canonical, ...(POSITIONAL_ALT_ORDERS[kind] ?? [])].find(
+    (candidate) => candidate.length === declared.length,
+  );
+  if (!order) return null;
   // Sort numerically, so a template that lists its params out of order still maps {{1}} to the
   // first variable. "10" must sort after "9", which a string sort gets wrong.
   const inOrder = [...declared].sort((a, b) => Number(a) - Number(b));
-  return Object.fromEntries(inOrder.map((param, i) => [param, canonical[i]]));
+  return Object.fromEntries(inOrder.map((param, i) => [param, order[i]]));
 }
 
 export const WHATSAPP_AVAILABLE_VARS = Object.fromEntries(

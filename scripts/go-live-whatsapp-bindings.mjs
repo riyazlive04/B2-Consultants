@@ -63,11 +63,27 @@ const ALLOW_UNAPPROVED = argv.includes("--allow-unapproved");
  * sanity-check a POSITIONAL binding: positionalVarMap refuses to translate when the counts differ,
  * so a positional template whose arity does not match the kind's variable list would bind
  * "successfully" and then skip every send. Better to say that now than to discover it live.
+ *
+ * `altCanonical` mirrors POSITIONAL_ALT_ORDERS there - the shorter layouts a kind also accepts,
+ * for a template that does not use everything the touchpoint offers.
  */
 const TARGETS = {
   BOOKING_CONFIRM_REQUEST: {
     template: "b2_booking_confirm_request",
     canonical: ["name", "slot_time", "booking_url"],
+  },
+  AGREEMENT_OTP: {
+    template: "b2_agreement_otp",
+    canonical: ["name", "code"],
+    // AUTHENTICATION category: Meta fixes the body at one placeholder - the code - and the category
+    // has no named parameters, so the approved template is ["1"] and `name` is never used. That one
+    // placeholder must resolve to `code`; mapping it to `name` would WhatsApp the student their own
+    // first name as their signing code.
+    altCanonical: [["code"]],
+    expectArity: 1,
+    arityHint:
+      "An AUTHENTICATION template carries the code and nothing else - more than one placeholder\n" +
+      "     means this was submitted as a UTILITY text template, which Meta rejects for passcodes.",
   },
   STUDENT_WELCOME: {
     template: "b2_student_welcome",
@@ -76,6 +92,7 @@ const TARGETS = {
     // which is why the approval pack keeps `b2_student_welcome` (4 vars) and
     // `b2_student_welcome_portal` (5 vars) as separate names. Bind ONE.
     expectArity: 4,
+    arityHint: "Check you are not binding the _portal variant by mistake.",
   },
 };
 
@@ -171,11 +188,14 @@ async function main() {
 
     const approvedParams = Array.isArray(entry.params) ? entry.params.map(String) : [];
 
-    // Arity checks, so a binding that would silently skip every send is caught here.
-    if (isPositional(approvedParams) && approvedParams.length !== want.canonical.length) {
+    // Arity checks, so a binding that would silently skip every send is caught here. Same order of
+    // preference as positionalVarMap: the canonical list first, then the shorter layouts.
+    const layouts = [want.canonical, ...(want.altCanonical ?? [])];
+    const layout = layouts.find((l) => l.length === approvedParams.length);
+    if (isPositional(approvedParams) && !layout) {
       console.log(
         `  ✖ ${label} "${want.template}" is positional with ${approvedParams.length} placeholder(s),\n` +
-          `     but this kind supplies ${want.canonical.length} variable(s) ` +
+          `     but this kind supplies ${layouts.map((l) => l.length).join(" or ")} variable(s) ` +
           `(${want.canonical.join(", ")}).\n` +
           `     positionalVarMap refuses to guess when the counts differ, so every send would be\n` +
           `     skipped. Not binding - the template needs re-approving with the right arity.`,
@@ -187,7 +207,7 @@ async function main() {
       console.log(
         `  ⚠ ${label} "${want.template}" declares ${approvedParams.length} variable(s), expected ` +
           `${want.expectArity}:\n     [${approvedParams.join(", ")}]\n` +
-          `     Check you are not binding the _portal variant by mistake.`,
+          `     ${want.arityHint ?? "Check you are not binding a variant of it by mistake."}`,
       );
     }
 
@@ -197,9 +217,12 @@ async function main() {
       continue;
     }
 
+    // The layout the arity check matched, not `canonical` - for a one-placeholder OTP template
+    // those differ, and printing the wrong one would describe a binding nobody made.
     const note = isPositional(approvedParams)
-      ? `  (positional: ${approvedParams
-          .map((p, i) => `{{${p}}}→${want.canonical[i]}`)
+      ? `  (positional: ${[...approvedParams]
+          .sort((a, b) => Number(a) - Number(b))
+          .map((p, i) => `{{${p}}}→${(layout ?? want.canonical)[i]}`)
           .join(", ")})`
       : "";
 

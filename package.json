@@ -31,9 +31,11 @@
     "db:snippets": "tsx prisma/seed-snippets.ts",
     "wire:cta": "node --conditions=react-server --import tsx scripts/wire-cta-popup.ts",
     "db:link-bookings": "tsx prisma/backfill-booking-links.ts",
+    "verify:zoom": "node --conditions=react-server --import tsx scripts/zoom-selftest.ts",
     "verify:outreach": "tsx prisma/verify-outreach.ts",
     "verify:automation": "tsx prisma/verify-automation.ts",
     "docs:whatsapp": "tsx scripts/whatsapp-templates-docx.ts",
+    "docs:whatsapp:utility": "tsx scripts/wati-templates-utility-docx.ts",
     "e2e:builder": "tsx scripts/e2e-funnel-builder.ts",
     "wire:pipeline": "node --conditions=react-server --import tsx scripts/wire-form-pipeline.ts"
   },

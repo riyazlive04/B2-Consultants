@@ -5,6 +5,7 @@ import {
   type IncomeFormCatalogues, type IncomeFormDraft, type IncomeFormEditing, type OpenPlan,
 } from "../income-form";
 import { DEFAULT_INSTALMENT_PLAN_CONFIG, DEFAULT_PAYMENT_TYPES_CONFIG } from "../config-schema";
+import { sumMoneyText } from "../instalment-amounts";
 
 const TODAY = "2026-10-07";
 
@@ -461,5 +462,62 @@ describe("nameKey pairs the way the server pairs", () => {
   });
   test("two different people stay different", () => {
     assert.notEqual(nameKey("Anna Smith"), nameKey("Anna Smyth"));
+  });
+});
+
+describe("the first instalment is the operator's, not a derivation", () => {
+  const PLAN = {
+    paymentType: "INSTALMENT",
+    programLevel: "GUIDED",
+    fee: { inr: "40000", eur: "" },
+    extra: { inr: "", eur: "" },
+    instalmentCount: 4,
+  } as const;
+
+  test("untouched, it is the equal share and the schedule is the other three", () => {
+    const d = derive({ ...PLAN });
+    assert.deepEqual(d.banked, { inr: "10000.00", eur: "" });
+    assert.deepEqual(d.equalShare, { inr: "10000.00", eur: "" });
+    assert.equal(d.scheduleShares.length, 3);
+    // The parts sum back to the fee exactly - the remainder rides on the last instalment.
+    assert.equal(sumMoneyText([d.banked, ...d.scheduleShares]).inr, "40000.00");
+  });
+
+  test("typed, it stands and the remaining three absorb the difference", () => {
+    const d = derive({ ...PLAN, firstInstalment: { inr: "20000", eur: "" } });
+    // Reported exactly AS TYPED, not re-formatted: this is the string the box holds and the
+    // string the action will bank, and normalising it here would make the two differ.
+    assert.deepEqual(d.banked, { inr: "20000", eur: "" });
+    // The suggestion is kept apart from the override, which is what lets the form tell
+    // "nobody has touched this" from "somebody typed the same number".
+    assert.deepEqual(d.equalShare, { inr: "10000.00", eur: "" });
+    assert.deepEqual(d.scheduleShares.map((s) => s.inr), ["6666.66", "6666.66", "6666.68"]);
+    // The plan still adds up to the price above it.
+    assert.equal(sumMoneyText([d.banked, ...d.scheduleShares]).inr, "40000.00");
+  });
+
+  test("a cleared box reads as empty, not as the equal share", () => {
+    // `planShares` falls back to an equal split when it has no override amount to divide from,
+    // and reporting that split while the box on screen is empty is exactly the disagreement
+    // between field and figure this change exists to end.
+    const d = derive({ ...PLAN, firstInstalment: { inr: "", eur: "" } });
+    assert.deepEqual(d.banked, { inr: "", eur: "" });
+    // ...and what would be stored is then one instalment short of the total, which is what the
+    // schedule's own reconciliation reports (it measures the live rows - see InstalmentSchedule).
+    assert.equal(sumMoneyText([d.banked, ...d.scheduleShares]).inr, "30000.00");
+  });
+
+  test("a first instalment above the whole fee is reported as a gap, not hidden", () => {
+    const d = derive({ ...PLAN, firstInstalment: { inr: "50000", eur: "" } });
+    // ₹10,000 more than the ₹40,000 price, and never negative instalments to hide it.
+    assert.equal(sumMoneyText([d.banked, ...d.scheduleShares]).inr, "50000.00");
+    assert.deepEqual(d.scheduleShares.map((s) => s.inr), ["0.00", "0.00", "0.00"]);
+  });
+
+  test("outside plan mode there is no first instalment to speak of", () => {
+    const d = derive({ paymentType: "FULL_PAYMENT", fee: { inr: "40000", eur: "" } });
+    assert.deepEqual(d.shares, []);
+    assert.deepEqual(d.scheduleShares, []);
+    assert.deepEqual(d.equalShare, { inr: "", eur: "" });
   });
 });

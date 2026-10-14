@@ -28,6 +28,8 @@ const config: Config = {
         faint: "var(--ink-3)",
         // text/icon that sits ON a saturated fill; re-themes, unlike `text-white`
         "on-accent": "var(--on-accent)",
+        // the same job for an ACTION-red fill, which resolves differently - see globals.css
+        "on-action": "var(--on-action)",
         line: { DEFAULT: "var(--border)", strong: "var(--border-strong)" },
         primary: {
           DEFAULT: "var(--primary)",
@@ -37,6 +39,19 @@ const config: Config = {
         },
         // legacy alias — same blue as primary
         accent: { DEFAULT: "var(--primary)", soft: "var(--primary-soft)" },
+        /**
+         * The brand's action red — "jump in, don't wait for perfect". Only for the handful
+         * of places we ask someone to commit (book, sign, pay), and only as a solid fill
+         * with `text-on-action`. Destructive actions use `risk`/`bad`, never this.
+         * `action.brand` is the untouched brand hex, for GRAPHICS only — see globals.css.
+         */
+        action: {
+          DEFAULT: "var(--action)",
+          strong: "var(--action-strong)",
+          soft: "var(--action-soft)",
+          tint: "var(--action-tint)",
+          brand: "var(--brand-red)",
+        },
         ok: { DEFAULT: "var(--good)", soft: "var(--good-bg)" },
         watch: { DEFAULT: "var(--warn)", soft: "var(--warn-bg)" },
         risk: { DEFAULT: "var(--bad)", soft: "var(--bad-bg)" },

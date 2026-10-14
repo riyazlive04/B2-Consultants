@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { formatInrMinor, formatEurMinor, formatDate } from "@/lib/format";
 import { LEAD_STAGE_LABELS } from "@/lib/labels";
 import { ARCHIVED } from "@/lib/soft-delete";
+import { getExpenseCategoriesConfig } from "./founder-config";
+import { expenseCategoryLabel } from "@/lib/expense-categories";
 
 /**
  * Read layer for the per-section "Archived" tabs. Every getter returns the SAME serializable
@@ -112,16 +114,22 @@ export async function getArchivedIncomes(): Promise<ArchivedRow[]> {
 
 // ── Expense (Finance) ────────────────────────────────────────────────────────
 export async function getArchivedExpenses(): Promise<ArchivedRow[]> {
-  const rows = await prisma.expense.findMany({
-    where: ARCHIVED,
-    orderBy: { deletedAt: "desc" },
-    include: BY,
-  });
+  // The founder's own name for the category, not its code. They were the same strings while the
+  // list was an enum; a category somebody adds has a code like LEGAL_AND_ACCOUNTING and a label
+  // like "Legal & accounting", and this row is the only place that cost can be recovered from.
+  const [rows, categories] = await Promise.all([
+    prisma.expense.findMany({
+      where: ARCHIVED,
+      orderBy: { deletedAt: "desc" },
+      include: BY,
+    }),
+    getExpenseCategoriesConfig(),
+  ]);
   return rows.map((e) => ({
     id: e.id,
     primary: e.vendor,
     secondary: money(e.amountInrMinor, e.amountEurMinor),
-    detail: `${e.category} · ${formatDate(e.date)}`,
+    detail: `${expenseCategoryLabel(categories, e.category)} · ${formatDate(e.date)}`,
     ...stamp(e),
   }));
 }

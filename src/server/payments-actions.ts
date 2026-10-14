@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma, type Invoice, type InvoiceCurrency, type InvoiceKind, type InvoiceStatus, type Product, type ProductInterval } from "@prisma/client";
@@ -166,6 +167,30 @@ async function programmeTakenBy(levelCode: string, exceptId?: string): Promise<s
   return clash.deletedAt
     ? `"${clash.name}" already prices that programme - restore it from Archived instead of adding a second one`
     : `"${clash.name}" already prices that programme - edit it instead of adding a second one`;
+}
+
+/**
+ * The secret in a public invoice URL.
+ *
+ * `Invoice.publicToken` defaults to `cuid()` in the schema, and a cuid is an IDENTIFIER, not a
+ * secret: it is built from a timestamp, a counter and a machine fingerprint, so tokens issued
+ * near each other are near each other. That is fine for a primary key and wrong for the only
+ * thing standing between the open internet and a document carrying a customer's name, email,
+ * phone, what they were charged and the issuer's tax ID.
+ *
+ * 32 random bytes from the CSPRNG - the same strength `lib/agreement-token.ts` already uses for
+ * a signing link, which is the other public document this app hands out. There was no reason
+ * for the two to be held to different standards.
+ *
+ * NOT stored hashed, unlike the agreement token: an invoice link has to stay openable for as
+ * long as the customer keeps the email, so the server must be able to look it up by value.
+ * Entropy is doing the work here, which is exactly why it has to be real entropy.
+ *
+ * Invoices issued BEFORE this keep their cuid tokens - rewriting them would break links already
+ * sent. New documents are not guessable; old ones can be re-issued if that matters.
+ */
+function mintPublicToken(): string {
+  return randomBytes(32).toString("base64url");
 }
 
 export async function createProduct(form: FormData): Promise<ActionResult> {
@@ -484,6 +509,7 @@ export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> 
       data: {
         kind: payload.kind as InvoiceKind,
         number,
+        publicToken: mintPublicToken(),
         status: "DRAFT",
         leadId: payload.leadId || null,
         customerName: payload.customerName.trim(),
@@ -755,7 +781,7 @@ function invoiceEmailHtml(opts: { customerName: string; noun: string; number: st
     ${brandEmailHeader()}
     <p>Hi ${first},</p>
     <p>Please find your ${opts.noun.toLowerCase()} <strong>${opts.number}</strong> (${opts.totalDisplay}) attached.</p>
-    <p>You can also view and download it online: <a href="${opts.url}" style="color:#3762F0">${opts.url}</a></p>
+    <p>You can also view and download it online: <a href="${opts.url}" style="color:#003C8C">${opts.url}</a></p>
     <p>Thank you for your business.<br>B2 Consultants</p>
   </div>`;
 }
@@ -1051,6 +1077,7 @@ export async function convertEstimate(id: string): Promise<ActionResult> {
       data: {
         kind: "INVOICE",
         number,
+        publicToken: mintPublicToken(),
         status: "DRAFT",
         leadId: est.leadId,
         customerName: est.customerName,

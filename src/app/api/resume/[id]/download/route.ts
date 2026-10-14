@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession, resolveSections, sectionAllowed } from "@/lib/rbac";
 import { getSectionsConfig } from "@/server/founder-config";
-import { getResumeForRender, getResumeTemplate, resumeScope } from "@/server/resume-metrics";
+import { getResumeForRender, getResumeTemplate, resumeScopeForSession } from "@/server/resume-metrics";
 import { renderResumePdf } from "@/documents/resume-pdf";
 import { renderResumeDocx } from "@/documents/resume-docx";
 
@@ -11,7 +11,7 @@ import { renderResumeDocx } from "@/documents/resume-docx";
  * the Studio can download a CV. Rendered on demand from the stored ResumeData.
  *
  * Section access is necessary but not sufficient: `cv-check` is granted to STUDENT by default,
- * so a section-only gate let any student pull any other student's CV by id. `resumeScope` adds
+ * so a section-only gate let any student pull any other student's CV by id. `resumeScopeForSession` adds
  * the row-level rule - coaches see all, everyone else sees only what they own.
  */
 
@@ -33,7 +33,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 
   const [resume, template] = await Promise.all([
-    getResumeForRender(params.id, resumeScope(session)),
+    getResumeForRender(params.id, await resumeScopeForSession(session)),
     getResumeTemplate(),
   ]);
   if (!resume) return new NextResponse("CV not found", { status: 404 });

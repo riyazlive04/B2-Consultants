@@ -110,6 +110,11 @@ export default async function Home({
   const months = runway?.runwayMonths ?? null;
   const cashOnHandInr = runway?.cashInr ?? null;
   const avgBurnInr = runway?.burnInr ?? 0;
+  // The runway bar's goal and colours follow the founder's thresholds (Console → Cash targets)
+  // instead of the 6 that used to be written into this card AND into its own tooltip.
+  const runwayBands = runway?.runwayBands ?? { green: 6, amber: 3 };
+  const runwayGoalMonths = runwayBands.green || 6;
+  const burnWindowMonths = runway?.burnWindowMonths ?? 3;
   const cashAsOf = runway?.cashDate ?? null;
 
   /**
@@ -330,10 +335,10 @@ export default async function Home({
               <MetricCard
                 label="Cash runway"
                 value={months == null ? "Not set" : `${months} mo`}
-                target={months == null ? undefined : "goal 6 mo"}
-                signal={months == null ? undefined : signalForRunway(months)}
-                progress={months == null ? undefined : Math.min(1, months / 6)}
-                tooltip="Months the bank balance lasts at the current burn: cash ÷ average monthly expenses over the last 3 months. Green ≥ 6, amber 3–6, red < 3."
+                target={months == null ? undefined : `goal ${runwayGoalMonths} mo`}
+                signal={months == null ? undefined : signalForRunway(months, runwayBands)}
+                progress={months == null ? undefined : Math.min(1, months / runwayGoalMonths)}
+                tooltip={`Months the bank balance lasts at the current burn: cash ÷ average monthly expenses over the last ${burnWindowMonths} month${burnWindowMonths === 1 ? "" : "s"}. Green ≥ ${runwayBands.green}, amber ${runwayBands.amber}–${runwayBands.green}, red < ${runwayBands.amber}. Set in Console → Cash targets.`}
                 icon={<Gauge size={18} />}
                 href="/cash"
                 detail={{

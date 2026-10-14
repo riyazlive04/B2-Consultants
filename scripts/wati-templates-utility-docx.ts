@@ -1,7 +1,12 @@
 /**
- * Generates `WhatsApp_Templates_UTILITY_Submission_Pack.docx` - the full inventory of all 26
- * WhatsApp templates the application needs WATI/Meta to approve, written to qualify as UTILITY
+ * Generates `WhatsApp_Templates_UTILITY_Submission_Pack.docx` - the full inventory of every
+ * WhatsApp template the application needs WATI/Meta to approve, written to qualify as UTILITY
  * wherever that is honestly possible, each with the sample values Meta requires at submission.
+ *
+ * The count is never written down anywhere in here. It was stale ("25" in one comment, "26" in the
+ * footer of the generated document) within a day of the list changing, and a submission pack that
+ * misstates how many templates it contains is the one kind of error its reader cannot check. Every
+ * count is read off `TEMPLATES`.
  *
  * Unlike scripts/whatsapp-templates-docx.ts (the 9 SOP messages, derived from the SOP constants and
  * declared MARKETING), this is a self-contained submission pack: the bodies here are the UTILITY
@@ -57,9 +62,30 @@ type Tpl = {
 
 const catColor = (c: Category) => (c === "UTILITY" ? UTILITY : c === "AUTHENTICATION" ? AUTH : MARKETING);
 
-// ─────────────────────────────── The 25 templates ───────────────────────────────
+// ────────────────── The templates awaiting Meta approval ──────────────────
+//
+// The count is deliberately NOT written here - it was wrong ("25") for as long as it was, because
+// the comment and the array drift the moment anything is added. Read it off the array.
 
-const TEMPLATES: Tpl[] = [
+const AREA_A = "A · Discovery-call & booking lifecycle";
+
+/**
+ * The warning every Zoom-link variant carries. One constant because it is one fact, and three
+ * copies of it would be three chances to update only two.
+ */
+const ZOOM_BIND_NOTE =
+  "Bind this INSTEAD of the plain template only once Zoom is armed and proven: a booking with no " +
+  "link yet SKIPS the send rather than delivering a blank join line, which is the right trade for " +
+  "a joining link but is also why the plain template must stay approved as the fallback. The cron " +
+  "sweep fills a missing link within one tick.";
+
+/**
+ * Exported so `src/lib/__tests__/wati-template-catalogue.test.ts` can hold this list to the
+ * contract the app enforces at send time: a template may only declare variables its touchpoint
+ * actually offers, or every send of it is silently SKIPPED. That check belongs in CI, not in
+ * whoever-reads-the-Word-document's head.
+ */
+export const TEMPLATES: Tpl[] = [
   // ── A · Discovery-call & booking lifecycle ──
   {
     area: "A · Discovery-call & booking lifecycle",
@@ -124,6 +150,88 @@ const TEMPLATES: Tpl[] = [
     body:
       "Hi {{name}}, your discovery call has been rescheduled to *{{slot_time}}* IST.\n\n" +
       "If this new time doesn't suit you, you can choose another here at your convenience: {{booking_url}}",
+  },
+  // -- The three Zoom-link variants. Added 8 Oct 2026, when the app began creating a real Zoom
+  // meeting for every booked discovery call (src/server/zoom-meetings.ts).
+  //
+  // WHY THEY ARE SEPARATE TEMPLATES rather than a 4th variable bolted onto the three above: a
+  // declared variable with no value BLOCKS the send. Editing the approved templates in place would
+  // mean that the first time Zoom timed out, the prospect got no confirmation at all instead of
+  // one without a link. As separate names, the plain templates stay approved as the fallback and
+  // the founder binds these per touchpoint once Zoom has proven itself.
+  //
+  // Submit all three together - it is one review cycle for what is really one change.
+  {
+    area: AREA_A,
+    name: "b2_booking_confirmation_zoom",
+    kind: "BOOKING_CONFIRMATION",
+    sub: "Booking confirmation (with Zoom link)",
+    category: "UTILITY",
+    fires: "Once, immediately after a prospect books a discovery-call slot - the variant that carries the meeting link.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "slot_time", sample: "Sat 18 Jul, 07:00 PM" },
+      { name: "zoom_link", sample: "https://us06web.zoom.us/j/85512345678?pwd=abcdEFGH1234" },
+      { name: "booking_url", sample: "https://app.b2consultants.de/book" },
+    ],
+    body:
+      "Hi {{name}}, your discovery call with B2 Consultants is confirmed for *{{slot_time}}* IST.\n\n" +
+      "Join using this link at your scheduled time: {{zoom_link}}\n\n" +
+      "If you need to reschedule, use this link and we'll update your slot: {{booking_url}}",
+    note: {
+      tag: "Replaces a promise with the thing itself",
+      text:
+        "The plain b2_booking_confirmation promises that joining details will follow - a promise somebody " +
+        "then had to keep by hand. " + ZOOM_BIND_NOTE,
+    },
+  },
+  {
+    area: AREA_A,
+    name: "b2_booking_reminder_zoom",
+    kind: "BOOKING_REMINDER",
+    sub: "Pre-call reminder (with Zoom link)",
+    category: "UTILITY",
+    fires: "Before an upcoming booked slot (default 24h and 2h before) - the variant that carries the meeting link.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "slot_time", sample: "Sat 18 Jul, 07:00 PM" },
+      { name: "zoom_link", sample: "https://us06web.zoom.us/j/85512345678?pwd=abcdEFGH1234" },
+      { name: "booking_url", sample: "https://app.b2consultants.de/book" },
+    ],
+    body:
+      "Hi {{name}}, a reminder that your discovery call with B2 Consultants is scheduled for *{{slot_time}}* IST.\n\n" +
+      "Join here at your scheduled time: {{zoom_link}}\n\n" +
+      "Please reply *YES* to confirm you'll attend, or pick another time here if needed: {{booking_url}}",
+    note: {
+      tag: "The one that matters most",
+      text:
+        "This is the message a prospect actually has open minutes before the call, so it is the " +
+        "highest-value place for the link. " + ZOOM_BIND_NOTE,
+    },
+  },
+  {
+    area: AREA_A,
+    name: "b2_booking_rescheduled_zoom",
+    kind: "BOOKING_RESCHEDULED",
+    sub: "Rescheduled notice (with Zoom link)",
+    category: "UTILITY",
+    fires: "When a call is moved to a new time - the variant that repeats the meeting link alongside the new time.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "slot_time", sample: "Sun 19 Jul, 05:30 PM" },
+      { name: "zoom_link", sample: "https://us06web.zoom.us/j/85512345678?pwd=abcdEFGH1234" },
+      { name: "booking_url", sample: "https://app.b2consultants.de/book" },
+    ],
+    body:
+      "Hi {{name}}, your discovery call has been rescheduled to *{{slot_time}}* IST.\n\n" +
+      "The same joining link still works: {{zoom_link}}\n\n" +
+      "If this new time doesn't suit you, you can choose another here at your convenience: {{booking_url}}",
+    note: {
+      tag: "Why the link is safe to repeat",
+      text:
+        "A reschedule MOVES the existing Zoom meeting rather than creating a second one, so the link " +
+        "the prospect already holds stays valid - which is what lets this template say so. " + ZOOM_BIND_NOTE,
+    },
   },
   {
     area: "A · Discovery-call & booking lifecycle",
@@ -230,15 +338,17 @@ const TEMPLATES: Tpl[] = [
     sub: "Signing verification code",
     category: "AUTHENTICATION",
     fires: "To send the one-time code that binds the signature to control of the number.",
-    vars: [
-      { name: "name", sample: "Priya" },
-      { name: "code", sample: "482913" },
-    ],
+    // `name` is deliberately NOT declared: the body does not use it, and an AUTHENTICATION
+    // template accepts only the code parameter anyway (see the note below, which has said so since
+    // this pack was written). Declaring an unused variable is what shifts WATI's positional params
+    // by one and earns the "it cannot have typos or blank text" rejection - so the declaration has
+    // to match the body, not the list of values the app happens to be able to offer.
+    vars: [{ name: "code", sample: "482913" }],
     body: "{{code}} is your B2 Consultants agreement signing code. It is valid for a short time. Do not share it with anyone.",
     note: {
       warn: true,
       tag: "Use AUTHENTICATION, not UTILITY",
-      text: "A one-time passcode is Meta's AUTHENTICATION category, which has a fixed format (code + copy button, no marketing) and its own pricing. Meta rejects OTP-style copy submitted as UTILITY. Build it with WATI's authentication template flow; the {{name}} variable may have to be dropped, as AUTHENTICATION templates allow only the code parameter.",
+      text: "A one-time passcode is Meta's AUTHENTICATION category, which has a fixed format (code + copy button, no marketing) and its own pricing. Meta rejects OTP-style copy submitted as UTILITY. Build it with WATI's authentication template flow. Only the code parameter is declared here - AUTHENTICATION templates allow nothing else, and the app's AGREEMENT_OTP touchpoint offers `name` as well, which is harmless because a template never has to use everything on offer.",
     },
   },
   {
@@ -309,6 +419,62 @@ const TEMPLATES: Tpl[] = [
   },
 
   // ── E · Student coaching ──
+  {
+    area: "E · Student coaching",
+    name: "b2_student_welcome",
+    kind: "STUDENT_WELCOME",
+    sub: "Enrolment welcome",
+    category: "UTILITY",
+    fires:
+      "Once, when a student is seated in a batch - i.e. after they have signed, paid and been enrolled. Never repeats, even if they later move batch.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "program", sample: "Guided" },
+      { name: "tutor_name", sample: "Lena Fischer" },
+      { name: "first_class", sample: "Mon 20 Oct, 07:00 PM IST" },
+    ],
+    body:
+      "Hi {{name}}, welcome to the *{{program}}* programme at B2 Consultants - you're all set.\n\n" +
+      "{{tutor_name}} will be looking after you, and your first session is {{first_class}}.\n\n" +
+      "Reply here any time if you have a question.",
+    note: {
+      tag: "Bind this one first",
+      text:
+        "This is the only enrolment message the app sends. Every variable it declares is guaranteed " +
+        "non-empty by the sender: tutor_name falls back from the batch tutor to the assigned coach, " +
+        "and first_class to “we'll confirm the time shortly” when no class is scheduled yet. " +
+        "It therefore cannot be skipped for want of a value, unlike the _portal variant below.",
+    },
+  },
+  {
+    area: "E · Student coaching",
+    name: "b2_student_welcome_portal",
+    kind: "STUDENT_WELCOME",
+    sub: "Enrolment welcome (with portal link)",
+    category: "UTILITY",
+    fires: "Same trigger as b2_student_welcome - bind ONE of the two, not both.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "program", sample: "Guided" },
+      { name: "tutor_name", sample: "Lena Fischer" },
+      { name: "first_class", sample: "Mon 20 Oct, 07:00 PM IST" },
+      { name: "portal_url", sample: "https://app.b2consultants.de/portal" },
+    ],
+    body:
+      "Hi {{name}}, welcome to the *{{program}}* programme at B2 Consultants - you're all set.\n\n" +
+      "{{tutor_name}} will be looking after you, and your first session is {{first_class}}.\n\n" +
+      "You can follow your milestones, agreement and payments any time at {{portal_url}}.\n\n" +
+      "Reply here any time if you have a question.",
+    note: {
+      warn: true,
+      tag: "Skips for students with no login",
+      text:
+        "portal_url is EMPTY for a student who has not been given a portal account yet, and an " +
+        "unresolved variable skips the whole send rather than delivering a blank line. Same trade as " +
+        "the _zoom booking variants: bind this one only once creating a portal login is a routine " +
+        "part of enrolling someone, and keep b2_student_welcome approved as the fallback.",
+    },
+  },
   {
     area: "E · Student coaching",
     name: "b2_checkin_nudge",
@@ -816,7 +982,7 @@ function checklist(): (Paragraph | Table)[] {
     checkbox("Send a test to your own number. Confirm variables resolve and the bold renders."),
     checkbox("Turn on sending one low-risk touchpoint at a time; watch the WhatsApp history before enabling the rest."),
     rule(),
-    p("Generated from scripts/wati-templates-utility-docx.ts - re-run `npx tsx scripts/wati-templates-utility-docx.ts` after any edit. The nine SOP bodies are UTILITY rewrites of Script for Outreach Specialist.docx (Steps 3–21); the app currently ships them as MARKETING via src/lib/whatsapp-submission.ts. 26 templates · the free-form MANUAL touchpoint needs no template and is excluded; b2_book_order is a proposed new touchpoint not yet wired.", {
+    p(`Generated from scripts/wati-templates-utility-docx.ts - re-run \`npx tsx scripts/wati-templates-utility-docx.ts\` after any edit. The nine SOP bodies are UTILITY rewrites of Script for Outreach Specialist.docx (Steps 3–21); the app currently ships them as MARKETING via src/lib/whatsapp-submission.ts. ${TEMPLATES.length} templates · the free-form MANUAL touchpoint needs no template and is excluded; b2_book_order is a proposed new touchpoint not yet wired.`, {
       size: 16,
       color: MUTED,
       italics: true,
@@ -873,7 +1039,18 @@ async function main() {
   console.log(`${TEMPLATES.length} templates - ${counts.UTILITY ?? 0} UTILITY, ${counts.AUTHENTICATION ?? 0} AUTHENTICATION, ${counts.MARKETING ?? 0} MARKETING.`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+/**
+ * Only write the document when this file is the thing being RUN.
+ *
+ * Importing it (the catalogue test does) must not have the side effect of overwriting a submission
+ * pack sitting next to the repo - least of all during a test run.
+ */
+// split/join rather than a regex: a lone backslash in a literal is the kind of escaping that
+// breaks differently in every tool that touches this file.
+const runDirectly = (process.argv[1] ?? "").split("\\").join("/").endsWith("scripts/wati-templates-utility-docx.ts");
+if (runDirectly) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

@@ -40,112 +40,115 @@ enum UserStatus {
 }
 
 model User {
-  id            String     @id
-  name          String
-  email         String     @unique
-  emailVerified Boolean    @default(false)
-  image         String?
-  role          Role       @default(USER)
-  status        UserStatus @default(ACTIVE)
+  id                      String             @id
+  name                    String
+  email                   String             @unique
+  emailVerified           Boolean            @default(false)
+  image                   String?
+  role                    Role               @default(USER)
+  status                  UserStatus         @default(ACTIVE)
   // O4 - forced password change. Set true when an ADMIN sets someone's password (they picked it,
   // so the owner must replace it); cleared the moment the user changes it. Invited users choose
   // their own password on acceptance, so they are never flagged. `requireSession` bounces any
   // flagged user to /change-password before an app route renders.
-  mustChangePassword Boolean @default(false)
+  mustChangePassword      Boolean            @default(false)
   /// Part 2 §13: "dark and light per user" - the founder prefers dark, others may not.
   /// SYSTEM defers to the OS setting, which is why it is the default rather than LIGHT:
   /// a fresh account should follow the machine, not impose one person's taste.
-  themePreference ThemePreference @default(SYSTEM)
+  themePreference         ThemePreference    @default(SYSTEM)
   /// Slots this user owned that somebody else covered (Part 2 §7.1).
   discoveriesCoveredForMe DiscoveryOutcome[] @relation("DiscoveryCoveredFor")
   // Per-user feature overrides (Admin-managed): { "finance": true, "students": false, … }.
   // Missing key → the role's default access applies. Admins always see everything.
-  sectionAccess Json?
+  sectionAccess           Json?
   // Per-user capability overrides: { "finance.write": true, … }. What they may DO, as
   // opposed to which screens they may open. See src/lib/capabilities.ts.
-  capabilities  Json?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  capabilities            Json?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
 
   sessions                 Session[]
   accounts                 Account[]
-  workDays                 WorkDay[]          @relation("WorkDayUser")
+  workDays                 WorkDay[]            @relation("WorkDayUser")
   teamProfile              TeamProfile?
   /// Terminations this person carried out. SetNull like every other actor link - an admin
   /// leaving must not erase the record of who offboarded whom.
-  terminationsPerformed    TeamProfile[]      @relation("TeamProfileTerminatedBy")
-  studentProfile           Student?           @relation("StudentAccount")
-  incomesEntered           Income[]           @relation("IncomeEnteredBy")
-  expensesEntered          Expense[]          @relation("ExpenseEnteredBy")
-  leadsEntered             Lead[]             @relation("LeadEnteredBy")
-  leadsAssigned            Lead[]             @relation("LeadAssignedTo")
-  outcomesEntered          DiscoveryOutcome[] @relation("OutcomeEnteredBy")
-  callsLogged              CallLog[]          @relation("CallLoggedBy")
-  stageChanges             LeadStageHistory[] @relation("StageChangedBy")
-  slotsAssigned            AppointmentSlot[]  @relation("SlotAssignedTo")
+  terminationsPerformed    TeamProfile[]        @relation("TeamProfileTerminatedBy")
+  studentProfile           Student?             @relation("StudentAccount")
+  incomesEntered           Income[]             @relation("IncomeEnteredBy")
+  equityContributed        EquityContribution[] @relation("EquityContributor")
+  equityEntered            EquityContribution[] @relation("EquityEnteredBy")
+  equityArchived           EquityContribution[] @relation("EquityArchivedBy")
+  expensesEntered          Expense[]            @relation("ExpenseEnteredBy")
+  leadsEntered             Lead[]               @relation("LeadEnteredBy")
+  leadsAssigned            Lead[]               @relation("LeadAssignedTo")
+  outcomesEntered          DiscoveryOutcome[]   @relation("OutcomeEnteredBy")
+  callsLogged              CallLog[]            @relation("CallLoggedBy")
+  stageChanges             LeadStageHistory[]   @relation("StageChangedBy")
+  slotsAssigned            AppointmentSlot[]    @relation("SlotAssignedTo")
   dailyLogs                DailyLog[]
-  milestoneLogUpdates      MilestoneLog[]     @relation("MilestoneUpdatedBy")
-  signalChanges            SignalChangeLog[]  @relation("SignalChangedBy")
-  sprintWeeksEntered       SprintWeek[]       @relation("SprintEnteredBy")
-  rewardGrantsDecided      RewardGrant[]      @relation("RewardGrantDecidedBy")
-  invite                   UserInvite?        @relation("UserInviteFor")
-  invitesCreated           UserInvite[]       @relation("UserInviteCreatedBy")
-  gnBatchesTutored         Batch[]            @relation("BatchTutor")
-  tutorFeesEarned          TutorFee[]         @relation("TutorFeeEarner")
-  gnRecordingsPosted       GnRecording[]      @relation("GnRecordingPostedBy")
-  gnRecordingWatches       GnRecordingWatch[] @relation("GnRecordingWatchUser")
-  gnEventsCreated          ClassSession[]     @relation("GnEventCreatedBy")
-  attendanceMarked         SessionAttendance[] @relation("AttendanceMarkedBy")
-  gnPosts                  GnPost[]           @relation("GnPostAuthor")
-  gnComments               GnComment[]        @relation("GnCommentAuthor")
-  gnLikes                  GnLike[]           @relation("GnLikeUser")
-  gnCommentLikes           GnCommentLike[]    @relation("GnCommentLikeUser")
-  telecallerPayoutsEntered TelecallerPayout[] @relation("TelecallerPayoutEnteredBy")
-  whatsappMessagesSent     WhatsAppMessage[]  @relation("WhatsAppSentBy")
-  agreementsIssued         Agreement[]        @relation("AgreementIssuedBy")
-  journalEntriesPosted     JournalEntry[]     @relation("JournalEntryPostedBy")
-  periodLocksSet           PeriodLock[]       @relation("PeriodLockedBy")
-  auditEntries             AuditEntry[]       @relation("AuditActor")
-  activityLogged           ActivityLog[]      @relation("ActivityActor")
+  milestoneLogUpdates      MilestoneLog[]       @relation("MilestoneUpdatedBy")
+  signalChanges            SignalChangeLog[]    @relation("SignalChangedBy")
+  sprintWeeksEntered       SprintWeek[]         @relation("SprintEnteredBy")
+  rewardGrantsDecided      RewardGrant[]        @relation("RewardGrantDecidedBy")
+  invite                   UserInvite?          @relation("UserInviteFor")
+  invitesCreated           UserInvite[]         @relation("UserInviteCreatedBy")
+  gnBatchesTutored         Batch[]              @relation("BatchTutor")
+  tutorFeesEarned          TutorFee[]           @relation("TutorFeeEarner")
+  gnRecordingsPosted       GnRecording[]        @relation("GnRecordingPostedBy")
+  gnRecordingWatches       GnRecordingWatch[]   @relation("GnRecordingWatchUser")
+  gnEventsCreated          ClassSession[]       @relation("GnEventCreatedBy")
+  attendanceMarked         SessionAttendance[]  @relation("AttendanceMarkedBy")
+  gnPosts                  GnPost[]             @relation("GnPostAuthor")
+  gnComments               GnComment[]          @relation("GnCommentAuthor")
+  gnLikes                  GnLike[]             @relation("GnLikeUser")
+  gnCommentLikes           GnCommentLike[]      @relation("GnCommentLikeUser")
+  telecallerPayoutsEntered TelecallerPayout[]   @relation("TelecallerPayoutEnteredBy")
+  whatsappMessagesSent     WhatsAppMessage[]    @relation("WhatsAppSentBy")
+  agreementsIssued         Agreement[]          @relation("AgreementIssuedBy")
+  journalEntriesPosted     JournalEntry[]       @relation("JournalEntryPostedBy")
+  periodLocksSet           PeriodLock[]         @relation("PeriodLockedBy")
+  auditEntries             AuditEntry[]         @relation("AuditActor")
+  activityLogged           ActivityLog[]        @relation("ActivityActor")
   // Synamate CRM (Phase 1)
-  companiesOwned           Company[]          @relation("CompanyOwner")
-  contactNotes             ContactNote[]      @relation("NoteAuthor")
-  tasksAssigned            ContactTask[]      @relation("TaskAssignee")
-  tasksCreated             ContactTask[]      @relation("TaskCreatedBy")
-  opportunitiesOwned       Opportunity[]      @relation("OppOwner")
+  companiesOwned           Company[]            @relation("CompanyOwner")
+  contactNotes             ContactNote[]        @relation("NoteAuthor")
+  tasksAssigned            ContactTask[]        @relation("TaskAssignee")
+  tasksCreated             ContactTask[]        @relation("TaskCreatedBy")
+  opportunitiesOwned       Opportunity[]        @relation("OppOwner")
   // Synamate Sites (Phase 2)
-  formsCreated             Form[]             @relation("FormCreatedBy")
-  funnelsCreated           Funnel[]           @relation("FunnelCreatedBy")
-  snippetsCreated  SectionSnippet[] @relation("SnippetCreatedBy")
+  formsCreated             Form[]               @relation("FormCreatedBy")
+  funnelsCreated           Funnel[]             @relation("FunnelCreatedBy")
+  snippetsCreated          SectionSnippet[]     @relation("SnippetCreatedBy")
   // Sites - the marketing website
-  sitesCreated             Site[]             @relation("SiteCreatedBy")
-  sitePageRevisions        SitePageRevision[] @relation("SitePageRevisionBy")
-  mediaUploaded            MediaAsset[]       @relation("MediaUploadedBy")
+  sitesCreated             Site[]               @relation("SiteCreatedBy")
+  sitePageRevisions        SitePageRevision[]   @relation("SitePageRevisionBy")
+  mediaUploaded            MediaAsset[]         @relation("MediaUploadedBy")
   // Synamate Payments (Phase 3)
-  invoicesCreated          Invoice[]          @relation("InvoiceCreatedBy")
-  invoicePaymentsRecorded  InvoicePayment[]   @relation("InvoicePaymentRecordedBy")
+  invoicesCreated          Invoice[]            @relation("InvoiceCreatedBy")
+  invoicePaymentsRecorded  InvoicePayment[]     @relation("InvoicePaymentRecordedBy")
   // Synamate Conversations (Phase 4)
-  messagesSent             Message[]          @relation("MessageSentBy")
-  messagesAssigned         Message[]          @relation("MessageAssignedTo")
+  messagesSent             Message[]            @relation("MessageSentBy")
+  messagesAssigned         Message[]            @relation("MessageAssignedTo")
   // Synamate Automation (Phase 5)
-  workflowsCreated         Workflow[]         @relation("WorkflowCreatedBy")
+  workflowsCreated         Workflow[]           @relation("WorkflowCreatedBy")
   // Outreach Specialist SOP
-  outreachStepsActed       OutreachStepLog[]  @relation("OutreachStepActedBy")
-  outreachQualified        OutreachJourney[]  @relation("OutreachQualifiedBy")
-  outreachTouchpoints      OutreachJourney[]  @relation("OutreachRespTouchpoint")
-  outreachDiscos           OutreachJourney[]  @relation("OutreachRespDisco")
-  enrollmentsClosed        Enrollment[]       @relation("EnrollmentCloser")
-  sssSlotsOwned            SssSlot[]          @relation("SssSlotOwner")
+  outreachStepsActed       OutreachStepLog[]    @relation("OutreachStepActedBy")
+  outreachQualified        OutreachJourney[]    @relation("OutreachQualifiedBy")
+  outreachTouchpoints      OutreachJourney[]    @relation("OutreachRespTouchpoint")
+  outreachDiscos           OutreachJourney[]    @relation("OutreachRespDisco")
+  enrollmentsClosed        Enrollment[]         @relation("EnrollmentCloser")
+  sssSlotsOwned            SssSlot[]            @relation("SssSlotOwner")
   // Soft-delete authorship: records this user archived (see src/lib/soft-delete.ts)
-  leadsArchived            Lead[]             @relation("LeadArchivedBy")
-  companiesArchived        Company[]          @relation("CompanyArchivedBy")
-  opportunitiesArchived    Opportunity[]      @relation("OpportunityArchivedBy")
-  tasksArchived            ContactTask[]      @relation("ContactTaskArchivedBy")
-  incomesArchived          Income[]           @relation("IncomeArchivedBy")
-  expensesArchived         Expense[]          @relation("ExpenseArchivedBy")
-  invoicesArchived         Invoice[]          @relation("InvoiceArchivedBy")
-  pendingPaymentsArchived  PendingPayment[]   @relation("PendingPaymentArchivedBy")
-  productsArchived         Product[]          @relation("ProductArchivedBy")
+  leadsArchived            Lead[]               @relation("LeadArchivedBy")
+  companiesArchived        Company[]            @relation("CompanyArchivedBy")
+  opportunitiesArchived    Opportunity[]        @relation("OpportunityArchivedBy")
+  tasksArchived            ContactTask[]        @relation("ContactTaskArchivedBy")
+  incomesArchived          Income[]             @relation("IncomeArchivedBy")
+  expensesArchived         Expense[]            @relation("ExpenseArchivedBy")
+  invoicesArchived         Invoice[]            @relation("InvoiceArchivedBy")
+  pendingPaymentsArchived  PendingPayment[]     @relation("PendingPaymentArchivedBy")
+  productsArchived         Product[]            @relation("ProductArchivedBy")
 
   @@map("user")
 }
@@ -320,17 +323,6 @@ enum PaymentMethod {
   OTHER
 }
 
-enum ExpenseCategory {
-  MARKETING
-  TOOLS_SOFTWARE
-  TEAM_SALARIES
-  CONTENT_CREATION
-  EVENTS_OFFLINE
-  OPERATIONS
-  COGS_DIRECT_DELIVERY
-  OTHER
-}
-
 enum PendingPaymentStatus {
   ACTIVE
   PAID_IN_FULL
@@ -350,14 +342,14 @@ enum ExpenseBusinessLine {
 
 // Daily income entry (PRD1 §4.2). Admin-only.
 model Income {
-  id             String        @id @default(cuid())
-  date           DateTime      @db.Date
-  studentName    String
+  id                      String              @id @default(cuid())
+  date                    DateTime            @db.Date
+  studentName             String
   // Optional links - how Finance feeds Student LTV (CONTEXT §7). Never required in Phase 1.
-  studentId      String?
-  student        Student?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  enrollmentId   String?
-  enrollment     Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  studentId               String?
+  student                 Student?            @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  enrollmentId            String?
+  enrollment              Enrollment?         @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   /// WHICH RECEIVABLE THIS PAYMENT SETTLES (FIN-12).
   ///
   /// Paid-so-far used to be summed per STUDENT, so a student with four plans had every one of
@@ -369,44 +361,47 @@ model Income {
   /// arrive before any plan exists. An unlinked payment is still credited to the student's plans
   /// (oldest first, each capped at its own balance) by `lib/payment-allocation` - but it is
   /// credited ONCE, which is the part that was broken.
-  pendingPaymentId String?
-  pendingPayment   PendingPayment? @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
-  amountInrMinor BigInt        @default(0) // paise
-  amountEurMinor BigInt        @default(0) // cents
-  fxRateUsed     Decimal       @db.Decimal(14, 6) // INR per 1 EUR on entry date
-  programLevel   String // Level.code (was ProgramLevel enum)
+  pendingPaymentId        String?
+  pendingPayment          PendingPayment?     @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
+  /// The plan THIS payment agreed, when it was the payment that generated a schedule. The other
+  /// side of PendingPayment.startedByIncomeId - editing this income restates that plan.
+  startedPlan             PendingPayment?     @relation("PlanStartedBy")
+  amountInrMinor          BigInt              @default(0) // paise
+  amountEurMinor          BigInt              @default(0) // cents
+  fxRateUsed              Decimal             @db.Decimal(14, 6) // INR per 1 EUR on entry date
+  programLevel            String // Level.code (was ProgramLevel enum)
   /// PaymentTypeConfig.code (was the PaymentType enum). Founder-configurable in the Console, so
   /// "Subscription", "Deposit" or "Part payment" can be added without a migration - the same move
   /// `programLevel` made when ProgramLevel became the Level catalogue. The two codes the rest of
   /// the app BRANCHES on (FULL_PAYMENT, INSTALMENT) are locked in the config and cannot be
   /// renamed away; everything else is the founder's to name.
-  paymentType    String
-  paymentMethod  PaymentMethod
+  paymentType             String
+  paymentMethod           PaymentMethod
   /// What "Other" meant, typed in free text. The enum cannot grow a value per bank or wallet
   /// somebody is paid through, and "Other" with no note is a row nobody can reconcile later.
   /// Only ever set when paymentMethod = OTHER.
-  paymentMethodOther String?
+  paymentMethodOther      String?
   /// A recurring arrangement: how often it bills and when the next one falls. Asked only for a
   /// payment type whose kind is SUBSCRIPTION, and null for every other kind.
-  recurrenceInterval RecurrenceInterval?
-  recurrenceNextDate DateTime?           @db.Date
+  recurrenceInterval      RecurrenceInterval?
+  recurrenceNextDate      DateTime?           @db.Date
   // Instalment plan details - asked only when paymentType = INSTALMENT. The count is how many
   // instalments the fee is split into; the extras are the surcharge added for choosing the plan
   // (informational - the received amounts above stay the money that actually arrived).
   instalmentCount         Int?
-  instalmentExtraInrMinor BigInt @default(0) // paise
-  instalmentExtraEurMinor BigInt @default(0) // cents
-  notes          String?
-  source         Source        @default(MANUAL)
-  manualOverride Boolean       @default(false)
-  externalRef    String? // e.g. Razorpay payment id - de-dupe key for ingest
-  enteredById    String?
-  enteredBy      User?         @relation("IncomeEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  deletedAt      DateTime?
-  deletedById    String?
-  deletedBy      User?         @relation("IncomeArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  instalmentExtraInrMinor BigInt              @default(0) // paise
+  instalmentExtraEurMinor BigInt              @default(0) // cents
+  notes                   String?
+  source                  Source              @default(MANUAL)
+  manualOverride          Boolean             @default(false)
+  externalRef             String? // e.g. Razorpay payment id - de-dupe key for ingest
+  enteredById             String?
+  enteredBy               User?               @relation("IncomeEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  deletedAt               DateTime?
+  deletedById             String?
+  deletedBy               User?               @relation("IncomeArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@unique([source, externalRef])
   @@index([date])
@@ -419,75 +414,108 @@ model Income {
 
 // Daily expense entry (PRD1 §4.3). Admin-only.
 model Expense {
-  id             String          @id @default(cuid())
-  date           DateTime        @db.Date
-  amountInrMinor BigInt          @default(0)
-  amountEurMinor BigInt          @default(0)
-  fxRateUsed     Decimal         @db.Decimal(14, 6)
-  category       ExpenseCategory
-  isCogs         Boolean         @default(false)
+  id              String              @id @default(cuid())
+  date            DateTime            @db.Date
+  amountInrMinor  BigInt              @default(0)
+  amountEurMinor  BigInt              @default(0)
+  fxRateUsed      Decimal             @db.Decimal(14, 6)
+  /// ExpenseCategoryOption.code (was the ExpenseCategory enum). Founder-configurable in the
+  /// Console, so "Rent", "Legal and accounting" or "Travel" can be added without a migration -
+  /// the same move `programLevel` and `paymentType` already made. Each category names the P&L
+  /// account it debits, so a new one is a new line in the ledger and not just a new label.
+  category        String
+  isCogs          Boolean             @default(false)
+  /// WHICH ACCOUNT THE MONEY ACTUALLY LEFT FROM - a code from `MONEY_ACCOUNTS` (1000 Bank INR,
+  /// 1010 Bank EUR, 1020 Cash).
+  ///
+  /// Every expense used to credit the INR bank whatever had really paid it, because the posting
+  /// rule said so and the row carried nothing to say otherwise: petty cash never went down, the
+  /// euro account was drained in rupees, and no statement could ever be reconciled against
+  /// either. Defaults to the INR bank, which is exactly what every historic row was posted to,
+  /// so nothing already in the ledger is restated by this column existing.
+  paidFromAccount String              @default("1000")
   /// Defaults to SHARED so every pre-existing row keeps behaving exactly as it did before
   /// this column existed (apportioned by revenue share) - the split only sharpens as costs
   /// are actually tagged, and never silently reattributes history.
-  businessLine   ExpenseBusinessLine @default(SHARED)
-  vendor         String
-  notes          String?
-  source         Source          @default(MANUAL)
-  manualOverride Boolean         @default(false)
-  externalRef    String?
-  enteredById    String?
-  enteredBy      User?           @relation("ExpenseEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  deletedAt      DateTime?
-  deletedById    String?
-  deletedBy      User?           @relation("ExpenseArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  businessLine    ExpenseBusinessLine @default(SHARED)
+  vendor          String
+  /// WHO on the team this cost paid, when it paid a person rather than a company.
+  ///
+  /// `vendor` is free text ("3M", "Zoho One", "Karthick salary"), which is right for a supplier
+  /// and wrong for a colleague: a month typed "Karthik" and the next "Karthick salary" are two
+  /// vendors as far as every total is concerned, so "what have we paid this person" had no
+  /// answer. Optional and SetNull: the overwhelming majority of expenses pay no-one on the team,
+  /// and an offboarded person's pay history must survive their profile being removed.
+  teamProfileId   String?
+  teamProfile     TeamProfile?        @relation("ExpenseTeamMember", fields: [teamProfileId], references: [id], onDelete: SetNull)
+  notes           String?
+  source          Source              @default(MANUAL)
+  manualOverride  Boolean             @default(false)
+  externalRef     String?
+  enteredById     String?
+  enteredBy       User?               @relation("ExpenseEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  deletedAt       DateTime?
+  deletedById     String?
+  deletedBy       User?               @relation("ExpenseArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@unique([source, externalRef])
   @@index([date])
   @@index([isCogs, date])
   @@index([deletedAt])
+  @@index([teamProfileId, date])
   @@map("expense")
 }
 
 // Pending payments tracker (PRD1 §4.4). "Amount paid so far" is COMPUTED at read time
 // by summing Income rows linked to the same student - never stored, never double-entered.
 model PendingPayment {
-  id               String               @id @default(cuid())
-  studentName      String
-  studentId        String?
-  student          Student?             @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  id                String               @id @default(cuid())
+  studentName       String
+  studentId         String?
+  student           Student?             @relation(fields: [studentId], references: [id], onDelete: SetNull)
   /// ER v2 `ENROLLMENT ||--|| EMI_PLAN` (Track E). PendingPayment + Instalment already IS the
   /// EMI plan; what it lacked was the link saying which enrollment it bills.
-  enrollmentId     String?
-  enrollment       Enrollment?          @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
-  programLevel     String // Level.code (was ProgramLevel enum)
+  enrollmentId      String?
+  enrollment        Enrollment?          @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  programLevel      String // Level.code (was ProgramLevel enum)
   /// ER v2 EMI_PLAN.num_emis / levels_taken. INPUTS the founder sets when building the plan
   /// (the spec's "2 EMIs per level" rule), not outputs - which is why they are stored rather
   /// than counted off Instalment rows that may not all exist yet.
-  numEmis          Int?
-  levelsTaken      Int?
-  totalFeeInrMinor BigInt               @default(0)
-  totalFeeEurMinor BigInt               @default(0)
+  numEmis           Int?
+  levelsTaken       Int?
+  totalFeeInrMinor  BigInt               @default(0)
+  totalFeeEurMinor  BigInt               @default(0)
   /// The surcharge for paying in instalments, priced per plan length in the Founder Console
   /// (AppSetting "instalmentPlans"). Kept SEPARATE from totalFee so the agreed fee keeps its
   /// original meaning - "total to collect" is fee + this, computed, never a restated fee.
   /// Snapshotted when the plan is generated: re-pricing the table must not silently move the
   /// balance on a plan the student already signed up to.
-  planExtraInrMinor BigInt              @default(0)
-  planExtraEurMinor BigInt              @default(0)
+  planExtraInrMinor BigInt               @default(0)
+  planExtraEurMinor BigInt               @default(0)
   /// Days between instalments used to build this plan's schedule - stored so the plan can be
   /// explained ("every 30 days") after the config default has since changed.
-  intervalDays     Int?
-  fxRateUsed       Decimal              @db.Decimal(14, 6)
-  nextDueDate      DateTime?            @db.Date
-  status           PendingPaymentStatus @default(ACTIVE)
-  notes            String?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  deletedAt        DateTime?
-  deletedById      String?
-  deletedBy        User?                @relation("PendingPaymentArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  intervalDays      Int?
+  fxRateUsed        Decimal              @db.Decimal(14, 6)
+  nextDueDate       DateTime?            @db.Date
+  status            PendingPaymentStatus @default(ACTIVE)
+  /// THE PAYMENT THAT AGREED THIS PLAN - the one recorded on the Income form that generated the
+  /// schedule, stored as instalment 1.
+  ///
+  /// Without it the plan and its first payment were two rows with nothing between them: editing
+  /// the income to correct the amount received left `totalFee` and instalment 1 saying what had
+  /// been typed first, so the schedule and the balance disagreed for good and the dunning ladder
+  /// chased the difference. Nullable and SetNull - a plan can be built by hand with no payment
+  /// at all, and most plans predate the column.
+  startedByIncomeId String?              @unique
+  startedByIncome   Income?              @relation("PlanStartedBy", fields: [startedByIncomeId], references: [id], onDelete: SetNull)
+  notes             String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  deletedAt         DateTime?
+  deletedById       String?
+  deletedBy         User?                @relation("PendingPaymentArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   whatsappMessages WhatsAppMessage[]
   instalments      Instalment[]
@@ -525,7 +553,7 @@ model Instalment {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  dunningEvents    DunningEvent[]
+  dunningEvents DunningEvent[]
 
   @@unique([pendingPaymentId, seq])
   @@index([status, dueDate])
@@ -637,25 +665,25 @@ enum PaymentPlan {
 }
 
 model Lead {
-  id             String        @id @default(cuid())
-  name           String
+  id                String           @id @default(cuid())
+  name              String
   // Nullable since the Synamate import (16 Jul): 5,886 of 23,432 imported contacts have
   // no phone at all - 5,086 of those have no email either. Every code path that sends
   // (WATI/WhatsApp, the Outreach SOP ladder) MUST null-check before dialling.
-  phone          String?
-  email          String? // captured from booking form / ad lead (Wave-1)
-  city           String?
-  industry       String?
-  leadSource     LeadSource
-  dateIn         DateTime      @db.Date
-  stage          LeadStage     @default(NEW_LEAD)
-  wonLevel       String? // Level.code; set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
-  paymentPlan    PaymentPlan? // set from DEPOSIT_PAID onward - split pay vs full pay
-  notes          String?
-  source         Source        @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
-  manualOverride Boolean       @default(false)
-  externalRef    String?
-  utm            Json? // captured UTM params from the ad / landing source (Wave-1)
+  phone             String?
+  email             String? // captured from booking form / ad lead (Wave-1)
+  city              String?
+  industry          String?
+  leadSource        LeadSource
+  dateIn            DateTime         @db.Date
+  stage             LeadStage        @default(NEW_LEAD)
+  wonLevel          String? // Level.code; set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
+  paymentPlan       PaymentPlan? // set from DEPOSIT_PAID onward - split pay vs full pay
+  notes             String?
+  source            Source           @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
+  manualOverride    Boolean          @default(false)
+  externalRef       String?
+  utm               Json? // captured UTM params from the ad / landing source (Wave-1)
   /// The hostname this contact came in through - "optin.b2consultants.de", lower-cased, no port.
   ///
   /// Observed, never inferred: it is the Host header of the request that actually created them,
@@ -663,19 +691,19 @@ model Lead {
   /// NULL, and NULL means "we do not know", not "none" - the WhatsApp domain gate reads it that
   /// way and lets an unknown origin through, because the 23,429 leads imported from Synamate can
   /// never have one and blocking them would silence every reminder in the system.
-  originDomain   String?
+  originDomain      String?
   // Speed-to-lead (Synamate "Who" + "Speed Ratio"): who owns the lead and when it was
   // first contacted. Speed = contactedAt − createdAt, computed at read time.
-  assignedToId   String?
-  assignedTo     User?         @relation("LeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
-  contactedAt    DateTime?
+  assignedToId      String?
+  assignedTo        User?            @relation("LeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  contactedAt       DateTime?
   /// ER v2 `MARKETING_SOURCE ||--o{ LEAD` (Track F). `leadSource` above stays as the coarse
   /// CHANNEL; this is the campaign beneath it. SetNull - retiring a campaign must not orphan
   /// or delete the leads it produced.
   marketingSourceId String?
   marketingSource   MarketingSource? @relation(fields: [marketingSourceId], references: [id], onDelete: SetNull)
-  enteredById    String?
-  enteredBy      User?         @relation("LeadEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  enteredById       String?
+  enteredBy         User?            @relation("LeadEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
 
   /// ── BANT AT OPT-IN ────────────────────────────────────────────────────────────────
   /// The band score as of the LANDING PAGE, not the booking.
@@ -708,40 +736,40 @@ model Lead {
   /// the founder which fields arrived unrecognised instead of the score silently reading 0.
   intakeAnswers Json?
 
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  deletedAt      DateTime?
-  deletedById    String?
-  deletedBy      User?         @relation("LeadArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("LeadArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
-  outcomes            DiscoveryOutcome[]
-  callLogs            CallLog[]
-  stageHistory        LeadStageHistory[]
-  students            Student[]
-  bookings            BookingRequest[]
-  outreachJourney     OutreachJourney?
-  whatsappMessages    WhatsAppMessage[]
-  agreements          Agreement[]
+  outcomes              DiscoveryOutcome[]
+  callLogs              CallLog[]
+  stageHistory          LeadStageHistory[]
+  students              Student[]
+  bookings              BookingRequest[]
+  outreachJourney       OutreachJourney?
+  whatsappMessages      WhatsAppMessage[]
+  agreements            Agreement[]
   // Synamate CRM (Phase 1): the Lead is the Contact record.
-  tags                Tag[]                @relation("LeadTags")
-  companyId           String?
-  company             Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  customFields        Json? // values keyed by CustomFieldDefinition.key (object = CONTACT)
-  contactNotes        ContactNote[]
-  tasks               ContactTask[]
-  opportunities       Opportunity[]
-  formSubmissions     FormSubmission[]
-  invoices            Invoice[]
-  subscriptions       Subscription[]
-  messages            Message[]
-  workflowEnrollments WorkflowEnrollment[]
-  consents            ConsentRecord[]
-  answers             LeadAnswer[]
+  tags                  Tag[]                  @relation("LeadTags")
+  companyId             String?
+  company               Company?               @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  customFields          Json? // values keyed by CustomFieldDefinition.key (object = CONTACT)
+  contactNotes          ContactNote[]
+  tasks                 ContactTask[]
+  opportunities         Opportunity[]
+  formSubmissions       FormSubmission[]
+  invoices              Invoice[]
+  subscriptions         Subscription[]
+  messages              Message[]
+  workflowEnrollments   WorkflowEnrollment[]
+  consents              ConsentRecord[]
+  answers               LeadAnswer[]
   /// Every address this person has ever given us - see LeadEmail.
-  emails              LeadEmail[]
+  emails                LeadEmail[]
   /// BANT as it stood at each scoring, kept so a returning prospect can be read in context.
-  scoreEvents         LeadScoreEvent[]
-  enrollments         Enrollment[]           @relation("EnrollmentLead")
+  scoreEvents           LeadScoreEvent[]
+  enrollments           Enrollment[]           @relation("EnrollmentLead")
   workshopRegistrations WorkshopRegistration[]
 
   @@unique([source, externalRef])
@@ -790,11 +818,11 @@ model LeadStageHistory {
 /// recognises someone who comes back on an older address, and the desk can see which address
 /// reached them before.
 model LeadEmail {
-  id     String @id @default(cuid())
-  leadId String
-  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  leadId   String
+  lead     Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   /// Exactly as they typed it - what a human reads back off the screen.
-  email  String
+  email    String
   /// Lower-cased and trimmed, which is ALL the folding `normalizeEmail` does. Gmail's dot and
   /// `+` conventions are deliberately not applied: `a.b@yahoo.com` really is a different mailbox
   /// from `ab@yahoo.com`, and folding them would merge two prospects into one record.
@@ -828,14 +856,14 @@ model LeadScoreEvent {
   leadId String
   lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
-  source  BantSource
-  budget    Boolean?
-  authority Boolean?
-  need      Boolean?
-  timeline  Boolean?
-  score     Int?
-  avg       Float?
-  verdict   BantVerdict?
+  source        BantSource
+  budget        Boolean?
+  authority     Boolean?
+  need          Boolean?
+  timeline      Boolean?
+  score         Int?
+  avg           Float?
+  verdict       BantVerdict?
   /// Which question catalogue produced this, so a later re-tune is never mistaken for what this
   /// prospect was actually scored under.
   configVersion Int?
@@ -1216,21 +1244,21 @@ model FormSubmission {
 
 /// A funnel / multi-step landing site (Synamate "Funnels"/"Websites"). Public at /p/<slug>.
 model Funnel {
-  id          String       @id @default(cuid())
-  name        String
-  slug        String       @unique
-  published   Boolean      @default(false)
+  id           String       @id @default(cuid())
+  name         String
+  slug         String       @unique
+  published    Boolean      @default(false)
   /// Block[] rendered above and below EVERY step of this funnel - the logo bar and the
   /// legal/footer strip. Held on the funnel rather than copied into each step because a funnel
   /// with four steps otherwise means changing the phone number in four places and missing one.
   /// Null (not `[]`) means "this funnel has none", so an empty header is a deliberate state.
   headerBlocks Json?
   footerBlocks Json?
-  createdById String?
-  createdBy   User?        @relation("FunnelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  steps       FunnelStep[]
+  createdById  String?
+  createdBy    User?        @relation("FunnelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  steps        FunnelStep[]
 
   @@map("funnel")
 }
@@ -1273,7 +1301,7 @@ model FunnelStep {
 /// holding an entire page (`scope: PAGE`), a library SECTION is one holding a fragment. Two
 /// tables would have meant two editors, two pickers and two ways to drift.
 model SectionSnippet {
-  id          String   @id @default(cuid())
+  id          String       @id @default(cuid())
   name        String
   /// Grouping for the picker ("Hero", "Social proof", "Closing") - free text, not an enum, so
   /// the team can organise their own library without a migration.
@@ -1284,11 +1312,11 @@ model SectionSnippet {
   blocks      Json
   /// Seeded starter content is BUILT-IN and cannot be deleted from the UI; anything the team
   /// saves is theirs to remove.
-  builtIn     Boolean  @default(false)
+  builtIn     Boolean      @default(false)
   createdById String?
-  createdBy   User?    @relation("SnippetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdBy   User?        @relation("SnippetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   @@index([scope, category])
   @@map("section_snippet")
@@ -1314,10 +1342,10 @@ enum SnippetScope {
 /// One hosted website = one domain. Theme, nav and the shared header/footer live here, so a page
 /// created next year inherits them without anyone copying anything.
 model Site {
-  id   String @id @default(cuid())
-  name String
+  id     String  @id @default(cuid())
+  name   String
   /// URL path prefix while the real domain is still pointed at GHL: /s/<slug>/…
-  slug String @unique
+  slug   String  @unique
   /// Primary hostname, once DNS is cut over. NULL means "not serving a domain yet", which is the
   /// state this ships in - the rebuild is verified on b2app.sirahagents.com first.
   domain String? @unique
@@ -1325,11 +1353,11 @@ model Site {
   /// Design tokens (colours, fonts, radii) as SiteTheme JSON. Held per-site rather than read from
   /// the dashboard's own Tailwind tokens because this site must NOT inherit the app's look - it
   /// has its own brand, and the two must be free to diverge.
-  theme Json
+  theme   Json
   /// NavItem[] - the shared header menu. External targets (the GHL opt-in) are just absolute hrefs.
   navMenu Json
 
-  faviconUrl String?
+  faviconUrl      String?
   /// Tracking. Absent = not injected at all, rather than an empty script tag.
   metaPixelId     String?
   gaMeasurementId String?
@@ -1388,7 +1416,7 @@ model SitePage {
   seoDescription String?
   ogImageUrl     String?
   /// Excluded from the generated sitemap/robots (privacy and terms do not need indexing).
-  noIndex Boolean @default(false)
+  noIndex        Boolean @default(false)
 
   published Boolean   @default(false)
   /// Denormalised view counter. Incremented in batches, NOT per request - see the public route.
@@ -1409,11 +1437,11 @@ model SitePage {
 /// row lookup. GHL shows a version history and the team will expect one; more to the point, this
 /// site takes paid traffic and a bad edit needs a one-click way back.
 model SitePageRevision {
-  id     String   @id @default(cuid())
-  pageId String
-  page   SitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  pageId      String
+  page        SitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
   /// The full `sections` blob as it was after this save.
-  sections Json
+  sections    Json
   /// Optional human label ("before pricing change"); autosaves leave it null.
   label       String?
   createdById String?
@@ -1429,19 +1457,19 @@ model SitePageRevision {
 /// in Postgres: the existing data-URL-in-a-column trick is fine for a 64px avatar and wrong for a
 /// hero image, which must be CDN-cacheable and resizable by next/image.
 model MediaAsset {
-  id         String @id @default(cuid())
-  storageKey String @unique
+  id         String  @id @default(cuid())
+  storageKey String  @unique
   url        String
   filename   String
   mimeType   String
   bytes      Int
   /// Intrinsic dimensions, captured at upload so the renderer can set width/height and avoid
   /// layout shift without measuring the image at request time.
-  width  Int?
-  height Int?
+  width      Int?
+  height     Int?
   /// Editable alt text - the media library is the right place to fix accessibility once, rather
   /// than re-typing alt on every page that uses the image.
-  alt String?
+  alt        String?
 
   uploadedById String?
   uploadedBy   User?     @relation("MediaUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
@@ -1594,22 +1622,22 @@ model InvoiceLineItem {
 }
 
 model InvoicePayment {
-  id             String   @id @default(cuid())
+  id             String          @id @default(cuid())
   invoiceId      String
-  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice        Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   amountInrMinor BigInt
-  amountEurMinor BigInt   @default(0)
+  amountEurMinor BigInt          @default(0)
   /// Which currency the amount was typed in - the invoice's, normally. The other side is derived
   /// once at `fxRateUsed` and stored, so a euro receipt never re-prices when the euro moves.
   currency       InvoiceCurrency @default(INR)
-  fxRateUsed     Decimal? @db.Decimal(14, 6)
+  fxRateUsed     Decimal?        @db.Decimal(14, 6)
   method         String // cash / upi / bank / razorpay / stripe (free text until a processor is wired)
   reference      String?
   provider       String? // future: "razorpay" | "stripe"
   externalId     String? // future: processor payment id
-  paidAt         DateTime @default(now())
+  paidAt         DateTime        @default(now())
   recordedById   String?
-  recordedBy     User?    @relation("InvoicePaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  recordedBy     User?           @relation("InvoicePaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([recordedById])
@@ -1873,29 +1901,29 @@ enum SlotReleaseReason {
 /// rather than joined, because the point of the row is to survive the thing it describes - slots
 /// are deleted, bookings are archived, people leave the team.
 model SlotRelease {
-  id               String            @id @default(cuid())
+  id                String            @id @default(cuid())
   /// The slot that was freed. Nullable only because a slot can later be deleted outright.
-  slotId           String?
-  slot             AppointmentSlot?  @relation(fields: [slotId], references: [id], onDelete: SetNull)
-  bookingRequestId String?
-  bookingRequest   BookingRequest?   @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
+  slotId            String?
+  slot              AppointmentSlot?  @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  bookingRequestId  String?
+  bookingRequest    BookingRequest?   @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
   /// When the released call had been, in UTC.
-  slotStartsAt     DateTime
-  durationMins     Int               @default(30)
+  slotStartsAt      DateTime
+  durationMins      Int               @default(30)
   /// Who the slot was being held for.
-  prospectName     String
-  reason           SlotReleaseReason
+  prospectName      String
+  reason            SlotReleaseReason
   /// What the slot became. OPEN when it is genuinely re-bookable; BLOCKED when it was released
   /// inside the min-notice window, where the public form would refuse it anyway (see
   /// `releasedSlotStatus`) - publishing it as OPEN would advertise capacity nobody can take.
-  releasedStatus   SlotStatus        @default(OPEN)
+  releasedStatus    SlotStatus        @default(OPEN)
   /// Filled in when promote-next moved another call up into this opening - the one figure that
   /// says whether a cancellation cost us the slot or merely reshuffled it.
   promotedBookingId String?
   promotedName      String?
   /// Null means the automation did it; a name means a person did.
-  releasedByName   String?
-  createdAt        DateTime          @default(now())
+  releasedByName    String?
+  createdAt         DateTime          @default(now())
 
   @@index([slotStartsAt])
   @@index([createdAt])
@@ -1911,20 +1939,20 @@ model SlotRelease {
 /// booking-automation engine: blocking a BOOKED slot moves its journey to the next OPEN slot for
 /// the same owner and resets the SSS confirmation. journey.sssAt is kept in sync with startsAt.
 model SssSlot {
-  id           String     @id @default(cuid())
+  id           String           @id @default(cuid())
   startsAt     DateTime // UTC instant
-  durationMins Int        @default(45)
-  status       SlotStatus @default(OPEN)
+  durationMins Int              @default(45)
+  status       SlotStatus       @default(OPEN)
   // Who runs this SSS (defaults to the configured SSS owner). Per-slot so a reschedule keeps the
   // same closer and blocking one owner's day leaves another owner's slots untouched.
   ownerId      String?
-  owner        User?      @relation("SssSlotOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner        User?            @relation("SssSlotOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   // The prospect's journey booked into this slot (null unless BOOKED). One journey → at most one
   // SSS slot.
   journeyId    String?          @unique
   journey      OutreachJourney? @relation("SssSlotJourney", fields: [journeyId], references: [id], onDelete: SetNull)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   @@index([status, startsAt])
   @@index([ownerId, startsAt])
@@ -1972,13 +2000,13 @@ model BookingRequest {
   // Weighted layer (client notes): every answer carries a 0–4 score; bantAvg is the
   // mean of the four dimension scores and bantVerdict applies Ameen's thresholds
   // (>3 confirm · 2–3 doubt · <2 cancel). Recommendation only - no automated action.
-  bantBudget    Boolean      @default(false)
-  bantAuthority Boolean      @default(false)
-  bantNeed      Boolean      @default(false)
-  bantTimeline  Boolean      @default(false)
-  bantScore     Int          @default(0)
-  bantAvg       Float?
-  bantVerdict   BantVerdict?
+  bantBudget        Boolean      @default(false)
+  bantAuthority     Boolean      @default(false)
+  bantNeed          Boolean      @default(false)
+  bantTimeline      Boolean      @default(false)
+  bantScore         Int          @default(0)
+  bantAvg           Float?
+  bantVerdict       BantVerdict?
   /// Track D cutover instrumentation. `bantShadowAvg` is what the CONFIGURABLE question
   /// catalogue would have scored this submission - written alongside the column-based score
   /// during the shadow phase and compared, never read by any decision. A disagreement is a
@@ -1995,6 +2023,25 @@ model BookingRequest {
   // is set by a WhatsApp "yes" (wati/webhook) or a manual "Mark confirmed" from the Bookings table.
   confirmSentAt DateTime?
   confirmedAt   DateTime?
+
+  /// The Zoom meeting for this call, created when the slot is claimed (src/server/zoom-meetings.ts).
+  ///
+  /// `zoomJoinUrl` is what the prospect clicks and is safe to put in any message - it already
+  /// carries the passcode. `zoomStartUrl` is the HOST link: whoever opens it joins AS the host,
+  /// so it lives in its own column precisely so no template can reach for "the Zoom link" and
+  /// hand a prospect the keys. `zoomMeetingId` is what lets a reschedule MOVE the meeting and a
+  /// cancellation DELETE it, rather than stranding a dead room on the host's calendar.
+  ///
+  /// All three are nullable and stay null when Zoom is unarmed, times out, or rejects the call -
+  /// a booking is never blocked on a meeting link.
+  zoomMeetingId String?
+  zoomJoinUrl   String?
+  zoomStartUrl  String?
+  /// The instant the Zoom meeting is CURRENTLY scheduled for, which is not always the slot's own
+  /// time: a reschedule writes the slot first and Zoom is reconciled afterwards, and that call can
+  /// fail. Storing it makes the sync a true reconcile - "does Zoom disagree with the calendar?" -
+  /// so the retry sweep can spot and repair drift instead of blindly re-PATCHing every booking.
+  zoomStartsAt  DateTime?
 
   status      BookingStatus @default(BOOKED)
   source      Source        @default(BOOKING_FORM)
@@ -2072,6 +2119,21 @@ model TeamProfile {
   // notion (Saturdays follow worksSaturdays) that the monthly Goal engine doesn't model.
   dailyCallTarget     Int             @default(0)
 
+  /// ── AGREED MONTHLY PAY ────────────────────────────────────────────────────────────
+  /// What this person is paid in a normal month, in either currency, as the founder agreed it.
+  ///
+  /// Zero means "not agreed here", which is why BOTH sides default to 0 rather than one of them
+  /// being required: a tutor paid per batch (TutorFee) and a telecaller paid on commission
+  /// (TelecallerPayout) genuinely have no monthly salary, and a 0 that the Team payments form
+  /// treats as "nothing to pre-fill" is the honest rendering of that.
+  ///
+  /// Deliberately NOT a dated history: this is the figure a payment form opens on, and the
+  /// durable record of what was actually paid is the Expense row itself, which stamps its own
+  /// amount and FX rate. A raise therefore changes what is suggested next month and rewrites
+  /// nothing that already happened.
+  monthlyPayInrMinor BigInt @default(0)
+  monthlyPayEurMinor BigInt @default(0)
+
   /// ── TERMINATION ───────────────────────────────────────────────────────────────────
   /// Set when someone leaves. `status` goes INACTIVE and the linked `User` is SUSPENDED in the
   /// same transaction - the two statuses were previously never kept in sync by any code path,
@@ -2090,11 +2152,13 @@ model TeamProfile {
   /// years later - the reassignment itself leaves no trace on the row it moved.
   successorProfileId String?
 
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   okrs              OKR[]
   telecallerPayouts TelecallerPayout[]
+  /// Every expense recorded as paying this person - the Team payments section's history.
+  teamPayments      Expense[]          @relation("ExpenseTeamMember")
   goals             Goal[]
   rewardGrants      RewardGrant[]
 
@@ -2157,8 +2221,8 @@ model DailyLog {
   // HUMAN - before this field existed, a row could only come from the submit form.
   source DailyLogSource @default(HUMAN)
 
-  notes          String? // notes / blockers
-  correctionNote String? // Admin may append a correction - original stays intact
+  notes            String? // notes / blockers
+  correctionNote   String? // Admin may append a correction - original stays intact
   // Which numeric fields were auto-filled from real activity at submit time (report §3.A).
   // A JSON array of field keys - lets the timeline badge historical entries as auto-captured,
   // not just today's (today's is recomputed live; history needs this record).
@@ -2322,15 +2386,15 @@ model Enrollment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  incomes         Income[]
-  milestoneLogs   MilestoneLog[]
-  signalChanges   SignalChangeLog[]
-  sprintWeeks     SprintWeek[]
-  jobApplications JobApplication[]
+  incomes           Income[]
+  milestoneLogs     MilestoneLog[]
+  signalChanges     SignalChangeLog[]
+  sprintWeeks       SprintWeek[]
+  jobApplications   JobApplication[]
   milestoneProgress MilestoneProgress[]
-  agreements      Agreement[]
-  bookOrders      BookOrder[]
-  pendingPayments PendingPayment[]
+  agreements        Agreement[]
+  bookOrders        BookOrder[]
+  pendingPayments   PendingPayment[]
 
   @@index([studentId])
   @@index([status, programLevel])
@@ -2353,25 +2417,25 @@ enum JobApplicationStatus {
 }
 
 model JobApplication {
-  id           String               @id @default(cuid())
-  enrollmentId String
-  enrollment   Enrollment           @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  id               String               @id @default(cuid())
+  enrollmentId     String
+  enrollment       Enrollment           @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   /// ER v2 `JOB_APPLICATION.cv_id / jd_id` (Track H). Both SetNull and both optional: the
   /// company/role/jobUrl strings above stay as the record of what was applied to, so an
   /// application whose JD was later retired still reads correctly.
   resumeId         String?
   jobDescriptionId String?
-  jobDescription   JobDescription? @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
-  company      String
-  role         String
-  jobUrl       String?
-  location     String?
-  status       JobApplicationStatus @default(APPLIED)
-  appliedAt    DateTime             @db.Date
-  statusAt     DateTime             @default(now()) // when it last changed status
-  notes        String?
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  jobDescription   JobDescription?      @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
+  company          String
+  role             String
+  jobUrl           String?
+  location         String?
+  status           JobApplicationStatus @default(APPLIED)
+  appliedAt        DateTime             @db.Date
+  statusAt         DateTime             @default(now()) // when it last changed status
+  notes            String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   @@index([enrollmentId, status])
   @@index([status, statusAt])
@@ -2498,12 +2562,91 @@ model CashPosition {
   id                      String   @id @default(cuid())
   date                    DateTime @unique @db.Date // should be a Monday
   bankBalanceInrMinor     BigInt   @default(0)
-  personalSavingsInrMinor BigInt? // optional, planning only - excluded from runway
+  /// DEPRECATED - superseded by EquityContribution. No form writes this any more.
+  ///
+  /// It was "personal savings": one unattributed rupee figure per week, excluded from runway and
+  /// from everything else, so it could answer no question at all - not whose money it was, not
+  /// when it went in, not whether it ever did. The column is KEPT rather than dropped because the
+  /// figures already typed into it are a record of something, and silently deleting a founder's
+  /// numbers to tidy a schema is not a migration anyone should write. Nothing reads it.
+  personalSavingsInrMinor BigInt?
   notes                   String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
   @@map("cash_position")
+}
+
+/// Money PUT IN by an owner, and taken back out - the capital side of the business.
+///
+/// ── What this replaces ────────────────────────────────────────────────────────────────
+/// `CashPosition.personalSavingsInrMinor`: one number a week, labelled "personal savings
+/// (planning only)", belonging to nobody. There is no second owner it could describe, no date it
+/// went in on, and no way to tell a contribution from a balance that happens to be sitting in a
+/// personal account. "In future other people will also add to equity" is simply unanswerable in
+/// one nullable column.
+///
+/// ── It is real money, and it is NOT revenue ───────────────────────────────────────────
+/// A contribution posts Dr the account it landed in · Cr Owner's equity (3000) - never an income
+/// account. Equity that reached the P&L would inflate revenue, margin, commission and every
+/// growth figure derived from them, which is the single worst thing this table could do. It is
+/// also NOT added on top of Cash in Hand: that figure is the bank balance the founder types each
+/// week, and contributed money is already sitting inside it. Adding it again would double it.
+///
+/// A DRAWING is the same entry reversed (Dr equity · Cr the account), so one table answers "what
+/// has each owner put in, taken out, and left in the business" without a second model.
+model EquityContribution {
+  id   String   @id @default(cuid())
+  date DateTime @db.Date
+
+  /// WHOSE equity. Free text plus an optional account link, exactly like `Income.studentName` and
+  /// `studentId`: an owner is very often not an app user (a family member, a silent partner), and
+  /// requiring a User row would make the commonest case unrecordable.
+  contributorName String
+  userId          String?
+  user            User?   @relation("EquityContributor", fields: [userId], references: [id], onDelete: SetNull)
+
+  kind EquityEntryKind @default(CONTRIBUTION)
+
+  /// Dual currency with a stamped rate, like every other money row. A euro contribution is
+  /// entered in euro and keeps the rate it came in at, so re-pricing the FX table never restates
+  /// what somebody put in.
+  amountInrMinor BigInt  @default(0)
+  amountEurMinor BigInt  @default(0)
+  fxRateUsed     Decimal @default(0) @db.Decimal(14, 6)
+
+  /// Which account the money moved through - the asset side of the entry. One of the ASSET codes
+  /// in lib/chart-of-accounts (1000 Bank INR, 1010 Bank EUR, 1020 Cash). Stored because "it went
+  /// into the euro account" is a fact about the transfer, not something to infer later.
+  accountCode String @default("1000")
+
+  notes String?
+
+  /// The journal entry this raised, when the ledger is reachable. Null = recorded but unposted,
+  /// which is recoverable; a failed posting must never lose the founder's entry.
+  postedEntryId String?
+
+  enteredById String?
+  enteredBy   User?   @relation("EquityEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Archived, not destroyed - the same soft delete the nine core money records use, for the same
+  /// reason: a capital entry is evidence.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("EquityArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([date])
+  @@index([contributorName])
+  @@index([deletedAt])
+  @@map("equity_contribution")
+}
+
+enum EquityEntryKind {
+  CONTRIBUTION // money in
+  DRAWING // money out, to the owner
 }
 
 enum PayableFrequency {
@@ -2522,7 +2665,9 @@ enum PayableStatus {
 model Payable {
   id             String           @id @default(cuid())
   name           String
-  category       ExpenseCategory
+  /// ExpenseCategoryOption.code - the same founder-configured list an Expense uses, so a
+  /// commitment and the cost that settles it are filed the same way.
+  category       String
   /// Dual currency with a stamped rate, exactly like Income and Expense. A bill that arrives in
   /// euro is entered in euro; the rate is fixed at entry, so re-pricing the FX table never moves
   /// a commitment that was already agreed.
@@ -2582,17 +2727,17 @@ enum GnVideoProvider {
 /// portal login exists). That asymmetry is deliberate: a B2 seat IS the enrollment, whereas a
 /// GN student may sit in a batch for a level they were gifted or repeated.
 model Batch {
-  id        String        @id @default(cuid())
+  id             String        @id @default(cuid())
   /// Which business this cohort belongs to. Guards level-kind compatibility at the service
   /// layer (COACHING_TIER → B2, GERMAN_LEVEL/GERMAN_BUNDLE → GERMAN_NOTE).
-  line      BatchLine     @default(GERMAN_NOTE)
+  line           BatchLine     @default(GERMAN_NOTE)
   /// The founders' own label - "A1", "B10", "B26". Nullable because pre-existing rows have
   /// none, unique because it is the human key they use on calls and in the workbooks.
-  code      String?       @unique
-  name      String // "A1 Evening - July 2026"
-  level     String // Level.code - service-validated against `line`
-  tutorId   String?
-  tutor     User?         @relation("BatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
+  code           String?       @unique
+  name           String // "A1 Evening - July 2026"
+  level          String // Level.code - service-validated against `line`
+  tutorId        String?
+  tutor          User?         @relation("BatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
   status         GnBatchStatus @default(ACTIVE)
   targetStrength Int           @default(8) // target class size (spec: ~8 per batch)
   /// ER v2 BATCH.start_date. Nullable: the GN batches that already exist were never asked for one.
@@ -2602,13 +2747,13 @@ model Batch {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  members    BatchMember[]
+  members        BatchMember[]
   enrollments    Enrollment[]
   pendingJoiners GnPendingJoiner[]
-  recordings GnRecording[]
-  posts      GnPost[]
-  modules    GnModule[]
-  events     ClassSession[]
+  recordings     GnRecording[]
+  posts          GnPost[]
+  modules        GnModule[]
+  events         ClassSession[]
   tutorFees      TutorFee[]
   /// Workshop conversions whose per-level batch label resolved to this row (Track A backfill).
   conversionsA1  GnWorkshopConversion[] @relation("ConversionBatchA1")
@@ -2660,11 +2805,11 @@ enum GnEventType {
 /// `GnEventType` already carried the diagram's exact session vocabulary
 /// (KICKOFF / COACHING / LINKEDIN / QA / OPEN_MARKET), so the enum is reused verbatim.
 model ClassSession {
-  id           String      @id @default(cuid())
+  id           String       @id @default(cuid())
   batchId      String
-  batch        Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch        Batch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
   title        String
-  type         GnEventType @default(LIVE_CLASS)
+  type         GnEventType  @default(LIVE_CLASS)
   startsAt     DateTime
   durationMins Int?
   joinUrl      String?
@@ -2674,11 +2819,11 @@ model ClassSession {
   recordingId  String?      @unique
   recording    GnRecording? @relation("SessionRecording", fields: [recordingId], references: [id], onDelete: SetNull)
   createdById  String?
-  createdBy    User?    @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdBy    User?        @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  tasks SessionTask[]
+  tasks      SessionTask[]
   attendance SessionAttendance[]
 
   @@index([batchId, startsAt])
@@ -2729,18 +2874,18 @@ model SessionTask {
 /// "what did I miss while I was away", because it has no memory of what was outstanding
 /// when. Seating a student into a batch backfills their missing rows.
 model SessionTaskCompletion {
-  id          String         @id @default(cuid())
-  taskId      String
-  task        SessionTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  studentId   String
-  student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  status      TaskCompletion @default(PENDING) // reuses the existing YES / NO / PENDING enum
-  completedAt DateTime?
+  id            String         @id @default(cuid())
+  taskId        String
+  task          SessionTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status        TaskCompletion @default(PENDING) // reuses the existing YES / NO / PENDING enum
+  completedAt   DateTime?
   /// True when the status was derived from watch progress rather than ticked by the student.
-  autoCompleted Boolean      @default(false)
-  note        String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  autoCompleted Boolean        @default(false)
+  note          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@unique([taskId, studentId])
   @@index([studentId, status])
@@ -2844,9 +2989,9 @@ model GnRecording {
 
   watches GnRecordingWatch[]
   /// The scheduled session this is the recording OF (ER v2 SESSION ||--o| RECORDING).
-  session ClassSession?     @relation("SessionRecording")
+  session ClassSession?      @relation("SessionRecording")
   /// WATCH_VIDEO tasks pointing at this clip.
-  tasks   SessionTask[]     @relation("TaskRecording")
+  tasks   SessionTask[]      @relation("TaskRecording")
 
   @@index([batchId, classDate])
   @@index([moduleId])
@@ -2856,17 +3001,17 @@ model GnRecording {
 // Per-viewer "watched" state → the batch progress bar + completion checkmarks.
 // Recordings are lifetime, so this is progress, not access control.
 model GnRecordingWatch {
-  id          String      @id @default(cuid())
-  recordingId String
-  recording   GnRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User        @relation("GnRecordingWatchUser", fields: [userId], references: [id], onDelete: Cascade)
+  id           String      @id @default(cuid())
+  recordingId  String
+  recording    GnRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User        @relation("GnRecordingWatchUser", fields: [userId], references: [id], onDelete: Cascade)
   /// When the student SAID they watched it (the tick). Kept, but no longer the truth.
-  watchedAt   DateTime    @default(now())
+  watchedAt    DateTime    @default(now())
   /// Whether the student actually ticked "watched". Previously implied by the row existing -
   /// but tracking now creates rows too, so the claim needs saying out loud. Defaults true so
   /// every pre-existing row (which could only have come from a tick) keeps its meaning.
-  selfReported Boolean    @default(true)
+  selfReported Boolean     @default(true)
 
   /// Spec §10.3: "the tracked percentage is the source of truth" over a self-reported
   /// 'watched'. 0–100, high-water mark - scrubbing backwards must not erase progress.
@@ -3003,21 +3148,21 @@ enum GnWorkshopSource {
 /// the landing page the ad points at, the WhatsApp group registrants are pushed into, and
 /// the instant the taster runs (distinct from `month`, which is the intake period).
 model Workshop {
-  id        String           @id @default(cuid())
-  line      BatchLine        @default(GERMAN_NOTE)
-  name      String // "May 2026"
-  month     DateTime         @db.Date // first of the intake month - drives ordering
-  status    GnWorkshopStatus @default(ACTIVE)
+  id                String           @id @default(cuid())
+  line              BatchLine        @default(GERMAN_NOTE)
+  name              String // "May 2026"
+  month             DateTime         @db.Date // first of the intake month - drives ordering
+  status            GnWorkshopStatus @default(ACTIVE)
   landingPageUrl    String?
   whatsappGroupLink String?
   scheduledAt       DateTime?
-  notes     String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  notes             String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
-  conversions GnWorkshopConversion[]
-  adSets      AdSpend[]
-  registrations WorkshopRegistration[]
+  conversions    GnWorkshopConversion[]
+  adSets         AdSpend[]
+  registrations  WorkshopRegistration[]
   pendingJoiners GnPendingJoiner[]
 
   @@index([status])
@@ -3035,23 +3180,23 @@ model Workshop {
 /// `leadId` is SetNull, not Cascade: a registration is evidence that someone turned up, and
 /// must survive the lead being merged or archived.
 model WorkshopRegistration {
-  id         String    @id @default(cuid())
-  workshopId String
-  workshop   Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
-  leadId     String?
-  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  id           String    @id @default(cuid())
+  workshopId   String
+  workshop     Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  leadId       String?
+  lead         Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
   /// Snapshotted at registration - the lead row may later be corrected or merged.
-  name       String
-  email      String?
-  phone      String?
-  registeredAt DateTime @default(now())
-  attended   Boolean   @default(false)
-  attendedAt DateTime?
-  source     Source    @default(NATIVE_FORM)
-  externalRef String?
-  notes      String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  name         String
+  email        String?
+  phone        String?
+  registeredAt DateTime  @default(now())
+  attended     Boolean   @default(false)
+  attendedAt   DateTime?
+  source       Source    @default(NATIVE_FORM)
+  externalRef  String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   conversion GnWorkshopConversion?
 
@@ -3069,25 +3214,25 @@ model WorkshopRegistration {
 ///     even though B2 runs euro ad accounts.
 /// `workshopId` stays so the German Note ad-performance panel keeps working unchanged.
 model AdSpend {
-  id              String     @id @default(cuid())
+  id              String           @id @default(cuid())
   workshopId      String?
-  workshop        Workshop?  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  workshop        Workshop?        @relation(fields: [workshopId], references: [id], onDelete: Cascade)
   sourceId        String?
   source          MarketingSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   label           String? // "Set A", optional
   /// Kept as the INR field the GN panel already reads; `amountEurMinor` + `fxRateUsed` are
   /// the additive half, defaulted so every historical row keeps its exact meaning.
-  adSpendInrMinor BigInt     @default(0) // paise
-  amountEurMinor  BigInt     @default(0) // cents
-  fxRateUsed      Decimal?   @db.Decimal(14, 6)
-  periodStart     DateTime?  @db.Date
-  periodEnd       DateTime?  @db.Date
-  reach           Int        @default(0)
-  linkClicks      Int        @default(0)
-  attended        Int        @default(0) // registrations / attendees on the taster
-  conversions     Int        @default(0) // deals closed attributed to this set
-  orderIndex      Int        @default(0)
-  createdAt       DateTime   @default(now())
+  adSpendInrMinor BigInt           @default(0) // paise
+  amountEurMinor  BigInt           @default(0) // cents
+  fxRateUsed      Decimal?         @db.Decimal(14, 6)
+  periodStart     DateTime?        @db.Date
+  periodEnd       DateTime?        @db.Date
+  reach           Int              @default(0)
+  linkClicks      Int              @default(0)
+  attended        Int              @default(0) // registrations / attendees on the taster
+  conversions     Int              @default(0) // deals closed attributed to this set
+  orderIndex      Int              @default(0)
+  createdAt       DateTime         @default(now())
 
   @@index([workshopId])
   @@index([sourceId, periodStart])
@@ -3098,9 +3243,9 @@ model AdSpend {
 // COGS = books + tutor; Gross = final − COGS; Total Exp = COGS + ads + referral;
 // Net = final − Total Exp; ROAS = final ÷ ads. (Verified against the sheet rollup.)
 model GnWorkshopConversion {
-  id                        String             @id @default(cuid())
+  id                        String                @id @default(cuid())
   workshopId                String
-  workshop                  Workshop           @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  workshop                  Workshop              @relation(fields: [workshopId], references: [id], onDelete: Cascade)
   /// The registration this sale came from (Track G). Nullable + unique: historical rows were
   /// entered straight from the workbook with no registration behind them, and one
   /// registration can convert at most once.
@@ -3111,39 +3256,39 @@ model GnWorkshopConversion {
   phone                     String?
   address                   String?
   product                   GnWorkshopProduct
-  dayType                   GnWorkshopDayType  @default(WEEKDAY)
+  dayType                   GnWorkshopDayType     @default(WEEKDAY)
   // per-level batch assignment (label + time), free-text like the sheet ("B26", "7:00 AM").
   // Kept as the historical SNAPSHOT of what the workbook said; the *Id columns beside them
   // are the resolved links the Track A backfill writes. A label the backfill could not
   // resolve stays here with a null Id and is surfaced in the UI as "unlinked" - never guessed.
   batchA1                   String?
   batchA1Id                 String?
-  batchA1Ref                Batch?             @relation("ConversionBatchA1", fields: [batchA1Id], references: [id], onDelete: SetNull)
+  batchA1Ref                Batch?                @relation("ConversionBatchA1", fields: [batchA1Id], references: [id], onDelete: SetNull)
   timeA1                    String?
   batchA2                   String?
   batchA2Id                 String?
-  batchA2Ref                Batch?             @relation("ConversionBatchA2", fields: [batchA2Id], references: [id], onDelete: SetNull)
+  batchA2Ref                Batch?                @relation("ConversionBatchA2", fields: [batchA2Id], references: [id], onDelete: SetNull)
   timeA2                    String?
   batchB1                   String?
   batchB1Id                 String?
-  batchB1Ref                Batch?             @relation("ConversionBatchB1", fields: [batchB1Id], references: [id], onDelete: SetNull)
+  batchB1Ref                Batch?                @relation("ConversionBatchB1", fields: [batchB1Id], references: [id], onDelete: SetNull)
   timeB1                    String?
-  source                    GnWorkshopSource   @default(AD) // AD = from the workshop ad campaign; ORGANIC = referral / carry-over / free
-  status                    GnConversionStatus @default(CONFIRMED)
-  isFreeSeat                Boolean            @default(false) // B2-client / free-repeat seat (₹0 revenue; cost still applies)
-  finalPriceInrMinor        BigInt             @default(0) // billed price (paise) - an INPUT: varies per deal (EMI / negotiation)
-  paidAmountInrMinor        BigInt             @default(0) // cash collected (paise); balance = paid − final
+  source                    GnWorkshopSource      @default(AD) // AD = from the workshop ad campaign; ORGANIC = referral / carry-over / free
+  status                    GnConversionStatus    @default(CONFIRMED)
+  isFreeSeat                Boolean               @default(false) // B2-client / free-repeat seat (₹0 revenue; cost still applies)
+  finalPriceInrMinor        BigInt                @default(0) // billed price (paise) - an INPUT: varies per deal (EMI / negotiation)
+  paidAmountInrMinor        BigInt                @default(0) // cash collected (paise); balance = paid − final
   paymentMethod             String? // "UPI", "Credit Card", "German Bank", "UPI · 6 EMI"…
-  nextDueDate               DateTime?          @db.Date
+  nextDueDate               DateTime?             @db.Date
   // Costs are DERIVED from the product via the level cost model (lib/gn-workshop-pricing).
   // These override the model only for genuine exceptions (null → use the model). Ad spend
   // is DERIVED at read time: workshop ad-set spend ÷ its AD conversions.
   booksCostOverrideInrMinor BigInt?
   tutorCostOverrideInrMinor BigInt?
-  referralInrMinor          BigInt             @default(0)
+  referralInrMinor          BigInt                @default(0)
   notes                     String?
-  createdAt                 DateTime           @default(now())
-  updatedAt                 DateTime           @updatedAt
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
 
   @@index([workshopId])
   @@map("gn_workshop_conversion")
@@ -3344,6 +3489,10 @@ enum WhatsAppKind {
   NO_SHOW_FOLLOWUP // missed the call - rebook
   PAYMENT_REMINDER // overdue pending payment / receivable
   EMI_PRE_DUE // instalment falls due in N days - the reminder that lands BEFORE the due date
+  /// Sent ONCE, when a student is seated in a batch - the first thing the app tells someone who
+  /// has signed, paid and joined. Until this existed there was no enrolment message of any kind:
+  /// the next automated thing a new student heard was a payment reminder.
+  STUDENT_WELCOME
   CHECKIN_NUDGE // student coaching check-in due
   SPRINT_MISS_NUDGE // student missed a sprint-week target
   AGREEMENT_SEND // coaching agreement is ready - carries the tokenized signing link
@@ -3521,10 +3670,10 @@ model Agreement {
   status          AgreementStatus @default(DRAFT)
 
   // Who it is for. SetNull like every other audit link: a signed agreement outlives its student row.
-  studentId String?
-  student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  leadId    String?
-  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  studentId    String?
+  student      Student?    @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  leadId       String?
+  lead         Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
   /// ER v2 `ENROLLMENT ||--|| AGREEMENT` (Track E). Additive; `studentId` stays. Which LEVEL
   /// this contract governs was previously only readable out of the frozen `data` blob.
   enrollmentId String?
@@ -3651,6 +3800,10 @@ enum LedgerSourceType {
   /// value is additive and safe for the same reason INVOICE/PAYMENT were:
   /// forbid_duplicate_live_source() keys off (sourceType, sourceId) generically.
   TUTOR_FEE
+  /// An owner putting money in, or taking it out (EquityContribution). Its OWN value rather than
+  /// MANUAL so capital movements can be told apart from hand-keyed journal entries in a report -
+  /// "how much has been put in" is a question about this source, not about a narration.
+  EQUITY
 }
 
 // Chart of accounts, seeded for B2 in `prisma/chart-of-accounts.ts` (SPEC §10.1).
@@ -3856,17 +4009,17 @@ model Resume {
 /// link to a reusable JobDescription; `jdText` STAYS as the frozen snapshot, because a JD can
 /// be edited afterwards and the review must show what was actually matched against.
 model ResumeReview {
-  id           String   @id @default(cuid())
-  resumeId     String
-  resume       Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  id               String          @id @default(cuid())
+  resumeId         String
+  resume           Resume          @relation(fields: [resumeId], references: [id], onDelete: Cascade)
   jobDescriptionId String?
   jobDescription   JobDescription? @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
-  jdText       String
-  provider     String   @default("ai")
-  model        String?
-  scoreOverall Int      @default(0) // 0-100 ATS match
-  result       Json
-  createdAt    DateTime @default(now())
+  jdText           String
+  provider         String          @default("ai")
+  model            String?
+  scoreOverall     Int             @default(0) // 0-100 ATS match
+  result           Json
+  createdAt        DateTime        @default(now())
 
   @@index([resumeId])
   @@index([jobDescriptionId])
@@ -4013,8 +4166,16 @@ model OutreachJourney {
   // Step 19 - the SSS appointment instant (UTC), set when the Discovery Specialist books it.
   sssAt DateTime?
 
-  // Cross-cutting - the Zoom link pulled from the Discovery Specialist's calendar (§R).
-  zoomLink String?
+  // Cross-cutting - the Zoom link the SSS confirmation templates need (§R).
+  //
+  // Historically pasted by hand out of the Discovery Specialist's calendar, and still editable
+  // that way. When Zoom is armed, booking a prospect into an SSS slot fills it automatically and
+  // records the meeting id below, so a reschedule moves that same meeting instead of leaving the
+  // prospect holding a link to a room nobody will be in.
+  zoomLink      String?
+  zoomMeetingId String?
+  /// What `zoomMeetingId` is currently scheduled for - see the same field on BookingRequest.
+  zoomStartsAt  DateTime?
 
   // Steps 16/18/21/23 - the "mark the row RED" flag. A presentation flag on its own field so it
   // can never silently overwrite a status column (checklist §N).
@@ -4162,9 +4323,9 @@ enum GnSlotPreference {
 /// delete-guard (`levelUsageCount`) still counts them, so a level an old joiner references can
 /// never be deleted out from under them.
 model GnPendingJoiner {
-  id        String       @id @default(cuid())
+  id        String  @id @default(cuid())
   studentId String
-  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   level     String // Level.code (was ProgramLevel enum)
 
   preference    GnSlotPreference @default(EITHER)
@@ -4233,9 +4394,9 @@ enum BookOrderStatus {
 /// spec's ₹30,000 is an example the founders gave, and §18.3 lists the precise figure as
 /// still open.
 model BookOrder {
-  id        String       @id @default(cuid())
-  studentId String
-  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id           String      @id @default(cuid())
+  studentId    String
+  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
   /// ER v2 `ENROLLMENT ||--o{ BOOK_ORDER` (Track E, decision D6). ADDITIVE - `studentId`
   /// stays and remains required. For a student on three German levels, "which level were
   /// these books for" was previously inferred from `level` alone; this makes it a link.
@@ -4243,9 +4404,9 @@ model BookOrder {
   /// ambiguous matches null rather than guessing.
   enrollmentId String?
   enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
-  level     String // Level.code (was ProgramLevel enum)
-  vendorId  String?
-  vendor    Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  level        String // Level.code (was ProgramLevel enum)
+  vendorId     String?
+  vendor       Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
 
   /// Human-quotable reference, e.g. `BO-2026-0087` - the `{{order_ref}}` the approved WATI
   /// template sends to the publisher, and what the publisher quotes back at us. Deliberately not
@@ -4330,16 +4491,16 @@ model TutorFee {
   overrideAmountInrMinor BigInt?
   overrideReason         String?
 
-  status     TutorFeeStatus @default(DRAFT)
-  computedAt DateTime       @default(now())
-  approvedAt DateTime?
-  paidAt     DateTime?
+  status        TutorFeeStatus @default(DRAFT)
+  computedAt    DateTime       @default(now())
+  approvedAt    DateTime?
+  paidAt        DateTime?
   /// The Dr COGS-tutor-fees / Cr Accounts-payable accrual, when
   /// `financePosting.tutorFeeAccrual` is on. Null = reported but not accrued.
   postedEntryId String?
   notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   /// One fee per batch per level (D3: the rate is per level per batch, not monthly). A batch
   /// running A1 then A2 produces two rows; a recompute updates the DRAFT one in place.
@@ -4384,12 +4545,12 @@ model QualificationQuestion {
   key     String
   version Int    @default(1)
 
-  text     String // the wording shown on the form - this IS the evidence
-  helpText String?
-  kind     QuestionKind  @default(SELECT)
+  text          String // the wording shown on the form - this IS the evidence
+  helpText      String?
+  kind          QuestionKind  @default(SELECT)
   /// [{ value, label, score }] - score is the 0–4 weighted layer the BANT average is taken
   /// over. Null for free-text kinds, which score nothing.
-  options  Json?
+  options       Json?
   /// ── INBOUND MAPPING ─────────────────────────────────────────────────────────────────
   /// How an EXTERNAL form's vocabulary is recognised as this question. Both founder-editable at
   /// Console → Qualification: the landing page posts its own field names and its own answer
@@ -4406,18 +4567,18 @@ model QualificationQuestion {
   /// Field names this question may arrive under, e.g. ["when_start", "timeline"]. Matched case-
   /// and punctuation-insensitively, so "When_Start_Germany" and "when start germany" both hit
   /// without being listed. Empty means: match on the question `key` alone.
-  inboundKeys String[] @default([])
+  inboundKeys   String[]      @default([])
   /// Answer texts per option: { "<option value>": ["Immediately", "Right away"] }. `value` and
   /// `label` are always accepted without being listed here.
   answerAliases Json?
-  dimension BantDimension @default(NONE)
-  weight    Int           @default(1)
-  required  Boolean       @default(false)
-  orderIndex Int          @default(0)
+  dimension     BantDimension @default(NONE)
+  weight        Int           @default(1)
+  required      Boolean       @default(false)
+  orderIndex    Int           @default(0)
   /// Config tables retire, they do not delete - history points at them.
-  active    Boolean       @default(true)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  active        Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   answers LeadAnswer[]
 
@@ -4427,16 +4588,16 @@ model QualificationQuestion {
 }
 
 model LeadAnswer {
-  id               String  @id @default(cuid())
+  id               String                @id @default(cuid())
   leadId           String
-  lead             Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead             Lead                  @relation(fields: [leadId], references: [id], onDelete: Cascade)
   /// The submission this answer came in on. Nullable so an answer captured outside the
   /// booking form (a call, an import) still has a home.
   bookingRequestId String?
-  bookingRequest   BookingRequest? @relation(fields: [bookingRequestId], references: [id], onDelete: Cascade)
+  bookingRequest   BookingRequest?       @relation(fields: [bookingRequestId], references: [id], onDelete: Cascade)
   /// Points at a specific (key, version) - pinning WHICH wording was answered.
-  questionId String
-  question   QualificationQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  questionId       String
+  question         QualificationQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
 
   answerRaw String
   /// 0–4, resolved from `options` AT SUBMIT TIME. Stored rather than re-derived so a later
@@ -4480,14 +4641,14 @@ model MarketingSource {
 // ═════════════ ER v2 Track H - Job descriptions + CV linkage ═════════════
 
 model JobDescription {
-  id       String  @id @default(cuid())
-  title    String
-  company  String
-  location String?
-  url      String?
-  language String  @default("EN")
-  text     String
-  active   Boolean @default(true)
+  id          String   @id @default(cuid())
+  title       String
+  company     String
+  location    String?
+  url         String?
+  language    String   @default("EN")
+  text        String
+  active      Boolean  @default(true)
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -4512,15 +4673,15 @@ enum MilestoneProgressStatus {
 }
 
 model ProgramMilestone {
-  id        String    @id @default(cuid())
-  levelCode String // Level.code - per program, as the diagram asks
-  key       Milestone // reuse the shipped 7-value enum rather than inventing a parallel one
-  name      String
-  targetDay Int // day-N of the 90/120-day tracker
-  orderIndex Int      @default(0)
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  levelCode  String // Level.code - per program, as the diagram asks
+  key        Milestone // reuse the shipped 7-value enum rather than inventing a parallel one
+  name       String
+  targetDay  Int // day-N of the 90/120-day tracker
+  orderIndex Int       @default(0)
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   progress MilestoneProgress[]
 
@@ -4530,16 +4691,16 @@ model ProgramMilestone {
 }
 
 model MilestoneProgress {
-  id           String     @id @default(cuid())
+  id           String                  @id @default(cuid())
   enrollmentId String
-  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollment   Enrollment              @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   milestoneId  String
-  milestone    ProgramMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  milestone    ProgramMilestone        @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
   status       MilestoneProgressStatus @default(NOT_STARTED)
   achievedAt   DateTime?
   note         String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
 
   @@unique([enrollmentId, milestoneId])
   @@index([status])

@@ -1,7 +1,7 @@
 import { FileSearch } from "lucide-react";
 import { PageHeader } from "@/components/ui/kit";
 import { requireSection } from "@/lib/rbac";
-import { listResumes, getResumeTemplate, getAiStatus, resumeScope } from "@/server/resume-metrics";
+import { listResumes, getResumeTemplate, getAiStatus, resumeScopeForSession } from "@/server/resume-metrics";
 import { CvStudio } from "./_components/CvStudio";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
@@ -22,7 +22,7 @@ export default async function CvCheckPage() {
   const session = await requireSection("cv-check");
   const isAdmin = session.role === "ADMIN";
   const [resumes, template, aiStatus] = await Promise.all([
-    listResumes(resumeScope(session)),
+    listResumes(await resumeScopeForSession(session)),
     getResumeTemplate(),
     getAiStatus(),
   ]);

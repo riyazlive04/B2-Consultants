@@ -407,6 +407,29 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
   const name = text("name") || [text("firstName"), text("lastName")].filter(Boolean).join(" ").trim();
   const phone = text("phone");
 
+  /**
+   * The consent evidence, when this form actually asked for it.
+   *
+   * A "terms" item is the builder's consent tick, and its `termsText`/`label` is the exact
+   * wording the respondent was shown - which is the evidence, not the fact of the tick. Taken
+   * from the item the respondent was ASKED (`asked`, post-branching), so a terms question on a
+   * skipped branch cannot be recorded as agreed to.
+   *
+   * No terms item on the form means no consent row, not a default one. See the note on
+   * `IntakeLead.consent`.
+   */
+  const termsItem = asked.find((i) => i.type === "terms" && answerToText(data[i.key]).trim() !== "");
+  const consentHeaders = termsItem ? await Promise.resolve(headers()) : null;
+  const consent = termsItem
+    ? {
+        purpose: (termsItem.termsText || termsItem.label || "").slice(0, 2000),
+        policyVersion: null,
+        source: "NATIVE_FORM" as const,
+        ipAddress: consentHeaders ? clientIpFrom(consentHeaders) : null,
+        userAgent: consentHeaders?.get("user-agent") ?? null,
+      }
+    : null;
+
   let leadId: string | null = null;
   /** Set only when a lead was captured; run after the response - see where it is assigned. */
   let deferredSideEffects: (() => Promise<void>) | null = null;
@@ -422,6 +445,7 @@ export async function submitPublicForm(slug: string, form: FormData): Promise<Su
       externalRef: null,
       utm: Object.keys(utm).length ? utm : null,
       originDomain: await observedOriginDomain(),
+      consent,
     }, { announceReturning: true });
     leadId = lead.id;
 

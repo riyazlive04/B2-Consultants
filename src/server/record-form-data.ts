@@ -6,8 +6,16 @@ import { prisma } from "@/lib/prisma";
 import { getActiveLevels } from "@/server/levels";
 import { levelOptions } from "@/lib/levels";
 import { toDateInputValue, istToday } from "@/lib/dates";
-import { getInstalmentPlanConfig, getPaymentTypesConfig } from "@/server/founder-config";
-import type { InstalmentPlanConfig, PaymentTypesConfig } from "@/lib/config-schema";
+import {
+  getExpenseCategoriesConfig,
+  getInstalmentPlanConfig,
+  getPaymentTypesConfig,
+} from "@/server/founder-config";
+import type {
+  ExpenseCategoriesConfig,
+  InstalmentPlanConfig,
+  PaymentTypesConfig,
+} from "@/lib/config-schema";
 import { levelKinds } from "@/server/levels";
 import { lineForKind, type BusinessLine } from "@/lib/business-line";
 import { getPendingRows } from "@/server/finance-metrics";
@@ -40,6 +48,12 @@ export type RecordFormData = {
    */
   paymentTypes: PaymentTypesConfig;
   instalmentPlans: InstalmentPlanConfig;
+  /**
+   * The founder's expense categories, for the Expense half of this modal. The Record button is
+   * the door most costs come through, so a category added in the Console has to appear here too
+   * - it offered a hardcoded eight while the Finance page offered the founder's list.
+   */
+  expenseCategories: ExpenseCategoriesConfig;
   /**
    * ── What the shared income fields need, beyond the above ────────────────────────
    * The quick form now renders the SAME fields as the Finance page (components/finance
@@ -75,13 +89,16 @@ export async function getRecordFormData(): Promise<RecordFormData | null> {
   const { allowed, session } = await capabilityCheck("finance.write");
   if (!allowed) return null;
 
-  const [fx, students, levels, paymentTypes, instalmentPlans, kinds, pendings, viewLine] =
+  const [
+    fx, students, levels, paymentTypes, instalmentPlans, expenseCategories, kinds, pendings, viewLine,
+  ] =
     await Promise.all([
       getTodayInrPerEur(),
       prisma.student.findMany({ orderBy: { fullName: "asc" }, select: { id: true, fullName: true, code: true } }),
       getActiveLevels(),
       getPaymentTypesConfig(),
       getInstalmentPlanConfig(),
+      getExpenseCategoriesConfig(),
       levelKinds(),
       getPendingRows(),
       resolveBusinessLine(undefined),
@@ -107,6 +124,7 @@ export async function getRecordFormData(): Promise<RecordFormData | null> {
     levelOptions: levelOptions(levels),
     paymentTypes,
     instalmentPlans,
+    expenseCategories,
     levelLines: Object.fromEntries(levelOptions(levels).map((o) => [o.value, lineOfLevel(o.value)])),
     /**
      * Only the plans that still owe something: a settled receivable is not something a new

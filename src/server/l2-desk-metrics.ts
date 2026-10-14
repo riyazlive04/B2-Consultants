@@ -145,7 +145,7 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
         id: true, startsAt: true,
         booking: {
           select: {
-            id: true, name: true, phone: true, status: true, confirmedAt: true,
+            id: true, name: true, phone: true, status: true, confirmedAt: true, zoomJoinUrl: true,
             // The booking's own score + the six scored answers, for the call-prep panel.
             bantAvg: true, bantScore: true, bantVerdict: true,
             bantBudget: true, bantAuthority: true, bantNeed: true, bantTimeline: true,
@@ -233,7 +233,15 @@ export const getL2Desk = cache(async (userId: string): Promise<L2Desk> => {
         // Per the JD: past its time, nothing recorded → the specialist owes them a direct
         // call before this can be called a no-show.
         needsChase: !recorded && s.startsAt < now && b.status !== "COMPLETED",
-        zoomLink: b.lead?.outreachJourney?.zoomLink ?? null,
+        /**
+         * The DISCOVERY call's own meeting link first.
+         *
+         * This used to read only the outreach journey's `zoomLink`, which is the SSS (sales) call
+         * link - a different meeting, usually weeks later. So the specialist's desk offered a
+         * "Join" button that, where both existed, opened the wrong call. The journey link stays as
+         * the fallback for a booking taken before Zoom was armed, where a human had pasted one.
+         */
+        zoomLink: b.zoomJoinUrl ?? b.lead?.outreachJourney?.zoomLink ?? null,
         bant: resolveBant(b, b.lead),
         answers: answerLinesFor(b, b.lead),
       };

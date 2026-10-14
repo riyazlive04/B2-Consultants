@@ -4,10 +4,11 @@ import { ComboBox } from "@/components/ui/ComboBox";
 import { Field, NotesField, Select, TextInput } from "@/components/ui/form";
 import { AmountPair } from "@/components/ui/AmountPair";
 import { InstalmentSchedule } from "@/app/(app)/finance/_components/InstalmentSchedule";
+import { planTotalText } from "@/lib/instalment-amounts";
 import { PROGRAM_LEVEL_LABELS } from "@/lib/labels";
 import { BUSINESS_LINE_LABELS, BUSINESS_LINES, type BusinessLine } from "@/lib/business-line";
 import { paymentTypeOptions, RECURRENCE_INTERVAL_LABELS, suggestNextBillingDate } from "@/lib/payment-types";
-import { remainingShares } from "@/lib/instalment-amounts";
+
 import type {
   DerivedIncomeForm, IncomeFormCatalogues, IncomeFormDraft, IncomeFormEditing,
 } from "@/lib/income-form";
@@ -78,7 +79,8 @@ export function IncomeFields({
   const {
     line, lineLevelOptions, programLevel, entryLine, lineLabel,
     paymentType, typeKind, needsSchedule, planMode,
-    shares, banked, methodOptions, paymentMethod, extraDefaults, extraKey,
+    banked, scheduleShares, equalShare,
+    methodOptions, paymentMethod, extraDefaults, extraKey,
     plansForPayer, planOptions, pendingPaymentId, newStudentName, suggestedCode,
   } = derived;
   const { levelOptions, paymentTypes, instalmentPlans, today } = catalogues;
@@ -88,6 +90,8 @@ export function IncomeFields({
   const interval = derived.recurrenceInterval;
   const nextBilling = derived.recurrenceNextDate;
   const instalmentCount = draft.instalmentCount;
+  // The headline the parts are reconciled against: fee + surcharge, in the fee's currencies.
+  const planTotal = planTotalText(draft.fee, draft.extra);
   const mintStudent = draft.mintStudent;
   /** `{ KEY: "Label" }` → Select options, in declaration order. */
   const optionsFrom = (labels: Record<string, string>) =>
@@ -212,11 +216,59 @@ export function IncomeFields({
           defaultEur={amountDefaults.eur}
           onAmountsChange={(next) => patch({ fee: next })}
         />
+        {/*
+          ── THE FIRST INSTALMENT, TYPED ───────────────────────────────────────────────
+          This was two hidden inputs carrying `total ÷ count`, which made the commonest plan in
+          the business unrecordable: a bigger payment up front with the balance spread. The only
+          ways to enter it were to pretend the plan was equal, or to record a plain payment and
+          rebuild the schedule by hand afterwards - and a schedule nobody goes back to build
+          chases nobody.
+
+          Pre-filled with the equal share, so the ordinary plan is still one less thing to type;
+          typed over, and the REMAINING instalments are re-cut from what is left (see
+          `planShares`), which keeps the plan summing to the same total without a second sum
+          anywhere. `amountInr`/`amountEur` are the names the action banks, exactly as the hidden
+          fields were.
+        */}
         {planMode && (
-          <>
-            <input type="hidden" name="amountInr" value={banked.inr} />
-            <input type="hidden" name="amountEur" value={banked.eur} />
-          </>
+          <AmountPair
+            /*
+              Keyed on the SUGGESTION alone - never on whether it has been overridden.
+
+              Keying on "typed vs not" sent the box into a flip-flop that ate the figure being
+              entered: typing re-keyed it, the remount restored the suggested default, the
+              default matched the suggestion so the override cleared, which re-keyed it back.
+              The number vanished as fast as it was typed.
+
+              On the suggestion, the box re-adopts a new equal share when the fee or the count
+              changes - the same rule the surcharge box above uses (`extraKey`) - and otherwise
+              leaves whatever was typed alone.
+            */
+            key={`first-${equalShare.inr}|${equalShare.eur}`}
+            fxRate={fxRate}
+            fxStale={fxStale}
+            fxDate={fxDate}
+            inrName="amountInr"
+            eurName="amountEur"
+            inrLabel="Paid today (₹)"
+            eurLabel="Paid today (€)"
+            baseHint={
+              draft.firstInstalment
+                ? "The rest of the plan is split over the remaining instalments"
+                : "An equal share by default - change it for a larger first payment"
+            }
+            defaultInr={equalShare.inr}
+            defaultEur={equalShare.eur}
+            // The pair reports its value on MOUNT as well as on every keystroke, so "equal to
+            // the suggestion" has to mean "untouched" - otherwise the first render would record
+            // an override and the box would stop following the fee and the count.
+            onAmountsChange={(next) =>
+              patch({
+                firstInstalment:
+                  next.inr === equalShare.inr && next.eur === equalShare.eur ? null : next,
+              })
+            }
+          />
         )}
         {/*
           Carries no `name`: the business is NOT submitted, because nothing stores it. It is a
@@ -389,8 +441,9 @@ export function IncomeFields({
               <InstalmentSchedule
                 count={instalmentCount}
                 anchorDate={entryDate}
-                shares={remainingShares(shares)}
+                shares={scheduleShares}
                 bankedToday={banked}
+                planTotal={planTotal}
                 onCompleteChange={(complete) => patch({ scheduleComplete: complete })}
               />
             )}

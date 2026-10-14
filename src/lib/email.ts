@@ -66,17 +66,35 @@ export async function getEmailRuntime(): Promise<EmailRuntime> {
 }
 
 /**
- * Brand header for transactional emails. Deliberately CSS-drawn, not an <img>:
- * this app has no public asset host to serve a logo file from, and most email
- * clients strip inline SVG - a bordered serif "B²" (the "²" via &sup2;) renders
- * the mark reliably everywhere. Colour matches the app's --brand-indigo token.
+ * Brand header for transactional emails.
+ *
+ * ── Why this is an <img> now, when the old note said it could not be ────────────
+ * That note said "this app has no public asset host to serve a logo file from". It
+ * does: `public/media/` is whitelisted in `middleware.ts` precisely so the marketing
+ * pages can serve brand assets to signed-out visitors, and `BETTER_AUTH_URL` is the
+ * validated public origin (env.ts refuses http:// and localhost, so it is always a
+ * real https host). So the real artwork can travel, and a drawn-in-CSS approximation
+ * of a logo is no longer the best available answer.
+ *
+ * ── It still has to survive images being blocked ────────────────────────────────
+ * Most clients block remote images until the reader allows them, so the logo is NOT
+ * load-bearing: the wordmark beside it is live text. Blocked images leave "B2
+ * Consultants" in the brand blue, which is a perfectly good header. The `alt` carries
+ * the same words for the same reason.
+ *
+ * No SVG and no CSS mask here - Outlook strips the first and ignores the second.
  */
 export function brandEmailHeader(): string {
+  const origin = (process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "");
+  // Height only: the artwork is landscape, and fixing both axes would squash it in the
+  // clients that honour width/height attributes (most of them).
+  const logo = origin
+    ? `<td style="vertical-align:middle;padding-right:10px">
+      <img src="${origin}/media/b2-logo.png" alt="B2 Consultants" height="34" style="display:block;height:34px;width:auto;border:0;outline:none;text-decoration:none">
+    </td>`
+    : "";
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 22px"><tr>
-    <td style="vertical-align:middle">
-      <span style="display:inline-block;border:2px solid #5b60c9;border-radius:7px;padding:2px 9px;font-family:Georgia,'Times New Roman',serif;font-weight:bold;font-size:18px;line-height:1.3;color:#5b60c9">B&sup2;</span>
-    </td>
-    <td style="vertical-align:middle;padding-left:10px;font-family:Inter,Arial,sans-serif;font-weight:700;font-size:16px;color:#16203A">B2 Consultants</td>
+    ${logo}<td style="vertical-align:middle;font-family:Inter,Arial,sans-serif;font-weight:700;font-size:16px;color:#003C8C">B2 Consultants</td>
   </tr></table>`;
 }
 

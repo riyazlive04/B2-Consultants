@@ -25,6 +25,7 @@ export const WHATSAPP_KINDS = [
   "AGREEMENT_OTP",
   "AGREEMENT_REMINDER",
   "AGREEMENT_COPY",
+  "STUDENT_WELCOME",
   "MANUAL",
   "SOP_INTRO",
   "SOP_FOLLOWUP",
@@ -55,6 +56,7 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   NO_SHOW_FOLLOWUP: "No-show follow-up",
   PAYMENT_REMINDER: "Payment reminder",
   EMI_PRE_DUE: "EMI due-soon reminder",
+  STUDENT_WELCOME: "Student welcome",
   CHECKIN_NUDGE: "Check-in nudge",
   SPRINT_MISS_NUDGE: "Sprint-miss nudge",
   AGREEMENT_SEND: "Agreement signing link",
@@ -91,6 +93,8 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   NO_SHOW_FOLLOWUP: "A lead marked No-show - nudge them to rebook.",
   PAYMENT_REMINDER: "A pending payment that is overdue.",
   EMI_PRE_DUE: "An instalment falls due in the next few days - lands BEFORE the due date, unlike the overdue reminder.",
+  STUDENT_WELCOME:
+    "Sent ONCE when a student is seated in a batch - names their tutor, their first class and where to follow their own progress.",
   CHECKIN_NUDGE: "A student whose coaching check-in date has arrived / passed.",
   SPRINT_MISS_NUDGE: "A student who missed a sprint-week target.",
   AGREEMENT_SEND: "The founder countersigned an agreement - carries the tokenized signing link.",
@@ -147,13 +151,39 @@ const isLeadFacing = (k: string) => LEAD_FACING_KINDS.has(k) || k.startsWith("SO
 
 const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
   DISCO_REMINDER: ["name", "booking_url"],
-  BOOKING_CONFIRMATION: ["name", "slot_time", "booking_url"],
-  BOOKING_REMINDER: ["name", "slot_time", "booking_url"],
+  // `zoom_link` is OFFERED on the three booked-call touchpoints, not required by them. The
+  // currently-approved templates declare only the first three names, so nothing changes until a
+  // template that actually uses it is approved and bound (see the `_zoom` variants in
+  // scripts/wati-templates-utility-docx.ts). Offering it is what makes binding one POSSIBLE: a
+  // template declaring a variable the touchpoint does not offer is refused outright.
+  //
+  // ⚠ A bound `_zoom` template SKIPS the send when the booking has no link, because an
+  // unresolved variable blocks delivery rather than sending "join here: ". That is the correct
+  // trade for a joining link, and `sweepZoomMeetings` fills a missing one within a cron tick -
+  // but it is why the plain templates stay approved as the fallback.
+  BOOKING_CONFIRMATION: ["name", "slot_time", "booking_url", "zoom_link"],
+  BOOKING_REMINDER: ["name", "slot_time", "booking_url", "zoom_link"],
   NO_SHOW_FOLLOWUP: ["name", "booking_url"],
   PAYMENT_REMINDER: ["name", "amount"],
   // `due_date` is what makes this reminder land as "due on the 3rd" rather than a vague nudge.
   // `seq`/`total` let a template say "instalment 2 of 3" - both offered, neither required.
   EMI_PRE_DUE: ["name", "amount", "due_date", "seq", "total"],
+  /**
+   * The enrolment message, sent once when a student is seated in a batch.
+   *
+   * Every variable here is GUARANTEED non-empty by `sendStudentWelcome` except `portal_url` -
+   * an unresolved variable skips the whole send, and a welcome that silently never arrives is
+   * the exact failure this touchpoint exists to fix. So `tutor_name` falls back through the
+   * batch tutor to the assigned coach, and `first_class` falls back to a plain phrase rather
+   * than a blank.
+   *
+   * `portal_url` is the one that can legitimately be absent: a student with no login yet has
+   * nowhere to be sent. It is OFFERED so a template CAN carry it - see the `_portal` variant in
+   * scripts/wati-templates-utility-docx.ts - and binding that variant is a deliberate choice
+   * that trades "skips until they have a login" for "names the portal", exactly as the `_zoom`
+   * booking variants do. The plain template stays approved as the fallback.
+   */
+  STUDENT_WELCOME: ["name", "program", "tutor_name", "first_class", "portal_url"],
   CHECKIN_NUDGE: ["name"],
   SPRINT_MISS_NUDGE: ["name"],
   // `sign_url` is the full tokenized link. If the approved template puts the token in a dynamic
@@ -194,7 +224,9 @@ const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
   // Bookings confirmation loop. `slot_time` is the IST call time; the reschedule notice reuses it
   // to name the NEW time. `booking_url` is the public /book link for rebooking after a cancel.
   BOOKING_CONFIRM_REQUEST: ["name", "slot_time", "booking_url"],
-  BOOKING_RESCHEDULED: ["name", "slot_time", "booking_url"],
+  // The room is MOVED, never re-created, so the link a prospect already holds stays valid - which
+  // is exactly why a reschedule notice can safely repeat it.
+  BOOKING_RESCHEDULED: ["name", "slot_time", "booking_url", "zoom_link"],
   BOOKING_AUTO_CANCELLED: ["name", "booking_url"],
   // SSS calendar. `slot_time` is the NEW SSS time (IST); `sss_url` is the /sss rebook link.
   SSS_RESCHEDULED: ["name", "slot_time", "sss_url"],
@@ -299,6 +331,13 @@ export type WatiCadence = {
   emiPreDueEnabled: boolean;
   /** One switch for both student nudges (check-in + sprint-miss) - they share a cadence field. */
   studentNudgesEnabled: boolean;
+  /**
+   * The enrolment welcome. Its OWN switch, not folded into `studentNudgesEnabled`: the nudges
+   * chase someone who is already in the programme, this one is the first thing a new student
+   * hears, and the founder will want to arm it only once the template is approved and the
+   * tutor/first-class data is actually being filled in.
+   */
+  studentWelcomeEnabled: boolean;
   /** Wait this long after a lead first arrives before the first discovery reminder. */
   discoFirstDelayHours: number;
   /** Minimum spacing between two discovery reminders to the same lead. */
@@ -369,6 +408,9 @@ export const DEFAULT_CADENCE: WatiCadence = {
   paymentEnabled: true,
   emiPreDueEnabled: true,
   studentNudgesEnabled: true,
+  // SHIPS OFF. Outbound to paying students, and it reads as a promise about who their tutor
+  // is - it arms when the founder says the data behind it is real.
+  studentWelcomeEnabled: false,
   discoFirstDelayHours: 2,
   discoRepeatHours: 24,
   discoMaxReminders: 3,

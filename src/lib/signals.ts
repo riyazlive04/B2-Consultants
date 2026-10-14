@@ -12,6 +12,7 @@
  *   ───────────────────────────────────────────────────────────────────────────────────────
  *   OKR / target completion %     ≥ 80%        50–79%       < 50%      signalForPercent
  *   Cash runway (months)          ≥ 6          3–6          < 3        signalForRunway
+ *                                 (founder-editable - Console → Cash targets; these are defaults)
  *   Speed to lead                 ≤ 5 min      6–60 min     -          signalForSpeedToLead
  *   Signed figures (profit,       > 0          -            < 0        signedColor
  *     margin, balance, variance)               (0 = neutral, no verdict claimed)
@@ -46,10 +47,23 @@ export function signalForPercent(pct: number): SignalLevel {
   return "risk";
 }
 
-/** Runway months (PRD3 §4.4): ≥6 green, ≥3 and <6 amber, <3 red. */
-export function signalForRunway(months: number): SignalLevel {
-  if (months >= 6) return "ok";
-  if (months >= 3) return "watch";
+/**
+ * Runway months (PRD3 §4.4): ≥6 green, ≥3 and <6 amber, <3 red - BY DEFAULT.
+ *
+ * The two bands are now the founder's (Console → Cash targets, AppSetting("cashTargets")), because
+ * "six months is safe" is a judgement about this business, not a constant. The defaults are the
+ * numbers that were hardcoded here, so a caller that passes nothing - and an install that never
+ * opens the panel - gets exactly the old verdict.
+ *
+ * Callers that CAN read config pass it (the Cash page, the home KPI strip, the top-bar badge);
+ * this stays pure so the thresholds table above remains the one place the bands are written down.
+ */
+export function signalForRunway(
+  months: number,
+  bands: { green: number; amber: number } = { green: 6, amber: 3 },
+): SignalLevel {
+  if (months >= bands.green) return "ok";
+  if (months >= bands.amber) return "watch";
   return "risk";
 }
 

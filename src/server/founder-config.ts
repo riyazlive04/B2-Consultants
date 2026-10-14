@@ -34,6 +34,10 @@ import {
   coerceSpeedToLeadAlert,
   coerceDunningConfig,
   coerceAttendanceConfig,
+  coerceCashTargetsConfig,
+  coerceExpenseCategoriesConfig,
+  coerceZoomConfig,
+  ZOOM_SETTINGS_KEY,
   DEFAULT_AGREEMENT_WORKFLOW,
   DEFAULT_CALL_DISTRIBUTION,
   DEFAULT_BOOKING_RULES_CONFIG,
@@ -53,6 +57,9 @@ import {
   DEFAULT_SPEED_TO_LEAD_ALERT,
   DEFAULT_DUNNING_CONFIG,
   DEFAULT_ATTENDANCE_CONFIG,
+  DEFAULT_CASH_TARGETS_CONFIG,
+  DEFAULT_EXPENSE_CATEGORIES_CONFIG,
+  DEFAULT_ZOOM_CONFIG,
   type AgreementWorkflowConfig,
   type CallDistributionConfig,
   type BookingRulesConfig,
@@ -76,6 +83,9 @@ import {
   type SpeedToLeadAlertConfig,
   type DunningConfig,
   type AttendanceConfig,
+  type CashTargetsConfig,
+  type ExpenseCategoriesConfig,
+  type ZoomConfig,
 } from "@/lib/config-schema";
 import { DEFAULT_GAMIFICATION_CONFIG, type GamificationConfig } from "@/lib/gamification";
 import { resolveSections, type ResolvedSection, type SectionsConfig } from "@/lib/sections";
@@ -106,6 +116,7 @@ export const AGREEMENT_WORKFLOW_KEY = "agreementWorkflow";
 export const QUALIFICATION_KEY = "qualificationConfig";
 export const CALL_DISTRIBUTION_KEY = "callDistribution";
 export const TUTOR_FEE_KEY = "tutorFee";
+export const DELIVERY_DEFAULTS_KEY = "deliveryDefaults";
 export const BOOK_ORDER_KEY = "bookOrders";
 export const PIPELINE_KEY = "pipelineConfig";
 export const MAINTENANCE_KEY = "maintenanceConfig";
@@ -117,6 +128,10 @@ export const INVOICE_SETTINGS_KEY = "invoiceSettings";
 export const SPEED_TO_LEAD_ALERT_KEY = "speedToLeadAlert";
 export const DUNNING_KEY = "dunning";
 export const ATTENDANCE_KEY = "attendance";
+export const CASH_TARGETS_KEY = "cashTargets";
+export const EXPENSE_CATEGORIES_KEY = "expenseCategories";
+/** Aliased from config-schema, where it lives so the engine path can import it alone. */
+export const ZOOM_KEY = ZOOM_SETTINGS_KEY;
 
 /**
  * Every config row on this page is read through ONE tagged cache entry.
@@ -217,6 +232,24 @@ export const getBookingCalendars = cache(async (): Promise<BookingCalendar[]> =>
   const row = await readSetting(SLOT_PATTERN_KEY);
   return row ? coerceBookingCalendarsConfig(row.value).calendars : [];
 });
+
+/**
+ * Which Zoom account hosts whose calls. Lazy like every other document here: no row means
+ * "every meeting runs on the Zoom account owner", which still yields a working link.
+ */
+export const getZoomConfig = cache(async (): Promise<ZoomConfig> => {
+  const row = await readSetting(ZOOM_KEY);
+  return row ? coerceZoomConfig(row.value) : DEFAULT_ZOOM_CONFIG;
+});
+
+export async function writeZoomConfig(config: ZoomConfig): Promise<void> {
+  await prisma.appSetting.upsert({
+    where: { key: ZOOM_KEY },
+    create: { key: ZOOM_KEY, value: config as unknown as Prisma.InputJsonValue },
+    update: { value: config as unknown as Prisma.InputJsonValue },
+  });
+  revalidateFounderConfig();
+}
 
 export async function writeBookingCalendars(calendars: BookingCalendar[]): Promise<void> {
   const value = { calendars } as unknown as Prisma.InputJsonValue;
@@ -414,6 +447,50 @@ export async function writeAttendanceConfig(config: AttendanceConfig): Promise<v
   revalidateFounderConfig();
 }
 
+/**
+ * Cash Health's targets and thresholds - read by server/cash-metrics.ts and the Cash page.
+ *
+ * Nothing here arms or sends anything: these are the bars the page measures against, so the
+ * defaults are the literals they replaced and an install that never opens the panel reads
+ * exactly as it did before.
+ */
+export const getCashTargetsConfig = cache(async (): Promise<CashTargetsConfig> => {
+  const row = await readSetting(CASH_TARGETS_KEY);
+  return row ? coerceCashTargetsConfig(row.value) : DEFAULT_CASH_TARGETS_CONFIG;
+});
+
+/**
+ * The founder's expense categories - read by every cost form and by the posting engine.
+ *
+ * The shipped default is the eight the Prisma enum used to hold, each pointing at the account
+ * `expenseAccountFor` hardcoded for it, so an install that never opens the panel records and
+ * posts exactly as it did before the list became editable.
+ */
+export const getExpenseCategoriesConfig = cache(async (): Promise<ExpenseCategoriesConfig> => {
+  const row = await readSetting(EXPENSE_CATEGORIES_KEY);
+  return row ? coerceExpenseCategoriesConfig(row.value) : DEFAULT_EXPENSE_CATEGORIES_CONFIG;
+});
+
+export async function writeExpenseCategoriesConfig(config: ExpenseCategoriesConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: EXPENSE_CATEGORIES_KEY },
+    create: { key: EXPENSE_CATEGORIES_KEY, value },
+    update: { value },
+  });
+  revalidateFounderConfig();
+}
+
+export async function writeCashTargetsConfig(config: CashTargetsConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: CASH_TARGETS_KEY },
+    create: { key: CASH_TARGETS_KEY, value },
+    update: { value },
+  });
+  revalidateFounderConfig();
+}
+
 /** Ledger auto-posting switches - read by invoice-posting.ts and commission-actions.ts. */
 export const getFinancePostingConfig = cache(async (): Promise<FinancePostingConfig> => {
   const row = await readSetting(FINANCE_POSTING_KEY);
@@ -472,6 +549,42 @@ export const getDailyLogEod = cache(async (): Promise<DailyLogEodConfig> => {
   const row = await readSetting(DAILY_LOG_EOD_KEY);
   return row ? coerceDailyLogEod(row.value) : DEFAULT_DAILY_LOG_EOD;
 });
+
+/**
+ * The coach an enrolment is assigned to when the operator leaves the field blank.
+ *
+ * This used to be the literal string "Karthick", written in four places in students-actions.ts.
+ * It was invisible, it was wrong the moment anyone else took a student, and the enrolment
+ * welcome made it load-bearing: that message falls back to the assigned coach when a batch has
+ * no tutor, so a hardcoded name would have been WhatsApped to students as the person looking
+ * after them.
+ *
+ * Still just a name, not a User link - `Enrollment.assignedCoach` is a free-text column and
+ * changing that is a migration, not a config read. What this buys is that the default is now
+ * the founder's to set, and visible on a screen rather than buried in a server action.
+ *
+ * Empty string is a legitimate value and means "leave it blank", which is the honest state when
+ * nobody has been assigned yet.
+ */
+export const getDeliveryDefaults = cache(async (): Promise<{ defaultCoach: string }> => {
+  const row = await readSetting(DELIVERY_DEFAULTS_KEY);
+  const v = row?.value;
+  const name =
+    v && typeof v === "object" && typeof (v as { defaultCoach?: unknown }).defaultCoach === "string"
+      ? (v as { defaultCoach: string }).defaultCoach
+      : "";
+  return { defaultCoach: name.trim().slice(0, 120) };
+});
+
+export async function writeDeliveryDefaults(config: { defaultCoach: string }): Promise<void> {
+  const value = { defaultCoach: config.defaultCoach.trim().slice(0, 120) } as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: DELIVERY_DEFAULTS_KEY },
+    create: { key: DELIVERY_DEFAULTS_KEY, value },
+    update: { value },
+  });
+  revalidateFounderConfig();
+}
 
 /** Agreement readiness prompt threshold - read by the agreement-state derivation. */
 export const getAgreementWorkflow = cache(async (): Promise<AgreementWorkflowConfig> => {

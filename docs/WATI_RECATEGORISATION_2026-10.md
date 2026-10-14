@@ -43,6 +43,10 @@ Of **36** mapped touchpoints in the live config, **28 are MARKETING** and only 8
 - **7 touchpoints must stay MARKETING** (listed at the end) — they are genuine re-engagement.
 
 Every body below was rewritten to qualify as UTILITY back in August and **was never submitted**.
+
+**Updated 8 October 2026:** three *new* templates were added to this list at the end — the Zoom
+joining-link variants. They are additions, not re-categorisations, and they can be submitted in the
+same sitting.
 They are reproduced verbatim from `scripts/wati-templates-utility-docx.ts`, so they match the
 existing `WhatsApp_Templates_UTILITY_Submission_Pack.docx`.
 
@@ -384,6 +388,101 @@ If you've already paid, please ignore this message. Otherwise, reply here and we
 |---|---|
 | `{{name}}` | Priya |
 | `{{amount}}` | ₹25,000 |
+
+---
+
+## New templates to submit — Zoom joining links
+
+**Added 8 October 2026.** These are **not** re-categorisations. They are three new names, and they
+exist because the app now creates a real Zoom meeting for every booked discovery call and attaches
+the joining link to the booking. Nothing can put that link in front of a prospect over WhatsApp
+until one of these is approved.
+
+Submit all three as **UTILITY**, in one batch — it is one review cycle for what is really one
+change. Each is a copy of a template you already have, with one extra variable.
+
+> **Bind these only once Zoom is switched on and proven.** A booking with no link yet will **skip
+> the message entirely** rather than send a blank "join here:" line. That is the right behaviour
+> for a joining link, but it means the plain templates must stay approved as the fallback — do not
+> retire them. (The app re-checks every upcoming call each cron tick and fills in a link that
+> failed the first time, so "no link" is normally a matter of minutes.)
+
+### 14. `b2_booking_confirmation_zoom`
+
+*Replaces the promise in `b2_booking_confirmation` ("we'll share the joining details before the
+call") with the details themselves.* Powers `BOOKING_CONFIRMATION`.
+
+*When it fires:* Once, immediately after a prospect books a discovery-call slot.
+
+**Body — paste exactly as-is:**
+
+```
+Hi {{name}}, your discovery call with B2 Consultants is confirmed for *{{slot_time}}* IST.
+
+Join using this link at your scheduled time: {{zoom_link}}
+
+If you need to reschedule, use this link and we'll update your slot: {{booking_url}}
+```
+
+| Variable | Sample value for review |
+|---|---|
+| `{{name}}` | Priya |
+| `{{slot_time}}` | Sat 18 Jul, 07:00 PM |
+| `{{zoom_link}}` | https://us06web.zoom.us/j/85512345678?pwd=abcdEFGH1234 |
+| `{{booking_url}}` | https://app.b2consultants.de/book |
+
+---
+
+### 15. `b2_booking_reminder_zoom`
+
+**The most valuable of the three.** Powers `BOOKING_REMINDER` — the message a prospect actually has
+open minutes before the call.
+
+*When it fires:* Before an upcoming booked slot (default 24h and 2h before).
+
+**Body — paste exactly as-is:**
+
+```
+Hi {{name}}, a reminder that your discovery call with B2 Consultants is scheduled for *{{slot_time}}* IST.
+
+Join here at your scheduled time: {{zoom_link}}
+
+Please reply *YES* to confirm you'll attend, or pick another time here if needed: {{booking_url}}
+```
+
+| Variable | Sample value for review |
+|---|---|
+| `{{name}}` | Priya |
+| `{{slot_time}}` | Sat 18 Jul, 07:00 PM |
+| `{{zoom_link}}` | https://us06web.zoom.us/j/85512345678?pwd=abcdEFGH1234 |
+| `{{booking_url}}` | https://app.b2consultants.de/book |
+
+---
+
+### 16. `b2_booking_rescheduled_zoom`
+
+Powers `BOOKING_RESCHEDULED`. Safe to repeat the link: a reschedule **moves** the existing Zoom
+meeting rather than creating a second one, so the link the prospect already holds stays valid.
+
+*When it fires:* When a call is moved to a new time — manual postpone, or promoted into a freed
+earlier slot.
+
+**Body — paste exactly as-is:**
+
+```
+Hi {{name}}, your discovery call has been rescheduled to *{{slot_time}}* IST.
+
+The same joining link still works: {{zoom_link}}
+
+If this new time doesn't suit you, you can choose another here at your convenience: {{booking_url}}
+```
+
+| Variable | Sample value for review |
+|---|---|
+| `{{name}}` | Priya |
+| `{{slot_time}}` | Sun 19 Jul, 05:30 PM |
+| `{{zoom_link}}` | https://us06web.zoom.us/j/85512345678?pwd=abcdEFGH1234 |
+| `{{booking_url}}` | https://app.b2consultants.de/book |
 
 ---
 

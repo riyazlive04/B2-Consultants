@@ -19,16 +19,19 @@ import {
   getScheduledReportConfig,
   getFinancePostingConfig,
   getInstalmentPlanConfig,
+  getCashTargetsConfig,
+  getExpenseCategoriesConfig,
   getPaymentTypesConfig,
   getInvoiceSettings,
   getBookingCalendars,
+  getZoomConfig,
   getSssPatternConfig,
   getSssConfig,
   getBookingRulesConfig,
   getSpeedToLeadAlertConfig,
   getDunningConfig,
   getAttendanceConfig,
-} from "@/server/founder-config";
+  getDeliveryDefaults,} from "@/server/founder-config";
 import { getGoalsWithProgress } from "@/server/goals";
 import { listTutorFees } from "@/server/tutor-fees";
 import { getAllQualificationQuestions, shadowAgreement } from "@/server/qualification";
@@ -45,10 +48,16 @@ import { RewardsPanel, type GrantView, type RuleRow } from "./_components/Reward
 import { CommissionPanel } from "./_components/CommissionPanel";
 import { DailyTargetsPanel } from "./_components/DailyTargetsPanel";
 import { DailyLogEodPanel } from "./_components/DailyLogEodPanel";
+import { DeliveryDefaultsPanel } from "./_components/DeliveryDefaultsPanel";
 import { AgreementWorkflowPanel } from "./_components/AgreementWorkflowPanel";
 import { TutorFeePanel } from "./_components/TutorFeePanel";
 import { InstalmentPlanPanel } from "./_components/InstalmentPlanPanel";
+import { CashTargetsPanel } from "./_components/CashTargetsPanel";
+import { ExpenseCategoriesPanel } from "./_components/ExpenseCategoriesPanel";
+import { ACCOUNT } from "@/lib/chart-of-accounts";
+import { getZoomRuntime } from "@/lib/zoom";
 import { PaymentTypesPanel } from "./_components/PaymentTypesPanel";
+import { ZoomPanel } from "./_components/ZoomPanel";
 import { InvoicingPanel } from "./_components/InvoicingPanel";
 import { TutorFeeLedgerPanel } from "./_components/TutorFeeLedgerPanel";
 import { QualificationPanel } from "./_components/QualificationPanel";
@@ -97,6 +106,7 @@ export default async function ConsolePage() {
     commissionRules,
     dailyTargets,
     agreementWorkflow,
+    deliveryDefaults,
     dailyLogEod,
     tutorFee,
     bookOrders,
@@ -115,6 +125,7 @@ export default async function ConsolePage() {
       getCommissionRulesConfig(),
       getDailyLogTargets(),
       getAgreementWorkflow(),
+      getDeliveryDefaults(),
       getDailyLogEod(),
       getTutorFeeConfig(),
       getBookOrderConfig(),
@@ -186,12 +197,16 @@ export default async function ConsolePage() {
     bookingRules,
     bookableMembers,
     instalmentPlans,
+    cashTargets,
+    expenseCategories,
+    expenseAccounts,
     paymentTypes,
     invoiceSettings,
     speedToLeadConfig,
     dunningConfig,
     attendanceConfig,
     slotReleases,
+    zoomConfig,
   ] = await Promise.all([
     getMaintenanceConfig(),
     getScheduledReportConfig(),
@@ -204,6 +219,17 @@ export default async function ConsolePage() {
     // hand-made path wouldn't.
     getBookableTeamMembers(),
     getInstalmentPlanConfig(),
+    getCashTargetsConfig(),
+    getExpenseCategoriesConfig(),
+    // The P&L lines a category can be pointed at - read from the ledger rather than from the
+    // seeded chart, because the lines the founder has already opened are accounts like any other.
+    prisma.ledgerAccount.findMany({
+      // Not the FX gain/loss account: a realized currency movement is not a cost anybody incurs,
+      // and a category pointed at it would mix the two beyond separating again.
+      where: { type: "EXPENSE", archived: false, code: { not: ACCOUNT.FX_GAIN_LOSS } },
+      select: { code: true, name: true },
+      orderBy: [{ sortKey: "asc" }, { code: "asc" }],
+    }),
     getPaymentTypesConfig(),
     getInvoiceSettings(),
     getSpeedToLeadAlertConfig(),
@@ -212,6 +238,7 @@ export default async function ConsolePage() {
     // What the confirm-or-cancel loop has actually released. A console that can arm an automation
     // should be able to show what it did - "off by default" is only half the story.
     listSlotReleases(40),
+    getZoomConfig(),
   ]);
 
   // The SSS diary's owner is a User (the founder), not a TeamProfile - resolve the name so the
@@ -333,7 +360,23 @@ export default async function ConsolePage() {
                   // Beside it because the two answer one question between them: what kinds of
                   // payment can be recorded, and what each kind costs.
                   { label: "Payment Types", content: <PaymentTypesPanel config={paymentTypes} /> },
+                  {
+                    // The other half of the same question: what kinds of COST can be recorded.
+                    // Beside Payment Types because they are the two lists every money form on
+                    // /finance is built out of, and both were Prisma enums until they weren't.
+                    label: "Expense categories",
+                    content: (
+                      <ExpenseCategoriesPanel config={expenseCategories} accounts={expenseAccounts} />
+                    ),
+                  },
                   { label: "Invoicing", content: <InvoicingPanel config={invoiceSettings} /> },
+                  {
+                    // The bars Cash Health judges against. Under Money because every one of
+                    // them is a rupee figure or a verdict about rupees - and because the four
+                    // numbers behind them used to be literals in cash-metrics.ts and signals.ts.
+                    label: "Cash targets",
+                    content: <CashTargetsPanel config={cashTargets} />,
+                  },
                   { label: "Tutor Fee", content: <TutorFeePanel config={tutorFee} /> },
                   {
                     label: `Tutor Fees${tutorFeeRows.filter((f) => f.status === "DRAFT").length ? ` (${tutorFeeRows.filter((f) => f.status === "DRAFT").length})` : ""}`,
@@ -398,6 +441,21 @@ export default async function ConsolePage() {
                   },
                   {
                     /**
+                     * Zoom sits next to Availability deliberately: a booking calendar and the
+                     * account that hosts its calls are one decision, and splitting them across
+                     * two tabs is how a new calendar ends up with no host mapped.
+                     */
+                    label: "Zoom links",
+                    content: (
+                      <ZoomPanel
+                        config={zoomConfig}
+                        people={bookableMembers.map((m) => ({ id: m.id, name: m.name }))}
+                        runtime={getZoomRuntime()}
+                      />
+                    ),
+                  },
+                  {
+                    /**
                      * The confirm-or-cancel rule, in the console that already tells you it is off.
                      *
                      * Console → System → Not armed has listed this loop as disarmed since it
@@ -434,6 +492,10 @@ export default async function ConsolePage() {
                 variant="underline"
                 tabs={[
                   { label: "Agreements", content: <AgreementWorkflowPanel config={agreementWorkflow} /> },
+                  {
+                    label: "Delivery defaults",
+                    content: <DeliveryDefaultsPanel config={deliveryDefaults} />,
+                  },
                   {
                     label: "Daily Targets",
                     content: (

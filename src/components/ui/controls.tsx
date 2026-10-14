@@ -20,7 +20,7 @@ import { useFormStatus } from "react-dom";
  * styling each time. `secondary` is a deprecated alias of `soft` so existing call
  * sites keep compiling; it renders the Soft style.
  */
-export type BtnVariant = "primary" | "soft" | "secondary" | "ghost" | "danger" | "outline";
+export type BtnVariant = "primary" | "action" | "soft" | "secondary" | "ghost" | "danger" | "outline";
 export type BtnSize = "sm" | "md";
 
 // `text-on-accent` (not `text-white`): the dark theme's fills are light, so a
@@ -29,6 +29,14 @@ const SOFT = "bg-primary-soft text-primary-strong hover:bg-primary-tint";
 
 const VARIANT: Record<BtnVariant, string> = {
   primary: "bg-primary text-on-accent hover:bg-primary-strong",
+  /**
+   * The brand's action red, for the moments we ask somebody to COMMIT - book the call,
+   * sign the agreement, pay the invoice. Rare by design: the signal only works while it
+   * stays rare, and this is the one other red in a system where red already means destroy.
+   * `text-on-action` rather than `text-on-accent` - the two fills resolve their label
+   * colour differently per theme (see globals.css).
+   */
+  action: "bg-action text-on-action hover:bg-action-strong",
   soft: SOFT,
   secondary: SOFT,
   ghost: "text-ink-2 hover:bg-surface-2 hover:text-ink",

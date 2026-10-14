@@ -67,7 +67,7 @@ function resetPasswordEmailHtml(name: string, url: string): string {
     ${brandEmailHeader()}
     <p>Hi ${first},</p>
     <p>Someone asked to reset the password on your B2 Consultants account. If that was you, set a new one here - this link works once and expires in an hour:</p>
-    <p><a href="${url}" style="color:#3762F0">Reset your password</a></p>
+    <p><a href="${url}" style="color:#003C8C">Reset your password</a></p>
     <p>If you didn't request this, you can ignore this email - your password hasn't changed.</p>
   </div>`;
 }
@@ -85,23 +85,52 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
-    // Password RESET only - sign-up stays disabled above. Fails closed exactly like
-    // every other email path in this app: if EMAIL_ENABLED/RESEND_API_KEY aren't
-    // set (or sending is paused), this silently no-ops instead of throwing into
-    // better-auth's request handler. The request-password-reset endpoint always
-    // returns a generic "check your email" response either way, so this never
-    // leaks whether an address exists.
+    /**
+     * Password RESET only - sign-up stays disabled above.
+     *
+     * ── Silence is not "failing closed" here ────────────────────────────────────
+     * This used to `return` when email was switched off, described as failing closed
+     * like every other email path. The difference is that every other email path is
+     * something the APP decided to send; this one is something a locked-out person
+     * ASKED for and is now waiting on. The form told them "a reset link is on its
+     * way", nothing was attempted, and nothing anywhere recorded that they had tried -
+     * this path calls `sendResendEmail` directly rather than the logged
+     * `sendEmailMessage` seam, so it misses the delivery-health tally too.
+     *
+     * So it now throws. Better Auth turns that into an error on the response, the form
+     * already renders it ("Could not send the reset email: …"), and the person learns
+     * immediately to contact someone instead of watching an empty inbox.
+     *
+     * This does NOT leak whether an address exists: better-auth only reaches this
+     * callback for a user that was found, but it answers the endpoint generically in
+     * both cases, and the failure below is about OUR configuration, not about them -
+     * an unknown address still gets the generic success.
+     */
     sendResetPassword: async ({ user, url }) => {
       const rt = await getEmailRuntime();
-      if (!rt.enabled) return;
+      if (!rt.enabled) {
+        const why = !rt.envEnabled
+          ? "EMAIL_ENABLED is not set"
+          : rt.paused
+            ? "email sending is paused in settings"
+            : "Resend is not configured (API key or from-address missing)";
+        console.error(`[auth] password reset not sent - ${why}`);
+        throw new Error("Password reset email is not available right now - contact B2 Consultants.");
+      }
       const from = rt.fromName ? `${rt.fromName} <${rt.fromEmail}>` : rt.fromEmail;
-      await sendResendEmail({
+      const res = await sendResendEmail({
         apiKey: rt.apiKey!,
         from,
         to: user.email,
         subject: "Reset your B2 Consultants password",
         html: resetPasswordEmailHtml(user.name, url),
       });
+      // `sendResendEmail` resolves a result rather than throwing, so an accepted-looking
+      // call that Resend actually rejected would otherwise read as success here too.
+      if (!res.ok) {
+        console.error(`[auth] password reset rejected by Resend - ${res.error ?? "unknown error"}`);
+        throw new Error("Could not send the reset email - please contact B2 Consultants.");
+      }
     },
   },
   user: {

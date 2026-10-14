@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import { postEntry, restatedDate, voidEntryForSource } from "./ledger";
 import { expenseEntryDraft, incomeEntryDraft } from "./finance-posting";
+import { expenseAccountMap } from "@/lib/expense-categories";
+import { getExpenseCategoriesConfig } from "./founder-config";
 import { levelIncomeAccounts } from "./levels";
 import { nameKey } from "@/lib/payment-allocation";
 
@@ -33,6 +35,8 @@ export type PayoutForSync = {
   fxRateUsed: Prisma.Decimal;
   status: "PENDING" | "PAID";
   vendorName: string;
+  /** The person this pays - written onto the expense so it reaches their pay history. */
+  teamProfileId: string;
 };
 
 /**
@@ -47,6 +51,10 @@ export async function syncPayoutExpense(
   payoutId: string,
 ): Promise<void> {
   const ref = PAYOUT_EXPENSE_REF(payoutId);
+  // The founder's category mapping, read once outside the transaction: TEAM_SALARIES may have
+  // been re-pointed at another P&L line, and an auto-posted payout has to land where a
+  // hand-keyed one does or the two halves of team pay would sit in different accounts.
+  const expenseAccounts = expenseAccountMap(await getExpenseCategoriesConfig());
   try {
     await prisma.$transaction(async (tx) => {
       const existing = await tx.expense.findUnique({
@@ -69,9 +77,10 @@ export async function syncPayoutExpense(
         amountInrMinor: payout.bonusInrMinor + payout.commInrMinor,
         amountEurMinor: payout.bonusEurMinor + payout.commEurMinor,
         fxRateUsed: payout.fxRateUsed,
-        category: "TEAM_SALARIES" as const,
+        category: "TEAM_SALARIES",
         isCogs: false,
         vendor: payout.vendorName,
+        teamProfileId: payout.teamProfileId,
         notes: "Auto-posted from a telecaller payout",
       };
       if (existing) {
@@ -79,13 +88,13 @@ export async function syncPayoutExpense(
         const voided = await voidEntryForSource(tx, "EXPENSE", existing.id, {
           reason: "telecaller payout edited", actorId, on: istToday(),
         });
-        const draft = expenseEntryDraft(updated);
+        const draft = expenseEntryDraft(updated, expenseAccounts);
         await postEntry(tx, { ...draft, date: restatedDate(voided, draft.date) });
       } else {
         const created = await tx.expense.create({
           data: { ...data, source: "MANUAL", externalRef: ref },
         });
-        await postEntry(tx, expenseEntryDraft(created));
+        await postEntry(tx, expenseEntryDraft(created, expenseAccounts));
       }
     });
   } catch {

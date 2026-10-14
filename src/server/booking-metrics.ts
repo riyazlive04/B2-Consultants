@@ -154,6 +154,13 @@ export async function getBookingsOverview() {
       slotTime: b.slot ? istTime.format(b.slot.startsAt) : "",
       slotCet: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Europe/Berlin") : "",
       slotDurationMins: b.slot?.durationMins ?? null,
+      /**
+       * The Zoom room for this call, when Zoom made one. Both are deliberately carried:
+       * `zoomJoinUrl` is prospect-safe, `zoomStartUrl` signs its opener in as the HOST, and the
+       * detail dialog labels them differently for exactly that reason.
+       */
+      zoomJoinUrl: b.zoomJoinUrl,
+      zoomStartUrl: b.zoomStartUrl,
       slotStartsAt: b.slot ? b.slot.startsAt.toISOString() : null,
       assignedToId: b.slot?.assignedTo?.id ?? null,
       assignedToName: b.slot?.assignedTo?.name ?? null,

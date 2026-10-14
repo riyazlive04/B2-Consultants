@@ -11,6 +11,8 @@ import { optionalRule, rule } from "@/lib/field-rules";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
+import { getExpenseCategoriesConfig } from "./founder-config";
+import { expenseCategoryIsCogs } from "@/lib/expense-categories";
 
 /** Cash Health (PRD3 §4) - Admin-only. */
 
@@ -26,7 +28,6 @@ const moneyInput = optionalRule("money");
 const cashSchema = z.object({
   date: z.string().min(10),
   bankBalance: moneyInput,
-  personalSavings: moneyInput,
   notes: optionalRule("text"),
 });
 
@@ -41,15 +42,20 @@ export async function saveCashPosition(form: FormData): Promise<ActionResult> {
   const date = parseDateInput(d.date);
   const row = await prisma.cashPosition.upsert({
     where: { date },
+    /**
+     * `personalSavingsInrMinor` is no longer written. It was one unattributed figure a week,
+     * excluded from runway and from every other number, so it could answer no question - not
+     * whose money it was, nor when it went in. Capital is now a record of its own
+     * (EquityContribution, Cash Health → Owner's equity). The COLUMN is left in place with the
+     * values already typed into it; nothing reads them.
+     */
     update: {
       bankBalanceInrMinor: majorStringToMinor(d.bankBalance),
-      personalSavingsInrMinor: d.personalSavings?.trim() ? majorStringToMinor(d.personalSavings) : null,
       notes: d.notes || null,
     },
     create: {
       date,
       bankBalanceInrMinor: majorStringToMinor(d.bankBalance),
-      personalSavingsInrMinor: d.personalSavings?.trim() ? majorStringToMinor(d.personalSavings) : null,
       notes: d.notes || null,
     },
   });
@@ -60,10 +66,7 @@ export async function saveCashPosition(form: FormData): Promise<ActionResult> {
     entityType: "CashPosition",
     entityId: row.id,
     summary: `Recorded the cash position for ${formatDate(row.date)} - bank ${formatInrMinor(row.bankBalanceInrMinor)}`,
-    meta: {
-      bankBalanceInrMinor: row.bankBalanceInrMinor.toString(),
-      personalSavingsInrMinor: row.personalSavingsInrMinor?.toString() ?? null,
-    },
+    meta: { bankBalanceInrMinor: row.bankBalanceInrMinor.toString() },
   });
 
   revalidatePath("/cash");
@@ -74,10 +77,8 @@ export async function saveCashPosition(form: FormData): Promise<ActionResult> {
 const payableSchema = z.object({
   // Free text, not rule("name"): "WATI subscription" is a payable, not a person.
   name: rule("text").pipe(z.string().min(1, "Payable name is required")),
-  category: z.enum([
-    "MARKETING", "TOOLS_SOFTWARE", "TEAM_SALARIES", "CONTENT_CREATION",
-    "EVENTS_OFFLINE", "OPERATIONS", "COGS_DIRECT_DELIVERY", "OTHER",
-  ]),
+  /** A founder-configured category code - the same list an Expense uses. Checked below. */
+  category: z.string().trim().min(1, "Pick a category"),
   /**
    * ── Either currency, or both ────────────────────────────────────────────────────
    * `amountInr` was the only money field, because the form had the only rupee box. A euro
@@ -127,6 +128,16 @@ export async function savePayable(id: string | null, form: FormData): Promise<Ac
    * An EDIT re-stamps it, because an edit is a restatement of the amount; leaving the old rate
    * against a new figure would pair a number with the rate of a different agreement.
    */
+  /**
+   * The category has to be one the founder actually offers. A payable is the commitment an
+   * expense later settles, so a code this list does not hold would put the bill in one line of
+   * the P&L and the payment in another.
+   */
+  const categories = await getExpenseCategoriesConfig();
+  if (!categories.categories.some((c) => c.code === d.category)) {
+    return { ok: false, error: "That category no longer exists - pick another." };
+  }
+
   const fx = await getTodayInrPerEur();
 
   const data = {
@@ -137,7 +148,8 @@ export async function savePayable(id: string | null, form: FormData): Promise<Ac
     fxRateUsed: fx.rate,
     frequency: d.frequency,
     nextDueDate: d.nextDueDate?.trim() ? parseDateInput(d.nextDueDate) : null,
-    isCogs: d.isCogs === "on",
+    // The tick, or the category's own default - exactly as an expense resolves it.
+    isCogs: d.isCogs === "on" || expenseCategoryIsCogs(categories, d.category),
     status: d.status,
   };
   const existing = id ? await prisma.payable.findUnique({ where: { id } }) : null;

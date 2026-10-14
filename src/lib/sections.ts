@@ -130,7 +130,7 @@ export const SECTION_CATALOGUE = [
 
   // ─────────────────────────────── Finance ───────────────────────────────
   // First on the rail by the founder's choice (17 Sep 2026): Finance is what Ameen opens most.
-  // Admin-only except Telecaller Pay, so a Head sees that one item at the top and no other role
+  // Admin-only except Bonus & Commission, so a Head sees that one item at the top and no other role
   // sees this block at all.
   { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"] },
   { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"] },
@@ -142,10 +142,10 @@ export const SECTION_CATALOGUE = [
   // Synamate Payments parity (Phase 3): invoices, estimates, products, subscriptions.
   { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"] },
   // Kept last in the Finance group on purpose: the default sidebar order follows this
-  // catalogue order, so placing "Telecaller Pay" after Payments drops it to the bottom of Finance.
+  // catalogue order, so placing "Bonus & Commission" after Payments drops it to the bottom of Finance.
   // §3 "Commissions - all": Head R. The telecaller tiers get their OWN commission on My Desk, not
   // the whole-team board - §3 gives them `O` here, not `R`.
-  { key: "telecaller", label: "Telecaller Pay", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN", "HEAD"] },
+  { key: "telecaller", label: "Bonus & Commission", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN", "HEAD"] },
 
   // ─────────────────────────────── My Work ───────────────────────────────
   // What the person signed in is doing today, first, because it is the only block that is
@@ -154,7 +154,7 @@ export const SECTION_CATALOGUE = [
   // six. Every role sees a different two or three of these, and no role sees an empty group.
 
   // The telecaller's OWN numbers + today's call list - a personal work view (the counterpart to
-  // "Telecaller Pay": that board is Ameen looking at the team, this is Nilofer/Asma looking at
+  // "Bonus & Commission": that board is Ameen looking at the team, this is Nilofer/Asma looking at
   // themselves). USER is in the default list; ADMIN can inspect it, and the page renders an
   // explainer for anyone with no telecaller profile, since "telecaller" is a
   // TeamProfile.logVariant, not a role that could gate a section.
@@ -164,7 +164,7 @@ export const SECTION_CATALOGUE = [
    * which is also where a tutor's sessions-delivered figure comes from.
    *
    * USER is NOT in this list, and that is the telecallers (founder's call). Their day is already
-   * counted from their actual calls - My Desk shows their own numbers, Telecaller Pay shows the
+   * counted from their actual calls - My Desk shows their own numbers, Bonus & Commission shows the
    * team board, both derived from CallLog rather than self-reported. Asking them to also write a
    * daily log recorded the same day twice by two methods that could disagree, and the hand-typed
    * one is the one nobody can check. They are off the People logs board for the same reason.

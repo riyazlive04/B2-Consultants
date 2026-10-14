@@ -1,9 +1,4 @@
-import type {
-  Currency,
-  ExpenseCategory,
-  LedgerAccountType,
-  PaymentMethod,
-} from "@prisma/client";
+import type { Currency, LedgerAccountType, PaymentMethod } from "@prisma/client";
 
 /**
  * B2's chart of accounts (SPEC §10.1), and the maps that decide which account a
@@ -63,6 +58,21 @@ export const CHART_OF_ACCOUNTS = [
 
 export type AccountCode = (typeof CHART_OF_ACCOUNTS)[number]["code"];
 
+/**
+ * A code a journal line may name: one from the seeded chart above, or one of the EXPENSE
+ * accounts the founder has since created for a category of their own
+ * (`saveExpenseCategoriesConfig`).
+ *
+ * The `string & {}` arm widens the type without losing autocomplete for the known codes. It is
+ * safe because nothing here is trusted: `postEntry` resolves every code against the
+ * `ledger_account` table and throws `LedgerError` on one it cannot find, so a code that names no
+ * account fails the action loudly instead of writing a half-entry.
+ */
+export type PostableAccountCode = AccountCode | (string & {});
+
+/** The codes a founder-created expense account is allocated from, in order. */
+export const CUSTOM_EXPENSE_CODE_RANGE = { first: 6100, last: 6899 } as const;
+
 export const ACCOUNT = {
   BANK_INR: "1000",
   BANK_EUR: "1010",
@@ -74,7 +84,31 @@ export const ACCOUNT = {
   /// flagged isCogs, so gross profit stays a ledger slice rather than a second calculation.
   COGS_DELIVERY: "5000",
   FX_GAIN_LOSS: "7000",
+  /// Capital put in by an owner (and drawn back out) - see server/equity-actions.ts. Already in
+  /// the seeded chart; nothing could post to it until equity became a record rather than an
+  /// unattributed figure on the weekly cash position.
+  OWNERS_EQUITY: "3000",
 } as const;
+
+/**
+ * The real-world accounts money can arrive into or leave from - what an equity contribution
+ * picks between.
+ *
+ * Deliberately a short, named list rather than "every ASSET account": a contribution cannot land
+ * in Accounts receivable or in the gateway clearing account, and offering them would invite an
+ * entry that balances and still describes something that never happened.
+ */
+export const MONEY_ACCOUNTS = [
+  { code: ACCOUNT.BANK_INR, label: "Bank - INR", currency: "INR" as Currency },
+  { code: ACCOUNT.BANK_EUR, label: "Bank - EUR", currency: "EUR" as Currency },
+  { code: ACCOUNT.CASH, label: "Cash", currency: null },
+] as const;
+
+export type MoneyAccountCode = (typeof MONEY_ACCOUNTS)[number]["code"];
+
+export function isMoneyAccount(code: string): code is MoneyAccountCode {
+  return MONEY_ACCOUNTS.some((a) => a.code === code);
+}
 
 /** The valid INCOME account codes, for validating a per-level override. */
 const INCOME_CODES = new Set<string>(CHART_OF_ACCOUNTS.filter((a) => a.type === "INCOME").map((a) => a.code));
@@ -106,7 +140,25 @@ export function incomeAccountFor(level: string, accountByCode?: Map<string, stri
   }
 }
 
-export function expenseAccountFor(category: ExpenseCategory): AccountCode {
+/**
+ * Which expense account a cost category debits.
+ *
+ * Categories are configurable rows now (AppSetting "expenseCategories"), so the authority is
+ * each category's own `accountCode`: pass `accountByCategory` (from
+ * `lib/expense-categories.expenseAccountMap`) to honour the founder's mapping, including the
+ * accounts created for categories they added. Without the map - e.g. `prisma/seed-ledger.ts` -
+ * it falls back to the rule below, which reproduces the eight codes the enum was hardcoded to,
+ * so a backfilled row and a freshly entered one post to the same account.
+ *
+ * NEVER returns undefined: an unrecognised category lands in "Other expenses" rather than
+ * taking the whole entry down, because a cost that cannot be filed still has to be recorded.
+ */
+export function expenseAccountFor(
+  category: string,
+  accountByCategory?: Map<string, string>,
+): PostableAccountCode {
+  const mapped = accountByCategory?.get(category);
+  if (mapped) return mapped;
   switch (category) {
     case "COGS_DIRECT_DELIVERY":
       return "5000";
@@ -122,7 +174,7 @@ export function expenseAccountFor(category: ExpenseCategory): AccountCode {
       return "6040";
     case "OPERATIONS":
       return "6050";
-    case "OTHER":
+    default:
       return "6090";
   }
 }

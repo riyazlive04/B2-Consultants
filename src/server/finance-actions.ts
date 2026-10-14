@@ -23,9 +23,12 @@ import {
   unsettleIncome,
   type SettlementRecord,
 } from "./instalment-settlement";
+import { restatePlanForStarterIncome } from "./plan-restate";
 import { allocateStudentCode, lineForLevel } from "./student-code";
 import { normalizeStudentCode } from "@/lib/student-code";
-import { getPaymentTypesConfig } from "./founder-config";
+import { getExpenseCategoriesConfig, getPaymentTypesConfig } from "./founder-config";
+import { expenseAccountMap, expenseCategoryIsCogs } from "@/lib/expense-categories";
+import { ACCOUNT, isMoneyAccount } from "@/lib/chart-of-accounts";
 import { RECURRENCE_INTERVALS } from "@/lib/payment-types";
 import { currenciesInPlay, methodsForCurrencies } from "@/lib/payment-methods";
 import type { PaymentTypeKind } from "@/lib/config-schema";
@@ -328,9 +331,14 @@ function expenseDiffShape(row: Expense) {
     date: row.date,
     amountInrMinor: row.amountInrMinor.toString(),
     amountEurMinor: row.amountEurMinor.toString(),
-    category: row.category as string,
+    category: row.category,
     isCogs: row.isCogs,
+    /** Which account was drained - the ledger entry moves with it, so the log says so too. */
+    paidFromAccount: row.paidFromAccount,
     vendor: row.vendor,
+    // Moving a cost from a supplier onto a colleague (or between colleagues) changes what every
+    // pay total says, so it belongs in the activity log like any other money field.
+    teamProfileId: row.teamProfileId,
     notes: row.notes,
   };
 }
@@ -584,8 +592,21 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
             nextDueDate: schedule[0].dueDate,
             numEmis: schedule.length + 1,
             status: "ACTIVE",
+            /**
+             * WHICH PAYMENT AGREED THIS PLAN. Without it the plan and its first instalment were
+             * stranded from the income that created them: correcting the amount received left
+             * both holding the figure typed first, the schedule and the balance disagreed for
+             * good, and the ladder chased the difference. `updateIncome` reads this back.
+             */
+            startedByIncomeId: income.id,
           },
         });
+        /**
+         * ...and the income names the plan in return, so `lib/payment-allocation` credits this
+         * money to THIS plan by rule 1 rather than spreading it oldest-first across whatever
+         * else the student owes. It did pay instalment 1 of this plan, and nothing else.
+         */
+        await tx.income.update({ where: { id: income.id }, data: { pendingPaymentId: plan.id } });
         await tx.instalment.createMany({
           data: [
             // Seq 1 is the payment being recorded right now, stored PAID. The schedule then reads
@@ -798,6 +819,20 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
         }
       }
 
+      /**
+       * A plan this income AGREED is a different relationship from a plan it paid into, and it
+       * needs the opposite treatment: there is nothing to re-settle, because instalment 1 IS
+       * this payment - it has to be restated to match what the payment now says, and the plan's
+       * total with it. See server/plan-restate.
+       */
+      const startedPlan = await tx.pendingPayment.findUnique({
+        where: { startedByIncomeId: id },
+        select: { id: true },
+      });
+      if (startedPlan && moneyChanged) {
+        await restatePlanForStarterIncome(tx, startedPlan.id, income, !income.deletedAt);
+      }
+
       // Void before posting: the ledger permits only one live entry per source row.
       const voided = await voidEntryForSource(tx, "INCOME", id, {
         reason: "income edited",
@@ -872,6 +907,17 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
        */
       const prior = await latestSettlement(tx, id);
       await unsettleIncome(tx, prior, income.date, istToday());
+      /**
+       * The same is true of a plan this income STARTED: its instalment 1 is this very payment,
+       * so withdrawing the payment makes that instalment owed again. Left PAID, the plan would
+       * show a receipt that exists nowhere else in the app while the balance - computed from
+       * live income rows - rose underneath it.
+       */
+      const startedPlan = await tx.pendingPayment.findUnique({
+        where: { startedByIncomeId: id },
+        select: { id: true },
+      });
+      if (startedPlan) await restatePlanForStarterIncome(tx, startedPlan.id, income, false);
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "income.archive",
@@ -927,6 +973,13 @@ export async function restoreIncome(id: string): Promise<ActionResult> {
       // stands NOW, which may have moved on while this income was archived.
       const prior = await latestSettlement(tx, id);
       const settlement = prior?.autoSettle ? await settleInstalmentsForIncome(tx, income) : undefined;
+      // ...and a plan this income agreed gets its first instalment back - the other half of the
+      // archive above, so restoring is exactly reversible.
+      const startedPlan = await tx.pendingPayment.findUnique({
+        where: { startedByIncomeId: id },
+        select: { id: true },
+      });
+      if (startedPlan) await restatePlanForStarterIncome(tx, startedPlan.id, income, true);
       const entryId = await postEntry(tx, incomeEntryDraft(income, incomeAccounts));
       await appendAudit(tx, {
         actorId: session.user.id,
@@ -985,18 +1038,95 @@ const expenseSchema = z.object({
   date: z.string().min(10),
   amountInr: moneyInput,
   amountEur: moneyInput,
-  category: z.enum([
-    "MARKETING", "TOOLS_SOFTWARE", "TEAM_SALARIES", "CONTENT_CREATION",
-    "EVENTS_OFFLINE", "OPERATIONS", "COGS_DIRECT_DELIVERY", "OTHER",
-  ]),
+  /**
+   * A founder-configured category code, no longer an enum - validated against the live list in
+   * `resolveExpenseCategory`, the same way programLevel is validated against the Level catalogue.
+   */
+  category: z.string().trim().min(1, "Pick an expense category"),
   isCogs: z.string().optional(), // checkbox: "on" | undefined
+  /**
+   * WHICH ACCOUNT THE MONEY LEFT FROM. Optional so a caller that predates the field still
+   * validates and falls back to the INR bank - which is what every such row was posted to
+   * anyway, so an older form post is recorded exactly as it always was.
+   */
+  paidFromAccount: z.string().trim().optional(),
   // Which business the cost belongs to (§1.4). Optional so an older form post - or any
   // caller that predates the field - still validates and simply falls back to SHARED.
   businessLine: z.enum(["B2", "GERMAN_NOTE", "SHARED"]).optional(),
   // Free text, NOT rule("name"): a vendor is a company, and "3M"/"Zoho One" are real ones.
   vendor: rule("text").pipe(z.string().min(1, "Paid to (vendor) is required")),
+  /**
+   * WHO on the team this paid, when it paid a person.
+   *
+   * Optional, and blank for the overwhelming majority of costs. Set, it is what makes "what have
+   * we paid this person" answerable - `vendor` alone could not, because one month's "Karthick"
+   * and the next month's "Karthick salary" are two different payees to every total in the app.
+   * Validated against the live roster in the action, the same way programLevel is validated
+   * against the Level catalogue.
+   */
+  teamProfileId: z.string().trim().optional(),
   notes: optionalRule("text"),
 });
+
+/**
+ * The team member a cost is being recorded against, or null for the ordinary supplier payment.
+ *
+ * Refuses an id that is not on the roster rather than storing a dangling link: the whole point of
+ * the column is that a person's pay history can be summed, and a row pointing at nobody is worse
+ * than a row pointing at nothing.
+ */
+/**
+ * The category this cost is filed under, the account it posts to, and whether it is COGS.
+ *
+ * Refuses a code that is not on the founder's list rather than storing it: an unrecognised
+ * category reads as "Other" on every screen while being stored as something else, which is the
+ * one way a cost can be in the books and in no line of the P&L at the same time. An INACTIVE
+ * code is still accepted - that is how editing an old row to fix its vendor leaves its category
+ * alone - but an unknown one is not.
+ *
+ * `isCogs` is the row's own tick OR the category's default: the tick is what the operator said,
+ * the default is what the category means when they said nothing. The row always keeps its own
+ * answer, because COGS is orthogonal to category (SPEC 4.2).
+ */
+async function resolveExpenseCategory(
+  code: string,
+  tickedCogs: boolean,
+): Promise<{ error: string } | { category: string; isCogs: boolean; accounts: Map<string, string> }> {
+  const config = await getExpenseCategoriesConfig();
+  if (!config.categories.some((c) => c.code === code)) {
+    return { error: "That expense category no longer exists - pick another." };
+  }
+  return {
+    category: code,
+    isCogs: tickedCogs || expenseCategoryIsCogs(config, code),
+    accounts: expenseAccountMap(config),
+  };
+}
+
+/**
+ * The real-world account the money left from, or the INR bank when nothing says otherwise.
+ *
+ * Refuses anything outside `MONEY_ACCOUNTS`: a cost cannot be paid out of Accounts receivable or
+ * the gateway clearing account, and accepting one would write an entry that balances and still
+ * describes something that never happened.
+ */
+function resolvePaidFrom(code: string | undefined): { error: string } | { paidFromAccount: string } {
+  if (!code) return { paidFromAccount: ACCOUNT.BANK_INR };
+  if (!isMoneyAccount(code)) return { error: "Pick which account this was paid from." };
+  return { paidFromAccount: code };
+}
+
+async function resolveTeamProfile(
+  id: string | undefined,
+): Promise<{ error: string } | { teamProfileId: string | null; fullName: string | null }> {
+  if (!id) return { teamProfileId: null, fullName: null };
+  const profile = await prisma.teamProfile.findUnique({
+    where: { id },
+    select: { id: true, fullName: true },
+  });
+  if (!profile) return { error: "That team member no longer exists - pick another." };
+  return { teamProfileId: profile.id, fullName: profile.fullName };
+}
 
 export async function createExpense(form: FormData): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
@@ -1011,6 +1141,13 @@ export async function createExpense(form: FormData): Promise<ActionResult> {
   const expDateError = dateWithinLimits(expenseDate, istToday(), "expense date");
   if (expDateError) return { ok: false, error: expDateError };
 
+  const payee = await resolveTeamProfile(d.teamProfileId);
+  if ("error" in payee) return { ok: false, error: payee.error };
+  const filed = await resolveExpenseCategory(d.category, d.isCogs === "on");
+  if ("error" in filed) return { ok: false, error: filed.error };
+  const paidFrom = resolvePaidFrom(d.paidFromAccount);
+  if ("error" in paidFrom) return { ok: false, error: paidFrom.error };
+
   // The rate for the day it was paid, not for today (issue 14) - same reason as income.
   const fx = await getInrPerEurOn(expenseDate);
   let created: Expense | null = null;
@@ -1022,15 +1159,20 @@ export async function createExpense(form: FormData): Promise<ActionResult> {
           amountInrMinor: d.amountInr?.trim() ? majorStringToMinor(d.amountInr) : BigInt(0),
           amountEurMinor: d.amountEur?.trim() ? majorStringToMinor(d.amountEur) : BigInt(0),
           fxRateUsed: fx.rate,
-          category: d.category,
-          isCogs: d.isCogs === "on" || d.category === "COGS_DIRECT_DELIVERY",
+          category: filed.category,
+          isCogs: filed.isCogs,
+          paidFromAccount: paidFrom.paidFromAccount,
           businessLine: d.businessLine ?? "SHARED",
-          vendor: d.vendor,
+          // The person's own name wins over whatever is in the box: the two would otherwise
+          // drift the first time somebody edited the free-text field, and `vendor` is what every
+          // table and CSV prints.
+          vendor: payee.fullName ?? d.vendor,
+          teamProfileId: payee.teamProfileId,
           notes: d.notes || null,
           enteredById: session.user.id,
         },
       });
-      const entryId = await postEntry(tx, expenseEntryDraft(expense));
+      const entryId = await postEntry(tx, expenseEntryDraft(expense, filed.accounts));
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "expense.create",
@@ -1075,6 +1217,13 @@ export async function updateExpense(id: string, form: FormData): Promise<ActionR
   const amountError = requireSomeAmount(d.amountInr, d.amountEur);
   if (amountError) return { ok: false, error: amountError };
 
+  const payee = await resolveTeamProfile(d.teamProfileId);
+  if ("error" in payee) return { ok: false, error: payee.error };
+  const filed = await resolveExpenseCategory(d.category, d.isCogs === "on");
+  if ("error" in filed) return { ok: false, error: filed.error };
+  const paidFrom = resolvePaidFrom(d.paidFromAccount);
+  if ("error" in paidFrom) return { ok: false, error: paidFrom.error };
+
   const existing = await prisma.expense.findUnique({ where: { id } });
   let updated: Expense | null = null;
   const result = await withLedgerErrors(async () => {
@@ -1085,10 +1234,12 @@ export async function updateExpense(id: string, form: FormData): Promise<ActionR
           date: parseDateInput(d.date),
           amountInrMinor: d.amountInr?.trim() ? majorStringToMinor(d.amountInr) : BigInt(0),
           amountEurMinor: d.amountEur?.trim() ? majorStringToMinor(d.amountEur) : BigInt(0),
-          category: d.category,
-          isCogs: d.isCogs === "on" || d.category === "COGS_DIRECT_DELIVERY",
+          category: filed.category,
+          isCogs: filed.isCogs,
+          paidFromAccount: paidFrom.paidFromAccount,
           businessLine: d.businessLine ?? "SHARED",
-          vendor: d.vendor,
+          vendor: payee.fullName ?? d.vendor,
+          teamProfileId: payee.teamProfileId,
           notes: d.notes || null,
         },
       });
@@ -1098,7 +1249,7 @@ export async function updateExpense(id: string, form: FormData): Promise<ActionR
         actorId: session.user.id,
         on: istToday(),
       });
-      const draft = expenseEntryDraft(expense);
+      const draft = expenseEntryDraft(expense, filed.accounts);
       const entryId = await postEntry(tx, { ...draft, date: restatedDate(voided, draft.date) });
       await appendAudit(tx, {
         actorId: session.user.id,
@@ -1189,11 +1340,16 @@ export async function restoreExpense(id: string): Promise<ActionResult> {
   if (!existing) return { ok: false, error: "Record not found" };
   if (!existing.deletedAt) return { ok: false, error: "This expense is not archived" };
 
+  // Restoring re-posts, so it needs the founder's mapping too: without it the entry would land
+  // on the prefix fallback and a category pointed at its own P&L line would quietly post to
+  // Operations the moment somebody un-archived the row.
+  const expenseAccounts = expenseAccountMap(await getExpenseCategoriesConfig());
+
   let restored: Expense | null = null;
   const result = await withLedgerErrors(async () => {
     await prisma.$transaction(async (tx) => {
       const expense = await tx.expense.update({ where: { id }, data: restoreData });
-      const entryId = await postEntry(tx, expenseEntryDraft(expense));
+      const entryId = await postEntry(tx, expenseEntryDraft(expense, expenseAccounts));
       await appendAudit(tx, {
         actorId: session.user.id,
         action: "expense.restore",

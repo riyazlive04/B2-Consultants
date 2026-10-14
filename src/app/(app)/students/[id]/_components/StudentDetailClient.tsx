@@ -6,6 +6,7 @@ import {
   revokeStudentLogin, setEnrollmentCloser, setEnrollmentStatus, updateStudent, updateTracker,
 } from "@/server/students-actions";
 import { createJobApplication, deleteJobApplication, updateJobApplicationStatus } from "@/server/job-applications-actions";
+import { seatEnrollment, unseatEnrollment } from "@/server/batch-actions";
 import type { StudentDetail } from "@/server/students-metrics";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { BadgeChip, JourneyRing, MomentumChip } from "@/components/ui/gamification";
@@ -26,16 +27,110 @@ import {
 type Enrollment = StudentDetail["enrollments"][number];
 type MilestoneLogRow = Enrollment["milestoneLogs"][number];
 
+/**
+ * Seat an enrolment in a batch, or take it out of one.
+ *
+ * ── Why this exists ─────────────────────────────────────────────────────────────
+ * `seatEnrollment` has been written, permission-guarded and tested since the ER-v2 work, and
+ * nothing in the interface has ever called it. So `Enrollment.batchId` had no writer: a Guided
+ * or Elite student could not be put in a batch at all, which meant they could not be given a
+ * tutor, and the enrolment welcome - which fires on seating - could never reach them. German
+ * Note learners were fine, because their own Members screen writes the OTHER link
+ * (`BatchMember`). This closes that half.
+ *
+ * ── The over-capacity dance ─────────────────────────────────────────────────────
+ * Overfilling is deliberate: the founders take a ninth person when the next cohort is a month
+ * away, and the action warns rather than refuses. It signals that by returning
+ * `OVER_CAPACITY:<filled>:<target>`, which is a prompt, not an error - so it is shown as a
+ * confirm naming the real numbers, and accepting re-sends with `confirmed`.
+ */
+function BatchPicker({
+  enrollment,
+  batches,
+  canEdit,
+  onError,
+}: {
+  enrollment: Enrollment;
+  batches: StudentDetail["seatableBatches"];
+  canEdit: boolean;
+  onError: (msg: string | null) => void;
+}) {
+  // Only batches on this enrolment's own line. `allowedBatchLine` is null for an OTHER level,
+  // which genuinely belongs to neither line - then every batch is offered rather than none.
+  const eligible = enrollment.allowedBatchLine
+    ? batches.filter((b) => b.line === enrollment.allowedBatchLine)
+    : batches;
+
+  if (!canEdit) {
+    return (
+      <span className="text-muted">
+        Batch: <span className="text-ink">{enrollment.batchName ?? "-"}</span>
+      </span>
+    );
+  }
+
+  const seat = async (batchId: string, confirmed = false): Promise<void> => {
+    onError(null);
+    const res = await safeAction(() =>
+      batchId ? seatEnrollment(enrollment.id, batchId, confirmed) : unseatEnrollment(enrollment.id),
+    );
+    if (res.ok) {
+      toast(batchId ? "Seated - the enrolment welcome goes out if it is armed" : "Removed from the batch");
+      return;
+    }
+    const over = res.error.startsWith("OVER_CAPACITY:");
+    if (!over) {
+      onError(res.error);
+      return;
+    }
+    const [, filled, target] = res.error.split(":");
+    const ok = await askConfirm({
+      title: "That batch is over its target size",
+      body: `It already holds ${filled} of a target ${target}. Seat them anyway?`,
+      confirmLabel: "Seat anyway",
+    });
+    if (ok) await seat(batchId, true);
+  };
+
+  return (
+    <span className="flex items-center gap-2">
+      <span className="text-muted">Batch:</span>
+      <Select
+        value={enrollment.batchId ?? ""}
+        aria-label="Batch"
+        onChange={(ev) => void seat(ev.target.value)}
+        options={[
+          { value: "", label: "- not seated -" },
+          ...eligible.map((b) => ({
+            value: b.id,
+            // The fill count is on the option itself, so a full cohort is visible BEFORE it is
+            // picked rather than as a confirm dialog afterwards.
+            label: `${b.name} (${b.filled}/${b.targetStrength})`,
+          })),
+        ]}
+      />
+    </span>
+  );
+}
+
 const B2_LEVEL_OPTIONS = [
   { value: "SOLO", label: "Solo" },
   { value: "GUIDED", label: "Guided (90d)" },
   { value: "ELITE", label: "Elite (120d)" },
 ];
 
-// PRD2 §4.1: assigned coach is a dropdown (currently Karthick).
-const COACH_OPTIONS = [
-  { value: "Karthick", label: "Karthick" },
-  { value: "Ameen", label: "Ameen" },
+// The coach picker's options.
+//
+// Was a hardcoded two-name list with "Karthick" pre-selected, in both this file and the
+// students list. That is why the server-side default could almost never fire: the form always
+// submitted a name, so `assignedCoach || defaultCoach` never reached its fallback.
+//
+// Now: the real team, plus a blank. Blank is first and is a legitimate answer - an unassigned
+// student is a truer record than one assigned to whoever happened to be hardcoded - and the
+// founder's own default (Console → Delivery & team → Delivery defaults) is what pre-selects.
+const coachOptions = (team: { id: string; name: string }[]) => [
+  { value: "", label: "- none -" },
+  ...team.map((m) => ({ value: m.name, label: m.name })),
 ];
 
 const MILESTONE_ORDER = [
@@ -220,11 +315,18 @@ export function StudentDetailClient({
   student,
   isAdmin,
   canEditTracker,
+  canSeat,
   todayKey,
 }: {
   student: StudentDetail;
   isAdmin: boolean;
   canEditTracker: boolean; // Admin or Head
+  /**
+   * The `batches.manage` CAPABILITY, not a role test. It defaults to Admin but the founder can
+   * grant it per person from People → Access, and `seatEnrollment` checks the capability - so
+   * gating this on the role would hide the control from exactly the people it was handed to.
+   */
+  canSeat: boolean;
   todayKey: string; // IST today, YYYY-MM-DD - highlights the current sprint week
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -365,6 +467,12 @@ export function StudentDetailClient({
             <span className="text-muted">
               Coach: <span className="text-ink">{e.assignedCoach ?? "-"}</span>
             </span>
+            <BatchPicker
+              enrollment={e}
+              batches={student.seatableBatches}
+              canEdit={canSeat}
+              onError={setError}
+            />
             <span className="flex items-center gap-2">
               <span className="text-muted">Closer (L3):</span>
               {isAdmin ? (
@@ -596,7 +704,7 @@ export function StudentDetailClient({
               <Field label="Program level"><Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" /></Field>
               <Field label="Enrolment date"><TextInput type="date" name="enrollmentDate" required defaultValue={todayKey} /></Field>
               <Field label="Sessions planned"><TextInput kind="int" name="totalSessionsPlanned" /></Field>
-              <Field label="Assigned coach"><Select name="assignedCoach" options={COACH_OPTIONS} defaultValue="Karthick" /></Field>
+              <Field label="Assigned coach"><Select name="assignedCoach" options={coachOptions(student.teamMembers)} defaultValue={student.defaultCoach} /></Field>
               <Field label="Closer (L3)" hint="For the commission split">
                 <Select
                   name="closerId"

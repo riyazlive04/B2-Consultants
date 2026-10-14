@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Prisma, type Currency, type LedgerSourceType } from "@prisma/client";
 import { eurMinorToInrMinor } from "@/lib/fx";
-import { CHART_OF_ACCOUNTS, type AccountCode } from "@/lib/chart-of-accounts";
+import { CHART_OF_ACCOUNTS, type AccountCode, type PostableAccountCode } from "@/lib/chart-of-accounts";
 
 /**
  * The double-entry posting engine (SPEC §10).
@@ -31,7 +31,12 @@ const BASE_CURRENCY: Currency = "INR";
 const ONE = new Prisma.Decimal(1);
 
 export type DraftLine = {
-  accountCode: AccountCode;
+  /**
+   * A seeded code, or one of the EXPENSE accounts the founder created for a category of their
+   * own. Resolved against `ledger_account` in `resolveAccountIds` below, which throws on a code
+   * that names no account - so widening this type costs no safety.
+   */
+  accountCode: PostableAccountCode;
   side: "debit" | "credit";
   /** minor units of `currency` - paise for INR, cents for EUR */
   amountMinor: bigint;

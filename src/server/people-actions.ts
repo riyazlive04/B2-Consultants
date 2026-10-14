@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireSection, requireSession } from "@/lib/rbac";
 import { istMinutesOfDay, istToday } from "@/lib/dates";
+import { majorStringToMinor } from "@/lib/format";
 import { formatIstMinutes } from "@/lib/config-schema";
 import { activityDate } from "@/lib/activity-actions";
 import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
@@ -44,6 +45,16 @@ const profileSchema = z.object({
   // How many calls a day this person is expected to make - drives the My Desk bar and the
   // once-a-day greeting. Blank/0 = no target, which hides the bar rather than showing 0/0.
   dailyCallTarget: blankToUndefined(intInRange(0, 999, "Daily call target must be")),
+  /**
+   * AGREED MONTHLY PAY - what the Team payments form opens on for this person.
+   *
+   * Optional and blank-safe: a tutor paid per batch and a telecaller paid on commission have no
+   * monthly salary, and 0 means "nothing to pre-fill" rather than "paid nothing". Changing it
+   * rewrites no history - what was actually paid lives on the Expense rows, each with its own
+   * amount and stamped FX rate.
+   */
+  monthlyPayInr: optionalRule("money"),
+  monthlyPayEur: optionalRule("money"),
 });
 
 export async function saveTeamProfile(id: string | null, form: FormData): Promise<ActionResult> {
@@ -65,6 +76,8 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
     firstCallSharePct: Math.min(100, d.firstCallSharePct?.trim() ? parseInt(d.firstCallSharePct, 10) : 0),
     worksSaturdays: d.worksSaturdays === "on",
     dailyCallTarget: Math.min(999, d.dailyCallTarget?.trim() ? parseInt(d.dailyCallTarget, 10) : 0),
+    monthlyPayInrMinor: d.monthlyPayInr?.trim() ? majorStringToMinor(d.monthlyPayInr) : BigInt(0),
+    monthlyPayEurMinor: d.monthlyPayEur?.trim() ? majorStringToMinor(d.monthlyPayEur) : BigInt(0),
   };
 
   /**

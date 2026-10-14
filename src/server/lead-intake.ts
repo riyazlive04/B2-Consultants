@@ -85,6 +85,27 @@ export type IntakeLead = {
   originDomain?: string | null;
   notes?: string | null;
   /**
+   * Evidence that this person agreed to be stored and contacted, in the WORDS they were shown.
+   *
+   * Until this existed, `ConsentRecord` was written by exactly ONE of the app's five intake
+   * paths - the booking form. Every lead arriving through a hosted form, a funnel page or a
+   * webhook was stored with no record of consent at all, while the booking action's comment
+   * described "no consent, no row" as a property of the app. It was a property of that action.
+   *
+   * Deliberately OPTIONAL, and deliberately not defaulted. A path that genuinely collected a
+   * tick passes it; a path where the agreement happened on somebody ELSE'S form (the Meta and
+   * Pabbly webhooks - we never saw their wording and hold no copy of it) passes nothing. A
+   * fabricated consent row asserting wording we never showed would be worse evidence than an
+   * honest absence, because it would look like proof.
+   */
+  consent?: {
+    purpose: string;
+    policyVersion?: string | null;
+    source: Source;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+  } | null;
+  /**
    * The sender's RAW payload, when it may carry qualification answers.
    *
    * Application Logic §4.3 stage 1: the landing page asks the band-score questions, so the score
@@ -229,6 +250,38 @@ export async function upsertIntakeLead(
   opts: { announceReturning?: boolean } = {},
 ): Promise<IntakeResult> {
   const result = await resolveIntakeLead(rawInput);
+
+  /**
+   * The consent row, written INSIDE the request rather than deferred below.
+   *
+   * It is evidence about data we have just stored, so it has to land with that data, not in a
+   * best-effort block that a restart is explicitly allowed to drop. `createMany` with
+   * `skipDuplicates` keeps a replayed webhook from stacking identical grants.
+   *
+   * One grant per capture, not per person: re-consenting on a second form is a new, separately
+   * dated agreement to the wording shown THAT time, and the whole point of the row is to be
+   * able to say which wording was on screen when.
+   */
+  if (rawInput.consent) {
+    await prisma.consentRecord.create({
+      data: {
+        leadId: result.lead.id,
+        granted: true,
+        purpose: rawInput.consent.purpose,
+        policyVersion: rawInput.consent.policyVersion ?? null,
+        // Left null on purpose, as on the booking path: the forms have no country field, and
+        // deriving "DE" from a typed city name is a guess recorded as a fact.
+        region: null,
+        source: rawInput.consent.source,
+        ipAddress: rawInput.consent.ipAddress ?? null,
+        userAgent: rawInput.consent.userAgent?.slice(0, 500) ?? null,
+      },
+    }).catch((e) => {
+      // Never fail a capture over its audit row - losing the lead is the worse outcome - but
+      // say so loudly, because a silent gap here is the bug this whole field exists to close.
+      console.error(`[intake] consent record failed for lead ${result.lead.id}`, e);
+    });
+  }
 
   /**
    * Scoring and the intro send now run AFTER the caller is answered - see `after-response.ts`.

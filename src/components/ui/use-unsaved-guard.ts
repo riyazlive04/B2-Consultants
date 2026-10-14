@@ -88,11 +88,38 @@ export function useUnsavedGuard(
       return !!form && target instanceof Node && form.contains(target);
     };
 
+    /**
+     * ── WHY A RESET HAS A SETTLING WINDOW ────────────────────────────────────────
+     * Some controls REFILL THEMSELVES as a consequence of the reset that clears them, and they
+     * do it by dispatching a synthetic `input`. The date field on every finance form is one:
+     * `defaultToday` has DatePicker write the browser's today back into the input (see its
+     * `useFormReset`), through a `setNativeValue` that dispatches `input` and `change` on
+     * purpose - that is how React's value tracker is kept honest.
+     *
+     * These listeners sit on `document` in the CAPTURE phase, so they run before the form's own
+     * reset handlers: the guard cleared its flag, the date refilled itself, and the form was
+     * dirty again one tick after a successful save. The symptom was a browser "Leave site?"
+     * prompt on the next refresh with nothing unsaved anywhere - which teaches people to click
+     * straight through the one prompt that exists to protect their work.
+     *
+     * So for a moment after a reset, a SYNTHETIC event does not re-arm the guard. A real
+     * keystroke still does, because `isTrusted` tells the two apart - which matters, since the
+     * app's custom pickers legitimately dirty a form through synthetic events too (choosing a
+     * date in the popover is one), and those must keep counting outside this window.
+     */
+    let settlingUntil = 0;
+
     const onEdit = (e: Event) => {
-      if (inForm(e.target)) dirty = true;
+      if (!inForm(e.target)) return;
+      if (!e.isTrusted && Date.now() < settlingUntil) return;
+      dirty = true;
     };
     const onReset = (e: Event) => {
-      if (inForm(e.target) || e.target === formRef.current) dirty = false;
+      if (!inForm(e.target) && e.target !== formRef.current) return;
+      dirty = false;
+      // Long enough for a control's own reset handling and the render it schedules; far too
+      // short to swallow a person coming back to type.
+      settlingUntil = Date.now() + 400;
     };
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!dirty) return;

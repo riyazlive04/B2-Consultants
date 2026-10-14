@@ -7,7 +7,7 @@ import { TextInput } from "@/components/ui/form";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { useFormReset } from "@/components/ui/use-form-reset";
 import { DUE_DATE_SCHEME_LABELS, dueDateSeries, type DueDateScheme } from "@/lib/instalment-dates";
-import type { MoneyText } from "@/lib/instalment-amounts";
+import { planGap, type MoneyText } from "@/lib/instalment-amounts";
 import {
   formatEurMinor, formatInrMinor, majorStringToMinor, minorToMajorString,
 } from "@/lib/format";
@@ -85,6 +85,7 @@ export function InstalmentSchedule({
   anchorDate,
   shares,
   bankedToday,
+  planTotal,
   onCompleteChange,
 }: {
   defaultRows?: ScheduleRow[];
@@ -105,6 +106,16 @@ export function InstalmentSchedule({
    * reading this form back needs to be sure of.
    */
   bankedToday?: MoneyText;
+  /**
+   * The headline the parts are reconciled against - the fee plus the plan surcharge.
+   *
+   * Every amount on this form is now the operator's: the first instalment is typed, and so is
+   * every row below. So the parts CAN disagree with the price above them, and the receivable is
+   * raised for the parts (the action stores `received now + everything scheduled`). This box is
+   * where that is said out loud, because the alternative is a plan that silently bills a figure
+   * nobody typed.
+   */
+  planTotal?: MoneyText;
   /**
    * Told whenever "every row has a date" changes, so the form can hold its submit button closed.
    * A plan saved with a blank date silently drops that receivable, and nothing ever chases it.
@@ -161,9 +172,40 @@ export function InstalmentSchedule({
    * with no amount is recoverable later from the plan itself, so it is not gated here.
    */
   const complete = rows.length > 0 && rows.every((r) => r.dueDate.trim() !== "");
+  /**
+   * ── WHY THE CALLBACK IS HELD IN A REF ────────────────────────────────────────────
+   * This used to be `useEffect(..., [complete, onCompleteChange])`, and `onCompleteChange` is an
+   * inline arrow at both call sites - a NEW function on every parent render. So the effect ran
+   * on every render, called back into the parent's `patch`, which builds a new draft object,
+   * which re-rendered the form, which made another arrow, which ran the effect again. React
+   * stopped it with "Maximum update depth exceeded", and it fired the instant anybody chose the
+   * Instalment payment type - the schedule mounts, and the form spins.
+   *
+   * The ref keeps the newest callback without making it a dependency (the same pattern
+   * `AmountPair` uses for exactly this reason), so the parent is told when the ANSWER changes
+   * and not when it happens to re-render.
+   */
+  const notifyComplete = useRef(onCompleteChange);
   useEffect(() => {
-    onCompleteChange?.(complete);
-  }, [complete, onCompleteChange]);
+    notifyComplete.current = onCompleteChange;
+  });
+  useEffect(() => {
+    notifyComplete.current?.(complete);
+  }, [complete]);
+
+  /**
+   * ── DO THE PARTS ADD UP TO THE PRICE? ────────────────────────────────────────────
+   * Measured from THESE ROWS, not from the equal split the form derived: every amount here is
+   * hand-editable, and the receivable is raised for what the rows actually say (the action
+   * stores `received today + everything scheduled`). Reconciling against the derivation would
+   * reassure the operator about numbers they had just edited away.
+   */
+  const liveGap = planTotal
+    ? planGap(planTotal, [
+        bankedToday ?? { inr: "", eur: "" },
+        ...rows.map((r) => ({ inr: r.amountInr, eur: r.amountEur })),
+      ])
+    : null;
 
   /** Read a sibling field by name - the income date and the amount just received seed row 1. */
   const sibling = (name: string): string => {
@@ -249,19 +291,68 @@ export function InstalmentSchedule({
         )}
       </div>
 
-      {/* What the division came to, in words. The box above holds the whole fee on a plan, so
-          "how much is actually going in the till today" is the question this answers. */}
-      {bankedToday && moneyText(bankedToday) && (
-        <p className="mt-2 rounded-card bg-surface-2 px-3 py-2 text-caption text-ink-2">
-          <span className="font-medium text-ink">{moneyText(bankedToday)}</span> of the{" "}
-          <span className="font-medium text-ink">{moneyText(sumText([bankedToday, ...(shares ?? [])]))}</span>{" "}
-          total is recorded as received today
-          {shares?.length
-            ? `; the ${shares.length} instalment${shares.length === 1 ? "" : "s"} below ${
-                shares.length === 1 ? "is" : "are"
-              } the rest.`
-            : "."}
-        </p>
+      {/* What the parts come to, in words, and whether they match the price typed above.
+          "How much is actually going in the till today" is the first question; "does this plan
+          add up to what we quoted" is the second, and it only became askable once every amount
+          here became editable. */}
+      {(bankedToday || shares?.length) && (
+        <div className="mt-2 space-y-1.5">
+          {bankedToday && moneyText(bankedToday) && (
+            <p className="rounded-card bg-surface-2 px-3 py-2 text-caption text-ink-2">
+              <span className="font-medium text-ink">{moneyText(bankedToday)}</span> of the{" "}
+              <span className="font-medium text-ink">
+                {moneyText(
+                  sumText([
+                    bankedToday,
+                    ...rows.map((r) => ({ inr: r.amountInr, eur: r.amountEur })),
+                  ]),
+                )}
+              </span>{" "}
+              plan is recorded as received today
+              {shares?.length
+                ? `; the ${shares.length} instalment${shares.length === 1 ? "" : "s"} below ${
+                    shares.length === 1 ? "is" : "are"
+                  } the rest.`
+                : "."}
+            </p>
+          )}
+          {/*
+            The receivable is raised for the PARTS. So a mismatch is reported as what will be
+            stored rather than as an error: a plan agreed at an odd total is a real thing, and
+            refusing the save would only send the operator back to re-type the headline.
+          */}
+          {liveGap && (liveGap.inr !== BigInt(0) || liveGap.eur !== BigInt(0)) && planTotal && (
+            <p
+              className="rounded-card bg-warn-soft px-3 py-2 text-caption text-warn"
+              role="status"
+            >
+              The parts add up to{" "}
+              <span className="font-semibold">
+                {moneyText(
+                  sumText([
+                    ...(bankedToday ? [bankedToday] : []),
+                    ...rows.map((r) => ({ inr: r.amountInr, eur: r.amountEur })),
+                  ]),
+                )}
+              </span>
+              , not the {moneyText(planTotal)} above -{" "}
+              {liveGap.inr > BigInt(0) || liveGap.eur > BigInt(0) ? "more" : "less"} by{" "}
+              <span className="font-semibold">
+                {[
+                  liveGap.inr !== BigInt(0)
+                    ? formatInrMinor(liveGap.inr < BigInt(0) ? -liveGap.inr : liveGap.inr)
+                    : "",
+                  liveGap.eur !== BigInt(0)
+                    ? formatEurMinor(liveGap.eur < BigInt(0) ? -liveGap.eur : liveGap.eur)
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" + ")}
+              </span>
+              . The plan will be saved for the parts.
+            </p>
+          )}
+        </div>
       )}
 
       <div className="mt-2 space-y-2">

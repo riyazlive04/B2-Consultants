@@ -142,7 +142,7 @@ export function DailyLogEodPanel({ config, cronArmed }: { config: DailyLogEodCon
           <p className="mt-4 rounded-field bg-warn-soft px-3 py-2 text-xs font-medium text-warn">
             With a 0-day amend window, auto-saved logs are final. Auto-capture can&apos;t see every field
             (follow-up messages have no source), so those days will read <strong>low</strong> on the
-            Telecaller Pay board and nobody can correct them.
+            Bonus & Commission board and nobody can correct them.
           </p>
         )}
 

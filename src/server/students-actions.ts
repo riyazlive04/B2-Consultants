@@ -11,6 +11,7 @@ import { intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 import { allocateStudentCode, lineForLevel } from "./student-code";
+import { getDeliveryDefaults } from "./founder-config";
 import { normalizeStudentCode } from "@/lib/student-code";
 import { Prisma } from "@prisma/client";
 
@@ -104,6 +105,10 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
   const start = parseDateInput(e.data.enrollmentDate);
   const { duration, programEndDate } = derivedDuration(e.data.programLevel, start);
 
+  // The founder's default coach (Console → Delivery & team → Delivery defaults). Blank is a
+  // legitimate answer and leaves the field empty, which is honest when nobody is assigned yet.
+  const { defaultCoach } = await getDeliveryDefaults();
+
   // Typed in wins; blank falls back to the next generated number, exactly as before - in the
   // series the programme level belongs to (B2-0001… or GN-0001…), derived not asked for.
   const typedCode = normalizeStudentCode(s.data.code);
@@ -128,7 +133,7 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
             totalSessionsPlanned: e.data.totalSessionsPlanned?.trim()
               ? parseInt(e.data.totalSessionsPlanned, 10)
               : null,
-            assignedCoach: e.data.assignedCoach || "Karthick",
+            assignedCoach: e.data.assignedCoach || defaultCoach,
             closerId: e.data.closerId || null,
             milestoneLogs: { create: { newMilestone: "ONBOARDING" } },
           },
@@ -156,7 +161,7 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
     meta: {
       programLevel: e.data.programLevel,
       enrollmentDate: e.data.enrollmentDate,
-      assignedCoach: e.data.assignedCoach || "Karthick",
+      assignedCoach: e.data.assignedCoach || defaultCoach,
       incomeEntriesLinked: ids.length,
     },
   });
@@ -285,6 +290,8 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
   if (!e.success) return { ok: false, error: firstError(e.error) };
   const start = parseDateInput(e.data.enrollmentDate);
   const { duration, programEndDate } = derivedDuration(e.data.programLevel, start);
+  // Same founder default as createStudent - see the note there.
+  const { defaultCoach } = await getDeliveryDefaults();
   const enrollment = await prisma.enrollment.create({
     data: {
       studentId,
@@ -295,7 +302,7 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
       totalSessionsPlanned: e.data.totalSessionsPlanned?.trim()
         ? parseInt(e.data.totalSessionsPlanned, 10)
         : null,
-      assignedCoach: e.data.assignedCoach || "Karthick",
+      assignedCoach: e.data.assignedCoach || defaultCoach,
       closerId: e.data.closerId || null,
       milestoneLogs: { create: { newMilestone: "ONBOARDING" } },
     },
@@ -310,7 +317,7 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
     meta: {
       programLevel: e.data.programLevel,
       enrollmentDate: e.data.enrollmentDate,
-      assignedCoach: e.data.assignedCoach || "Karthick",
+      assignedCoach: e.data.assignedCoach || defaultCoach,
     },
   });
   revalidatePath("/students");
@@ -678,7 +685,41 @@ export async function createStudentLogin(studentId: string, form: FormData): Pro
 
   const student = await prisma.student.findUnique({ where: { id: studentId } });
   if (!student) return { ok: false, error: "Student not found" };
-  if (student.userId) return { ok: false, error: "This student already has a portal login" };
+
+  /**
+   * A student whose access was revoked keeps their `userId` - revoking suspends the account
+   * rather than deleting it, so their watch history and community record survive (see
+   * `revokeStudentLogin`). Re-granting therefore has to REINSTATE, not refuse: without this
+   * the old "already has a portal login" error made revoke a one-way door, and the only way
+   * back was to delete the account by hand and lose exactly what suspension protected.
+   */
+  if (student.userId) {
+    const existing = await prisma.user.findUnique({
+      where: { id: student.userId },
+      select: { status: true, email: true },
+    });
+    if (existing?.status !== "SUSPENDED") {
+      return { ok: false, error: "This student already has a portal login" };
+    }
+    const ctx = await portalAuth.$context;
+    await ctx.internalAdapter.updatePassword(student.userId, await ctx.password.hash(d.password));
+    await prisma.user.update({
+      where: { id: student.userId },
+      // Same O4 rule as below: an admin chose this password, so the owner replaces it.
+      data: { status: "ACTIVE", mustChangePassword: true },
+    });
+    await logActivity(session, {
+      action: "student.login.reinstate",
+      section: "students",
+      entityType: "User",
+      entityId: student.userId,
+      summary: `Reinstated ${student.fullName}'s portal login (${existing.email})`,
+      meta: { studentId },
+    });
+    revalidatePath(`/students/${studentId}`);
+    revalidatePath("/people");
+    return { ok: true };
+  }
 
   const existing = await prisma.user.findUnique({ where: { email: d.email } });
   if (existing) return { ok: false, error: "A user with this email already exists" };
@@ -695,7 +736,18 @@ export async function createStudentLogin(studentId: string, form: FormData): Pro
     await prisma.$transaction([
       prisma.user.update({
         where: { id: res.user.id },
-        data: { role: "STUDENT", emailVerified: true },
+        data: {
+          role: "STUDENT",
+          emailVerified: true,
+          /**
+           * The app's own rule (O4), which this path was the one exception to: "the admin
+           * chose this password, so the owner must replace it on next sign-in". Team members
+           * never hit it because they set their own password through an invite; students have
+           * no invite flow, so an admin types their password and - until now - it stayed that
+           * password, known to the admin, indefinitely.
+           */
+          mustChangePassword: true,
+        },
       }),
       prisma.student.update({ where: { id: studentId }, data: { userId: res.user.id } }),
     ]);
@@ -720,13 +772,36 @@ export async function createStudentLogin(studentId: string, form: FormData): Pro
   return { ok: true };
 }
 
-/** Remove a student's portal access entirely (account + sessions). The student record stays. */
+/**
+ * Remove a student's portal access. The student record - and their history - stays.
+ *
+ * ── Why this suspends rather than deletes ───────────────────────────────────────
+ * It used to call `user.delete`, with a comment saying the student record was untouched.
+ * The student ROW was; a good deal of their work was not. `GnRecordingWatch`, `GnLike` and
+ * `GnCommentLike` all cascade from User, so deleting the account silently erased:
+ *
+ *   · every recording the student had watched, and the watch percentages that drive their
+ *     batch's course-progress bars and auto-complete WATCH_VIDEO coursework;
+ *   · every like they had given, quietly decrementing other people's community points and
+ *     the leaderboard those points feed.
+ *
+ * Posts and comments survived (both SetNull, rendering as "Former member"), which is what
+ * made the loss easy to miss - the visible things stayed and the measured things went.
+ *
+ * Suspension revokes access just as completely: `requireSession` bounces a SUSPENDED user
+ * on the very next request and deletes their sessions again on the way past. The difference
+ * is only that the evidence of their time in the programme survives it, which is what a
+ * coach looking back at a dropped student actually needs.
+ */
 export async function revokeStudentLogin(studentId: string): Promise<ActionResult> {
   const session = await requireAdmin();
   const student = await prisma.student.findUnique({ where: { id: studentId } });
   if (!student?.userId) return { ok: false, error: "This student has no portal login" };
-  // Cascades sessions/accounts; Student.userId is ON DELETE SET NULL.
-  await prisma.user.delete({ where: { id: student.userId } });
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: student.userId }, data: { status: "SUSPENDED" } }),
+    // Takes effect immediately rather than at their next page load.
+    prisma.session.deleteMany({ where: { userId: student.userId } }),
+  ]);
   await logActivity(session, {
     action: "student.login.revoke",
     section: "students",

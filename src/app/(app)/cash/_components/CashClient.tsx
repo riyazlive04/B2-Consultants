@@ -11,7 +11,19 @@ import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextIn
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { AmountPair } from "@/components/ui/AmountPair";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
-import { EXPENSE_CATEGORY_LABELS, optionsFrom } from "@/lib/labels";
+import { optionsFrom } from "@/lib/labels";
+import {
+  activeExpenseCategories,
+  expenseCategoryLabel,
+  expenseCategoryOptions,
+} from "@/lib/expense-categories";
+import type { ExpenseCategoriesConfig } from "@/lib/config-schema";
+
+/** Tools and Software while the founder still offers it, else whatever they offer first. */
+function openingCategory(config: ExpenseCategoriesConfig): string {
+  const offered = activeExpenseCategories(config);
+  return offered.some((c) => c.code === "TOOLS_SOFTWARE") ? "TOOLS_SOFTWARE" : offered[0]?.code ?? "OTHER";
+}
 import { safeAction } from "@/lib/action-guard";
 import { useUnsavedGuard } from "@/components/ui/use-unsaved-guard";
 
@@ -76,9 +88,13 @@ export function CashPositionForm({ today, stale }: { today: string; stale: boole
           <Field label="Business bank balance (₹)">
             <MoneyInput currency="INR" name="bankBalance" required />
           </Field>
-          <Field label="Personal savings (₹, optional)" hint="Planning only - never counted in runway">
-            <MoneyInput currency="INR" name="personalSavings" />
-          </Field>
+          {/*
+            "Personal savings (planning only)" used to be here: one unattributed rupee figure a
+            week, excluded from runway and from every other calculation, which could not say whose
+            money it was or when it went in. Capital is now a record of its own - see the
+            Owner's equity tab below - so the box is gone rather than renamed, and the column it
+            wrote to is left in the database with whatever was already typed into it.
+          */}
           <Field label="Notes">
             <TextInput kind="text" name="notes" placeholder="Large payment made / expected…" />
           </Field>
@@ -100,11 +116,7 @@ export function CashPositionHistory({ positions }: { positions: CashOverview["po
       key: "balance", header: "Cash in Hand", align: "right",
       cell: (r) => formatInrMinor(r.balanceInr), value: (r) => r.balanceInr / 100,
     },
-    {
-      key: "savings", header: "Personal savings (planning only)", align: "right",
-      cell: (r) => (r.personalSavingsInr === null ? "-" : formatInrMinor(r.personalSavingsInr)),
-      value: (r) => (r.personalSavingsInr ?? 0) / 100,
-    },
+
     { key: "notes", header: "Notes", cell: (r) => r.notes ?? "", value: (r) => r.notes ?? "" },
   ];
 
@@ -187,11 +199,15 @@ function PayableSchedule({
  */
 export function PayablesSection({
   payables,
+  categories,
   fxRate,
   fxStale,
   fxDate,
 }: {
   payables: PayableRow[];
+  /** The founder's expense categories - the same list an expense is filed under, since a
+   *  payable is the commitment an expense later settles. */
+  categories: ExpenseCategoriesConfig;
   /** INR per EUR, as the server will stamp it - so the preview matches what gets saved. */
   fxRate: number;
   fxStale?: boolean;
@@ -204,7 +220,11 @@ export function PayablesSection({
 
   const columns: Column<PayableRow>[] = [
     { key: "name", header: "Payable", cell: (r) => r.name, value: (r) => r.name },
-    { key: "category", header: "Category", cell: (r) => EXPENSE_CATEGORY_LABELS[r.category], value: (r) => r.category },
+    {
+      key: "category", header: "Category",
+      cell: (r) => expenseCategoryLabel(categories, r.category),
+      value: (r) => r.category,
+    },
     {
       key: "amount", header: "Price", align: "right",
       // The side that was typed leads; the other sits beneath, muted. `amountInr` is the
@@ -276,7 +296,13 @@ export function PayablesSection({
               <TextInput kind="text" name="name" required defaultValue={editing?.name ?? ""} />
             </Field>
             <Field label="Category">
-              <Select name="category" options={optionsFrom(EXPENSE_CATEGORY_LABELS)} defaultValue={editing?.category ?? "TOOLS_SOFTWARE"} />
+              <Select
+                name="category"
+                // The row's own category is carried even if it has since been switched off, so
+                // editing a bill to change its price cannot re-file it as something else.
+                options={expenseCategoryOptions(categories, editing?.category)}
+                defaultValue={editing?.category ?? openingCategory(categories)}
+              />
             </Field>
             <AmountPair
               fxRate={fxRate}

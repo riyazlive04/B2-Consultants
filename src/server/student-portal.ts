@@ -64,7 +64,19 @@ export const getMyStudentPortal = cache(async (userId: string) => {
   const nextStepsByMilestone = currentRuleset(config, todayKey).student.nextSteps;
 
   const enrollments = student.enrollments.map((e) => {
-    const totalDays = e.programLevel === "GUIDED" ? 90 : e.programLevel === "ELITE" ? 120 : null;
+    /**
+     * The programme clock, read off `duration` rather than matched against level NAMES.
+     *
+     * It used to test `programLevel === "GUIDED" / "ELITE"`. `programLevel` is a `Level.code`
+     * and levels are founder-configurable, so renaming or adding one silently dropped the
+     * "Day 34 of 90" line from the student's page - while the `programEndDate`-derived "days
+     * left" beside it kept working, leaving two halves of one fact disagreeing.
+     *
+     * `duration` is the enum the end date was computed from in the first place
+     * (`derivedDuration`), so this reads the same source the dates came from. LIFETIME has no
+     * clock by definition, which is why Solo shows none.
+     */
+    const totalDays = e.duration === "DAYS_90" ? 90 : e.duration === "DAYS_120" ? 120 : null;
     const journey = computeStudentJourney({
       todayKey,
       status: e.status,

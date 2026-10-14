@@ -10,7 +10,7 @@ import { TelecallerClient } from "./_components/TelecallerClient";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
-export const metadata = { title: "Telecaller Pay" };
+export const metadata = { title: "Bonus & Commission" };
 
 export const dynamic = "force-dynamic";
 
@@ -29,8 +29,8 @@ export default async function TelecallerPage({
       {/* Month picker - plain GET form, works without client JS */}
       <PageHeader
         icon={<PhoneCall size={20} />}
-        title="Telecaller Pay"
-        subtitle="Assign a bonus and/or commission to each telecaller - based on their calls or any other criteria."
+        title="Bonus & Commission"
+        subtitle="Assign a bonus and/or commission to anyone on the team - based on their calls, or any other criteria."
         actions={
           <form method="get" className="flex items-center gap-2">
             {/* type="month" keeps a native (now theme-corrected via color-scheme) popup;
@@ -58,7 +58,7 @@ export default async function TelecallerPage({
         <MetricCard
           label="Bonuses"
           value={compact(totals.bonusInrMinor)}
-          secondary={`${totals.rewardedCount} telecaller${totals.rewardedCount === 1 ? "" : "s"} rewarded`}
+          secondary={`${totals.rewardedCount} ${totals.rewardedCount === 1 ? "person" : "people"} rewarded`}
           icon={<Gift size={18} />}
           detail={{ rows: board.bonusBreakdown.map((b) => ({ label: b.name, value: compact(b.inr) })) }}
         />

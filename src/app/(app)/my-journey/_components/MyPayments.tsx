@@ -50,10 +50,20 @@ export function MyPayments({ payments }: { payments: StudentPayments }) {
         >
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
-              <p className="text-caption text-muted">Programme fee</p>
+              {/* "Total" and not "Programme fee": this figure is fee + instalment surcharge,
+                  and it is what the instalments below add up to. It used to show the fee
+                  alone, which made the list underneath look like it overcharged them. When
+                  there IS a surcharge the fee is broken out below, so nothing is hidden. */}
+              <p className="text-caption text-muted">Total</p>
               <p className="tnum font-display text-xl font-bold text-ink">
-                {formatInrMinor(p.totalFeeInrMinor)}
+                {formatInrMinor(p.totalToCollectInrMinor)}
               </p>
+              {p.planExtraInrMinor > 0 && (
+                <p className="text-caption text-muted">
+                  {formatInrMinor(p.totalFeeInrMinor)} fee + {formatInrMinor(p.planExtraInrMinor)}{" "}
+                  instalment plan
+                </p>
+              )}
             </div>
             <div>
               <p className="text-caption text-muted">Paid</p>

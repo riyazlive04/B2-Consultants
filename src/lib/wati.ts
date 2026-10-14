@@ -61,6 +61,11 @@ function coerceCadence(raw: unknown): WatiCadence {
     paymentEnabled: flag(c.paymentEnabled),
     emiPreDueEnabled: flag(c.emiPreDueEnabled),
     studentNudgesEnabled: flag(c.studentNudgesEnabled),
+    // NOT `flag()`. That helper reads a missing key as TRUE - right for the switches that
+    // predate it, because every install already had that behaviour. This one is new and ships
+    // OFF, so an absent key must fall to the default (false) rather than arm itself on upgrade.
+    studentWelcomeEnabled:
+      typeof c.studentWelcomeEnabled === "boolean" ? c.studentWelcomeEnabled : DEFAULT_CADENCE.studentWelcomeEnabled,
     discoFirstDelayHours: num(c.discoFirstDelayHours, DEFAULT_CADENCE.discoFirstDelayHours),
     discoRepeatHours: num(c.discoRepeatHours, DEFAULT_CADENCE.discoRepeatHours),
     discoMaxReminders: num(c.discoMaxReminders, DEFAULT_CADENCE.discoMaxReminders),

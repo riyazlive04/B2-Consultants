@@ -32,6 +32,7 @@ import { scoreSubmission } from "./qualification";
 import { sendBookingConfirmation, sendBookingRescheduled } from "./whatsapp";
 import { promoteIntoFreedSlot, runBookingConfirmations } from "./booking-automation";
 import { recordSlotRelease } from "./slot-release";
+import { syncBookingMeeting } from "./zoom-meetings";
 import { prepareConfirmLoopSave } from "./confirm-loop-config";
 import { sendEmailMessage } from "./messaging";
 import { afterResponse } from "./after-response";
@@ -574,6 +575,18 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
     // booking, so BOOKING_CREATED workflows could never enroll a single contact.
     await emitTrigger("BOOKING_CREATED", { leadId: bookedLeadId });
 
+    /**
+     * Create the Zoom meeting BEFORE the confirmation goes out, not after.
+     *
+     * No approved WATI template carries a meeting link today, so today the order is invisible.
+     * It stops being invisible the moment one does: a confirmation sent first would be the one
+     * message the prospect actually reads, and it would be the one without the link in it.
+     *
+     * Silent and harmless when Zoom is unarmed; a failure here leaves the booking untouched and
+     * `sweepZoomMeetings` fills the link in on the next tick.
+     */
+    await syncBookingMeeting(bookingId);
+
     // Wave-2: fire the WhatsApp booking confirmation. No-op (and writes no row) unless WATI is
     // configured + enabled; it never throws, so it can't affect the booking result.
     await sendBookingConfirmation(bookingId);
@@ -874,6 +887,14 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
     });
   }
 
+  /**
+   * The call is off, so the room should be too. The reconciler decides: it deletes the meeting
+   * for a cancellation or a no-show, and does nothing at all for a status that keeps the call
+   * live. Deliberately after the transaction - a Zoom timeout must never roll back the fact that
+   * somebody cancelled.
+   */
+  await syncBookingMeeting(id);
+
   // Fill the freed slot with the next waiting call for the same caller on the same day.
   if (status === "CANCELLED" && booking.slotId) {
     const rules = await getBookingRulesConfig();
@@ -969,7 +990,14 @@ async function moveBookingOntoSlot(
 ): Promise<void> {
   await tx.bookingRequest.update({
     where: { id: booking.id },
-    data: { slotId: newSlotId, status: "BOOKED", confirmedAt: null, confirmSentAt: null },
+    /**
+     * `zoomStartsAt: null` means "Zoom is now known-stale". The meeting id is KEPT, so the
+     * reconciler moves the existing room rather than creating a second one, and the null is what
+     * makes this booking visible to `sweepZoomMeetings` if the reconcile below never runs or
+     * fails. Every path that changes a call's time owes this null - it is the one invariant that
+     * keeps the calendar and Zoom from drifting apart silently.
+     */
+    data: { slotId: newSlotId, status: "BOOKED", confirmedAt: null, confirmSentAt: null, zoomStartsAt: null },
   });
 
   if (booking.slotId) {
@@ -1035,6 +1063,10 @@ async function afterBookingMoved(
       after: { slotId: newSlotId, status: "BOOKED" },
     },
   });
+
+  // Move the Zoom meeting onto the new time before the prospect is told the call moved, so the
+  // link they already hold keeps working rather than pointing at the old slot.
+  await syncBookingMeeting(booking.id);
 
   // Intimate the prospect their call moved (best-effort; silent when WhatsApp is off).
   await sendBookingRescheduled(booking.id, session.user.id);

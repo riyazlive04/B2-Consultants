@@ -9,7 +9,8 @@ import { formatInrMinor } from "@/lib/format";
 import { ACCOUNT, expenseAccountFor } from "@/lib/chart-of-accounts";
 import { postEntryOnce, voidEntryForSource, type DraftEntry } from "./ledger";
 import { getCommissionReport } from "./commission-metrics";
-import { getFinancePostingConfig } from "./founder-config";
+import { getExpenseCategoriesConfig, getFinancePostingConfig } from "./founder-config";
+import { expenseAccountMap } from "@/lib/expense-categories";
 import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
@@ -79,7 +80,9 @@ export async function runCommissionPayout(): Promise<ActionResult> {
         sourceId: COMMISSION_SOURCE(monthKey),
         postedById: session.user.id,
         lines: [
-          { accountCode: expenseAccountFor("TEAM_SALARIES"), side: "debit", amountMinor: totalInrMinor, currency: "INR", fxRate: ONE, isCogs: false },
+          // Through the founder's mapping, so commission accrues to whichever P&L line team pay
+          // posts to - re-pointing the category must move both halves or they would disagree.
+          { accountCode: expenseAccountFor("TEAM_SALARIES", expenseAccountMap(await getExpenseCategoriesConfig())), side: "debit", amountMinor: totalInrMinor, currency: "INR", fxRate: ONE, isCogs: false },
           { accountCode: ACCOUNT.PAYABLE, side: "credit", amountMinor: totalInrMinor, currency: "INR", fxRate: ONE },
         ],
       };

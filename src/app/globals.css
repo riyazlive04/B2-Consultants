@@ -17,22 +17,51 @@
   --bg-app: #f1f5fb;       /* app canvas - the "half-white" */
   --bg-surface: #ffffff;   /* cards, panels, modals */
   --bg-surface-2: #f4f8fe; /* insets: table headers, input wells, secondary panels */
-  --bg-sky: #e4effe;       /* soft blue tint panels (highlight boxes, empty states) */
-  --bg-sky-grad: linear-gradient(135deg, #e8f1fe 0%, #d9e9ff 100%); /* the ONE allowed gradient: hero strips */
+  --bg-sky: #e6edf9;       /* soft blue tint panels (highlight boxes, empty states) */
+  /* the ONE allowed gradient: hero strips. Re-tuned onto the brand blue's hue (214 deg)
+     so the hero reads as #003C8C diluted rather than as a second, unrelated blue. */
+  --bg-sky-grad: linear-gradient(135deg, #eaf0fb 0%, #d6e3f6 100%);
 
-  /* brand - one accent, used with restraint.
-     --primary carries WHITE TEXT (primary button) and is itself used as text on
-     --primary-soft (active nav), so it is tuned to clear 4.5:1 in both directions. */
-  --primary: #0a64e2;
-  --primary-strong: #0855c0;
-  --primary-soft: #e6f0fe;
-  --primary-tint: #bbd6ff;
-  --primary-rgb: 10, 100, 226; /* raw channels for rgba() tints */
+  /* ── brand ─────────────────────────────────────────────────────────────────────
+     Two colours, two jobs:
 
-  /* brand-indigo - the periwinkle of the B2 Consultants logo mark. Kept OUT of the
-     --primary family on purpose: --primary is the interactive blue, this is only ever
-     the logo's ink. Lightened in dark mode so the mark stays legible on a navy rail. */
-  --brand-indigo: #5b60c9;
+       BLUE  #003C8C   trust. The STRUCTURAL colour - nav, links, primary buttons,
+                       focus rings, charts, every default interactive surface. If a
+                       thing is part of how the app is built, it is blue.
+       RED   #ED1C24   bold action - "jump in, don't wait for perfect". Spent only
+                       where we ask someone to commit: book the call, sign, pay.
+
+     ── Where the two reds live, so they never get confused ─────────────────────────
+     Brand red and the danger red are different jobs wearing a similar hue, so they are
+     separated three ways and the rule is: KEEP ALL THREE.
+       1. Place   action red is overwhelmingly a PUBLIC-surface colour (/book, the
+                  signing page, the invoice); danger red is an in-app colour.
+       2. Form    action red is a SOLID FILL on a button. Danger is a soft fill or an
+                  outline, and always carries an icon.
+       3. Tone    --bad is darker and less saturated than --action (7.75:1 vs 4.99:1
+                  on white), so even side by side they do not read as the same red.
+     A solid, icon-less red button always means "commit", never "destroy".
+
+     Every ratio below is measured, not eyeballed. */
+  --primary: #003C8C;        /* 10.37:1 under a white label · 9.48:1 as text on the canvas */
+  --primary-strong: #002a63; /* hover / pressed - 13.89:1 */
+  --primary-soft: #e4ecf8;   /* active nav, tinted panels - --primary on it is 8.72:1 */
+  --primary-tint: #b3c6e4;   /* the edge of a soft fill */
+  --primary-rgb: 0, 60, 140; /* raw channels for rgba() tints */
+
+  /* The EXACT brand red, kept un-tuned because it is the identity. It measures 4.38:1 on
+     white: enough for the 3:1 that governs graphics (bars, rules, icons, a hero accent)
+     and NOT enough for the 4.5:1 that governs a 14px semibold button label. So it is the
+     colour of marks, never of text and never of a surface with text on it. */
+  --brand-red: #ED1C24;
+
+  /* The interactive red: the same hue darkened by the least that clears AA under a white
+     label. This - not --brand-red - is what a CTA button is actually filled with. */
+  --action: #dd1620;         /* 4.99:1 under a white label */
+  --action-strong: #b9121a;  /* hover / pressed - 6.64:1 */
+  --action-soft: #fde7e8;
+  --action-tint: #f6b8bb;
+  --action-rgb: 221, 22, 32;
 
   /* ink */
   --ink: #16203a;   /* primary text, headings, key figures - never pure black */
@@ -59,8 +88,12 @@
   --good-bg: #e4f7ee;
   --warn: #9a610e;
   --warn-bg: #fbefd7;
-  --bad: #cb2a31;
-  --bad-bg: #fce7e8;
+  /* Deepened from #cb2a31 when #ED1C24 became the brand's action red: at the old value the
+     two were close enough that a delete button and a "Book your call" button read as the
+     same colour. Now 7.75:1 on white against the action red's 4.99:1 - a visibly darker,
+     flatter red that still says danger on its own. See the brand block above. */
+  --bad: #a4161a;
+  --bad-bg: #fbe9ea;
 
   /* Status text on a chart tooltip. The tooltip surface is `var(--ink)`, and `--ink` INVERTS
      with the theme (near-black in light, near-white in dark) - so these must invert too, in
@@ -72,8 +105,12 @@
   --good-on-ink: #7ee2b0;
   --bad-on-ink: #ff9ea2;
 
-  /* data-viz - calm, blue-led; use in slot order */
-  --viz-1: #4b93f7;
+  /* data-viz - calm, blue-led; use in slot order.
+     Slot 1 is the brand blue lightened to work as a FILL (a #003C8C area on a white chart
+     is a hole, not a series). Red is deliberately ABSENT from the categorical ramp: these
+     charts also carry profit/loss sign and overdue state, and a red category sitting next
+     to a red loss bar makes both meaningless. */
+  --viz-1: #2f6fcc;
   --viz-2: #3fc0b7;
   --viz-3: #9b8cff;
   --viz-4: #f2a93b;
@@ -141,6 +178,12 @@
   --risk: var(--bad);
   --risk-soft: var(--bad-bg);
   --brass: var(--primary);
+  /* `--on-action` is separate from `--on-accent` because the red fill and the blue fill do
+     NOT want the same label colour in the same theme. Here both happen to be white; in the
+     dark theme the blue goes pale and the red stays saturated, and both end up near-black -
+     but only because #ED1C24 is bright enough to fail under white (4.38:1). Two tokens, so
+     each fill is measured on its own terms rather than inheriting the other's answer. */
+  --on-action: #ffffff;
   --chart-1: var(--viz-1);
   --chart-2: var(--viz-2);
   --chart-3: var(--viz-3);
@@ -183,14 +226,32 @@
   --bg-surface-2: #1c1c20;
   --bg-sky: #15171c;
   --bg-sky-grad: linear-gradient(135deg, #131519 0%, #1a1d24 100%);
+  /* Hue-matched to the light theme's #003C8C (both sit at 214 degrees), lightened because
+     the brand blue itself measures 1.9:1 on black - unreadable, and unusable as a fill.
+     Same hue, opposite end of the ramp: the app reads as one blue across both themes. */
   --primary: #5aa2ff;
   --primary-strong: #8ec3ff;
-  --primary-soft: #16243d;
+  --primary-soft: #0f1f38;
   /* Darkened from #37527f: `--primary-strong` on it is the soft button's HOVER state, and the
      old pair measured 4.07:1 - the label dimmed on hover, which is backwards. Now 6.35:1. */
-  --primary-tint: #24385c;
+  --primary-tint: #20365d;
   --primary-rgb: 90, 162, 255;
-  --brand-indigo: #9ca0f5;
+
+  /* The action red needs NO lightening for the dark theme - unlike the blue, #ED1C24 reads
+     fine on black, so the dark theme carries the EXACT brand red on its CTAs where the light
+     theme has to settle for a darkened one. The hover goes LIGHTER here (the light theme's
+     goes darker), because on black that is the direction that reads as "raised".
+
+     Its LABEL flips to near-black, though, and that is not a stylistic choice: white on
+     #ED1C24 measures 4.38:1 and fails, while the near-black ink makes 4.62:1. Red is the one
+     fill in the system bright enough to need dark text in the DARK theme. */
+  --brand-red: #ED1C24;
+  --action: #ED1C24;         /* 4.62:1 under --on-action below */
+  --action-strong: #ff5c63;  /* hover / pressed - 6.72:1 under the same ink */
+  --action-soft: #2b1013;
+  --action-tint: #5a1e22;
+  --action-rgb: 237, 28, 36;
+  --on-action: #05060a;
   --ink: #f3f4f6;
   --ink-2: #b6bac4;
   --ink-3: #959aa6;
@@ -212,7 +273,7 @@
      the dark, page-tuned tones (the light theme's `--good`/`--bad`), not the pale ones. Without
      this override the light-block values render mint-on-white at roughly 1.6:1. */
   --good-on-ink: #197e50;
-  --bad-on-ink: #cb2a31;
+  --bad-on-ink: #a4161a;
   --viz-grid: #26262c;
   --bg-frost: rgba(255, 255, 255, 0.06);
   --e-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.6);

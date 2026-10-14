@@ -21,11 +21,12 @@ const B2_LEVEL_OPTIONS = [
   { value: "ELITE", label: "Elite (120 days)" },
 ];
 
-// PRD2 §4.1: assigned coach is a dropdown (currently Karthick).
-const COACH_OPTIONS = [
-  { value: "Karthick", label: "Karthick" },
-  { value: "Ameen", label: "Ameen" },
-];
+// The coach picker's options - see the matching note in StudentDetailClient.
+//
+// Was a hardcoded two-name list with "Karthick" pre-selected, which is why the server-side
+// default could almost never fire: the form always submitted a name. Blank is first and is a
+// legitimate answer; the founder's default (Console → Delivery & team → Delivery defaults) is
+// what pre-selects.
 
 // CSV formula-injection guard (mirrors DataTable): a cell starting with = + - @
 // or a tab/CR is executed by Excel/Sheets - neutralise with a leading apostrophe.
@@ -35,7 +36,23 @@ const csvSafe = (v: string | number | null | undefined): string | number => {
 };
 
 /** Student list + add form (Admin) - one row per person; total-paid column sortable (PRD2 §4.6). */
-export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]; isAdmin: boolean; today: string }) {
+export function StudentsPanel({
+  rows,
+  isAdmin,
+  today,
+  coaches,
+  defaultCoach,
+}: {
+  rows: StudentListRow[];
+  isAdmin: boolean;
+  today: string;
+  coaches: { id: string; name: string }[];
+  defaultCoach: string;
+}) {
+  const coachOptions = [
+    { value: "", label: "- none -" },
+    ...coaches.map((c) => ({ value: c.name, label: c.name })),
+  ];
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -173,7 +190,7 @@ export function StudentsPanel({ rows, isAdmin, today }: { rows: StudentListRow[]
               <TextInput kind="int" name="totalSessionsPlanned" />
             </Field>
             <Field label="Assigned coach">
-              <Select name="assignedCoach" options={COACH_OPTIONS} defaultValue="Karthick" />
+              <Select name="assignedCoach" options={coachOptions} defaultValue={defaultCoach} />
             </Field>
             <Field label="Lead source" hint="Ghosted Blueprint tag drives Phase 3 attribution">
               <Select name="leadSource" options={[{ value: "", label: "-" }, ...optionsFrom(LEAD_SOURCE_LABELS)]} defaultValue="" />

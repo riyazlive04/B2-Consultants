@@ -97,6 +97,7 @@ export function WhatsAppSettingsForm({
     paymentEnabled: c.paymentEnabled,
     emiPreDueEnabled: c.emiPreDueEnabled,
     studentNudgesEnabled: c.studentNudgesEnabled,
+    studentWelcomeEnabled: c.studentWelcomeEnabled,
     // Not a cadence field: this one saves into the booking rules (see saveWatiSettings).
     autoCancelEnabled: rules.autoCancelEnabled,
   });
@@ -339,6 +340,20 @@ export function WhatsAppSettingsForm({
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <NumField name="studentRepeatHours" label="Repeat gap per student (hrs)" defaultValue={c.studentRepeatHours} />
             </div>
+          </ScheduleGroup>
+
+          <ScheduleGroup
+            title="Enrolment welcome"
+            hint="Sent once, when a student is seated in a batch - names their tutor, their first class and where to follow their progress. Nothing else in the app tells a new student they are enrolled."
+            name="studentWelcomeEnabled"
+            on={enabled.studentWelcomeEnabled}
+            onToggle={setOn("studentWelcomeEnabled")}
+          >
+            <p className="mt-3 text-caption text-ink-3">
+              No cadence to set - it fires on seating, once per student, and never repeats. Bind{" "}
+              <code>b2_student_welcome</code> first; the <code>_portal</code> variant also carries a
+              sign-in link and will skip for any student who has no login yet.
+            </p>
           </ScheduleGroup>
 
           {/* EMI pre-due - kept visually distinct because this is the one touchpoint that fans out

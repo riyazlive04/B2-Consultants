@@ -26,9 +26,10 @@ import type { IncomeFormCatalogues } from "@/lib/income-form";
 import { safeAction } from "@/lib/action-guard";
 import {
   optionsFrom,
-  EXPENSE_CATEGORY_LABELS,
   EXPENSE_BUSINESS_LINE_LABELS,
 } from "@/lib/labels";
+import { activeExpenseCategories, expenseCategoryOptions } from "@/lib/expense-categories";
+import { ACCOUNT, MONEY_ACCOUNTS } from "@/lib/chart-of-accounts";
 
 /**
  * The Record CTA's popup (this replaces the old menu that navigated to /finance): an Income and an
@@ -262,7 +263,24 @@ function ExpenseForm({ data, onClose }: { data: RecordFormData; onClose: () => v
           baseHint="INR, EUR, or both"
         />
         <Field label="Expense category">
-          <Select name="category" options={optionsFrom(EXPENSE_CATEGORY_LABELS)} defaultValue="TOOLS_SOFTWARE" />
+          <Select
+            name="category"
+            options={expenseCategoryOptions(data.expenseCategories)}
+            defaultValue={
+              activeExpenseCategories(data.expenseCategories).some((c) => c.code === "TOOLS_SOFTWARE")
+                ? "TOOLS_SOFTWARE"
+                : activeExpenseCategories(data.expenseCategories)[0]?.code ?? "OTHER"
+            }
+          />
+        </Field>
+        {/* Which account the money left. Defaulted to the INR bank, which is where every expense
+            was posted before the row could say otherwise - so leaving it alone changes nothing. */}
+        <Field label="Paid from" hint="The account the money actually left">
+          <Select
+            name="paidFromAccount"
+            options={MONEY_ACCOUNTS.map((a) => ({ value: a.code, label: a.label }))}
+            defaultValue={ACCOUNT.BANK_INR}
+          />
         </Field>
         <Field label="Business line" hint="Tag a cost that belongs to one business; leave Shared for rent, ads and tools.">
           <Select name="businessLine" options={optionsFrom(EXPENSE_BUSINESS_LINE_LABELS)} defaultValue="SHARED" />

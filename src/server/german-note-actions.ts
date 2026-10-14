@@ -6,6 +6,8 @@ import { Prisma } from "@prisma/client";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/prisma";
+import { sendStudentWelcome } from "./whatsapp";
+import { afterResponse } from "./after-response";
 import { requireAdmin, requireSection } from "@/lib/rbac";
 import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { parseDateInput } from "@/lib/dates";
@@ -271,6 +273,11 @@ export async function addExistingMember(batchId: string, form: FormData): Promis
       summary: `Added ${student.fullName} to the batch "${batch?.name ?? "German Note"}"`,
       meta: { batchId, studentId },
     });
+    // Same enrolment welcome the B2 seat path sends - a German Note learner joining a batch is
+    // the same event from the student's side. Once-ever and off by default; see sendStudentWelcome.
+    afterResponse(`student-welcome:${studentId}`, async () => {
+      await sendStudentWelcome(studentId, session.user.id);
+    });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { ok: false, error: "Already in this batch" };
@@ -323,6 +330,11 @@ export async function addNewMember(batchId: string, form: FormData): Promise<Act
     await prisma.income.updateMany({ where: { id: { in: ids } }, data: { studentId: student.id } });
   }
   const batch = await prisma.batch.findUnique({ where: { id: batchId }, select: { name: true } });
+  // Same enrolment welcome the B2 seat path sends - a German Note learner joining a batch is
+  // the same event from the student's side. Once-ever and off by default; see sendStudentWelcome.
+  afterResponse(`student-welcome:${student.id}`, async () => {
+    await sendStudentWelcome(student.id, session.user.id);
+  });
   await logActivity(session, {
     action: "gn.member.create",
     section: "german-note",

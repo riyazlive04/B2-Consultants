@@ -9,6 +9,8 @@ import { levelFitsBatchLine, normalizeBatchCode, capacityBand } from "@/lib/batc
 import { getLevels } from "./levels";
 import { logActivity, diffFields } from "./activity-log";
 import { seatStudentTasks } from "./session-tasks";
+import { sendStudentWelcome } from "./whatsapp";
+import { afterResponse } from "./after-response";
 import type { ActionResult } from "./finance-actions";
 
 /**
@@ -153,6 +155,23 @@ export async function seatEnrollment(
     entityId: enrollmentId,
     summary: `Seated ${enrollment.student.fullName} in ${batch.name}`,
     meta: { batchId, fromBatchId: enrollment.batchId, tasksBackfilled: backfilled },
+  });
+
+  /**
+   * The enrolment welcome - the first (and until now, only) thing the app would say to someone
+   * who has just become a student.
+   *
+   * Seating is the right trigger because it is the moment the message HAS something to say:
+   * this is the step that decides their batch, and therefore their tutor and their first class.
+   * Firing on enrolment instead would send "your tutor is …" before anyone had picked one.
+   *
+   * Deferred, and never allowed to fail the seat: `sendStudentWelcome` resolves an outcome
+   * rather than throwing, it is a once-ever send guarded inside, and it is a no-op until the
+   * founder arms `studentWelcomeEnabled`. A student who was seated before it was armed still
+   * gets their welcome the first time anyone re-seats them, which is the recoverable direction.
+   */
+  afterResponse(`student-welcome:${enrollment.studentId}`, async () => {
+    await sendStudentWelcome(enrollment.studentId, session.user.id);
   });
 
   revalidatePath("/students");

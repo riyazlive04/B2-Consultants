@@ -29,6 +29,25 @@ const taskSchema = z.object({
 });
 
 /**
+ * Admin, or the tutor who runs this batch - the same test `attendance-actions.ts` applies
+ * before letting anyone mark a register, and for the same reason.
+ *
+ * `requireSection("german-note")` on its own is NOT a guard here: that section is granted to
+ * the STUDENT role by default (lib/sections.ts), so every action in this file was reachable
+ * by any signed-in student. Every export is a POST endpoint - this is a "use server" module -
+ * so "no component calls it" was never the protection it looked like.
+ */
+async function canManageBatch(
+  session: { role: string; user: { id: string } },
+  batchId: string,
+): Promise<boolean> {
+  if (session.role === "ADMIN") return true;
+  if (session.role !== "TUTOR") return false;
+  const batch = await prisma.batch.findUnique({ where: { id: batchId }, select: { tutorId: true } });
+  return batch?.tutorId === session.user.id;
+}
+
+/**
  * Assign a task, fanning out one completion row per student currently in the batch.
  *
  * The fan-out is MATERIALISED rather than derived. A computed "who hasn't done it" set is
@@ -61,6 +80,9 @@ export async function createSessionTask(sessionId: string, form: FormData): Prom
     },
   });
   if (!classSession) return { ok: false, error: "Session not found" };
+  // Who may set homework for a batch: its tutor, or an admin. Previously anyone holding the
+  // german-note section could assign work to any batch, including a student in another one.
+  if (!(await canManageBatch(session, classSession.batchId))) return { ok: false, error: "Not allowed" };
 
   const last = await prisma.sessionTask.findFirst({
     where: { sessionId },
@@ -119,6 +141,13 @@ export async function createSessionTask(sessionId: string, form: FormData): Prom
  * task list and looks fully up to date - the exact opposite of the truth.
  */
 export async function seatStudentTasks(batchId: string, studentId: string): Promise<number> {
+  // Exported from a "use server" module, so it is an endpoint whether or not it was meant to
+  // be one, and it had no authorization of any kind. Its one real caller (batch-actions.ts
+  // `seat`) is already admin/tutor-guarded, so this re-states that guard rather than adding
+  // a new rule - it just stops the endpoint standing open on its own.
+  const session = await requireSection("german-note");
+  if (!(await canManageBatch(session, batchId))) return 0;
+
   const tasks = await prisma.sessionTask.findMany({
     where: { session: { batchId } },
     select: { id: true },
@@ -150,11 +179,24 @@ export async function completeSessionTask(
     where: { id: completionId },
     select: {
       studentId: true,
-      task: { select: { title: true } },
-      student: { select: { fullName: true } },
+      task: { select: { title: true, session: { select: { batchId: true } } } },
+      student: { select: { fullName: true, userId: true } },
     },
   });
   if (!row) return { ok: false, error: "Task not found" };
+
+  /**
+   * Whose box is this? Either the student it belongs to, or someone who runs their batch.
+   *
+   * There was no check at all here. Any signed-in student could tick (or un-tick) any other
+   * student's coursework by id - and because the write-through below pushes the result onto
+   * that student's Enrollment, it also moved a row on the at-risk radar the coaches work from.
+   */
+  const isOwner = row.student.userId !== null && row.student.userId === session.user.id;
+  const batchId = row.task.session.batchId;
+  if (!isOwner && !(await canManageBatch(session, batchId))) {
+    return { ok: false, error: "Not allowed" };
+  }
 
   await prisma.sessionTaskCompletion.update({
     where: { id: completionId },
@@ -188,8 +230,21 @@ export async function completeSessionTask(
   return { ok: true };
 }
 
-/** A student's outstanding coursework across every batch they are in. */
+/**
+ * A student's outstanding coursework across every batch they are in.
+ *
+ * Takes a studentId, so it has to prove the caller is allowed to see that student: this is
+ * an endpoint, and it used to answer for ANY id handed to it, with no session check at all.
+ * A student may read their own; Admin and a tutor may read anyone's (a tutor already sees
+ * their batch rosters, and narrowing further would need a per-batch intersection this
+ * read's callers do not have).
+ */
 export async function studentTasks(studentId: string) {
+  const session = await requireSection("german-note");
+  if (session.role !== "ADMIN" && session.role !== "TUTOR") {
+    const own = await prisma.student.count({ where: { id: studentId, userId: session.user.id } });
+    if (own === 0) return [];
+  }
   const rows = await prisma.sessionTaskCompletion.findMany({
     where: { studentId },
     select: {

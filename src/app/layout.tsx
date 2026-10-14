@@ -38,7 +38,9 @@ export const metadata: Metadata = {
     template: "%s · B2 Consultants",
   },
   description: "Private internal dashboard for B2 Consultants",
-  icons: { icon: "/icon.svg" },
+  // No explicit `icons` entry: `src/app/icon.png` is picked up by the file convention and served
+  // with a content hash, so the browser cannot keep showing the old redrawn mark from cache.
+  // Naming a path here would pin a URL that the convention does not actually serve.
   robots: { index: false, follow: false },
 };
 

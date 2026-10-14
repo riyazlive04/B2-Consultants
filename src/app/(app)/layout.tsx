@@ -26,7 +26,13 @@ import { computeNotifications } from "@/server/notifications";
  */
 async function RunwaySlot() {
   const runway = await getRunwaySnapshot();
-  return <RunwayBadge months={runway.runwayMonths} />;
+  return (
+    <RunwayBadge
+      months={runway.runwayMonths}
+      bands={runway.runwayBands}
+      burnWindowMonths={runway.burnWindowMonths}
+    />
+  );
 }
 
 async function BellSlot({ role, userId }: { role: AppRole; userId: string }) {

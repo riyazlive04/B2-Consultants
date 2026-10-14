@@ -17,21 +17,24 @@ import { optionalRule, rule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
 import { syncPayoutExpense, type PayoutForSync } from "./finance-autopost";
 
-/** Telecaller Pay is Admin-only (Ameen). Every action re-checks. */
+/** The bonus-and-commission board is Admin-only (Ameen). Every action re-checks. */
 
 /** Shape a payout row + its person's name into the finance auto-post argument. */
 function payoutSyncArg(
   row: {
     id: string; month: Date; bonusInrMinor: bigint; bonusEurMinor: bigint;
     commInrMinor: bigint; commEurMinor: bigint; fxRateUsed: PayoutForSync["fxRateUsed"];
-    status: "PENDING" | "PAID";
+    status: "PENDING" | "PAID"; teamProfileId: string;
   },
   vendorName: string,
 ): PayoutForSync {
   return {
     id: row.id, month: row.month, bonusInrMinor: row.bonusInrMinor, bonusEurMinor: row.bonusEurMinor,
     commInrMinor: row.commInrMinor, commEurMinor: row.commEurMinor, fxRateUsed: row.fxRateUsed,
-    status: row.status, vendorName,
+    // Carried so the auto-posted expense LINKS to the person, not just names them: Finance →
+    // Team payments sums a link, and a payout that only wrote `vendor` would sit outside the
+    // very pay history it belongs to.
+    status: row.status, vendorName, teamProfileId: row.teamProfileId,
   };
 }
 
@@ -39,7 +42,7 @@ function payoutSyncArg(
 const moneyInput = optionalRule("money");
 
 const payoutSchema = z.object({
-  teamProfileId: z.string().min(1, "Choose a telecaller"),
+  teamProfileId: z.string().min(1, "Choose who this is for"),
   month: z.string().regex(/^\d{4}-\d{2}$/, "Pick a month"),
   bonusInr: moneyInput,
   bonusEur: moneyInput,
@@ -106,7 +109,7 @@ function payoutShape(p: PayoutAmounts) {
 }
 
 const PAYOUT_FIELD_LABELS: Record<string, string> = {
-  teamProfileId: "Telecaller", month: "Month", bonusInr: "Bonus (INR)", bonusEur: "Bonus (EUR)",
+  teamProfileId: "Paid to", month: "Month", bonusInr: "Bonus (INR)", bonusEur: "Bonus (EUR)",
   commInr: "Commission (INR)", commEur: "Commission (EUR)", reason: "Reason", status: "Status",
 };
 
@@ -125,7 +128,7 @@ export async function createPayout(form: FormData): Promise<ActionResult> {
 
   // Guard the FK so a stale/forged id can't 500 the action.
   const profile = await prisma.teamProfile.findUnique({ where: { id: d.teamProfileId } });
-  if (!profile) return { ok: false, error: "That telecaller no longer exists" };
+  if (!profile) return { ok: false, error: "That team member no longer exists" };
 
   const fx = await getTodayInrPerEur();
   const row = await prisma.telecallerPayout.create({

@@ -11,6 +11,7 @@ import { toast } from "@/components/ui/feedback";
 import { Card, Pill } from "@/components/ui/kit";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatDate } from "@/lib/format";
 import { LOG_VARIANT_LABELS, optionsFrom, TEAM_STATUS_LABELS } from "@/lib/labels";
 import { safeAction } from "@/lib/action-guard";
@@ -209,6 +210,21 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
             <div className="flex items-end pb-1">
               <CheckboxField name="worksSaturdays" label="Works Saturdays" defaultChecked={editing?.worksSaturdays ?? true} />
             </div>
+            {/*
+              ── AGREED MONTHLY PAY ────────────────────────────────────────────────────
+              What Finance → Team payments opens on when this person is paid. Blank means
+              "nothing agreed here", which is the truth for someone paid per batch (tutor fees)
+              or on commission - and a blank pre-fill is better than a wrong one.
+
+              Changing it rewrites nothing: what was actually paid is on the expense rows, each
+              with its own amount and its own stamped FX rate.
+            */}
+            <Field label="Monthly pay (₹)" hint="Pre-fills Finance → Team payments. Blank = none agreed.">
+              <MoneyInput currency="INR" name="monthlyPayInr" defaultValue={editing?.monthlyPayInr ?? ""} />
+            </Field>
+            <Field label="Monthly pay (€)" hint="For someone paid in euro. Leave blank otherwise.">
+              <MoneyInput currency="EUR" name="monthlyPayEur" defaultValue={editing?.monthlyPayEur ?? ""} />
+            </Field>
             <div className="sm:col-span-2 lg:col-span-3">
               <Field label="Key responsibilities" hint="Plain English - what this person owns every day">
                 <TextArea kind="text" name="keyResponsibilities" defaultValue={editing?.keyResponsibilities ?? ""} />

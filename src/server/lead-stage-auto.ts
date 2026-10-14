@@ -71,10 +71,55 @@ export async function advanceLeadStageForWhatsApp(leadId: string, kind: WhatsApp
  *
  * Returns whether the card actually moved, so the caller can log it honestly.
  */
+/**
+ * Mark this lead's upcoming discovery booking as confirmed, whatever channel the answer
+ * arrived on. Idempotent and narrow by design:
+ *
+ *  - only a BOOKED booking that still holds a slot in the FUTURE. A past call is history,
+ *    and confirming it would reopen nothing;
+ *  - only one that is not already confirmed, so a second yes does not move the timestamp;
+ *  - `updateMany` with the full condition set, so the guard is in the database rather than
+ *    in a read-then-write that two replies could interleave on.
+ *
+ * Returns whether a booking was actually stamped, for callers that want to log it.
+ */
+export async function confirmLiveBookingForLead(leadId: string): Promise<boolean> {
+  const res = await prisma.bookingRequest.updateMany({
+    where: {
+      leadId,
+      status: "BOOKED",
+      confirmedAt: null,
+      slot: { is: { startsAt: { gt: new Date() } } },
+    },
+    data: { confirmedAt: new Date() },
+  });
+  return res.count > 0;
+}
+
 export async function markDiscoveryConfirmed(
   leadId: string,
   channel: "whatsapp" | "call" | "email" | "manual",
 ): Promise<boolean> {
+  /**
+   * ── Stamp the BOOKING, not just the board ───────────────────────────────────────
+   * `BookingRequest.confirmedAt` is the one field the auto-cancel engine reads: its
+   * candidate query is `confirmedAt: null`, and it consults nothing else. Only the WATI
+   * webhook was setting it. A verbal yes on a Step-16 confirmation call, and a yes
+   * detected from an email reply, both moved the card and set `whatsappConfirmed` on the
+   * journey - and left the booking looking unanswered.
+   *
+   * So two of the three confirmation channels the founder built were invisible to the
+   * engine that acts on confirmation, and arming the loop would have released the slot of
+   * a prospect who had already told a telecaller they were coming - then messaged them to
+   * say their call was cancelled for not replying.
+   *
+   * Stamped HERE because this is the one function every channel already calls, so a
+   * channel added later cannot forget it. Above the `moved` check on purpose: a lead
+   * already sitting in DISCO_BOOKED returns false from that check, and their booking would
+   * otherwise never be stamped at all.
+   */
+  await confirmLiveBookingForLead(leadId);
+
   const moved = await advanceLeadStage(leadId, "DISCO_BOOKED", [
     "NEW_LEAD",
     "WHATSAPP_SENT",

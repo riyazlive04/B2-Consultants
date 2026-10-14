@@ -42,7 +42,7 @@
     ".next-dev-verify/types/**/*.ts",
     ".next-v/types/**/*.ts",
     ".next-local/types/**/*.ts",
-    ".next-localdemo/types/**/*.ts"
+    ".next-localdemo/types/**/*.ts",
   ],
   "exclude": [
     "node_modules",

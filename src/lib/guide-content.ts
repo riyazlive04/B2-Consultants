@@ -166,7 +166,7 @@ export const GUIDES: GuideEntry[] = [
     what: "Survival math: runway, break-even, receivables, payables. Admin-only.",
     steps: [
       "Enter the bank balance every Monday - the 12-week chart and runway update from it.",
-      "Runway = cash ÷ average of the last 3 months' expenses; green ≥6mo, amber 3-6, red <3.",
+      "Runway = cash ÷ average of the last few months' expenses; the window and the green/amber/red bands are set in Console → Cash targets (they ship as 3 months, ≥6mo green, 3-6 amber, <3 red).",
       "Receivables auto-pull from Finance pending payments - never enter them twice.",
       "Payables hold fixed costs; their monthly total is your break-even revenue line.",
     ],

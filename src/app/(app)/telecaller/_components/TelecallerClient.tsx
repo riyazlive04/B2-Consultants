@@ -43,7 +43,7 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const hasTelecallers = board.teamOptions.length > 0;
+  const hasTeam = board.telecallers.length > 0;
   const selectedProfile = editing?.teamProfileId ?? prefill ?? board.teamOptions[0]?.value ?? "";
 
   const submit = async (form: FormData) => {
@@ -90,7 +90,7 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
   };
 
   const columns: Column<PayoutRow>[] = [
-    { key: "name", header: "Telecaller", cell: (r) => r.name, value: (r) => r.name },
+    { key: "name", header: "Paid to", cell: (r) => r.name, value: (r) => r.name },
     {
       key: "bonus", header: "Bonus", align: "right",
       cell: (r) => <span className="tnum">{pair(r.bonusInrRaw, r.bonusEurRaw)}</span>,
@@ -136,23 +136,35 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
 
   return (
     <section className="space-y-6">
-      {/* Telecaller call-context cards - the basis for the reward */}
-      {hasTelecallers ? (
+      {/*
+        One card per person, with call counts for the two telecaller functions as the context
+        their reward is usually judged on. Everyone else simply has no counts - a tutor's bonus
+        is not measured in calls, and an empty row of pills says so more honestly than a zero.
+      */}
+      {hasTeam ? (
         <div>
           <h2 className="mb-3 font-display text-h2 font-semibold">
-            Telecallers <span className="text-sm font-normal text-muted">· calls this month</span>
+            The team <span className="text-sm font-normal text-muted">· calls this month, where they are counted</span>
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {board.telecallers.map((t) => (
               <div key={t.teamProfileId} className="rounded-card border border-line bg-surface p-4 shadow-card">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-display text-base font-semibold" title={t.name}>{t.name}</p>
-                    <p className="truncate text-xs text-muted">{LOG_VARIANT_LABELS[t.logVariant] ?? t.roleTitle}</p>
+                    <p className="truncate font-display text-base font-semibold" title={t.name}>
+                      {t.name}
+                      {/* Here only because they were paid in the month on screen. */}
+                      {!t.active && <span className="ml-1.5 text-caption font-normal text-muted">former</span>}
+                    </p>
+                    <p className="truncate text-xs text-muted">{t.roleTitle || LOG_VARIANT_LABELS[t.logVariant]}</p>
                   </div>
-                  <Btn variant="soft" size="sm" onClick={() => assignTo(t.teamProfileId)}>
-                    Assign
-                  </Btn>
+                  {/* Nothing to assign to somebody who has left: the only honest edit is to the
+                      payout that already exists, in the table below. */}
+                  {t.active && (
+                    <Btn variant="soft" size="sm" onClick={() => assignTo(t.teamProfileId)}>
+                      Assign
+                    </Btn>
+                  )}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {t.calls.map((c) => (
@@ -174,13 +186,13 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
         </div>
       ) : (
         <p className="rounded-card border border-line bg-surface p-5 text-sm text-muted shadow-card">
-          No active telecallers yet. Add team members with the <strong>Appointment Setter</strong> or{" "}
-          <strong>Discovery Call Specialist</strong> role in <strong>Users</strong>, then come back to assign their pay.
+          No team profiles yet. Add people under <strong>People</strong>, then come back to assign a
+          bonus or commission to any of them.
         </p>
       )}
 
       {/* Assignment form */}
-      {hasTelecallers && (
+      {hasTeam && (
         <Card
           title={
             <CardTitle icon={<Gift size={18} />}>

@@ -21,11 +21,14 @@ import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { signalForRunway } from "@/lib/signals";
 import { requireSection } from "@/lib/rbac";
 import { getCashOverview } from "@/server/cash-metrics";
+import { getEquityOverview } from "@/server/equity-metrics";
+import { getExpenseCategoriesConfig } from "@/server/founder-config";
 import { getStudentCodeMap } from "@/server/students-metrics";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { AgeAnalysis } from "./_components/AgeAnalysis";
 import { CashChart } from "./_components/CashChart";
 import { CashPeriodSwitch } from "./_components/CashPeriodSwitch";
+import { EquitySection } from "./_components/EquitySection";
 import { CashPositionForm, CashPositionHistory, GrowthOverrideForm, PayablesSection } from "./_components/CashClient";
 import { TopReceivablesTable, ReceivablesTable } from "./_components/CashTables";
 
@@ -41,16 +44,24 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
   await requireSection("cash"); // Admin-only (PRD3 §2)
   // F6: chart window from the URL, defaulting to the 12 weeks this page always showed.
   const period = parseCashPeriod(searchParams?.period);
-  const [data, studentCodeById, fx] = await Promise.all([
+  const [data, studentCodeById, fx, equity, expenseCategories] = await Promise.all([
     getCashOverview(period),
     getStudentCodeMap(),
     // For the payables form's ₹/€ pair - the preview has to use the rate the server will stamp.
     getTodayInrPerEur(),
+    // Who has put money into the business, and taken it out.
+    getEquityOverview(),
+    // The founder's category list - what the payables form offers and how its table names a bill.
+    getExpenseCategoriesConfig(),
   ]);
   const { runway, receivables, commitments } = data;
   const today = toDateInputValue(istToday());
   const asOf = formatDate(istToday().toISOString());
-  const runwayLevel = runway.runwayMonths === null ? null : signalForRunway(runway.runwayMonths);
+  // The green/amber bands and the gauge's horizon are the founder's (Console → Cash targets).
+  const runwayLevel =
+    runway.runwayMonths === null ? null : signalForRunway(runway.runwayMonths, runway.runwayBands);
+  const targets = data.targets;
+  const targetLabel = formatInrMinor(targets.monthlyRevenueTargetInrMinor, { compact: true });
 
   // The date the money actually runs out at this burn - a deadline lands harder
   // than "3.1 months". Approximate month = 30.44 days; rounded to the day.
@@ -62,7 +73,8 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
   // runway gauge geometry (ring fills toward a 12-month horizon)
   const gaugeR = 72;
   const gaugeC = 2 * Math.PI * gaugeR;
-  const gaugeFrac = runway.runwayMonths === null ? 0 : Math.min(1, runway.runwayMonths / 12);
+  const gaugeFrac =
+    runway.runwayMonths === null ? 0 : Math.min(1, runway.runwayMonths / targets.runwayHorizonMonths);
   const gaugeColor = runwayLevel ? `var(--${runwayLevel})` : "var(--muted)";
   // hero band coloured by the runway signal (green ≥6, amber 3–6, red <3) - soft bg, not a gradient
   const gaugeBand = runwayLevel ? `var(--${runwayLevel}-soft)` : "var(--surface-2)";
@@ -138,7 +150,14 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
                 Cash in Hand
                 <InfoHint
                   className="ml-1"
-                  text="Money actually available - income received minus expenses paid, accumulated to the date of the latest cash position entry. Not a forecast, and not the same as profit on paper."
+                  /* Says what the figure IS. It used to describe "income received minus expenses
+                     paid, accumulated to the date of the latest cash position entry" - a
+                     calculation this app does not perform: `getRunwaySnapshot` reads the bank
+                     balance typed on the latest weekly cash position, full stop. Which matters,
+                     because everything downstream divides by it: a reader who believed the old
+                     description would have gone looking for the arithmetic error rather than for
+                     the Monday entry nobody made. */
+                  text="The bank balance entered on the most recent weekly cash position - what the account actually held that day, as typed. Not a forecast, not derived from income and expenses, and not the same as profit on paper."
                 />
                 {runway.cashStale ? " · ⚠ stale" : runway.cashDate ? ` · ${formatDate(runway.cashDate)}` : ""}
               </p>
@@ -227,7 +246,7 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
             <p className="mt-2 text-sm text-muted">
               {runway.cashInr === null
                 ? "Enter a weekly bank balance to compute runway."
-                : `Cash ${compact(runway.cashInr)} ÷ burn ${compact(runway.burnInr)}/mo (avg last 3 months of expenses)`}
+                : `Cash ${compact(runway.cashInr)} ÷ burn ${compact(runway.burnInr)}/mo (avg last ${runway.burnWindowMonths} month${runway.burnWindowMonths === 1 ? "" : "s"} of expenses)`}
             </p>
             {cashOutDate && (
               <p className="tnum mt-1.5 text-sm font-semibold" style={{ color: gaugeColor }}>
@@ -257,7 +276,13 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
                 />
               </div>
             )}
-            <p className="mt-2 text-xs text-muted">Green ≥ 6 mo · Amber 3-6 mo · Red &lt; 3 mo</p>
+            {/* The bands READ from the config rather than restating it - the one place this went
+                wrong before was a caption that outlived the thresholds it described. */}
+            <p className="mt-2 text-xs text-muted">
+              Green ≥ {targets.runwayGreenMonths} mo · Amber {targets.runwayAmberMonths}-
+              {targets.runwayGreenMonths} mo · Red &lt; {targets.runwayAmberMonths} mo ·{" "}
+              <a className="underline hover:text-ink" href="/console" title="Console → Money → Cash targets">change</a>
+            </p>
           </div>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-4 border-t border-line pt-5 text-sm sm:grid-cols-4">
@@ -273,7 +298,7 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
             </p>
           </div>
           <div>
-            <p className="text-muted">Months to ₹8L / month</p>
+            <p className="text-muted">Months to {targetLabel} / month</p>
             <p className="font-display text-h2 font-semibold tnum">
               {data.growth.monthsToTarget === null ? "-" : data.growth.monthsToTarget === 0 ? "Reached" : data.growth.monthsToTarget}
             </p>
@@ -409,10 +434,28 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
             ),
           },
           {
+            /*
+              Capital, where "Personal savings (planning only)" used to be a single box on the
+              form above. See _components/EquitySection - it is real money, it is not revenue,
+              and it is not added on top of Cash in Hand.
+            */
+            label: `Owner's equity${equity.unpostedCount ? " ⚠" : ""}`,
+            content: (
+              <EquitySection
+                overview={equity}
+                today={today}
+                fxRate={Number(fx.rate)}
+                fxStale={fx.stale}
+                fxDate={fx.date.toISOString()}
+              />
+            ),
+          },
+          {
             label: "Payables",
             content: (
               <PayablesSection
                 payables={data.payables}
+                categories={expenseCategories}
                 fxRate={Number(fx.rate)}
                 fxStale={fx.stale}
                 fxDate={fx.date.toISOString()}

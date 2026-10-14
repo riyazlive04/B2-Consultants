@@ -228,7 +228,7 @@ export function SignCeremony({
                 Back
               </Btn>
               <Btn
-                variant="primary"
+                variant="action"
                 onClick={submit}
                 busy={pending}
                 disabled={!signature || !consent}

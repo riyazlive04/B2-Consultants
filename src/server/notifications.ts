@@ -301,7 +301,7 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
 
     // Auto-saved on their behalf → ask them to amend it while they still can. This matters for
     // money: auto-capture can't see followUpMessagesSent, so an unamended row reads LOW on the
-    // Telecaller Pay board. The window is short, so this is a "watch", not an "info".
+    // Bonus & Commission board. The window is short, so this is a "watch", not an "info".
     if (
       profile?.status === "ACTIVE" &&
       todayLog?.source === "EOD_AUTO" &&
@@ -371,6 +371,51 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
      */
     for (const d of await deliveryNotifications()) {
       items.push({ id: d.key, severity: d.severity, title: d.title, body: d.body, href: d.href });
+    }
+
+    /**
+     * Weekend sprint check-ins waiting on a coach (portal issue 12).
+     *
+     * The student's form asks "Anything in the way? Blockers, questions for your coach…".
+     * Until now the answer landed in a SprintWeek row and an activity-log line, and nothing
+     * told anybody it was there - it surfaced only if someone happened to open that student's
+     * record. A prompt for a blocker that nobody is paged about is worse than not asking.
+     *
+     * Two states are worth raising, and they are different kinds of thing:
+     *   · answered-but-unjudged (PENDING with an `actual`) - a verdict is owed, because the
+     *     target was prose and the arithmetic deliberately declined to guess;
+     *   · MISSED in the last fortnight - the student said they fell short, which is the
+     *     earliest honest signal of a student slipping.
+     */
+    const [awaitingReview, missedRecently] = await Promise.all([
+      prisma.sprintWeek.count({
+        where: { status: "PENDING", actual: { not: null }, enrollment: { status: "ACTIVE" } },
+      }),
+      prisma.sprintWeek.count({
+        where: {
+          status: "MISSED",
+          weekEnd: { gte: fourteenDaysAgo },
+          enrollment: { status: "ACTIVE" },
+        },
+      }),
+    ]);
+    if (awaitingReview > 0) {
+      items.push({
+        id: "sprint-awaiting-review",
+        severity: "watch",
+        title: `${awaitingReview} sprint check-in${awaitingReview === 1 ? "" : "s"} waiting on you`,
+        body: "A student has said what they got done; the week still needs your verdict.",
+        href: "/students",
+      });
+    }
+    if (missedRecently > 0) {
+      items.push({
+        id: "sprint-missed",
+        severity: "risk",
+        title: `${missedRecently} missed sprint week${missedRecently === 1 ? "" : "s"} in the last fortnight`,
+        body: "Students who told us they fell short of their target - worth a conversation.",
+        href: "/students",
+      });
     }
 
     /**

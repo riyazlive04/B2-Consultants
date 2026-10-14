@@ -70,6 +70,12 @@ const VARIANTS: Record<LoginVariant, {
   /** Students are provisioned from a Student record - they cannot request a seat here. */
   allowSignup: boolean;
   next: string;
+  /** Sits under the wordmark in the brand panel. */
+  kicker: string;
+  /** The two chips on the brand panel. Internal metrics must not reach a student. */
+  badges: { label: string; tone: "good" | "primary" }[];
+  /** The closing line of the brand panel. */
+  footnote: string;
 }> = {
   team: {
     heading: "Welcome back",
@@ -79,6 +85,12 @@ const VARIANTS: Record<LoginVariant, {
       "Finance, pipeline, students and team - every number traced to a balanced ledger. Sign in with the role that matches your seat.",
     allowSignup: true,
     next: "/",
+    kicker: "Business cockpit",
+    badges: [
+      { label: "Ledger-backed numbers", tone: "good" },
+      { label: "Live speed-to-lead", tone: "primary" },
+    ],
+    footnote: "Internal tool · access by invitation",
   },
   student: {
     heading: "Student portal",
@@ -90,6 +102,17 @@ const VARIANTS: Record<LoginVariant, {
     // offering a request form here would collect requests nobody can action.
     allowSignup: false,
     next: "/my-journey",
+    kicker: "Student portal",
+    // NOT the team's chips. "Business cockpit", "Ledger-backed numbers" and "Live
+    // speed-to-lead" are internal sales and finance metrics, and they were rendering on
+    // the student's own sign-in page - along with a footer telling them this is an
+    // internal tool they need an invitation for, which is the exact line this variant
+    // was created to remove. Only the headline and blurb were ever being swapped.
+    badges: [
+      { label: "Your milestones", tone: "primary" },
+      { label: "Your agreement & payments", tone: "good" },
+    ],
+    footnote: "Your coach sets up your login from your student record.",
   },
   tutor: {
     heading: "Tutor sign-in",
@@ -99,6 +122,12 @@ const VARIANTS: Record<LoginVariant, {
       "The cohorts you teach, the sessions you have delivered, and the community your students learn in.",
     allowSignup: true,
     next: "/german-note",
+    kicker: "German Note",
+    badges: [
+      { label: "Your batches", tone: "primary" },
+      { label: "Class recordings", tone: "good" },
+    ],
+    footnote: "Tutor access · arranged with B2 Consultants",
   },
 };
 
@@ -206,10 +235,10 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
       <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <BrandLogo className="h-10 w-10 flex-none" />
+            <BrandLogo className="h-10 flex-none" />
             <span className="flex flex-col leading-tight">
               <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
-              <span className="text-caption text-ink-2">Business cockpit</span>
+              <span className="text-caption text-ink-2">{v.kicker}</span>
             </span>
           </div>
           <ThemeToggle frosted />
@@ -221,19 +250,23 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
           </h1>
           <p className="mt-3.5 text-[15px] leading-relaxed text-ink-2">{v.heroBlurb}</p>
           <div className="mt-6 flex flex-wrap gap-2">
-            <span className="rounded-full bg-[var(--bg-frost)] px-3.5 py-1.5 text-xs font-semibold text-good">
-              Ledger-backed numbers
-            </span>
-            <span className="rounded-full bg-[var(--bg-frost)] px-3.5 py-1.5 text-xs font-semibold text-primary-strong">
-              Live speed-to-lead
-            </span>
+            {v.badges.map((b) => (
+              <span
+                key={b.label}
+                className={`rounded-full bg-[var(--bg-frost)] px-3.5 py-1.5 text-xs font-semibold ${
+                  b.tone === "good" ? "text-good" : "text-primary-strong"
+                }`}
+              >
+                {b.label}
+              </span>
+            ))}
           </div>
         </div>
 
         {/* The same credit the signed-in app carries, folded into the line that was already
             here rather than bolted on as a second footer - this pane has one closing line. */}
         <p className="text-caption text-ink-3">
-          Internal tool · access by invitation · Developed by{" "}
+          {v.footnote} · Developed by{" "}
           <a
             href="https://sirahdigital.in/"
             target="_blank"
@@ -252,10 +285,10 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
           {/* mobile brand row (brand panel is hidden below lg) */}
           <div className="mb-6 flex items-center justify-between lg:hidden">
             <div className="flex items-center gap-2.5">
-              <BrandLogo className="h-9 w-9 flex-none" />
+              <BrandLogo className="h-9 flex-none" />
               <span className="flex flex-col leading-tight">
                 <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-                <span className="text-caption text-ink-3">Business cockpit</span>
+                <span className="text-caption text-ink-3">{v.kicker}</span>
               </span>
             </div>
             <ThemeToggle />

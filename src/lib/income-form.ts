@@ -1,5 +1,5 @@
 import { BUSINESS_LINE_LABELS, type BusinessLine } from "./business-line";
-import { firstShare, planShares, type MoneyText } from "./instalment-amounts";
+import { firstShare, planShares, remainingShares, type MoneyText } from "./instalment-amounts";
 import { instalmentExtraFor } from "./instalment-plan";
 import type { InstalmentPlanConfig, PaymentTypesConfig } from "./config-schema";
 import { formatDate, formatInrMinor, minorToMajorString } from "./format";
@@ -52,6 +52,14 @@ export type IncomeFormDraft = {
   fee: MoneyText;
   /** The plan surcharge. Pre-filled from the Console, still the operator's to change. */
   extra: MoneyText;
+  /**
+   * The FIRST instalment, when somebody has typed it. Null = divide the total equally.
+   *
+   * Null is "nobody has said", not zero: an equal split is the default and the box shows it, but
+   * the moment a figure is typed the remaining instalments are re-cut from what is left rather
+   * than the typed figure being thrown away (which is what a derived, hidden field did).
+   */
+  firstInstalment: MoneyText | null;
   instalmentCount: number | null;
   /** YYYY-MM-DD. The day the money arrived. */
   date: string | null;
@@ -73,6 +81,7 @@ export function emptyDraft(today: string): IncomeFormDraft {
     pendingPaymentId: null,
     fee: { inr: "", eur: "" },
     extra: { inr: "", eur: "" },
+    firstInstalment: null,
     instalmentCount: null,
     date: today,
     student: { text: "", value: "" },
@@ -169,10 +178,20 @@ export type DerivedIncomeForm = {
   blockSaveReason: string | null;
   /** True when the top amount is the whole fee rather than the money in hand. */
   planMode: boolean;
-  /** The fee cut into equal instalments. Empty when not in plan mode. */
+  /** The fee cut into instalments - the first one as typed, if it was. Empty outside plan mode. */
   shares: MoneyText[];
   /** The first instalment - the money actually being banked today. */
   banked: MoneyText;
+  /** The instalments after the first - what the schedule rows below the form hold. */
+  scheduleShares: MoneyText[];
+  /**
+   * The equal share, ignoring any typed first instalment - what the "Paid today" box SUGGESTS.
+   *
+   * Kept apart from `banked` so the form can tell "nobody has touched this" from "somebody typed
+   * the same number": the box reports its value on mount, and treating that as an override would
+   * freeze the suggestion the first time the fee changed.
+   */
+  equalShare: MoneyText;
   feeCurrencies: MoneyCurrency[];
   methodOptions: { value: string; label: string }[];
   paymentMethod: string;
@@ -257,8 +276,24 @@ export function deriveIncomeForm(
   // something an income edit may silently restate. That belongs in the receivable.
   const needsSchedule = typeKind === "INSTALMENT" && !editing;
   const planMode = needsSchedule;
-  const shares = planMode ? planShares(draft.fee, draft.extra, draft.instalmentCount) : [];
-  const banked = firstShare(shares);
+  const shares = planMode
+    ? planShares(draft.fee, draft.extra, draft.instalmentCount, draft.firstInstalment)
+    : [];
+  /**
+   * What is banked today. The TYPED figure wins outright, including when it has been cleared:
+   * `planShares` falls back to an equal split for an empty override (it has no amount to divide
+   * from), and reporting that split while the box on screen is empty is exactly the kind of
+   * quiet disagreement between field and figure this whole change is undoing.
+   */
+  const banked = draft.firstInstalment ?? firstShare(shares);
+  const scheduleShares = remainingShares(shares);
+  /**
+   * NOTE: whether the parts ADD UP to the price is deliberately NOT derived here. Every schedule
+   * row is hand-editable after this function has run, and only the schedule component knows what
+   * they currently say - see the reconciliation in InstalmentSchedule, which measures the rows
+   * themselves. A second answer computed from the equal split would reassure the operator about
+   * numbers they had just edited away.
+   */
 
   const feeCurrencies = currenciesInPlay(draft.fee);
   const pricedExtra = instalmentExtraFor(draft.instalmentCount ?? 0, cat.instalmentPlans);
@@ -374,6 +409,10 @@ export function deriveIncomeForm(
     planMode,
     shares,
     banked,
+    scheduleShares,
+    equalShare: planMode
+      ? firstShare(planShares(draft.fee, draft.extra, draft.instalmentCount))
+      : { inr: "", eur: "" },
     feeCurrencies,
     methodOptions,
     paymentMethod,

@@ -15,7 +15,7 @@ import {
 } from "@/lib/resume-template";
 import { coerceReviewResult, type AiReviewResult } from "@/lib/resume-review-types";
 import { getAiRuntime, callClaude, extractJson, readAiSettings, writeAiSettings, type AiSettings } from "@/lib/anthropic";
-import { getResumeTemplate, getResume, resumeScope, type ResumeDetail } from "@/server/resume-metrics";
+import { getResumeTemplate, getResume, resumeScopeForSession, type ResumeDetail } from "@/server/resume-metrics";
 import { analyseCv } from "@/lib/cv-analysis";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
@@ -27,17 +27,18 @@ const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
  * Every action below that touches an EXISTING resume resolves it through here rather than by
  * bare id. `requireSection("cv-check")` only says the person may open the Studio, and the
  * section is granted to STUDENT by default - so an id-only lookup let one candidate edit,
- * delete, duplicate or re-review another's CV. See `resumeScope` for the rule itself.
+ * delete, duplicate or re-review another's CV. See `resumeScopeForSession` for the rule itself.
  *
  * Returns null for both "gone" and "not yours", deliberately: distinguishing them would confirm
  * the existence of an id the caller has no business knowing about.
  */
 async function findOwned<S extends Prisma.ResumeSelect>(
-  session: { role: Parameters<typeof resumeScope>[0]["role"]; user: { id: string } },
+  session: { role: Parameters<typeof resumeScopeForSession>[0]["role"]; user: { id: string } },
   id: string,
   select: S,
 ) {
-  return prisma.resume.findFirst({ where: { id, ...resumeScope(session) }, select });
+  // The widened scope: their own CVs AND any filed against their student record.
+  return prisma.resume.findFirst({ where: { id, ...(await resumeScopeForSession(session)) }, select });
 }
 
 // ───────────────────────────── resume CRUD ─────────────────────────────
@@ -137,7 +138,7 @@ export async function deleteResume(id: string): Promise<ActionResult> {
 /** Full resume detail for the client editor/review panels (server-only reads can't be called from a client). */
 export async function loadResume(id: string): Promise<ResumeDetail | null> {
   const session = await requireSection("cv-check");
-  return getResume(id, resumeScope(session));
+  return getResume(id, await resumeScopeForSession(session));
 }
 
 export async function duplicateResume(id: string): Promise<ActionResult & { id?: string }> {
@@ -331,7 +332,7 @@ export async function deleteReview(id: string): Promise<ActionResult> {
   const session = await requireSection("cv-check");
   // Scoped through the review's PARENT resume - a review carries no owner of its own.
   const row = await prisma.resumeReview.findFirst({
-    where: { id, resume: resumeScope(session) },
+    where: { id, resume: await resumeScopeForSession(session) },
     select: { id: true, resumeId: true, provider: true, scoreOverall: true },
   });
   if (row) {

@@ -1,4 +1,4 @@
-import { Prisma, type ExpenseCategory, type PaymentMethod } from "@prisma/client";
+import { Prisma, type PaymentMethod } from "@prisma/client";
 import { eurMinorToInrMinor } from "@/lib/fx";
 import { ACCOUNT, assetAccountFor, expenseAccountFor, incomeAccountFor } from "@/lib/chart-of-accounts";
 import type { DraftEntry, DraftLine } from "./ledger-core";
@@ -63,6 +63,45 @@ function assetLines(row: DualCurrencyRow, method: PaymentMethod, side: "debit" |
   return lines;
 }
 
+/**
+ * The asset side of a row that NAMES its account rather than implying one from a payment method.
+ *
+ * One line per currency actually used, each at its own rate, exactly like `assetLines` - but
+ * against the chosen account, because "it left the euro account" is a fact about the transfer and
+ * not something to guess later. A rupee amount is always put on a rupee-capable account and a
+ * euro amount on a euro-capable one: the EUR bank cannot hold rupees, and a line that said it
+ * did would balance and still describe something that never happened.
+ *
+ * Shared by equity (money an owner moved in or out) and expenses (money that left to pay a
+ * cost), so the two can never disagree about where a euro payment lands.
+ */
+function moneyAccountLines(
+  row: DualCurrencyRow,
+  accountCode: string,
+  side: "debit" | "credit",
+): DraftLine[] {
+  const lines: DraftLine[] = [];
+  if (row.amountInrMinor > BigInt(0)) {
+    lines.push({
+      accountCode: accountCode === ACCOUNT.BANK_EUR ? ACCOUNT.BANK_INR : accountCode,
+      side,
+      amountMinor: row.amountInrMinor,
+      currency: "INR",
+      fxRate: ONE,
+    });
+  }
+  if (row.amountEurMinor > BigInt(0)) {
+    lines.push({
+      accountCode: accountCode === ACCOUNT.BANK_INR ? ACCOUNT.BANK_EUR : accountCode,
+      side,
+      amountMinor: row.amountEurMinor,
+      currency: "EUR",
+      fxRate: row.fxRateUsed,
+    });
+  }
+  return lines;
+}
+
 export type IncomeForPosting = DualCurrencyRow & {
   id: string;
   date: Date;
@@ -103,8 +142,11 @@ export type ExpenseForPosting = DualCurrencyRow & {
   id: string;
   date: Date;
   vendor: string;
-  category: ExpenseCategory;
+  /** A founder-configured category code (AppSetting "expenseCategories"), no longer an enum. */
+  category: string;
   isCogs: boolean;
+  /** Which real-world account the money left from - one of MONEY_ACCOUNTS. */
+  paidFromAccount: string;
   enteredById: string | null;
 };
 
@@ -116,7 +158,10 @@ export type ExpenseForPosting = DualCurrencyRow & {
  * delivery cost (SPEC §4.2). Gross profit is then `revenue − Σ lines where isCogs`, a
  * slice of the ledger rather than a second source of truth.
  */
-export function expenseEntryDraft(e: ExpenseForPosting): DraftEntry {
+export function expenseEntryDraft(
+  e: ExpenseForPosting,
+  expenseAccounts?: Map<string, string>,
+): DraftEntry {
   return {
     date: e.date,
     narration: `Expense - ${e.vendor} (${e.category})`,
@@ -125,15 +170,69 @@ export function expenseEntryDraft(e: ExpenseForPosting): DraftEntry {
     postedById: e.enteredById,
     lines: [
       {
-        accountCode: expenseAccountFor(e.category),
+        accountCode: expenseAccountFor(e.category, expenseAccounts),
         side: "debit",
         amountMinor: baseTotalMinor(e),
         currency: "INR",
         fxRate: ONE,
         isCogs: e.isCogs,
       },
-      // Expenses record no payment method; they settle against the bank accounts.
-      ...assetLines(e, "BANK_TRANSFER_INR", "credit"),
+      /**
+       * ── WHERE THE MONEY ACTUALLY LEFT FROM ──────────────────────────────────────
+       * Every expense used to credit the INR bank, whatever had really paid it: the petty-cash
+       * tin and the euro account both drained a rupee bank account that no statement would ever
+       * agree with, and the Cash account could only ever go up. The row now names the account it
+       * left, and that is the account credited.
+       */
+      ...moneyAccountLines(e, e.paidFromAccount, "credit"),
+    ],
+  };
+}
+
+export type EquityForPosting = DualCurrencyRow & {
+  id: string;
+  date: Date;
+  contributorName: string;
+  kind: "CONTRIBUTION" | "DRAWING";
+  /** Which real-world account the money moved through - one of MONEY_ACCOUNTS. */
+  accountCode: string;
+  enteredById: string | null;
+};
+
+/**
+ * An owner putting money IN: Dr the account it landed in · Cr Owner's equity (3000).
+ * A DRAWING is the same entry reversed.
+ *
+ * ── NEVER AN INCOME ACCOUNT ───────────────────────────────────────────────────────
+ * This is the one rule that matters here. Capital is not revenue: a contribution posted to an
+ * income account would inflate revenue, gross and net profit, margin, commission (which is a
+ * percentage of payments) and every growth figure derived from them - and it would do so
+ * invisibly, because the totals would still balance. Equity belongs on the balance sheet.
+ *
+ * It is also NOT added to "Cash in Hand" anywhere: that figure is the bank balance the founder
+ * types each Monday, and money already in the account is already in it. The ledger is where this
+ * entry shows its effect.
+ *
+ * One line per currency on the asset side, each at its own rate, against the CHOSEN account -
+ * see `moneyAccountLines`, which an expense's "paid from" side now shares.
+ */
+export function equityEntryDraft(e: EquityForPosting): DraftEntry {
+  const asset = moneyAccountLines(e, e.accountCode, e.kind === "CONTRIBUTION" ? "debit" : "credit");
+  return {
+    date: e.date,
+    narration: `${e.kind === "CONTRIBUTION" ? "Capital introduced" : "Owner drawing"} - ${e.contributorName}`,
+    sourceType: "EQUITY",
+    sourceId: e.id,
+    postedById: e.enteredById,
+    lines: [
+      ...asset,
+      {
+        accountCode: ACCOUNT.OWNERS_EQUITY,
+        side: e.kind === "CONTRIBUTION" ? "credit" : "debit",
+        amountMinor: baseTotalMinor(e),
+        currency: "INR",
+        fxRate: ONE,
+      },
     ],
   };
 }

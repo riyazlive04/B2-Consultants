@@ -1,6 +1,7 @@
 import "server-only";
 import type { OutreachStep, Prisma, WhatsAppKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { syncJourneyMeeting } from "./zoom-meetings";
 import { formatDateTimeInZone } from "@/lib/format";
 import {
   coerceOutreachConfig,
@@ -856,11 +857,14 @@ async function releaseDiscoBooking(journeyId: string): Promise<{ cancelled: bool
       await tx.appointmentSlot.update({ where: { id: freedSlotId }, data: { status: "OPEN" } });
     }
     if (row.leadId) {
+      // Both booked stages - see the note in booking-automation.ts. A prospect cancelled by the
+      // SOP ladder is one who never confirmed, so they are usually still in STRATEGY_CALL_BOOKED
+      // and the DISCO_BOOKED-only guard left their card claiming a call that was just released.
       const lead = await tx.lead.findUnique({ where: { id: row.leadId }, select: { stage: true } });
-      if (lead && lead.stage === "DISCO_BOOKED") {
+      if (lead && (lead.stage === "DISCO_BOOKED" || lead.stage === "STRATEGY_CALL_BOOKED")) {
         await tx.lead.update({ where: { id: row.leadId }, data: { stage: "DISCO_NOT_BOOKED" } });
         await tx.leadStageHistory.create({
-          data: { leadId: row.leadId, fromStage: "DISCO_BOOKED", toStage: "DISCO_NOT_BOOKED" },
+          data: { leadId: row.leadId, fromStage: lead.stage, toStage: "DISCO_NOT_BOOKED" },
         });
       }
     }
@@ -902,6 +906,9 @@ async function releaseSssBooking(journeyId: string): Promise<{ cancelled: boolea
     });
   });
   await advanceLeadStage(row.leadId, "LOST", ["SSS_BOOKED"]);
+  // The SOP has given up on this prospect and the slot is back on the calendar, so the Zoom room
+  // should not outlive either. No-op when Zoom never created one (a hand-pasted link is left be).
+  await syncJourneyMeeting(journeyId);
   return { cancelled: true, freedSlot: Boolean(freedSlotId) };
 }
 

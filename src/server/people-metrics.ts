@@ -91,6 +91,9 @@ export async function getPeopleOverview(monthStr?: string) {
     firstCallSharePct: p.firstCallSharePct,
     worksSaturdays: p.worksSaturdays,
     dailyCallTarget: p.dailyCallTarget,
+    /** Agreed monthly pay, as major-unit text the profile form re-opens on ("" when none). */
+    monthlyPayInr: p.monthlyPayInrMinor === BigInt(0) ? "" : (Number(p.monthlyPayInrMinor) / 100).toFixed(2),
+    monthlyPayEur: p.monthlyPayEurMinor === BigInt(0) ? "" : (Number(p.monthlyPayEurMinor) / 100).toFixed(2),
     // Offboarding state, so the org chart can move former members into their own list rather
     // than presenting them as current team.
     terminatedAt: p.terminatedAt?.toISOString() ?? null,

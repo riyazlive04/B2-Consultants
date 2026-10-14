@@ -17,7 +17,7 @@ import type { LogVariant } from "@/lib/daily-log";
  *     followUpMessagesSent   (APPOINTMENT_SETTER) - no per-message record until WATI logs one
  *     studentsCheckedInOn    (DELIVERY_COACH)     - no check-in event
  *     assignmentsReviewed    (DELIVERY_COACH)     - no review event
- * The Telecaller Pay board sums followUpMessagesSent into "calls", so a row built only from this
+ * The Bonus & Commission board sums followUpMessagesSent into "calls", so a row built only from this
  * function reads LOW against a hand-entered one. That is why EOD_AUTO rows stay amendable
  * (see submitDailyLog) instead of being final like a HUMAN submission.
  */

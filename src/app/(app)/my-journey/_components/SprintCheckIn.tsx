@@ -36,10 +36,19 @@ export function SprintCheckIn({ weeks }: { weeks: PortalSprintWeek[] }) {
   const [error, setError] = useState<string | null>(null);
   if (!weeks.length) return null;
 
-  // the week to check in on: current week first, else the oldest past week still pending
+  /**
+   * The week to check in on: the current one first, else the oldest overdue one.
+   *
+   * `!w.actual` on BOTH arms. It was only on the second, so a week whose target was prose
+   * stayed PENDING after the student answered - and the form came straight back, empty,
+   * with nothing to say the first answer had been received. Submitting again overwrote it.
+   */
   const todayTarget =
-    weeks.find((w) => w.isCurrent && w.status === "PENDING") ??
+    weeks.find((w) => w.isCurrent && w.status === "PENDING" && !w.actual) ??
     weeks.find((w) => w.status === "PENDING" && !w.actual && new Date(w.weekEnd) < new Date());
+
+  /** Answered, not yet judged - so the student can see what they sent. */
+  const awaitingReview = weeks.find((w) => w.status === "PENDING" && !!w.actual);
 
   const done = weeks.filter((w) => w.status === "ACHIEVED").length;
 
@@ -103,6 +112,23 @@ export function SprintCheckIn({ weeks }: { weeks: PortalSprintWeek[] }) {
             <FormError message={error} />
           </div>
         </form>
+      ) : awaitingReview ? (
+        // Their own words, read back. Without this the only acknowledgement of a check-in was
+        // the toast, which is gone on the next page load.
+        <div className="mt-4 rounded-field border border-line bg-surface-2 p-4">
+          <p className="text-sm font-semibold">
+            Week {awaitingReview.weekIndex} check-in received
+            <span className="ml-2 font-normal text-muted">with your coach for review</span>
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            You said: <span className="font-medium text-ink">{awaitingReview.actual}</span>
+          </p>
+          {awaitingReview.note && (
+            <p className="mt-1 text-sm text-muted">
+              Note: <span className="text-ink">{awaitingReview.note}</span>
+            </p>
+          )}
+        </div>
       ) : (
         <p className="mt-3 text-xs text-muted">
           All caught up - your next check-in opens on the weekend. Keep the streak alive!

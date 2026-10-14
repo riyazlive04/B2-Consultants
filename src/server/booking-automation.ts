@@ -9,6 +9,7 @@ import { releasedSlotStatus } from "@/lib/booking-hold";
 import { getBookingRulesConfig } from "./founder-config";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import { markReleasePromoted, recordSlotRelease } from "./slot-release";
+import { sweepZoomMeetings, syncBookingMeeting, type ZoomSweepResult } from "./zoom-meetings";
 import {
   sendBookingConfirmRequest,
   sendBookingRescheduled,
@@ -104,7 +105,8 @@ export async function promoteIntoFreedSlot(freedSlotId: string, sentById?: strin
     // grace it can't be auto-cancelled before the prospect has had a chance to answer.
     await tx.bookingRequest.update({
       where: { id: candidate.booking!.id },
-      data: { slotId: freed.id, status: "BOOKED", confirmedAt: null, confirmSentAt: new Date() },
+      // zoomStartsAt: null - the call moved, so Zoom is known-stale until reconciled below.
+      data: { slotId: freed.id, status: "BOOKED", confirmedAt: null, confirmSentAt: new Date(), zoomStartsAt: null },
     });
     // The promoted call's OLD slot is now empty too - and nobody cancelled anything, so without
     // this row the later slot would simply appear free with no reason on the calendar.
@@ -125,6 +127,9 @@ export async function promoteIntoFreedSlot(freedSlotId: string, sentById?: strin
   // Only now that the move really happened: claiming a slot was re-used when the concurrency guard
   // bounced the promote is the one error that would make the cancelled-slots list lie.
   await markReleasePromoted(freed.id, candidate.booking.id, candidate.booking.name);
+
+  // The promoted call is at a new time now - move its Zoom meeting before the prospect is told.
+  await syncBookingMeeting(candidate.booking.id);
 
   const out = await sendBookingRescheduled(candidate.booking.id, sentById);
   // The engine owns this row even on the manual path: a person cancelled a booking, but choosing
@@ -160,6 +165,11 @@ export type BookingAutomationRun = {
   skippedNotReached: number;
   /** Channel-health tally for the confirm-request sends, harvested by `cron-route.ts`. */
   delivery: DeliveryTally;
+  /**
+   * What the Zoom reconcile did this tick. Optional because a run that never reached the sweep
+   * (engine disabled, early return) has no answer, and "0 created" would be a lie there.
+   */
+  zoom?: ZoomSweepResult;
 };
 
 /** Run the confirm-or-cancel cadence + promote-next once. Idempotent across ticks. */
@@ -304,18 +314,30 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
           releasedStatus: freedStatus,
           releasedByName: null, // the engine
         });
-        // Re-open the lead so the discovery-reminder cadence can chase them to rebook.
+        /**
+         * Re-open the lead so the discovery-reminder cadence can chase them to rebook.
+         *
+         * BOTH booked stages, not just DISCO_BOOKED. A prospect who books on the public form
+         * lands in STRATEGY_CALL_BOOKED and only reaches DISCO_BOOKED once they CONFIRM - and
+         * an auto-cancel by definition happens to someone who never confirmed. So the old
+         * single-stage guard could essentially never fire on the path it was written for: the
+         * slot was handed back and the card stayed sitting in "Discovery Call Booked",
+         * claiming a call that no longer existed.
+         */
         if (b.leadId) {
           const lead = await tx.lead.findUnique({ where: { id: b.leadId }, select: { stage: true } });
-          if (lead && lead.stage === "DISCO_BOOKED") {
+          if (lead && (lead.stage === "DISCO_BOOKED" || lead.stage === "STRATEGY_CALL_BOOKED")) {
             await tx.lead.update({ where: { id: b.leadId }, data: { stage: "DISCO_NOT_BOOKED" } });
             await tx.leadStageHistory.create({
-              data: { leadId: b.leadId, fromStage: "DISCO_BOOKED", toStage: "DISCO_NOT_BOOKED" },
+              data: { leadId: b.leadId, fromStage: lead.stage, toStage: "DISCO_NOT_BOOKED" },
             });
           }
         }
       });
       cancelled++;
+      // The engine released the slot, so release the Zoom room with it - otherwise every
+      // unconfirmed booking leaves a dead meeting sitting on the host's calendar.
+      await syncBookingMeeting(b.id);
       const out = await sendBookingAutoCancelled(b.id);
       // One row for the release itself - that happened whether or not the notice got out, so
       // `notified` carries the part that didn't.
@@ -338,5 +360,15 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
     }
   }
 
-  return { enabled: true, ranAt, asked, cancelled, promoted, skippedNotReached, delivery };
+  /**
+   * Last: heal any upcoming call whose Zoom link is missing or stale.
+   *
+   * This is what makes a Zoom outage a non-event rather than an incident. A booking taken while
+   * Zoom was timing out simply has no link for a few minutes; this picks it up on the next tick.
+   * Runs after the cancellations above so it never creates a meeting for a call this very tick
+   * just cancelled.
+   */
+  const zoom = await sweepZoomMeetings();
+
+  return { enabled: true, ranAt, asked, cancelled, promoted, skippedNotReached, delivery, zoom };
 }

@@ -17,10 +17,14 @@ import {
   coerceTutorFeeConfig,
   coerceInstalmentPlanConfig,
   coercePaymentTypesConfig,
+  coerceZoomConfig,
   coerceInvoiceSettings,
   invoiceSettingsSchema,
   instalmentPlanConfigSchema,
+  cashTargetsConfigSchema,
+  coerceCashTargetsConfig,
   paymentTypesConfigSchema,
+  zoomConfigSchema,
   coerceDailyLogEod,
   coerceDailyLogTargets,
   coerceGamificationConfig,
@@ -42,11 +46,18 @@ import {
   parseRewardTrigger,
   rewardTriggerSchema,
   sectionsConfigSchema,
+  expenseCategoriesConfigSchema,
+  coerceExpenseCategoriesConfig,
+  NEW_EXPENSE_ACCOUNT,
 } from "@/lib/config-schema";
+import { CHART_OF_ACCOUNTS, CUSTOM_EXPENSE_CODE_RANGE } from "@/lib/chart-of-accounts";
 import type { GamificationConfig } from "@/lib/gamification";
 import type { SectionsConfig } from "@/lib/sections";
 import {
   AGREEMENT_WORKFLOW_KEY,
+  DELIVERY_DEFAULTS_KEY,
+  getDeliveryDefaults,
+  writeDeliveryDefaults,
   CALL_DISTRIBUTION_KEY,
   BOOK_ORDER_KEY,
   COMMISSION_RULES_KEY,
@@ -57,6 +68,7 @@ import {
   SECTIONS_KEY,
   TUTOR_FEE_KEY,
   INSTALMENT_PLAN_KEY,
+  CASH_TARGETS_KEY,
   SLOT_PATTERN_KEY,
   SSS_PATTERN_KEY,
   revalidateFounderConfig,
@@ -67,8 +79,11 @@ import {
   writePipelineConfig,
   writeTutorFeeConfig,
   writeInstalmentPlanConfig,
+  writeCashTargetsConfig,
   writePaymentTypesConfig,
   PAYMENT_TYPES_KEY,
+  writeZoomConfig,
+  ZOOM_KEY,
   writeInvoiceSettings,
   INVOICE_SETTINGS_KEY,
   writeDailyLogEod,
@@ -77,6 +92,8 @@ import {
   writeSectionsConfig,
   writeBookingCalendars,
   writeSssPatternConfig,
+  EXPENSE_CATEGORIES_KEY,
+  writeExpenseCategoriesConfig,
 } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
 import { syncRewardGrants } from "./rewards";
@@ -278,6 +295,37 @@ export async function saveCallDistribution(input: unknown): Promise<ActionResult
  * send an agreement for anyone from the picker. It only decides who gets an action card and a
  * dashboard task before a draft exists. Every surface re-derives on the next view.
  */
+/**
+ * The default coach a new enrolment gets when the field is left blank.
+ *
+ * Replaces the literal "Karthick" that was written into four places in students-actions.ts.
+ * It mattered more than it looked: the enrolment welcome falls back to the assigned coach when
+ * a batch has no tutor, so that hardcoded name was on its way to being WhatsApped to students
+ * as the person looking after them.
+ */
+export async function saveDeliveryDefaults(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = z
+    .object({ defaultCoach: z.string().trim().max(120, "Keep the name under 120 characters").default("") })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const before = await getDeliveryDefaults();
+  await writeDeliveryDefaults(parsed.data);
+  if (before.defaultCoach !== parsed.data.defaultCoach) {
+    await logActivity(session, {
+      action: "console.delivery-defaults.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: DELIVERY_DEFAULTS_KEY,
+      summary: parsed.data.defaultCoach
+        ? `Set the default coach for new enrolments to ${parsed.data.defaultCoach}`
+        : "Cleared the default coach for new enrolments",
+      meta: { before: before.defaultCoach, after: parsed.data.defaultCoach },
+    });
+  }
+  return { ok: true };
+}
+
 export async function saveAgreementWorkflow(input: unknown): Promise<ActionResult> {
   const session = await requireAdmin();
   const parsed = agreementWorkflowSchema.safeParse(input);
@@ -837,6 +885,39 @@ export async function savePaymentTypesConfig(input: unknown): Promise<ActionResu
 }
 
 /**
+ * Which Zoom account hosts whose calls (Console → Sales ops → Availability).
+ *
+ * Only the MAPPING is editable here - the credentials are env secrets and the arming flag is
+ * `ZOOM_ENABLED`, because a founder who can turn on outbound sending from a web form is a founder
+ * who can turn it on by accident. An empty mapping is a valid, working state: every meeting is
+ * then hosted from the Zoom account owner.
+ */
+export async function saveZoomConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = zoomConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const before = coerceZoomConfig(await settingValue(ZOOM_KEY));
+  await writeZoomConfig(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "console.zoom.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: ZOOM_KEY,
+      summary: "Changed which Zoom account hosts which calls",
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  revalidatePath("/bookings");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+/**
  * Who invoices are FROM, and what tax they charge per currency (Console → Money → Invoicing).
  *
  * The tax rate is a DEFAULT, not a repricing. Each invoice snapshots the label and percent it
@@ -902,6 +983,148 @@ export async function saveInstalmentPlanConfig(input: unknown): Promise<ActionRe
     });
   }
   revalidatePath("/finance");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+/**
+ * Cash Health's targets (Founder Console → Money → Cash targets).
+ *
+ * Four numbers that were literals in the code: the monthly revenue bar the "months to target"
+ * card counts towards, the runway green/amber bands, the buffer that flags a payable as
+ * underfunded, and how many months burn averages over. None of them is an engineering constant -
+ * they are this business's definition of healthy, and until now raising the bar meant a deploy.
+ *
+ * Changing them re-reads every screen that judges cash: Cash Health, the home KPI strip and the
+ * top-bar runway pill, which all share `getRunwaySnapshot`.
+ */
+export async function saveCashTargetsConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = cashTargetsConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const before = coerceCashTargetsConfig(await settingValue(CASH_TARGETS_KEY));
+  await writeCashTargetsConfig(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0) {
+    await logActivity(session, {
+      action: "console.cash-targets.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: CASH_TARGETS_KEY,
+      summary: "Changed the Cash Health targets",
+      meta: { changed: diff.changed, before: diff.before, after: diff.after },
+    });
+  }
+  // Every screen that renders a runway verdict, not just /cash: the badge is in the shell.
+  revalidatePath("/cash");
+  revalidatePath("/");
+  revalidatePath("/console");
+  return { ok: true };
+}
+
+/**
+ * THE EXPENSE CATEGORY LIST (Console → Money → Expense categories).
+ *
+ * ── Why a category is more than a label ──────────────────────────────────────────
+ * Every category names the EXPENSE account its costs are debited to, which is what makes it a
+ * line in the P&L rather than a word on a report. A founder adding "Rent" therefore has two
+ * honest answers: post it to a line that already exists (Operations, say), or give it a line of
+ * its own. `NEW_EXPENSE_ACCOUNT` is that second answer, and this action is where it is granted:
+ * the ledger account is CREATED FIRST and the config is stored with its real code, so the saved
+ * configuration can never name an account that does not exist. (It could not quietly fail
+ * either - `postEntry` refuses a code it cannot resolve - but refusing at the next expense
+ * somebody records is no way to find out.)
+ *
+ * Codes are allocated from 6100-6899, after the eight seeded ones and before the FX account at
+ * 7000, so the Ledger view stays in chart order. The range is deliberately finite: an install
+ * that has used all 800 has a taxonomy problem, not a numbering one.
+ */
+export async function saveExpenseCategoriesConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = expenseCategoriesConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const before = coerceExpenseCategoriesConfig(await settingValue(EXPENSE_CATEGORIES_KEY));
+  const wantsAccount = parsed.data.categories.filter((c) => c.accountCode === NEW_EXPENSE_ACCOUNT);
+  const created: { code: string; name: string }[] = [];
+
+  if (wantsAccount.length > 0) {
+    // One read of the taken codes, then allocate in memory: two categories asking for a line in
+    // the same save must not both be given 6100.
+    const taken = new Set(
+      (await prisma.ledgerAccount.findMany({ select: { code: true } })).map((a) => a.code),
+    );
+    let next = CUSTOM_EXPENSE_CODE_RANGE.first;
+    const sortKeyBase = CHART_OF_ACCOUNTS.length;
+    for (const category of wantsAccount) {
+      while (taken.has(String(next)) && next <= CUSTOM_EXPENSE_CODE_RANGE.last) next += 1;
+      if (next > CUSTOM_EXPENSE_CODE_RANGE.last) {
+        return {
+          ok: false,
+          error: "There is no room left for another P&L line - point this category at an existing one.",
+        };
+      }
+      const code = String(next);
+      taken.add(code);
+      await prisma.ledgerAccount.create({
+        data: {
+          code,
+          name: category.label,
+          type: "EXPENSE",
+          currency: null,
+          isCogs: category.isCogs,
+          sortKey: sortKeyBase + created.length,
+        },
+      });
+      created.push({ code, name: category.label });
+      // The parsed object is what gets written, so the sentinel is replaced in place.
+      category.accountCode = code;
+    }
+  }
+
+  /**
+   * An account's COGS flag mirrors its category's, so gross profit stays one answer whether it
+   * is sliced from the account or from the row. Only the accounts this list owns are touched:
+   * re-pointing a category at Operations must not re-flag Operations for everything else that
+   * posts there, so the seeded eight are left exactly as `seedChartOfAccounts` set them.
+   */
+  const customCodes = new Set(created.map((c) => c.code));
+  for (const category of parsed.data.categories) {
+    if (!customCodes.has(category.accountCode) && Number(category.accountCode) >= CUSTOM_EXPENSE_CODE_RANGE.first
+      && Number(category.accountCode) <= CUSTOM_EXPENSE_CODE_RANGE.last) {
+      await prisma.ledgerAccount.updateMany({
+        where: { code: category.accountCode },
+        data: { name: category.label, isCogs: category.isCogs },
+      });
+    }
+  }
+
+  await writeExpenseCategoriesConfig(parsed.data);
+  const diff = diffFields(
+    before as unknown as Record<string, unknown>,
+    parsed.data as unknown as Record<string, unknown>,
+  );
+  if (diff.changed.length > 0 || created.length > 0) {
+    await logActivity(session, {
+      action: "console.expense-categories.update",
+      section: "console",
+      entityType: "AppSetting",
+      entityId: EXPENSE_CATEGORIES_KEY,
+      summary:
+        created.length > 0
+          ? `Changed the expense categories and opened ${created.length} new P&L line${created.length === 1 ? "" : "s"}`
+          : "Changed the expense categories",
+      meta: { changed: diff.changed, before: diff.before, after: diff.after, accountsCreated: created },
+    });
+  }
+  // The three cost forms, the P&L lines on the reports, and the Ledger's chart of accounts.
+  revalidatePath("/finance");
+  revalidatePath("/cash");
+  revalidatePath("/ledger");
+  revalidatePath("/reports");
   revalidatePath("/console");
   return { ok: true };
 }

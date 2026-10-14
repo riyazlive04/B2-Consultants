@@ -7,6 +7,7 @@ import { aggEurMinor, aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
 import { isRecurring, monthlyEquivalentMinor, nextOccurrence } from "@/lib/payable-frequency";
 import { getPendingRows } from "./finance-metrics";
+import { getCashTargetsConfig } from "./founder-config";
 
 /**
  * Cash Health (PRD3 §4). Every cross-phase number here is a native query:
@@ -52,13 +53,18 @@ export const getRunwaySnapshot = cache(async (range: KpiRangeKey = "this-month")
   const today = istToday();
   const { end: rangeEnd } = kpiDateRange(range, today);
   const anchor = new Date(Math.min(rangeEnd.getTime() - 86400000, today.getTime()));
-  const threeMonthsAgo = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 3, 1));
+  // How many complete months burn averages over is the founder's (Console → Cash targets).
+  // It defaults to the 3 that was hardcoded here, so nothing moves until someone changes it.
+  const targets = await getCashTargetsConfig();
+  const windowStart = new Date(
+    Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - targets.burnWindowMonths, 1),
+  );
   const thisMonthStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
 
   const [latestCash, expenses] = await Promise.all([
     prisma.cashPosition.findFirst({ orderBy: { date: "desc" } }),
     prisma.expense.findMany({
-      where: { ...ACTIVE, date: { gte: threeMonthsAgo, lt: thisMonthStart } },
+      where: { ...ACTIVE, date: { gte: windowStart, lt: thisMonthStart } },
       select: { date: true, amountInrMinor: true, amountEurMinor: true, fxRateUsed: true },
     }),
   ]);
@@ -67,7 +73,7 @@ export const getRunwaySnapshot = cache(async (range: KpiRangeKey = "this-month")
     (a, e) => a + Number(aggInrMinor(e.amountInrMinor, e.amountEurMinor, e.fxRateUsed)),
     0,
   );
-  // Average over the months that actually have expense data, not a flat /3 -
+  // Average over the months that actually have expense data, not a flat divide by the window -
   // a young business (or an un-backfilled month) would otherwise dilute burn
   // and overstate runway, silencing the <3/<6-month alerts.
   const monthsWithData = new Set(
@@ -85,6 +91,11 @@ export const getRunwaySnapshot = cache(async (range: KpiRangeKey = "this-month")
     cashStale: latestCash ? today.getTime() - latestCash.date.getTime() > 7 * 86400000 : true,
     burnInr,
     runwayMonths,
+    /** The window burn was averaged over, so a caller can SAY which months it covers. */
+    burnWindowMonths: targets.burnWindowMonths,
+    /** The founder's green/amber bands, for `signalForRunway`. */
+    runwayBands: { green: targets.runwayGreenMonths, amber: targets.runwayAmberMonths },
+    runwayHorizonMonths: targets.runwayHorizonMonths,
   };
 });
 
@@ -95,6 +106,7 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
   // caller (and a bare /cash visit) renders exactly what it did before.
   const chartFrom = cashPeriodStart(period, today);
 
+  const targets = await getCashTargetsConfig();
   const [runway, positions, pendingRows, payables, monthIncomes, growthSetting, monthlyRevenue] =
     await Promise.all([
       getRunwaySnapshot(),
@@ -214,7 +226,10 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
       p.status === "ACTIVE" && !!dueOf(p) &&
       dueOf(p)!.getTime() - today.getTime() <= 7 * 86400000 &&
       dueOf(p)!.getTime() >= today.getTime() &&
-      runway.cashInr !== null && runway.cashInr < 2 * payableInr(p), // red rule (PRD3 §4.3)
+      // The buffer is the founder's (Console → Cash targets): a bill due this week is flagged
+      // when the account holds less than `payableBufferMultiple` times it. Defaults to the 2
+      // that was hardcoded here (PRD3 §4.3).
+      runway.cashInr !== null && runway.cashInr < targets.payableBufferMultiple * payableInr(p),
   }));
 
   // ── Revenue vs break-even + months to ₹8L (PRD3 §4.4) ──
@@ -240,7 +255,9 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
   const growthOverridePct = growthSetting ? Number(growthSetting.value) : null;
   const effectiveGrowthPct = growthOverridePct ?? avgGrowthPct;
 
-  const TARGET_INR = 80_000_000; // ₹8,00,000 in paise
+  // The monthly revenue bar is the founder's (Console → Cash targets); ₹8,00,000 remains the
+  // default, which is the figure this card was built around.
+  const TARGET_INR = targets.monthlyRevenueTargetInrMinor;
   let monthsToTarget: number | null = null;
   if (revenueThisMonthInr >= TARGET_INR) monthsToTarget = 0;
   else if (effectiveGrowthPct !== null && effectiveGrowthPct > 0 && revenueThisMonthInr > 0) {
@@ -259,6 +276,8 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
     revenueThisMonthInr,
     revenueVsBreakEvenInr: revenueThisMonthInr - monthlyFixedInr,
     growth: { avgGrowthPct, growthOverridePct, effectiveGrowthPct, monthsToTarget },
+    /** Everything the page needs to LABEL its own targets - never a second copy of the maths. */
+    targets,
     chart: positions.map((p) => ({
       date: p.date.toISOString(),
       balanceInr: Number(p.bankBalanceInrMinor),
@@ -271,7 +290,7 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
         date: p.date.toISOString(),
         balanceInr: Number(p.bankBalanceInrMinor),
         balanceRaw: p.bankBalanceInrMinor.toString(),
-        personalSavingsInr: p.personalSavingsInrMinor === null ? null : Number(p.personalSavingsInrMinor),
+
         notes: p.notes,
       })),
     receivables,

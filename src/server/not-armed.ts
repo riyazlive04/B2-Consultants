@@ -154,6 +154,20 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       where: "Console → Sales ops → Confirm-or-cancel (also WhatsApp → Settings, or Bookings → Manage availability)",
     },
     {
+      /**
+       * The ONLY message the app sends on enrolment. It belongs on this panel because "built
+       * but switched off" is precisely what the panel is for - and because the consequence of
+       * leaving it off is silence at the moment somebody has just paid, which no other screen
+       * in the app would ever surface.
+       */
+      key: "studentWelcome",
+      name: "Enrolment welcome",
+      armed: wati.settings.cadence.studentWelcomeEnabled,
+      consequence:
+        "A student who has signed, paid and been seated in a batch is told nothing at all. They learn their tutor, their start time and that a portal exists only if somebody remembers to message them - and the next automated thing they hear from us is a payment reminder.",
+      where: "WhatsApp → Settings → Enrolment welcome (bind b2_student_welcome first)",
+    },
+    {
       key: "intake",
       name: "Lead capture webhooks",
       armed: anyDelivery,

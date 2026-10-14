@@ -90,6 +90,11 @@ const CHANNELS: { flag: string; needs: string[]; consequence: string }[] = [
     needs: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"],
     consequence: "every outbound SMS would be dropped",
   },
+  {
+    flag: "ZOOM_ENABLED",
+    needs: ["ZOOM_ACCOUNT_ID", "ZOOM_CLIENT_ID", "ZOOM_CLIENT_SECRET"],
+    consequence: "every booked call would be confirmed to the prospect with no meeting link",
+  },
 ];
 
 /**

@@ -37,13 +37,25 @@ export default async function MyJourneyPage({
     getMyAgreements(session.user.id),
     getMyPayments(session.user.id),
   ]);
-  // Home forwards ?onboarding=1 here for STUDENT before it can redirect this far.
+  /**
+   * The welcome walkthrough, which no student could ever see.
+   *
+   * `?onboarding=1` is minted in exactly one place - the invite-acceptance redirect - and
+   * students are never invited: `createStudentLogin` provisions the account directly, so the
+   * flag never existed on any URL a student could arrive at. The component even carries
+   * bespoke STUDENT copy that had no way of reaching the screen.
+   *
+   * Opened unconditionally here instead. The component already keeps a per-user localStorage
+   * mark and returns immediately if it finds one, so "first visit" is a thing it can decide
+   * for itself - it never needed the query string to tell it, and depending on that string
+   * was what made this unreachable. Home still forwards the flag for the invited roles.
+   */
   const onboarding = (
     <OnboardingWalkthrough
       userId={session.user.id}
       role={session.role}
       firstName={session.user.name.split(" ")[0]}
-      initialOpen={searchParams?.onboarding === "1"}
+      initialOpen
     />
   );
 
@@ -73,11 +85,20 @@ export default async function MyJourneyPage({
         icon={<Rocket size={20} />}
         title="My Journey"
         subtitle={
-          <>
-            {portal.fullName}
-            {portal.targetRole ? ` · aiming for ${portal.targetRole} in Germany` : " · your road to Germany"} -
-            every session, application and interview moves the bar.
-          </>
+          /**
+           * A German Note learner is a Student with a batch seat and NO Enrollment, so there is
+           * no journey to narrate - and "every session, application and interview moves the bar"
+           * described a coaching programme they are not on. Branch on what they actually have.
+           */
+          ordered.length === 0 ? (
+            <>{portal.fullName} · your German Note classes, agreement and payments.</>
+          ) : (
+            <>
+              {portal.fullName}
+              {portal.targetRole ? ` · aiming for ${portal.targetRole} in Germany` : " · your road to Germany"} -
+              every session, application and interview moves the bar.
+            </>
+          )
         }
       />
 

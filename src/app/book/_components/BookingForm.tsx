@@ -179,7 +179,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
           variant is not used here: its strapline is 10 units in a 100-unit box, so at this size it
           would render at ~6px, under the §7 text floor. */}
       <div className="flex items-center gap-2.5">
-        <BrandLogo className="h-11 w-11 flex-none" />
+        <BrandLogo className="h-11 flex-none" />
         <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
       </div>
       <p className="mt-5 text-caption font-semibold uppercase tracking-wide text-ink-3">Discovery</p>
@@ -326,7 +326,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
         <div className="flex items-center gap-3">
           <FormError message={error} />
           {isLast ? (
-            <SubmitButton>Confirm my call</SubmitButton>
+            <SubmitButton tone="action">Confirm my call</SubmitButton>
           ) : (
             <Btn variant="primary" onClick={goNext} disabled={step === 0 && !slotId} className="px-6">
               Next

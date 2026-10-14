@@ -5,12 +5,14 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSection } from "@/lib/rbac";
 import { istToday, parseDateInput } from "@/lib/dates";
-import { formatDate, formatInrMinor } from "@/lib/format";
+import { formatDate, formatEurMinor, formatInrMinor, majorStringToMinor } from "@/lib/format";
+import { optionalRule } from "@/lib/field-rules";
 import { instalmentDueDates, instalmentExtraFor, splitInstalments } from "@/lib/instalment-plan";
 import { logActivity, diffFields } from "./activity-log";
 import { getInstalmentPlanConfig } from "./founder-config";
 import { syncInstalmentIncome } from "./finance-autopost";
 import type { ActionResult } from "./finance-actions";
+import { restatePlanFromInstalments } from "./plan-restate";
 
 /**
  * Structured EMI schedule (spec Module G). Turns a PendingPayment (the single-figure
@@ -230,6 +232,132 @@ export async function setInstalmentStatus(id: string, status: string): Promise<A
   revalidatePath("/finance");
   revalidatePath("/cash");
   revalidatePath("/ledger");
+  return { ok: true };
+}
+
+const money = optionalRule("money");
+
+const editSchema = z.object({
+  amountInr: money,
+  amountEur: money,
+  dueDate: z.string().min(10, "A due date is required"),
+});
+
+/**
+ * EDIT ONE UNPAID INSTALMENT - its amount and its due date.
+ *
+ * ── Why this had to exist ─────────────────────────────────────────────────────────
+ * A schedule was effectively immutable. The modal let you change each row's STATUS and nothing
+ * else, so the only way to restructure a plan a student had renegotiated - "I can pay ₹5,000 a
+ * month, not ₹8,000" - was "Clear schedule" and generate a fresh equal split. That deletes every
+ * row INCLUDING the paid ones, which is the plan's payment history, and an equal split is
+ * precisely what a renegotiated plan is not. In practice the schedule was therefore left wrong,
+ * and the dunning ladder reads the schedule: it chased the old figure on the old date.
+ *
+ * ── Why only the unpaid ones ──────────────────────────────────────────────────────
+ * A PAID instalment has an Income row behind it (seq 1 is the payment that agreed the plan;
+ * later ones are mirrored by `syncInstalmentIncome`). Letting its amount be edited here would
+ * leave the schedule claiming one figure and the money ledger another, with no trace of which
+ * was meant. Paid rows stay frozen; a mistake in one is corrected where the money is - on the
+ * income row itself.
+ *
+ * ── What moves with it ────────────────────────────────────────────────────────────
+ * The plan's TOTAL is re-stated so `toCollect` (totalFee + planExtra, which is what the balance
+ * is measured from) equals the sum of its instalments. Without that, raising an instalment would
+ * change what is chased and not what is owed - two numbers on the same screen disagreeing, which
+ * is the bug this whole section keeps producing. The surcharge is left alone: it is a snapshot of
+ * what the plan cost, not part of the schedule.
+ *
+ * `nextDueDate` follows the earliest instalment still unpaid, exactly as marking one paid does.
+ */
+export async function updateInstalment(id: string, form: FormData): Promise<ActionResult> {
+  const session = await requireSection("finance");
+  const parsed = editSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const d = parsed.data;
+
+  const inst = await prisma.instalment.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      seq: true,
+      status: true,
+      dueDate: true,
+      amountInrMinor: true,
+      amountEurMinor: true,
+      pendingPaymentId: true,
+      pendingPayment: {
+        select: {
+          studentName: true,
+          planExtraInrMinor: true,
+          planExtraEurMinor: true,
+        },
+      },
+    },
+  });
+  if (!inst) return { ok: false, error: "Instalment not found" };
+  if (inst.status === "PAID") {
+    return {
+      ok: false,
+      error:
+        "This instalment is already paid - its amount is the payment that was recorded. Mark it unpaid first, or correct the income entry.",
+    };
+  }
+
+  const amountInrMinor = d.amountInr?.trim() ? majorStringToMinor(d.amountInr) : BigInt(0);
+  const amountEurMinor = d.amountEur?.trim() ? majorStringToMinor(d.amountEur) : BigInt(0);
+  // An instalment for nothing is not an instalment: it would be chased, reported and reconciled
+  // as a real row while asking for no money. Removing it is what "Clear schedule" is for.
+  if (amountInrMinor <= BigInt(0) && amountEurMinor <= BigInt(0)) {
+    return { ok: false, error: "Enter an amount greater than 0 for this instalment" };
+  }
+  const dueDate = parseDateInput(d.dueDate);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.instalment.update({
+      where: { id },
+      data: { amountInrMinor, amountEurMinor, dueDate },
+    });
+
+    /**
+     * The headline follows the rows, through the one rule that editing the income which agreed
+     * the plan now goes through as well - see server/plan-restate. Two copies of this arithmetic
+     * would eventually disagree about which of them was right.
+     */
+    await restatePlanFromInstalments(tx, inst.pendingPaymentId);
+  });
+
+  const diff = diffFields(
+    {
+      amountInrMinor: inst.amountInrMinor.toString(),
+      amountEurMinor: inst.amountEurMinor.toString(),
+      dueDate: inst.dueDate.toISOString().slice(0, 10),
+    },
+    {
+      amountInrMinor: amountInrMinor.toString(),
+      amountEurMinor: amountEurMinor.toString(),
+      dueDate: dueDate.toISOString().slice(0, 10),
+    },
+  );
+  if (diff.changed.length) {
+    const shown = [
+      amountInrMinor > BigInt(0) ? formatInrMinor(amountInrMinor) : "",
+      amountEurMinor > BigInt(0) ? formatEurMinor(amountEurMinor) : "",
+    ]
+      .filter(Boolean)
+      .join(" + ");
+    await logActivity(session, {
+      action: "finance.instalment.update",
+      section: "finance",
+      entityType: "Instalment",
+      entityId: id,
+      summary: `Changed instalment #${inst.seq} for ${inst.pendingPayment.studentName} to ${shown} due ${formatDate(dueDate)}`,
+      meta: { ...diff, seq: inst.seq },
+    });
+  }
+
+  revalidatePath("/finance");
+  revalidatePath("/cash");
   return { ok: true };
 }
 

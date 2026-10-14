@@ -4,9 +4,10 @@ import { istMonthInstantRange, istToday } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
 import { computeStudentJourney, type GamificationConfig, type StudentJourney } from "@/lib/gamification";
-import { getGamificationConfig } from "./founder-config";
+import { getDeliveryDefaults, getGamificationConfig } from "./founder-config";
 import { levelKinds, levelLabels } from "./levels";
 import { lineForKind, type BusinessLine } from "@/lib/business-line";
+import { lineForLevelKind } from "@/lib/batch";
 import { parseStudentCodeParts } from "@/lib/student-code";
 
 /** Students dashboards (PRD2 §4): counts, 90/120 tracker, satisfaction, LTV. */
@@ -396,6 +397,11 @@ export async function getStudentsOverview() {
       highest,
     },
     students: studentRows,
+    // The coach picker on the "add student" form: real team accounts plus the founder's
+    // default, replacing a hardcoded two-name list. Same source the detail page uses.
+    coaches: await prisma.user
+      .findMany({ where: { status: "ACTIVE", role: { not: "STUDENT" } }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    defaultCoach: (await getDeliveryDefaults()).defaultCoach,
   };
 }
 
@@ -410,6 +416,7 @@ export async function getStudentDetail(id: string) {
           signalChanges: { orderBy: { date: "desc" }, include: { changedBy: { select: { name: true } } } },
           sprintWeeks: { orderBy: { weekIndex: "asc" }, include: { enteredBy: { select: { name: true } } } },
           closer: { select: { id: true, name: true } },
+          batch: { select: { id: true, name: true, line: true } },
           jobApplications: { orderBy: [{ status: "asc" }, { appliedAt: "desc" }] },
         },
       },
@@ -432,6 +439,34 @@ export async function getStudentDetail(id: string) {
     take: 100,
     select: { id: true, studentName: true, date: true, amountInrMinor: true },
   });
+  /**
+   * Batches an enrolment on this page could be seated into - the options behind the new batch
+   * picker on each enrolment card.
+   *
+   * ACTIVE only: seating someone into an archived cohort is never the intent, and `seatEnrollment`
+   * refuses it anyway, so offering it would only produce an error the operator cannot act on.
+   *
+   * The `line` rides along because the picker filters per ENROLMENT, not per student: the one-table
+   * batch design lets a coaching client and a German Note learner share this list, and
+   * `levelFitsBatchLine` is the rule that stops a Guided client being seated in an A1 cohort. The
+   * same rule is re-applied server-side in the action - this filter is the courtesy, not the guard.
+   */
+  const kinds = await levelKinds();
+  // The founder's default coach, so the picker pre-selects it instead of a hardcoded name.
+  const { defaultCoach } = await getDeliveryDefaults();
+  const seatableBatches = await prisma.batch.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: [{ line: "asc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      line: true,
+      level: true,
+      targetStrength: true,
+      _count: { select: { members: true, enrollments: true } },
+    },
+  });
+
   // Active team accounts (not students) - the closer picker for the commission split.
   const teamMembers = await prisma.user.findMany({
     where: { status: "ACTIVE", role: { not: "STUDENT" } },
@@ -467,6 +502,18 @@ export async function getStudentDetail(id: string) {
         assignedCoach: e.assignedCoach,
         closerId: e.closerId,
         closerName: e.closer?.name ?? null,
+        batchId: e.batchId,
+        batchName: e.batch?.name ?? null,
+        /**
+         * Which batch line this enrolment may be seated on - resolved HERE rather than in the
+         * picker, so the client never has to re-implement `lineForLevelKind`. `null` means the
+         * level is OTHER and genuinely belongs to neither line, in which case the rule is "do
+         * not enforce" rather than "reject", and every batch is offered.
+         */
+        allowedBatchLine: (() => {
+          const kind = kinds.get(e.programLevel);
+          return kind ? lineForLevelKind(kind) : null;
+        })(),
         status: e.status,
         dayNumber: totalDays ? Math.min(Math.max(dayDiff(today, e.enrollmentDate) + 1, 1), totalDays) : null,
         totalDays,
@@ -542,6 +589,17 @@ export async function getStudentDetail(id: string) {
       label: `${i.studentName} · ${i.date.toISOString().slice(0, 10)} · ₹${(Number(i.amountInrMinor) / 100).toLocaleString("en-IN")}`,
     })),
     teamMembers: teamMembers.map((m) => ({ id: m.id, name: m.name })),
+    defaultCoach,
+    seatableBatches: seatableBatches.map((b) => ({
+      id: b.id,
+      name: b.name,
+      line: b.line,
+      level: b.level,
+      // "Evening A1 (6/8)" - the operator needs to see a full cohort BEFORE picking it, not as
+      // a confirm dialog after. Both seating routes count, same as the capacity check itself.
+      filled: b._count.members + b._count.enrollments,
+      targetStrength: b.targetStrength,
+    })),
   };
 }
 

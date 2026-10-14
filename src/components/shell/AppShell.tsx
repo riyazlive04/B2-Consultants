@@ -221,7 +221,7 @@ export function AppShell({
       {/* brand + collapse toggle */}
       <div className={`mb-5 flex items-center ${compact ? "justify-center" : "justify-between"} px-1`}>
         <Link href="/" prefetch className="flex items-center gap-2.5">
-          <BrandLogo className="h-10 w-10 flex-none" />
+          <BrandLogo className="h-10 flex-none" />
           {!compact && (
             <span className="flex flex-col leading-tight">
               <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
@@ -377,7 +377,7 @@ export function AppShell({
               is the app", and the alternative was squashing the icon buttons under their 40px hit
               target (§7). Between 375 and md it stays. */}
           <Link href="/" className="hidden flex-none items-center gap-2 min-[375px]:flex md:hidden">
-            <BrandLogo className="h-8 w-8" />
+            <BrandLogo className="h-8" />
           </Link>
 
           {/* The always-visible metric strip: search · month · runway · theme · alerts · user.

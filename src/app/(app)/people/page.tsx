@@ -36,7 +36,7 @@ export default async function PeoplePage() {
    * The daily-log board is for the people whose day is NOT already measured elsewhere.
    *
    * A telecaller's work is counted from their actual calls - My Desk shows their own numbers and
-   * Telecaller Pay shows the team board, both derived from CallLog rather than self-reported.
+   * Bonus & Commission shows the team board, both derived from CallLog rather than self-reported.
    * Asking them to also write a daily log meant the same day was recorded twice, by two methods 
    * that could disagree, and the hand-typed one is the one nobody could check. So they come off 
    * this board (and off the My Daily Log rail entry - see lib/sections.ts).

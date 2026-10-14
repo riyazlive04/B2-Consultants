@@ -555,8 +555,12 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
       amountEurRaw: e.amountEurMinor.toString(),
       category: e.category,
       isCogs: e.isCogs,
+      /** Which real-world account was drained - what the ledger credited. */
+      paidFromAccount: e.paidFromAccount,
       businessLine: e.businessLine,
       vendor: e.vendor,
+      /** Set when this cost paid somebody on the team - the Team payments section's link. */
+      teamProfileId: e.teamProfileId,
       notes: e.notes,
       source: e.source,
     })),

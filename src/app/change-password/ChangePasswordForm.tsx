@@ -48,7 +48,7 @@ export default function ChangePasswordForm() {
       <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <BrandLogo className="h-10 w-10 flex-none" />
+            <BrandLogo className="h-10 flex-none" />
             <span className="flex flex-col leading-tight">
               <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
               <span className="text-caption text-ink-2">Business cockpit</span>
@@ -73,7 +73,7 @@ export default function ChangePasswordForm() {
         <div className="w-full max-w-sm">
           <div className="mb-6 flex items-center justify-between lg:hidden">
             <div className="flex items-center gap-2.5">
-              <BrandLogo className="h-9 w-9 flex-none" />
+              <BrandLogo className="h-9 flex-none" />
               <span className="flex flex-col leading-tight">
                 <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
                 <span className="text-caption text-ink-3">Business cockpit</span>

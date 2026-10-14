@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarClock, Check, CircleCheck, Mail, Phone } from "lucide-react";
+import { ArrowRight, CalendarClock, Check, CircleCheck, Mail, Phone, Video } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Btn } from "@/components/ui/controls";
 import { Field, Select } from "@/components/ui/form";
@@ -140,6 +140,39 @@ export function BookingDetail({
             )}
           </div>
         </section>
+
+        {/* ── The call itself. Only drawn once Zoom has actually made the room. ── */}
+        {booking.zoomJoinUrl && (
+          <section className="space-y-2">
+            <h4 className="text-label uppercase text-ink-2">Zoom</h4>
+            <div className="flex flex-wrap gap-2">
+              {/*
+                * Two deliberately different links. The host link signs whoever opens it in AS the
+                * host, so it is labelled as such and never sits next to the prospect's name
+                * unlabelled - handing it to the wrong person gives them control of the call.
+                */}
+              {booking.zoomStartUrl && (
+                <a
+                  href={booking.zoomStartUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-10 items-center gap-2 rounded-btn border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-surface-2"
+                >
+                  <Video size={15} aria-hidden /> Start as host
+                </a>
+              )}
+              <a
+                href={booking.zoomJoinUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-10 min-w-0 items-center gap-2 rounded-btn border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-surface-2"
+              >
+                <Video size={15} aria-hidden className="flex-none" />
+                <span className="truncate">Prospect&apos;s join link</span>
+              </a>
+            </div>
+          </section>
+        )}
 
         {/* ── What they told us. The columns the table had to drop. ── */}
         <section className="space-y-2">

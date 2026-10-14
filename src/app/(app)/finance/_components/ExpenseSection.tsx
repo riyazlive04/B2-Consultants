@@ -12,9 +12,18 @@ import { CheckboxField, Field, FormError, NotesField, Select, SubmitButton, Text
 import { useUnsavedGuard } from "@/components/ui/use-unsaved-guard";
 import { formatDate, formatEurMinor, formatInrMinor } from "@/lib/format";
 import { moneyInline, moneyValue } from "@/lib/money-display";
-import { EXPENSE_BUSINESS_LINE_LABELS, EXPENSE_CATEGORY_LABELS, optionsFrom } from "@/lib/labels";
+import { EXPENSE_BUSINESS_LINE_LABELS, optionsFrom } from "@/lib/labels";
+import {
+  activeExpenseCategories,
+  expenseCategoryLabel,
+  expenseCategoryOptions,
+} from "@/lib/expense-categories";
+import type { ExpenseCategoriesConfig } from "@/lib/config-schema";
+import { ACCOUNT, MONEY_ACCOUNTS } from "@/lib/chart-of-accounts";
 import { AmountPair } from "@/components/ui/AmountPair";
 import { useFinanceCcy } from "./FinanceCurrency";
+import { TeamPayPanel } from "./TeamPayPanel";
+import type { TeamPayOverview } from "@/server/team-pay-metrics";
 import { safeAction } from "@/lib/action-guard";
 
 const minorToInput = (raw: string) => {
@@ -28,6 +37,8 @@ export function ExpenseSection({
   fxRate,
   fxStale,
   fxDate,
+  teamPay,
+  categories,
   defaultBusinessLine = "SHARED",
 }: {
   rows: ExpenseRow[];
@@ -35,6 +46,24 @@ export function ExpenseSection({
   fxRate: number;
   fxStale?: boolean;
   fxDate?: string;
+  /**
+   * The team, what each is paid in a normal month, and what has actually gone out in this
+   * period - for the Team payments panel between this form and the expenses table, and for the
+   * payee picker the form grows when the category is team pay.
+   *
+   * Handed down rather than fetched here: a dropdown that waits for a round trip is a dropdown
+   * people type past, and the panel below needs the same figures.
+   */
+  teamPay?: TeamPayOverview;
+  /**
+   * The founder's expense categories (Console → Money → Expense categories).
+   *
+   * Handed down rather than read here for the same reason as the roster: it travels with the
+   * page already, and a picker that waits for a round trip is a picker people type past. It is
+   * also what NAMES a category in the table below - the labels are the founder's words now, not
+   * a constant in lib/labels.
+   */
+  categories: ExpenseCategoriesConfig;
   /**
    * What a new cost is tagged with when nobody says otherwise - the page's business-line switch,
    * or "SHARED" on the Combined view.
@@ -48,6 +77,58 @@ export function ExpenseSection({
 }) {
   const { ccy } = useFinanceCcy();
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
+  /**
+   * -- WHO, when the cost is team pay ------------------------------------------------
+   * "Paid to (vendor)" is free text, which is right for a supplier and wrong for a colleague:
+   * one month's "Karthik" and the next month's "Karthick salary" are two payees to every total
+   * in the app. So choosing the Team salaries category turns that box into a picker, and
+   * picking somebody fills in their agreed monthly pay.
+   *
+   * Tracked as state (not read off the select) because two other fields follow it.
+   */
+  /**
+   * Tools and Software if the founder still offers it - it is what most daily costs are, and
+   * changing somebody's habitual first choice is not an improvement. Otherwise the first
+   * category on their list, because a form cannot open on an option that is not there.
+   */
+  const offered = activeExpenseCategories(categories);
+  const openingCategory = offered.some((c) => c.code === "TOOLS_SOFTWARE")
+    ? "TOOLS_SOFTWARE"
+    : offered[0]?.code ?? "OTHER";
+  const [category, setCategory] = useState<string>(openingCategory);
+  const [profileId, setProfileId] = useState<string>("");
+  /**
+   * WHICH ACCOUNT THE MONEY LEFT FROM. Tracked as state only so the picker can be re-keyed
+   * alongside the row being edited; the default is the INR bank, which is where the ledger put
+   * every expense ever recorded before the row could say otherwise.
+   */
+  const [paidFrom, setPaidFrom] = useState<string>(ACCOUNT.BANK_INR);
+  const isTeamPay = category === "TEAM_SALARIES";
+  /** The roster as the picker needs it: name, and the agreed figure as the box's opening text. */
+  const team = (teamPay?.people ?? []).map((t) => ({
+    profileId: t.profileId,
+    name: t.name,
+    active: t.active,
+    payInr: t.monthlyPay.inr > 0 ? (t.monthlyPay.inr / 100).toFixed(2) : "",
+    payEur: t.monthlyPay.eur > 0 ? (t.monthlyPay.eur / 100).toFixed(2) : "",
+  }));
+  const payee = team.find((t) => t.profileId === profileId) ?? null;
+
+  /**
+   * "Pay" in the panel below loads that person into THIS form - the one form on the tab.
+   *
+   * Deliberately not a second form of its own: a team payment is an expense, writes the same
+   * row through the same action, and two money forms on one screen is an invitation to wonder
+   * which one is the real one.
+   */
+  const payPerson = (id: string) => {
+    setError(null);
+    setEditing(null);
+    setCategory("TEAM_SALARIES");
+    setProfileId(id);
+    setPaidFrom(ACCOUNT.BANK_INR);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   // Warn before a refresh or a tab close throws away a half-typed entry.
@@ -60,6 +141,11 @@ export function ExpenseSection({
   /** Load a row into the form and take the eye there too (issue 21). */
   const startEdit = (row: ExpenseRow) => {
     setEditing(row);
+    // Follow the row being edited, or the form opens showing another cost's category and payee
+    // while claiming to be editing this one.
+    setCategory(row.category);
+    setProfileId(row.teamProfileId ?? "");
+    setPaidFrom(row.paidFromAccount);
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
@@ -75,6 +161,9 @@ export function ExpenseSection({
     if (!res.ok) return setError(res.error);
     toast(editing ? "Expense updated" : "Expense added");
     setEditing(null);
+    setCategory(openingCategory);
+    setProfileId("");
+    setPaidFrom(ACCOUNT.BANK_INR);
     formRef.current?.reset();
   };
 
@@ -118,7 +207,18 @@ export function ExpenseSection({
       cell: (r) => moneyInline(r.agg, ccy, { compact: true }),
       value: (r) => moneyValue(r.agg, ccy),
     },
-    { key: "category", header: "Category", cell: (r) => EXPENSE_CATEGORY_LABELS[r.category], value: (r) => EXPENSE_CATEGORY_LABELS[r.category] },
+    {
+      key: "category", header: "Category",
+      cell: (r) => expenseCategoryLabel(categories, r.category),
+      value: (r) => expenseCategoryLabel(categories, r.category),
+    },
+    {
+      // Which account went down. Worth a column of its own because it is the one thing on the
+      // row a bank statement is reconciled against, and it was unanswerable until now.
+      key: "paidFrom", header: "Paid from",
+      cell: (r) => MONEY_ACCOUNTS.find((a) => a.code === r.paidFromAccount)?.label ?? r.paidFromAccount,
+      value: (r) => r.paidFromAccount,
+    },
     {
       key: "businessLine", header: "Business line",
       cell: (r) => (r.businessLine === "SHARED" ? "Shared" : r.businessLine === "B2" ? "B2" : "German Note"),
@@ -127,7 +227,25 @@ export function ExpenseSection({
     {
       key: "cogs", header: "COGS", cell: (r) => (r.isCogs ? "Yes" : "No"), value: (r) => (r.isCogs ? "Yes" : "No"),
     },
-    { key: "vendor", header: "Paid to", cell: (r) => r.vendor, value: (r) => r.vendor },
+    {
+      key: "vendor", header: "Paid to",
+      cell: (r) => (
+        <span>
+          {r.vendor}
+          {/* A team-pay row with no link counts in nobody's pay total - flagged here because
+              this is the tab where it can be fixed (Edit, then pick the person). */}
+          {r.category === "TEAM_SALARIES" && !r.teamProfileId && (
+            <span
+              className="ml-1.5 cursor-help text-caption text-watch"
+              title="Not linked to a team member - edit this row and pick them, so it counts in their pay history"
+            >
+              unlinked
+            </span>
+          )}
+        </span>
+      ),
+      value: (r) => r.vendor,
+    },
     { key: "notes", header: "Notes", cell: (r) => r.notes ?? "", value: (r) => r.notes ?? "" },
     {
       key: "actions", header: "", sortable: false,
@@ -171,6 +289,10 @@ export function ExpenseSection({
             />
           </Field>
           <AmountPair
+            /* Re-keyed on the chosen person, so switching payee adopts THEIR agreed figure
+               instead of leaving the previous one's salary in the box. An existing row keys off
+               its own id, so editing never re-prices what was actually paid. */
+            key={editing ? `exp-${editing.id}` : `exp-new-${profileId}`}
             fxRate={fxRate}
             fxStale={fxStale}
             fxDate={fxDate}
@@ -178,12 +300,43 @@ export function ExpenseSection({
             eurName="amountEur"
             inrLabel="Price paid (₹)"
             eurLabel="Price paid (€)"
-            baseHint="INR, EUR, or both"
-            defaultInr={editing ? minorToInput(editing.amountInrRaw) : ""}
-            defaultEur={editing ? minorToInput(editing.amountEurRaw) : ""}
+            baseHint={
+              !editing && payee && (payee.payInr || payee.payEur)
+                ? "Their agreed monthly pay - change it for a part month or a bonus"
+                : "INR, EUR, or both"
+            }
+            defaultInr={editing ? minorToInput(editing.amountInrRaw) : (payee?.payInr ?? "")}
+            defaultEur={editing ? minorToInput(editing.amountEurRaw) : (payee?.payEur ?? "")}
           />
-          <Field label="Expense category">
-            <Select name="category" options={optionsFrom(EXPENSE_CATEGORY_LABELS)} defaultValue={editing?.category ?? "TOOLS_SOFTWARE"} />
+          <Field
+            label="Expense category"
+            hint={isTeamPay ? "Paying a person - pick them below and the amount fills in." : undefined}
+          >
+            <Select
+              name="category"
+              // The row's own category is included even if it has since been switched off, or
+              // opening an old cost to fix its vendor would silently re-file it.
+              options={expenseCategoryOptions(categories, editing?.category)}
+              value={category}
+              onChange={(e) => {
+                const next = e.currentTarget.value;
+                setCategory(next);
+                // Leaving the category drops the person: a Marketing invoice still linked to a
+                // colleague would put an ad spend in their pay history.
+                if (next !== "TEAM_SALARIES") setProfileId("");
+              }}
+            />
+          </Field>
+          <Field
+            label="Paid from"
+            hint="The account the money actually left - this is what the ledger credits, and what a bank statement is reconciled against."
+          >
+            <Select
+              name="paidFromAccount"
+              options={MONEY_ACCOUNTS.map((a) => ({ value: a.code, label: a.label }))}
+              value={paidFrom}
+              onChange={(e) => setPaidFrom(e.currentTarget.value)}
+            />
           </Field>
           <Field
             label="Business line"
@@ -195,10 +348,50 @@ export function ExpenseSection({
               defaultValue={editing?.businessLine ?? defaultBusinessLine}
             />
           </Field>
-          {/* Not kind="name": a vendor is a company ("3M", "Zoho One"), not a person. */}
-          <Field label="Paid to (vendor)">
-            <TextInput kind="text" name="vendor" required placeholder="Who received this payment" defaultValue={editing?.vendor ?? ""} />
-          </Field>
+          {/*
+            Paid to - a PICKER when the money is going to a colleague, free text otherwise.
+
+            The two are mutually exclusive by construction: only one of them is rendered, so only
+            one reaches FormData and a typed name can never disagree with a chosen one. The action
+            overwrites `vendor` with the chosen person's own name, which is why the picker can
+            carry a hidden vendor without the two drifting.
+          */}
+          {isTeamPay && team.length > 0 ? (
+            <Field
+              label="Paid to (team member)"
+              hint={
+                payee && !payee.payInr && !payee.payEur
+                  ? "No monthly pay agreed for them - set it under People, or just type the amount."
+                  : "Fills the amount from their agreed monthly pay"
+              }
+            >
+              <Select
+                name="teamProfileId"
+                options={[
+                  { value: "", label: "Pick a team member" },
+                  ...team.map((t) => ({
+                    value: t.profileId,
+                    label: t.active ? t.name : `${t.name} (former)`,
+                  })),
+                ]}
+                value={profileId}
+                onChange={(e) => setProfileId(e.currentTarget.value)}
+              />
+              <input type="hidden" name="vendor" value={payee?.name ?? ""} />
+            </Field>
+          ) : (
+            /* Not kind="name": a vendor is a company ("3M", "Zoho One"), not a person. */
+            <Field
+              label="Paid to (vendor)"
+              hint={
+                isTeamPay
+                  ? "No team profiles on file yet - add people under People to link pay to a person."
+                  : undefined
+              }
+            >
+              <TextInput kind="text" name="vendor" required placeholder="Who received this payment" defaultValue={editing?.vendor ?? ""} />
+            </Field>
+          )}
           {/* Counts down the last characters instead of silently swallowing them (issue 18). */}
           <NotesField placeholder="Any extra info" defaultValue={editing?.notes ?? ""} key={`notes-${editing?.id ?? "new"}`} />
           <div className="flex items-end pb-1">
@@ -221,6 +414,15 @@ export function ExpenseSection({
         </div>
         </form>
       </Card>
+
+      {/*
+        Between the entry form and the full expense table, because that is where it belongs in
+        the sequence of the task: who do we pay, how much are they owed, and then every other
+        cost. It is not a separate tab - a team payment IS one of the rows below.
+      */}
+      {teamPay && (
+        <TeamPayPanel overview={teamPay} ccy={ccy} categories={categories} onPay={payPerson} />
+      )}
 
       <DataTable
         rows={visibleRows}

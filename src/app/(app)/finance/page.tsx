@@ -14,13 +14,19 @@ import { parsePeriod, resolvePeriod } from "@/lib/period";
 import { PeriodBar } from "@/components/ui/PeriodBar";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { formatMonth, formatPct } from "@/lib/format";
-import { PROGRAM_LEVEL_LABELS, PAYMENT_METHOD_LABELS, EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
+import { PROGRAM_LEVEL_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { getTodayInrPerEur } from "@/lib/fx";
-import { getInstalmentPlanConfig, getPaymentTypesConfig } from "@/server/founder-config";
+import {
+  getExpenseCategoriesConfig,
+  getInstalmentPlanConfig,
+  getPaymentTypesConfig,
+} from "@/server/founder-config";
+import { expenseCategoryLabel } from "@/lib/expense-categories";
 import { formatStudentCode, nextStudentNumber } from "@/lib/student-code";
 import { getFinanceOverview } from "@/server/finance-metrics";
+import { getTeamPayOverview } from "@/server/team-pay-metrics";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { getCommissionReport } from "@/server/commission-metrics";
 import { getActiveLevels } from "@/server/levels";
@@ -86,7 +92,9 @@ export default async function FinancePage({
     activeLevels,
     line,
     paymentTypes,
+    expenseCategories,
     instalmentPlans,
+    teamPay,
   ] = await Promise.all([
     getFinanceOverview(period),
     // Follows the page's period switch (issue 20) - the tab used to ignore it entirely.
@@ -112,7 +120,11 @@ export default async function FinancePage({
     // fetched per keystroke by the forms below - both are cached app-wide, a handful of numbers,
     // and no secret, so the income form can do its arithmetic as you type.
     getPaymentTypesConfig(),
+    getExpenseCategoriesConfig(),
     getInstalmentPlanConfig(),
+    // Who is on the team, what they are owed a month, and what has actually been paid them in
+    // this window. Follows the page's period switch like every other tab.
+    getTeamPayOverview(period),
   ]);
   const fxRate = Number(fx.rate);
   const fxDate = fx.date.toISOString();
@@ -322,7 +334,9 @@ export default async function FinancePage({
     }));
 
   // Expenses by category (this month) - top 5 + Other tail
-  const shortCat = (c: string) => (EXPENSE_CATEGORY_LABELS[c] ?? c).split(" (")[0].split(" - ")[0];
+  // The founder's own name for the category, trimmed of its parenthetical for a donut legend.
+  const shortCat = (c: string) =>
+    expenseCategoryLabel(expenseCategories, c).split(" (")[0].split(" - ")[0];
   // Both aggregates are carried through so the donut can flip currency with the toggle.
   const catTotals = new Map<string, { inr: number; eur: number }>();
   for (const e of expenses.filter((e) => e.date.slice(0, 7) === monthKey)) {
@@ -585,6 +599,12 @@ export default async function FinancePage({
                   fxRate={fxRate}
                   fxStale={fx.stale}
                   fxDate={fxDate}
+                  // The Team payments panel inside this tab, and the payee picker the form
+                  // grows when the category is team pay.
+                  teamPay={teamPay}
+                  // The founder's category list - what the picker offers and how the table
+                  // and the Team payments panel name each cost.
+                  categories={expenseCategories}
                   // Same rule as income. "Shared" on Combined - rent and tools really do
                   // belong to both books, and that is the honest answer when none is picked.
                   defaultBusinessLine={line === "ALL" ? "SHARED" : line}

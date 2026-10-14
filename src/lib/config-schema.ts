@@ -471,6 +471,69 @@ export function coerceBookingCalendarsConfig(value: unknown): BookingCalendarsCo
   return DEFAULT_BOOKING_CALENDARS_CONFIG;
 }
 
+// ──────────────────── Zoom meeting links ────────────────────
+
+/**
+ * Which Zoom account hosts which person's calls.
+ *
+ * WHY THIS IS CONFIG AND NOT A COLUMN: the credentials are in env (secrets), but "Asma's calls
+ * run on asma@…" is an operational decision the founder changes when someone joins or leaves,
+ * and it must not need a deploy. Same AppSetting pattern as every other document here.
+ *
+ * WHY IT IS A LIST AND NOT A MAP: a map keyed by cuid is unreadable in the raw JSON, and the
+ * console renders a row per active user anyway.
+ *
+ * An unmapped person falls through to `defaultHostEmail`, and a blank default falls through to
+ * the account owner (`me`). So the WORST case is "every call is hosted from the owner account",
+ * which still produces a working link - never a missing one. The cost of that fallback is that
+ * two concurrent calls would share a room, which is why the console warns when two calendars
+ * with overlapping hours resolve to the same host.
+ */
+/**
+ * The AppSetting key, declared HERE rather than with its siblings in `server/founder-config.ts`.
+ *
+ * That module imports React's `cache`, so anything that needs only the key name would drag the
+ * whole request-scoped config layer in with it - which is what stopped the engine path and the
+ * self-test script from running outside a Next request at all. `founder-config` re-exports this,
+ * so there is still exactly one spelling of the string.
+ */
+export const ZOOM_SETTINGS_KEY = "zoomConfig";
+
+export const zoomHostSchema = z.object({
+  /** The User this mapping is for - matched against `AppointmentSlot.assignedToId`. */
+  userId: z.string().trim().min(1).max(64),
+  /** Their Zoom login email. Not validated against Zoom: the app lacks the user:read scope. */
+  email: z.string().trim().email("Enter a valid Zoom login email").max(200),
+});
+
+export const zoomConfigSchema = z.object({
+  /** Blank = the Zoom account owner. Used for slots with no assignee, and unmapped people. */
+  defaultHostEmail: z.union([z.literal(""), z.string().trim().email().max(200)]).default(""),
+  hosts: z.array(zoomHostSchema).max(20).default([]),
+});
+
+export type ZoomConfig = z.infer<typeof zoomConfigSchema>;
+
+export const DEFAULT_ZOOM_CONFIG: ZoomConfig = { defaultHostEmail: "", hosts: [] };
+
+export function coerceZoomConfig(value: unknown): ZoomConfig {
+  const parsed = zoomConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_ZOOM_CONFIG;
+}
+
+/**
+ * Whose Zoom account should run a call assigned to `assignedToId`.
+ *
+ * Returns null for "the account owner" rather than a magic string, so the transport layer owns
+ * the `me` detail. Pure - unit-testable without a database or a Zoom account.
+ */
+export function zoomHostFor(config: ZoomConfig, assignedToId: string | null | undefined): string | null {
+  const mapped = assignedToId
+    ? config.hosts.find((h) => h.userId === assignedToId)?.email.trim()
+    : "";
+  return mapped || config.defaultHostEmail.trim() || null;
+}
+
 // ──────────────────── global workflow settings (Automation) ────────────────────
 
 /**
@@ -1103,7 +1166,7 @@ export function coerceDailyLogTargets(value: unknown): DailyLogTargets {
  *                   stamped EOD_AUTO, so no day is ever blank. Needs the cron to tick.
  *   amendWindowDays - how long an EOD_AUTO row stays amendable by its owner. This is the
  *                   counterweight to autoSave: auto-capture cannot see every field, so an
- *                   unamended EOD_AUTO row reads LOW on the Telecaller Pay board. 1 = the
+ *                   unamended EOD_AUTO row reads LOW on the Bonus & Commission board. 1 = the
  *                   member can still fix it the next morning. 0 = auto rows are final.
  *   founderSummary - after cutoff, Admin's notification centre reports who logged and who didn't.
  *
@@ -1672,4 +1735,192 @@ export const DEFAULT_ATTENDANCE_CONFIG: AttendanceConfig = {
 export function coerceAttendanceConfig(value: unknown): AttendanceConfig {
   const parsed = attendanceConfigSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_ATTENDANCE_CONFIG;
+}
+
+// ───────────────────────── cash health targets ─────────────────────────
+
+/**
+ * THE NUMBERS CASH HEALTH JUDGES ITSELF AGAINST - founder-editable via AppSetting("cashTargets").
+ *
+ * Every one of these was a literal in the code. `TARGET_INR = 80_000_000` sat in
+ * `server/cash-metrics.ts` and drove the "Months to ₹8L / month" card; the runway verdict's
+ * ≥6 / 3-6 / <3 bands were hardcoded in `lib/signals.ts`; burn averaged the last three calendar
+ * months because a `-3` was written into the query; and a payable was flagged underfunded at
+ * "less than twice the bill in the bank".
+ *
+ * They are all BUSINESS decisions, not engineering constants. ₹8L/month was the target when this
+ * page was built - reaching it makes the card read "Reached" forever, with no way to raise the bar
+ * without a deploy. A seasonal business wants a six-month burn window; a business with one big
+ * annual bill wants a bigger buffer than 2×.
+ *
+ * `runwayGreenMonths` must stay at or above `runwayAmberMonths`, or the bands would overlap and
+ * the same runway could be two colours. Enforced here rather than in the panel, so the rule holds
+ * whoever writes the setting.
+ */
+export const cashTargetsConfigSchema = z
+  .object({
+    /** The monthly revenue the "months to target" card counts towards. Minor units (paise). */
+    monthlyRevenueTargetInrMinor: z.number().int().min(0).max(100_000_000_000),
+    /** Runway at or above this many months is green. */
+    runwayGreenMonths: z.number().min(0).max(60),
+    /** Runway at or above this (and below green) is amber; below it is red. */
+    runwayAmberMonths: z.number().min(0).max(60),
+    /** What a full runway gauge means. Purely the dial's scale - it changes no verdict. */
+    runwayHorizonMonths: z.number().min(1).max(60),
+    /**
+     * A payable due within a week is flagged red when the cash in hand is less than this many
+     * times the bill. 1 = "we cannot cover it at all"; 2 = "covering it would halve the account".
+     */
+    payableBufferMultiple: z.number().min(0).max(10),
+    /** How many complete calendar months of expenses the burn rate averages over. */
+    burnWindowMonths: z.number().int().min(1).max(24),
+  })
+  .refine((c) => c.runwayGreenMonths >= c.runwayAmberMonths, {
+    message: "The green threshold must be at or above the amber one",
+    path: ["runwayGreenMonths"],
+  });
+
+export type CashTargetsConfig = z.infer<typeof cashTargetsConfigSchema>;
+
+export const DEFAULT_CASH_TARGETS_CONFIG: CashTargetsConfig = {
+  // Exactly the literals these replace, so an install that never opens the panel behaves
+  // identically to the hardcoded version.
+  monthlyRevenueTargetInrMinor: 80_000_000, // ₹8,00,000
+  runwayGreenMonths: 6,
+  runwayAmberMonths: 3,
+  runwayHorizonMonths: 12,
+  payableBufferMultiple: 2,
+  burnWindowMonths: 3,
+};
+
+export function coerceCashTargetsConfig(value: unknown): CashTargetsConfig {
+  const parsed = cashTargetsConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_CASH_TARGETS_CONFIG;
+}
+
+// ───────────────────────────── expense categories ─────────────────────────────
+
+/**
+ * The "Expense category" offered on every cost form, founder-editable via
+ * AppSetting("expenseCategories").
+ *
+ * ── Why this stops being an enum ──────────────────────────────────────────────────
+ * It held eight values chosen in a spec, and the one a real business reaches for next - Rent,
+ * Legal and accounting, Travel, Bank charges - was not among them. The only way to record such a
+ * cost was "Other", so the P&L's biggest line became the one that says nothing, and the founder
+ * could not fix it without a schema change and a deploy. `programLevel` and `paymentType` already
+ * went this way (20260718090000_configurable_levels, 20261003120000_configurable_payment_types);
+ * this follows them deliberately.
+ *
+ * ── ACCOUNT IS WHAT THE LEDGER BRANCHES ON ───────────────────────────────────────
+ * `code` is the value stored on the row and `label` is what the founder calls it, but neither
+ * decides where the money lands. `accountCode` does: it names the EXPENSE account in the chart
+ * that the cost is debited to, which is what makes the category appear as a line in the P&L
+ * rather than as a label on a report. A founder adding a category either points it at a line
+ * that already exists or asks for a line of its own - see `saveExpenseCategoriesConfig`, which
+ * creates the ledger account before the config that references it is stored, so a code here can
+ * never name an account that does not exist.
+ *
+ * `isCogs` is the category's DEFAULT answer to "is this a direct cost of delivery", not a verdict:
+ * every expense row still carries its own flag, because COGS is orthogonal to category (SPEC
+ * §4.2 - a tutor's salary is Team salaries *and* a delivery cost).
+ */
+const expenseCategorySchema = z.object({
+  /**
+   * The stored value. Upper snake case so it reads like the enum it replaces and is safe in a
+   * URL, a CSV cell and a filter box. Immutable once rows exist, which the Console enforces by
+   * never offering to edit the code of a category that is already in use.
+   */
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z][A-Z0-9_]{0,31}$/, "Use letters, numbers and underscores, starting with a letter"),
+  label: z.string().trim().min(1, "Every expense category needs a name").max(60, "That name is too long"),
+  /**
+   * The EXPENSE account this category debits. `NEW_ACCOUNT` is the request for a line of its
+   * own: the save action allocates the next free code, creates the account and stores that code
+   * instead, so the stored config only ever holds real account codes.
+   */
+  accountCode: z
+    .string()
+    .trim()
+    .regex(/^(\d{4}|NEW_ACCOUNT)$/, "Pick which P&L line this category posts to"),
+  /** The category's default answer to "is this a direct delivery cost". Per-row flag still wins. */
+  isCogs: z.boolean(),
+  /** Inactive categories stay on historic rows and read back correctly; they stop being offered. */
+  active: z.boolean(),
+});
+
+export type ExpenseCategoryOption = z.infer<typeof expenseCategorySchema>;
+
+/** The sentinel `accountCode` meaning "give this category its own line in the P&L". */
+export const NEW_EXPENSE_ACCOUNT = "NEW_ACCOUNT";
+
+/**
+ * The codes the rest of the app branches on by NAME, not only by account.
+ *
+ * TEAM_SALARIES is what turns "Paid to (vendor)" into the team picker, drives the Team payments
+ * panel and is what `postCommissionPayout` debits; COGS_DIRECT_DELIVERY is where a tutor fee
+ * accrues (ER v2 Track C); OTHER is the fallback every unrecognised code reads as. They may be
+ * relabelled, re-pointed at another account and deactivated (which only stops them being
+ * offered), but they can never be deleted - that would orphan live data and silently change what
+ * a historic row means.
+ */
+export const LOCKED_EXPENSE_CATEGORIES = ["TEAM_SALARIES", "COGS_DIRECT_DELIVERY", "OTHER"] as const;
+
+export const expenseCategoriesConfigSchema = z
+  .object({
+    categories: z.array(expenseCategorySchema).min(1, "Keep at least one expense category").max(40),
+  })
+  .superRefine((cfg, ctx) => {
+    const seen = new Set<string>();
+    for (const c of cfg.categories) {
+      if (seen.has(c.code)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `There are two categories coded ${c.code} - keep one`,
+        });
+        return;
+      }
+      seen.add(c.code);
+    }
+    // A form with nothing to offer cannot record a cost at all.
+    if (!cfg.categories.some((c) => c.active)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one category has to stay active" });
+      return;
+    }
+    for (const locked of LOCKED_EXPENSE_CATEGORIES) {
+      if (!cfg.categories.some((c) => c.code === locked)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${locked} is used by existing records and can be renamed but not removed`,
+        });
+        return;
+      }
+    }
+  });
+
+export type ExpenseCategoriesConfig = z.infer<typeof expenseCategoriesConfigSchema>;
+
+/**
+ * The eight the enum held, each pointing at the account `expenseAccountFor` hardcoded for it - so
+ * an install that never opens the panel posts exactly where it always did.
+ */
+export const DEFAULT_EXPENSE_CATEGORIES_CONFIG: ExpenseCategoriesConfig = {
+  categories: [
+    { code: "MARKETING", label: "Marketing (Meta Ads, Google Ads, Influencers)", accountCode: "6000", isCogs: false, active: true },
+    { code: "TOOLS_SOFTWARE", label: "Tools and Software", accountCode: "6010", isCogs: false, active: true },
+    { code: "TEAM_SALARIES", label: "Team Salaries and Commissions", accountCode: "6020", isCogs: false, active: true },
+    { code: "CONTENT_CREATION", label: "Content Creation", accountCode: "6030", isCogs: false, active: true },
+    { code: "EVENTS_OFFLINE", label: "Events and Offline", accountCode: "6040", isCogs: false, active: true },
+    { code: "OPERATIONS", label: "Operations", accountCode: "6050", isCogs: false, active: true },
+    { code: "COGS_DIRECT_DELIVERY", label: "COGS - Direct Delivery Cost", accountCode: "5000", isCogs: true, active: true },
+    { code: "OTHER", label: "Other", accountCode: "6090", isCogs: false, active: true },
+  ],
+};
+
+export function coerceExpenseCategoriesConfig(value: unknown): ExpenseCategoriesConfig {
+  const parsed = expenseCategoriesConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_EXPENSE_CATEGORIES_CONFIG;
 }

@@ -226,6 +226,7 @@ export function SubmitButton({
   children,
   disabled = false,
   title,
+  tone = "primary",
 }: {
   children: ReactNode;
   /**
@@ -236,14 +237,27 @@ export function SubmitButton({
   disabled?: boolean;
   /** Why it is closed. Without this a greyed-out button is just a dead end. */
   title?: string;
+  /**
+   * "action" paints the button in the brand's action red instead of the structural blue.
+   *
+   * Reserved for the handful of moments we ask somebody to COMMIT - book the call, sign the
+   * agreement, pay - and deliberately not the default: the whole point of the red is that it
+   * is rare. A red button on an internal "Save" form would spend the signal on a form field,
+   * and would also collide with the one other red in the system, which means destroy.
+   */
+  tone?: "primary" | "action";
 }) {
   const { pending } = useFormStatus();
+  const fill =
+    tone === "action"
+      ? "bg-action text-on-action hover:bg-action-strong"
+      : "bg-primary text-on-accent hover:bg-primary-strong";
   return (
     <button
       type="submit"
       title={disabled ? title : undefined}
       disabled={pending || disabled}
-      className="inline-flex h-10 flex-none items-center justify-center gap-2 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-ink-disabled"
+      className={`inline-flex h-10 flex-none items-center justify-center gap-2 rounded-btn px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-ink-disabled ${fill}`}
     >
       {pending && <Loader2 size={15} className="animate-spin" />}
       {pending ? "Saving…" : children}

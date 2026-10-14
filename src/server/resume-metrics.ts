@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { studentIdForUser } from "@/server/student-lookup";
 import { prisma } from "@/lib/prisma";
 import type { AppRole } from "@/lib/sections";
 import { coerceResumeData, type ResumeData } from "@/lib/resume-types";
@@ -41,11 +42,39 @@ function fmtDate(d: Date): string {
  *  · Every reader takes it as a REQUIRED argument. A default of "unscoped" is precisely the bug
  *    being fixed here; making it required means a new call site cannot compile without deciding.
  */
-export type ResumeScope = { ownerUserId?: string };
+export type ResumeScope = { OR?: { ownerUserId?: string; studentId?: string }[] };
 
 export function resumeScope(session: { role: AppRole; user: { id: string } }): ResumeScope {
   const seesAll = session.role === "ADMIN" || session.role === "HEAD";
-  return seesAll ? {} : { ownerUserId: session.user.id };
+  return seesAll ? {} : { OR: [{ ownerUserId: session.user.id }] };
+}
+
+/**
+ * The same scope, widened to include CVs filed against the caller's STUDENT record.
+ *
+ * `Resume.studentId` is a real FK that exists, per its own schema note, so that "a coach
+ * building a CV for a student needs it on the student's record". The scope above only ever
+ * matched `ownerUserId`, so that CV - built by the coach, owned by the coach - was invisible
+ * in the student's own CV Studio. The one link in the schema designed to connect the two was
+ * the one thing the query did not read.
+ *
+ * It also makes the student's own history survive a lost login: `ownerUserId` points at a
+ * specific account, so re-issuing access used to orphan every CV they had built.
+ *
+ * Async because it has to resolve the caller's student id; `resumeScope` stays synchronous
+ * for the callers that only need the owner test.
+ */
+export async function resumeScopeForSession(session: {
+  role: AppRole;
+  user: { id: string };
+}): Promise<ResumeScope> {
+  if (session.role === "ADMIN" || session.role === "HEAD") return {};
+  const studentId = await studentIdForUser(session.user.id);
+  return {
+    OR: studentId
+      ? [{ ownerUserId: session.user.id }, { studentId }]
+      : [{ ownerUserId: session.user.id }],
+  };
 }
 
 export type ResumeListItem = {

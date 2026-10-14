@@ -5,10 +5,21 @@ import { aggInrMinor, aggEurMinor } from "@/lib/money";
 import { LOG_FIELD_SHORT } from "@/lib/labels";
 
 /**
- * Telecaller Pay board (Admin-only). Lists the telecallers (USER-role team members
- * who make calls - appointment setters + discovery specialists), each with this
- * month's call activity pulled from their daily logs as context for the reward,
- * plus every bonus/commission Ameen has assigned for the month.
+ * The bonus-and-commission board (Admin-only): every bonus or commission the founder has
+ * assigned this month, and who it went to.
+ *
+ * ── WHO APPEARS, AND WHY IT USED TO BE FEWER ─────────────────────────────────────
+ * This listed only profiles whose `logVariant` was APPOINTMENT_SETTER or DISCOVERY_SPECIALIST,
+ * which is how it got its name - and which meant the delivery coach, every tutor and the
+ * designer could not be given a bonus here at all. There was no second screen for it either, so
+ * a reward for anyone outside those two functions had to be typed as a nameless expense, and
+ * then appeared in nobody's pay history. The board now lists the WHOLE active team, plus anyone
+ * already paid in the month being viewed even if they have since left - a payout that exists has
+ * to be visible on the screen that made it.
+ *
+ * Call activity is still shown where it means something: the two telecaller functions keep their
+ * per-call columns (pulled from their daily logs as context for the reward), and everyone else
+ * simply has none. An empty set of call stats is the honest answer for a tutor, not a gap.
  *
  * Money follows the app rule (CONTEXT §6): stored as INR + EUR minor units with the
  * FX rate stamped per row; aggregates roll each row up at its own stored rate.
@@ -27,6 +38,8 @@ export type TelecallerRow = {
   name: string;
   roleTitle: string;
   logVariant: string;
+  /** False for someone who has left and is only here because they were paid in this month. */
+  active: boolean;
   calls: CallStat[];
   assignedInrMinor: number; // this month's bonus+commission, aggregated to INR
   payoutCount: number;
@@ -89,12 +102,15 @@ export async function getTelecallerBoard(month?: string): Promise<TelecallerBoar
     timeZone: "UTC",
   }).format(ref);
 
-  const [telecallers, payouts] = await Promise.all([
+  const [team, payouts] = await Promise.all([
+    /**
+     * THE WHOLE TEAM, not two functions of it. The `logVariant` filter that used to be here is
+     * what made a bonus for the delivery coach impossible to record anywhere - see the note at
+     * the top of this file. Inactive profiles are picked up separately below, but only when they
+     * were actually paid in the month on screen.
+     */
     prisma.teamProfile.findMany({
-      where: {
-        status: "ACTIVE",
-        logVariant: { in: ["APPOINTMENT_SETTER", "DISCOVERY_SPECIALIST"] },
-      },
+      where: { status: "ACTIVE" },
       orderBy: [{ orderIndex: "asc" }, { fullName: "asc" }],
     }),
     prisma.telecallerPayout.findMany({
@@ -106,6 +122,20 @@ export async function getTelecallerBoard(month?: string): Promise<TelecallerBoar
       orderBy: { createdAt: "desc" },
     }),
   ]);
+
+  /**
+   * Anyone paid this month who is no longer on the active roster - offboarded mid-month, say.
+   * Their payout is a fact about this month and has to be listed next to everyone else's, or the
+   * per-person rows would not add up to the totals printed above them.
+   */
+  const paidProfileIds = [...new Set(payouts.map((p) => p.teamProfileId))];
+  const alsoPaid = paidProfileIds.length
+    ? await prisma.teamProfile.findMany({
+        where: { id: { in: paidProfileIds }, NOT: { status: "ACTIVE" } },
+        orderBy: [{ orderIndex: "asc" }, { fullName: "asc" }],
+      })
+    : [];
+  const telecallers = [...team, ...alsoPaid];
 
   // Call activity this month, per linked user, summed from daily logs.
   const userIds = telecallers.map((t) => t.userId).filter((id): id is string => !!id);
@@ -172,6 +202,7 @@ export async function getTelecallerBoard(month?: string): Promise<TelecallerBoar
       name: t.fullName,
       roleTitle: t.roleTitle,
       logVariant: t.logVariant,
+      active: t.status === "ACTIVE",
       calls,
       assignedInrMinor: assigned?.inr ?? 0,
       payoutCount: assigned?.count ?? 0,
@@ -214,7 +245,9 @@ export async function getTelecallerBoard(month?: string): Promise<TelecallerBoar
     month: monthKey(ref),
     monthLabel,
     telecallers: telecallerRows,
-    teamOptions: telecallers.map((t) => ({ value: t.id, label: t.fullName })),
+    // The picker on the assign form offers the active roster only: a bonus for somebody who has
+    // left is a correction to a month already closed, made by editing the payout that exists.
+    teamOptions: team.map((t) => ({ value: t.id, label: t.fullName })),
     payouts: payoutRows,
     bonusBreakdown,
     commBreakdown,

@@ -36,6 +36,7 @@ import {
   Polyline,
 } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
+import { PdfBrandLockup } from "./pdf-brand";
 import { deviceRows, userAgentMismatch, type StoredDevice } from "@/lib/device";
 import {
   AGREEMENT_BANKS,
@@ -281,15 +282,17 @@ function stamp(d: Date): string {
 }
 
 function Brand() {
-  // The logo mark, in the brand periwinkle (matches the app's --brand-indigo and the
-  // invoice mark). "²" is WinAnsi-safe - see the glyph note at the top of this file.
-  const INDIGO = "#5B60C9";
+  /**
+   * The real logo, as a raster - not the typed-out "B²" in a rounded periwinkle box this
+   * used to draw. Using the lockup asset also retires the hand-set CONSULTANTS strapline
+   * below it, which was 4.6pt: under any print legibility floor, and the wrong letterforms.
+   *
+   * No glyph concern here any more - nothing is typeset, so the WinAnsi note at the top of
+   * this file does not apply to the mark.
+   */
   return (
     <View style={{ alignItems: "center", marginBottom: 10 }}>
-      <View style={{ borderWidth: 1.3, borderColor: INDIGO, borderRadius: 4, paddingHorizontal: 9, paddingTop: 2, paddingBottom: 1 }}>
-        <Text style={{ fontFamily: "Times-Bold", fontSize: 20, color: INDIGO }}>B²</Text>
-      </View>
-      <Text style={{ fontSize: 4.6, letterSpacing: 1.6, marginTop: 1.5, color: INDIGO }}>CONSULTANTS</Text>
+      <PdfBrandLockup size={30} />
     </View>
   );
 }

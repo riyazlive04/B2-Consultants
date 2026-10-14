@@ -41,7 +41,7 @@ export default async function StudentsPage() {
   // Mirrors `updateTracker`'s own `requireAdminOrHead` gate - the weekly-round form is only
   // offered to people the server will actually accept a write from.
   const canEditTracker = isAdmin || session.role === "HEAD";
-  const { counts, avgSatisfaction, avgNps, satisfactionBreakdown, npsBreakdown, tracker, momentumBoard, atRiskRadar, ltvSummary, students } =
+  const { counts, avgSatisfaction, avgNps, satisfactionBreakdown, npsBreakdown, tracker, momentumBoard, atRiskRadar, ltvSummary, students, coaches, defaultCoach } =
     await getStudentsOverview();
   const waByStudent = await getWhatsAppStatusMap("studentId", tracker.map((t) => t.studentId));
   const today = toDateInputValue(istToday());
@@ -289,7 +289,7 @@ export default async function StudentsPage() {
                 },
               ]
             : []),
-          { label: "All students & totals", content: <StudentsPanel rows={students} isAdmin={isAdmin} today={today} /> },
+          { label: "All students & totals", content: <StudentsPanel rows={students} isAdmin={isAdmin} today={today} coaches={coaches} defaultCoach={defaultCoach} /> },
           ...(isAdmin
             ? [
                 {

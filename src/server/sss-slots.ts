@@ -4,6 +4,7 @@ import { istWallToUtc } from "@/lib/dates";
 import { formatDateTimeInZone } from "@/lib/format";
 import { getSssConfig } from "./founder-config";
 import { sendSssRescheduled } from "./whatsapp";
+import { syncJourneyMeeting } from "./zoom-meetings";
 
 /**
  * SSS (Success Strategy Session) slot engine - the founder-run sales call calendar.
@@ -159,12 +160,24 @@ export async function bookJourneyIntoSlot(journeyId: string, slotId: string): Pr
       if (claim.count === 0) throw new Error("slot-taken");
       await tx.outreachJourney.update({
         where: { id: journeyId },
-        data: { sssAt: slot.startsAt, salesCallConfirmed: false, salesCallConfirmedAt: null },
+        // zoomStartsAt: null marks Zoom known-stale - see the same invariant in booking-actions.
+        data: { sssAt: slot.startsAt, salesCallConfirmed: false, salesCallConfirmedAt: null, zoomStartsAt: null },
       });
       return true;
     })
     .catch(() => false);
-  return ok ? { ok: true } : { ok: false, error: "That slot was just taken - pick another" };
+  if (!ok) return { ok: false, error: "That slot was just taken - pick another" };
+
+  /**
+   * Fill in the Zoom link the SOP's confirmation steps (19–21) need.
+   *
+   * This is the field somebody has been pasting by hand out of the Discovery Specialist's
+   * calendar, and those steps REFUSE to send while it is empty - so when Zoom is armed this is
+   * what unblocks the SSS ladder without anyone copying anything. Silent when Zoom is off: the
+   * paste-it-yourself box on the Outreach card still works exactly as before.
+   */
+  await syncJourneyMeeting(journeyId);
+  return { ok: true };
 }
 
 /**
@@ -191,12 +204,18 @@ async function relocate(journeyId: string, toSlotId: string, freeOldTo: "OPEN" |
       if (claim.count === 0) throw new Error("slot-taken");
       await tx.outreachJourney.update({
         where: { id: journeyId },
-        data: { sssAt: target.startsAt, salesCallConfirmed: false, salesCallConfirmedAt: null },
+        // zoomStartsAt: null marks Zoom known-stale - see the same invariant in booking-actions.
+        data: { sssAt: target.startsAt, salesCallConfirmed: false, salesCallConfirmedAt: null, zoomStartsAt: null },
       });
       return true;
     })
     .catch(() => false);
-  return done ? { ok: true, newStartsAt: target.startsAt } : { ok: false };
+  if (!done) return { ok: false };
+
+  // Move the existing meeting onto the new time rather than minting a second room, so the link
+  // the prospect already has keeps working. Done before the caller WhatsApps them the new time.
+  await syncJourneyMeeting(journeyId);
+  return { ok: true, newStartsAt: target.startsAt };
 }
 
 /** The next OPEN same-owner slot after now, within the reschedule window, excluding one id. */

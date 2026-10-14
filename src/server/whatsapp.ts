@@ -2,6 +2,8 @@ import "server-only";
 import { bookingUrl, leadTemplateVars } from "./lead-template-vars";
 import { Prisma, type WhatsAppKind, type WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { levelLabels } from "./levels";
+import { PROGRAM_LEVEL_LABELS } from "@/lib/labels";
 import { istToday } from "@/lib/dates";
 import { formatDate, formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import {
@@ -988,6 +990,22 @@ async function loadBooking(bookingRequestId: string) {
   });
 }
 
+/**
+ * The prospect-safe Zoom join link, for the templates that declare `{{zoom_link}}`.
+ *
+ * OMITTED entirely when there is no link, rather than passed as "". The two are not the same
+ * thing to `buildParams`: a declared-but-empty variable is reported as missing and the send is
+ * skipped, which is what we want for a template whose whole purpose is to carry the link. An
+ * absent key is simply a variable this touchpoint did not offer today, so a template that never
+ * asked for it sends exactly as before.
+ *
+ * `zoomStartUrl` is deliberately NOT exposed here under any name - it signs its opener in as the
+ * host, and the one certain way to send it to a prospect is to make it reachable from a template.
+ */
+function zoomVar(b: { zoomJoinUrl: string | null }): Record<string, string> {
+  return b.zoomJoinUrl ? { zoom_link: b.zoomJoinUrl } : {};
+}
+
 export async function sendBookingConfirmation(bookingRequestId: string, sentById?: string | null): Promise<SendOutcome> {
   const b = await loadBooking(bookingRequestId);
   if (!b) return notFound("Booking");
@@ -1000,6 +1018,7 @@ export async function sendBookingConfirmation(bookingRequestId: string, sentById
       name: firstName(b.name),
       slot_time: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Asia/Kolkata") : "",
       booking_url: bookingUrl(),
+      ...zoomVar(b),
     },
   });
 }
@@ -1013,6 +1032,7 @@ export async function sendBookingReminderFor(bookingRequestId: string, sentById?
       name: firstName(b.name),
       slot_time: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Asia/Kolkata") : "",
       booking_url: bookingUrl(),
+      ...zoomVar(b),
     },
   });
 }
@@ -1049,6 +1069,7 @@ export async function sendBookingRescheduled(bookingRequestId: string, sentById?
       name: firstName(b.name),
       slot_time: b.slot ? formatDateTimeInZone(b.slot.startsAt, "Asia/Kolkata") : "",
       booking_url: bookingUrl(),
+      ...zoomVar(b),
     },
   });
 }
@@ -1121,6 +1142,117 @@ export async function sendStudentNudgeFor(
   return sendWhatsApp({
     kind, to: e.student.phone, studentId: e.student.id, sentById,
     vars: { name: firstName(e.student.fullName) },
+  });
+}
+
+/**
+ * The enrolment welcome - the one message the app sends when somebody actually becomes a student.
+ *
+ * ── Why it exists ───────────────────────────────────────────────────────────────
+ * There was no enrolment touchpoint at all. A student signed, paid, was enrolled by hand and
+ * seated in a batch by hand, and the next automated thing they heard from us was a payment
+ * reminder. Who their tutor was, when class started and that a portal existed all depended on
+ * somebody remembering to message them personally.
+ *
+ * ── Sent ONCE, ever ─────────────────────────────────────────────────────────────
+ * Keyed on a prior SENT row for this student rather than a time window: being moved between
+ * batches is a normal thing that happens to a student, and "welcome to the programme" is not a
+ * thing to say twice. A FAILED or SKIPPED attempt does not count, so an unarmed or
+ * misconfigured first attempt can still be delivered once it is fixed.
+ *
+ * ── Every variable is guaranteed non-empty, except one ──────────────────────────
+ * An unresolved variable SKIPS the whole send (see `buildParameters`), which for this
+ * touchpoint would mean the welcome silently never arrives - the exact failure it exists to
+ * fix. So `tutor_name` falls back through batch tutor -> assigned coach, and `first_class`
+ * falls back to a plain phrase rather than a blank.
+ *
+ * `portal_url` is the deliberate exception: a student with no login has nowhere to be sent, so
+ * it is empty for them and a template declaring it will skip. That is why the approved pack
+ * carries a plain variant AND a `_portal` one, and why the plain one is the one to bind first.
+ */
+export async function sendStudentWelcome(
+  studentId: string,
+  sentById?: string | null,
+): Promise<SendOutcome> {
+  const runtime = await getWatiRuntime();
+  if (!runtime.settings.cadence.studentWelcomeEnabled) {
+    return { messageId: null, status: "SKIPPED", sent: false, skipped: true, error: "Student welcome is switched off" };
+  }
+
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: {
+      id: true,
+      fullName: true,
+      phone: true,
+      userId: true,
+      enrollments: {
+        where: { status: "ACTIVE" },
+        orderBy: { enrollmentDate: "desc" },
+        take: 1,
+        select: { programLevel: true, assignedCoach: true, batchId: true },
+      },
+      gnMemberships: { select: { batchId: true }, orderBy: { addedAt: "desc" }, take: 1 },
+    },
+  });
+  if (!student) return notFound("Student");
+
+  // Once ever. A delivered welcome is the whole dedupe key.
+  const already = await prisma.whatsAppMessage.count({
+    where: { studentId, kind: "STUDENT_WELCOME", direction: "OUTBOUND", status: { in: ["SENT", "DELIVERED", "READ", "REPLIED"] } },
+  });
+  if (already > 0) {
+    return { messageId: null, status: "SKIPPED", sent: false, skipped: true, error: "Welcome already sent" };
+  }
+
+  const enrollment = student.enrollments[0] ?? null;
+  const batchId = enrollment?.batchId ?? student.gnMemberships[0]?.batchId ?? null;
+
+  const [batch, labels] = await Promise.all([
+    batchId
+      ? prisma.batch.findUnique({
+          where: { id: batchId },
+          select: {
+            tutor: { select: { name: true } },
+            // The next class that has not happened yet - the one they should turn up to.
+            events: {
+              where: { startsAt: { gt: new Date() } },
+              orderBy: { startsAt: "asc" },
+              take: 1,
+              select: { startsAt: true },
+            },
+          },
+        })
+      : Promise.resolve(null),
+    levelLabels(),
+  ]);
+
+  const level = enrollment?.programLevel ?? null;
+  const base = (process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "");
+  const nextClass = batch?.events[0]?.startsAt ?? null;
+
+  return sendWhatsApp({
+    kind: "STUDENT_WELCOME",
+    to: student.phone,
+    studentId: student.id,
+    sentById,
+    runtime,
+    bodySummary: "Welcome - you are enrolled",
+    vars: {
+      name: firstName(student.fullName),
+      // Prefer the founder's own label for the level; fall back to the shipped map, then to the
+      // raw code. Never blank - a blank here would skip the send over a cosmetic lookup.
+      program: (level && (labels[level] ?? PROGRAM_LEVEL_LABELS[level])) || level || "your programme",
+      // Batch tutor first (they take the classes), then the coach on the enrollment, which is
+      // always set. Both are real people's names, so either is honest in "X is looking after you".
+      tutor_name: batch?.tutor?.name || enrollment?.assignedCoach || "your B2 coach",
+      first_class: nextClass
+        ? `${formatDateTimeInZone(nextClass, "Asia/Kolkata")} IST`
+        : "we'll confirm the time shortly",
+      // Empty when they have no login yet - see the note above. Only a `_portal` template
+      // declares it, and that template is meant to be bound once logins are routine.
+      portal_url: student.userId && base ? `${base}/portal` : "",
+    },
   });
 }
 

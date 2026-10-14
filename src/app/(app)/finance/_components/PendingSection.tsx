@@ -6,7 +6,7 @@ import {
   createPendingPayment, deletePendingPayment, updatePendingPayment,
 } from "@/server/finance-actions";
 import {
-  clearInstalmentPlan, generateInstalmentPlan, setInstalmentStatus,
+  clearInstalmentPlan, generateInstalmentPlan, setInstalmentStatus, updateInstalment,
 } from "@/server/emi-actions";
 import type { PendingRow } from "@/server/finance-metrics";
 import type { WhatsAppStatusCell } from "@/server/whatsapp";
@@ -21,6 +21,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { guardAction } from "@/lib/action-guard";
 import { Field, FormError, NotesField, Select, SubmitButton, TextInput } from "@/components/ui/form";
 import { AmountPair } from "@/components/ui/AmountPair";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { formatDate } from "@/lib/format";
 import { money, moneyInline, moneyValue, type Ccy } from "@/lib/money-display";
@@ -49,6 +50,84 @@ const INSTALMENT_STATUS_OPTIONS = [
   { value: "OVERDUE", label: "Overdue" },
 ];
 
+/**
+ * One unpaid instalment, open for editing - amount and due date.
+ *
+ * A plain `<form>` posting to the action rather than controlled state: there are three boxes, the
+ * row closes on save, and the server is the only thing that decides whether the change is legal
+ * (a row that was marked paid in another tab is refused, with the reason said here).
+ *
+ * The amounts open on what is stored, in the currency it was stored in - zero comes up EMPTY,
+ * not "0.00", because a euro-only plan showing "₹0.00" beside its real figure reads as a plan
+ * billed in both and would be saved back as one.
+ */
+function InstalmentEditRow({
+  instalment,
+  onCancel,
+  onSaved,
+  onError,
+}: {
+  instalment: PendingRow["instalments"][number];
+  onCancel: () => void;
+  onSaved: () => void;
+  onError: (m: string | null) => void;
+}) {
+  const asInput = (minor: number) => (minor === 0 ? "" : (minor / 100).toFixed(2));
+  return (
+    <form
+      action={async (form) => {
+        onError(null);
+        const res = await safeAction(() => updateInstalment(instalment.id, form));
+        if (!res.ok) return onError(res.error);
+        toast(`Instalment #${instalment.seq} updated`);
+        onSaved();
+      }}
+      className="flex flex-wrap items-end gap-2 rounded-field border border-primary bg-surface-2 px-3 py-2.5"
+    >
+      <span className="pb-2.5 text-sm font-medium">#{instalment.seq}</span>
+      {/* Field takes no className - the width lives on a wrapper so the row can wrap on a
+          phone without the three boxes collapsing into unreadable slivers. */}
+      <div className="min-w-[9rem] flex-1">
+      <Field label="Due date">
+        <TextInput
+          type="date"
+          name="dueDate"
+          required
+          defaultValue={instalment.dueDate.slice(0, 10)}
+          aria-label={`Due date for instalment ${instalment.seq}`}
+        />
+      </Field>
+      </div>
+      <div className="min-w-[8rem] flex-1">
+      <Field label="Amount (₹)">
+        <MoneyInput
+          currency="INR"
+          name="amountInr"
+          defaultValue={asInput(instalment.inr)}
+          aria-label={`Amount in rupees for instalment ${instalment.seq}`}
+        />
+      </Field>
+      </div>
+      <div className="min-w-[8rem] flex-1">
+      <Field label="Amount (€)">
+        <MoneyInput
+          currency="EUR"
+          name="amountEur"
+          defaultValue={asInput(instalment.eur)}
+          aria-label={`Amount in euros for instalment ${instalment.seq}`}
+        />
+      </Field>
+      </div>
+      <div className="flex items-center gap-2 pb-0.5">
+        <SubmitButton>Save</SubmitButton>
+        <Btn variant="ghost" size="sm" type="button" onClick={onCancel}>
+          Cancel
+        </Btn>
+      </div>
+    </form>
+  );
+}
+
 /** Structured EMI schedule (spec Module G): generate an N-instalment plan, mark each paid, or clear it. */
 function EmiScheduleModal({
   row,
@@ -66,6 +145,8 @@ function EmiScheduleModal({
   const has = row.instalments.length > 0;
   const paidCount = row.instalments.filter((i) => i.status === "PAID").length;
 
+  /** Which instalment is open for editing, by seq. Null = the read-only list. */
+  const [editingSeq, setEditingSeq] = useState<number | null>(null);
   const [count, setCount] = useState(row.instalments.length || 2);
   const [intervalDays, setIntervalDays] = useState<number | null>(config.defaultIntervalDays);
 
@@ -129,7 +210,16 @@ function EmiScheduleModal({
             </span>
             {row.intervalDays && <span className="text-muted">every {row.intervalDays} days</span>}
           </div>
-          {row.instalments.map((it) => (
+          {row.instalments.map((it) =>
+            editingSeq === it.seq ? (
+              <InstalmentEditRow
+                key={it.id}
+                instalment={it}
+                onCancel={() => setEditingSeq(null)}
+                onSaved={() => setEditingSeq(null)}
+                onError={onError}
+              />
+            ) : (
             <div
               key={it.id}
               className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm"
@@ -147,7 +237,19 @@ function EmiScheduleModal({
                 due {formatDate(it.dueDate)}
                 {it.paidDate ? ` · paid ${formatDate(it.paidDate)}` : ""}
               </span>
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-2">
+                {/*
+                  Amount and date, changeable in place on a row nobody has paid yet. Until now
+                  the ONLY thing editable on a schedule was this status dropdown, so a
+                  renegotiated plan ("₹5,000 a month, not ₹8,000") could be recorded only by
+                  clearing the whole schedule - which deletes the paid rows too - and generating
+                  a fresh equal split. A paid row has an Income row behind it and stays frozen.
+                */}
+                {it.status !== "PAID" && (
+                  <Btn variant="ghost" size="sm" onClick={() => { onError(null); setEditingSeq(it.seq); }}>
+                    Edit
+                  </Btn>
+                )}
                 <Select
                   value={it.status}
                   aria-label={`Instalment ${it.seq} status`}
@@ -161,7 +263,13 @@ function EmiScheduleModal({
                 />
               </div>
             </div>
-          ))}
+            ),
+          )}
+          <p className="pt-1 text-caption text-muted">
+            Editing an unpaid instalment re-states what this receivable has left to collect, so
+            the schedule and the balance always agree. Paid instalments are the payments that were
+            recorded - correct those on the income entry itself.
+          </p>
           <div className="pt-2">
             <Btn
               variant="danger"

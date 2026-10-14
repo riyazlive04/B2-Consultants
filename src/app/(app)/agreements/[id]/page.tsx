@@ -9,11 +9,14 @@ import {
   formatGermanDate,
 } from "@/lib/agreement";
 import { WHATSAPP_KIND_LABELS, WHATSAPP_STATUS_LABELS } from "@/lib/whatsapp";
-import { getAgreementDetail } from "@/server/agreement-metrics";
+import { getAgreementDetail, getMeetingAttendees } from "@/server/agreement-metrics";
+import { getInstalmentPlanConfig } from "@/server/founder-config";
 import { readStoredDevice } from "@/server/agreement-core";
 import { StatusBadge } from "../_components/StatusBadge";
 import { AgreementActions } from "./_components/AgreementActions";
 import { DevicePanel } from "./_components/DevicePanel";
+import { EnrolPrompt } from "./_components/EnrolPrompt";
+import { enrolmentState } from "@/lib/agreement-enrol";
 import { AgreementForm } from "../_components/AgreementForm";
 import { PageHeader } from "@/components/ui/kit";
 
@@ -25,6 +28,11 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
   await requireSection("agreements");
   const row = await getAgreementDetail(params.id);
   if (!row) notFound();
+  // Only a draft shows the form, so neither of these is fetched for an issued agreement.
+  const isEditable = row.status === "DRAFT";
+  const [instalmentPlans, attendees] = isEditable
+    ? await Promise.all([getInstalmentPlanConfig(), getMeetingAttendees()])
+    : [undefined, []];
 
   if (!row.parsed.success) {
     return (
@@ -62,6 +70,16 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
             button the server would only reject. */}
         <AgreementActions id={row.id} status={status} studentName={data.student.fullName} />
       </div>
+
+      {/* The signed-but-not-a-student gap. Only after signing: before that there is nothing to
+          enrol from, and the agreement's own terms can still change. */}
+      {isSigned && (
+        <EnrolPrompt
+          agreementId={row.id}
+          studentName={data.student.fullName}
+          state={enrolmentState(row)}
+        />
+      )}
 
       {/* Integrity - the two hashes, and why they are different things. */}
       <div className="rounded-card border border-line bg-surface p-5 shadow-card">
@@ -130,12 +148,33 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
               <Row label="Batch">{data.batch.number}</Row>
               <Row label="Starts">{formatGermanDate(data.batch.startDate)}</Row>
               <Row label="Total price (₹)">{formatInrMinor(BigInt(data.payment.totalInrMinor))}</Row>
+              {/* The plan charge is a separate term from the fee - §7.1 prints it on its own
+                  line, and summarising the two as one number here would hide what the student
+                  is actually being asked to pay for choosing to spread it. */}
+              {data.payment.option === "INSTALMENT" && data.payment.planExtraInrMinor && (
+                <Row label="Plan charge">
+                  {formatInrMinor(BigInt(data.payment.planExtraInrMinor))} · collects{" "}
+                  {formatInrMinor(
+                    BigInt(data.payment.totalInrMinor) + BigInt(data.payment.planExtraInrMinor),
+                  )}
+                </Row>
+              )}
               <Row label="Plan">
-                {data.payment.option === "FULL"
-                  ? "Option A - full payment"
-                  : `Option B - ${data.payment.instalments
-                      .map((i) => formatInrMinor(BigInt(i.amountInrMinor)))
-                      .join(" + ")}`}
+                {data.payment.option === "FULL" ? (
+                  "Option A - full payment"
+                ) : (
+                  // One line per instalment rather than "a + b + c": the dates are the half of
+                  // the plan somebody checking this screen is actually chasing.
+                  <ul className="space-y-0.5">
+                    {data.payment.instalments.map((i, n) => (
+                      <li key={n} className="tnum">
+                        {formatInrMinor(BigInt(i.amountInrMinor))}
+                        {i.dueDate ? ` · ${formatGermanDate(i.dueDate)}` : ""}
+                        <span className="text-muted"> · {i.dueMilestone}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Row>
             </dl>
           </div>
@@ -200,7 +239,12 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
           <p className="text-xs text-muted">
             Only a draft can be edited. Once issued, the terms are frozen - void and clone to revise.
           </p>
-          <AgreementForm initial={data} mode={{ kind: "edit", id: row.id }} />
+          <AgreementForm
+            initial={data}
+            instalmentPlans={instalmentPlans}
+            attendees={attendees}
+            mode={{ kind: "edit", id: row.id }}
+          />
         </div>
       )}
     </div>

@@ -334,3 +334,79 @@ function toIsoDate(d: Date): string {
 // `getAgreementCandidates` (WON-only leads + every student, rendered as a flat chip wall) was
 // replaced by `getAgreementCandidatesGrouped` in server/agreement-state.ts, which annotates every
 // candidate with its derived workflow state so the picker can group and rank them.
+
+// ───────────────────────────── Who has actually met us ─────────────────────────────
+
+/** One person who sat through a discovery call, as the agreement's name box offers them. */
+export type MeetingAttendee = {
+  /** The lead behind the booking, "" when the booking was never linked to one. */
+  leadId: string;
+  name: string;
+  phone: string;
+  email: string;
+  /** "Met 02 Oct 2026" - shown beneath the name so two same-named people can be told apart. */
+  met: string;
+};
+
+/**
+ * Everybody who has attended a discovery call, newest meeting first.
+ *
+ * WHY THIS LIST AND NOT THE CRM's. The form already has a client picker above it, which lists
+ * every live deal and every student and navigates to a prefilled form. That is the right control
+ * for "draw up the agreement we discussed on Tuesday" - and the wrong one for the moment the
+ * founder is actually in, which is typing a name they have just said out loud on a call. The
+ * name box offering the people who have BEEN on a call closes that gap without the round trip:
+ * type three letters, pick the person, and their number and email come with them.
+ *
+ * COMPLETED only. A booking that is merely in the diary is a meeting that has not happened, and
+ * a contract drawn up for somebody who never showed is the one case this list must not make
+ * easier - NO_SHOW and CANCELLED stay out for the same reason.
+ *
+ * Deduped on the normalised name, keeping the most recent meeting: a prospect who rebooked twice
+ * is one person, and three identical rows in a dropdown is how the right one gets missed.
+ */
+export async function getMeetingAttendees(limit = 200): Promise<MeetingAttendee[]> {
+  const rows = await prisma.bookingRequest.findMany({
+    where: { status: "COMPLETED" },
+    select: {
+      leadId: true,
+      name: true,
+      phone: true,
+      whatsapp: true,
+      email: true,
+      createdAt: true,
+      slot: { select: { startsAt: true } },
+    },
+    // The slot is the meeting; `createdAt` is only when the form was filled in. Ordering on the
+    // booking is still right for rows whose slot was detached (SlotRelease) and has no time left.
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+
+  const met = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
+
+  const byName = new Map<string, MeetingAttendee>();
+  for (const r of rows) {
+    const name = r.name.trim();
+    if (!name) continue;
+    const key = name.toLowerCase().replace(/\s+/g, " ");
+    // First writer wins - the rows arrive newest-first, so this keeps the latest meeting and the
+    // contact details the prospect gave most recently.
+    if (byName.has(key)) continue;
+    byName.set(key, {
+      leadId: r.leadId ?? "",
+      name,
+      // WhatsApp is the number the signing link and the OTP actually go to, so it wins where the
+      // prospect gave one that differs from their phone.
+      phone: (r.whatsapp || r.phone || "").trim(),
+      email: (r.email || "").trim(),
+      met: `Met ${met.format(r.slot?.startsAt ?? r.createdAt)}`,
+    });
+  }
+  return [...byName.values()];
+}

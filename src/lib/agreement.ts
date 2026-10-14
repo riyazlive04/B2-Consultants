@@ -15,8 +15,14 @@
 import { z } from "zod";
 import { formatInrMinor } from "./format";
 
-/** The git-pinned renderer. Bump when the clauses change; old agreements keep rendering their own. */
-export const AGREEMENT_TEMPLATE_VERSION = "guided-v3";
+/**
+ * The git-pinned renderer. Bump when the clauses change; old agreements keep rendering their own.
+ *
+ * v3 → v4 added the Due Date column to the §7.2 payment table and the instalment-plan surcharge
+ * line to §7.1. `renderAgreementPdf` dispatches on the version stored on the ROW, so every
+ * agreement signed under v3 still renders the v3 clause set from `agreement-guided-v3.tsx`.
+ */
+export const AGREEMENT_TEMPLATE_VERSION = "guided-v4";
 
 /** How long a signing link stays live. Longer than an invite (7d) - a contract deserves a re-read. */
 export const AGREEMENT_TTL_DAYS = 14;
@@ -74,6 +80,19 @@ const instalmentSchema = z.object({
   amountInrMinor: minorUnits,
   /** Free text: §7.2 says "Before commencement of Week 1", "Before the commencement of 2nd Sprint Week". */
   dueMilestone: z.string().trim().min(3).max(120),
+  /**
+   * The calendar date the instalment falls due - what the student is actually chased on.
+   *
+   * A milestone alone ("Before the commencement of 2nd Sprint Week") is a date only to somebody
+   * holding the timetable, which the student is not and a reminder job certainly is not. So the
+   * form now derives real dates from the programme start (lib/agreement-plan) and the v4 template
+   * prints them beside the milestone.
+   *
+   * `.optional()` with NO `.default()`, for the same reason as `addOns` below: `canonicalJson`
+   * drops undefined keys, so every agreement signed before this field existed parses to exactly
+   * the same object and keeps the content hash printed on its signed PDF.
+   */
+  dueDate: isoDate.optional(),
 });
 
 /**
@@ -131,6 +150,21 @@ export const agreementDataSchema = z
          * object and keep the hash printed on their signed PDF. See the agreement-hash test.
          */
         instalments: z.array(instalmentSchema).min(2).max(6),
+        /**
+         * The surcharge for paying in instalments - the founder's Console price for a plan of
+         * this length (Console → Instalment plans, `instalmentExtraFor`), which the income form
+         * has charged for months and the contract had no way to state.
+         *
+         * ADDED to the programme fee, not carved out of it: §7.1 keeps printing the price the
+         * student was quoted, this is disclosed on its own line beneath it, and the instalments
+         * must sum to the two together (see the invariant below). That is the same rule
+         * `totalToCollect` applies on the income side, so a plan quoted there and written here
+         * collect the same money.
+         *
+         * Optional with no default - a plan with no surcharge must hash exactly as it did
+         * before this field existed. See the note on `dueDate` above.
+         */
+        planExtraInrMinor: minorUnits.optional(),
       }),
     ]),
     /**
@@ -160,14 +194,21 @@ export const agreementDataSchema = z
   .superRefine((d, ctx) => {
     if (d.payment.option !== "INSTALMENT") return;
     // The invariant a founder editing a form at 11pm will break. 43,999 + 26,000 = 69,999.
+    //
+    // The surcharge is part of what the plan collects, so it is part of what the instalments
+    // must add up to. An agreement without one is unchanged: `planExtraInrMinor` is absent,
+    // this is zero, and the comparison is byte-for-byte the one every stored row already passed.
     const sum = d.payment.instalments.reduce((a, i) => a + BigInt(i.amountInrMinor), BigInt(0));
-    if (sum !== BigInt(d.payment.totalInrMinor)) {
+    const extra = d.payment.planExtraInrMinor ? BigInt(d.payment.planExtraInrMinor) : BigInt(0);
+    const owed = BigInt(d.payment.totalInrMinor) + extra;
+    if (sum !== owed) {
       ctx.addIssue({
         code: "custom",
         path: ["payment", "instalments"],
-        message: `Instalments add up to ${formatInrMinor(sum)}, but the total fee is ${formatInrMinor(
-          BigInt(d.payment.totalInrMinor),
-        )}.`,
+        message:
+          extra > BigInt(0)
+            ? `Instalments add up to ${formatInrMinor(sum)}, but the fee plus the plan charge is ${formatInrMinor(owed)}.`
+            : `Instalments add up to ${formatInrMinor(sum)}, but the total fee is ${formatInrMinor(owed)}.`,
       });
     }
   });

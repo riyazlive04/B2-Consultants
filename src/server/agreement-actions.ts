@@ -97,6 +97,17 @@ export async function updateAgreement(id: string, data: unknown): Promise<Action
     data: {
       data: parsed.data as unknown as Prisma.InputJsonValue,
       dataSha256: contentHash(parsed.data),
+      /**
+       * Re-pin the draft to the CURRENT template.
+       *
+       * `contentHash` hashes the terms together with the template version, and the default it
+       * uses is the current one - so a draft created under guided-v3 and edited after the bump
+       * would have stored a v4 hash against a v3 row, and the hash printed on its pages would
+       * have matched nothing. A draft has been signed by nobody and promised to nobody, so
+       * moving it to the live clause set is the honest repair; an ISSUED agreement is excluded
+       * by the `status: "DRAFT"` guard above and keeps its own version forever.
+       */
+      templateVersion: AGREEMENT_TEMPLATE_VERSION,
     },
   });
   if (updated.count === 0) {

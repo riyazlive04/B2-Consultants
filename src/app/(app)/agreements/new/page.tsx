@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft, UserSearch } from "lucide-react";
 import { requireCapability, requireSection } from "@/lib/rbac";
-import { getAgreementPrefill } from "@/server/agreement-metrics";
+import { getAgreementPrefill, getMeetingAttendees } from "@/server/agreement-metrics";
 import { getAgreementCandidatesGrouped } from "@/server/agreement-state";
-import { getAgreementWorkflow } from "@/server/founder-config";
+import { getAgreementWorkflow, getInstalmentPlanConfig } from "@/server/founder-config";
 import { AgreementClientPicker } from "../_components/AgreementClientPicker";
 import { AgreementForm } from "../_components/AgreementForm";
 import { PageHeader } from "@/components/ui/kit";
@@ -19,13 +19,17 @@ export default async function NewAgreementPage({
   await requireSection("agreements");
   await requireCapability("agreements.issue");
 
-  const [prefill, candidates, config] = await Promise.all([
+  const [prefill, candidates, config, instalmentPlans, attendees] = await Promise.all([
     getAgreementPrefill({
       leadId: searchParams.leadId ?? null,
       studentId: searchParams.studentId ?? null,
     }),
     getAgreementCandidatesGrouped(),
     getAgreementWorkflow(),
+    // The plan prices pre-fill the instalment surcharge, and the attendees feed the name box -
+    // both read-only, both alongside the prefill rather than after it.
+    getInstalmentPlanConfig(),
+    getMeetingAttendees(),
   ]);
   const picked = !!(searchParams.leadId || searchParams.studentId);
 
@@ -63,6 +67,8 @@ export default async function NewAgreementPage({
         notes={prefill.notes}
         missing={prefill.missing}
         filled={prefill.filled}
+        instalmentPlans={instalmentPlans}
+        attendees={attendees}
         mode={{ kind: "create", leadId: prefill.leadId, studentId: prefill.studentId }}
       />
     </div>

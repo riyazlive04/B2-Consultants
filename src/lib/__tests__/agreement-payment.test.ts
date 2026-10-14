@@ -134,3 +134,76 @@ test("add-ons are itemised and bounded (N5)", () => {
   assert.ok(payload.includes("addOns"), "an add-on that exists must be part of what was signed");
   assert.ok(payload.includes("Course books"));
 });
+
+// ───────────────── Due dates and the plan charge (v4) ─────────────────
+//
+// Both fields are OPTIONAL with no default, for the same reason `addOns` is: this schema parses
+// contracts that are already executed, and `contentHash` hashes the parsed object. A field that
+// materialised on an old row would change the hash printed on its signed PDF.
+
+test("the v4 fields do not materialise on an agreement that never had them", () => {
+  const parsed = agreementDataSchema.parse(LEGACY);
+  const payload = canonicalPayload(parsed, "v1");
+  assert.ok(!payload.includes("dueDate"), "an absent due date must not appear in the hash");
+  assert.ok(!payload.includes("planExtraInrMinor"), "an absent plan charge must not appear either");
+});
+
+test("a plan may now carry a due date per instalment", () => {
+  const dated = {
+    ...LEGACY,
+    payment: {
+      ...LEGACY.payment,
+      instalments: [
+        { ...LEGACY.payment.instalments[0], dueDate: "2026-08-01" },
+        { ...LEGACY.payment.instalments[1], dueDate: "2026-09-01" },
+      ],
+    },
+  };
+  assert.equal(agreementDataSchema.safeParse(dated).success, true);
+
+  // A date, not free text: "next month" is not something a reminder can be raised on.
+  const vague = {
+    ...dated,
+    payment: {
+      ...dated.payment,
+      instalments: [{ ...dated.payment.instalments[0], dueDate: "next month" }, dated.payment.instalments[1]],
+    },
+  };
+  assert.equal(agreementDataSchema.safeParse(vague).success, false);
+});
+
+test("the instalments must add up to the fee PLUS the plan charge", () => {
+  const base = {
+    ...LEGACY,
+    payment: {
+      option: "INSTALMENT" as const,
+      totalInrMinor: "6999900", // 69,999
+      planExtraInrMinor: "60000", // 600 - the Console's price for a 3-part plan
+      instalments: [
+        { amountInrMinor: "2353300", dueMilestone: "Before commencement of Week 1" },
+        { amountInrMinor: "2353300", dueMilestone: "Before the commencement of 2nd Sprint Week" },
+        { amountInrMinor: "2353300", dueMilestone: "Instalment 3" },
+      ],
+    },
+  };
+  // 3 × 23,533 = 70,599 = 69,999 + 600.
+  assert.equal(agreementDataSchema.safeParse(base).success, true);
+
+  // The trap this invariant exists for: a plan that collects the fee and quietly drops the
+  // charge the student was told about in §7.1.
+  const dropsTheCharge = {
+    ...base,
+    payment: {
+      ...base.payment,
+      instalments: base.payment.instalments.map((i) => ({ ...i, amountInrMinor: "2333300" })),
+    },
+  };
+  const res = agreementDataSchema.safeParse(dropsTheCharge);
+  assert.equal(res.success, false);
+  assert.match(res.success ? "" : res.error.issues[0].message, /plan charge/);
+});
+
+test("a plan with no charge is judged exactly as it was before", () => {
+  // `planExtraInrMinor` absent means zero, so the comparison is the one every stored row passed.
+  assert.equal(agreementDataSchema.safeParse(LEGACY).success, true);
+});

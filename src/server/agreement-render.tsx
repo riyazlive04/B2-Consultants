@@ -1,6 +1,7 @@
 import "server-only";
 import { renderToBuffer } from "@react-pdf/renderer";
-import { AgreementGuidedV3, type CertificateEvent } from "@/documents/agreement-guided-v3";
+import { AgreementGuidedV3 } from "@/documents/agreement-guided-v3";
+import { AgreementGuidedV4, type AgreementDocProps, type CertificateEvent } from "@/documents/agreement-guided-v4";
 import { sha256Hex, toOwnedBytes } from "@/lib/agreement-token";
 import type { StoredDevice } from "@/lib/device";
 import {
@@ -56,16 +57,26 @@ export type RenderInput = {
  */
 export async function renderAgreementPdf(input: RenderInput): Promise<Buffer> {
   const templateVersion = input.templateVersion ?? AGREEMENT_TEMPLATE_VERSION;
-  if (templateVersion !== AGREEMENT_TEMPLATE_VERSION) {
-    // A signed agreement must keep rendering the clauses it was signed on. When the terms change,
-    // add agreement-guided-v4.tsx and dispatch here - never edit v3 in place.
+  /**
+   * Dispatch on the version stored on the ROW, never on the current one.
+   *
+   * This is the whole reason the version exists: a contract signed under guided-v3 must go on
+   * rendering the v3 clause set for as long as it is enforceable, even though every new agreement
+   * is drawn up under v4. The props are identical across versions (`AgreementDocProps`), so the
+   * only thing that varies is which component - and the shape of the data, which stays
+   * backward-compatible precisely so an old row can still be handed to its old renderer.
+   *
+   * Adding guided-v5 means adding a file and a line here, never editing v3 or v4 in place.
+   */
+  const Template = TEMPLATES[templateVersion];
+  if (!Template) {
     throw new Error(
       `No renderer for template version "${templateVersion}". Signed agreements must render their own clause set.`,
     );
   }
 
   return renderToBuffer(
-    <AgreementGuidedV3
+    <Template
       documentNo={input.documentNo}
       dataSha256={contentHash(input.data, templateVersion)}
       data={input.data}
@@ -77,6 +88,18 @@ export async function renderAgreementPdf(input: RenderInput): Promise<Buffer> {
     />,
   );
 }
+
+/**
+ * Every clause set this codebase can still render, by the version string stored on the row.
+ *
+ * NOTHING may be removed from this map while an agreement in the table still carries that
+ * version - dropping an entry does not deprecate a template, it makes a signed contract
+ * undownloadable. The current one is `AGREEMENT_TEMPLATE_VERSION` (lib/agreement).
+ */
+const TEMPLATES: Record<string, (props: AgreementDocProps) => React.JSX.Element> = {
+  "guided-v3": AgreementGuidedV3,
+  "guided-v4": AgreementGuidedV4,
+};
 
 /** Render once, hash the exact bytes that will be stored. Called only from the signing path. */
 export async function sealAgreementPdf(input: RenderInput) {

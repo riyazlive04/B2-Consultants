@@ -34,6 +34,9 @@ export function dialFor(iso: string): CountryDial {
 export const COUNTRY_DIAL_OPTIONS = COUNTRY_DIALS.map((c) => ({
   value: c.iso,
   label: `${c.name} (+${c.dial})`,
+  // The closed picker shows only "+91": it sits beside the number input, and the full
+  // name there would take the width the number needs. The list still reads "India (+91)".
+  triggerLabel: `+${c.dial}`,
 }));
 
 /**

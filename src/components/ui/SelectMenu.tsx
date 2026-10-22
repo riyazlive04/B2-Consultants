@@ -16,7 +16,14 @@ import { useFormReset } from "./use-form-reset";
  * Drop-in for the old `Select`: same `{ options }` prop, same select attributes.
  */
 
-export type SelectOption = { value: string; label: string; disabled?: boolean };
+/**
+ * `triggerLabel` is a SHORTER stand-in shown only on the closed trigger, for a control that
+ * has to sit in a narrow slot - a country-code picker beside a phone number, say, where
+ * "India (+91)" would eat the space the number needs. The open list, the native <option>
+ * and the type-ahead all keep `label`, so the full country name is still what you read and
+ * what you search. Omit it and the trigger shows `label` as before.
+ */
+export type SelectOption = { value: string; label: string; disabled?: boolean; triggerLabel?: string };
 
 type Props = Omit<SelectHTMLAttributes<HTMLSelectElement>, "size"> & {
   options: SelectOption[];
@@ -175,7 +182,7 @@ export function SelectMenu({
         className={`${fieldButtonCls(size, invalid, open)} ${className}`}
       >
         <span className={`truncate ${currentOpt ? "" : "text-ink-3"}`}>
-          {currentOpt ? currentOpt.label : placeholder ?? ""}
+          {currentOpt ? currentOpt.triggerLabel ?? currentOpt.label : placeholder ?? ""}
         </span>
         <ChevronDown
           size={size === "sm" ? 14 : 16}

@@ -73,7 +73,9 @@ export function PhoneField({
   return (
     <div className="space-y-1">
       <div className="flex gap-2">
-        <div className="w-40 flex-none">
+        {/* Only wide enough for "+971" and the chevron - the number gets the rest. The
+            picker's own list still shows the full country name, so nothing is lost. */}
+        <div className="w-24 flex-none">
           <SelectMenu
             aria-label="Country code"
             options={COUNTRY_DIAL_OPTIONS}

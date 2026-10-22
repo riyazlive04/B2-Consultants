@@ -17,15 +17,19 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      # Plain HTTP only — Traefik (host-shared, owns 80/443) terminates TLS and
-      # forwards here. See Caddyfile for why auto_https is off.
-      - "8080:80"
+      # This box is dedicated to B2, so Caddy owns 80/443 and terminates TLS itself.
+      # 80 must stay open even though the app is https-only: the ACME HTTP-01
+      # challenge and the ->https redirect both live there.
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN to your domain, e.g. app.b2consultants.in}
+      TLS_EMAIL: ${TLS_EMAIL:?set TLS_EMAIL for Let's Encrypt expiry notices}
     depends_on:
       app:
         condition: service_healthy

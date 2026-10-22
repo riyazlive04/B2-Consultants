@@ -25,7 +25,7 @@ export const SECTION_ICON_NAMES = [
   "map", "book-open", "message-circle", "trophy", "sliders", "target", "gift",
   "sparkles", "bar-chart", "shield", "layout-grid", "file-signature", "scale",
   "contact", "kanban", "file-text", "layout-template", "receipt", "inbox", "workflow",
-  "globe", "layers", "school", "calendar-days", "user-check", "medal",
+  "globe", "layers", "school", "calendar-days", "calendar-range", "user-check", "medal",
 ] as const;
 export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];
 
@@ -112,6 +112,21 @@ type SectionCatalogueEntry = {
   readonly roles: readonly AppRole[];
   /** always enabled, always ADMIN-only - the founder can't lock themselves out */
   readonly locked?: boolean;
+  /**
+   * THE SIGNED-IN PERSON'S OWN PAGE - and therefore STUDENT only, whoever asks.
+   *
+   * These three (Dashboard, My Journey, My Classroom) don't take a student id: they resolve
+   * the signed-in USER to their own `Student` row and show that one person's classes, money
+   * and progress. So the section is not a permission to be handed out - no role grant, and no
+   * ADMIN bypass, can make the page work for somebody who has no student record. Before this
+   * flag existed the ADMIN bypass below listed all three in the founder's rail, and every one
+   * of them answered "Your login isn't linked to a student record yet" - three dead ends that
+   * read as a bug, and a My Classroom that looked empty while My Teaching listed students.
+   *
+   * Staff read the same facts where they are editable and scoped to a person they pick: the
+   * Students board, the batch timetable and My Teaching.
+   */
+  readonly personal?: boolean;
   /** hidden in code: ships disabled by default (nav + route), but the console can still re-enable it */
   readonly hidden?: boolean;
   /**
@@ -203,9 +218,9 @@ export const SECTION_CATALOGUE = [
    * ring had to work out for themselves which of the other two held the answer. This owns no
    * data; it summarises both and links out.
    */
-  { key: "dashboard", label: "Dashboard", href: "/dashboard", phase: 2, icon: "layout-grid", group: "My Work", roles: ["STUDENT"] },
+  { key: "dashboard", label: "Dashboard", href: "/dashboard", phase: 2, icon: "layout-grid", group: "My Work", roles: ["STUDENT"], personal: true },
   // STUDENT portal: their own journey only.
-  { key: "my-journey", label: "My Journey", href: "/my-journey", phase: 2, icon: "map", group: "My Work", roles: ["STUDENT"] },
+  { key: "my-journey", label: "My Journey", href: "/my-journey", phase: 2, icon: "map", group: "My Work", roles: ["STUDENT"], personal: true },
   /**
    * The student's CLASSROOM - their batch timetable, join links, recordings, coursework and
    * their own attendance.
@@ -219,7 +234,7 @@ export const SECTION_CATALOGUE = [
    * STUDENT only. Staff read the same timetable from the batch itself (/batches/[id]), where
    * they can also edit it; this route is deliberately read-only and self-scoped.
    */
-  { key: "classroom", label: "My Classroom", href: "/classroom", phase: 2, icon: "calendar-days", group: "Classroom", roles: ["STUDENT"] },
+  { key: "classroom", label: "My Classroom", href: "/classroom", phase: 2, icon: "calendar-days", group: "Classroom", roles: ["STUDENT"], personal: true },
   /**
    * The TEACHING desk - one screen for everyone who stands in front of a batch.
    *
@@ -250,6 +265,22 @@ export const SECTION_CATALOGUE = [
    * feature widens (see `canMark` in server/attendance-actions.ts).
    */
   { key: "attendance", label: "Attendance", href: "/attendance", phase: 2, icon: "user-check", group: "Classroom", roles: ["ADMIN", "HEAD", "COACH", "TUTOR"] },
+  /**
+   * BATCHES & PLANS - the setup side of a classroom, as opposed to the running of one.
+   *
+   * It exists because the job was spread over three doors and named after none of them:
+   * cohorts were created on a tab of the Students board, the week-by-week plan on a tab of
+   * Programs, and the dates and times on `/batches/[batchId]`, which nothing linked to unless
+   * you came through one of the other two. The founders do all three in one sitting - write
+   * the plan, make the batch, set its dates - so there is now one door for it.
+   *
+   * ADMIN only, and not by oversight: `upsertBatch` and every curriculum action are
+   * `requireAdmin`, so handing a head coach this section would draw forms the server refuses.
+   * Their side of a classroom is My Teaching, which lists every cohort and lets them run any
+   * of it. The page re-checks with `requireAdmin()` regardless - the role list is a default
+   * the founder can edit, and a rail that can be re-pointed is never the fence.
+   */
+  { key: "batches", label: "Batches & Plans", href: "/batches", phase: 2, icon: "calendar-range", group: "Classroom", roles: ["ADMIN"] },
   /**
    * THE SPRINT LEADERBOARD - and the only section in the catalogue a student and their coach
    * both open to look at the same thing.
@@ -447,6 +478,8 @@ export type ResolvedSection = SectionSetting & {
   locked: boolean;
   /** Enabled and reachable, but not listed in the sidebar. See `offRail` on the catalogue. */
   offRail: boolean;
+  /** The signed-in person's own page: STUDENT only, whatever the config says. See the catalogue. */
+  personal: boolean;
 };
 
 /**
@@ -461,11 +494,16 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
     const locked = "locked" in base && base.locked === true;
     const hiddenByCode = "hidden" in base && base.hidden === true;
     const offRailByCode = "offRail" in base && base.offRail === true;
+    const personal = "personal" in base && base.personal === true;
     return {
       key: base.key,
       href: base.href,
       phase: base.phase,
       locked,
+      // Not founder-overridable, and deliberately not read from the saved config: whether a
+      // page is self-scoped is a fact about the code, not a setting. The founder can still
+      // switch the section off entirely, or rename and reorder it.
+      personal,
       label: s?.label?.trim() || base.label,
       icon: s?.icon ?? base.icon,
       group: s?.group ?? base.group,
@@ -482,14 +520,17 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
 }
 
 /**
- * THE access rule. Three questions, in order:
+ * THE access rule. Four questions, in order:
  *   1. Has the founder switched this section off? Then nobody goes in.
- *   2. Is this user's per-user override set? It wins over the role default.
- *   3. Otherwise, does the section's role list include them?
+ *   2. Is this a `personal` section - the signed-in person's own page? STUDENT only.
+ *   3. Is this user's per-user override set? It wins over the role default.
+ *   4. Otherwise, does the section's role list include them?
  *
- * ADMIN skips (2) and (3) but not (1) - except for `locked` sections, which are
+ * ADMIN skips (3) and (4) but not (1) or (2) - not (1) except for `locked` sections, which are
  * always on and always admin-only, so the founder can never switch off the screen
- * that would switch everything back on.
+ * that would switch everything back on; and not (2) because the bypass cannot conjure the
+ * student record those pages read. See `personal` on the catalogue for why that is a rule
+ * about the page rather than about trust.
  *
  * Lives here, not in rbac.ts, because the access-manager checkbox grid has to show
  * the user exactly what the server will decide. One function, no mirror to drift.
@@ -500,6 +541,8 @@ export function sectionAllowed(
   overrides: SectionOverrides | null,
 ): boolean {
   if (!s.enabled) return false;
+  // Ahead of the ADMIN bypass on purpose - see `personal` on the catalogue entry.
+  if (s.personal) return role === "STUDENT";
   if (role === "ADMIN") return true;
   if (s.locked) return false;
   const override = overrides?.[s.key];
@@ -516,14 +559,33 @@ export function effectiveSectionKeys(
   return new Set(sections.filter((s) => sectionAllowed(s, role, overrides)).map((s) => s.key));
 }
 
-/** Role defaults only - the baseline the per-user toggles start from. */
+/**
+ * Role defaults only - the baseline the per-user toggles start from.
+ *
+ * The `personal` test repeats `sectionAllowed`'s because the founder may add a role to a
+ * section's list in Console → Sections, and for a self-scoped page that grant cannot take
+ * effect. Leaving it out would pre-tick a box the server then ignores.
+ */
 export function roleDefaultKeys(role: AppRole, config: SectionsConfig | null = null): SectionKey[] {
   return resolveSections(config)
-    .filter((s) => s.enabled && !s.locked && s.roles.includes(role))
+    .filter((s) => s.enabled && !s.locked && grantableTo(s, role) && s.roles.includes(role))
     .map((s) => s.key);
 }
 
 /** Role defaults against an already-resolved list (client-side, no config fetch). */
 export function roleDefaultKeysFrom(sections: ResolvedSection[], role: AppRole): SectionKey[] {
-  return sections.filter((s) => s.enabled && !s.locked && s.roles.includes(role)).map((s) => s.key);
+  return sections
+    .filter((s) => s.enabled && !s.locked && grantableTo(s, role) && s.roles.includes(role))
+    .map((s) => s.key);
+}
+
+/**
+ * Is this section a toggle worth OFFERING for someone in this role?
+ *
+ * False for a `personal` section outside STUDENT: the checkbox would save, and change nothing,
+ * because `sectionAllowed` refuses the page anyway. The access dialog hides those rather than
+ * presenting a switch with no effect.
+ */
+export function grantableTo(s: ResolvedSection, role: AppRole): boolean {
+  return !s.personal || role === "STUDENT";
 }

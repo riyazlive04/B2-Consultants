@@ -5,6 +5,7 @@ import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Btn } from "@/components/ui/controls";
 import {
   FIELD_KINDS,
+  MAX_FIELD_LABEL,
   FIELD_KIND_LABELS,
   SIGNER_LABELS,
   SIGNER_ROLES,
@@ -77,7 +78,7 @@ export function FieldInspector({
         <TextInput
           value={field.label ?? ""}
           placeholder={placeholder}
-          maxLength={60}
+          maxLength={MAX_FIELD_LABEL}
           onChange={(e) => {
             const label = e.target.value;
             const next = { ...field };

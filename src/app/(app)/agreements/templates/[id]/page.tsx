@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui/kit";
 import { requireCapability, requireSection } from "@/lib/rbac";
 import { formatDateTimeInZone } from "@/lib/format";
 import { describeFields, docFieldsSchema } from "@/lib/agreement-doc";
-import { getAgreementTemplate } from "@/server/agreement-templates";
+import { getAgreementTemplate, getDefaultTemplateChoice } from "@/server/agreement-templates";
 import { DocumentEditor } from "../../_components/document/DocumentEditor";
 import { UploadBox } from "../../_components/document/UploadBox";
 import { MakeCurrentButton, TemplateAdmin } from "./_components/TemplateAdmin";
@@ -27,8 +27,12 @@ export default async function AgreementTemplatePage({ params }: { params: { id: 
   await requireSection("agreements");
   await requireCapability("agreements.issue");
 
-  const template = await getAgreementTemplate(params.id);
+  const [template, defaultDoc] = await Promise.all([
+    getAgreementTemplate(params.id),
+    getDefaultTemplateChoice(),
+  ]);
   if (!template) notFound();
+  const isDefault = defaultDoc?.id === template.id;
 
   const current = template.current;
   const body = template.currentBody;
@@ -43,6 +47,10 @@ export default async function AgreementTemplatePage({ params }: { params: { id: 
           template.archivedAt ? (
             <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-muted">
               Archived
+            </span>
+          ) : isDefault ? (
+            <span className="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary">
+              Sent by default
             </span>
           ) : undefined
         }
@@ -61,6 +69,8 @@ export default async function AgreementTemplatePage({ params }: { params: { id: 
         description={template.description}
         archived={!!template.archivedAt}
         usedBy={template.usedBy}
+        isDefault={isDefault}
+        usable={!!template.currentVersionId}
       />
 
       {/* ── The designer, on the current version ── */}

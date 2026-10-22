@@ -2,7 +2,15 @@ import "server-only";
 import { cache } from "react";
 import type { BatchLine } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { capacityBand, capacityLabel, levelFitsBatchLine } from "@/lib/batch";
+import {
+  BATCH_LINE_LABELS,
+  type BatchChoice,
+  batchTiming,
+  capacityBand,
+  capacityLabel,
+  compareBatchChoices,
+  levelFitsBatchLine,
+} from "@/lib/batch";
 import { toDateInputValue } from "@/lib/dates";
 import { getLevels } from "./levels";
 
@@ -29,6 +37,8 @@ export type BatchRow = {
   notes: string | null;
   /** German Note roster (BatchMember) + B2 seats (Enrollment) - the two ways in. */
   filled: number;
+  /** Classes on its timetable. 0 means the cohort has dates for nothing yet. */
+  sessionCount: number;
   capacity: ReturnType<typeof capacityBand>;
   capacityLabel: string;
 };
@@ -62,7 +72,7 @@ export const listBatches = cache(
         targetStrength: true,
         notes: true,
         tutor: { select: { name: true } },
-        _count: { select: { members: true, enrollments: true } },
+        _count: { select: { members: true, enrollments: true, events: true } },
       },
       orderBy: [{ status: "asc" }, { startDate: "desc" }, { name: "asc" }],
     });
@@ -83,6 +93,7 @@ export const listBatches = cache(
         targetStrength: b.targetStrength,
         notes: b.notes,
         filled,
+        sessionCount: b._count.events,
         capacity: capacityBand(filled, b.targetStrength),
         capacityLabel: capacityLabel(filled, b.targetStrength),
       };
@@ -187,6 +198,17 @@ export type BatchBoardRow = {
   capacityLabel: string;
   /** Carried so the edit form re-submits what is stored instead of blanking it. */
   notes: string | null;
+  /**
+   * ── IS THIS COHORT ACTUALLY SCHEDULED? ────────────────────────────────────────────
+   * Classes on its timetable, and when the next one is. The board's whole job on the Batches
+   * & Plans screen is to answer "which cohorts still need their dates and times set", and a
+   * list of names with nothing but a capacity pill cannot answer it.
+   *
+   * `nextSessionAt` is `yyyy-mm-dd`, and null means either no timetable or nothing left in the
+   * future - the two read differently beside `sessionCount`.
+   */
+  sessionCount: number;
+  nextSessionAt: string | null;
 };
 
 export async function getBatchBoard(line: BatchLine): Promise<{
@@ -207,6 +229,20 @@ export async function getBatchBoard(line: BatchLine): Promise<{
   ]);
   const labelOf = (code: string) => levels.find((l) => l.code === code)?.label ?? code;
 
+  // ONE query for every cohort's next class, rather than one per row. `groupBy` with `_min`
+  // is the cheapest shape for "the soonest future session per batch".
+  const nextByBatch = new Map<string, Date>();
+  if (batches.length > 0) {
+    const upcoming = await prisma.classSession.groupBy({
+      by: ["batchId"],
+      where: { batchId: { in: batches.map((b) => b.id) }, startsAt: { gte: new Date() } },
+      _min: { startsAt: true },
+    });
+    for (const row of upcoming) {
+      if (row._min.startsAt) nextByBatch.set(row.batchId, row._min.startsAt);
+    }
+  }
+
   return {
     rows: batches.map((b) => ({
       id: b.id,
@@ -224,6 +260,11 @@ export async function getBatchBoard(line: BatchLine): Promise<{
       capacity: b.capacity,
       capacityLabel: b.capacityLabel,
       notes: b.notes,
+      sessionCount: b.sessionCount,
+      nextSessionAt: (() => {
+        const d = nextByBatch.get(b.id);
+        return d ? toDateInputValue(d) : null;
+      })(),
     })),
     levelOptions: levels
       .filter((l) => l.active && levelFitsBatchLine(l.kind, line))
@@ -231,3 +272,66 @@ export async function getBatchBoard(line: BatchLine): Promise<{
     leadOptions: leads.map((u) => ({ value: u.id, label: `${u.name} · ${u.role.toLowerCase()}` })),
   };
 }
+
+/**
+ * ── THE COHORTS AN AGREEMENT CAN NAME ────────────────────────────────────────────────
+ *
+ * `AgreementData.batch.number` is free text, and it stays free text: it is a term of a frozen
+ * contract, and existing signed agreements say "Batch 12" where no `Batch` row ever existed.
+ * What was wrong is that the form ASKED as if the app knew nothing - so this is the list it
+ * should have been offering, with the cohort that is running and the one that starts next
+ * named as such.
+ *
+ * Both lines are returned, labelled. An agreement is raised against a person, not a line, and
+ * German Note sells one too; filtering to B2 here would have hidden every cohort that exists
+ * on the live database.
+ */
+export type AgreementBatchOption = BatchChoice & {
+  code: string | null;
+  name: string;
+  line: BatchLine;
+  lineLabel: string;
+  levelLabel: string;
+  endDate: string | null;
+  capacity: ReturnType<typeof capacityBand>;
+  capacityLabel: string;
+};
+
+/**
+ * What a contract should call this cohort.
+ *
+ * `code` is the founders' human key ("B26") and the thing they say on calls, so it wins. The
+ * cap is `agreementDataSchema`'s own 40 characters - a name long enough to be rejected by the
+ * schema must never be offered as a choice the form cannot then submit.
+ */
+const BATCH_LABEL_MAX = 40;
+function batchLabel(b: { code: string | null; name: string }): string {
+  return (b.code?.trim() || b.name.trim()).slice(0, BATCH_LABEL_MAX);
+}
+
+/** Active batches on both lines, classified and in offer order. `cache`d per request. */
+export const agreementBatchOptions = cache(async (): Promise<AgreementBatchOption[]> => {
+  const [batches, levels] = await Promise.all([listBatches({ status: "ACTIVE" }), getLevels()]);
+  const now = new Date();
+  const labelOf = (code: string) => levels.find((l) => l.code === code)?.label ?? code;
+
+  return batches
+    .map((b) => ({
+      id: b.id,
+      label: batchLabel(b),
+      code: b.code,
+      name: b.name,
+      line: b.line,
+      lineLabel: BATCH_LINE_LABELS[b.line],
+      level: b.level,
+      levelLabel: labelOf(b.level),
+      timing: batchTiming({ startDate: b.startDate, endDate: b.endDate }, now),
+      startDate: b.startDate ? toDateInputValue(b.startDate) : null,
+      endDate: b.endDate ? toDateInputValue(b.endDate) : null,
+      filled: b.filled,
+      targetStrength: b.targetStrength,
+      capacity: b.capacity,
+      capacityLabel: b.capacityLabel,
+    }))
+    .sort(compareBatchChoices);
+});

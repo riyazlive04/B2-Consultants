@@ -34,6 +34,7 @@ import {
   Layers,
   School,
   CalendarDays,
+  CalendarRange,
   UserCheck,
   Medal,
   type LucideIcon,
@@ -83,6 +84,7 @@ export const SECTION_ICONS: Record<SectionIconName, LucideIcon> = {
   "user-check": UserCheck,
   medal: Medal,
   "calendar-days": CalendarDays,
+  "calendar-range": CalendarRange,
 };
 
 export const FallbackIcon = LayoutGrid;

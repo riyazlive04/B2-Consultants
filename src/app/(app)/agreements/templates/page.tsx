@@ -3,7 +3,7 @@ import { FileStack, FileText, FileType, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/kit";
 import { requireCapability, requireSection } from "@/lib/rbac";
 import { formatDate } from "@/lib/format";
-import { listAgreementTemplates } from "@/server/agreement-templates";
+import { getDefaultTemplateChoice, listAgreementTemplates } from "@/server/agreement-templates";
 import { AgreementNav } from "../_components/AgreementNav";
 import { NewTemplate } from "./_components/NewTemplate";
 
@@ -22,7 +22,10 @@ export default async function AgreementTemplatesPage() {
   await requireSection("agreements");
   await requireCapability("agreements.issue");
 
-  const templates = await listAgreementTemplates({ includeArchived: true });
+  const [templates, defaultDoc] = await Promise.all([
+    listAgreementTemplates({ includeArchived: true }),
+    getDefaultTemplateChoice(),
+  ]);
   const live = templates.filter((t) => !t.archivedAt);
   const archived = templates.filter((t) => t.archivedAt);
 
@@ -63,6 +66,14 @@ export default async function AgreementTemplatesPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-primary">{t.name}</p>
+                        {/* The one "Generate & send" uses on a contact record. Worth a line on the
+                            card: it is the difference between one tap sending this and sending the
+                            built-in clause set, and it is otherwise invisible from here. */}
+                        {defaultDoc?.id === t.id && (
+                          <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                            Sent by default
+                          </p>
+                        )}
                         {t.description && (
                           <p className="mt-0.5 line-clamp-2 text-xs text-muted">{t.description}</p>
                         )}

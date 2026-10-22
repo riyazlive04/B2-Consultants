@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/rbac";
-import { hasCapability } from "@/lib/capabilities";
 import { isSafeResourceUrl, scopeOf, type ResourceScope } from "@/lib/resources";
+import { canManageDelivery } from "./batch-access";
 import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
@@ -36,23 +36,34 @@ const schema = z.object({
 
 type Scope = { scope: ResourceScope; id: string };
 
-/** Admin, `batches.manage`, or the person who runs the cohort this resource hangs off. */
+/**
+ * Whoever may run this cohort's delivery may hang material off it.
+ *
+ * The rule itself is `canManageDelivery` (server/batch-access.ts): Admin, the head coach,
+ * anyone holding `batches.manage`, or the person who leads the batch. This file used to carry
+ * a fourth hand-written copy of it which left HEAD out - so the cohort page offered the head
+ * coach an "Add material" button on a batch whose timetable they may re-date and whose register
+ * they may take, and then refused the save.
+ *
+ * The one thing that is NOT delivery stays exactly as it was: curriculum material reaches every
+ * future cohort, so it remains the founder's.
+ */
 async function canManage(
   session: { role: string; user: { id: string }; capabilities: unknown },
   target: Scope,
 ): Promise<boolean> {
   if (session.role === "ADMIN") return true;
-  // Curriculum material reaches every future cohort - that stays with the founder.
   if (target.scope === "curriculumItem") return false;
-  if (hasCapability(session.role as never, (session.capabilities ?? null) as never, "batches.manage")) return true;
 
   const batchId =
     target.scope === "batch"
       ? target.id
       : (await prisma.classSession.findUnique({ where: { id: target.id }, select: { batchId: true } }))?.batchId;
   if (!batchId) return false;
-  const batch = await prisma.batch.findUnique({ where: { id: batchId }, select: { tutorId: true } });
-  return !!batch && batch.tutorId === session.user.id;
+  return canManageDelivery(
+    { role: session.role, user: session.user, capabilities: (session.capabilities ?? null) as never },
+    batchId,
+  );
 }
 
 /** Where to re-render after a change. A session resource shows up on three different screens. */

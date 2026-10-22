@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { htmlToBlocks } from "../docx-blocks";
-import type { DocBlock } from "../agreement-doc";
+import { MAX_FIELD_LABEL, type DocBlock } from "../agreement-doc";
 
 /**
  * The parser is the only thing standing between a Word file and a contract, so these tests are
@@ -103,6 +103,37 @@ test("placeholder aliases and the other field kinds", () => {
   );
   // Ids stay sequential across the whole document, never random - they are hashed.
   assert.deepEqual(fields.map((f) => f.id), ["f1", "f2", "f3", "f4"]);
+});
+
+/**
+ * A CONSENT TICK IS A SENTENCE, AND IT MUST NOT FALL BACK TO PROSE.
+ *
+ * The label bound in `PLACEHOLDER_RE` is deliberately far looser than `MAX_FIELD_LABEL`, because
+ * of how this failed before: the two were equal, so a label one character too long did not
+ * truncate - it stopped the whole placeholder from matching, and the raw `[[check:student|…]]`
+ * was typeset into the contract with no tick box and nothing said. Printing markup where a
+ * signer's consent should be is the exact failure this module exists to prevent.
+ */
+test("a long tick-box label still parses as a field, truncated to the stored cap", () => {
+  const clause =
+    "I consent to photographs and video taken during the workshop being used by B2 Consultants " +
+    "in its marketing material, on its website and on its social media channels, indefinitely";
+  assert.ok(clause.length > 60, "the clause has to be longer than the old bound to prove anything");
+
+  const { blocks, fields } = htmlToBlocks(`<p>[[check:student|${clause}]]</p>`);
+
+  assert.deepEqual(blocks, [{ type: "field", fieldId: "f1" }], "a field block, not a paragraph");
+  assert.equal(fields.length, 1);
+  assert.equal(fields[0]!.kind, "CHECKBOX");
+  assert.equal(fields[0]!.label, clause.slice(0, MAX_FIELD_LABEL));
+  // And what it kept has to be storable, or the upload is rejected after a clean parse.
+  assert.ok((fields[0]!.label?.length ?? 0) <= MAX_FIELD_LABEL);
+});
+
+test("an absurd label truncates rather than leaking markup into the document", () => {
+  const { blocks, fields } = htmlToBlocks(`<p>[[text:student|${"x".repeat(900)}]]</p>`);
+  assert.deepEqual(blocks, [{ type: "field", fieldId: "f1" }]);
+  assert.equal(fields[0]!.label!.length, MAX_FIELD_LABEL);
 });
 
 test("entities decode, &nbsp; becomes a plain space, <br> becomes a newline", () => {

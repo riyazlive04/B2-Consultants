@@ -81,6 +81,13 @@ export default async function NewAgreementPage({
         instalmentPlans={instalmentPlans}
         attendees={attendees}
         templates={templates}
+        // So the form opens on the same document "Generate & send" would have used.
+        defaultTemplateId={config.defaultTemplateId}
+        // The cohorts §2.1 can name, and the one the prefill resolved to. Read inside the
+        // prefill (request-cached), so passing them costs no second query.
+        batches={prefill.batches}
+        batchId={prefill.batchId}
+        suggested={prefill.suggested}
         mode={{ kind: "create", leadId: prefill.leadId, studentId: prefill.studentId }}
       />
     </div>

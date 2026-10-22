@@ -15,7 +15,7 @@ import {
   type DocBlock,
   type DocBody,
 } from "@/lib/agreement-doc";
-import { loadVersionForInstantiate } from "./agreement-templates";
+import { getDefaultTemplateChoice, loadVersionForInstantiate } from "./agreement-templates";
 import {
   BODY_SELECT,
   BODY_SELECT_WITH_BYTES,
@@ -447,7 +447,13 @@ export async function generateAndSendAgreement(input: {
   studentId?: string | null;
   /** This browser's account of itself (collectReportedDevice) - not the signature. */
   reported?: unknown;
-  /** Draw it up on an uploaded template rather than the guided clause set. */
+  /**
+   * Draw it up on an uploaded template rather than the guided clause set.
+   *
+   * `undefined` means "whatever the founder set as the default" (`defaultTemplateId`); an explicit
+   * `null` means the guided clause set. The distinction matters because the bulk screen and the
+   * task card do not ask, while the form does - so only the form can say "guided, and I mean it".
+   */
   templateId?: string | null;
 }): Promise<ActionResult<GenerateOutcome>> {
   const { allowed, denied, session } = await capabilityCheck("agreements.issue");
@@ -456,8 +462,18 @@ export async function generateAndSendAgreement(input: {
 
   const href = `/agreements/new?${input.leadId ? `leadId=${input.leadId}` : `studentId=${input.studentId}`}`;
   const prefill = await getAgreementPrefill({ leadId: input.leadId, studentId: input.studentId });
-  if (prefill.missing.length > 0) {
-    return { ok: true, data: { kind: "needsForm", href, missing: prefill.missing } };
+  /*
+    `suggested` counts as a reason to go to the form, exactly like `missing`.
+
+    The batch box is prefilled from the cohorts on file, and when nothing seats this person that
+    prefill is an INFERENCE - the next intake with room. A one-click send would countersign and
+    deliver a contract naming a cohort nobody confirmed, and this path's whole promise is that it
+    refuses to guess. So the founder gets the form, opened on the suggestion, one glance from
+    sending.
+  */
+  const unconfirmed = [...prefill.missing, ...prefill.suggested];
+  if (unconfirmed.length > 0) {
+    return { ok: true, data: { kind: "needsForm", href, missing: unconfirmed } };
   }
 
   const saved = await getSavedSignature(session.user.id);
@@ -486,11 +502,15 @@ export async function generateAndSendAgreement(input: {
 
   let id = existing?.id;
   if (!id) {
+    // Only when the caller did not say. A stale default resolves to the guided set rather than
+    // failing the send - see `getDefaultTemplateChoice`.
+    const templateId =
+      input.templateId === undefined ? ((await getDefaultTemplateChoice())?.id ?? null) : input.templateId;
     const created = await createAgreement({
       data: prefill.data,
       leadId: prefill.leadId,
       studentId: prefill.studentId,
-      templateId: input.templateId ?? null,
+      templateId,
     });
     if (!created.ok) return created;
     id = created.data!.id;
@@ -1106,7 +1126,9 @@ export async function bulkIssueAgreements(input: {
     const name = names.get(studentId) ?? "Unknown student";
     const result = await generateAndSendAgreement({
       studentId,
-      templateId: input.templateId ?? null,
+      // Passed through UNTOUCHED, undefined and all: `?? null` here would have turned "the founder
+      // did not say" into "the guided clause set, definitely", and the default would never apply.
+      templateId: input.templateId,
       reported: input.reported,
     });
 

@@ -90,3 +90,9 @@ prelaunch-reset-backup-*.json
 # Invoice PDFs written by hand when verifying the currency/issuer rendering. Regenerated on
 # demand; they are output, not fixtures.
 /sample-invoice-*.pdf
+
+# Agreement smoke-test renders (scripts/verify-agreement-docs.ts). SMOKE_OUT defaults to
+# ".", so every `npm run verify:agreement-docs` drops four PDFs in the repo root. They are
+# regenerated output, not source — and they are rendered CONTRACTS, so a future run against
+# real data would be committing a client's signed document.
+smoke-*.pdf

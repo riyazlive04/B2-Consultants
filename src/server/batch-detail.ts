@@ -1,7 +1,8 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { hasCapability, type CapabilityOverrides } from "@/lib/capabilities";
+import { type CapabilityOverrides } from "@/lib/capabilities";
+import { canManageDelivery } from "./batch-access";
 import type { AppRole } from "@/lib/sections";
 import { toDateInputValue } from "@/lib/dates";
 import { capacityBand, capacityLabel } from "@/lib/batch";
@@ -90,26 +91,36 @@ function istParts(d: Date): { dateYmd: string; timeHm: string } {
 }
 
 /**
- * May this person open this batch at all?
+ * May this person open this batch at all - and may they RUN it?
  *
  * ADMIN and HEAD supervise everything. Anyone holding `batches.manage` is already trusted to
  * move people between cohorts, so they can see one. Otherwise it has to be YOUR cohort: you
  * lead it, or you coach somebody seated in it.
+ *
+ * ── WHY `manage` IS NOW `canManageDelivery` ─────────────────────────────────────────────
+ * It used to return `manage: false` for a Head coach, deliberately - the comment in
+ * batch-access.ts recorded that choice. It was wrong in practice, and only ever in one
+ * direction: EVERY action this flag draws a button for (build the timetable, add, re-time or
+ * remove a class, take the register, post a recording, set the sprint start, hang material off
+ * the cohort) is enforced server-side by `canManageDelivery`, which has always said yes to a
+ * head coach. So the page hid buttons for work the server was waiting to accept, and the
+ * founders' answer when they hit it was the plain one: the head coach runs these classes too.
+ *
+ * It buys nothing else. Seating students and creating or archiving cohorts are not on this
+ * page and keep their own `batches.manage` / Admin fences.
  */
 export async function canViewBatch(
   session: { role: AppRole; user: { id: string }; capabilities: CapabilityOverrides | null },
   batchId: string,
 ): Promise<{ view: boolean; manage: boolean }> {
-  if (session.role === "ADMIN") return { view: true, manage: true };
-
+  // Existence first, and for everyone: `canManageDelivery` answers about STANDING, so an
+  // Admin "may manage" an id that was never a batch. The page needs those to be different
+  // answers - one redirects, the other would render a cohort made of nulls.
   const batch = await prisma.batch.findUnique({ where: { id: batchId }, select: { tutorId: true } });
   if (!batch) return { view: false, manage: false };
 
-  const leads = batch.tutorId === session.user.id;
-  const manages = hasCapability(session.role, session.capabilities, "batches.manage");
-  if (leads || manages) return { view: true, manage: true };
-
-  if (session.role === "HEAD") return { view: true, manage: false };
+  if (batch.tutorId === session.user.id) return { view: true, manage: true };
+  if (await canManageDelivery(session, batchId)) return { view: true, manage: true };
 
   // A coach whose own student sits in this cohort may read it, but not re-time it.
   const coaches = await prisma.enrollment.count({ where: { batchId, coachId: session.user.id } });

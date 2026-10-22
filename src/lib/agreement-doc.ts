@@ -241,11 +241,23 @@ export function isInkField(kind: FieldKind): boolean {
  */
 const unit = z.number().min(0).max(1);
 
+/**
+ * How long a field's caption may be.
+ *
+ * Generous, because a CHECKBOX's label is not a caption at all - it is the clause the signer is
+ * agreeing to, and it is printed as the tick box's text. "I consent to photographs taken during
+ * the workshop being used by B2 Consultants" is an ordinary consent tick and would never have fit
+ * in a caption-sized limit. Named rather than written twice: `docx-blocks` truncates to it when
+ * it reads a `[[check:student|…]]` placeholder out of a Word file, and this schema is what would
+ * reject the result if the two ever disagreed.
+ */
+export const MAX_FIELD_LABEL = 240;
+
 export const docFieldSchema = z.object({
   id: z.string().min(1).max(40),
   kind: z.enum(FIELD_KINDS),
   signer: z.enum(SIGNER_ROLES),
-  label: z.string().trim().max(60).optional(),
+  label: z.string().trim().max(MAX_FIELD_LABEL).optional(),
   /** A CREATOR TEXT box: what the founder typed while drafting. Part of the hash. */
   value: z.string().max(2000).optional(),
   /**

@@ -2,29 +2,36 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Check, Loader2, Pencil } from "lucide-react";
+import { Archive, ArchiveRestore, Check, Loader2, Pencil, Star, StarOff } from "lucide-react";
 import { Btn } from "@/components/ui/controls";
 import { Field, FormError, TextArea, TextInput } from "@/components/ui/form";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import {
   archiveAgreementTemplate,
   renameAgreementTemplate,
+  setDefaultAgreementTemplate,
   setTemplateCurrentVersion,
 } from "@/server/agreement-template-actions";
 
-/** Rename, archive, and choose which version new agreements are drawn from. */
+/** Rename, archive, make it the one-tap default, and choose which version is current. */
 export function TemplateAdmin({
   id,
   name,
   description,
   archived,
   usedBy,
+  isDefault,
+  usable,
 }: {
   id: string;
   name: string;
   description: string | null;
   archived: boolean;
   usedBy: number;
+  /** Is this already the document "Generate & send" draws up? */
+  isDefault: boolean;
+  /** Has it a current version at all? An empty template cannot be anybody's default. */
+  usable: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -73,6 +80,40 @@ export function TemplateAdmin({
     });
   };
 
+  /**
+   * Make this the document the one-tap "Generate & send" uses - or hand that back to the guided
+   * clause set.
+   *
+   * CONFIRMED when switching it ON, because the consequence is not local to this screen: every
+   * contact record's card starts drawing up this contract instead, in one tap, with no further
+   * prompt. Turning it off needs no confirmation - it restores the behaviour the app shipped with.
+   */
+  const toggleDefault = () => {
+    startTransition(async () => {
+      if (!isDefault) {
+        const ok = await askConfirm({
+          title: "Send this by default?",
+          body:
+            "“Generate & send” on a contact record will draw up this document from now on, in one " +
+            "tap. You can still pick a different one for an individual agreement on the full form.",
+          confirmLabel: "Make it the default",
+        });
+        if (!ok) return;
+      }
+      const res = await setDefaultAgreementTemplate(isDefault ? null : id);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      toast(
+        isDefault
+          ? "One-tap sends are back on the Guided Mode clause set."
+          : "One-tap sends now use this document.",
+      );
+      router.refresh();
+    });
+  };
+
   return (
     <div className="space-y-3">
       <FormError message={error} />
@@ -109,6 +150,18 @@ export function TemplateAdmin({
           <Btn variant="secondary" icon={<Pencil size={14} />} onClick={() => setEditing(true)}>
             Rename
           </Btn>
+          {/* Not offered for an archived or empty template - `setDefaultAgreementTemplate` refuses
+              both, and a button that always fails is worse than no button. */}
+          {!archived && usable && (
+            <Btn
+              variant={isDefault ? "secondary" : "ghost"}
+              icon={isDefault ? <StarOff size={14} /> : <Star size={14} />}
+              onClick={toggleDefault}
+              disabled={pending}
+            >
+              {isDefault ? "Stop sending by default" : "Send this by default"}
+            </Btn>
+          )}
           <Btn
             variant={archived ? "secondary" : "ghost"}
             icon={archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}

@@ -1164,6 +1164,19 @@ export const agreementWorkflowSchema = z.object({
    * already have, which is also why sending four of them is worse than sending two.
    */
   reminderDays: z.array(z.number().int().min(1).max(89)).max(5).default([3, 7, 12]),
+  /**
+   * Which document the ONE-TAP path draws up: a template's id, or null for the guided clause set.
+   *
+   * It exists because "Generate & send" on a contact record never shows a chooser - that is the
+   * whole point of one tap - so without a stored answer it silently always meant the guided clause
+   * set, and a founder who had uploaded their real contract had no way to make it the one that
+   * goes out. The form at /agreements/new still asks per agreement and overrides this.
+   *
+   * An ID and not a name, and deliberately NOT a foreign key: this is a config blob. A template
+   * that is later archived or deleted leaves a dangling id here, so every read resolves it through
+   * `getDefaultTemplateChoice`, which falls back to the guided set rather than failing a send.
+   */
+  defaultTemplateId: z.string().max(40).nullable().default(null),
 });
 
 export type AgreementWorkflowConfig = z.infer<typeof agreementWorkflowSchema>;
@@ -1174,6 +1187,7 @@ export const DEFAULT_AGREEMENT_WORKFLOW: AgreementWorkflowConfig = {
   deliverBy: "BOTH",
   ttlDays: 14,
   reminderDays: [3, 7, 12],
+  defaultTemplateId: null,
 };
 
 export function coerceAgreementWorkflow(value: unknown): AgreementWorkflowConfig {

@@ -1,7 +1,8 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { hasCapability, type CapabilityOverrides } from "@/lib/capabilities";
+import { type CapabilityOverrides } from "@/lib/capabilities";
+import { mayManageAnyBatch } from "./batch-access";
 import type { AppRole } from "@/lib/sections";
 import { istToday, toDateInputValue } from "@/lib/dates";
 import type { SessionDeliveryValue } from "@/lib/curriculum";
@@ -76,6 +77,12 @@ export type DeskBatchView = {
   href: string;
   /** False for a supervisor looking at somebody else's cohort. */
   iLead: boolean;
+  /**
+   * Who leads it. Only worth reading on a cohort that is not yours - which is most of them on
+   * a desk that now shows every classroom, where "whose class is this" is the question a pill
+   * saying "not yours" leaves unanswered.
+   */
+  leadName: string | null;
 };
 
 export type DeskStudentView = {
@@ -98,6 +105,12 @@ export type CoachingDesk = {
   role: AppRole;
   /** True when this person leads nothing and coaches nobody - i.e. they are supervising. */
   supervising: boolean;
+  /**
+   * True when this desk is showing EVERY active cohort rather than only this person's - the
+   * founder's and the head coach's view, whether or not they also run a cohort themselves.
+   * `iLead` on each row is what tells the two apart on screen.
+   */
+  seesAllBatches: boolean;
   batches: DeskBatchView[];
   /** The next seven days, plus anything in the past still needing a register. */
   upcoming: DeskSessionView[];
@@ -117,13 +130,26 @@ export const getCoachingDesk = cache(
     capabilities: CapabilityOverrides | null;
   }): Promise<CoachingDesk> => {
     const userId = session.user.id;
-    const supervisor =
-      session.role === "ADMIN" ||
-      session.role === "HEAD" ||
-      hasCapability(session.role, session.capabilities, "batches.manage");
+    /*
+      ── WHO SEES EVERY CLASSROOM ────────────────────────────────────────────────────────
+      ONE rule, from server/batch-access.ts: Admin, the head coach, or anyone holding
+      `batches.manage`. This file used to carry two local copies of it, and both were wrong in
+      the same direction:
 
-    const mayManageAnyBatch =
-      session.role === "ADMIN" || hasCapability(session.role, session.capabilities, "batches.manage");
+        · `supervisor` was only honoured when the viewer led NOTHING and coached NOBODY. So the
+          moment the founder or the head coach took a single cohort of their own, every other
+          cohort disappeared from their desk - they were demoted to a coach by teaching. That
+          is backwards, and it is what "we must see all the classrooms, not only my classroom"
+          means.
+        · the second copy, which decides whether the mark buttons are drawn, left HEAD out
+          entirely - so the head coach was shown a register they are explicitly allowed to take
+          (`canManageDelivery` has said so since the attendance window shipped) with no way to
+          take it. The desk lied about a permission the server grants.
+
+      The attendance board already scoped itself this way. These two screens answer the same
+      question about the same people, so they now answer it with the same function.
+    */
+    const supervisor = mayManageAnyBatch(session);
 
     const [ledBatches, coachedCount] = await Promise.all([
       prisma.batch.findMany({ where: { tutorId: userId, status: "ACTIVE" }, select: { id: true } }),
@@ -131,11 +157,14 @@ export const getCoachingDesk = cache(
     ]);
     const leadIds = new Set(ledBatches.map((b) => b.id));
 
-    // A supervisor who teaches nothing sees every active cohort; everyone else sees only theirs.
-    // The `iLead` flag below is what keeps the two readable apart on screen.
+    /**
+     * Whether this desk is ALSO somebody's own teaching desk - what the page's subtitle and the
+     * student list below turn on. A supervisor who teaches nothing has no caseload to show, so
+     * they get every active enrollment instead; one who does teach keeps their own.
+     */
     const supervising = supervisor && leadIds.size === 0 && coachedCount === 0;
 
-    const batchWhere = supervising
+    const batchWhere = supervisor
       ? { status: "ACTIVE" as const }
       : {
           status: "ACTIVE" as const,
@@ -150,6 +179,7 @@ export const getCoachingDesk = cache(
       select: {
         id: true, line: true, name: true, code: true, level: true, tutorId: true,
         targetStrength: true, startDate: true, sprintStartDate: true,
+        tutor: { select: { name: true } },
         curriculumTemplate: { select: { name: true } },
         _count: { select: { members: true, enrollments: true } },
         events: {
@@ -206,7 +236,7 @@ export const getCoachingDesk = cache(
           hasRecording: e.recordingId !== null,
           // Mirrors `canMark` in attendance-actions.ts and `canManageBatch` in
           // batch-timetable-actions.ts - the three have to agree or the UI lies.
-          canMark: mayManageAnyBatch || b.tutorId === userId,
+          canMark: supervisor || b.tutorId === userId,
         };
 
         if (!pre && start >= now && start <= weekAhead) upcoming.push(view);
@@ -234,6 +264,7 @@ export const getCoachingDesk = cache(
         nextSessionAt,
         href: b.line === "B2" ? `/batches/${b.id}` : `/german-note/${b.id}`,
         iLead: b.tutorId === userId,
+        leadName: b.tutor?.name ?? null,
       });
     }
 
@@ -243,7 +274,15 @@ export const getCoachingDesk = cache(
 
     const students = await loadStudents(userId, supervising);
 
-    return { role: session.role, supervising, batches: batchViews, upcoming, needsRegister, students };
+    return {
+      role: session.role,
+      supervising,
+      seesAllBatches: supervisor,
+      batches: batchViews,
+      upcoming,
+      needsRegister,
+      students,
+    };
   },
 );
 

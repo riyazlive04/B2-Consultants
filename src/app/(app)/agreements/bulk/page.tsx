@@ -2,7 +2,7 @@ import { Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/kit";
 import { requireCapability, requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import { listUsableTemplates } from "@/server/agreement-templates";
+import { getDefaultTemplateChoice, listUsableTemplates } from "@/server/agreement-templates";
 import { getSavedSignature } from "@/server/founder-config";
 import { requireSession } from "@/lib/rbac";
 import { BulkSend } from "./_components/BulkSend";
@@ -24,7 +24,7 @@ export default async function BulkAgreementsPage() {
   await requireCapability("agreements.issue");
   const session = await requireSession();
 
-  const [students, templates, saved] = await Promise.all([
+  const [students, templates, saved, defaultDoc] = await Promise.all([
     prisma.student.findMany({
       select: {
         id: true,
@@ -48,6 +48,7 @@ export default async function BulkAgreementsPage() {
     }),
     listUsableTemplates(),
     getSavedSignature(session.user.id),
+    getDefaultTemplateChoice(),
   ]);
 
   return (
@@ -78,6 +79,7 @@ export default async function BulkAgreementsPage() {
             level: s.enrollments[0]?.programLevel ?? null,
           }))}
           templates={templates}
+          defaultTemplateId={defaultDoc?.id ?? null}
         />
       )}
     </div>

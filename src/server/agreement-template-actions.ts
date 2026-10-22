@@ -14,6 +14,7 @@ import {
 } from "@/lib/agreement-doc";
 import { mergeProblems } from "@/lib/agreement-merge";
 import { logActivity } from "./activity-log";
+import { getAgreementWorkflow, writeAgreementWorkflow } from "./founder-config";
 import type { ActionResult } from "./agreement-core";
 
 /**
@@ -84,6 +85,54 @@ export async function archiveAgreementTemplate(id: string, archived: boolean): P
     summary: `${archived ? "Archived" : "Restored"} the agreement template “${row.name}”`,
   });
   revalidateTemplate(id);
+  return { ok: true };
+}
+
+/**
+ * Make this template the one the ONE-TAP path uses, or hand that back to the guided clause set.
+ *
+ * ── WHY THIS SETTING EXISTS ─────────────────────────────────────────────────────────────────
+ * "Generate & send" on a contact record draws up, countersigns and delivers a contract in a single
+ * tap, which means it cannot stop to ask which document to use. It therefore always used the
+ * guided clause set, and a founder who had uploaded their real contract could only reach it by
+ * abandoning one tap for the long form. This is where that answer is stored.
+ *
+ * ARCHIVED AND VERSIONLESS TEMPLATES ARE REFUSED HERE, at the moment the founder can see why - a
+ * document with no signature boxes would be refused at the moment they pressed send instead. The
+ * read side (`getDefaultTemplateChoice`) still re-checks, because a template can be archived after
+ * this was set.
+ */
+export async function setDefaultAgreementTemplate(templateId: string | null): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("agreements.issue");
+  if (!allowed) return denied;
+
+  let name = "the Guided Mode clause set";
+  if (templateId) {
+    const row = await prisma.agreementTemplate.findUnique({
+      where: { id: templateId },
+      select: { name: true, archivedAt: true, currentVersionId: true },
+    });
+    if (!row) return { ok: false, error: "That template no longer exists." };
+    if (row.archivedAt) return { ok: false, error: "Restore this template before making it the default." };
+    if (!row.currentVersionId) {
+      return { ok: false, error: "Upload a document to this template before making it the default." };
+    }
+    name = `“${row.name}”`;
+  }
+
+  const current = await getAgreementWorkflow();
+  await writeAgreementWorkflow({ ...current, defaultTemplateId: templateId });
+
+  await logActivity(session, {
+    action: "agreement.template.default",
+    section: "agreements",
+    entityType: "AgreementTemplate",
+    entityId: templateId ?? "guided",
+    summary: `One-tap agreements now go out on ${name}`,
+  });
+  revalidateTemplate(templateId ?? undefined);
+  // The task card on every contact record prints which document is about to go out.
+  revalidatePath("/contacts", "layout");
   return { ok: true };
 }
 

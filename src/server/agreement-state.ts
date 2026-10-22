@@ -14,6 +14,7 @@ import {
   type LatestAgreement,
 } from "@/lib/agreement-state";
 import { getAgreementPrefill } from "./agreement-metrics";
+import { getDefaultTemplateChoice } from "./agreement-templates";
 import { getAgreementWorkflow } from "./founder-config";
 
 /**
@@ -148,9 +149,10 @@ export async function getAgreementSummaryFor(opts: {
   leadId?: string | null;
   studentId?: string | null;
 }): Promise<AgreementSummary> {
-  const [info, prefill] = await Promise.all([
+  const [info, prefill, defaultDocument] = await Promise.all([
     getClientAgreementState(opts),
     getAgreementPrefill({ leadId: opts.leadId ?? null, studentId: opts.studentId ?? null }),
+    getDefaultTemplateChoice(),
   ]);
   return {
     state: info.state,
@@ -159,7 +161,11 @@ export async function getAgreementSummaryFor(opts: {
     documentNo: info.agreement?.documentNo ?? null,
     leadId: prefill.leadId ?? opts.leadId ?? null,
     studentId: prefill.studentId ?? opts.studentId ?? null,
-    missing: prefill.missing,
+    // Suggestions ride along with the genuinely-missing fields so the card and
+    // `generateAndSendAgreement` agree: a guessed batch means "open the form", and a card that
+    // offered one-click send would be bounced straight back to it.
+    missing: [...prefill.missing, ...prefill.suggested],
+    defaultDocument,
   };
 }
 

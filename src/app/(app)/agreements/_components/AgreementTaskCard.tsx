@@ -50,7 +50,7 @@ const SignaturePad = dynamic(() => import("@/components/ui/SignaturePad").then((
  * "Start anyway" is always available - readiness is a prompt, not a gate.
  */
 export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
-  const { state, config, agreementId, documentNo, leadId, studentId } = summary;
+  const { state, config, agreementId, documentNo, leadId, studentId, defaultDocument } = summary;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [signOpen, setSignOpen] = useState(false);
@@ -138,6 +138,29 @@ export function AgreementTaskCard({ summary }: { summary: AgreementSummary }) {
       </div>
 
       <p className="mt-3 text-sm text-ink-2">{agreementStateHint(state, config)}</p>
+
+      {/*
+        WHICH DOCUMENT ONE TAP IS ABOUT TO SEND, said before it sends it.
+
+        Only while nothing is drafted yet: once an agreement exists it holds its own copy of a
+        document, which may not be the default at all, and this line would be a confident lie.
+
+        It is also the answer to "there is no option to choose a template before creating a draft".
+        One tap cannot stop to ask - that is what makes it one tap - so it names what it will use
+        and offers the long form, which does ask, right beside it.
+      */}
+      {!agreementId && (state === "READY_TO_SEND" || state === "EXPIRED") && (
+        <p className="mt-2 text-caption text-muted">
+          Drawn up on{" "}
+          <span className="font-medium text-ink-2">
+            {defaultDocument ? defaultDocument.name : "the Guided Mode clause set"}
+          </span>
+          .{" "}
+          <Link href={newHref} className="font-medium text-primary hover:underline">
+            Use a different document
+          </Link>
+        </p>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {(state === "READY_TO_SEND" || state === "EXPIRED") && (

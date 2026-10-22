@@ -10,6 +10,7 @@ import {
 } from "pdf-lib";
 import {
   DEFAULT_FIELD_SIZE,
+  MAX_FIELD_LABEL,
   nextFieldId,
   type DocField,
   type FieldKind,
@@ -230,7 +231,7 @@ function humanise(name: string): string | null {
     .trim();
   if (!cleaned || !/[a-zA-Z]/.test(cleaned)) return null;
   const label = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-  return label.slice(0, 60);
+  return label.slice(0, MAX_FIELD_LABEL);
 }
 
 // ───────────────────────────── Defensive lookups ─────────────────────────────

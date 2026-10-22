@@ -20,7 +20,9 @@ import { DUE_DATE_SCHEME_LABELS, type DueDateScheme } from "@/lib/instalment-dat
 import { instalmentExtraFor } from "@/lib/instalment-plan";
 import type { InstalmentPlanConfig } from "@/lib/config-schema";
 import { fillFromAttendee } from "@/lib/attendee-fill";
+import { BATCH_TIMING_LABELS } from "@/lib/batch";
 import type { MeetingAttendee } from "@/server/agreement-metrics";
+import type { AgreementBatchOption } from "@/server/batches";
 import { formatInrMinor, majorStringToMinor, minorToMajorString } from "@/lib/format";
 import { createAgreement, updateAgreement } from "@/server/agreement-actions";
 import { DocumentChooser, type UsableTemplate } from "./DocumentChooser";
@@ -93,6 +95,10 @@ export function AgreementForm({
   instalmentPlans,
   attendees = [],
   templates,
+  defaultTemplateId = null,
+  batches = [],
+  batchId = null,
+  suggested,
 }: {
   initial: AgreementData;
   mode: Mode;
@@ -116,6 +122,25 @@ export function AgreementForm({
    * exactly as it did before this feature existed.
    */
   templates?: UsableTemplate[];
+  /**
+   * Which of them the founder set as the default (`agreementWorkflow.defaultTemplateId`), so the
+   * form opens on the same document one tap would have sent. Null is the guided clause set.
+   */
+  defaultTemplateId?: string | null;
+  /**
+   * The cohorts §2.1 can name - every ACTIVE batch on both lines, in offer order (what starts
+   * next, then what is running). Defaults to empty, and the box is then the plain text field it
+   * has always been: an app with no batches on file must not lose the ability to type one.
+   */
+  batches?: AgreementBatchOption[];
+  /** Which of them the prefill resolved to, so the chooser opens on it. */
+  batchId?: string | null;
+  /**
+   * Fields answered by an inference rather than by a record - the batch, when nothing on file
+   * says which cohort this person is joining. Said out loud as its own line, because "filled
+   * from the record" would be a claim the record does not support.
+   */
+  suggested?: string[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -128,7 +153,7 @@ export function AgreementForm({
    * an existing draft, which is the detail screen's job (and has a confirmation, because it
    * replaces the contract body).
    */
-  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(defaultTemplateId ?? null);
 
   const [fullName, setFullName] = useState(initial.student.fullName);
   const [address, setAddress] = useState(initial.student.address);
@@ -276,6 +301,61 @@ export function AgreementForm({
     injected.current = { phone: picked.phone, email: picked.email };
     setPhone(filled.phone);
     setEmail(filled.email);
+  };
+
+  /**
+   * ── THE BATCH BOX: a chooser over the real cohorts ────────────────────────────────
+   * `label` is what goes into the contract (the founders' code, "B26"); everything else is there
+   * to be read and searched - the level, whether it is running or starting, and how many seats
+   * are gone, which is the question that decides whether this person can join it at all.
+   */
+  const batchOptions = useMemo(
+    () =>
+      batches.map((b) => ({
+        value: b.id,
+        label: b.label,
+        // Searchable beside the label, so "Pflege" or "July" finds the cohort by its full name.
+        hint: b.name === b.label ? undefined : b.name,
+        meta: [
+          BATCH_TIMING_LABELS[b.timing],
+          b.startDate ? `starts ${b.startDate}` : null,
+          b.levelLabel,
+          `${b.capacityLabel} seats`,
+          b.lineLabel,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      })),
+    [batches],
+  );
+
+  /**
+   * The start date THIS control last wrote, so a second pick can correct its own first answer
+   * without ever overwriting one that came from the CRM or from the founder's keyboard.
+   *
+   * Seeded only when the prefill's date demonstrably came from the resolved cohort. The student
+   * branch of the prefill also fills this field from an ENROLMENT date, and that value is not
+   * ours to replace: every instalment due date is counted forward from it.
+   */
+  const injectedStart = useRef(
+    (() => {
+      const opened = batches.find((b) => b.id === batchId);
+      return opened?.startDate && opened.startDate === initial.batch.startDate ? opened.startDate : "";
+    })(),
+  );
+
+  const onBatchPick = (next: { text: string; value: string }) => {
+    setBatchNo(next.text);
+    const picked = next.value ? batches.find((b) => b.id === next.value) : undefined;
+    // No cohort behind the text, or a cohort with no start date of its own: the box is the
+    // founder's typed label and the date stays whatever it was. A blank start date would take
+    // the whole instalment schedule with it, so it is never written back.
+    if (!picked?.startDate) return;
+    // Decided from plain values, NOT inside a setState updater - see `onNamePick` on why an
+    // updater that reads this ref compares the previous answer against itself.
+    const replaceable = startDate === "" || startDate === injectedStart.current;
+    injectedStart.current = picked.startDate;
+    if (replaceable) setStartDate(picked.startDate);
   };
 
   const totalMinor = minorOf(total);
@@ -430,18 +510,31 @@ export function AgreementForm({
   return (
     <form onSubmit={submit} className="space-y-6">
       {mode.kind === "create" && templates && templates.length > 0 && (
-        <DocumentChooser templates={templates} value={templateId} onChange={setTemplateId} />
+        <DocumentChooser
+          templates={templates}
+          value={templateId}
+          defaultTemplateId={defaultTemplateId ?? null}
+          onChange={setTemplateId}
+        />
       )}
 
       {/* What the CRM answered, and what it couldn't. The founder should re-type only the second
           list - everything else is already on the record and re-asking for it is the bug this
           redesign exists to kill. */}
-      {(filledLabels.length > 0 || (missing && missing.length > 0)) && (
+      {(filledLabels.length > 0 ||
+        (missing && missing.length > 0) ||
+        (suggested && suggested.length > 0)) && (
         <div className="space-y-1.5 rounded-card border border-line bg-surface-2 px-4 py-3 text-sm">
           {filledLabels.length > 0 && (
             <p style={{ color: "var(--good)" }}>
               <span className="font-semibold">Filled from the record:</span>{" "}
               <span className="text-ink-2">{filledLabels.join(", ")}</span>
+            </p>
+          )}
+          {suggested && suggested.length > 0 && (
+            <p style={{ color: "var(--warn)" }}>
+              <span className="font-semibold">Suggested - worth a glance:</span>{" "}
+              <span className="text-ink-2">{suggested.join(", ")}</span>
             </p>
           )}
           {missing && missing.length > 0 && (
@@ -519,10 +612,40 @@ export function AgreementForm({
       </section>
 
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="mb-4 font-display text-h2 font-semibold">Batch (§2.1)</h2>
+        <h2 className="mb-1 font-display text-h2 font-semibold">Batch (§2.1)</h2>
+        <p className="mb-4 text-xs text-muted">
+          {batches.length > 0
+            ? "The cohorts on file, next intake first. Picking one brings its start date with it."
+            : "No cohorts on file yet - type the batch as it should read in the contract."}
+        </p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Batch">
-            <TextInput value={batchNo} onChange={(e) => setBatchNo(e.target.value)} required placeholder="Batch 12" />
+          {/*
+            Free text underneath, always. `agreementDataSchema` keeps `batch.number` a string
+            because it re-parses agreements signed before cohorts were a table - those say
+            "Batch 12", and a <Select> would have made them unrepresentable. So this offers the
+            real batches and still keeps whatever is typed.
+          */}
+          <Field
+            label="Batch"
+            hint={batches.length > 0 ? "Search by code, name or level - or type any label" : undefined}
+          >
+            {batches.length > 0 ? (
+              <ComboBox
+                options={batchOptions}
+                // Carriers only: this form posts through a server action, and `onBatchPick` is
+                // what the form actually reads.
+                nameText="batchNumber"
+                nameValue="batchId"
+                required
+                defaultText={batchNo}
+                defaultValue={batchId ?? ""}
+                placeholder="Search the cohorts, or type a label"
+                onStateChange={onBatchPick}
+                emptyHint="No cohort on file under that name - it will be used exactly as typed."
+              />
+            ) : (
+              <TextInput value={batchNo} onChange={(e) => setBatchNo(e.target.value)} required placeholder="Batch 12" />
+            )}
           </Field>
           <Field label="Programme start date" hint="Also the 12-month boundary in §6.">
             <TextInput type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />

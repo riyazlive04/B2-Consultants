@@ -26,10 +26,17 @@ export type UsableTemplate = {
 export function DocumentChooser({
   templates,
   value,
+  defaultTemplateId = null,
   onChange,
 }: {
   templates: UsableTemplate[];
   value: string | null;
+  /**
+   * Which one the founder set as the default for one-tap sends. Marked rather than merely
+   * pre-selected: the form opens on it, and without the badge the founder cannot tell whether
+   * the selection is their standing choice or something this screen picked.
+   */
+  defaultTemplateId?: string | null;
   onChange: (templateId: string | null) => void;
 }) {
   return (
@@ -48,7 +55,7 @@ export function DocumentChooser({
           onSelect={() => onChange(null)}
           icon={<FileSignature size={15} />}
           title="Guided Mode clause set"
-          meta="Built in · the contract B2 has always sent"
+          meta={`Built in · the contract B2 has always sent${defaultTemplateId === null ? " · your default" : ""}`}
           body="Fixed clauses, the §7 payment table and the signature block at the end. Nothing to mark up."
         />
         {templates.map((t) => (
@@ -58,7 +65,9 @@ export function DocumentChooser({
             onSelect={() => onChange(t.id)}
             icon={t.kind === "PDF" ? <FileText size={15} /> : <FileType size={15} />}
             title={t.name}
-            meta={`${t.kind === "PDF" ? "PDF" : "Word"} · v${t.version}${t.label ? ` · ${t.label}` : ""} · ${t.fieldSummary}`}
+            meta={`${t.kind === "PDF" ? "PDF" : "Word"} · v${t.version}${t.label ? ` · ${t.label}` : ""}${
+              t.id === defaultTemplateId ? " · your default" : ""
+            } · ${t.fieldSummary}`}
             body={t.description ?? t.sourceName}
           />
         ))}

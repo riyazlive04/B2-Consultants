@@ -11,6 +11,7 @@ import {
 import { WHATSAPP_KIND_LABELS, WHATSAPP_STATUS_LABELS } from "@/lib/whatsapp";
 import { getAgreementDetail, getMeetingAttendees } from "@/server/agreement-metrics";
 import { getInstalmentPlanConfig } from "@/server/founder-config";
+import { agreementBatchOptions } from "@/server/batches";
 import { readStoredDevice } from "@/server/agreement-core";
 import { documentReadiness, parseBodyRow } from "@/server/agreement-body";
 import { documentNeedsCoSigner, listAgreementSigners } from "@/server/agreement-signers";
@@ -43,9 +44,9 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
   if (!row) notFound();
   // Only a draft shows the form, so neither of these is fetched for an issued agreement.
   const isEditable = row.status === "DRAFT";
-  const [instalmentPlans, attendees] = isEditable
-    ? await Promise.all([getInstalmentPlanConfig(), getMeetingAttendees()])
-    : [undefined, []];
+  const [instalmentPlans, attendees, batches] = isEditable
+    ? await Promise.all([getInstalmentPlanConfig(), getMeetingAttendees(), agreementBatchOptions()])
+    : [undefined, [], []];
 
   if (!row.parsed.success) {
     return (
@@ -368,6 +369,11 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
             initial={data}
             instalmentPlans={instalmentPlans}
             attendees={attendees}
+            batches={batches}
+            /* Resolved by LABEL, not by a stored id: a draft holds the words §2.1 will print,
+               and nothing links it to a `Batch` row. A draft typed before cohorts were offered
+               therefore opens as the free text it is, which is what it should do. */
+            batchId={batches.find((b) => b.label === data.batch.number)?.id ?? null}
             mode={{ kind: "edit", id: row.id }}
           />
         </div>

@@ -37,8 +37,10 @@ export default async function CoachingPage() {
         icon={<School size={20} />}
         title="My Teaching"
         subtitle={
-          desk.supervising
-            ? "Every active cohort - you are not assigned to one, so this is the supervisor's view."
+          desk.seesAllBatches
+            ? desk.supervising
+              ? "Every active cohort - you are not assigned to one, so this is the supervisor's view."
+              : "Every active cohort, yours marked as such - plus the students you coach."
             : "The cohorts you run and the students you coach."
         }
       />
@@ -130,7 +132,11 @@ export default async function CoachingPage() {
                         <Pill tone={b.line === "B2" ? "primary" : "info"}>
                           {b.line === "B2" ? "Coaching" : "German Note"}
                         </Pill>
-                        {!b.iLead && <Pill tone="neutral">Not yours</Pill>}
+                        {/* Whose class it is, rather than merely that it is not yours - the
+                            useful half of the same fact on a desk showing every classroom. */}
+                        {!b.iLead && (
+                          <Pill tone="neutral">{b.leadName ? `Led by ${b.leadName}` : "No coach assigned"}</Pill>
+                        )}
                       </div>
                       <p className="mt-2 text-sm text-ink-2">
                         {b.sessionCount > 0

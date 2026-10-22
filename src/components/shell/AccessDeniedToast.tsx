@@ -17,6 +17,7 @@ export function AccessDeniedToast() {
   const router = useRouter();
   const pathname = usePathname();
   const denied = params.get("denied");
+  const kind = params.get("kind");
   // StrictMode double-invokes effects in dev; without this the toast fires twice.
   const shown = useRef<string | null>(null);
 
@@ -27,11 +28,16 @@ export function AccessDeniedToast() {
     const what =
       denied === "admin"
         ? "That section is admin-only."
-        : `You don't have access to ${denied.replace(/[.-]/g, " ")}.`;
+        : // `kind=personal` (rbac.ts): a self-scoped student page, not a permission we withheld.
+          // Keyed off the param rather than a list of keys here, so the two can't drift.
+          kind === "personal"
+          ? "That page is a student's own - it reads their classes and progress from their login. Open the person on the Students board instead."
+          : `You don't have access to ${denied.replace(/[.-]/g, " ")}.`;
+    // The toast layer has only success/error, so the wording carries the distinction.
     toast(what, "error");
 
     router.replace(pathname);
-  }, [denied, pathname, router]);
+  }, [denied, kind, pathname, router]);
 
   return null;
 }

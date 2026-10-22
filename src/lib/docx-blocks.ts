@@ -44,6 +44,7 @@
  */
 
 import {
+  MAX_FIELD_LABEL,
   nextFieldId,
   type DocAlign,
   type DocBlock,
@@ -65,9 +66,17 @@ import {
  * Longer alternatives are listed FIRST (`signature` before `sign`, `initials` before `initial`).
  * The regex engine does backtrack, so a shorter-first order happens to work - but it works by
  * failing and retrying, and the order below says what is meant.
+ *
+ * ⚠ THE LABEL GROUP IS DELIBERATELY UNBOUNDED, and the capture below truncates to
+ * `MAX_FIELD_LABEL`. It used to be bounded by the stored cap, and the consequence was the worst
+ * kind of failure this module can have: a label one character too long did not truncate, it
+ * stopped the WHOLE placeholder from matching, and `[[check:student|I confirm my attendance…]]`
+ * was then printed into the contract as literal prose, with no tick box and no warning. Any bound
+ * here just moves that cliff somewhere less obvious, so there is none. `[^\]]*` cannot run past
+ * the first `]`, so it stays linear and cannot swallow the document.
  */
 const PLACEHOLDER_RE =
-  /\[\[\s*(signature|sign|initials|initial|date|name|text|checkbox|check|attachment|attach|file)\s*:\s*(creator|b2|coach|guardian|parent|witness|student|client)\s*(?:\|([^\]]{0,60}))?\s*\]\]/gi;
+  /\[\[\s*(signature|sign|initials|initial|date|name|text|checkbox|check|attachment|attach|file)\s*:\s*(creator|b2|coach|guardian|parent|witness|student|client)\s*(?:\|([^\]]*))?\s*\]\]/gi;
 
 const KIND_ALIASES: Record<string, FieldKind> = {
   sign: "SIGNATURE",
@@ -611,7 +620,7 @@ function splitPlaceholders(source: DocInline[], fields: DocField[]): Piece[] {
       const signer = SIGNER_ALIASES[m[2]!.toLowerCase()]!;
       const label = m[3]?.trim();
       const field: DocField = { id: nextFieldId(fields), kind, signer };
-      if (label) field.label = label.slice(0, 60);
+      if (label) field.label = label.slice(0, MAX_FIELD_LABEL);
       fields.push(field);
       pieces.push({ kind: "field", fieldId: field.id });
 

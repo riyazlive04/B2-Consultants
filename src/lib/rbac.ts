@@ -95,7 +95,11 @@ export async function requireSection(key: SectionKey) {
   const session = await requireSession();
   const section = resolveSections(await getSectionsConfig()).find((s) => s.key === key);
   if (!section || !sectionAllowed(section, session.role, session.overrides)) {
-    redirect(`/?denied=${encodeURIComponent(key)}`);
+    // A self-scoped page refused to a staff account is not a permissions boundary, and saying
+    // "you don't have access" sends the founder looking for a switch that would not help. The
+    // toast reads this to say what is actually true: the page belongs to a student.
+    const kind = section?.personal && session.role !== "STUDENT" ? "&kind=personal" : "";
+    redirect(`/?denied=${encodeURIComponent(key)}${kind}`);
   }
   return session;
 }

@@ -20,6 +20,7 @@ import {
 } from "@/lib/capabilities";
 import {
   effectiveSectionKeys,
+  grantableTo,
   roleDefaultKeysFrom,
   type AppRole,
   type ResolvedSection,
@@ -73,7 +74,6 @@ export function AccessDialog({
   onClose: () => void;
   onInvited: (link: { url: string; expiresInDays: number }) => void;
 }) {
-  const grantable = sections.filter((s) => !s.locked);
   // A requested role is a suggestion, not a grant - and never Admin off a public form.
   const initialRole: AppRole =
     user?.role ?? (prefill?.role === "HEAD" || prefill?.role === "USER" ? prefill.role : "USER");
@@ -92,6 +92,14 @@ export function AccessDialog({
   const [error, setError] = useState<string | null>(null);
 
   const isAdminRole = role === "ADMIN";
+
+  /**
+   * Depends on the role being edited, not just on the catalogue - so switching the role picker
+   * re-draws the list. Dashboard, My Journey and My Classroom drop out for everyone but a
+   * student: they read the signed-in person's OWN student record, so ticking them for a coach
+   * would save a grant the server ignores. `grantableTo` is the same test `sectionAllowed` runs.
+   */
+  const grantable = sections.filter((s) => !s.locked && grantableTo(s, role));
 
   // Raw <input>s (this dialog predates the form kit), so the kind's attrs + character
   // filter are wired by hand. Not hooks - safe to call here. See lib/field-rules.ts.

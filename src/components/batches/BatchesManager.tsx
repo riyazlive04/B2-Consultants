@@ -164,6 +164,32 @@ export function BatchesManager({
             {b.startDate ? ` · from ${formatDate(b.startDate)}` : ""}
             {b.endDate ? ` to ${formatDate(b.endDate)}` : ""}
           </p>
+          {/*
+            WHETHER THIS COHORT HAS DATES YET - the question this list exists to answer on the
+            Batches & Plans screen, and one a name and a capacity pill cannot. A B2 cohort says
+            it as a link, because the answer to "no timetable" is the page that builds one.
+          */}
+          {line === "B2" ? (
+            <Link
+              href={`/batches/${b.id}`}
+              className="mt-0.5 inline-block text-xs text-muted underline-offset-2 hover:text-ink hover:underline"
+            >
+              {b.sessionCount === 0 ? (
+                <span className="text-warn">No timetable yet - set the dates</span>
+              ) : (
+                <>
+                  {b.sessionCount} class{b.sessionCount === 1 ? "" : "es"}
+                  {b.nextSessionAt ? ` · next ${formatDate(b.nextSessionAt)}` : " · none upcoming"}
+                </>
+              )}
+            </Link>
+          ) : (
+            <p className="mt-0.5 text-xs text-muted">
+              {b.sessionCount === 0
+                ? "No classes scheduled yet"
+                : `${b.sessionCount} class${b.sessionCount === 1 ? "" : "es"}${b.nextSessionAt ? ` · next ${formatDate(b.nextSessionAt)}` : " · none upcoming"}`}
+            </p>
+          )}
         </div>
         <Pill tone={CAPACITY_TONE[b.capacity]}>
           <span className="inline-flex items-center gap-1">

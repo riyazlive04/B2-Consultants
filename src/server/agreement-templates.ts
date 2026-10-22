@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { parseBodyRow } from "./agreement-body";
+import { getAgreementWorkflow } from "./founder-config";
 import { describeFields, docFieldsSchema, type DocBody } from "@/lib/agreement-doc";
 
 /**
@@ -123,6 +124,28 @@ export async function listUsableTemplates() {
       fieldSummary: r.fieldSummary,
       sourceName: r.currentVersion?.sourceName ?? "",
     }));
+}
+
+/**
+ * WHICH DOCUMENT THE ONE-TAP PATH WILL USE, resolved and verified.
+ *
+ * `agreementWorkflow.defaultTemplateId` is a config blob holding a bare id, so it can outlive the
+ * template it names - archived, deleted, or left with no usable current version. Every caller goes
+ * through here, and here a stale id means the guided clause set, never an error: the alternative is
+ * a founder pressing "Generate & send" and being told their configuration is broken, which is the
+ * one moment they can least act on it.
+ *
+ * Returns the NAME as well, because both callers want it: the task card prints which document is
+ * about to go out, and the form pre-selects it.
+ */
+export async function getDefaultTemplateChoice(): Promise<{ id: string; name: string } | null> {
+  const { defaultTemplateId } = await getAgreementWorkflow();
+  if (!defaultTemplateId) return null;
+  const row = await prisma.agreementTemplate.findFirst({
+    where: { id: defaultTemplateId, archivedAt: null, currentVersionId: { not: null } },
+    select: { id: true, name: true },
+  });
+  return row ?? null;
 }
 
 /**

@@ -202,6 +202,13 @@ export type AgreementSummary = {
   studentId: string | null;
   /** Fields the CRM cannot answer - a non-empty list means one-click must route to the form. */
   missing: string[];
+  /**
+   * Which document one tap would draw up: the founder's default template, or null for the guided
+   * clause set. Carried in the summary so the card can SAY so before it sends - one tap is fast
+   * enough to be irreversible, and "which contract did that just send?" is not a question a
+   * founder should have to answer by opening the PDF.
+   */
+  defaultDocument: { id: string; name: string } | null;
 };
 
 // ───────────────────────────── Grouping (the picker) ─────────────────────────────

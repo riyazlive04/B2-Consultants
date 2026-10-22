@@ -27,14 +27,18 @@ import type { UsableTemplate } from "../../_components/DocumentChooser";
 export function BulkSend({
   students,
   templates,
+  defaultTemplateId = null,
 }: {
   students: { id: string; fullName: string; code: string | null; level: string | null }[];
   templates: UsableTemplate[];
+  /** The founder's standing choice of document, so this screen opens on it. */
+  defaultTemplateId?: string | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [templateId, setTemplateId] = useState<string>("");
+  // Opens on the founder's default, same as the single-agreement form - "" is the guided set.
+  const [templateId, setTemplateId] = useState<string>(defaultTemplateId ?? "");
   const [outcomes, setOutcomes] = useState<BulkOutcome[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -100,10 +104,15 @@ export function BulkSend({
             value={templateId}
             onChange={(e) => setTemplateId(e.target.value)}
             options={[
-              { value: "", label: "Guided Mode clause set (built in)" },
+              {
+                value: "",
+                label: `Guided Mode clause set (built in)${!defaultTemplateId ? " - your default" : ""}`,
+              },
               ...templates.map((t) => ({
                 value: t.id,
-                label: `${t.name} - v${t.version} (${t.kind === "PDF" ? "PDF" : "Word"})`,
+                label: `${t.name} - v${t.version} (${t.kind === "PDF" ? "PDF" : "Word"})${
+                  t.id === defaultTemplateId ? " - your default" : ""
+                }`,
               })),
             ]}
           />

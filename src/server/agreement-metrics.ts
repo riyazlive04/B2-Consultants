@@ -6,7 +6,9 @@ import {
   effectiveAgreementStatus,
   type AgreementData,
 } from "@/lib/agreement";
+import { BATCH_TIMING_LABELS, defaultBatchChoice } from "@/lib/batch";
 import { BODY_SELECT } from "./agreement-body";
+import { agreementBatchOptions, type AgreementBatchOption } from "./batches";
 
 /**
  * Read side of the agreements section.
@@ -196,6 +198,25 @@ export type AgreementPrefill = {
   missing: string[];
   /** Field keys we filled from the CRM, so the form can mark them as auto-filled. */
   filled: string[];
+  /**
+   * Fields answered by a SUGGESTION rather than by a record - today only the batch, when nothing
+   * seats this person and no previous agreement names a cohort, so the next intake with room was
+   * offered.
+   *
+   * Labels, like `missing`, and kept apart from it on purpose. `missing` means "the CRM cannot
+   * answer this"; these are answered, but by an inference. The one-click and bulk send paths
+   * treat both the same way - go and look at the form - because a guessed cohort is not
+   * something to countersign a contract on unseen. The form itself just asks for a glance.
+   */
+  suggested: string[];
+  /**
+   * The cohort the batch box resolved to, if it resolved to a real one - what the chooser opens
+   * selected. Null when the label is free text that names no `Batch` row, which every agreement
+   * signed before cohorts existed does.
+   */
+  batchId: string | null;
+  /** The cohorts the chooser offers. Request-cached, so the page re-reading them is free. */
+  batches: AgreementBatchOption[];
 };
 
 const EMPTY: AgreementData = {
@@ -219,9 +240,13 @@ export async function getAgreementPrefill(opts: {
 }): Promise<AgreementPrefill> {
   const notes: string[] = [];
   const filled: string[] = [];
+  const suggested: string[] = [];
   const data: AgreementData = structuredClone(EMPTY);
   let leadId: string | null = null;
   let studentId: string | null = null;
+  /** Where this person is already seated, and on what programme - both feed the batch default. */
+  let seatedBatchId: string | null = null;
+  let preferLevel: string | null = null;
 
   const mark = (key: string, value: string) => {
     if (value) filled.push(key);
@@ -243,8 +268,17 @@ export async function getAgreementPrefill(opts: {
           take: 1,
         },
         enrollments: {
-          select: { enrollmentDate: true, programLevel: true },
+          // `batchId` is the whole point of the batch default: a student who already holds a
+          // seat must have THAT cohort named in their contract, not the next intake.
+          select: { enrollmentDate: true, programLevel: true, batchId: true },
           orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+        // The other way into a cohort - German Note seats through BatchMember, B2 through
+        // Enrollment, and a prefill must not care which route this person came in by.
+        gnMemberships: {
+          select: { batchId: true },
+          orderBy: { addedAt: "desc" },
           take: 1,
         },
       },
@@ -270,6 +304,8 @@ export async function getAgreementPrefill(opts: {
         data.batch.startDate = toIsoDate(enrolled.enrollmentDate);
         filled.push("batchStartDate");
       }
+      seatedBatchId = enrolled?.batchId ?? student.gnMemberships[0]?.batchId ?? null;
+      preferLevel = enrolled?.programLevel ?? null;
     }
   } else if (opts.leadId) {
     const lead = await prisma.lead.findUnique({
@@ -332,6 +368,71 @@ export async function getAgreementPrefill(opts: {
     }
   }
 
+  /*
+    ── THE BATCH, FROM THE COHORTS THAT ACTUALLY EXIST ────────────────────────────────
+    This box used to open empty and be typed into, while the app already knew every cohort by
+    name, who was in it and when it starts. So it is now resolved here, and the form offers the
+    list rather than a blank line.
+
+    PRECEDENCE, strongest evidence first:
+      1. a seat this person already holds. A fact.
+      2. the label carried over from their previous agreement. Their own history, and the
+         carry-over note above already asks the founder to check it is still current - so it is
+         only RESOLVED to a cohort here (so the chooser opens on it), never replaced.
+      3. `defaultBatchChoice` - the next intake with room, preferring their programme level.
+
+    None of the three is a decision: the chooser is one click away and free text still wins,
+    because `agreementDataSchema` keeps `batch.number` free text and contracts signed before
+    cohorts existed say things like "Batch 12".
+  */
+  const batches = await agreementBatchOptions();
+  const carried = data.batch.number.trim().toLowerCase();
+  const seated = seatedBatchId ? batches.find((b) => b.id === seatedBatchId) : undefined;
+  const suggestion =
+    seated ??
+    (carried
+      ? batches.find((b) => b.label.toLowerCase() === carried)
+      : (defaultBatchChoice(batches, { preferLevel }) ?? undefined));
+  let batchId: string | null = null;
+
+  if (suggestion) {
+    batchId = suggestion.id;
+    const evidenced = !!seated || !!carried;
+    if (data.batch.number !== suggestion.label) {
+      data.batch.number = suggestion.label;
+      if (evidenced) filled.push("batchNumber");
+      else suggested.push("Batch");
+      if (seated) {
+        notes.push(`Batch ${suggestion.label} is the cohort this student is already seated in.`);
+      } else if (!carried) {
+        notes.push(
+          `Batch ${suggestion.label} filled in for you - ${BATCH_TIMING_LABELS[
+            suggestion.timing
+          ].toLowerCase()}, ${suggestion.capacityLabel} seats. Pick another from the list if they are joining a different cohort.`,
+        );
+      }
+      // The third case - a carried-over label that matched a cohort in a different spelling -
+      // says nothing new. The carry-over note above already asks for it to be checked.
+    }
+    /*
+      The cohort's own start date beats the enrolment date lifted above: §2.1 and the 12-month
+      boundary in §6 both mean the day the PROGRAMME starts, which is the batch's anchor.
+
+      Only when it HAS one. Most live batches do not (the German Note cohorts predate the
+      column), and blanking this field would take the instalment due dates with it - the whole
+      plan is counted forward from here.
+    */
+    if (suggestion.startDate) {
+      const wasAnswered = !!data.batch.startDate;
+      data.batch.startDate = suggestion.startDate;
+      if (evidenced) filled.push("batchStartDate");
+      // A date that only arrived with the guessed cohort is itself a guess - and this field is
+      // what every instalment due date is counted forward from, so it is the last one to let
+      // through unseen. One that was already answered stays described as it was.
+      else if (!wasAnswered) suggested.push("Programme start date");
+    }
+  }
+
   const missing: string[] = [];
   if (!data.student.fullName) missing.push("Full name");
   if (!data.student.phone) missing.push("WhatsApp number");
@@ -339,7 +440,19 @@ export async function getAgreementPrefill(opts: {
   if (!data.batch.number) missing.push("Batch");
   if (!data.batch.startDate) missing.push("Programme start date");
 
-  return { leadId, studentId, data, notes, missing, filled };
+  return {
+    leadId,
+    studentId,
+    data,
+    notes,
+    missing,
+    // Deduped: the batch can be answered twice over (carried from the last agreement, then
+    // resolved to a cohort), and the form renders this list as prose - "Batch, Batch" is noise.
+    filled: [...new Set(filled)],
+    suggested,
+    batchId,
+    batches,
+  };
 }
 
 /** A `@db.Date` column back to the `yyyy-mm-dd` the agreement schema wants. */

@@ -189,7 +189,11 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
                 <Toggle
                   key={role}
                   checked={s.roles.includes(role)}
-                  disabled={s.locked || !s.enabled}
+                  // A `personal` section reads the signed-in person's own student record, so a
+                  // grant to any other role saves a switch the server ignores. Better to show
+                  // it as unavailable than to let the founder set it and wonder why nothing
+                  // changed - which is what made My Classroom look broken for Admins.
+                  disabled={s.locked || !s.enabled || (s.personal && role !== "STUDENT")}
                   onChange={() => toggleRole(s.key, role)}
                   label={`${ROLE_LABELS[role]} - default access to ${s.label}`}
                   hideLabel
@@ -199,7 +203,9 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
                       ? "Locked to Admin"
                       : !s.enabled
                         ? "Switch the section on to change its roles"
-                        : ROLE_LABELS[role]
+                        : s.personal && role !== "STUDENT"
+                          ? `${s.label} is a student's own page - it reads their classes and progress from their login, so only Students can open it`
+                          : ROLE_LABELS[role]
                   }
                 />
               ))}
@@ -227,8 +233,10 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
 
       <div className="mt-4 space-y-1">
         <Hint>
-          Admins always see every switched-on section. Switching a section off hides it from
-          everyone, including you - except the locked Founder Console.
+          Admins always see every switched-on section, with one exception: Dashboard, My Journey
+          and My Classroom are a student&apos;s <b>own</b> pages - they read the signed-in
+          person&apos;s student record, so no role but Student can open them. Switching a section
+          off hides it from everyone, including you - except the locked Founder Console.
         </Hint>
         <Hint>
           These are <b>defaults</b>. A per-user override, set in Users → Users &amp; access, still wins.

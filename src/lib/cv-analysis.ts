@@ -177,14 +177,14 @@ const TEMPLATE_RULES: TemplateRule[] = [
   {
     key: "dates",
     group: "Format",
-    label: "Dated roles (mm/yyyy – mm/yyyy)",
-    hint: "Every role & degree needs a start–end date range so the timeline reads at a glance.",
+    label: "Dated roles (mm/yyyy - mm/yyyy)",
+    hint: "Every role & degree needs a start-end date range so the timeline reads at a glance.",
     test: (t) => (t.match(/\b(19|20)\d{2}\b/g)?.length ?? 0) >= 2,
   },
   {
     key: "current",
     group: "Format",
-    label: "Current role marked (…– present)",
+    label: "Current role marked (…- present)",
     hint: "Most-recent role should end in “present / heute / current” so it's clearly ongoing.",
     test: (t) => /(present|current|heute|to date|till date|ongoing|\bnow\b)/i.test(t),
   },

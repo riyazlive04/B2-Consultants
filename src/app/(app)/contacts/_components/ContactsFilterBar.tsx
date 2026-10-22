@@ -280,7 +280,7 @@ export function ContactsFilterBar({ filters }: { filters: ContactListFilters }) 
               value={active.from ?? ""}
               onChange={(e) => setFilter("from", e.target.value)}
             />
-            <span className="text-ink-3">–</span>
+            <span className="text-ink-3">-</span>
             <DatePicker
               size="sm"
               aria-label="Created to"

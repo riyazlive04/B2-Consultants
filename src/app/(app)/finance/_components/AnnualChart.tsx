@@ -43,7 +43,7 @@ export function AnnualChart({ data }: { data: AnnualPerformance }) {
     { label: "Actual", value: compact(achievedToDateInr) },
     { label: "Attainment", value: formatPct(attainmentPct), tone: attainmentTone },
     remainingMonths > 0
-      ? { label: `Needed ${nextLabel}–${lastLabel}`, value: `${compact(neededPerMonthInr)}/mo` }
+      ? { label: `Needed ${nextLabel}-${lastLabel}`, value: `${compact(neededPerMonthInr)}/mo` }
       : { label: "Gap to close", value: compact(Math.max(0, gapInr)) },
   ];
 

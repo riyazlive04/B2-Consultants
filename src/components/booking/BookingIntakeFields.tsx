@@ -176,7 +176,7 @@ export function BookingIntakeFields({
               <Field
                 label="Why do you want to work in Germany? What is pushing you to make this move now?"
                 required
-                hint="(We work only with those who have a clear purpose for moving to Germany. Please write in 2–4 sentences. Be specific about your pain or vision.)"
+                hint="(We work only with those who have a clear purpose for moving to Germany. Please write in 2-4 sentences. Be specific about your pain or vision.)"
               >
                 <TextArea kind="text" name="whyGermany" required />
               </Field>

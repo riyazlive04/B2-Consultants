@@ -227,7 +227,7 @@ function Results({ outcomes }: { outcomes: BulkOutcome[] }) {
           <ul className="mt-1.5 space-y-0.5 text-xs text-ink-2">
             {needsForm.map((o) => (
               <li key={o.studentId}>
-                <span className="font-medium">{o.name}</span> — {o.note}
+                <span className="font-medium">{o.name}</span> - {o.note}
               </li>
             ))}
           </ul>
@@ -242,7 +242,7 @@ function Results({ outcomes }: { outcomes: BulkOutcome[] }) {
           <ul className="mt-1.5 space-y-0.5 text-xs text-ink-2">
             {failed.map((o) => (
               <li key={o.studentId}>
-                <span className="font-medium">{o.name}</span> — {o.note}
+                <span className="font-medium">{o.name}</span> - {o.note}
               </li>
             ))}
           </ul>
@@ -259,7 +259,7 @@ function Results({ outcomes }: { outcomes: BulkOutcome[] }) {
           <ul className="mt-1.5 space-y-0.5 text-xs text-ink-2">
             {sent.map((o) => (
               <li key={o.studentId}>
-                <span className="font-medium">{o.name}</span> — {o.note}
+                <span className="font-medium">{o.name}</span> - {o.note}
               </li>
             ))}
           </ul>

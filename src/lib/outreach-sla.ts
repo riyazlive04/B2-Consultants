@@ -33,9 +33,9 @@ const FIVE_MINUTES_MS = 5 * 60 * 1000;
 export type SlaWindow = "DAY" | "NIGHT" | "EARLY";
 
 export const SLA_WINDOW_LABELS: Record<SlaWindow, string> = {
-  DAY: "Daytime lead (09:00–20:00)",
-  NIGHT: "Night lead (20:00–24:00)",
-  EARLY: "Early-hours lead (00:00–09:00)",
+  DAY: "Daytime lead (09:00-20:00)",
+  NIGHT: "Night lead (20:00-24:00)",
+  EARLY: "Early-hours lead (00:00-09:00)",
 };
 
 /**
@@ -170,11 +170,11 @@ export const QUEUE_BUCKET_META: Record<
   NOT_BOOKED_AFTER_MESSAGE: {
     title: "Messaged, didn't book - call now",
     why: "They got the booking link and haven't used it. The SOP has raised a call for you.",
-    target: "30–40% of leads booked",
+    target: "30-40% of leads booked",
   },
   DAY_DUE: {
     title: "Daytime leads, not yet connected",
-    why: "Arrived 09:00–20:00 and owed a connection today.",
+    why: "Arrived 09:00-20:00 and owed a connection today.",
     target: "100% same day",
   },
   NIGHT_DUE: {
@@ -196,7 +196,7 @@ export const QUEUE_BUCKET_META: Record<
   OPTED_NOT_BOOKED: {
     title: "Called, not booked - call back",
     why: "You spoke to these and they haven't booked. Each reappears once the call-back gap has passed.",
-    target: "30–40% of leads booked",
+    target: "30-40% of leads booked",
   },
   OLD_LEADS: {
     title: "Old leads",
@@ -271,7 +271,7 @@ export const L1_TARGETS: Record<TargetKey, TargetSpec> = {
     label: "Same-day connection",
     green: 100, amber: 90, unit: "pct",
     tooltip:
-      "Leads arriving 09:00–20:00 that were connected before the day ended. JD target: 100%.",
+      "Leads arriving 09:00-20:00 that were connected before the day ended. JD target: 100%.",
   },
   nightConnect: {
     label: "Night leads, following day",
@@ -281,12 +281,12 @@ export const L1_TARGETS: Record<TargetKey, TargetSpec> = {
   leadToBooked: {
     label: "Lead → booked discovery call",
     green: 30, amber: 25, unit: "pct",
-    tooltip: "Leads that became a booked discovery call. JD target: 30–40%.",
+    tooltip: "Leads that became a booked discovery call. JD target: 30-40%.",
   },
   bantAccuracy: {
     label: "BANT qualification accuracy",
     green: 65, amber: 55, unit: "pct",
-    tooltip: "Leads you qualified that the discovery call agreed with. JD target: 65–75%.",
+    tooltip: "Leads you qualified that the discovery call agreed with. JD target: 65-75%.",
   },
   showRate: {
     label: "Show rate on booked calls",

@@ -77,7 +77,7 @@ export function ResumeEditor({ data, onChange }: Props) {
       </EditorSection>
 
       {/* ── Highlights ── */}
-      <EditorSection title="What I have to offer (highlights)" hint="6–7 crisp bullets - the recruiter's 10-second scan.">
+      <EditorSection title="What I have to offer (highlights)" hint="6-7 crisp bullets - the recruiter's 10-second scan.">
         <StringList items={data.highlights} onChange={(highlights) => patch({ highlights })} placeholder="e.g. 5 years designing HVAC systems" addLabel="Add highlight" />
       </EditorSection>
 

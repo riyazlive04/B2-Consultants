@@ -426,7 +426,7 @@ function LevelsEditor({ ruleset, patch }: EditorProps) {
             {/* the band this level actually covers - the thing you're really editing */}
             <NameCell className="text-ink-3">
               {l.minXp.toLocaleString("en-IN")}
-              {levels[i + 1] ? `–${(levels[i + 1].minXp - 1).toLocaleString("en-IN")} XP` : "+ XP"}
+              {levels[i + 1] ? `-${(levels[i + 1].minXp - 1).toLocaleString("en-IN")} XP` : "+ XP"}
             </NameCell>
             {levels.length > 1 ? (
               <RemoveCell label={`Remove level ${l.level}`} onClick={() => set(levels.filter((_, j) => j !== i))} />

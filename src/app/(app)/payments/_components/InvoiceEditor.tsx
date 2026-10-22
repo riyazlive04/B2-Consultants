@@ -554,7 +554,7 @@ export default function InvoiceEditor({
               </div>
               {/* Nothing is charged at 0, and the document says nothing about tax at all. */}
               <p className="text-caption text-ink-3">
-                {taxRow ? `Charged as “${taxRow}”.` : "No tax on this invoice — the tax line is left off the document."}
+                {taxRow ? `Charged as “${taxRow}”.` : "No tax on this invoice - the tax line is left off the document."}
                 {taxPercent > 0 && (
                   <>
                     {" "}

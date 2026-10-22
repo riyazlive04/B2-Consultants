@@ -22,7 +22,7 @@ const BOLD: Record<ResumeTemplateConfig["style"]["font"], string> = {
 
 function dateRange(start: string, end: string, current: boolean): string {
   const e = current ? "present" : end;
-  return [start, e].filter(Boolean).join(" – ");
+  return [start, e].filter(Boolean).join(" - ");
 }
 
 function styles(cfg: ResumeTemplateConfig) {

@@ -339,17 +339,17 @@ export async function sendTestEmail(form: FormData): Promise<TestSendResult> {
   if (!to) return { ok: false, message: "Enter an address to send the test to" };
 
   const rt = await getEmailRuntime();
-  if (!rt.envEnabled) return { ok: false, message: 'EMAIL_ENABLED is not "true" in the environment — set it and restart the app' };
-  if (!rt.apiKey) return { ok: false, message: "RESEND_API_KEY is not set in the environment — add it and restart the app" };
+  if (!rt.envEnabled) return { ok: false, message: 'EMAIL_ENABLED is not "true" in the environment - set it and restart the app' };
+  if (!rt.apiKey) return { ok: false, message: "RESEND_API_KEY is not set in the environment - add it and restart the app" };
   if (!rt.fromEmail) return { ok: false, message: "Save a From address above before sending a test" };
-  if (rt.paused) return { ok: false, message: 'Sending is paused — turn off "Pause sending" above and save' };
+  if (rt.paused) return { ok: false, message: 'Sending is paused - turn off "Pause sending" above and save' };
 
   const from = rt.fromName ? `${rt.fromName} <${rt.fromEmail}>` : rt.fromEmail;
   const html = `${brandEmailHeader()}<div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#16203A;line-height:1.6">
     <p>This is a test email from the B2 Consultants app.</p>
     <p>If you are reading it, the Resend connection is live: the API key works, the sending domain is verified, and the app can send.</p>
   </div>`;
-  const subject = "B2 Consultants — email channel test";
+  const subject = "B2 Consultants - email channel test";
   const res = await sendResendEmail({ apiKey: rt.apiKey, from, to, subject, html });
 
   // Logged like any other send, so the test is visible in Conversations rather than invisible.
@@ -366,13 +366,13 @@ export async function sendTestEmail(form: FormData): Promise<TestSendResult> {
     section: "conversations",
     entityType: "AppSetting",
     entityId: "emailConfig",
-    summary: `Sent a test email to ${to} — ${res.ok ? "accepted by Resend" : "rejected"}`,
+    summary: `Sent a test email to ${to} - ${res.ok ? "accepted by Resend" : "rejected"}`,
     meta: { to, from, ok: res.ok, error: res.error ?? null },
   });
 
   revalidatePath("/conversations");
   return res.ok
-    ? { ok: true, message: `Sent to ${to} — check the inbox (and the spam folder)` }
+    ? { ok: true, message: `Sent to ${to} - check the inbox (and the spam folder)` }
     : { ok: false, message: res.error ?? "Resend rejected the send" };
 }
 

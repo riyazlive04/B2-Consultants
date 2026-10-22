@@ -245,7 +245,7 @@ export function TemplateEditor({ template, aiStatus }: { template: ResumeTemplat
         )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Model"><Select value={ai.model} onChange={(e) => setAi({ ...ai, model: e.target.value })} options={MODEL_OPTIONS} /></Field>
-          <Field label="Max output tokens" hint="Higher = longer, deeper reviews (1024–16000).">
+          <Field label="Max output tokens" hint="Higher = longer, deeper reviews (1024-16000).">
             <TextInput kind="int" maxLength={5} value={String(ai.maxTokens)} onChange={(e) => setAi({ ...ai, maxTokens: Number(e.target.value) || 4096 })} />
           </Field>
         </div>

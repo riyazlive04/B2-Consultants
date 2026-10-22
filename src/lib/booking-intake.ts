@@ -75,7 +75,7 @@ export const INTAKE_OPTIONS = {
   currentIncome: [
     { value: "lt_30k", label: "Less than ₹30,000" },
     { value: "30_50k", label: "₹30,000 - ₹50,000" },
-    { value: "50_75k", label: "₹50,000 – ₹75,000" },
+    { value: "50_75k", label: "₹50,000 - ₹75,000" },
     { value: "75k_1l", label: "₹75,000 - ₹1,00,000" },
     { value: "gt_1l", label: "More than ₹1,00,000" },
   ],

@@ -272,7 +272,7 @@ export default async function PipelinePage({
                   />
                   {" · "}Solo {conv.SOLO} · Guided {conv.GUIDED} · Elite {conv.ELITE}
                 </p>
-                <p className="tnum mt-1 text-caption text-ink-3">typical 2026 month ≈ 4 wins (range 2–7)</p>
+                <p className="tnum mt-1 text-caption text-ink-3">typical 2026 month ≈ 4 wins (range 2-7)</p>
               </div>
             </Card>
           </div>
@@ -374,8 +374,8 @@ export default async function PipelinePage({
               label="Show-up rate"
               value={formatPct(metrics.showUpPct)}
               secondary="Completed ÷ booked"
-              target="typ. 52–70%"
-              tooltip="Discovery calls conducted ÷ booked. The 2026 sheets run 52–70% at this stage (the famous 91.6% show rate is the later sales call, not this one)."
+              target="typ. 52-70%"
+              tooltip="Discovery calls conducted ÷ booked. The 2026 sheets run 52-70% at this stage (the famous 91.6% show rate is the later sales call, not this one)."
               progress={metrics.showUpPct / 100}
               icon={<Percent size={18} />}
               signal={metrics.booked === 0 ? undefined : metrics.showUpPct >= 52 ? "ok" : metrics.showUpPct >= 40 ? "watch" : "risk"}
@@ -407,8 +407,8 @@ export default async function PipelinePage({
               label="Highly qualified rate"
               value={formatPct(metrics.hqPct)}
               secondary="HQ calls ÷ completed"
-              target="typ. 27–47%"
-              tooltip="Highly-qualified outcomes ÷ discovery calls conducted. 2026 sheet average is 37%, ranging 27–47% - below 27% means lead quality or triage is slipping."
+              target="typ. 27-47%"
+              tooltip="Highly-qualified outcomes ÷ discovery calls conducted. 2026 sheet average is 37%, ranging 27-47% - below 27% means lead quality or triage is slipping."
               progress={metrics.hqPct / 100}
               icon={<Award size={18} />}
               signal={metrics.monthOutcomes === 0 ? undefined : metrics.hqPct >= 27 ? "ok" : metrics.hqPct >= 15 ? "watch" : "risk"}

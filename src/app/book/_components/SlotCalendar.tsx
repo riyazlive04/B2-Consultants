@@ -254,7 +254,7 @@ export function SlotCalendar({
             </Btn>
           ))}
           {dayTimes.length === 0 && (
-            <p className="text-caption text-muted">No times on this day — pick another highlighted date.</p>
+            <p className="text-caption text-muted">No times on this day - pick another highlighted date.</p>
           )}
         </div>
       </div>

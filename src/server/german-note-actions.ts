@@ -97,7 +97,7 @@ function revalidateBatch(batchId: string) {
 
 const batchSchema = z.object({
   name: z.string().trim().min(1, "Batch name is required").max(120),
-  level: z.string().trim().min(1, "Pick a level (A1–B2)"), // validated vs the live catalogue in the action
+  level: z.string().trim().min(1, "Pick a level (A1-B2)"), // validated vs the live catalogue in the action
   tutorId: z.string().trim().optional(),
   targetStrength: z.coerce.number().int().min(1).max(100).optional(), // target class size (~8)
   notes: optionalRule("text"),
@@ -114,7 +114,7 @@ export async function createBatch(form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
   const parsed = batchSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  if (!(await isKnownLevel(parsed.data.level, ["GERMAN_LEVEL"]))) return { ok: false, error: "Pick a German level (A1–B2)" };
+  if (!(await isKnownLevel(parsed.data.level, ["GERMAN_LEVEL"]))) return { ok: false, error: "Pick a German level (A1-B2)" };
   const tutorId = await validTutorId(parsed.data.tutorId);
   if (tutorId === undefined) return { ok: false, error: "Selected tutor account not found" };
   const batch = await prisma.batch.create({
@@ -145,7 +145,7 @@ export async function updateBatch(batchId: string, form: FormData): Promise<Acti
     .extend({ status: z.enum(["ACTIVE", "ARCHIVED"]) })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  if (!(await isKnownLevel(parsed.data.level, ["GERMAN_LEVEL"]))) return { ok: false, error: "Pick a German level (A1–B2)" };
+  if (!(await isKnownLevel(parsed.data.level, ["GERMAN_LEVEL"]))) return { ok: false, error: "Pick a German level (A1-B2)" };
   const tutorId = await validTutorId(parsed.data.tutorId);
   if (tutorId === undefined) return { ok: false, error: "Selected tutor account not found" };
   const before = await prisma.batch.findUnique({

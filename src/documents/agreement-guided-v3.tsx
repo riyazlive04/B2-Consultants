@@ -206,7 +206,7 @@ function Bullet({ children, sub }: { children: ReactNode; sub?: boolean }) {
   return (
     <View style={[s.bulletRow, sub ? { paddingLeft: 16 } : {}]}>
       {/* "•" and "–" are both in WinAnsi; "◦" is not. */}
-      <Text style={s.bulletDot}>{sub ? "–" : "•"}</Text>
+      <Text style={s.bulletDot}>{sub ? "-" : "•"}</Text>
       <Text style={s.bulletBody}>{children}</Text>
     </View>
   );
@@ -359,14 +359,14 @@ export function AgreementGuidedV3({
         <Party label="Name:" value={student.fullName} />
         <Party label="Address:" value={student.address} />
         <Text style={[s.italic, { marginTop: 6, marginBottom: 10, color: MUTED }]}>
-          – hereinafter referred to as “the Student” – and
+          - hereinafter referred to as “the Student” - and
         </Text>
 
         <Party label="Name:" value={AGREEMENT_PROVIDER.name} />
         <Party label="Address:" value={AGREEMENT_PROVIDER.address} />
         <Party label="Entity:" value={AGREEMENT_PROVIDER.entity} />
         <Text style={[s.italic, { marginTop: 6, marginBottom: 10, color: MUTED }]}>
-          – hereinafter referred to as “B2 Consultants” –
+          - hereinafter referred to as “B2 Consultants” -
         </Text>
 
         <Text style={{ marginBottom: 4 }}>it is hereby agreed as follows:</Text>
@@ -443,7 +443,7 @@ export function AgreementGuidedV3({
         <P>The Guided Mode programme runs across the following phases:</P>
         <View style={s.callout}>
           <Text style={[s.calloutText, s.bold]}>
-            Phase 1 - Guided Coaching (Weeks 1–4, Live &amp; Pre-Recorded Sessions)
+            Phase 1 - Guided Coaching (Weeks 1-4, Live &amp; Pre-Recorded Sessions)
           </Text>
           <Text style={s.calloutText}>
             Structured group sessions covering: Kick Off, Resume Building, Social Profile Building, Effective
@@ -925,7 +925,7 @@ export function AgreementGuidedV3({
         <Text style={s.subtitle}>Guided Mode Programme - Service Specification</Text>
         <View style={{ borderBottomWidth: 1.4, borderBottomColor: RULE, marginTop: 6, marginBottom: 12 }} />
 
-        <H2>1. Phase 1 - Group Coaching Sessions (Weeks 1–4)</H2>
+        <H2>1. Phase 1 - Group Coaching Sessions (Weeks 1-4)</H2>
         <P>
           All sessions in Phase 1 are delivered as part of the Student’s assigned batch. Live sessions are
           conducted virtually and recorded. Pre-recorded sessions are delivered as video modules via the Skool

@@ -22,7 +22,7 @@ const FONT_STACK: Record<ResumeTemplateConfig["style"]["font"], string> = {
 };
 
 function range(start: string, end: string, current: boolean) {
-  return [start, current ? "present" : end].filter(Boolean).join(" – ");
+  return [start, current ? "present" : end].filter(Boolean).join(" - ");
 }
 function place(city: string, country: string) {
   const loc = [city, country].filter(Boolean).join(", ");

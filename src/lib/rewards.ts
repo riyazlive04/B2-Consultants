@@ -43,7 +43,7 @@ export const REWARD_WINDOWS: readonly RewardWindow[] = ["ALL", "MONTH", "WEEK"];
 export const REWARD_WINDOW_LABELS: Record<RewardWindow, string> = {
   ALL: "All time",
   MONTH: "Per calendar month",
-  WEEK: "Per week (Mon–Sun)",
+  WEEK: "Per week (Mon-Sun)",
 };
 
 export type RewardTrigger =

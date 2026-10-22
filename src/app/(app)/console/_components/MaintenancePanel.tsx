@@ -235,7 +235,7 @@ function ReportCard({ config }: { config: ScheduledReportConfig }) {
               <NumInput ariaLabel="Weekday" value={draft.weekday} onChange={(n) => patch({ weekday: n })} min={1} max={7} />
             </Field>
           ) : (
-            <Field label="Day of month (1–28)">
+            <Field label="Day of month (1-28)">
               <NumInput ariaLabel="Day of month" value={draft.monthday} onChange={(n) => patch({ monthday: n })} min={1} max={28} />
             </Field>
           )}

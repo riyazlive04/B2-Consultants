@@ -78,7 +78,7 @@ export default async function AgreementTemplatePage({ params }: { params: { id: 
         <section className="space-y-3">
           <div>
             <h2 className="font-display text-h2 font-semibold">
-              Current document — v{current.version}
+              Current document - v{current.version}
               {current.label ? ` · ${current.label}` : ""}
             </h2>
             <p className="text-xs text-muted">

@@ -57,13 +57,13 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
         window).
       </p>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Field label="Buffer between slots (min)" hint="Gap kept between consecutive generated slots. 0–240.">
+        <Field label="Buffer between slots (min)" hint="Gap kept between consecutive generated slots. 0-240.">
           <TextInput kind="int" name="bufferMinutes" required defaultValue={rules.bufferMinutes} maxLength={3} />
         </Field>
-        <Field label="Minimum notice (hours)" hint="Hides slots starting sooner than this from now. 0–240.">
+        <Field label="Minimum notice (hours)" hint="Hides slots starting sooner than this from now. 0-240.">
           <TextInput kind="int" name="minNoticeHours" required defaultValue={rules.minNoticeHours} maxLength={3} />
         </Field>
-        <Field label="Max advance booking (days)" hint="Hides slots further out than this. 1–365.">
+        <Field label="Max advance booking (days)" hint="Hides slots further out than this. 1-365.">
           <TextInput kind="int" name="maxAdvanceDays" required defaultValue={rules.maxAdvanceDays} maxLength={3} />
         </Field>
       </div>

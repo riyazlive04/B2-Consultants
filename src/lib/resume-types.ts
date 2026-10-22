@@ -187,7 +187,7 @@ export function resumeToPlainText(d: ResumeData): string {
   if (d.experience.length) {
     lines.push("", "Professional experience");
     for (const e of d.experience) {
-      lines.push(`${e.start} – ${e.current ? "present" : e.end} · ${e.company}, ${e.city}, ${e.country}`);
+      lines.push(`${e.start} - ${e.current ? "present" : e.end} · ${e.company}, ${e.city}, ${e.country}`);
       lines.push(e.position);
       for (const b of e.bullets) lines.push(`- ${b}`);
     }
@@ -195,7 +195,7 @@ export function resumeToPlainText(d: ResumeData): string {
   if (d.education.length) {
     lines.push("", "Education");
     for (const e of d.education) {
-      lines.push(`${e.start} – ${e.end} · ${e.institution}, ${e.city}, ${e.country}`);
+      lines.push(`${e.start} - ${e.end} · ${e.institution}, ${e.city}, ${e.country}`);
       lines.push([e.program, e.note].filter(Boolean).join(" - "));
     }
   }

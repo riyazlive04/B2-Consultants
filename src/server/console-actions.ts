@@ -1222,7 +1222,7 @@ export async function saveBookingCalendars(input: unknown): Promise<ActionResult
   await writeBookingCalendars(list);
 
   const summarise = (cs: typeof list) =>
-    cs.map((c) => `${c.name}${c.enabled ? ` (${c.weekdays.join("/")} ${c.startTime}–${c.endTime})` : " - off"}`).join("; ");
+    cs.map((c) => `${c.name}${c.enabled ? ` (${c.weekdays.join("/")} ${c.startTime}-${c.endTime})` : " - off"}`).join("; ");
   const beforeText = summarise(before.calendars);
   const afterText = summarise(list);
   if (beforeText !== afterText) {
@@ -1263,7 +1263,7 @@ export async function saveSssPatternConfig(input: unknown): Promise<ActionResult
       entityType: "AppSetting",
       entityId: SSS_PATTERN_KEY,
       summary: parsed.data.enabled
-        ? `Set standing SSS availability - ${parsed.data.weekdays.join(", ")} ${parsed.data.startTime}–${parsed.data.endTime}`
+        ? `Set standing SSS availability - ${parsed.data.weekdays.join(", ")} ${parsed.data.startTime}-${parsed.data.endTime}`
         : "Switched off standing SSS availability",
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });

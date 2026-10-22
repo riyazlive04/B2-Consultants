@@ -62,13 +62,13 @@ function BatchFields({
       {/* The line is fixed by the screen this panel is on - a cohort does not change business. */}
       <input type="hidden" name="line" value={line} />
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Batch name" hint={line === "B2" ? "e.g. Guided — October 2026" : "e.g. A1 Evening — July 2026"}>
+        <Field label="Batch name" hint={line === "B2" ? "e.g. Guided - October 2026" : "e.g. A1 Evening - July 2026"}>
           <TextInput
             kind="text"
             name="name"
             required
             maxLength={160}
-            placeholder={line === "B2" ? "Guided — October 2026" : "A1 Evening — July 2026"}
+            placeholder={line === "B2" ? "Guided - October 2026" : "A1 Evening - July 2026"}
             defaultValue={batch?.name}
           />
         </Field>
@@ -241,7 +241,7 @@ export function BatchesManager({
           <h3 className="font-display text-h2 font-semibold">{BATCH_LINE_LABELS[line]} batches</h3>
           <p className="mt-0.5 max-w-2xl text-xs text-muted">
             One batch = one cohort: a programme, whoever runs it, and the students seated in it. Seat a student from
-            their own profile — the batch picker there offers the active cohorts on their programme&apos;s line.
+            their own profile - the batch picker there offers the active cohorts on their programme&apos;s line.
           </p>
         </div>
         {canCreate && (
@@ -261,7 +261,7 @@ export function BatchesManager({
           title="No programmes to run a batch for"
           body={
             line === "B2"
-              ? "Add a coaching tier under Programs first — a batch has to be seating something."
+              ? "Add a coaching tier under Programs first - a batch has to be seating something."
               : "Add a German level under German Note → Manage → Levels first."
           }
         />

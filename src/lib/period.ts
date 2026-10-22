@@ -134,7 +134,7 @@ export function resolvePeriod(spec: PeriodSpec = DEFAULT_PERIOD, today = istToda
       // wrong silently drops every row from the last day of the range.
       endExclusive = new Date(to);
       endExclusive.setUTCDate(to.getUTCDate() + 1);
-      label = `${DAY_SHORT.format(from)} – ${DAY_LABEL.format(to)}`;
+      label = `${DAY_SHORT.format(from)} - ${DAY_LABEL.format(to)}`;
       break;
     }
     case "week": {
@@ -143,7 +143,7 @@ export function resolvePeriod(spec: PeriodSpec = DEFAULT_PERIOD, today = istToda
       endExclusive = w.end;
       const last = new Date(w.end);
       last.setUTCDate(w.end.getUTCDate() - 1);
-      label = `${DAY_SHORT.format(w.start)} – ${DAY_LABEL.format(last)}`;
+      label = `${DAY_SHORT.format(w.start)} - ${DAY_LABEL.format(last)}`;
       break;
     }
     case "quarter": {

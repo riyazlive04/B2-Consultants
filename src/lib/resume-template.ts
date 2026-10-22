@@ -102,11 +102,11 @@ export const DEFAULT_ATS_RULES: AtsRule[] = [
   { id: "contact-parseable", label: "Parseable contact header", instruction: "Email and phone sit in a plain text header an ATS can read (not inside an image or table).", weight: 4, severity: "high", enabled: true },
   { id: "jd-keywords", label: "Mirrors the JD language", instruction: "Uses the job description’s own words for the skills/tools the candidate genuinely has.", weight: 5, severity: "high", enabled: true },
   { id: "quantified", label: "Quantified achievements", instruction: "At least ~4 in 10 bullets carry a metric (%, €, time saved, volume, team size).", weight: 4, severity: "high", enabled: true },
-  { id: "reverse-chron", label: "Dated, reverse-chronological roles", instruction: "Every role and degree has a start–end date, newest first, current role marked “present”.", weight: 3, severity: "medium", enabled: true },
+  { id: "reverse-chron", label: "Dated, reverse-chronological roles", instruction: "Every role and degree has a start-end date, newest first, current role marked “present”.", weight: 3, severity: "medium", enabled: true },
   { id: "standard-headings", label: "Standard section headings", instruction: "Uses conventional headings (Experience, Education, Skills…) an ATS maps to fields.", weight: 3, severity: "medium", enabled: true },
   { id: "ats-safe-layout", label: "ATS-safe layout", instruction: "Single column, no tables / text boxes / multi-column layout that scramble ATS parsing.", weight: 3, severity: "medium", enabled: true },
   { id: "german-signals", label: "German-market signals", instruction: "States date of birth, relocation/Reisebereitschaft and a German language level.", weight: 2, severity: "medium", enabled: true },
-  { id: "length", label: "One–two pages", instruction: "Concise: roughly 250–1100 words, oldest/irrelevant roles trimmed.", weight: 1, severity: "low", enabled: true },
+  { id: "length", label: "One-two pages", instruction: "Concise: roughly 250-1100 words, oldest/irrelevant roles trimmed.", weight: 1, severity: "low", enabled: true },
 ];
 
 export const DEFAULT_RESUME_TEMPLATE: ResumeTemplateConfig = {

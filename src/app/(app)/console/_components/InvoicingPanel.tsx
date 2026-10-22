@@ -106,7 +106,7 @@ export function InvoicingPanel({ config }: { config: InvoiceSettings }) {
                 aria-label="Street address"
                 value={addressText}
                 rows={2}
-                placeholder={"Musterstraße 1\nBuilding B"}
+                placeholder={"Example Street 1\nBuilding B"}
                 onChange={(e) =>
                   patchIssuer({
                     // One line per line typed, blanks dropped - an empty line would print as a

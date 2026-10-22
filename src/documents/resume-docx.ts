@@ -32,7 +32,7 @@ const noHash = (hex: string) => hex.replace(/^#/, "");
 
 function dateRange(start: string, end: string, current: boolean): string {
   const e = current ? "present" : end;
-  return [start, e].filter(Boolean).join(" – ");
+  return [start, e].filter(Boolean).join(" - ");
 }
 
 function place(city: string, country: string): string {

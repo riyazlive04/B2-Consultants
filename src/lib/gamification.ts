@@ -212,7 +212,7 @@ export const QUEST_FIELDS = [
  * the founder actually reads - the same reason EMPLOYEE_METRIC_LABELS exists.
  */
 export const QUEST_FIELD_LABELS: Record<(typeof QUEST_FIELDS)[number], string> = {
-  [WEEKDAY_LOGS_FIELD]: "Weekday logs (Mon–Fri count)",
+  [WEEKDAY_LOGS_FIELD]: "Weekday logs (Mon-Fri count)",
   discoveryCallsCompleted: "Discovery calls completed",
   highlyQualifiedCalls: "Highly-qualified calls",
   followUpsDone: "Follow-ups done",

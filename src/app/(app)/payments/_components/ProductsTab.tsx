@@ -175,7 +175,7 @@ export default function ProductsTab({
         <Hint>
           <span className="flex flex-wrap items-center gap-2">
             <AlertCircle size={14} className="text-warn" aria-hidden />
-            <span>Not priced yet — click one to price it, or set it where the course is created:</span>
+            <span>Not priced yet - click one to price it, or set it where the course is created:</span>
             {unpriced.map((u) => (
               <button
                 key={u.levelCode}

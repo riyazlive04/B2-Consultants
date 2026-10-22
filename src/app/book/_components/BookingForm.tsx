@@ -41,7 +41,7 @@ const STEPS = [
   { title: "Your details", hint: "So we know who we're speaking to.", section: "identity" },
   { title: "Your background", hint: "A quick picture of where you are today.", section: "credentials" },
   { title: "Your Germany plan", hint: "Where you're trying to get to.", section: "motivation" },
-  { title: "Fit & commitment", hint: "The last few — then you're booked.", section: "commercial" },
+  { title: "Fit & commitment", hint: "The last few - then you're booked.", section: "commercial" },
 ] as const satisfies readonly { title: string; hint: string; section: IntakeSection | null }[];
 
 /**
@@ -202,7 +202,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
       </dl>
       <p className="mt-5 text-sm leading-relaxed text-muted">
         A free {durationMins}-minute call with our team. Please answer the short questionnaire so we
-        have the details needed to help you on the call <em>(takes 2–3 minutes)</em>.
+        have the details needed to help you on the call <em>(takes 2-3 minutes)</em>.
       </p>
     </aside>
   );
@@ -222,7 +222,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
       return shell(
         <div className="py-6 text-center">
           <MailCheck className="mx-auto text-primary" size={40} />
-          <h2 className="mt-3 font-display text-h2">Thanks — we have your answers</h2>
+          <h2 className="mt-3 font-display text-h2">Thanks - we have your answers</h2>
           <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
             A call hasn&apos;t been scheduled. Our team will go through what you&apos;ve shared and
             email you about the best next step.
@@ -253,7 +253,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
       <div className="py-10 text-center">
         <CalendarCheck className="mx-auto text-muted" size={36} />
         <p className="mt-3 text-sm text-muted">
-          No call times are open right now. Please check back shortly — we release new slots
+          No call times are open right now. Please check back shortly - we release new slots
           regularly.
         </p>
       </div>,

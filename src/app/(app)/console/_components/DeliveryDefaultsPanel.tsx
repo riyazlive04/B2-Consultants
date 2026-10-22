@@ -49,7 +49,7 @@ export function DeliveryDefaultsPanel({ config }: { config: { defaultCoach: stri
       <Card title="Default coach">
         <Hint>
           Used when someone creates an enrolment and leaves the coach field empty. Leave this
-          blank to have it stay empty instead — an unassigned student is a truer record than one
+          blank to have it stay empty instead - an unassigned student is a truer record than one
           assigned to whoever was hardcoded.
         </Hint>
         <div className="mt-3 max-w-sm">
@@ -64,7 +64,7 @@ export function DeliveryDefaultsPanel({ config }: { config: { defaultCoach: stri
         </div>
         <Hint>
           This name reaches students. The enrolment welcome introduces their tutor, and falls back
-          to this coach when their batch has no tutor assigned — so put a real person here, or
+          to this coach when their batch has no tutor assigned - so put a real person here, or
           nobody.
         </Hint>
         <SaveBar

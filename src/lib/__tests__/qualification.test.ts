@@ -161,7 +161,7 @@ describe("qualification - the rules that are easy to get wrong", () => {
     assert.equal(optionScore(q, "ready_now"), 4);
   });
 
-  test("weight scales but clamps into 0–4 so the verdict thresholds stay meaningful", () => {
+  test("weight scales but clamps into 0-4 so the verdict thresholds stay meaningful", () => {
     const base = CATALOGUE.find((x) => x.key === "readyToInvest")!;
     const heavy: QuestionSpec = { ...base, weight: 3 };
     assert.equal(optionScore(heavy, "need_clarity"), 4); // 3 × 2 = 6, clamped to 4

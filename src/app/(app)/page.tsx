@@ -341,7 +341,7 @@ export default async function Home({
                 target={months == null ? undefined : `goal ${runwayGoalMonths} mo`}
                 signal={months == null ? undefined : signalForRunway(months, runwayBands)}
                 progress={months == null ? undefined : Math.min(1, months / runwayGoalMonths)}
-                tooltip={`Months the bank balance lasts at the current burn: cash ÷ average monthly expenses over the last ${burnWindowMonths} month${burnWindowMonths === 1 ? "" : "s"}. Green ≥ ${runwayBands.green}, amber ${runwayBands.amber}–${runwayBands.green}, red < ${runwayBands.amber}. Set in Console → Cash targets.`}
+                tooltip={`Months the bank balance lasts at the current burn: cash ÷ average monthly expenses over the last ${burnWindowMonths} month${burnWindowMonths === 1 ? "" : "s"}. Green ≥ ${runwayBands.green}, amber ${runwayBands.amber}-${runwayBands.green}, red < ${runwayBands.amber}. Set in Console → Cash targets.`}
                 icon={<Gauge size={18} />}
                 href="/cash"
                 detail={{

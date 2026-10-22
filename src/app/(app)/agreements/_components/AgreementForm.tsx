@@ -671,7 +671,7 @@ export function AgreementForm({
               onChange={(e) => setOption(e.target.value as "FULL" | "INSTALMENT")}
               options={[
                 { value: "FULL", label: "Option A - Full payment" },
-                { value: "INSTALMENT", label: "Option B - Instalment plan (2–6)" },
+                { value: "INSTALMENT", label: "Option B - Instalment plan (2-6)" },
               ]}
             />
           </Field>

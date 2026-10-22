@@ -53,9 +53,9 @@ export function AgingSection({ rows }: { rows: StageAging[] }) {
         </table>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-ink-3">
-        <LegendDot color="var(--good)" label="0–3d" />
-        <LegendDot color="var(--warn)" label="4–7d" />
-        <LegendDot color="var(--bad)" opacity={0.5} label="8–14d" />
+        <LegendDot color="var(--good)" label="0-3d" />
+        <LegendDot color="var(--warn)" label="4-7d" />
+        <LegendDot color="var(--bad)" opacity={0.5} label="8-14d" />
         <LegendDot color="var(--bad)" label="15d+" />
       </div>
     </div>

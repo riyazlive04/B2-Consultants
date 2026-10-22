@@ -260,7 +260,7 @@ describe("coerceExtraction - the model is not trusted", () => {
     assert.equal(x.evidence.followUpDate, undefined);
   });
 
-  test("confidence is clamped into 0–1", () => {
+  test("confidence is clamped into 0-1", () => {
     assert.equal(coerceExtraction({ confidence: 7 }, TODAY).confidence, 1);
     assert.equal(coerceExtraction({ confidence: -3 }, TODAY).confidence, 0);
     assert.equal(coerceExtraction({ confidence: "high" }, TODAY).confidence, 0);

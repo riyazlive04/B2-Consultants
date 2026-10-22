@@ -126,6 +126,22 @@ function channelProblems(): string[] {
       problems.push(`  - ${c.flag} is true but ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} unset - ${c.consequence}`);
     }
   }
+
+  /**
+   * The timestamp authority, which fails in exactly the shape this block exists to catch.
+   *
+   * Unset is a perfectly valid deployment - sealed agreements are then simply not timestamped.
+   * But a URL that is set and NOT https is silently ignored by `timestampConfig()`, so somebody
+   * who configured an authority would get no timestamps, no error and no clue. The whole point of
+   * a timestamp is to be there years later when it is needed.
+   */
+  const tsa = process.env.AGREEMENT_TSA_URL?.trim();
+  if (tsa && !/^https:\/\//i.test(tsa)) {
+    problems.push(
+      "  - AGREEMENT_TSA_URL is set but is not https:// - it would be ignored, and signed agreements would silently never be timestamped",
+    );
+  }
+
   return problems;
 }
 

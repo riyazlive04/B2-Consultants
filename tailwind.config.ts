@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 /**
  * "Daylight" theme (docs/DESIGN_SYSTEM.md). Every value reads from the CSS
@@ -99,6 +100,18 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    /**
+     * `touch:` - styles that apply only where there is no hover.
+     *
+     * Controls revealed on hover are invisible on a phone, where hovering does not exist. Every
+     * such control therefore carries a `touch:` rule that keeps it visible - see the block editor
+     * in the agreements designer. Without this variant those classes compile to nothing at all,
+     * which is worse than not having them: the markup claims to handle touch and does not.
+     */
+    plugin(({ addVariant }) => {
+      addVariant("touch", "@media (hover: none)");
+    }),
+  ],
 };
 export default config;

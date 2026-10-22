@@ -179,6 +179,14 @@ export function Popover({
   onClose,
   children,
   labelledBy,
+  /**
+   * The panel's own id, so the control that opens it can name it in `aria-controls`.
+   *
+   * Required by `role="combobox"`, which every picker trigger now carries - without it the
+   * trigger claims to control a popup it never identifies. Optional because the plain
+   * `role="dialog"` callers do not need one.
+   */
+  id,
   role = "dialog",
   className = "",
 }: {
@@ -187,6 +195,7 @@ export function Popover({
   onClose: () => void;
   children: ReactNode;
   labelledBy?: string;
+  id?: string;
   role?: "dialog" | "listbox";
   className?: string;
 }) {
@@ -211,6 +220,7 @@ export function Popover({
   return createPortal(
     <div
       ref={panelRef}
+      id={id}
       role={role}
       aria-labelledby={labelledBy}
       style={{

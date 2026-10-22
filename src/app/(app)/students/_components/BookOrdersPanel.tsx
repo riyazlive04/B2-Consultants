@@ -12,6 +12,7 @@ import { toast } from "@/components/ui/feedback";
 import { Modal } from "@/components/ui/Modal";
 import { TablePager, usePaged } from "@/components/ui/pager";
 import { safeAction } from "@/lib/action-guard";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 /**
  * Book orders with the publisher (spec §9.2, Part 2 §4):
@@ -273,7 +274,7 @@ export function BookOrdersPanel({
       <Modal open={addingVendor} onClose={() => setAddingVendor(false)} title="Add a book vendor">
         <form action={addVendor} className="space-y-4">
           <Field label="Name"><TextInput name="name" /></Field>
-          <Field label="Phone" hint="The WhatsApp number the team sends orders to."><TextInput name="phone" /></Field>
+          <Field label="Phone" hint="The WhatsApp number the team sends orders to."><PhoneField name="phone" /></Field>
           <Field label="Email"><TextInput name="email" /></Field>
           <Field label="Address"><TextInput name="address" /></Field>
           <NotesField label="Notes" />

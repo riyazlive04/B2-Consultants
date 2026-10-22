@@ -30,6 +30,11 @@ enum Role {
   USER // Asma / Nilofer - own daily log + own pipeline entry
   STUDENT // portal login linked to ONE Student record - sees only their own journey
   TUTOR // German Note tutor - GN section only (batches they teach + community)
+  /// B2 coaching batch coach. Distinct from HEAD, which is the head coach's WIDER role
+  /// (team oversight, the Students board, commission). A COACH sees only what they teach:
+  /// their batches, their students' progress and their own sprint check-ins. Added so a
+  /// second coach can be hired without handing them the head coach's view of the business.
+  COACH
 }
 
 // A suspended account cannot sign in, and its live sessions are deleted the moment
@@ -99,6 +104,11 @@ model User {
   gnRecordingWatches       GnRecordingWatch[]   @relation("GnRecordingWatchUser")
   gnEventsCreated          ClassSession[]       @relation("GnEventCreatedBy")
   attendanceMarked         SessionAttendance[]  @relation("AttendanceMarkedBy")
+  attendanceWindowsOpened  ClassSession[]       @relation("AttendanceWindowOpenedBy")
+  attendancePublished      ClassSession[]       @relation("AttendancePublishedBy")
+  attendanceReasonsAsked   SessionAttendance[]  @relation("AttendanceReasonAskedBy")
+  sprintLogEntries         SprintLogEntry[]     @relation("SprintLogLoggedBy")
+  sprintLogRemovals        SprintLogEntry[]     @relation("SprintLogDeletedBy")
   gnPosts                  GnPost[]             @relation("GnPostAuthor")
   gnComments               GnComment[]          @relation("GnCommentAuthor")
   gnLikes                  GnLike[]             @relation("GnLikeUser")
@@ -106,6 +116,8 @@ model User {
   telecallerPayoutsEntered TelecallerPayout[]   @relation("TelecallerPayoutEnteredBy")
   whatsappMessagesSent     WhatsAppMessage[]    @relation("WhatsAppSentBy")
   agreementsIssued         Agreement[]          @relation("AgreementIssuedBy")
+  agreementTemplates       AgreementTemplate[]  @relation("AgreementTemplateCreatedBy")
+  agreementTemplateUploads AgreementTemplateVersion[] @relation("AgreementTemplateVersionCreatedBy")
   journalEntriesPosted     JournalEntry[]       @relation("JournalEntryPostedBy")
   periodLocksSet           PeriodLock[]         @relation("PeriodLockedBy")
   auditEntries             AuditEntry[]         @relation("AuditActor")
@@ -138,6 +150,7 @@ model User {
   outreachTouchpoints      OutreachJourney[]    @relation("OutreachRespTouchpoint")
   outreachDiscos           OutreachJourney[]    @relation("OutreachRespDisco")
   enrollmentsClosed        Enrollment[]         @relation("EnrollmentCloser")
+  enrollmentsCoached       Enrollment[]         @relation("EnrollmentCoach")
   sssSlotsOwned            SssSlot[]            @relation("SssSlotOwner")
   // Soft-delete authorship: records this user archived (see src/lib/soft-delete.ts)
   leadsArchived            Lead[]               @relation("LeadArchivedBy")
@@ -149,6 +162,7 @@ model User {
   invoicesArchived         Invoice[]            @relation("InvoiceArchivedBy")
   pendingPaymentsArchived  PendingPayment[]     @relation("PendingPaymentArchivedBy")
   productsArchived         Product[]            @relation("ProductArchivedBy")
+  resourcesCreated         Resource[]           @relation("ResourceCreatedBy")
 
   @@map("user")
 }
@@ -2393,7 +2407,14 @@ model Enrollment {
   enrollmentDate  DateTime        @db.Date
   duration        ProgramDuration
   programEndDate  DateTime?       @db.Date // enrollment + 90/120 days; null for LIFETIME
+  /// The coach's NAME as typed, kept for the years of rows that predate `coachId` and for
+  /// an outside coach who has no login. `coachId` is the one the coaching desk filters on.
   assignedCoach   String? // currently Karthick
+  /// ER v2 / coach flow: the real account that coaches this student. Nullable because most
+  /// existing rows carry only the name above, and SetNull because removing a coach's login
+  /// must orphan the assignment, never delete the enrollment.
+  coachId         String?
+  coach           User?           @relation("EnrollmentCoach", fields: [coachId], references: [id], onDelete: SetNull)
   // L3 closer who ran the sales/SSS call - the third leg of the commission split
   // (setter + discovery are inferred from the Lead; the closer had no home before).
   closerId        String?
@@ -2421,6 +2442,7 @@ model Enrollment {
   milestoneLogs     MilestoneLog[]
   signalChanges     SignalChangeLog[]
   sprintWeeks       SprintWeek[]
+  sprintLog         SprintLogEntry[]
   jobApplications   JobApplication[]
   milestoneProgress MilestoneProgress[]
   agreements        Agreement[]
@@ -2433,6 +2455,7 @@ model Enrollment {
   @@index([closerId])
   @@index([batchId])
   @@index([leadId])
+  @@index([coachId, status])
   @@map("enrollment")
 }
 
@@ -2506,6 +2529,83 @@ model SprintWeek {
   @@unique([enrollmentId, weekIndex])
   @@index([status, weekEnd])
   @@map("sprint_week")
+}
+
+/// What a student can log about their own sprint (ER: the self-reported half of the leaderboard).
+///
+/// THE DERIVED METRICS ARE NOT IN HERE. Classes attended, recordings watched, coursework ticked,
+/// sprint weeks achieved and job applications are all already recorded elsewhere, and the
+/// leaderboard reads them from there. Re-logging them here would be a second copy of the same
+/// fact, free to disagree with the register and the application tracker - and a leaderboard
+/// whose attendance column contradicts the attendance screen is worse than no leaderboard.
+///
+/// What is left is the handful of things the app has no other way of knowing: a German HR
+/// contact accepting a connection, an interview that came through a channel we never saw, a win
+/// worth telling the cohort about.
+enum SprintLogKind {
+  /// A connection request accepted by a German HR contact / hiring manager.
+  HR_CONNECTION
+  /// An HR screen or interview secured. Distinct from `JobApplication.status = INTERVIEW`,
+  /// which only knows about applications logged in the tracker.
+  HR_INTERVIEW
+  /// An application a company actually looked at - a recruiter view, a reply, a screening call.
+  /// There is no `REVIEWED` in `JobApplicationStatus`, which is why this is logged rather than
+  /// derived: "applied" and "somebody read it" are different facts and only one is in our gift.
+  APPLICATION_REVIEWED
+  /// Anything else worth a point and a mention - "Siemens replied to my InMail".
+  WIN
+}
+
+/// Who wrote the entry. A coach's own entry is not more TRUE than a student's, but it is
+/// different evidence, and the review feed sorts by it.
+enum SprintLogSource {
+  STUDENT
+  COACH
+}
+
+/// One self-reported sprint event.
+///
+/// ── Scoring is immediate; correction is the coach's ────────────────────────────────────
+/// The founders chose "score at once, coach can correct". So an entry counts the moment it is
+/// written, and the coach's review feed is a correction surface rather than a gate. A student
+/// who did the work sees the board move, and a board that only moves when a coach gets round
+/// to it is a board nobody checks.
+///
+/// ── Removal is SOFT, and that is load-bearing ──────────────────────────────────────────
+/// `deletedAt` rather than a delete, following the house soft-delete pattern (lib/soft-delete).
+/// This row can decide a ranking, so a coach removing one is taking points off a named person:
+/// that has to be visible and reversible, not silent. Active reads spread `ACTIVE`.
+model SprintLogEntry {
+  id           String          @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment      @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  kind         SprintLogKind
+  /// How many this entry represents. Almost always 1 - but a student catching up on a week of
+  /// connection requests should not have to add nine rows, and a cap in the leaderboard config
+  /// is what stops that becoming a loophole.
+  quantity     Int             @default(1)
+  /// The day it happened, in IST - not when it was typed. A student logging Friday's interview
+  /// on Sunday belongs in Friday's week, or every weekly total is wrong.
+  occurredOn   DateTime        @db.Date
+  /// Which company, where it makes sense. Free text: a student knows the name, and making them
+  /// pick from a list we do not have would mean they log nothing.
+  company      String?
+  note         String?
+  source       SprintLogSource @default(STUDENT)
+  loggedById   String?
+  loggedBy     User?           @relation("SprintLogLoggedBy", fields: [loggedById], references: [id], onDelete: SetNull)
+  /// Set when a coach corrects an entry away. The row stays, so the activity log's "removed 10
+  /// points from Priya" has something to point at.
+  deletedAt    DateTime?
+  deletedById  String?
+  deletedBy    User?           @relation("SprintLogDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  /// The leaderboard's own read: one enrollment's active entries over a date range.
+  @@index([enrollmentId, occurredOn])
+  @@index([kind, occurredOn])
+  @@map("sprint_log_entry")
 }
 
 // APPEND-ONLY milestone history (PRD2 §4.4) - cannot be deleted by anyone, incl. Admin.
@@ -2758,28 +2858,42 @@ enum GnVideoProvider {
 /// portal login exists). That asymmetry is deliberate: a B2 seat IS the enrollment, whereas a
 /// GN student may sit in a batch for a level they were gifted or repeated.
 model Batch {
-  id             String        @id @default(cuid())
+  id                   String              @id @default(cuid())
   /// Which business this cohort belongs to. Guards level-kind compatibility at the service
   /// layer (COACHING_TIER → B2, GERMAN_LEVEL/GERMAN_BUNDLE → GERMAN_NOTE).
-  line           BatchLine     @default(GERMAN_NOTE)
+  line                 BatchLine           @default(GERMAN_NOTE)
   /// The founders' own label - "A1", "B10", "B26". Nullable because pre-existing rows have
   /// none, unique because it is the human key they use on calls and in the workbooks.
-  code           String?       @unique
-  name           String // "A1 Evening - July 2026"
-  level          String // Level.code - service-validated against `line`
-  tutorId        String?
-  tutor          User?         @relation("BatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
-  status         GnBatchStatus @default(ACTIVE)
-  targetStrength Int           @default(8) // target class size (spec: ~8 per batch)
+  code                 String?             @unique
+  name                 String // "A1 Evening - July 2026"
+  level                String // Level.code - service-validated against `line`
+  tutorId              String?
+  tutor                User?               @relation("BatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
+  status               GnBatchStatus       @default(ACTIVE)
+  targetStrength       Int                 @default(8) // target class size (spec: ~8 per batch)
   /// ER v2 BATCH.start_date. Nullable: the GN batches that already exist were never asked for one.
-  startDate      DateTime?     @db.Date
-  endDate        DateTime?     @db.Date
-  notes          String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  ///
+  /// For a B2 cohort it is also the TIMETABLE ANCHOR - `generateTimetable` counts every
+  /// curriculum week forward from here, so moving it is how a batch that slipped a week is
+  /// re-dated. Generation refuses without one rather than guessing today.
+  startDate            DateTime?           @db.Date
+  endDate              DateTime?           @db.Date
+  /// The curriculum this cohort's timetable was generated from (B2 coaching only - German
+  /// Note keeps scheduling class by class). Kept after generation, SetNull on delete, so the
+  /// batch page can say which programme it is running and offer to re-generate.
+  curriculumTemplateId String?
+  curriculumTemplate   CurriculumTemplate? @relation(fields: [curriculumTemplateId], references: [id], onDelete: SetNull)
+  /// The last row of the founders' timetable sheet: the day the 90-Day Sprint starts, which
+  /// is the day AFTER the final live session rather than a fixed offset from `startDate`.
+  /// Stored rather than derived because the founders move it by hand when a batch slips.
+  sprintStartDate      DateTime?           @db.Date
+  notes                String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
   members        BatchMember[]
   enrollments    Enrollment[]
+  resources      Resource[]
   pendingJoiners GnPendingJoiner[]
   recordings     GnRecording[]
   posts          GnPost[]
@@ -2794,6 +2908,7 @@ model Batch {
   @@index([status])
   @@index([tutorId])
   @@index([line, status])
+  @@index([curriculumTemplateId])
   @@map("batch")
 }
 
@@ -2812,6 +2927,165 @@ model GnModule {
 
   @@index([batchId, orderIndex])
   @@map("gn_module")
+}
+
+// ── Curriculum: the week-by-week timetable a B2 cohort is built from ────────────────
+//
+// The founders keep this as a spreadsheet: one row per session (Week Nr · Topic · Duration ·
+// Day · Time) and ONE COLUMN PER BATCH holding that cohort's real dates. The sheet's shape is
+// the model's shape - the rows are the template, a column is a batch.
+//
+// WHY A TEMPLATE RATHER THAN TYPING EACH BATCH'S CLASSES: Guided's eight sessions are the same
+// eight every time (they are written into the signed agreement, Annexure A), so re-typing them
+// per cohort is eight chances to disagree with the contract. The template is authored once;
+// opening a batch picks it plus a start date and the dates fall out.
+//
+// AND WHY THE GENERATED SESSIONS ARE STILL REAL ROWS: `generateTimetable` writes ordinary
+// `ClassSession`s and then lets go. A batch that moves its Saturday class to the Sunday edits
+// that one session; it does not fork the curriculum. The template is the starting point, never
+// a live binding - which is also why editing a template never reaches back into a batch that
+// has already started.
+
+/// How a session reaches the student.
+///
+/// Not a `GnEventType` value, because the two answer different questions and the founders'
+/// sheet carries both independently: KICKOFF/QA/OPEN_MARKET is WHAT the session is, LIVE vs
+/// PRE_RECORDED is HOW it is delivered. Agreement §3.2 names two pre-recorded modules
+/// (Effective Networking, German Interview Structure) sitting between live ones in the same week.
+enum SessionDelivery {
+  LIVE
+  /// A video module. It has no clock and no register: the student watches it in their own
+  /// time, so completion comes from watch progress (GnRecordingWatch), never from attendance.
+  PRE_RECORDED
+}
+
+/// What a resource IS, so the list can be read at a glance rather than by opening each link.
+/// Deliberately coarse: this is a label on a shelf, not a MIME type.
+enum ResourceKind {
+  DOCUMENT // worksheet, PDF, slides
+  VIDEO // a recording or explainer that is not the class recording itself
+  TEMPLATE // a CV / cover-letter / profile template to copy
+  TOOL // a site or app they are asked to use
+  LINK // anything else worth reading
+}
+
+/// Course material, hung off whichever thing it actually belongs to.
+///
+/// ── THE THREE SCOPES, AND WHY ALL THREE ──────────────────────────────────────────────────
+/// Exactly one of `curriculumItemId` / `batchId` / `sessionId` is set, enforced by a CHECK
+/// constraint in the migration as well as by the service layer.
+///
+///   · curriculumItem - "the Resume Building worksheet". The same material every single cohort
+///     needs, attached ONCE to the curriculum row. Every batch built from that curriculum shows
+///     it on that class, including batches created next year. Without this scope the founders
+///     would re-attach the same eight files to every new cohort, which is how a batch ends up
+///     with last year's template.
+///   · batch - "this cohort's WhatsApp group / shared drive". True for one cohort, every class.
+///   · session - "the slide deck I actually used on Saturday". One class, one cohort.
+///
+/// A student sees the union of all three for the class in front of them, which is the only view
+/// where the distinction stops mattering.
+///
+/// LINKS, NOT FILES. Every one of these already lives in Drive, Skool or Fathom, and the app has
+/// no object storage configured (`supabase-storage.ts` is unset, and the one upload route it does
+/// have is images-only, for the website's media library). Storing a URL is therefore the honest
+/// model rather than a half-built file manager; `kind` carries what it is.
+model Resource {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  kind        ResourceKind @default(LINK)
+  url         String
+
+  /// Template-level: every cohort running this curriculum sees it on that class.
+  curriculumItemId String?
+  curriculumItem   CurriculumItem? @relation(fields: [curriculumItemId], references: [id], onDelete: Cascade)
+  /// Cohort-level: this batch, all its classes.
+  batchId          String?
+  batch            Batch?          @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  /// Class-level: this one session of this one cohort.
+  sessionId        String?
+  session          ClassSession?   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  orderIndex        Int     @default(0)
+  /// Staff can stage material before releasing it - an exercise that would give away the answer
+  /// if it appeared before the class. Hidden rows are filtered out of every student-facing read.
+  visibleToStudents Boolean @default(true)
+
+  createdById String?
+  createdBy   User?    @relation("ResourceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([curriculumItemId, orderIndex])
+  @@index([batchId, orderIndex])
+  @@index([sessionId, orderIndex])
+  @@map("resource")
+}
+
+/// A reusable programme timetable - the rows of the founders' sheet, without any batch's dates.
+model CurriculumTemplate {
+  id          String    @id @default(cuid())
+  /// B2 only today. The column exists so German Note can adopt the same engine later without
+  /// a migration; nothing reads it as a filter yet beyond the admin list.
+  line        BatchLine @default(B2)
+  name        String // "Guided Mode - 4 weeks + 90-day sprint"
+  /// Level.code this curriculum is written for (GUIDED / ELITE). Nullable: a template may be
+  /// shared across tiers, and the batch's own level is what the seat guard checks.
+  levelCode   String?
+  description String?
+  /// Days of sprint that follow the final session - the sheet's "90 Day Sprint" footer row.
+  /// Guided is 90, Elite 120; null means this curriculum has no sprint phase.
+  sprintDays  Int?      @default(90)
+  /// Retired templates stay readable (batches point at them) but stop being offered.
+  active      Boolean   @default(true)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items   CurriculumItem[]
+  batches Batch[]
+
+  @@index([line, active])
+  @@map("curriculum_template")
+}
+
+/// One row of the sheet: a session the programme runs in a given week.
+model CurriculumItem {
+  id           String             @id @default(cuid())
+  templateId   String
+  template     CurriculumTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  /// 1-based, and NOT derivable from `orderIndex`: a week holds two or three sessions
+  /// (Week 03 runs Q&A, Hidden Job Market and Open Job Market), and the week number is what
+  /// the student's timetable groups by.
+  weekNumber   Int
+  /// Order WITHIN the week. Two sessions in the same week on the same day are ordered by this.
+  orderIndex   Int                @default(0)
+  title        String // "Hidden Job Market"
+  /// The parenthesised line under the topic in the sheet - "H.I.D.E. Framework". Its own
+  /// field rather than part of the title so the timetable can set it smaller and the
+  /// agreement's §3 list can be generated from titles alone.
+  framework    String?
+  type         GnEventType        @default(COACHING)
+  delivery     SessionDelivery    @default(LIVE)
+  durationMins Int? // 90 for "1.5 hrs"
+  /// 0 = Sunday … 6 = Saturday, matching JS `getDay()`. Null for a PRE_RECORDED module,
+  /// which has no day - the sheet writes "Video (pre-rec)" in that column instead.
+  dayOfWeek    Int?
+  /// "10:30" - 24-hour wall-clock IST, the sheet's Time row. A string, not a DateTime: a
+  /// template has no date to attach a time to, and 10:30 must stay 10:30 in Chennai whatever
+  /// the server's clock is doing. `generateTimetable` combines it with the week's date.
+  startTime    String?
+  notes        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  sessions  ClassSession[] @relation("SessionCurriculumItem")
+  resources Resource[]
+
+  @@unique([templateId, weekNumber, orderIndex])
+  @@index([templateId, weekNumber, orderIndex])
+  @@map("curriculum_item")
 }
 
 // The kind of session a calendar event represents (spec: kickoff / coaching /
@@ -2836,28 +3110,87 @@ enum GnEventType {
 /// `GnEventType` already carried the diagram's exact session vocabulary
 /// (KICKOFF / COACHING / LINKEDIN / QA / OPEN_MARKET), so the enum is reused verbatim.
 model ClassSession {
-  id           String       @id @default(cuid())
-  batchId      String
-  batch        Batch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  title        String
-  type         GnEventType  @default(LIVE_CLASS)
-  startsAt     DateTime
-  durationMins Int?
-  joinUrl      String?
-  notes        String?
+  id               String          @id @default(cuid())
+  batchId          String
+  batch            Batch           @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  title            String
+  /// The parenthesised framework line from the curriculum sheet ("H.I.D.E. Framework"),
+  /// copied at generation so a later template edit cannot silently re-word a batch's past.
+  framework        String?
+  type             GnEventType     @default(LIVE_CLASS)
+  /// Which programme week this session belongs to. Null for every German Note class and for
+  /// anything scheduled ad hoc - only a generated B2 timetable fills it, and the student's
+  /// timetable groups by it.
+  weekNumber       Int?
+  /// Order within the week; ties on `startsAt` are broken by this.
+  orderIndex       Int             @default(0)
+  /// LIVE or PRE_RECORDED. See `SessionDelivery` - a pre-recorded module has no register.
+  delivery         SessionDelivery @default(LIVE)
+  /// The curriculum row this was generated from. SetNull: retiring a template must never
+  /// delete a cohort's class history.
+  curriculumItemId String?
+  curriculumItem   CurriculumItem? @relation("SessionCurriculumItem", fields: [curriculumItemId], references: [id], onDelete: SetNull)
+  /// For a LIVE session, the moment it starts. For a PRE_RECORDED module there is no clock,
+  /// so this carries the day it is RELEASED to the batch (midnight IST of the week's anchor
+  /// day) and the UI reads "Available from" rather than a time. Kept non-null rather than
+  /// made optional because every ordering, register and reminder in the app sorts on it, and
+  /// a null would have meant teaching all of them a second code path to say "undated".
+  startsAt         DateTime
+  durationMins     Int?
+  joinUrl          String?
+  notes            String?
+
+  /// ── THE ATTENDANCE WINDOW ───────────────────────────────────────────────────────────
+  /// When the person teaching this class opened the register to self check-in, and when it
+  /// stops accepting one. See lib/attendance-window.ts for the rules.
+  ///
+  /// BOTH NULL IS A THIRD STATE, not a closed window. A great many sessions are marked the
+  /// old way - a tutor opening the sheet afterwards and ticking eight boxes - and those must
+  /// not read as "the window ran out", because "nobody could ever check in" and "the window
+  /// expired" are different things to say to a student who missed it.
+  ///
+  /// Closing early writes `attendanceClosesAt = now` rather than nulling it, so the record
+  /// still says a window existed and when it ended.
+  attendanceOpensAt       DateTime?
+  attendanceClosesAt      DateTime?
+  attendanceOpenedById    String?
+  attendanceOpenedBy      User?           @relation("AttendanceWindowOpenedBy", fields: [attendanceOpenedById], references: [id], onDelete: SetNull)
+  /// How long after the anchor a check-in still counts as PRESENT rather than LATE, captured
+  /// AT OPENING TIME. Null falls back to the founder's current setting. Stored per session
+  /// because the grace a cohort was judged against in October must not silently change when
+  /// somebody edits the config in December - the same reasoning as `framework` above.
+  attendanceGraceMins     Int?
+  /// When the marks became readable by the cohort, and by whom.
+  ///
+  /// SEPARATE FROM THE WINDOW on purpose. "Take the register now" and "you may read the
+  /// verdict" are two decisions, and a tutor who mis-tapped a row needs the second to be able
+  /// to come later than the first. Null = the cohort cannot see the tutor's marks yet; a
+  /// student's own check-in is visible to them regardless (`studentMaySeeMark`).
+  attendancePublishedAt   DateTime?
+  attendancePublishedById String?
+  attendancePublishedBy   User?           @relation("AttendancePublishedBy", fields: [attendancePublishedById], references: [id], onDelete: SetNull)
+
   /// ER v2 `SESSION ||--o| RECORDING`. Set when the tutor posts the class recording, so
   /// "which session is this video of" stops being inferred from the date.
-  recordingId  String?      @unique
-  recording    GnRecording? @relation("SessionRecording", fields: [recordingId], references: [id], onDelete: SetNull)
-  createdById  String?
-  createdBy    User?        @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  recordingId      String?         @unique
+  recording        GnRecording?    @relation("SessionRecording", fields: [recordingId], references: [id], onDelete: SetNull)
+  createdById      String?
+  createdBy        User?           @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  tasks      SessionTask[]
-  attendance SessionAttendance[]
+  tasks            SessionTask[]
+  attendance       SessionAttendance[]
+  whatsappMessages WhatsAppMessage[]
+  resources        Resource[]
 
   @@index([batchId, startsAt])
+  @@index([batchId, weekNumber, orderIndex])
+  @@index([curriculumItemId])
+  /// "Is anything open for me right now" runs on every student page load, and the answer is
+  /// almost always no - so it has to be an index hit rather than a scan of every class ever
+  /// held.
+  @@index([attendanceClosesAt])
   @@map("class_session")
 }
 
@@ -2937,6 +3270,22 @@ enum AttendanceStatus {
   EXCUSED
 }
 
+/// WHO PUT THIS MARK HERE - the student themselves, or the person teaching.
+///
+/// `markedById` already records which login wrote the row, and that is not the same question.
+/// On a self check-in the login IS the student's, so reading the source off the user id would
+/// mean joining to Student on every row just to ask "did they tick this themselves", and would
+/// quietly mis-answer for a tutor who is also enrolled somewhere. It also has to survive the
+/// login being deleted, which nulls `markedById` by design.
+///
+/// It earns its place twice over: a student may always see their OWN check-in before the
+/// register is published (see `studentMaySeeMark`), and a self check-in must never silently
+/// overwrite a tutor's considered verdict.
+enum AttendanceSource {
+  TUTOR
+  SELF
+}
+
 /// Who actually showed up to a class.
 ///
 /// THE GAP THIS CLOSES: tutor fees are computed against `Batch._count.members +
@@ -2968,6 +3317,32 @@ model SessionAttendance {
   /// simply ticked a box, which is the normal case.
   minutesAttended Int?
   note            String?
+
+  /// ── WHY THEY MISSED IT, asked for only when a coach asks ───────────────────────────
+  /// `reasonAskedAt` is the invitation, and it is what makes this field exist at all: the
+  /// founders asked to "capture the absence reason only when nudged by the head coach or
+  /// their tutor". An always-on "why were you away?" box on every missed class is a form
+  /// nobody fills in, and the silence it produces is indistinguishable from not caring.
+  ///
+  /// So nothing is asked by default. A coach presses "Ask why" on the one absence they
+  /// actually want explained, the student is prompted once, and the answer lands back on the
+  /// register beside the mark it explains.
+  reasonAskedAt   DateTime?
+  reasonAskedById String?
+  reasonAskedBy   User?     @relation("AttendanceReasonAskedBy", fields: [reasonAskedById], references: [id], onDelete: SetNull)
+  /// The student's own words. Null while unanswered - which, once asked, is itself a signal.
+  reason          String?
+  reasonAt        DateTime?
+
+  /// TUTOR unless the student checked themselves in. Defaults to TUTOR so every row written
+  /// before windows existed keeps its true provenance - those were all taken by hand.
+  source      AttendanceSource @default(TUTOR)
+  /// The instant a student pressed "I'm here". Null on a hand-taken row.
+  ///
+  /// Not merged into `markedAt`, which is overwritten by every later correction: a tutor who
+  /// amends one note at midnight would otherwise destroy the evidence of what time the student
+  /// actually arrived, which is the whole point of letting them check in.
+  checkedInAt DateTime?
 
   /// SetNull like every other actor link on a record that matters: removing a tutor's login must
   /// never delete the evidence of who marked a register.
@@ -3015,6 +3390,18 @@ model GnRecording {
   notes      String?
   postedById String?
   postedBy   User?           @relation("GnRecordingPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+
+  /// HOW LONG THE STUDENTS MAY SEE THIS - the tutor's or head coach's decision, per recording.
+  ///
+  /// Null = no time limit, which is both the old behaviour (recordings were lifetime) and the
+  /// right default for a cohort nobody has made a decision about. Staff are never gated by
+  /// this; it governs the student portal only.
+  ///
+  /// An ABSOLUTE instant, not a number of days. A student promised a recording until 5
+  /// November must still have it on 4 November after somebody shortens the default - storing
+  /// the days and computing the expiry on read would silently re-date every recording ever
+  /// posted. See `expiryFor` in lib/recording-access.ts.
+  availableUntil DateTime?
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
@@ -3029,8 +3416,13 @@ model GnRecording {
   @@map("gn_recording")
 }
 
-// Per-viewer "watched" state → the batch progress bar + completion checkmarks.
-// Recordings are lifetime, so this is progress, not access control.
+// Per-viewer "watched" state → the batch progress bar, the completion checkmarks, and the
+// catch-up list on the Attendance desk.
+//
+// This is PROGRESS. Access control now lives on `GnRecording.availableUntil` - the two are
+// deliberately separate rows: a student's watch history has to survive the window that allowed
+// it closing, or "did they ever catch up" would become unanswerable the moment a recording
+// expired, which is exactly when a coach wants to ask.
 model GnRecordingWatch {
   id           String      @id @default(cuid())
   recordingId  String
@@ -3567,6 +3959,34 @@ enum WhatsAppKind {
   // ship-to rather than addressing the recipient as the subject.
   BOOK_ORDER // order for a student's level books, sent to the publisher/vendor
 
+  // ── Class reminders. Keyed on a ClassSession rather than a booking: a class has a ROOM, not
+  // a one-to-one slot, so one session fans out to the whole roster.
+  //
+  // TWO kinds, not one, for the usual reason - the app binds exactly ONE template per kind, and
+  // these two messages say different things to different people. The student is told when their
+  // own class starts and where to join it; the coach is told which batch is about to begin and
+  // how many are expected. Collapsing them would send the student a headcount, or the coach a
+  // message addressed to them as the learner.
+  CLASS_REMINDER // to each student on the roster - their class is starting soon
+  CLASS_REMINDER_COACH // to whoever runs the batch - their class is starting soon
+
+  /// "You were marked absent from X" - to the one student, once the register is PUBLISHED.
+  ///
+  /// Keyed on the session like the reminders above, but it fans out to a FEW students rather
+  /// than the whole room: only those marked ABSENT. Not LATE (they were there) and not EXCUSED
+  /// (the student told somebody, which is the system working - chasing them punishes exactly
+  /// the behaviour we want).
+  ///
+  /// It fires on publication rather than on marking, because until a tutor shows the register
+  /// the mark is not yet the student's business - see `studentMaySeeMark`. A message that
+  /// arrives before the app will show the mark is a message about a fact the student cannot
+  /// check.
+  CLASS_ABSENCE
+  /// "You still have not watched the recording of X" - the catch-up nudge, sent once the grace
+  /// hours have passed and only while the recording is still openable. A nudge about a video
+  /// whose access window has closed is a complaint, not a reminder.
+  CLASS_CATCH_UP
+
   // ── Stage messages: one per LeadStage, sent every time a lead enters it (lib/stage-messages.ts).
   STAGE_NEW_LEAD
   STAGE_WHATSAPP_SENT
@@ -3625,6 +4045,15 @@ model WhatsAppMessage {
   agreement        Agreement?      @relation(fields: [agreementId], references: [id], onDelete: SetNull)
   bookOrderId      String?
   bookOrder        BookOrder?      @relation(fields: [bookOrderId], references: [id], onDelete: SetNull)
+  /// The class this message is about (CLASS_REMINDER / CLASS_REMINDER_COACH).
+  ///
+  /// This is what makes the reminder ladder idempotent WITHOUT a second table: "which rungs has
+  /// this student already had for this class" is a count of rows on (classSessionId, studentId,
+  /// kind), exactly as the pre-call reminder counts them on bookingRequestId. A dedicated
+  /// `class_reminder` table would have been a parallel record of sends that could disagree with
+  /// the one the WhatsApp screen shows.
+  classSessionId   String?
+  classSession     ClassSession?   @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
 
   sentById String? // the admin/user who triggered a manual send (null = automatic)
   sentBy   User?   @relation("WhatsAppSentBy", fields: [sentById], references: [id], onDelete: SetNull)
@@ -3639,6 +4068,7 @@ model WhatsAppMessage {
   @@index([pendingPaymentId])
   @@index([agreementId])
   @@index([bookOrderId])
+  @@index([classSessionId, kind])
   @@index([watiMessageId])
   @@index([toNumber])
   @@map("whatsapp_message")
@@ -3671,6 +4101,28 @@ model WhatsAppOptOut {
 // rendering never joins back to the mutable Student row. It also carries the two fields the rest
 // of the schema has no home for: the student's postal address and the programme batch.
 
+/**
+ * WHERE THE DOCUMENT BODY COMES FROM. See docs/AGREEMENT_DOCUMENTS_REBUILD.md.
+ *
+ * GUIDED is the original and the default: the clause set typeset in `documents/agreement-guided-*`,
+ * where the only variable is `Agreement.data`. Every row that existed before this enum is GUIDED,
+ * and its content hash is unaffected (`contentHash` is passed no body for it).
+ *
+ * DOCX and PDF both start as a file the founder wrote in Word. The difference is what we do with
+ * it, and it is a real trade rather than a preference:
+ *
+ *   DOCX - parsed into a block model (mammoth → HTML → `lib/docx-blocks`) and re-typeset by our own
+ *          renderer. Editable here afterwards, merge fields work, signature zones sit IN the text
+ *          flow. The layout is our typesetting of their content, not Word's.
+ *   PDF  - stored as bytes and never re-typeset. `pdf-lib` stamps signatures at normalised page
+ *          coordinates. Pixel-exact to Word; the prose can only be changed by uploading again.
+ */
+enum AgreementDocKind {
+  GUIDED
+  DOCX
+  PDF
+}
+
 enum AgreementStatus {
   DRAFT // founder is still editing; no token exists
   SENT // countersigned + link delivered; awaiting the student
@@ -3684,6 +4136,23 @@ enum AgreementStatus {
 // Append-only trail. This IS the audit certificate: without it a canvas squiggle proves nothing.
 enum AgreementEventType {
   CREATED
+  /// An uploaded document was attached to, or replaced on, a draft. Part of the trail because the
+  /// body of an uploaded agreement IS its terms - "which document did they sign" is exactly the
+  /// question a disputing counterparty asks.
+  DOCUMENT_ATTACHED
+  /// A co-signer (guardian/witness) completed their part. They sign BEFORE the student, so this
+  /// always precedes SIGNED - see the note on `SIGNER_ROLES` in lib/agreement-doc.
+  SIGNER_SIGNED
+  /// A co-signer refused. The agreement is dead at that point: the student is never asked.
+  SIGNER_DECLINED
+  /// A file was uploaded into an ATTACHMENT field during a ceremony.
+  ATTACHMENT_UPLOADED
+  /// A timestamp authority attested to the sealed bytes (RFC 3161). The one line on the trail a
+  /// third party, rather than B2, is the source of.
+  TIMESTAMPED
+  /// The founder opened the signing link themselves to sign the student in person. Recorded
+  /// because the certificate must never imply a link was followed from the student's own phone.
+  IN_PERSON
   ISSUED // founder countersigned and sent
   DELIVERY_SENT // handed to WATI
   DELIVERY_SKIPPED // WATI off / opted-out / no valid number - the founder must be told
@@ -3702,6 +4171,13 @@ model Agreement {
   documentNo      String          @unique // human reference, printed on every page: B2-GM-2026-0001
   templateVersion String // git-pinned renderer, e.g. "guided-v3"
   status          AgreementStatus @default(DRAFT)
+
+  /// WHERE THE PROSE COMES FROM. `GUIDED` for everything that existed before uploads, so this
+  /// column changes the behaviour of exactly nothing already in the table. The uploaded kinds
+  /// carry their body in `body` (a 1-1 row, so a bytea never rides along on a list query) and
+  /// pin `templateVersion` to "upload-docx-v1" / "upload-pdf-v1" - which is what the renderer
+  /// dispatches on, exactly as it does for the guided clause sets.
+  documentKind AgreementDocKind @default(GUIDED)
 
   // Who it is for. SetNull like every other audit link: a signed agreement outlives its student row.
   studentId    String?
@@ -3729,6 +4205,15 @@ model Agreement {
   founderDevice       Json? // same shape as signerDevice, captured when the founder countersigns
 
   signedAt            DateTime? // also the burn marker - never set twice
+  /**
+   * What the STUDENT typed or ticked in their own boxes, by field id (`signerValuesSchema`).
+   *
+   * On the agreement rather than in `agreement_body` because the body is the contract as OFFERED
+   * and is frozen at issue, while these are produced at signing. They enter the seal and are
+   * frozen from then on by `agreement_seal_guard`, which is extended to cover this column: an
+   * unticked consent box that could be ticked afterwards would be worthless.
+   */
+  signerFieldValues   Json?
   studentSignaturePng Bytes?
   // How the signature was physically made. Three parts, and the distinction is the whole point:
   // what the browser CLAIMS about itself, how the strokes were actually drawn, and - the only
@@ -3752,11 +4237,35 @@ model Agreement {
   pdfSha256 String?
   pdfSize   Int?
 
+  // ── RFC 3161 trusted timestamp ───────────────────────────────────────────────────────────────
+  //
+  // THE ONE CLAIM ON THIS ROW THAT DOES NOT COME FROM US. `pdfSha256` proves the stored artifact
+  // is untouched *if you trust our database*; a timestamp token is a third party attesting that
+  // these exact bytes existed at a point in time, which is the half B2 cannot assert about itself.
+  //
+  // Written AFTER sealing - it timestamps the final bytes, so it cannot exist before them - which
+  // is why these three columns are deliberately absent from `agreement_seal_guard`'s comparison.
+  // Nothing else about a signed row may change; this may be filled in once, by the sealing path or
+  // by the retry sweep. See lib/rfc3161.ts and server/agreement-timestamp.ts.
+  tsToken     Bytes? // the DER-encoded TimeStampToken, exactly as the authority returned it
+  tsAuthority String? // which TSA, so the token can be verified against the right certificate
+  tsGenTime   DateTime? // the time the AUTHORITY asserts, not our clock
+  tsError     String? // why the last attempt failed, so a missing timestamp is explicable
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   events           AgreementEvent[]
   whatsappMessages WhatsAppMessage[]
+  /// The uploaded body, for an `AgreementDocKind` other than GUIDED. Its own row rather than
+  /// columns here so `sourceBytes` can never be pulled in by a list query that forgot to narrow
+  /// its `select` - the same discipline the comment on `pdfBytes` asks for.
+  body             AgreementBody?
+  /// Additional signers - a guardian co-signing for a minor, a witness. Empty for almost every
+  /// agreement, and that is the normal case rather than an omission.
+  signers          AgreementSigner[]
+  /// Files collected from a signer through an ATTACHMENT field.
+  attachments      AgreementAttachment[]
 
   @@index([status, createdAt])
   @@index([studentId])
@@ -3780,6 +4289,217 @@ model AgreementEvent {
 
   @@index([agreementId, createdAt])
   @@map("agreement_event")
+}
+
+// ───────────────────── Uploaded agreement documents (templates + bodies) ─────────────────────
+//
+// The founder writes the draft in Word and uploads it; the app parses or stores it, the founder
+// marks up where each party signs, and the signing spine above does the rest unchanged.
+//
+// THE SHAPE OF THE WHOLE THING, in one sentence: a TEMPLATE holds VERSIONS, and instantiating a
+// version COPIES it onto an agreement's own BODY. Nothing an agreement renders is ever read back
+// out of a template - that is the same frozen-snapshot rule `Agreement.data` follows, for the same
+// reason: editing the template next month must not alter a contract drawn up today.
+
+/// A named, reusable document - "GM Coaching Agreement", "Workshop waiver". The template itself
+/// holds no content; every upload is a `AgreementTemplateVersion`.
+model AgreementTemplate {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  /// Fixed at creation by the first upload's file type. A template cannot switch kinds: its
+  /// versions' fields are either in-flow anchors (DOCX) or page coordinates (PDF), and the two
+  /// are not convertible - the coordinates would be meaningless against re-typeset blocks.
+  kind        AgreementDocKind
+
+  /// Which version a new agreement instantiates. Null only between creating the row and its
+  /// first upload succeeding.
+  currentVersionId String?                    @unique
+  currentVersion   AgreementTemplateVersion?  @relation("AgreementTemplateCurrent", fields: [currentVersionId], references: [id], onDelete: SetNull)
+
+  createdById String?
+  createdBy   User?   @relation("AgreementTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// Soft-delete, matching the app-wide archive contract. An archived template stays readable
+  /// because agreements point at its versions for provenance.
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  versions AgreementTemplateVersion[] @relation("AgreementTemplateVersions")
+  bodies   AgreementBody[]
+
+  @@index([archivedAt, updatedAt])
+  @@map("agreement_template")
+}
+
+/// One upload, plus the field placement made on it. Append-only in practice: a wording change is
+/// a new version, never an edit of an old one, so an agreement's provenance stays truthful.
+model AgreementTemplateVersion {
+  id         String            @id @default(cuid())
+  templateId String
+  template   AgreementTemplate @relation("AgreementTemplateVersions", fields: [templateId], references: [id], onDelete: Cascade)
+  /// 1, 2, 3 - what the founder reads. Allocated under the unique index below.
+  version    Int
+  label      String?
+  kind       AgreementDocKind
+
+  /// DOCX only: the parsed block model (`lib/agreement-doc`'s `DocBlock[]`). THIS is the prose
+  /// for a DOCX document - the renderer typesets it and the content hash hashes it. `sourceBytes`
+  /// is kept beside it only so the founder can download what they uploaded.
+  blocks Json?
+
+  /// The original upload. In Postgres, not the Supabase bucket: that bucket is public-read and
+  /// these documents carry a home address and B2's IBANs. NEVER select this in a list query.
+  sourceBytes  Bytes?
+  sourceName   String
+  sourceMime   String
+  sourceSize   Int
+  /// SHA-256 of the uploaded bytes. For a PDF body this - not the bytes - is what enters the
+  /// agreement's content hash, so the hash stays cheap and still moves if a byte changes.
+  sourceSha256 String
+
+  /// PDF only: page count and each page's size in PDF points, captured at upload so the field
+  /// designer can lay boxes out without re-parsing and the stamper can convert normalised
+  /// coordinates back to points.
+  pageCount Int?
+  pageSizes Json?
+
+  /// Placed fields - `lib/agreement-doc`'s `DocField[]`. Who signs where, and what each box is.
+  fields Json
+  /// Per-document switches - `lib/agreement-doc`'s `DocOptions`. Currently `initialEveryPage`.
+  options Json?
+
+  createdById String?
+  createdBy   User?   @relation("AgreementTemplateVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  currentOf AgreementTemplate? @relation("AgreementTemplateCurrent")
+  bodies    AgreementBody[]
+
+  @@unique([templateId, version])
+  @@index([templateId, createdAt])
+  @@map("agreement_template_version")
+}
+
+/// An agreement's OWN copy of a document body. 1-1 with the agreement.
+///
+/// Copied from a template version at creation, or uploaded straight onto the agreement with no
+/// template at all. Either way it is editable while the agreement is a DRAFT and frozen after:
+/// the server actions guard on `status = DRAFT`, and `agreement_body_seal_guard` (see the
+/// migration) refuses any write once the parent carries a `signedAt`.
+model AgreementBody {
+  /// The agreement IS the key - one body, no orphans, nothing to pick between.
+  agreementId String    @id
+  agreement   Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  kind AgreementDocKind
+
+  /// Provenance only, and SetNull for the same reason every other audit link is: a signed
+  /// agreement outlives the template it was drawn from. Nothing is ever read back through these.
+  templateId        String?
+  template          AgreementTemplate?        @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateVersionId String?
+  templateVersion   AgreementTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
+  /// What the version was called when it was instantiated - survives the version being deleted.
+  templateLabel     String?
+
+  blocks Json?
+
+  sourceBytes  Bytes?
+  sourceName   String
+  sourceMime   String
+  sourceSize   Int
+  sourceSha256 String
+
+  pageCount Int?
+  pageSizes Json?
+
+  fields Json
+  options Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([templateId])
+  @@map("agreement_body")
+}
+
+/// An ADDITIONAL signer on an agreement - a parent or guardian co-signing for a student under 18,
+/// or a witness. One row per person, each with their own link, their own one-time code and their
+/// own ink.
+///
+/// ── THEY SIGN BEFORE THE STUDENT, AND THAT IS STRUCTURAL ────────────────────────────────────
+/// `signAgreement` renders and hashes the PDF in the same write that sets `Agreement.signedAt`,
+/// and `agreement_seal_immutable` then freezes those bytes. A signature collected after the
+/// student's could therefore never appear on the sealed document without re-rendering a contract
+/// somebody has already signed. So the student's ceremony refuses until every required co-signer
+/// is done, and the student's signature remains the thing that seals. See server/agreement-signers.ts.
+model AgreementSigner {
+  id          String    @id @default(cuid())
+  agreementId String
+  agreement   Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  /// Matches `DocField.signer` - which placed boxes are theirs. `GUARDIAN` today.
+  role String
+
+  name  String
+  /// WhatsApp number: the delivery target AND the OTP target, exactly as for the student.
+  phone String
+  email String?
+
+  /// Their own signing link. Only the SHA-256 is stored, so a leaked row cannot be redeemed.
+  tokenHash    String?   @unique
+  expiresAt    DateTime?
+  otpHash      String?
+  otpExpiresAt DateTime?
+  otpAttempts  Int       @default(0)
+
+  signaturePng Bytes?
+  signedAt     DateTime? // also the burn marker for THIS signer
+  device       Json?
+  /// What they typed or ticked in their own boxes (`signerValuesSchema`).
+  fieldValues  Json?
+
+  declinedAt    DateTime?
+  declineReason String?
+
+  /// Signing order within the agreement, 1-based. Lower signs first; the student is always last.
+  position Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agreementId, position])
+  @@index([expiresAt])
+  @@map("agreement_signer")
+}
+
+/// A file a signer uploaded into an ATTACHMENT field - an ID, a photo, a certificate.
+///
+/// Bytes in Postgres for the same reason as everything else in this module: the Supabase bucket is
+/// public-read, and this is somebody's identity document. There is no public URL and no CDN.
+model AgreementAttachment {
+  id          String    @id @default(cuid())
+  agreementId String
+  agreement   Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  /// The `DocField.id` that asked for it, and who it came from (`DocField.signer`).
+  fieldId    String
+  signerRole String
+
+  bytes    Bytes
+  filename String
+  mimeType String
+  size     Int
+  sha256   String
+
+  uploadedAt DateTime @default(now())
+
+  /// One file per box: uploading again REPLACES, rather than leaving the renderer to pick.
+  @@unique([agreementId, fieldId])
+  @@map("agreement_attachment")
 }
 
 // ───────────────────────── Accounting engine (SPEC §10) ─────────────────────────

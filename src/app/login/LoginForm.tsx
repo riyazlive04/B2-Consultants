@@ -19,7 +19,7 @@ import { safeAction } from "@/lib/action-guard";
  */
 
 type Mode = "login" | "signup";
-type ReqRole = "HEAD" | "USER" | "TUTOR" | "STUDENT";
+type ReqRole = "HEAD" | "USER" | "TUTOR" | "STUDENT" | "COACH";
 
 /**
  * The access a stranger may ASK for.
@@ -40,8 +40,9 @@ type ReqRole = "HEAD" | "USER" | "TUTOR" | "STUDENT";
 const REQUEST_ROLES: { id: ReqRole; label: string; desc: string; icon: typeof ShieldCheck }[] = [
   { id: "HEAD", label: "Head coach", desc: "Delivery, students, pipeline & team", icon: Users },
   { id: "USER", label: "Telecaller", desc: "Telecaller board & daily log", icon: Phone },
+  { id: "COACH", label: "Coach", desc: "Your coaching batches & students", icon: Users },
   { id: "TUTOR", label: "German Note tutor", desc: "Your batches, sessions & community", icon: GraduationCap },
-  { id: "STUDENT", label: "Student", desc: "Your own journey, agreement & CV studio", icon: BookUser },
+  { id: "STUDENT", label: "Student", desc: "Your own journey, classroom & agreement", icon: BookUser },
 ];
 
 const fieldCls =
@@ -60,7 +61,7 @@ const fieldCls =
  * screen. One auth path, one set of guards, one place a credential bug can live. A second
  * implementation would be a second thing to keep secure for the sake of a heading.
  */
-export type LoginVariant = "team" | "student" | "tutor";
+export type LoginVariant = "team" | "student" | "tutor" | "coach";
 
 const VARIANTS: Record<LoginVariant, {
   heading: string;
@@ -94,10 +95,10 @@ const VARIANTS: Record<LoginVariant, {
   },
   student: {
     heading: "Student portal",
-    blurb: "Sign in to see your own journey, agreement and CV studio.",
+    blurb: "Sign in to see your own journey, classroom and agreement.",
     hero: "Your journey, in one place.",
     heroBlurb:
-      "Your milestones, your sessions, your agreement and the CV diagnostic - everything your coach is tracking, visible to you.",
+      "Your milestones, your sessions, your classes and your agreement - everything your coach is tracking, visible to you.",
     // A student login is created FROM their student record by an admin (see portal-actions);
     // offering a request form here would collect requests nobody can action.
     allowSignup: false,
@@ -113,6 +114,21 @@ const VARIANTS: Record<LoginVariant, {
       { label: "Your agreement & payments", tone: "good" },
     ],
     footnote: "Your coach sets up your login from your student record.",
+  },
+  coach: {
+    heading: "Coach sign-in",
+    blurb: "Sign in to the batches and students you coach.",
+    hero: "Your cohorts, your week.",
+    heroBlurb:
+      "The batches you run, the sessions due this week, the register to take and every sprint check-in waiting on you.",
+    allowSignup: true,
+    next: "/coaching",
+    kicker: "Coaching desk",
+    badges: [
+      { label: "Your batches", tone: "primary" },
+      { label: "Sprint check-ins", tone: "good" },
+    ],
+    footnote: "Coach access · arranged with B2 Consultants",
   },
   tutor: {
     heading: "Tutor sign-in",

@@ -89,6 +89,7 @@ export function DatePicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const gridId = useId();
+  const panelId = useId();
   // The one "today" this control knows: the ring, the Today button, the month it opens on and
   // `defaultToday` all read it, so the day the calendar highlights is always the day the form
   // would save. It is the browser's day, never India's - see `entryDateFor` in lib/dates.
@@ -225,8 +226,22 @@ export function DatePicker({
         ref={triggerRef}
         type="button"
         disabled={disabled}
+        /**
+         * role="combobox" is what makes `aria-required` below mean anything.
+         *
+         * This is a select-only combobox (ARIA 1.2): a button that opens a popup and reports
+         * the chosen value. `aria-required` is NOT a supported attribute on `role="button"` -
+         * which a plain <button> implicitly is - so assistive tech simply dropped it, and the
+         * native control underneath carries `aria-hidden`. The net effect was that a REQUIRED
+         * date/time/select field announced its required-ness to nobody at all: the `*` in
+         * `Field` is `aria-hidden` on the explicit premise that "the control's own required is
+         * what a screen reader announces", and for these custom popovers that premise was
+         * false. `aria-required` IS supported on combobox, so this one word closes the gap.
+         */
+        role="combobox"
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         aria-label={ariaLabel}
         aria-describedby={describedBy}
         aria-required={required || undefined}
@@ -240,7 +255,7 @@ export function DatePicker({
         <CalendarDays size={size === "sm" ? 14 : 16} aria-hidden className="flex-none text-ink-3" />
       </button>
 
-      <Popover anchorRef={triggerRef} open={open} onClose={() => setOpen(false)} role="dialog" className="w-[17rem] p-2">
+      <Popover id={panelId} anchorRef={triggerRef} open={open} onClose={() => setOpen(false)} role="dialog" className="w-[17rem] p-2">
         <div className="mb-1 flex items-center justify-between px-1">
           <button
             type="button"

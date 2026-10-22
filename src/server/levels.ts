@@ -48,24 +48,49 @@ export async function getActiveLevels(): Promise<LevelSummary[]> {
   return (await getLevels()).filter((l) => l.active);
 }
 
-/** All levels WITH their row id - for the admin CRUD panel, which targets update/delete by id. */
+/**
+ * All levels WITH their row id and their PRICE - for the admin CRUD panel, which targets
+ * update/delete by id and now also sets what each programme sells for.
+ *
+ * The price comes from the `Product` row that names this level (`Product.levelCode`, UNIQUE), so
+ * the catalogue panel and Payments → Products are two views of one price rather than two prices.
+ * Archived products are included: their price is still the answer to "what does this cost", and
+ * hiding it would make the panel offer to create a second product that the unique index refuses.
+ */
 export async function getAdminLevels(): Promise<AdminLevel[]> {
-  const rows = await prisma.level.findMany({
-    orderBy: [{ kind: "asc" }, { order: "asc" }, { label: "asc" }],
+  const [rows, products] = await Promise.all([
+    prisma.level.findMany({ orderBy: [{ kind: "asc" }, { order: "asc" }, { label: "asc" }] }),
+    prisma.product.findMany({
+      where: { levelCode: { not: null } },
+      select: { id: true, levelCode: true, priceInrMinor: true, priceEurMinor: true, interval: true, deletedAt: true },
+    }),
+  ]);
+  const priceByCode = new Map(products.map((p) => [p.levelCode as string, p]));
+  return rows.map((r) => {
+    const p = priceByCode.get(r.code);
+    return {
+      id: r.id,
+      code: r.code,
+      label: r.label,
+      kind: r.kind,
+      order: r.order,
+      active: r.active,
+      locked: r.locked,
+      incomeAccountCode: r.incomeAccountCode,
+      booksCostInrMinor: r.booksCostInrMinor === null ? null : Number(r.booksCostInrMinor),
+      tutorCostInrMinor: r.tutorCostInrMinor === null ? null : Number(r.tutorCostInrMinor),
+      bundleMembers: r.bundleMembers,
+      price: p
+        ? {
+            productId: p.id,
+            priceInrMinor: Number(p.priceInrMinor),
+            priceEurMinor: Number(p.priceEurMinor),
+            interval: p.interval,
+            archived: p.deletedAt !== null,
+          }
+        : null,
+    };
   });
-  return rows.map((r) => ({
-    id: r.id,
-    code: r.code,
-    label: r.label,
-    kind: r.kind,
-    order: r.order,
-    active: r.active,
-    locked: r.locked,
-    incomeAccountCode: r.incomeAccountCode,
-    booksCostInrMinor: r.booksCostInrMinor === null ? null : Number(r.booksCostInrMinor),
-    tutorCostInrMinor: r.tutorCostInrMinor === null ? null : Number(r.tutorCostInrMinor),
-    bundleMembers: r.bundleMembers,
-  }));
 }
 
 /** code → label, for the display maps client tables need. */

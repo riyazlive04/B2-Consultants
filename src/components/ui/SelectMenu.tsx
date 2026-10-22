@@ -161,6 +161,9 @@ export function SelectMenu({
         ref={triggerRef}
         type="button"
         disabled={disabled}
+        // See the note in DatePicker.tsx: aria-required is ignored on a button, so the
+        // required state of this field was announced by nothing. combobox fixes that.
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}

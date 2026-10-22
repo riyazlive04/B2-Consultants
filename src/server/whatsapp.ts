@@ -64,6 +64,8 @@ export type WhatsAppTarget = {
   pendingPaymentId?: string | null;
   agreementId?: string | null;
   bookOrderId?: string | null;
+  /** The class a reminder is about - what makes the reminder ladder de-duplicable. */
+  classSessionId?: string | null;
 };
 
 export type SendWhatsAppInput = WhatsAppTarget & {
@@ -169,6 +171,7 @@ async function writeRow(input: {
       pendingPaymentId: input.target.pendingPaymentId ?? null,
       agreementId: input.target.agreementId ?? null,
       bookOrderId: input.target.bookOrderId ?? null,
+      classSessionId: input.target.classSessionId ?? null,
     },
     select: { id: true },
   });
@@ -188,6 +191,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
       pendingPaymentId: input.pendingPaymentId,
       agreementId: input.agreementId,
       bookOrderId: input.bookOrderId,
+      classSessionId: input.classSessionId,
     } satisfies WhatsAppTarget,
   };
 

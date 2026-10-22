@@ -7,6 +7,10 @@ import { hashAgreementToken, mintAgreementToken, toOwnedBytes } from "@/lib/agre
 import { signingDeviceSchema, storedDeviceSchema, type StoredDevice } from "@/lib/device";
 import { displayWhatsappNumber, normalizeWhatsappNumber } from "@/lib/phone";
 import { sendWhatsApp } from "./whatsapp";
+import { emailSigningLink } from "./agreement-email";
+import { getAgreementWorkflow } from "./founder-config";
+import { issueSignerLinks } from "./agreement-signers";
+import { BODY_SELECT, documentReadiness, parseBodyRow } from "./agreement-body";
 
 /**
  * Shared internals for the agreement modules.
@@ -98,7 +102,16 @@ export async function issueAgreementCore(input: {
 
   const row = await prisma.agreement.findUnique({
     where: { id },
-    select: { id: true, status: true, data: true, documentNo: true, leadId: true, studentId: true },
+    select: {
+      id: true,
+      status: true,
+      data: true,
+      documentNo: true,
+      documentKind: true,
+      leadId: true,
+      studentId: true,
+      body: { select: BODY_SELECT },
+    },
   });
   if (!row) return { ok: false, error: "Agreement not found." };
   if (row.status !== "DRAFT") return { ok: false, error: "Only a draft can be issued." };
@@ -106,7 +119,28 @@ export async function issueAgreementCore(input: {
   const parsed = parseAgreementData(row.data);
   if (!parsed.ok) return { ok: false, error: `Stored fields are invalid: ${parsed.error}` };
 
-  const { token, tokenHash, expiresAt } = mintAgreementToken();
+  /**
+   * An uploaded document has to be SIGNABLE before it can go out, and the check runs here rather
+   * than only in the editor for the usual reason: the editor's answer is advisory, this one is
+   * the gate. Both parties need a signature box, every box has to be placed, and no unresolvable
+   * merge token may survive into a document somebody is about to sign.
+   *
+   * The failure is deliberately verbose - it is a list of things to go and fix, not "invalid".
+   */
+  if (row.documentKind !== "GUIDED") {
+    if (!row.body) {
+      return { ok: false, error: "This agreement has no document attached. Upload one first." };
+    }
+    const body = parseBodyRow(row.body);
+    if (!body.ok) return { ok: false, error: body.error };
+    const ready = documentReadiness(body.body);
+    if (!ready.ok) {
+      return { ok: false, error: `This document is not ready to send: ${ready.problems.join(" ")}` };
+    }
+  }
+
+  const workflow = await getAgreementWorkflow();
+  const { token, tokenHash, expiresAt } = mintAgreementToken(workflow.ttlDays);
   const now = new Date();
 
   const issued = await prisma.agreement.updateMany({
@@ -134,42 +168,117 @@ export async function issueAgreementCore(input: {
   });
 
   const url = signingUrl(token);
-  const outcome = await sendWhatsApp({
-    kind: "AGREEMENT_SEND",
-    to: parsed.data.student.phone,
-    vars: {
-      name: firstName(parsed.data.student.fullName),
-      sign_url: url,
-      sign_token: token,
-      document_no: row.documentNo,
+
+  /**
+   * TWO CHANNELS, independently reported.
+   *
+   * The founder's Console setting decides which are tried (`deliverBy`), and the outcome sentence
+   * names what actually happened on each - because "sent" and "we logged a SKIPPED row because no
+   * WATI template is bound" are completely different situations, and the second one used to look
+   * like the first on this screen.
+   */
+  const wantsWhatsApp = workflow.deliverBy !== "EMAIL";
+  const wantsEmail = workflow.deliverBy !== "WHATSAPP";
+
+  const whatsapp = wantsWhatsApp
+    ? await sendWhatsApp({
+        kind: "AGREEMENT_SEND",
+        to: parsed.data.student.phone,
+        vars: {
+          name: firstName(parsed.data.student.fullName),
+          sign_url: url,
+          sign_token: token,
+          document_no: row.documentNo,
+        },
+        sentById: session.user.id,
+        bodySummary: `Agreement ${row.documentNo} - signing link`,
+        agreementId: id,
+        leadId: row.leadId,
+        studentId: row.studentId,
+      })
+    : null;
+
+  const email =
+    wantsEmail && parsed.data.student.email
+      ? await emailSigningLink({
+          to: parsed.data.student.email,
+          name: parsed.data.student.fullName,
+          documentNo: row.documentNo,
+          signingUrl: url,
+          expiresAt,
+        })
+      : null;
+
+  const sent = !!whatsapp?.sent || !!email?.sent;
+  await recordAgreementEvent(id, sent ? "DELIVERY_SENT" : "DELIVERY_SKIPPED", {
+    meta: {
+      channels: workflow.deliverBy,
+      whatsapp: whatsapp ? { sent: whatsapp.sent, status: whatsapp.status, error: whatsapp.error ?? null } : null,
+      email: email ? { sent: email.sent, error: email.error ?? null } : null,
     },
-    sentById: session.user.id,
-    bodySummary: `Agreement ${row.documentNo} - signing link`,
-    agreementId: id,
-    leadId: row.leadId,
-    studentId: row.studentId,
   });
 
-  await recordAgreementEvent(id, outcome.sent ? "DELIVERY_SENT" : "DELIVERY_SKIPPED", {
-    meta: { status: outcome.status, error: outcome.error ?? null },
+  /**
+   * The co-signers' links go out in the same action that countersigns.
+   *
+   * Not a separate step the founder could forget: a document that asks a guardian to sign is
+   * unsignable by the student until they do, so inviting them at any other moment would mean an
+   * agreement that is "sent" and provably stuck.
+   */
+  const coSigners = await issueSignerLinks({
+    agreementId: id,
+    documentNo: row.documentNo,
+    studentName: parsed.data.student.fullName,
+    sentById: session.user.id,
+    leadId: row.leadId,
+    studentId: row.studentId,
   });
 
   revalidatePath(AGREEMENTS_PATH);
   revalidatePath(`${AGREEMENTS_PATH}/${id}`);
 
-  // The link comes back WHATEVER happened to the WhatsApp send. With WATI off, the number opted
-  // out, or the template unmapped, this response is the only place this token will ever exist -
-  // the database holds nothing but its hash.
+  // The link comes back WHATEVER happened to the sends. With WATI off, the number opted out, the
+  // template unmapped and no email on record, this response is the only place this token will ever
+  // exist - the database holds nothing but its hash.
   return {
     ok: true,
     data: {
       signingUrl: url,
-      sent: outcome.sent,
-      delivery: outcome.sent
-        ? "Signing link sent on WhatsApp."
-        : `WhatsApp did not send: ${outcome.error ?? "unknown reason"}. Copy the link below and share it yourself.`,
+      sent,
+      delivery: [
+        describeDelivery({
+          whatsapp,
+          email,
+          hasEmail: !!parsed.data.student.email,
+          wantsEmail,
+          wantsWhatsApp,
+        }),
+        // Named individually: "2 co-signers invited" is useless when one of them did not get it.
+        ...coSigners.map((c) => c.note),
+      ].join(" "),
     },
   };
+}
+
+/** One sentence naming what happened on each channel. Never "sent" when nothing left the building. */
+function describeDelivery(o: {
+  whatsapp: { sent: boolean; error?: string | null } | null;
+  email: { sent: boolean; error?: string | null } | null;
+  hasEmail: boolean;
+  wantsEmail: boolean;
+  wantsWhatsApp: boolean;
+}): string {
+  const parts: string[] = [];
+  if (o.wantsWhatsApp) {
+    parts.push(o.whatsapp?.sent ? "sent on WhatsApp" : `WhatsApp did not send (${o.whatsapp?.error ?? "unknown reason"})`);
+  }
+  if (o.wantsEmail) {
+    if (!o.hasEmail) parts.push("no email address on record");
+    else parts.push(o.email?.sent ? "emailed" : `email did not send (${o.email?.error ?? "unknown reason"})`);
+  }
+  const anySent = !!o.whatsapp?.sent || !!o.email?.sent;
+  const sentence = `Signing link: ${parts.join("; ")}.`;
+  return anySent ? sentence : `${sentence} Copy the link below and share it yourself.`;
 }
 
 // ───────────────────────────── Misc ─────────────────────────────
@@ -303,6 +412,7 @@ const TOKEN_SELECT = {
   id: true,
   documentNo: true,
   templateVersion: true,
+  documentKind: true,
   status: true,
   data: true,
   dataSha256: true,

@@ -71,12 +71,12 @@ const PUBLIC_PREFIXES = [
 ];
 
 /**
- * The sign-in screens. All three render the same `LoginForm` with different copy - `/portal` for
- * students, `/tutor` for German Note tutors - and all three must be reachable WITHOUT a session,
- * or the entry points built for people who have not signed in yet would bounce them to the one
- * that says "Internal tool".
+ * The sign-in screens. All four render the same `LoginForm` with different copy - `/portal` for
+ * students, `/tutor` for German Note tutors, `/coach` for coaches - and all four must be
+ * reachable WITHOUT a session, or the entry points built for people who have not signed in yet
+ * would bounce them to the one that says "Internal tool".
  */
-const LOGIN_PATHS = new Set(["/login", "/portal", "/tutor"]);
+const LOGIN_PATHS = new Set(["/login", "/portal", "/tutor", "/coach"]);
 
 /**
  * Stamp an anonymous visitor id on the funnel routes, so an A/B split can be STICKY.

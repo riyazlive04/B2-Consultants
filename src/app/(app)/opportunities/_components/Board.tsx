@@ -33,6 +33,7 @@ import { DialButton } from "@/components/calls/DialButton";
 import { LogOutcomeModal } from "@/components/calls/LogOutcomeModal";
 import { firstCallVerdict, firstCallLabel, type FirstCallState } from "@/lib/speed-to-lead";
 import { safeAction } from "@/lib/action-guard";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 /**
  * Band score at or above which a booked prospect reads green, on the 0-4 scale.
@@ -584,7 +585,7 @@ export default function Board({
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <Field label="Name"><TextInput kind="name" name="newName" placeholder="Full name" /></Field>
-              <Field label="Phone"><TextInput kind="phone" name="newPhone" placeholder="+91…" /></Field>
+              <Field label="Phone"><PhoneField name="newPhone" /></Field>
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">

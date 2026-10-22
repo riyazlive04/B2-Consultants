@@ -83,6 +83,30 @@ function coerceCadence(raw: unknown): WatiCadence {
     // silently start WhatsApping every paying student.
     emiPreDueDryRun: c.emiPreDueDryRun === false ? false : true,
     studentRepeatHours: num(c.studentRepeatHours, DEFAULT_CADENCE.studentRepeatHours),
+    // Class reminders - NOT `flag()`, for the same reason as studentWelcomeEnabled above: both
+    // ship OFF, so an absent key must fall to the default rather than arm itself on upgrade.
+    // Getting this wrong would arm a whole-batch broadcast the moment the app was redeployed.
+    classReminderEnabled:
+      typeof c.classReminderEnabled === "boolean" ? c.classReminderEnabled : DEFAULT_CADENCE.classReminderEnabled,
+    classReminderCoachEnabled:
+      typeof c.classReminderCoachEnabled === "boolean"
+        ? c.classReminderCoachEnabled
+        : DEFAULT_CADENCE.classReminderCoachEnabled,
+    // Fails SAFE like emiPreDueDryRun: only an explicit `false` stops rehearsing, so a
+    // corrupted settings blob can never silently start messaging a whole cohort.
+    classReminderDryRun: c.classReminderDryRun === false ? false : true,
+    // An explicitly stored [] means "no rungs", i.e. off - honoured, like emiPreDueLeadDays.
+    classReminderLeadMinutes: Array.isArray(c.classReminderLeadMinutes)
+      ? c.classReminderLeadMinutes.filter((m): m is number => typeof m === "number" && Number.isFinite(m) && m > 0)
+      : DEFAULT_CADENCE.classReminderLeadMinutes,
+    // The two class follow-ups, read exactly like the reminders above and for the same reasons:
+    // both ship OFF so an absent key must fall to the default, and the dry run fails SAFE so a
+    // corrupted blob cannot start telling students they were absent.
+    classAbsenceEnabled:
+      typeof c.classAbsenceEnabled === "boolean" ? c.classAbsenceEnabled : DEFAULT_CADENCE.classAbsenceEnabled,
+    classCatchUpEnabled:
+      typeof c.classCatchUpEnabled === "boolean" ? c.classCatchUpEnabled : DEFAULT_CADENCE.classCatchUpEnabled,
+    classFollowUpDryRun: c.classFollowUpDryRun === false ? false : true,
     maxPerRun: num(c.maxPerRun, DEFAULT_CADENCE.maxPerRun),
   };
 }

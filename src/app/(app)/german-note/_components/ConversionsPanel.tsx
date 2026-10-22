@@ -1,5 +1,6 @@
 "use client";
 
+import { PhoneField } from "@/components/ui/PhoneField";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -65,7 +66,7 @@ function ConversionFields({ c }: { c?: GnConversionRow }) {
             <TextInput kind="name" name="fullName" required defaultValue={c?.fullName} placeholder="Full name" />
           </Field>
           <Field label="Phone">
-            <TextInput kind="phone" name="phone" defaultValue={c?.phone ?? undefined} placeholder="Phone number" />
+            <PhoneField name="phone" defaultValue={c?.phone ?? ""} />
           </Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">

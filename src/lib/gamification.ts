@@ -383,7 +383,7 @@ export const DEFAULT_STUDENT_JOURNEY: StudentJourneyConfig = {
       focus: "Build a German-market CV",
       steps: [
         "Rework every bullet as Verb + what + measurable result.",
-        "Run your draft through the CV Diagnostic against a real job description.",
+        "Check it against a real German job description - mirror the keywords it asks for.",
         "Close the gaps it finds, then review the final version with your coach.",
       ],
     },

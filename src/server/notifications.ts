@@ -11,10 +11,19 @@ import type { AppRole } from "@/lib/rbac";
 import { aggEurMinor, aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
 import { parseMentions } from "@/lib/gn-mentions";
+import {
+  IN_APP_CLASS_ALERT_MINUTES,
+  alertCountdown,
+  formatClassTime,
+  isClassAlertOpen,
+} from "@/lib/class-reminder";
 import { getPendingRows } from "./finance-metrics";
 import { getRunwaySnapshot } from "./cash-metrics";
 import { getTeamGame } from "./gamification";
 import { getMyStudentPortal } from "./student-portal";
+import { getMyOpenCheckIns } from "./attendance-checkin";
+import { getMyCatchUp } from "./catch-up";
+import { getAttendanceConfig } from "./founder-config";
 import { getAgreementTaskCounts } from "./agreement-state";
 import { deliveryNotifications } from "./delivery-health";
 import { MILESTONE_LABELS } from "@/lib/labels";
@@ -64,6 +73,53 @@ function istHourNow(): number {
  * @mentions on the viewer's own posts/comments. Derived like every other
  * notification here - surfaces while it's "recent" (last 3 days), no read-state.
  */
+/**
+ * What a coach is late on: registers not taken, and sprint check-ins whose week has closed.
+ *
+ * Deliberately only two counts rather than a full read of the teaching desk - this runs on
+ * every page load for every coach, and the desk itself is one click away for the detail.
+ */
+async function coachNotifications(userId: string, today: Date): Promise<Notification[]> {
+  const items: Notification[] = [];
+  const [unmarked, checkIns] = await Promise.all([
+    prisma.classSession.count({
+      where: {
+        batch: { tutorId: userId, status: "ACTIVE" },
+        delivery: "LIVE",
+        // `now`, not `today`: `today` is IST midnight, so a class taught this morning would not
+        // have shown up as needing a register until the following day - which is precisely when
+        // the reminder stops being useful.
+        startsAt: { lt: new Date() },
+        attendance: { none: {} },
+      },
+    }),
+    prisma.sprintWeek.count({
+      where: { enrollment: { coachId: userId, status: "ACTIVE" }, status: "PENDING", weekEnd: { lt: today } },
+    }),
+  ]);
+
+  if (unmarked > 0) {
+    items.push({
+      id: "coach-registers",
+      severity: "watch",
+      title: `${unmarked} register${unmarked > 1 ? "s" : ""} still to take`,
+      body: "Classes you have taught but not yet marked. Attendance is what the drop-risk signal reads.",
+      // Tabs are addressed by index - 1 is "To mark" on the teaching desk.
+      href: "/coaching?tab=1",
+    });
+  }
+  if (checkIns > 0) {
+    items.push({
+      id: "coach-sprint",
+      severity: "watch",
+      title: `${checkIns} sprint check-in${checkIns > 1 ? "s" : ""} overdue`,
+      body: "The week has closed and the actual has not been recorded.",
+      href: "/coaching?tab=3",
+    });
+  }
+  return items;
+}
+
 async function gnEngagementNotifications(userId: string, today: Date): Promise<Notification[]> {
   const since = new Date(today.getTime() - 3 * 86400000);
   const [replies, postLikes, commentLikes, mentionPosts, mentionComments] = await Promise.all([
@@ -164,6 +220,151 @@ export const computeNotifications = cache(async (role: AppRole, userId: string) 
   return items;
 });
 
+/**
+ * "Your class starts in 25 minutes" - the in-app half of the class reminder.
+ *
+ * DERIVED, never stored. An in-app alert has no delivery to prove and no duplicate to avoid:
+ * the bell is recomputed on every page load, so a row recording that we "showed" it would be a
+ * second source of truth free to disagree with the screen. Only the WhatsApp ladder needs a
+ * memory, because a message cannot be un-sent.
+ *
+ * One function for both audiences because the fact is the same fact - a class is about to start
+ * - and only the scope and the wording differ: a student sees the classes they are seated in, a
+ * coach or tutor sees the ones they are about to teach.
+ */
+async function classAlertNotifications(
+  audience: { kind: "student"; userId: string } | { kind: "staff"; userId: string },
+): Promise<Notification[]> {
+  const now = new Date();
+  // Look up over the alert window only, and never backwards past a class that has finished:
+  // `isClassAlertOpen` makes the final call, this just keeps the query small.
+  const from = new Date(now.getTime() - 4 * 60 * 60_000);
+  const to = new Date(now.getTime() + IN_APP_CLASS_ALERT_MINUTES * 60_000);
+
+  const where =
+    audience.kind === "student"
+      ? {
+          // Both seating routes - a German Note learner has a BatchMember row and no enrollment.
+          batch: {
+            status: "ACTIVE" as const,
+            OR: [
+              { members: { some: { student: { userId: audience.userId } } } },
+              { enrollments: { some: { student: { userId: audience.userId }, status: "ACTIVE" as const } } },
+            ],
+          },
+        }
+      : { batch: { status: "ACTIVE" as const, tutorId: audience.userId } };
+
+  const sessions = await prisma.classSession.findMany({
+    where: { delivery: "LIVE", startsAt: { gte: from, lte: to }, ...where },
+    orderBy: { startsAt: "asc" },
+    take: 5,
+    select: {
+      id: true, title: true, startsAt: true, durationMins: true, joinUrl: true, delivery: true,
+      batch: { select: { name: true, line: true, id: true } },
+    },
+  });
+
+  const items: Notification[] = [];
+  for (const s of sessions) {
+    if (!isClassAlertOpen({ ...s, delivery: "LIVE" }, now, IN_APP_CLASS_ALERT_MINUTES)) continue;
+    const when = alertCountdown(s.startsAt, now);
+    const starting = s.startsAt.getTime() - now.getTime() <= 30 * 60_000;
+    items.push({
+      id: `class-${s.id}`,
+      // "watch" only once it is imminent. An hour out this is information, not a problem,
+      // and colouring it amber for two hours would teach people to ignore the colour.
+      severity: starting ? "watch" : "info",
+      title:
+        audience.kind === "student"
+          ? `${s.title} ${when}`
+          : `You are teaching ${s.title} - ${when}`,
+      body:
+        audience.kind === "student"
+          ? `${formatClassTime(s.startsAt)}${s.joinUrl ? " - the join link is on your classroom." : " - your coach will share the link."}`
+          : `${s.batch.name} - ${formatClassTime(s.startsAt)}.`,
+      href: audience.kind === "student" ? "/classroom" : "/coaching",
+    });
+  }
+  return items;
+}
+
+/**
+ * "Attendance is open - tap to check in" - the bell's copy of the check-in window.
+ *
+ * The card on the dashboard is the real control; this exists for the student who is on some
+ * other page when their coach opens the register. A window lasts minutes, so the bell is the
+ * only thing that can reach someone mid-navigation.
+ *
+ * It disappears on its own, because `getMyOpenCheckIns` only ever returns windows that are
+ * still open - and once the student has checked in it changes wording rather than vanishing,
+ * so the press has a visible consequence in the place that prompted it.
+ */
+async function openCheckInNotifications(userId: string): Promise<Notification[]> {
+  const open = await getMyOpenCheckIns(userId);
+  return open.map((c) => ({
+    id: `checkin-${c.sessionId}`,
+    severity: c.checkedIn ? ("win" as const) : ("watch" as const),
+    title: c.checkedIn ? `You are marked present for ${c.title}` : `Attendance is open for ${c.title}`,
+    body: c.checkedIn
+      ? `${c.batchName} - nothing more to do.`
+      : `${c.batchName} - tap to mark yourself present before the window closes.`,
+    href: "/dashboard",
+  }));
+}
+
+/**
+ * "You were marked absent from X" and "you still have not watched the recording".
+ *
+ * ── Why these fire on PUBLICATION, not on marking ───────────────────────────────────────
+ * `getMyCatchUp` only returns sessions whose register has been published, so this cannot tell
+ * a student about a mark their own classroom is simultaneously hiding from them. That ordering
+ * is the whole reason the publish switch exists: until a coach shows the register, the verdict
+ * is not yet the student's business, and a notification about an unviewable fact is one they
+ * can neither check nor dispute.
+ *
+ * ── Derived, like every other student alert here ────────────────────────────────────────
+ * No row records that this was shown. The bell is recomputed on each load, so it appears while
+ * the condition holds and disappears when the student watches the recording - which is the
+ * behaviour you want from a nudge and the opposite of what a stored "sent" flag would give.
+ * Only the WhatsApp half needs a memory, because a message cannot be un-sent.
+ *
+ * `IN_GRACE` is included and that is deliberate: reaching someone BEFORE the deadline is the
+ * point of telling them at all.
+ */
+async function catchUpNotifications(userId: string): Promise<Notification[]> {
+  const config = await getAttendanceConfig();
+  if (!config.absenceAlertEnabled && !config.catchUpAlertEnabled) return [];
+
+  const rows = await getMyCatchUp(userId);
+  const items: Notification[] = [];
+  for (const r of rows) {
+    const overdue = r.state === "OVERDUE";
+    // Two switches, one list. Before the grace runs out this is the absence notice; after it,
+    // it is the catch-up chase. A founder may want one without the other.
+    if (overdue && !config.catchUpAlertEnabled) continue;
+    if (!overdue && !config.absenceAlertEnabled) continue;
+
+    items.push({
+      id: `catchup-${r.sessionId}`,
+      // "watch" once it is late, "info" while there is still time - the same restraint as the
+      // class alert. Colouring a two-day-old absence amber for a week teaches people to ignore
+      // the colour.
+      severity: overdue ? "watch" : "info",
+      title: overdue
+        ? `Still to watch: ${r.sessionTitle}`
+        : `You were marked absent from ${r.sessionTitle}`,
+      body: r.recordingId
+        ? `${formatDate(r.classDateYmd)} - the recording is in your classroom. ${r.accessLabel}.${
+            r.watchedPct > 0 ? ` You are ${r.watchedPct}% through it.` : ""
+          }`
+        : `${formatDate(r.classDateYmd)} - ${r.accessLabel}.`,
+      href: "/classroom",
+    });
+  }
+  return items;
+}
+
 async function _computeNotifications(role: AppRole, userId: string): Promise<Notification[]> {
   const items: Notification[] = [];
   const today = istToday();
@@ -172,6 +373,16 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
   if (role === "STUDENT") {
     const portal = await getMyStudentPortal(userId);
     const e = portal?.primary;
+    // The class alert comes FIRST and on both exits of this branch. A German Note learner has
+    // no B2 enrollment and returns early below - they still have classes, and the first draft
+    // of this gave them community likes but not the lesson starting in ten minutes.
+    items.push(...(await classAlertNotifications({ kind: "student", userId })));
+    // Above the class alert in urgency: a class starting in an hour can be joined later, a
+    // check-in window cannot.
+    items.push(...(await openCheckInNotifications(userId)));
+    // Below the live window (which expires in minutes) and above everything else: a missed
+    // class with a recording still open is the one thing here with a closing door.
+    items.push(...(await catchUpNotifications(userId)));
     // German Note learners have no B2 enrollment - still get community engagement.
     if (!e) {
       items.push(...(await gnEngagementNotifications(userId, today)));
@@ -241,9 +452,23 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
     );
   }
 
-  // ── TUTOR: German Note only - community engagement, no business notifications ──
+  // ── COACH: their own teaching only. Explicitly branched rather than falling through to the
+  //    ADMIN/HEAD/USER block below, which would hand them CRM @mention alerts for a Contacts
+  //    screen they cannot open. ──
+  if (role === "COACH") {
+    items.push(...(await classAlertNotifications({ kind: "staff", userId })));
+    items.push(...(await coachNotifications(userId, today)));
+    const order = { risk: 0, watch: 1, win: 2, info: 3 };
+    return items.sort(
+      (a, b) => Number(!!b.escalated) - Number(!!a.escalated) || order[a.severity] - order[b.severity],
+    );
+  }
+
+  // ── TUTOR: German Note only - community engagement, plus the registers they owe ──
   if (role === "TUTOR") {
+    items.push(...(await classAlertNotifications({ kind: "staff", userId })));
     items.push(...(await gnEngagementNotifications(userId, today)));
+    items.push(...(await coachNotifications(userId, today)));
     const order = { risk: 0, watch: 1, win: 2, info: 3 };
     return items.sort(
       (a, b) => Number(!!b.escalated) - Number(!!a.escalated) || order[a.severity] - order[b.severity],

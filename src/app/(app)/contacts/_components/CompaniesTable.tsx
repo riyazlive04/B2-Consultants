@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/kit";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { createCompany, updateCompany, deleteCompany } from "@/server/contacts-actions";
 import { safeAction } from "@/lib/action-guard";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 type Row = {
   id: string;
@@ -126,7 +127,7 @@ export default function CompaniesTable({
               <TextInput name="domain" defaultValue={editing?.domain ?? ""} placeholder="example.com" />
             </Field>
             <Field label="Phone">
-              <TextInput kind="phone" name="phone" defaultValue={editing?.phone ?? ""} />
+              <PhoneField name="phone" defaultValue={editing?.phone ?? ""} />
             </Field>
             <Field label="Email">
               <TextInput kind="email" name="email" defaultValue={editing?.email ?? ""} />

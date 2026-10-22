@@ -5,6 +5,7 @@ import { requireAdmin, requireSection } from "@/lib/rbac";
 import { getGnManageData } from "@/server/german-note-metrics";
 import { getBatchCosts } from "@/server/batch-costs-metrics";
 import { getActiveLevels, getAdminLevels } from "@/server/levels";
+import { getTodayInrPerEur } from "@/lib/fx";
 import { levelOptions } from "@/lib/levels";
 import { BatchesPanel } from "../_components/BatchesPanel";
 import { MembersPanel } from "../_components/MembersPanel";
@@ -18,11 +19,12 @@ export const dynamic = "force-dynamic";
 export default async function GnManagePage() {
   await requireSection("german-note");
   await requireAdmin(); // belt and braces - management is Admin-only
-  const [{ batches, tutors, students }, batchCosts, activeLevels, adminLevels] = await Promise.all([
+  const [{ batches, tutors, students }, batchCosts, activeLevels, adminLevels, fx] = await Promise.all([
     getGnManageData(),
     getBatchCosts(),
     getActiveLevels(),
     getAdminLevels(),
+    getTodayInrPerEur(), // the ₹/€ course-fee pair on the Levels tab
   ]);
   // A batch seats a single German level (never a bundle or a coaching tier).
   const germanLevelOptions = levelOptions(activeLevels, ["GERMAN_LEVEL"]);
@@ -47,7 +49,10 @@ export default async function GnManagePage() {
           { label: "Tutors", content: <TutorsPanel tutors={tutors} /> },
           /* German levels and bundles only. The B2 coaching tiers this tab used to list as well
              now have their own section - see /programs. */
-          { label: "Levels", content: <LevelsPanel levels={adminLevels} line="GERMAN_NOTE" /> },
+          {
+            label: "Levels",
+            content: <LevelsPanel levels={adminLevels} line="GERMAN_NOTE" fxRate={Number(fx.rate)} fxStale={fx.stale} />,
+          },
           { label: "Costs", content: <BatchCostsPanel rows={batchCosts} /> },
         ]}
       />

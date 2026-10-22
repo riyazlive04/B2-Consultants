@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   FileText,
+  Hourglass,
   Loader2,
   MessageCircle,
   ShieldCheck,
@@ -14,12 +15,22 @@ import { Btn } from "@/components/ui/controls";
 import { SignaturePad, type SignatureValue } from "@/components/ui/SignaturePad";
 import { describeDevice, type SigningDevice } from "@/lib/device";
 import { declineAgreement, requestSignOtp, signAgreement } from "@/server/agreement-sign";
+import { declineAsCoSigner, requestCoSignOtp, signAsCoSigner } from "@/server/agreement-cosign";
 import { SignedCopyLinks } from "./SignedCopyLinks";
+import { SignerFields } from "./SignerFields";
 import { safeAction } from "@/lib/action-guard";
+import { validateSignerValues, type DocField, type SignerValues } from "@/lib/agreement-doc";
 
 /**
- * The student's signing ceremony, in the order a signature has to happen:
- *   read the document -> prove you hold the number -> make your mark -> declare intent.
+ * The signing ceremony, in the order a signature has to happen:
+ *   read the document -> prove you hold the number -> fill your boxes -> make your mark -> declare intent.
+ *
+ * ── ONE COMPONENT, TWO SIGNERS ──────────────────────────────────────────────────────────────
+ * The student and a co-signer (a parent or guardian) go through the identical ceremony, so this
+ * is parameterised by `mode` rather than copied. What differs between them is three server actions
+ * and some wording; what must NOT differ is the sequence - the one-time code before the signature,
+ * the required boxes before the code is spent, the intent declaration last. A second copy of this
+ * file would be a second chance to get that order wrong.
  *
  * The consent checkbox is not decoration. Under eIDAS a simple electronic signature needs the
  * signatory's intent to sign; a drawn squiggle with no declaration is a drawing.
@@ -31,16 +42,35 @@ import { safeAction } from "@/lib/action-guard";
 const STEPS = ["Review", "Verify", "Sign"] as const;
 type Step = 0 | 1 | 2 | 3; // 3 = done
 
+/** Who is signing, and therefore which endpoints and which wording. */
+export type CeremonyRole = "STUDENT" | "GUARDIAN";
+
 export function SignCeremony({
   token,
   documentNo,
   studentName,
   maskedPhone,
+  role = "STUDENT",
+  signerName,
+  inputFields = [],
+  blocking = [],
 }: {
   token: string;
   documentNo: string;
+  /** Whose agreement this is - always the student, whoever is signing. */
   studentName: string;
   maskedPhone: string;
+  role?: CeremonyRole;
+  /** The person at the keyboard. Defaults to the student. */
+  signerName?: string;
+  /** The boxes this signer has to fill: consent ticks, text, uploads. */
+  inputFields?: DocField[];
+  /**
+   * Why this signer cannot proceed yet - a guardian who has not co-signed, or who declined.
+   * Non-empty replaces the whole ceremony with the explanation: there is nothing useful they can
+   * do, and letting them draw a signature we would then refuse is worse than telling them.
+   */
+  blocking?: string[];
 }) {
   const [step, setStep] = useState<Step>(0);
   const [pending, startTransition] = useTransition();
@@ -48,6 +78,13 @@ export function SignCeremony({
   const [code, setCode] = useState("");
   const [signature, setSignature] = useState<SignatureValue | null>(null);
   const [consent, setConsent] = useState(false);
+  const [fieldValues, setFieldValues] = useState<SignerValues>({});
+
+  const whoIsSigning = signerName ?? studentName;
+  const isCoSigner = role === "GUARDIAN";
+
+  /** What this signer still has to fill. Advisory - the server checks the same thing. */
+  const unfilled = validateSignerValues(inputFields, role, fieldValues);
   const [declining, setDeclining] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   /** Localhost-only escape hatch; the server refuses to populate this anywhere else. */
@@ -61,7 +98,7 @@ export function SignCeremony({
   function sendCode() {
     setError(null);
     startTransition(async () => {
-      const res = await safeAction(() => requestSignOtp(token));
+      const res = await safeAction(() => (isCoSigner ? requestCoSignOtp(token) : requestSignOtp(token)));
       if (!res.ok) return setError(res.error);
       setDevCode(res.data?.devCode ?? null);
       setStep(1);
@@ -72,14 +109,19 @@ export function SignCeremony({
     setError(null);
     if (!signature) return setError("Please draw your signature.");
     if (!consent) return setError("Please confirm you agree to sign electronically.");
+    // Checked here so a missed consent tick costs a click rather than the one-time code.
+    if (unfilled.length > 0) return setError(unfilled[0]!.message);
+
     startTransition(async () => {
-      const res = await signAgreement({
+      const payload = {
         token,
         code,
         signature: signature.dataUrl,
         consent,
         device: signature.device,
-      });
+        fieldValues,
+      };
+      const res = isCoSigner ? await signAsCoSigner(payload) : await signAgreement(payload);
       if (!res.ok) return setError(res.error);
       setStep(3);
     });
@@ -88,26 +130,62 @@ export function SignCeremony({
   function decline() {
     setError(null);
     startTransition(async () => {
-      const res = await safeAction(() => declineAgreement(token, declineReason));
+      const res = await safeAction(() =>
+        isCoSigner ? declineAsCoSigner(token, declineReason) : declineAgreement(token, declineReason),
+      );
       if (!res.ok) return setError(res.error);
       window.location.reload();
     });
+  }
+
+  if (blocking.length > 0) {
+    return (
+      <div ref={topRef} className="rounded-card border border-warn/40 bg-surface p-8 text-center shadow-card">
+        <Hourglass size={40} className="mx-auto text-warn" />
+        <h2 className="mt-3 font-display text-h1 text-ink">Not ready for you yet</h2>
+        <ul className="mx-auto mt-3 max-w-md space-y-1 text-body text-ink-2">
+          {blocking.map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+        </ul>
+        <p className="mx-auto mt-4 max-w-md text-caption text-faint">
+          You can read {documentNo} above in the meantime. This page will let you sign as soon as it
+          is your turn - keep the link.
+        </p>
+      </div>
+    );
   }
 
   if (step === 3) {
     return (
       <div ref={topRef} className="rounded-card border border-line bg-surface p-8 text-center shadow-card">
         <CheckCircle2 size={44} className="mx-auto text-good" />
-        <h2 className="mt-3 font-display text-h1 text-ink">Agreement signed</h2>
-        <p className="mx-auto mt-2 max-w-sm text-body text-ink-2">
-          Thank you, {studentName.split(" ")[0]}. {documentNo} is now executed. Your countersigned copy is on
-          its way to you on WhatsApp - and you can take it now from here.
-        </p>
-        {/* The moment they most want the document is the moment they finish signing. The bytes are
-            already sealed by the time this screen renders (the server seals inside the same write
-            that burns the token), so the copy route is live and does not depend on the WhatsApp
-            send, which is fail-safe and may well have been skipped. */}
-        <SignedCopyLinks token={token} />
+        <h2 className="mt-3 font-display text-h1 text-ink">
+          {isCoSigner ? "Thank you - your part is signed" : "Agreement signed"}
+        </h2>
+        {isCoSigner ? (
+          /**
+           * A co-signer gets NO copy link here, and that is correct rather than mean: nothing has
+           * been sealed yet. The document is rendered and hashed in the write that records the
+           * STUDENT's signature, so until they sign there is no executed copy to hand anybody.
+           */
+          <p className="mx-auto mt-2 max-w-sm text-body text-ink-2">
+            Thank you, {whoIsSigning.split(" ")[0]}. {documentNo} now goes to {studentName.split(" ")[0]} to
+            sign. Once they have, B2 Consultants will send out the completed copy.
+          </p>
+        ) : (
+          <>
+            <p className="mx-auto mt-2 max-w-sm text-body text-ink-2">
+              Thank you, {studentName.split(" ")[0]}. {documentNo} is now executed. Your countersigned copy is
+              on its way to you - and you can take it now from here.
+            </p>
+            {/* The moment they most want the document is the moment they finish signing. The bytes
+                are already sealed by the time this screen renders (the server seals inside the same
+                write that burns the token), so the copy route is live and does not depend on the
+                WhatsApp or email send, either of which may have been skipped. */}
+            <SignedCopyLinks token={token} />
+          </>
+        )}
       </div>
     );
   }
@@ -121,8 +199,10 @@ export function SignCeremony({
           <>
             <StepHeading
               icon={<FileText size={18} />}
-              title="Review the agreement"
-              subtitle={`Read ${documentNo} above in full. When you are ready, we will send a 6-digit code to your WhatsApp number ending ${maskedPhone.slice(-4)} so we know it is you.`}
+              title={isCoSigner ? "Review the agreement" : "Review the agreement"}
+              subtitle={`Read ${documentNo} above in full${
+                isCoSigner ? ` - it is ${studentName}'s coaching agreement` : ""
+              }. When you are ready, we will send a 6-digit code to your WhatsApp number ending ${maskedPhone.slice(-4)} so we know it is you.`}
             />
             <Btn variant="primary" onClick={sendCode} busy={pending} icon={<MessageCircle size={16} />} className="mt-5 w-full sm:w-auto">
               Send me the code
@@ -191,6 +271,17 @@ export function SignCeremony({
               subtitle="Your signature will be affixed to the agreement and is mandatory."
             />
 
+            <SignerFields
+              token={token}
+              fields={inputFields}
+              values={fieldValues}
+              onChange={(next) => {
+                setFieldValues(next);
+                setError(null);
+              }}
+              disabled={pending}
+            />
+
             <div className="mt-5">
               <SignaturePad
                 onChange={(value) => {
@@ -211,8 +302,14 @@ export function SignCeremony({
                 className="mt-0.5 h-[18px] w-[18px] flex-none accent-[var(--primary)]"
               />
               <span>
-                I am {studentName}. I have read the agreement in full and I intend this electronic signature to
-                bind me to it, with the same effect as a handwritten signature.
+                I am {whoIsSigning}. I have read the agreement in full and I intend this electronic signature
+                to bind me to it, with the same effect as a handwritten signature.
+                {isCoSigner && (
+                  <>
+                    {" "}
+                    I confirm I am signing as {studentName}&apos;s parent, guardian or witness.
+                  </>
+                )}
               </span>
             </label>
 
@@ -231,7 +328,7 @@ export function SignCeremony({
                 variant="action"
                 onClick={submit}
                 busy={pending}
-                disabled={!signature || !consent}
+                disabled={!signature || !consent || unfilled.length > 0}
                 icon={<ShieldCheck size={16} />}
                 className="w-full sm:w-auto"
               >

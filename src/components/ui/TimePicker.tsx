@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { InputHTMLAttributes } from "react";
 import { Clock } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
@@ -70,6 +70,7 @@ export function TimePicker({
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const panelId = useId();
 
   const [uncontrolled, setUncontrolled] = useState<string>((defaultValue as string) ?? "");
 
@@ -141,8 +142,12 @@ export function TimePicker({
         ref={triggerRef}
         type="button"
         disabled={disabled}
+        // See the note in DatePicker.tsx: aria-required is ignored on a button, so the
+        // required state of this field was announced by nothing. combobox fixes that.
+        role="combobox"
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         aria-label={ariaLabel}
         aria-describedby={describedBy}
         aria-required={required || undefined}
@@ -160,7 +165,7 @@ export function TimePicker({
         <Clock size={size === "sm" ? 14 : 16} aria-hidden className="flex-none text-ink-3" />
       </button>
 
-      <Popover anchorRef={triggerRef} open={open} onClose={() => setOpen(false)} role="dialog" className="w-[13rem] p-2">
+      <Popover id={panelId} anchorRef={triggerRef} open={open} onClose={() => setOpen(false)} role="dialog" className="w-[13rem] p-2">
         <div className="flex gap-2">
           <div className="min-w-0 flex-1">
             <p className="px-1 pb-1 text-caption font-semibold uppercase text-ink-3">Hour</p>

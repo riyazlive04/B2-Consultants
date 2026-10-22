@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Download, ShieldCheck } from "lucide-react";
+import { Download, FileText, Paperclip, ShieldCheck } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { formatDateTimeInZone, formatInrMinor } from "@/lib/format";
 import {
@@ -12,10 +12,16 @@ import { WHATSAPP_KIND_LABELS, WHATSAPP_STATUS_LABELS } from "@/lib/whatsapp";
 import { getAgreementDetail, getMeetingAttendees } from "@/server/agreement-metrics";
 import { getInstalmentPlanConfig } from "@/server/founder-config";
 import { readStoredDevice } from "@/server/agreement-core";
+import { documentReadiness, parseBodyRow } from "@/server/agreement-body";
+import { documentNeedsCoSigner, listAgreementSigners } from "@/server/agreement-signers";
+import { listAgreementAttachments } from "@/server/agreement-attachments";
+import { SIGNER_LABELS } from "@/lib/agreement-doc";
 import { StatusBadge } from "../_components/StatusBadge";
 import { AgreementActions } from "./_components/AgreementActions";
 import { DevicePanel } from "./_components/DevicePanel";
 import { EnrolPrompt } from "./_components/EnrolPrompt";
+import { DocumentPanel } from "./_components/DocumentPanel";
+import { CoSignerPanel } from "./_components/CoSignerPanel";
 import { enrolmentState } from "@/lib/agreement-enrol";
 import { AgreementForm } from "../_components/AgreementForm";
 import { PageHeader } from "@/components/ui/kit";
@@ -23,6 +29,13 @@ import { PageHeader } from "@/components/ui/kit";
 export const dynamic = "force-dynamic";
 
 const ist = (d: Date) => formatDateTimeInZone(d, "Asia/Kolkata");
+
+/** What the header says this agreement is drawn up on. */
+const DOCUMENT_KIND_NOTE: Record<"GUIDED" | "DOCX" | "PDF", string> = {
+  GUIDED: "Guided Mode clause set",
+  DOCX: "uploaded Word document",
+  PDF: "uploaded PDF",
+};
 
 export default async function AgreementDetailPage({ params }: { params: { id: string } }) {
   await requireSection("agreements");
@@ -48,6 +61,25 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
   const isDraft = status === "DRAFT";
   const isSigned = status === "SIGNED";
 
+  /**
+   * The uploaded document, for an agreement that has one. Parsed here rather than in the panel so
+   * the readiness list the founder reads is computed by the SAME function `issueAgreement` gates
+   * on - the screen must never say "ready to send" about something the server would refuse.
+   */
+  const [signers, attachments] = await Promise.all([
+    listAgreementSigners(row.id),
+    listAgreementAttachments(row.id),
+  ]);
+
+  const parsedBody = row.body ? parseBodyRow(row.body) : null;
+  const docBody = parsedBody?.ok ? parsedBody.body : null;
+  const docProblems = docBody
+    ? (() => {
+        const ready = documentReadiness(docBody);
+        return ready.ok ? [] : ready.problems;
+      })()
+    : [];
+
   return (
     <div className="w-full space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -55,7 +87,9 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
           back={{ href: "/agreements", label: "Agreements" }}
           title={row.documentNo}
           titleSuffix={<StatusBadge status={status} />}
-          subtitle={`${data.student.fullName} · ${data.batch.number} · starts ${formatGermanDate(data.batch.startDate)} · template ${row.templateVersion}`}
+          subtitle={`${data.student.fullName} · ${data.batch.number} · starts ${formatGermanDate(
+            data.batch.startDate,
+          )} · ${DOCUMENT_KIND_NOTE[row.documentKind]}`}
         />
         <a
           href={`/api/agreements/${row.id}/pdf?download=1`}
@@ -100,32 +134,67 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
         />
       )}
 
-      {/* Integrity - the two hashes, and why they are different things. */}
-      <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-        <h2 className="mb-3 flex items-center gap-2 font-display text-h2 font-semibold">
-          <ShieldCheck size={18} className="text-accent" /> Integrity
-        </h2>
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Content hash (reproducible)</dt>
-            <dd className="mt-1 break-all font-mono text-xs">{row.dataSha256}</dd>
-            <p className="mt-1 text-xs text-muted">
-              SHA-256 of the agreed terms + template version. Printed on every page.
-            </p>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Sealed PDF hash</dt>
-            <dd className="mt-1 break-all font-mono text-xs">
-              {row.pdfSha256 ?? <span className="font-sans text-muted">Not sealed until signed</span>}
-            </dd>
-            <p className="mt-1 text-xs text-muted">
-              {row.pdfSha256
-                ? `SHA-256 of the ${row.pdfSize?.toLocaleString()} stored bytes. Taken once, at signing.`
-                : "The PDF is rendered and hashed at the moment the student signs."}
-            </p>
-          </div>
-        </dl>
-      </div>
+
+      <DocumentPanel
+        agreementId={row.id}
+        isDraft={isDraft}
+        documentKind={row.documentKind}
+        body={docBody}
+        bodyError={parsedBody && !parsedBody.ok ? parsedBody.error : null}
+        templateName={row.body?.template?.name ?? null}
+        templateLabel={row.body?.templateLabel ?? null}
+        problems={docProblems}
+      />
+
+      <CoSignerPanel
+        agreementId={row.id}
+        isDraft={isDraft}
+        required={!!docBody && documentNeedsCoSigner(docBody.fields)}
+        signers={signers.map((s) => ({
+          id: s.id,
+          name: s.name,
+          phone: s.phone,
+          email: s.email,
+          signedAt: s.signedAt,
+          declinedAt: s.declinedAt,
+          declineReason: s.declineReason,
+        }))}
+      />
+
+      {attachments.length > 0 && (
+        <div className="rounded-card border border-line bg-surface p-5 shadow-card">
+          <h2 className="mb-1 flex items-center gap-2 font-display text-h2 font-semibold">
+            <Paperclip size={18} className="text-accent" /> Files from the signers
+          </h2>
+          <p className="mb-3 text-xs text-muted">
+            Uploaded into the document&apos;s file boxes during a signing ceremony. Each one&apos;s SHA-256
+            is on the audit trail, so a file can be shown to be the one that was uploaded.
+          </p>
+          <ul className="space-y-2">
+            {attachments.map((a) => (
+              <li
+                key={a.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-field border border-line bg-surface-2 px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{a.filename}</p>
+                  <p className="truncate text-xs text-muted">
+                    {SIGNER_LABELS[a.signerRole as keyof typeof SIGNER_LABELS] ?? a.signerRole} ·{" "}
+                    {(a.size / 1024).toFixed(0)} KB · {ist(a.uploadedAt)}
+                  </p>
+                  <p className="mt-0.5 break-all font-mono text-[11px] text-muted">{a.sha256}</p>
+                </div>
+                <a
+                  href={`/api/agreements/${row.id}/attachments/${a.id}`}
+                  className="inline-flex h-9 flex-none items-center gap-1.5 rounded-btn border border-line px-3 text-sm font-medium transition-colors hover:border-primary hover:text-primary"
+                >
+                  <Download size={14} /> Download
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
@@ -137,22 +206,27 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
                 : "Rendered live from the fields below - this is what the student will read."}
             </p>
           </div>
+          {/*
+            iOS and most Android browsers refuse to render a PDF inside an iframe. The frame was
+            therefore 820px of empty grey on every phone - a third of the page saying nothing.
+            On small screens it is not rendered at all and the link below becomes the control; on
+            desktop, where the frame works, the link stays as the escape hatch it always was.
+          */}
           <iframe
             src={`/api/agreements/${row.id}/pdf`}
             title={`Agreement ${row.documentNo}`}
-            className="h-[820px] w-full bg-surface-2"
+            className="hidden h-[820px] w-full bg-surface-2 sm:block"
           />
-          {/* iOS and most Android browsers refuse to render a PDF inside an iframe - the founder on
-              a phone gets a blank panel and concludes the preview is broken. The student's signing
-              page has carried this escape hatch since day one; this screen was the one that didn't. */}
-          <div className="border-t border-line px-4 py-2.5 text-center">
+          <div className="border-t border-line px-4 py-3 text-center">
             <a
               href={`/api/agreements/${row.id}/pdf`}
               target="_blank"
               rel="noreferrer"
-              className="text-xs font-medium text-primary hover:underline"
+              className="inline-flex h-10 items-center gap-1.5 rounded-btn border border-line px-4 text-sm font-medium transition-colors hover:border-primary hover:text-primary sm:h-auto sm:border-0 sm:px-0 sm:text-xs sm:hover:underline"
             >
-              Not showing? Open the PDF in a new tab
+              <FileText size={15} className="sm:hidden" aria-hidden />
+              <span className="sm:hidden">Open the document</span>
+              <span className="hidden sm:inline">Not showing? Open the PDF in a new tab</span>
             </a>
           </div>
         </div>
@@ -198,6 +272,30 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
             </dl>
           </div>
 
+        </div>
+      </div>
+
+      {/*
+        ORDER IS THE POINT OF THIS PAGE.
+        Somebody opening an agreement wants the document and its terms. What they got third was
+        two 64-character hashes, then the device records, the trail and the message log - roughly
+        half the page, every time, for facts that matter on the day of a dispute and on no other.
+        All of it is still here in full, folded, below the thing itself.
+
+        Open by default ONLY when something is wrong (a decline): a page that hides a problem is
+        worse than one that buries a hash.
+      */}
+      <details className="rounded-card border border-line bg-surface shadow-card" open={!!row.declinedAt}>
+        <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-5 py-4 font-display text-h2 font-semibold">
+          <ShieldCheck size={18} className="text-accent" aria-hidden /> Audit &amp; integrity
+          <span className="ml-auto text-xs font-normal text-muted">
+            {row.events.length} event{row.events.length === 1 ? "" : "s"}
+            {row.pdfSha256 ? " · sealed" : ""}
+            {row.tsAuthority ? " · timestamped" : ""}
+          </span>
+        </summary>
+
+        <div className="grid gap-6 border-t border-line p-5 lg:grid-cols-2">
           <DevicePanel
             title="Signer's device"
             device={readStoredDevice(row.signerDevice)}
@@ -252,8 +350,13 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
               </ul>
             </div>
           )}
+
+          <div className="lg:col-span-2">
+            <h3 className="mb-3 font-display text-sm font-bold">Integrity</h3>
+            <IntegrityPanel row={row} isSigned={isSigned} />
+          </div>
         </div>
-      </div>
+      </details>
 
       {isDraft && (
         <div className="space-y-3">
@@ -270,6 +373,83 @@ export default async function AgreementDetailPage({ params }: { params: { id: st
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The two hashes, and the third-party timestamp - the forensic record.
+ *
+ * Pulled out of the page body and into the folded "Audit & integrity" section. It is the most
+ * technical thing on the screen and was occupying the third slot; a reader checking a contract
+ * does not start with a SHA-256, and a reader who wants one knows to look for it.
+ */
+function IntegrityPanel({
+  row,
+  isSigned,
+}: {
+  row: NonNullable<Awaited<ReturnType<typeof getAgreementDetail>>>;
+  isSigned: boolean;
+}) {
+  return (
+<dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">Content hash (reproducible)</dt>
+          <dd className="mt-1 break-all font-mono text-xs">{row.dataSha256}</dd>
+          <p className="mt-1 text-xs text-muted">
+            SHA-256 of the agreed terms + template version. Printed on every page.
+          </p>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">Sealed PDF hash</dt>
+          <dd className="mt-1 break-all font-mono text-xs">
+            {row.pdfSha256 ?? <span className="font-sans text-muted">Not sealed until signed</span>}
+          </dd>
+          <p className="mt-1 text-xs text-muted">
+            {row.pdfSha256
+              ? `SHA-256 of the ${row.pdfSize?.toLocaleString()} stored bytes. Taken once, at signing.`
+              : "The PDF is rendered and hashed at the moment the student signs."}
+          </p>
+        </div>
+        {/*
+          The one claim on this record that B2 is not the source of.
+          The other two hashes prove "what was agreed" and "the file is untouched" - but both are
+          assertions kept in B2's own database. A timestamp token is a third party attesting that
+          these exact bytes existed at a moment in time, which is the half B2 cannot assert about
+          itself. Shown whenever the agreement is sealed, including when it is absent, because
+          "not timestamped" and "we tried and the authority was down" are different facts.
+        */}
+        {isSigned && (
+          <div className="sm:col-span-2">
+            <dt className="text-xs uppercase tracking-wide text-muted">Trusted timestamp</dt>
+            {row.tsAuthority ? (
+              <>
+                <dd className="mt-1 text-sm">
+                  Attested by <span className="font-medium">{row.tsAuthority}</span>
+                  {row.tsGenTime ? ` at ${ist(row.tsGenTime)}` : ""}
+                </dd>
+                <p className="mt-1 text-xs text-muted">
+                  An RFC 3161 token over the sealed PDF hash, stored exactly as the authority
+                  returned it. Verify it with{" "}
+                  <code className="font-mono">openssl ts -verify</code> against their certificate -
+                  it holds without reference to anything of B2&apos;s.
+                </p>
+                <a
+                  href={`/api/agreements/${row.id}/timestamp`}
+                  className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-btn border border-line px-3 text-xs font-medium transition-colors hover:border-primary hover:text-primary"
+                >
+                  <Download size={13} /> Download the token (.tsr)
+                </a>
+              </>
+            ) : (
+              <dd className="mt-1 text-sm text-muted">
+                {row.tsError
+                  ? `Not timestamped - the last attempt failed: ${row.tsError}. The daily sweep retries it.`
+                  : "Not timestamped. Set AGREEMENT_TSA_URL to have an authority attest to sealed agreements."}
+              </dd>
+            )}
+          </div>
+        )}
+      </dl>
   );
 }
 

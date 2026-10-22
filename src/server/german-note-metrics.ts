@@ -15,6 +15,17 @@ import type { AppRole } from "@/lib/rbac";
  * empty state (isParticipant stays false).
  */
 
+/**
+ * EVERY read in this file is about GERMAN NOTE's cohorts, and `Batch` is one table for both
+ * business lines (ER v2 Track A unified `GnBatch` into it, with `line` as the discriminator).
+ * These queries predate there being any way to create a B2 batch, so they filtered on nothing
+ * and would have counted a coaching cohort as a German Note one the moment one existed - in the
+ * batch count on the home tile, in the dashboard cards, and in the manage list.
+ *
+ * The B2 side has its own screen now (Students → Batches), so the line has to be said out loud.
+ */
+const GN_BATCH = { line: "GERMAN_NOTE" } as const;
+
 export type GnAccess = {
   isAdmin: boolean;
   isTutor: boolean;
@@ -200,15 +211,15 @@ export type GnBatchDetail = {
  */
 export const getGnHomeSnapshot = cache(async () => {
   const [activeBatches, learners, upcoming, byLevel] = await Promise.all([
-    prisma.batch.count({ where: { status: "ACTIVE" } }),
-    prisma.batchMember.count({ where: { batch: { status: "ACTIVE" } } }),
+    prisma.batch.count({ where: { ...GN_BATCH, status: "ACTIVE" } }),
+    prisma.batchMember.count({ where: { batch: { ...GN_BATCH, status: "ACTIVE" } } }),
     prisma.classSession.findMany({
-      where: { startsAt: { gte: new Date() }, batch: { status: "ACTIVE" } },
+      where: { startsAt: { gte: new Date() }, batch: { ...GN_BATCH, status: "ACTIVE" } },
       orderBy: { startsAt: "asc" },
       take: 5,
       select: { title: true, startsAt: true, batch: { select: { name: true } } },
     }),
-    prisma.batch.groupBy({ by: ["level"], where: { status: "ACTIVE" }, _count: { _all: true } }),
+    prisma.batch.groupBy({ by: ["level"], where: { ...GN_BATCH, status: "ACTIVE" }, _count: { _all: true } }),
   ]);
   return {
     activeBatches,
@@ -230,7 +241,7 @@ export const getGnAccess = cache(async (role: AppRole, userId: string): Promise<
     return { isAdmin: false, isTutor: false, isViewer: true, isParticipant: true, memberBatchIds: [], tutorBatchIds: [] };
   }
   if (role === "TUTOR") {
-    const batches = await prisma.batch.findMany({ where: { tutorId: userId }, select: { id: true } });
+    const batches = await prisma.batch.findMany({ where: { ...GN_BATCH, tutorId: userId }, select: { id: true } });
     return {
       isAdmin: false,
       isTutor: true,
@@ -506,11 +517,14 @@ export const getGnOverview = cache(async (role: AppRole, userId: string) => {
       mentionCandidates: [] as GnMentionCandidate[],
     };
   }
-  const where = access.isAdmin || access.isViewer
-    ? {}
-    : access.isTutor
-      ? { tutorId: userId }
-      : { id: { in: access.memberBatchIds } };
+  const where = {
+    ...GN_BATCH,
+    ...(access.isAdmin || access.isViewer
+      ? {}
+      : access.isTutor
+        ? { tutorId: userId }
+        : { id: { in: access.memberBatchIds } }),
+  };
   const isLearner = !access.isAdmin && !access.isViewer && !access.isTutor;
   const [batches, feed, leaderboard, mentionCandidates, myWatches, upcoming] = await Promise.all([
     prisma.batch.findMany({
@@ -689,6 +703,7 @@ export type GnStudentOption = {
 export const getGnManageData = cache(async () => {
   const [batches, tutors, students] = await Promise.all([
     prisma.batch.findMany({
+      where: GN_BATCH,
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       include: {
         ...BATCH_CARD_INCLUDE,

@@ -2,7 +2,9 @@ import "server-only";
 import { cache } from "react";
 import type { BatchLine } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { capacityBand, capacityLabel } from "@/lib/batch";
+import { capacityBand, capacityLabel, levelFitsBatchLine } from "@/lib/batch";
+import { toDateInputValue } from "@/lib/dates";
+import { getLevels } from "./levels";
 
 /**
  * Batch reads - the unified cohort model (ER v2 Track A).
@@ -24,6 +26,7 @@ export type BatchRow = {
   startDate: Date | null;
   endDate: Date | null;
   targetStrength: number;
+  notes: string | null;
   /** German Note roster (BatchMember) + B2 seats (Enrollment) - the two ways in. */
   filled: number;
   capacity: ReturnType<typeof capacityBand>;
@@ -57,6 +60,7 @@ export const listBatches = cache(
         startDate: true,
         endDate: true,
         targetStrength: true,
+        notes: true,
         tutor: { select: { name: true } },
         _count: { select: { members: true, enrollments: true } },
       },
@@ -77,6 +81,7 @@ export const listBatches = cache(
         startDate: b.startDate,
         endDate: b.endDate,
         targetStrength: b.targetStrength,
+        notes: b.notes,
         filled,
         capacity: capacityBand(filled, b.targetStrength),
         capacityLabel: capacityLabel(filled, b.targetStrength),
@@ -153,3 +158,76 @@ export const batchRoster = cache(async (batchId: string) => {
     })),
   };
 });
+
+/**
+ * ── THE BATCH BOARD: everything one line's cohort screen needs, serializable ──────────
+ *
+ * The write path (`upsertBatch`) has been line-aware since the ER-v2 unification, but nothing
+ * ever called it: German Note kept its own panel, and the B2 side had no cohort screen at all,
+ * so there was no way to create a coaching batch in the app. This is the read behind that screen.
+ *
+ * Dates come out as `YYYY-MM-DD` strings and `BigInt` never appears, because every field here
+ * crosses to a client component and feeds a date input directly.
+ */
+export type BatchBoardRow = {
+  id: string;
+  code: string | null;
+  name: string;
+  level: string;
+  /** The catalogue's own words for the level, falling back to the stored code. */
+  levelLabel: string;
+  status: "ACTIVE" | "ARCHIVED";
+  leadId: string | null;
+  leadName: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  targetStrength: number;
+  filled: number;
+  capacity: ReturnType<typeof capacityBand>;
+  capacityLabel: string;
+  /** Carried so the edit form re-submits what is stored instead of blanking it. */
+  notes: string | null;
+};
+
+export async function getBatchBoard(line: BatchLine): Promise<{
+  rows: BatchBoardRow[];
+  /** Active levels this line's batches may seat - the guard `levelFitsBatchLine` enforces. */
+  levelOptions: { value: string; label: string }[];
+  /** Who can lead a cohort: active team accounts, never a student login. */
+  leadOptions: { value: string; label: string }[];
+}> {
+  const [batches, levels, leads] = await Promise.all([
+    listBatches({ line }),
+    getLevels(),
+    prisma.user.findMany({
+      where: { status: "ACTIVE", role: { not: "STUDENT" } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, email: true, role: true },
+    }),
+  ]);
+  const labelOf = (code: string) => levels.find((l) => l.code === code)?.label ?? code;
+
+  return {
+    rows: batches.map((b) => ({
+      id: b.id,
+      code: b.code,
+      name: b.name,
+      level: b.level,
+      levelLabel: labelOf(b.level),
+      status: b.status,
+      leadId: b.tutorId,
+      leadName: b.tutorName,
+      startDate: b.startDate ? toDateInputValue(b.startDate) : null,
+      endDate: b.endDate ? toDateInputValue(b.endDate) : null,
+      targetStrength: b.targetStrength,
+      filled: b.filled,
+      capacity: b.capacity,
+      capacityLabel: b.capacityLabel,
+      notes: b.notes,
+    })),
+    levelOptions: levels
+      .filter((l) => l.active && levelFitsBatchLine(l.kind, line))
+      .map((l) => ({ value: l.code, label: l.label })),
+    leadOptions: leads.map((u) => ({ value: u.id, label: `${u.name} · ${u.role.toLowerCase()}` })),
+  };
+}

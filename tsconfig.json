@@ -32,17 +32,23 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    // ONE GLOB, plus the canonical dir - not a list of every build directory anyone has used.
+    //
+    // This was eleven hard-coded entries (".next-verify", ".next-uiverify", ".next-verify2",
+    // ".next-dev-verify", ".next-v", ".next-prod" and more), because production builds run
+    // out-of-band into a separate dist dir: the dev server owns ".next", and a bare build
+    // corrupts it. Nine of those directories no longer existed, and TypeScript reports a
+    // missing include path as TS6053 - so every typecheck opened with nine errors, which is
+    // how a real one gets scrolled past. It very nearly hid a live error during this change.
+    //
+    // The glob matches whatever dist dir a build actually used, including ones nobody has
+    // invented yet, and stays silent when none exist. ".next/types" is ALSO listed because
+    // `next lint` and `next build` re-add it to this array whenever it is absent - naming it
+    // here is what stops that churn from rebuilding the eleven-entry list all over again.
+    // Keep this to two entries: if a tool appends another, delete it, the glob has it.
+    ".next*/types/**/*.ts",
     ".next/types/**/*.ts",
-    ".next-verify/types/**/*.ts",
-    ".next-build/types/**/*.ts",
-    ".next-uiverify/types/**/*.ts",
-    ".next-prod/types/**/*.ts",
-    ".next-verify2/types/**/*.ts",
-    ".next-verify3/types/**/*.ts",
-    ".next-dev-verify/types/**/*.ts",
-    ".next-v/types/**/*.ts",
-    ".next-local/types/**/*.ts",
-    ".next-localdemo/types/**/*.ts",
+    ".next-verify/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

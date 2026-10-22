@@ -6,6 +6,7 @@ import {
   effectiveAgreementStatus,
   type AgreementData,
 } from "@/lib/agreement";
+import { BODY_SELECT } from "./agreement-body";
 
 /**
  * Read side of the agreements section.
@@ -23,6 +24,9 @@ const LIST_SELECT = {
   documentNo: true,
   status: true,
   templateVersion: true,
+  /// WHICH KIND of document this is - guided clause set, uploaded Word file, uploaded PDF. Thin
+  /// enough for a list query; the body itself is a separate row and never rides along.
+  documentKind: true,
   data: true,
   createdAt: true,
   issuedAt: true,
@@ -81,12 +85,23 @@ export async function getAgreementDetail(id: string) {
       ...LIST_SELECT,
       dataSha256: true,
       pdfSize: true,
+      // The trusted timestamp. Four thin columns, never the token's bytes in a list query - the
+      // detail screen shows the authority and the time, and the token has its own download route.
+      tsAuthority: true,
+      tsGenTime: true,
+      tsError: true,
       founderSignedAt: true,
       founderDevice: true,
       signerDevice: true,
       declinedAt: true,
       voidedAt: true,
       events: { orderBy: { createdAt: "asc" } },
+      /**
+       * The uploaded body, WITHOUT its bytes (`BODY_SELECT`). The detail screen needs the blocks
+       * and the fields to show the editor and the readiness checks; nothing on that page needs
+       * the original file, which is served on demand by its own route.
+       */
+      body: { select: { ...BODY_SELECT, template: { select: { name: true } } } },
       whatsappMessages: {
         select: { id: true, kind: true, status: true, error: true, createdAt: true },
         orderBy: { createdAt: "desc" },

@@ -9,6 +9,7 @@ import { formatDate, formatInrMinor } from "@/lib/format";
 import { effectiveAgreementStatus } from "@/lib/agreement";
 import { getAgreementCounts, listAgreements } from "@/server/agreement-metrics";
 import { StatusBadge } from "./_components/StatusBadge";
+import { AgreementNav } from "./_components/AgreementNav";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
@@ -35,6 +36,8 @@ export default async function AgreementsPage() {
           </Link>
         }
       />
+
+      <AgreementNav />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard

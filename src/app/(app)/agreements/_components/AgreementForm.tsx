@@ -23,6 +23,8 @@ import { fillFromAttendee } from "@/lib/attendee-fill";
 import type { MeetingAttendee } from "@/server/agreement-metrics";
 import { formatInrMinor, majorStringToMinor, minorToMajorString } from "@/lib/format";
 import { createAgreement, updateAgreement } from "@/server/agreement-actions";
+import { DocumentChooser, type UsableTemplate } from "./DocumentChooser";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 /**
  * The founder's field form. Everything the master document leaves variable, and nothing else -
@@ -90,6 +92,7 @@ export function AgreementForm({
   filled,
   instalmentPlans,
   attendees = [],
+  templates,
 }: {
   initial: AgreementData;
   mode: Mode;
@@ -105,10 +108,27 @@ export function AgreementForm({
   instalmentPlans?: InstalmentPlanConfig;
   /** Everybody who has sat through a discovery call - what the name box suggests. */
   attendees?: MeetingAttendee[];
+  /**
+   * The uploaded templates this draft could be drawn up on (create mode only).
+   *
+   * Empty means the founder has not uploaded any, and the chooser is not shown at all - the
+   * Guided Mode clause set is the default and always has been, so an app with no templates looks
+   * exactly as it did before this feature existed.
+   */
+  templates?: UsableTemplate[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * WHICH DOCUMENT this agreement is drawn up on. `null` is the Guided Mode clause set.
+   *
+   * Only offered while creating: changing it afterwards means attaching a different document to
+   * an existing draft, which is the detail screen's job (and has a confirmation, because it
+   * replaces the contract body).
+   */
+  const [templateId, setTemplateId] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState(initial.student.fullName);
   const [address, setAddress] = useState(initial.student.address);
@@ -387,7 +407,12 @@ export function AgreementForm({
     startTransition(async () => {
       const res =
         mode.kind === "create"
-          ? await createAgreement({ data, leadId: mode.leadId, studentId: mode.studentId })
+          ? await createAgreement({
+              data,
+              leadId: mode.leadId,
+              studentId: mode.studentId,
+              templateId,
+            })
           : await updateAgreement(mode.id, data);
       if (!res.ok) {
         setError(res.error);
@@ -404,6 +429,10 @@ export function AgreementForm({
 
   return (
     <form onSubmit={submit} className="space-y-6">
+      {mode.kind === "create" && templates && templates.length > 0 && (
+        <DocumentChooser templates={templates} value={templateId} onChange={setTemplateId} />
+      )}
+
       {/* What the CRM answered, and what it couldn't. The founder should re-type only the second
           list - everything else is already on the record and re-asking for it is the bug this
           redesign exists to kill. */}
@@ -471,8 +500,10 @@ export function AgreementForm({
               emptyHint="No call on file under that name - it will be used exactly as typed."
             />
           </Field>
-          <Field label="WhatsApp number" hint="With country code. The signing link and code both go here.">
-            <TextInput kind="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+91 98765 43210" />
+          <Field label="WhatsApp number" hint="The signing link and code both go here.">
+            {/* Controlled: the form holds `phone` itself, so no `name` - a hidden input would
+                submit a second field of the same name alongside this state. */}
+            <PhoneField defaultValue={phone} onChange={setPhone} required />
           </Field>
           <div className="sm:col-span-2">
             <Field label="Postal address" hint="Printed in the agreement header (§2).">

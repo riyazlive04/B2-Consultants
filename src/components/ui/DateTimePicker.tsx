@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { InputHTMLAttributes } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 import { ControlSize, fieldButtonCls, Popover, useControlProps } from "./field-base";
@@ -84,6 +84,7 @@ export function DateTimePicker({
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const panelId = useId();
 
   const [uncontrolled, setUncontrolled] = useState<string>((defaultValue as string) ?? "");
 
@@ -168,8 +169,12 @@ export function DateTimePicker({
         ref={triggerRef}
         type="button"
         disabled={disabled}
+        // See the note in DatePicker.tsx: aria-required is ignored on a button, so the
+        // required state of this field was announced by nothing. combobox fixes that.
+        role="combobox"
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         aria-label={ariaLabel}
         aria-describedby={describedBy}
         aria-required={required || undefined}
@@ -186,7 +191,7 @@ export function DateTimePicker({
         <CalendarClock size={size === "sm" ? 14 : 16} aria-hidden className="flex-none text-ink-3" />
       </button>
 
-      <Popover anchorRef={triggerRef} open={open} onClose={() => setOpen(false)} role="dialog" className="w-[23rem] p-2">
+      <Popover id={panelId} anchorRef={triggerRef} open={open} onClose={() => setOpen(false)} role="dialog" className="w-[23rem] p-2">
         <div className="flex gap-2">
           {/* calendar */}
           <div className="min-w-0 flex-1">
@@ -227,7 +232,19 @@ export function DateTimePicker({
                     key={dayKey(d)}
                     type="button"
                     disabled={off}
-                    aria-selected={isSel || undefined}
+                    /**
+                     * `aria-pressed`, not `aria-selected`.
+                     *
+                     * `aria-selected` is only supported on gridcell/option/row/tab/treeitem.
+                     * DatePicker and MonthPicker earn it by being full `role="grid"` widgets
+                     * with roving-tabindex arrow-key navigation; THIS calendar has no grid
+                     * markup and no arrow keys, so claiming `role="gridcell"` here would
+                     * promise a navigable grid that does not exist - trading a small defect
+                     * for a larger one. `aria-pressed` is valid on a button, is actually
+                     * announced, and describes what this control really is until this picker
+                     * is brought up to the other two.
+                     */
+                    aria-pressed={isSel || undefined}
                     aria-current={isToday ? "date" : undefined}
                     onClick={() => pickDay(d)}
                     className={[

@@ -41,6 +41,10 @@ const ROLE_COPY: Record<AppRole, { title: string; blurb: string }> = {
     title: "Tutor",
     blurb: "This is your German Note home - your batches, recordings and the community.",
   },
+  COACH: {
+    title: "Coach",
+    blurb: "This is your teaching desk - the batches you run, the register to take and your students' sprints.",
+  },
 };
 
 function onboardingKey(userId: string): string {
@@ -83,7 +87,14 @@ export function OnboardingWalkthrough({
         // Same idiom sections.ts's own resolveSections() uses: only the `console`
         // entry carries `locked`, so the union type doesn't have the key on the rest.
         const locked = "locked" in s && s.locked === true;
-        return !locked && s.key !== "guide" && (s.roles as readonly AppRole[]).includes(role);
+        // A code-hidden section (cv-check, ledger, automation) is off the nav and refused by
+        // route, so a welcome tour that offered it would hand a brand-new user a dead end.
+        // The default is what matters here: this runs on the client off the static catalogue,
+        // not the founder's config, and the tour is a four-item teaser, not the nav.
+        const hidden = "hidden" in s && s.hidden === true;
+        return (
+          !locked && !hidden && s.key !== "guide" && (s.roles as readonly AppRole[]).includes(role)
+        );
       }).slice(0, 4),
     [role],
   );

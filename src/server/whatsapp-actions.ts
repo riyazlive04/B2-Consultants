@@ -322,6 +322,17 @@ function parseLeadDays(raw: FormDataEntryValue | null): number[] {
   return [...new Set(list)].sort((a, b) => b - a);
 }
 
+/**
+ * Class-reminder rungs. Like `parseLeadDays` and unlike `parseLeadWindows`, a deliberately
+ * CLEARED box means "no rungs" - i.e. off - rather than "use the defaults", so an admin can
+ * switch the touchpoint off from the form instead of only from the toggle beside it.
+ */
+function parseClassLeadWindows(raw: FormDataEntryValue | null): number[] {
+  if (typeof raw !== "string") return DEFAULT_CADENCE.classReminderLeadMinutes;
+  if (!raw.trim()) return [];
+  return parseDurationListMinutes(raw);
+}
+
 /** Save the editable (non-secret) WATI settings from the settings form. */
 export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionResult> {
   const session = await requireAdmin();
@@ -367,6 +378,19 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
     // would fail the other way: one missing input and every student gets a real message.
     emiPreDueDryRun: !(form.get("emiPreDueLive") === "on" || form.get("emiPreDueLive") === "true"),
     studentRepeatHours: num(form, "studentRepeatHours", DEFAULT_CADENCE.studentRepeatHours),
+    classReminderEnabled: on("classReminderEnabled"),
+    classReminderCoachEnabled: on("classReminderCoachEnabled"),
+    // Inverted exactly like emiPreDueLive above: the form asks "send for REAL?", so an
+    // unchecked box - or a form that never renders the field - resolves to a rehearsal. A
+    // `dryRun` checkbox would fail the other way, and this one fans out to a whole cohort.
+    classReminderDryRun: !(form.get("classReminderLive") === "on" || form.get("classReminderLive") === "true"),
+    classReminderLeadMinutes: parseClassLeadWindows(form.get("classReminderLead")),
+    classAbsenceEnabled: on("classAbsenceEnabled"),
+    classCatchUpEnabled: on("classCatchUpEnabled"),
+    // Inverted for the third time, for the third time on purpose - see emiPreDueLive above.
+    // One shared rehearsal switch for both class follow-ups: they fire off the same facts a few
+    // hours apart, and "am I rehearsing?" should not have two answers.
+    classFollowUpDryRun: !(form.get("classFollowUpLive") === "on" || form.get("classFollowUpLive") === "true"),
     maxPerRun: num(form, "maxPerRun", DEFAULT_CADENCE.maxPerRun),
   };
 

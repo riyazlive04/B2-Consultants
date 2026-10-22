@@ -862,3 +862,143 @@ tbody tr:hover {
   .xp-fill { transition: none; }
   * { scroll-behavior: auto !important; }
 }
+
+/* ───────────────────────── The agreement document editor ─────────────────────────
+ *
+ * The contenteditable page in the template/agreement designer. It is typeset to echo what the
+ * PDF renderer actually produces - the same heading colour and hierarchy, a justified body, an
+ * A4-ish measure - so that editing the document looks like the document, rather than like a form
+ * that happens to contain one.
+ *
+ * These have to be global rules: the content inside a contenteditable is written by the browser
+ * (and by `blocksToHtml`), so there is no React tree to hang utility classes off.
+ */
+.agreement-doc {
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.agreement-doc > * + * {
+  margin-top: 0.75em;
+}
+.agreement-doc h1,
+.agreement-doc h2,
+.agreement-doc h3 {
+  color: var(--primary);
+  font-family: var(--font-display), inherit;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.agreement-doc h1 {
+  font-size: 1.6rem;
+  border-bottom: 1.4px solid var(--primary);
+  padding-bottom: 0.25rem;
+  margin-top: 1.2em;
+}
+.agreement-doc h2 {
+  font-size: 1.2rem;
+  margin-top: 1.4em;
+}
+.agreement-doc h3 {
+  font-size: 1.02rem;
+  margin-top: 1.2em;
+}
+.agreement-doc p {
+  text-align: justify;
+}
+.agreement-doc ul,
+.agreement-doc ol {
+  padding-left: 1.5rem;
+}
+.agreement-doc ul {
+  list-style: disc;
+}
+.agreement-doc ol {
+  list-style: decimal;
+}
+.agreement-doc li + li {
+  margin-top: 0.25em;
+}
+.agreement-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--line);
+}
+.agreement-doc th,
+.agreement-doc td {
+  border: 1px solid var(--line);
+  padding: 0.4rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.92em;
+}
+.agreement-doc th {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.agreement-doc hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.2em 0;
+}
+.agreement-doc a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+/* A signature zone: atomic, and obviously not prose. */
+.agreement-doc .agreement-zone {
+  display: block;
+  border: 1.5px dashed color-mix(in srgb, var(--primary) 50%, transparent);
+  background: var(--primary-soft);
+  border-radius: var(--radius-field, 8px);
+  padding: 0.7rem 0.9rem;
+  margin: 0.9em 0;
+  cursor: pointer;
+  user-select: none;
+}
+.agreement-doc .agreement-zone:hover,
+.agreement-doc .agreement-zone.is-selected {
+  border-style: solid;
+  border-color: var(--primary);
+}
+.agreement-doc .agreement-zone.is-selected {
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.agreement-doc .agreement-zone__caption {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+.agreement-doc .agreement-zone__meta {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--ink-2);
+}
+.agreement-doc .agreement-zone--orphan {
+  border-color: var(--bad);
+  background: var(--bad-bg);
+}
+.agreement-doc .agreement-zone--orphan .agreement-zone__caption {
+  color: var(--bad);
+}
+
+/* A page break: a rule with a label, the way a word processor shows one. */
+.agreement-doc .agreement-break {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1.2em 0;
+  user-select: none;
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.agreement-doc .agreement-break::before,
+.agreement-doc .agreement-break::after {
+  content: "";
+  flex: 1;
+  border-top: 1.5px dashed var(--line-strong, var(--line));
+}

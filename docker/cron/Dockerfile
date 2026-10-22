@@ -1,6 +1,6 @@
 # Cron driver for the B2 app.
 #
-# The app has NO internal clock — four routes under /api/cron/* do real work and
+# The app has NO internal clock — the routes under /api/cron/* do real work and
 # something external must tick them. On Windows that was scripts/install-cron-task.ps1
 # (Task Scheduler); on the VPS that mechanism does not exist, so this tiny sidecar
 # takes over. It talks to the app over the private compose network (http://app:3000),

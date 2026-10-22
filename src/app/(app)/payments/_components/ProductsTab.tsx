@@ -34,6 +34,12 @@ import type { ProductRow, UnpricedProgramme } from "@/server/payments-metrics";
  * Programmes with no product are shown under the table rather than left out. A catalogue that
  * lists only what somebody has already got round to pricing cannot tell you the one that has
  * been forgotten.
+ *
+ * ── THE OTHER WAY IN ──────────────────────────────────────────────────────────────
+ * A programme's price is also settable where the programme itself is created - Programs, and
+ * German Note → Manage → Levels. Same `Product` row, edited from the screen whoever is adding
+ * the course is already on; this board stays the place that sees every price at once, and the
+ * only place a one-off item can be priced.
  */
 
 const CUSTOM = "__custom__";
@@ -169,7 +175,7 @@ export default function ProductsTab({
         <Hint>
           <span className="flex flex-wrap items-center gap-2">
             <AlertCircle size={14} className="text-warn" aria-hidden />
-            <span>Not priced yet:</span>
+            <span>Not priced yet — click one to price it, or set it where the course is created:</span>
             {unpriced.map((u) => (
               <button
                 key={u.levelCode}

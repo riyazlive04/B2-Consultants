@@ -32,6 +32,10 @@ import {
   Inbox,
   Workflow,
   Layers,
+  School,
+  CalendarDays,
+  UserCheck,
+  Medal,
   type LucideIcon,
 } from "lucide-react";
 import type { SectionIconName } from "@/lib/sections";
@@ -75,6 +79,10 @@ export const SECTION_ICONS: Record<SectionIconName, LucideIcon> = {
   inbox: Inbox,
   workflow: Workflow,
   layers: Layers,
+  school: School,
+  "user-check": UserCheck,
+  medal: Medal,
+  "calendar-days": CalendarDays,
 };
 
 export const FallbackIcon = LayoutGrid;

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 import { AGREEMENT_EVENT_LABELS, OTP_MAX_ATTEMPTS, type AgreementData } from "@/lib/agreement";
+import { signerValuesSchema, validateSignerValues } from "@/lib/agreement-doc";
 import { hashAgreementToken, mintOtp, otpMatches } from "@/lib/agreement-token";
 import {
   buildSigningDevice,
@@ -20,6 +21,12 @@ import {
   type TokenFailure,
 } from "./agreement-core";
 import { sealAgreementPdf } from "./agreement-render";
+import { uploadedBodyFor } from "./agreement-body";
+import { coSignersBlocking, signedGuardianFor } from "./agreement-signers";
+import { attachmentsSatisfied } from "./agreement-attachments";
+import { timestampAgreement } from "./agreement-timestamp";
+import { emailSignedCopy } from "./agreement-email";
+import { getAgreementWorkflow } from "./founder-config";
 import { sendWhatsApp } from "./whatsapp";
 import { logPublicActivity } from "./activity-log";
 
@@ -132,6 +139,13 @@ const signSchema = z.object({
   // Validated separately by buildSigningDevice: a browser that withholds its details must still
   // be able to sign, so a bad device payload degrades to null rather than blocking the signature.
   device: z.unknown().optional(),
+  /**
+   * What the signer typed and ticked in their own boxes, by field id.
+   *
+   * Parsed through `signerValuesSchema` below rather than here, so a malformed blob produces "we
+   * could not read your answers" instead of a zod path nobody outside this file can read.
+   */
+  fieldValues: z.unknown().optional(),
 });
 
 /**
@@ -187,6 +201,48 @@ export async function signAgreement(input: {
     };
   }
 
+  /**
+   * The signer's own boxes, checked BEFORE the code is burnt as verified.
+   *
+   * Order matters: a student who ticked nothing should be told to tick the consent box and be able
+   * to press sign again with the code they already have. Validating after OTP_VERIFIED would cost
+   * them the code for a mistake that is not about identity at all.
+   *
+   * This is the server half of a check the ceremony also runs as they type. The client's answer is
+   * guidance; this one is the gate - which is what makes a required consent box mean anything.
+   */
+  const bodyForFields = row.documentKind === "GUIDED" ? null : await uploadedBodyFor(row.id);
+  if (row.documentKind !== "GUIDED" && !bodyForFields) {
+    return { ok: false, error: "This agreement's document could not be loaded. Contact B2 Consultants." };
+  }
+
+  const values = signerValuesSchema.safeParse(parsed.data.fieldValues ?? {});
+  if (!values.success) {
+    return { ok: false, error: "We could not read your answers. Please reload the page and try again." };
+  }
+  if (bodyForFields) {
+    const unfilled = validateSignerValues(bodyForFields.fields, "STUDENT", values.data);
+    if (unfilled.length > 0) {
+      return { ok: false, error: unfilled[0]!.message };
+    }
+
+    /**
+     * THE ORDERING GATE. A document that asks for a guardian's signature cannot be sealed before
+     * it has one - see the note at the top of `agreement-signers.ts` for why the order is this way
+     * round rather than the other.
+     *
+     * Checked here, immediately before the render, and not only when the page loaded: a guardian
+     * can decline while the student sits on the signing screen.
+     */
+    const blocking = await coSignersBlocking(row.id, bodyForFields.fields);
+    if (blocking.length > 0) return { ok: false, error: blocking[0]! };
+
+    // A required upload box is satisfied by BYTES WE HOLD, not by a filename in the payload -
+    // see the note on `attachmentsSatisfied`.
+    const attached = await attachmentsSatisfied(row.id, bodyForFields.fields, "STUDENT");
+    if (!attached.ok) return { ok: false, error: attached.error };
+  }
+
   const now = new Date();
   const otpVerifiedAt = now;
   await recordAgreementEvent(row.id, "OTP_VERIFIED", { ip, userAgent });
@@ -217,11 +273,24 @@ export async function signAgreement(input: {
     device,
   };
 
+  /**
+   * The uploaded body, for an agreement that has one. WITH its bytes: the PDF kind is stamped
+   * onto the stored file, so this is one of the few places a source upload is read.
+   *
+   * It is loaded fresh here rather than carried on the token lookup because `loadAgreementByToken`
+   * guards the ceremony and must stay a thin, cheap query - a bytea on that path would be pulled
+   * on every page view of every signing link.
+   */
+  const body = bodyForFields;
+
   // ── Render once. These exact bytes are what gets hashed and stored. ──
   const sealed = await sealAgreementPdf({
     documentNo: row.documentNo,
     data,
     templateVersion: row.templateVersion,
+    body,
+    signerValues: values.data,
+    guardian: await signedGuardianFor(row.id),
     founderSignaturePng: row.founderSignaturePng,
     studentSignaturePng: png,
     founderSignedAt: row.founderSignedAt,
@@ -236,6 +305,11 @@ export async function signAgreement(input: {
       status: "SIGNED",
       signedAt: now,
       studentSignaturePng: png,
+      /**
+       * Frozen from here on by `agreement_seal_guard`, which covers this column: a consent box
+       * that could be ticked after the fact would be worth nothing at all.
+       */
+      signerFieldValues: Object.keys(values.data).length > 0 ? (values.data as Prisma.InputJsonValue) : Prisma.JsonNull,
       signerDevice: device ?? Prisma.JsonNull,
       pdfBytes: sealed.bytes,
       pdfSha256: sealed.sha256,
@@ -245,6 +319,15 @@ export async function signAgreement(input: {
     },
   });
   if (burned.count === 0) return { ok: false, error: "This agreement has already been signed." };
+
+  /**
+   * Ask the timestamp authority to attest to the bytes we just sealed.
+   *
+   * AFTER the burn, and non-fatal: the signature is already made and stored, so a TSA that is slow
+   * or down must cost nothing. The failure is recorded on the row (`tsError`) and the daily sweep
+   * retries it. Off entirely unless an authority is configured - see `timestampAgreement`.
+   */
+  await timestampAgreement(row.id).catch(() => undefined);
 
   await recordAgreementEvent(row.id, "SIGNED", {
     ip,
@@ -284,21 +367,50 @@ export async function signAgreement(input: {
    *
    * The link carries the same token: signing clears `otpHash`, never `tokenHash`.
    */
-  const copy = await sendWhatsApp({
-    kind: "AGREEMENT_COPY",
-    to: data.student.phone,
-    vars: {
-      name: firstName(data.student.fullName),
-      copy_url: signedCopyUrl(token),
-      document_no: row.documentNo,
+  const workflow = await getAgreementWorkflow();
+  const copyUrl = signedCopyUrl(token);
+
+  const copy =
+    workflow.deliverBy !== "EMAIL"
+      ? await sendWhatsApp({
+          kind: "AGREEMENT_COPY",
+          to: data.student.phone,
+          vars: {
+            name: firstName(data.student.fullName),
+            copy_url: copyUrl,
+            document_no: row.documentNo,
+          },
+          bodySummary: `Agreement ${row.documentNo} - countersigned copy`,
+          agreementId: row.id,
+          leadId: row.leadId,
+          studentId: row.studentId,
+        })
+      : null;
+
+  /**
+   * The copy by email as well, and this is the email that matters most.
+   *
+   * It is also the only one of the three that can carry a working link after the fact: signing
+   * clears `otpHash` but never `tokenHash`, so the token still in hand right here addresses the
+   * executed copy for as long as the student has the message. See `loadSignedAgreementByToken`.
+   */
+  const copyEmail =
+    workflow.deliverBy !== "WHATSAPP" && data.student.email
+      ? await emailSignedCopy({
+          to: data.student.email,
+          name: data.student.fullName,
+          documentNo: row.documentNo,
+          copyUrl,
+          signedAt: now,
+        })
+      : null;
+
+  await recordAgreementEvent(row.id, copy?.sent || copyEmail?.sent ? "DELIVERY_SENT" : "DELIVERY_SKIPPED", {
+    meta: {
+      kind: "AGREEMENT_COPY",
+      whatsapp: copy ? { sent: copy.sent, status: copy.status, error: copy.error ?? null } : null,
+      email: copyEmail ? { sent: copyEmail.sent, error: copyEmail.error ?? null } : null,
     },
-    bodySummary: `Agreement ${row.documentNo} - countersigned copy`,
-    agreementId: row.id,
-    leadId: row.leadId,
-    studentId: row.studentId,
-  });
-  await recordAgreementEvent(row.id, copy.sent ? "DELIVERY_SENT" : "DELIVERY_SKIPPED", {
-    meta: { kind: "AGREEMENT_COPY", status: copy.status, error: copy.error ?? null },
   });
 
   return { ok: true, data: { documentNo: row.documentNo } };

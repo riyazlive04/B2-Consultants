@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { hasCapability, requireSession } from "@/lib/rbac";
 import { clientIpFrom } from "@/lib/rate-limit";
 import { parseAgreementData, recordAgreementEvent } from "@/server/agreement-core";
+import { uploadedBodyFor } from "@/server/agreement-body";
 import { renderAgreementPdf } from "@/server/agreement-render";
 
 /**
@@ -31,6 +32,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       studentId: true,
       documentNo: true,
       templateVersion: true,
+      documentKind: true,
       data: true,
       status: true,
       signedAt: true,
@@ -76,10 +78,17 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   } else {
     const parsed = parseAgreementData(row.data);
     if (!parsed.ok) return new NextResponse(`Invalid fields: ${parsed.error}`, { status: 422 });
+    // The live draft render of an uploaded document. Without the body there is nothing to draw,
+    // so say so plainly - this is the founder's own screen and the message is the diagnosis.
+    const body = row.documentKind === "GUIDED" ? null : await uploadedBodyFor(row.id);
+    if (row.documentKind !== "GUIDED" && !body) {
+      return new NextResponse("No document is attached to this agreement yet.", { status: 422 });
+    }
     bytes = await renderAgreementPdf({
       documentNo: row.documentNo,
       data: parsed.data,
       templateVersion: row.templateVersion,
+      body,
       founderSignaturePng: row.founderSignaturePng,
       founderSignedAt: row.founderSignedAt,
     });

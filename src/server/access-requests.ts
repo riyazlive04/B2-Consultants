@@ -33,7 +33,7 @@ export type AccessRequest = {
    *
    * New ADMIN requests cannot be created - see `submitSchema`.
    */
-  role: "ADMIN" | "HEAD" | "USER" | "TUTOR" | "STUDENT";
+  role: "ADMIN" | "HEAD" | "USER" | "TUTOR" | "STUDENT" | "COACH";
   note: string;
   requestedAt: string; // ISO
 };
@@ -68,7 +68,7 @@ const submitSchema = z.object({
    * TUTOR and STUDENT are accepted: both roles already exist, already have their own dashboards,
    * and had no way to identify themselves here.
    */
-  role: z.enum(["HEAD", "USER", "TUTOR", "STUDENT"]),
+  role: z.enum(["HEAD", "USER", "TUTOR", "STUDENT", "COACH"]),
   note: z.string().trim().max(500).default(""),
 });
 

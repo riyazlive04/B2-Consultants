@@ -609,24 +609,79 @@ export async function getSubscriptionsList() {
 }
 
 /**
- * Contacts + products for the invoice/subscription editors.
+ * What an invoice line can sell: EVERY ACTIVE PROGRAMME, plus the one-off products.
  *
- * A product now offers a price in BOTH currencies, because the invoice it is being added to may
- * be a euro one: handing the editor a rupee price alone would make "add from product" silently
- * paste a rupee figure into a euro line - four orders of magnitude out, and indistinguishable
- * from a real amount once it is sitting in the box.
+ * The invoice editor's programme picker used to be fed from `Product` alone, so a programme
+ * nobody had got round to pricing was not on the list at all. With an empty products table -
+ * which is exactly what live had - the picker offered nothing, and the editor looked broken:
+ * "the programmes are not loading". Worse, the way round it was to type the line by hand, which
+ * drops the level, and with it the GL account the money should post to.
+ *
+ * So the catalogue drives the picker, and a price is an ENRICHMENT of an option rather than the
+ * reason it exists. An unpriced programme is offered with an empty price and flagged as unpriced
+ * in its label; picking it still carries the level onto the line → the Income row → the GL
+ * account. The price is set once, in the catalogue (Programs / German Note → Manage → Levels),
+ * and then fills itself in here.
+ *
+ * `priceInr`/`priceEur` are both carried because the invoice may be a euro document: handing the
+ * editor a rupee price alone would make "add a programme" paste a rupee figure into a euro line -
+ * four orders of magnitude out, and indistinguishable from a real amount once it is in the box.
  */
+export type InvoiceLineOption = {
+  /** Picker key: `lvl:<CODE>` for a programme, `item:<productId>` for a one-off product. */
+  id: string;
+  label: string;
+  description: string | null;
+  /** The programme this line sells, or null for a one-off item. */
+  levelCode: string | null;
+  priceInr: string;
+  priceEur: string;
+  /** False = on the catalogue but nobody has priced it. The label says so; the line still works. */
+  priced: boolean;
+};
+
 export async function getInvoicePickers() {
   const [contacts, products, levels] = await Promise.all([
     prisma.lead.findMany({ where: ACTIVE, select: { id: true, name: true, email: true, phone: true }, orderBy: { createdAt: "desc" }, take: 1000 }),
     prisma.product.findMany({
       where: { ...ACTIVE, active: true },
-      select: { id: true, name: true, levelCode: true, priceInrMinor: true, priceEurMinor: true },
+      select: { id: true, name: true, description: true, levelCode: true, priceInrMinor: true, priceEurMinor: true },
       orderBy: { name: "asc" },
     }),
     getLevels(),
   ]);
   const byCode = new Map(levels.map((l) => [l.code, l]));
+  const productByLevel = new Map(products.filter((p) => p.levelCode).map((p) => [p.levelCode as string, p]));
+
+  /** Programme options: the whole active catalogue, priced where somebody has priced it. */
+  const programmeOptions: InvoiceLineOption[] = levels
+    .filter((l) => l.active)
+    .map((l) => {
+      const p = productByLevel.get(l.code);
+      const lineLabel = BUSINESS_LINE_LABELS[lineForKind(l.kind)];
+      return {
+        id: `lvl:${l.code}`,
+        label: `${l.label} · ${lineLabel}${p ? "" : " · no price set"}`,
+        description: p?.description ?? null,
+        levelCode: l.code,
+        priceInr: p ? minorToMajorString(p.priceInrMinor) : "",
+        priceEur: p ? minorToMajorString(p.priceEurMinor) : "",
+        priced: !!p,
+      };
+    });
+
+  /** One-off items - a book set, a single seat, a re-sit fee. Real to invoice, not a programme. */
+  const oneOffOptions: InvoiceLineOption[] = products
+    .filter((p) => !p.levelCode)
+    .map((p) => ({
+      id: `item:${p.id}`,
+      label: p.name,
+      description: p.description,
+      levelCode: null,
+      priceInr: minorToMajorString(p.priceInrMinor),
+      priceEur: minorToMajorString(p.priceEurMinor),
+      priced: true,
+    }));
 
   /*
    * Each contact's SIGNED agreement, newest first - the contract an invoice for them bills under.
@@ -652,6 +707,12 @@ export async function getInvoicePickers() {
       agreementNo: signedFor.get(c.id)?.documentNo ?? null,
       address: signedFor.get(c.id)?.address ?? null,
     })),
+    /** The invoice editor's line picker. Catalogue first, then the one-off items. */
+    lineOptions: [...programmeOptions, ...oneOffOptions],
+    /**
+     * Still the `Product` rows, and only those: a subscription stores a real `productId`, so a
+     * synthetic catalogue option has no business in this list.
+     */
     products: products.map((p) => {
       const level = p.levelCode ? byCode.get(p.levelCode) : undefined;
       return {

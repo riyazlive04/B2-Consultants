@@ -43,10 +43,16 @@ cat > /etc/crontabs/root <<'EOF'
 */5 * * * * /usr/local/bin/tick.sh alerts
 0 3 * * * /usr/local/bin/tick.sh retention
 0 * * * * /usr/local/bin/tick.sh daily
+# Agreements: chases unsigned contracts on the founder's schedule (Console → Agreements) and
+# catches up any sealed agreement that missed its trusted timestamp. Once a day is the intended
+# cadence - the engine is idempotent (each nudge is recorded against the day it was for), so a
+# double tick sends nothing twice, but a reminder is a message with the company's name on it and
+# there is nothing to gain from checking more often.
+30 4 * * * /usr/local/bin/tick.sh agreements
 EOF
 chmod 600 /etc/crontabs/root
 
-echo "cron: TZ=${TZ:-UTC} target=${APP_URL:-http://app:3000} — outreach/whatsapp 1m, workflows/alerts 5m, daily-log 15m, retention daily, daily 1h"
+echo "cron: TZ=${TZ:-UTC} target=${APP_URL:-http://app:3000} — outreach/whatsapp 1m, workflows/alerts 5m, daily-log 15m, retention/agreements daily, daily 1h"
 
 # -f foreground (PID 1), -d 8 logs each job to stderr so `docker compose logs cron` works.
 exec crond -f -d 8

@@ -299,10 +299,22 @@ export function canonicalJson(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
 }
 
-/** The exact bytes that get hashed. Template version is inside, so the same fields under a
- *  different clause set hash differently - which is the whole point. */
-export function canonicalPayload(data: AgreementData, templateVersion: string): string {
-  return canonicalJson({ templateVersion, data });
+/**
+ * The exact bytes that get hashed. Template version is inside, so the same fields under a
+ * different clause set hash differently - which is the whole point.
+ *
+ * `body` is the uploaded document's contribution (`docBodyHashInput`), and it is OPTIONAL for a
+ * reason that is load-bearing rather than convenient: `canonicalJson` drops undefined keys, so a
+ * GUIDED agreement - which passes nothing - hashes to the identical string it hashed before
+ * uploaded documents existed. Every PDF already signed keeps the content hash printed on its
+ * pages. See the regression guard in __tests__/agreement-payment.test.ts.
+ */
+export function canonicalPayload(
+  data: AgreementData,
+  templateVersion: string,
+  body?: Record<string, unknown>,
+): string {
+  return canonicalJson({ templateVersion, data, body });
 }
 
 /** The footer form: short enough to read aloud, long enough that collisions aren't a worry. */
@@ -315,6 +327,12 @@ export function shortHash(sha256Hex: string): string {
 /** Type-only import: erased at compile time, so this file stays safe for client components. */
 export const AGREEMENT_EVENT_LABELS: Record<import("@prisma/client").AgreementEventType, string> = {
   CREATED: "Agreement created",
+  DOCUMENT_ATTACHED: "Document attached",
+  SIGNER_SIGNED: "Co-signer signed",
+  SIGNER_DECLINED: "Co-signer declined",
+  ATTACHMENT_UPLOADED: "File attached by signer",
+  TIMESTAMPED: "Timestamped by authority",
+  IN_PERSON: "Signed in person",
   ISSUED: "Countersigned & issued",
   DELIVERY_SENT: "Link sent via WhatsApp",
   DELIVERY_SKIPPED: "WhatsApp delivery skipped",

@@ -2,8 +2,9 @@ import Link from "next/link";
 import {
   BadgeCheck, CalendarClock, FileSearch, FileSignature, Mic2, Rocket, Send, Target,
 } from "lucide-react";
-import { requireSection } from "@/lib/rbac";
+import { requireSection, visibleSections } from "@/lib/rbac";
 import { getMyStudentPortal, type PortalEnrollment } from "@/server/student-portal";
+import { getMyClassroom } from "@/server/student-classroom";
 import { getMyAgreements } from "@/server/student-agreements";
 import { getMyPayments } from "@/server/student-payments";
 import { MyPayments } from "./_components/MyPayments";
@@ -32,10 +33,23 @@ export default async function MyJourneyPage({
   searchParams?: { onboarding?: string };
 }) {
   const session = await requireSection("my-journey");
-  const [portal, agreements, payments] = await Promise.all([
+  /**
+   * The CV Diagnostic card below is the only link to /cv-check anywhere in the app, and
+   * `cv-check` ships `hidden` (off the nav AND the route) - so hard-coding the card sent every
+   * student to `/?denied=cv-check`. Read the resolved section instead: the card appears exactly
+   * when the route would open, and comes back by itself if Console → Sections switches it on.
+   */
+  const cvStudioOpen = (await visibleSections(session.role, session.overrides)).some(
+    (s) => s.key === "cv-check",
+  );
+  const [portal, agreements, payments, classroom] = await Promise.all([
     getMyStudentPortal(session.user.id),
     getMyAgreements(session.user.id),
     getMyPayments(session.user.id),
+    // Only the next class is read here. The timetable itself lives on /classroom - this page
+    // carries one line so a student who lands on their scoreboard still sees what is on next,
+    // rather than having to know a second page exists.
+    getMyClassroom(session.user.id),
   ]);
   /**
    * The welcome walkthrough, which no student could ever see.
@@ -149,30 +163,56 @@ export default async function MyJourneyPage({
         </Card>
       )}
 
+      {classroom?.next && (
+        <Card>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="flex items-center gap-2">
+              <CalendarClock size={18} className="text-primary" />
+              <span className="text-label font-semibold uppercase text-ink-2">Next class</span>
+            </span>
+            <div className="min-w-[180px] flex-1">
+              <p className="font-display text-[15px] font-semibold text-ink">{classroom.next.session.title}</p>
+              <p className="text-sm text-ink-2">
+                {formatDate(classroom.next.session.dateYmd)}
+                {classroom.next.session.timeHm ? ` · ${classroom.next.session.timeHm} IST` : ""}
+              </p>
+            </div>
+            <Link
+              href="/classroom"
+              className="press inline-flex h-9 items-center rounded-field border border-line-strong px-3 text-sm font-semibold text-ink hover:bg-surface-2"
+            >
+              My Classroom
+            </Link>
+          </div>
+        </Card>
+      )}
+
       {/* Spec §10: the student's own payment plan, balance and receipts. Own records only -
           scoped to this login server-side; no margin, LTV or other students' figures. */}
       <MyPayments payments={payments} />
 
-      {/* CV diagnostic - the self-serve tool students can use any time */}
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="flex items-center gap-2 font-display text-h2 font-semibold">
-              <FileSearch size={18} /> CV Diagnostic
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              Paste your CV and a real German job description - get your match score, missing
-              keywords and weak bullets in seconds. Nothing is stored.
-            </p>
+      {/* CV diagnostic - the self-serve tool students can use any time, when it is switched on */}
+      {cvStudioOpen && (
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-display text-h2 font-semibold">
+                <FileSearch size={18} /> CV Diagnostic
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Paste your CV and a real German job description - get your match score, missing
+                keywords and weak bullets in seconds. Nothing is stored.
+              </p>
+            </div>
+            <Link
+              href="/cv-check"
+              className="rounded-field bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:opacity-95"
+            >
+              Run a check
+            </Link>
           </div>
-          <Link
-            href="/cv-check"
-            className="rounded-field bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:opacity-95"
-          >
-            Run a check
-          </Link>
-        </div>
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }

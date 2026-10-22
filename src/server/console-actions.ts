@@ -672,7 +672,7 @@ const rewardRuleSchema = z
     }
   });
 
-const ROLE_VALUES = ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR"] as const;
+const ROLE_VALUES = ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR", "COACH"] as const;
 const rolesSchema = z.array(z.enum(ROLE_VALUES));
 
 export async function saveRewardRule(form: FormData): Promise<ActionResult> {

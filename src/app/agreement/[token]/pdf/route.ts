@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { clientIpFrom, rateLimitOk } from "@/lib/rate-limit";
 import { loadAgreementByToken, parseAgreementData } from "@/server/agreement-core";
+import { uploadedBodyFor } from "@/server/agreement-body";
 import { renderAgreementPdf } from "@/server/agreement-render";
 import type { AgreementData } from "@/lib/agreement";
 
@@ -30,10 +31,19 @@ export async function GET(req: Request, { params }: { params: { token: string } 
   const parsed = parseAgreementData(row.data);
   if (!parsed.ok) return new NextResponse("This agreement is not ready to sign.", { status: 422 });
 
+  // An uploaded document renders from its own body; a guided one has none. A missing body on a
+  // kind that needs one is a 422, not a half-document: the student must never be shown a contract
+  // with the prose missing.
+  const body = row.documentKind === "GUIDED" ? null : await uploadedBodyFor(row.id);
+  if (row.documentKind !== "GUIDED" && !body) {
+    return new NextResponse("This agreement is not ready to sign.", { status: 422 });
+  }
+
   const bytes = await renderAgreementPdf({
     documentNo: row.documentNo,
     data: parsed.data as AgreementData,
     templateVersion: row.templateVersion,
+    body,
     founderSignaturePng: row.founderSignaturePng,
     founderSignedAt: row.founderSignedAt,
     // No student signature, no certificate: this is not an executed agreement and must not look like one.

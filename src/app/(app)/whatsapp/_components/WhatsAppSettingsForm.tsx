@@ -99,6 +99,10 @@ export function WhatsAppSettingsForm({
     emiPreDueEnabled: c.emiPreDueEnabled,
     studentNudgesEnabled: c.studentNudgesEnabled,
     studentWelcomeEnabled: c.studentWelcomeEnabled,
+    classReminderEnabled: c.classReminderEnabled,
+    classReminderCoachEnabled: c.classReminderCoachEnabled,
+    classAbsenceEnabled: c.classAbsenceEnabled,
+    classCatchUpEnabled: c.classCatchUpEnabled,
     // Not a cadence field: this one saves into the booking rules (see saveWatiSettings).
     autoCancelEnabled: rules.autoCancelEnabled,
   });
@@ -354,6 +358,122 @@ export function WhatsAppSettingsForm({
               No cadence to set - it fires on seating, once per student, and never repeats. Bind{" "}
               <code>b2_student_welcome</code> first; the <code>_portal</code> variant also carries a
               sign-in link and will skip for any student who has no login yet.
+            </p>
+          </ScheduleGroup>
+
+          {/* Class reminders - the other fan-out touchpoint, and the only one that messages a
+              whole ROOM per class rather than one person at a time. Same live/rehearse switch as
+              EMI below, for the same reason. */}
+          <ScheduleGroup
+            title="Class reminder (students)"
+            hint="Reminds every student on a batch roster that their live class is coming up, at each lead time below. Pre-recorded modules are never reminded about - they have no start time."
+            name="classReminderEnabled"
+            on={enabled.classReminderEnabled}
+            onToggle={setOn("classReminderEnabled")}
+          >
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-medium text-muted">
+                  Lead times before class (e.g. <code>24h, 1h</code>) - each fires once
+                </span>
+                <input
+                  name="classReminderLead"
+                  defaultValue={formatDurationList(c.classReminderLeadMinutes)}
+                  className={`mt-1 ${inputCls}`}
+                  placeholder="24h, 1h"
+                />
+                <span className="mt-1 block text-xs text-muted">
+                  Clearing this box switches the touchpoint off, the same as the toggle.
+                </span>
+              </label>
+              <label className="flex flex-col justify-center gap-1.5">
+                <span className="flex items-center gap-2">
+                  <input
+                    name="classReminderLive"
+                    type="checkbox"
+                    defaultChecked={!c.classReminderDryRun}
+                    className="h-4 w-4 rounded border-line"
+                  />
+                  <span className="text-sm font-medium">Send for real</span>
+                </span>
+                <span className="text-xs text-muted">
+                  Unticked (default) = <strong>rehearsal</strong>: every reminder is logged to WhatsApp history
+                  as “DRY RUN” naming the student, the template and the exact text, but nothing is sent. This
+                  switch covers the coach reminder below too - tick it only once a dry run looks right.
+                </span>
+              </label>
+            </div>
+            <p className="mt-3 text-caption text-ink-3">
+              Bind <code>b2_class_reminder</code>. The <code>_link</code> variant also carries the join link and
+              will <strong>skip</strong> any class whose link has not been pasted yet - an unresolved variable
+              stops the whole send.
+            </p>
+          </ScheduleGroup>
+
+          <ScheduleGroup
+            title="Class reminder (coach)"
+            hint="The same class, to whoever runs the batch - with the batch name and how many students are expected. Uses the lead times and the rehearse switch set above."
+            name="classReminderCoachEnabled"
+            on={enabled.classReminderCoachEnabled}
+            onToggle={setOn("classReminderCoachEnabled")}
+          >
+            <p className="mt-3 text-caption text-ink-3">
+              Goes to the number on the coach&apos;s <strong>team profile</strong>, not their login - a coach with
+              no profile number is skipped with that reason rather than guessed at. Bind{" "}
+              <code>b2_class_reminder_coach</code>.
+            </p>
+          </ScheduleGroup>
+
+          {/* ── Missing a class, and catching up ──
+              These two carry a JUDGEMENT about somebody rather than an invitation, which is why
+              they get their own rehearse switch rather than sharing the reminders' one: a
+              founder may well be happy to send reminders for real while still reading the
+              absence notices in a dry run. */}
+          <ScheduleGroup
+            title="Marked absent (student)"
+            hint="Tells a student they were marked absent - but only once the coach PUBLISHES that register, never when it is marked. Late and excused students are never messaged."
+            name="classAbsenceEnabled"
+            on={enabled.classAbsenceEnabled}
+            onToggle={setOn("classAbsenceEnabled")}
+          >
+            <div className="mt-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="flex items-center gap-2">
+                  <input
+                    name="classFollowUpLive"
+                    type="checkbox"
+                    defaultChecked={!c.classFollowUpDryRun}
+                    className="h-4 w-4 rounded border-line"
+                  />
+                  <span className="text-sm font-medium">Send for real</span>
+                </span>
+                <span className="text-xs text-muted">
+                  Unticked (default) = <strong>rehearsal</strong>: every notice is logged to WhatsApp history as
+                  “DRY RUN” naming the student, the template and the exact text, but nothing is sent. This switch
+                  covers the catch-up nudge below too.
+                </span>
+              </label>
+            </div>
+            <p className="mt-3 text-caption text-ink-3">
+              Bind <code>b2_class_absence</code>. The <code>_link</code> variant also carries the recording link
+              and will <strong>skip</strong> any class whose video has not been posted - which is the case where
+              being told matters most, so bind the plain one first. Only absences from the last{" "}
+              <strong>14 days</strong> are ever messaged.
+            </p>
+          </ScheduleGroup>
+
+          <ScheduleGroup
+            title="Recording not watched (student)"
+            hint="Nudges a student who missed a class and still has not watched the recording once the catch-up grace has run out (Console → Attendance, default 24h). Uses the rehearse switch set above."
+            name="classCatchUpEnabled"
+            on={enabled.classCatchUpEnabled}
+            onToggle={setOn("classCatchUpEnabled")}
+          >
+            <p className="mt-3 text-caption text-ink-3">
+              Sent once per class per student, and <strong>never</strong> once that recording&apos;s own viewing
+              window has closed - a nudge about a video they can no longer open is a complaint, not a reminder.
+              A missing recording is never blamed on the student either; both of those appear on the Attendance
+              desk instead. Bind <code>b2_class_catch_up</code>.
             </p>
           </ScheduleGroup>
 

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Check, Copy, Loader2, PenLine, Send, Trash2 } from "lucide-react";
+import { Check, Copy, Loader2, PenLine, Send, Trash2, UserCheck } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import type { SignatureValue } from "@/components/ui/SignaturePad";
 
@@ -21,6 +21,7 @@ import {
   issueAgreement,
   issueAgreementWithSavedSignature,
   resendAgreementLink,
+  startInPersonSigning,
   saveFounderSignature,
   voidAgreement,
 } from "@/server/agreement-actions";
@@ -122,6 +123,33 @@ export function AgreementActions({
     });
   }
 
+  /**
+   * Sign the student in person, now, on this device.
+   *
+   * It MINTS A FRESH LINK and therefore kills the one already sent - there is no way around that,
+   * because only the hash of the old token was ever stored. So it is confirmed rather than
+   * one-tap, and the confirmation says exactly that: a founder doing this on a call needs to know
+   * the student's WhatsApp link stops working.
+   */
+  function doInPerson() {
+    startTransition(async () => {
+      const ok = await askConfirm({
+        title: "Sign in person now?",
+        body:
+          "A new signing link is created for this device, and the link already sent to the student STOPS WORKING. The one-time code still goes to their own number, so the signature is bound to them exactly as before.",
+        confirmLabel: "Create the link",
+      });
+      if (!ok) return;
+      const res = await safeAction(() => startInPersonSigning(id));
+      if (!res.ok) return toast(res.error, "error");
+      const url = res.data!.signingUrl;
+      setIssued({ url, delivery: "In-person link ready. Hand the device to the student.", sent: true });
+      // Opened rather than only shown: the point of this button is to be signing ten seconds later.
+      window.open(url, "_blank", "noopener");
+      router.refresh();
+    });
+  }
+
   function doResend() {
     startTransition(async () => {
       const res = await safeAction(() => resendAgreementLink(id));
@@ -158,6 +186,16 @@ export function AgreementActions({
               <PenLine size={15} /> Sign this one by hand
             </button>
           </>
+        )}
+        {isPending && (
+          <button
+            onClick={doInPerson}
+            disabled={pending}
+            className="inline-flex h-10 items-center gap-1.5 rounded-btn border border-line px-4 text-sm font-medium transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+            title="Create a fresh link and sign the student on this device. The link already sent stops working."
+          >
+            <UserCheck size={15} /> Sign in person
+          </button>
         )}
         {isPending && (
           <button

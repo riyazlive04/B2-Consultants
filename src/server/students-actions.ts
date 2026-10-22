@@ -96,6 +96,29 @@ function derivedDuration(level: (typeof B2_LEVELS)[number], start: Date) {
   return { duration: level === "GUIDED" ? ("DAYS_90" as const) : ("DAYS_120" as const), programEndDate: end };
 }
 
+/**
+ * The coach NAME the form submits, resolved to the account behind it.
+ *
+ * The picker's values are names, not ids, and that is kept on purpose: `assignedCoach` carries
+ * years of rows naming coaches who never had a login, and an outside coach may still have none.
+ * So the name stays the record and `coachId` is derived from it - which is what puts a student
+ * on their coach's desk (`Enrollment.coachId`) without asking anyone to re-pick a coach they
+ * have already chosen.
+ *
+ * Returns null for a blank, an unknown name, or a name that is not unique among active accounts
+ * - all three mean "we cannot say which account this is", and a wrong link is worse than none.
+ */
+async function resolveCoachId(name: string | null | undefined): Promise<string | null> {
+  const trimmed = name?.trim();
+  if (!trimmed) return null;
+  const matches = await prisma.user.findMany({
+    where: { name: trimmed, status: "ACTIVE", role: { not: "STUDENT" } },
+    select: { id: true },
+    take: 2,
+  });
+  return matches.length === 1 ? matches[0].id : null;
+}
+
 export async function createStudent(form: FormData): Promise<ActionResult> {
   const session = await requireAdmin();
   const s = studentSchema.safeParse(Object.fromEntries(form));
@@ -109,6 +132,8 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
   // The founder's default coach (Console → Delivery & team → Delivery defaults). Blank is a
   // legitimate answer and leaves the field empty, which is honest when nobody is assigned yet.
   const { defaultCoach } = await getDeliveryDefaults();
+  const coachName = e.data.assignedCoach || defaultCoach;
+  const coachId = await resolveCoachId(coachName);
 
   // Typed in wins; blank falls back to the next generated number, exactly as before - in the
   // series the programme level belongs to (B2-0001… or GN-0001…), derived not asked for.
@@ -134,7 +159,8 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
             totalSessionsPlanned: e.data.totalSessionsPlanned?.trim()
               ? parseInt(e.data.totalSessionsPlanned, 10)
               : null,
-            assignedCoach: e.data.assignedCoach || defaultCoach,
+            assignedCoach: coachName,
+            coachId,
             closerId: e.data.closerId || null,
             milestoneLogs: { create: { newMilestone: "ONBOARDING" } },
           },
@@ -162,7 +188,7 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
     meta: {
       programLevel: e.data.programLevel,
       enrollmentDate: e.data.enrollmentDate,
-      assignedCoach: e.data.assignedCoach || defaultCoach,
+      assignedCoach: coachName,
       incomeEntriesLinked: ids.length,
     },
   });
@@ -293,6 +319,8 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
   const { duration, programEndDate } = derivedDuration(e.data.programLevel, start);
   // Same founder default as createStudent - see the note there.
   const { defaultCoach } = await getDeliveryDefaults();
+  const coachName = e.data.assignedCoach || defaultCoach;
+  const coachId = await resolveCoachId(coachName);
   const enrollment = await prisma.enrollment.create({
     data: {
       studentId,
@@ -303,7 +331,8 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
       totalSessionsPlanned: e.data.totalSessionsPlanned?.trim()
         ? parseInt(e.data.totalSessionsPlanned, 10)
         : null,
-      assignedCoach: e.data.assignedCoach || defaultCoach,
+      assignedCoach: coachName,
+      coachId,
       closerId: e.data.closerId || null,
       milestoneLogs: { create: { newMilestone: "ONBOARDING" } },
     },
@@ -318,10 +347,49 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
     meta: {
       programLevel: e.data.programLevel,
       enrollmentDate: e.data.enrollmentDate,
-      assignedCoach: e.data.assignedCoach || defaultCoach,
+      assignedCoach: coachName,
     },
   });
   revalidatePath("/students");
+  return { ok: true };
+}
+
+/**
+ * Re-assign the coach on an existing enrollment.
+ *
+ * Coaching assignments change - somebody leaves, a caseload is rebalanced, a student moves to
+ * Elite - and until now the only moment a coach could be set was the instant the enrollment was
+ * created. That is also what makes `Enrollment.coachId` worth having: the teaching desk is only
+ * as good as the assignment behind it.
+ *
+ * Writes BOTH fields. The name stays the human record (and the only record for a coach with no
+ * login); the id is what the desk filters on.
+ */
+export async function setEnrollmentCoach(enrollmentId: string, coachName: string): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const name = coachName.trim();
+  const coachId = await resolveCoachId(name);
+
+  const enrollment = await prisma.enrollment.update({
+    where: { id: enrollmentId },
+    data: { assignedCoach: name || null, coachId },
+    select: { id: true, student: { select: { id: true, fullName: true } } },
+  });
+
+  await logActivity(session, {
+    action: "enrollment.coach.set",
+    section: "students",
+    entityType: "Enrollment",
+    entityId: enrollment.id,
+    summary: name
+      ? `Assigned ${enrollment.student.fullName} to ${name}`
+      : `Cleared ${enrollment.student.fullName}'s coach`,
+    meta: { coachId, linked: coachId !== null },
+  });
+
+  revalidatePath("/students");
+  revalidatePath(`/students/${enrollment.student.id}`);
+  revalidatePath("/coaching");
   return { ok: true };
 }
 

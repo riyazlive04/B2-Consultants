@@ -14,12 +14,19 @@ import { AGREEMENT_TTL_DAYS, OTP_TTL_MINUTES } from "./agreement";
  * hard attempt cap, and a constant-time compare - the entropy is not doing the work.
  */
 
-export function mintAgreementToken(): { token: string; tokenHash: string; expiresAt: Date } {
+/**
+ * `ttlDays` comes from the founder's Console setting (Agreements → signing window) and falls back
+ * to `AGREEMENT_TTL_DAYS`, which is what every link minted before the setting existed used. Bounded
+ * here as well as in the config schema: this function guards a credential, and a caller that
+ * passes a NaN from a stale config must not produce a link that expires in 1970.
+ */
+export function mintAgreementToken(ttlDays?: number): { token: string; tokenHash: string; expiresAt: Date } {
+  const days = Number.isFinite(ttlDays) && (ttlDays as number) >= 1 ? Math.min(90, ttlDays as number) : AGREEMENT_TTL_DAYS;
   const token = randomBytes(32).toString("base64url");
   return {
     token,
     tokenHash: hashAgreementToken(token),
-    expiresAt: new Date(Date.now() + AGREEMENT_TTL_DAYS * 86400_000),
+    expiresAt: new Date(Date.now() + days * 86400_000),
   };
 }
 

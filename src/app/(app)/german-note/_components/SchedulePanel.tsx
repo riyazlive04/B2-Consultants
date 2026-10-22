@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, CalendarPlus, ClipboardCheck, ExternalLink, Pencil, Trash2 } from "lucide-react";
-import { AttendanceSheetModal } from "./AttendanceSheet";
+import { AttendanceSheetModal } from "@/components/attendance/AttendanceSheet";
 import { deleteGnEvent, scheduleGnEvent, updateGnEvent } from "@/server/german-note-actions";
 import type { GnEventRow } from "@/server/german-note-metrics";
 import { askConfirm, toast } from "@/components/ui/feedback";

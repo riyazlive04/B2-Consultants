@@ -46,6 +46,10 @@ export const WHATSAPP_KINDS = [
   "BOOKING_AUTO_CANCELLED",
   "SSS_RESCHEDULED",
   "BOOK_ORDER",
+  "CLASS_REMINDER",
+  "CLASS_REMINDER_COACH",
+  "CLASS_ABSENCE",
+  "CLASS_CATCH_UP",
   // One per pipeline stage - see lib/stage-messages.ts.
   ...STAGE_WHATSAPP_KINDS,
 ] as const satisfies readonly WhatsAppKind[];
@@ -84,6 +88,10 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   BOOKING_AUTO_CANCELLED: "Booking · auto-cancelled",
   SSS_RESCHEDULED: "SSS · rescheduled notice",
   BOOK_ORDER: "Book order to publisher",
+  CLASS_REMINDER: "Class reminder (student)",
+  CLASS_REMINDER_COACH: "Class reminder (coach)",
+  CLASS_ABSENCE: "Marked absent from a class",
+  CLASS_CATCH_UP: "Recording not watched yet",
   ...STAGE_KIND_LABELS,
 };
 
@@ -125,6 +133,14 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   BOOKING_AUTO_CANCELLED: "Bookings confirmation loop - no confirmation before the cut-off, so the slot was released; invites them to rebook.",
   SSS_RESCHEDULED: "SSS calendar - the Success Strategy Session was moved to a new time (founder blocked the slot/day, or a manual/drag reschedule).",
   BOOK_ORDER: "Sent to the book PUBLISHER, not the student - the order for a student's level books. Triggered by hand from Students → Book orders.",
+  CLASS_REMINDER:
+    "Sent to every student on a batch's roster before a live class, at each lead time set in Cadence. Pre-recorded modules are never reminded about - they have no start time.",
+  CLASS_REMINDER_COACH:
+    "The same class, to whoever runs the batch - with the batch name and how many students are expected, rather than a message addressed to them as the learner.",
+  CLASS_ABSENCE:
+    "To a student marked ABSENT, once the coach PUBLISHES that register - not when it is marked. Late and excused are never messaged: one was there, and the other told somebody.",
+  CLASS_CATCH_UP:
+    "To a student who missed a class and still has not watched the recording once the catch-up grace (Console → Attendance, default 24h) has run out. Never sent once the recording's own access window has closed.",
   ...STAGE_KIND_HINTS,
 };
 
@@ -245,6 +261,31 @@ const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
   // vendor, so `publisher_name` addresses them and `student_name` is the subject of the order.
   // Kept equal to BOOK_ORDER_VARS in lib/book-order-message.ts - a test asserts it.
   BOOK_ORDER: ["publisher_name", "order_ref", "level", "student_name", "ship_to", "ship_phone"],
+  /**
+   * Class reminders. `join_url` is the one that can be EMPTY - a class whose link has not been
+   * pasted yet - and an unresolved variable skips the whole send rather than delivering a blank
+   * line. That is the same trade as the `_zoom` booking variants and the `_portal` welcome, and
+   * the submission pack ships a link-less variant of each for exactly that reason.
+   */
+  CLASS_REMINDER: ["name", "class_title", "class_time", "join_url"],
+  // `batch_name` and `student_count` are what make this the COACH's message rather than a copy
+  // of the student's - they answer "which room, and how many are coming".
+  CLASS_REMINDER_COACH: ["name", "class_title", "class_time", "batch_name", "student_count", "join_url"],
+  /**
+   * The absence notice and the catch-up nudge.
+   *
+   * `recording_url` is the one that can be EMPTY - a class whose video has not been posted yet
+   * - and an unresolved variable skips the whole send rather than delivering a blank line. That
+   * is why the submission pack ships a link-less variant: a student told they were absent should
+   * hear so even when the recording is not up, and the message points them at their classroom
+   * instead.
+   *
+   * `watch_deadline` is a sentence rather than a date ("3 days left to watch", "No time limit"),
+   * because the recording's access window is per recording and a bare date would need the reader
+   * to work out whether it has passed.
+   */
+  CLASS_ABSENCE: ["name", "class_title", "class_date", "recording_url", "watch_deadline"],
+  CLASS_CATCH_UP: ["name", "class_title", "class_date", "recording_url", "watch_deadline"],
   ...STAGE_KIND_VARS,
 };
 
@@ -276,6 +317,22 @@ export const WHATSAPP_TEMPLATE_VAR_ORDER: Record<WhatsAppKind, readonly string[]
 const POSITIONAL_ALT_ORDERS: Partial<Record<WhatsAppKind, readonly (readonly string[])[]>> = {
   // AUTHENTICATION: {{1}} is the code and nothing else can be in the body.
   AGREEMENT_OTP: [["code"]],
+  /**
+   * The link-less variants of the two class follow-ups.
+   *
+   * `recording_url` is empty whenever the video has not been posted, and an unresolved variable
+   * skips the whole send. Without these layouts the only bindable template would be the one
+   * carrying the link, so a student marked absent from a class whose recording is still
+   * outstanding would hear nothing at all - which is the case where being told matters most.
+   */
+  CLASS_ABSENCE: [
+    ["name", "class_title", "class_date", "watch_deadline"],
+    ["name", "class_title", "class_date"],
+  ],
+  CLASS_CATCH_UP: [
+    ["name", "class_title", "class_date", "watch_deadline"],
+    ["name", "class_title", "class_date"],
+  ],
 };
 
 /**
@@ -431,6 +488,47 @@ export type WatiCadence = {
   emiPreDueDryRun: boolean;
   /** Minimum spacing between check-in / sprint nudges for the same student. */
   studentRepeatHours: number;
+  /**
+   * Class reminders to the STUDENTS on a batch roster.
+   *
+   * SHIPS OFF. Every other switch here governs a message to one person at a time; this one fans
+   * out to an entire cohort per class, on a schedule nobody has watched run yet. It arms when
+   * the founder has seen a dry run and the timetable it fires from is real.
+   */
+  classReminderEnabled: boolean;
+  /**
+   * Minutes-before-class at which to remind, each rung once. Shared by the student and coach
+   * reminders deliberately: two ladders would mean the coach being told at a different moment
+   * from the room they are about to teach.
+   */
+  classReminderLeadMinutes: number[];
+  /** The same class, to whoever runs the batch. Off until the student side is trusted. */
+  classReminderCoachEnabled: boolean;
+  /**
+   * SAFETY, and the same trade as `emiPreDueDryRun`: when true every class reminder is
+   * REHEARSED - each recipient gets a SKIPPED "DRY RUN" row naming them, the template and the
+   * exact text - but nothing leaves the building. Defaults ON, because this touchpoint's blast
+   * radius is a whole batch and the safe default is the one where a mistake costs nothing.
+   */
+  classReminderDryRun: boolean;
+  /**
+   * "You were marked absent" - to the student, when a register is PUBLISHED.
+   *
+   * SHIPS OFF, like every other class touchpoint. It fans out to fewer people than a reminder
+   * (only the absences) but it carries a judgement about somebody rather than an invitation,
+   * so the first one that goes out should be one a founder has read in a dry run.
+   */
+  classAbsenceEnabled: boolean;
+  /** "You still have not watched the recording" - once the catch-up grace has run out. */
+  classCatchUpEnabled: boolean;
+  /**
+   * One dry-run switch for both follow-ups, not two.
+   *
+   * They fire off the same facts a few hours apart and a founder rehearsing one wants to read
+   * the other in the same sitting. Two switches would make "am I rehearsing?" a question with
+   * two answers.
+   */
+  classFollowUpDryRun: boolean;
   /** Overall safety cap: max messages a single run of the engine will send. */
   maxPerRun: number;
 };
@@ -459,6 +557,16 @@ export const DEFAULT_CADENCE: WatiCadence = {
   emiPreDueLeadDays: [3, 0], // three days out, then again on the day
   emiPreDueDryRun: true,
   studentRepeatHours: 48,
+  // SHIPS OFF, and rehearsing when switched on. See the field notes above.
+  classReminderEnabled: false,
+  classReminderCoachEnabled: false,
+  classReminderDryRun: true,
+  // A day ahead to plan around, an hour ahead to show up. Both are whole rungs so `leadLabel`
+  // renders them as "tomorrow" and "in 1 hour" rather than as a number of minutes.
+  classReminderLeadMinutes: [24 * 60, 60],
+  classAbsenceEnabled: false,
+  classCatchUpEnabled: false,
+  classFollowUpDryRun: true,
   maxPerRun: 200,
 };
 

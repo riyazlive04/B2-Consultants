@@ -28,6 +28,8 @@ import { getActiveLevels } from "@/server/levels";
 import { levelOptions } from "@/lib/levels";
 import { TrackerTable } from "./_components/TrackerTable";
 import { TrackerBatchForm } from "./_components/TrackerBatchForm";
+import { getBatchBoard } from "@/server/batches";
+import { BatchesManager } from "@/components/batches/BatchesManager";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
@@ -45,10 +47,11 @@ export default async function StudentsPage() {
     await getStudentsOverview();
   const waByStudent = await getWhatsAppStatusMap("studentId", tracker.map((t) => t.studentId));
   const today = toDateInputValue(istToday());
-  // Book orders and Import are Admin-only tabs - a Head shouldn't pay for reads they can't see.
-  const [bookOrders, studentOptions] = isAdmin
-    ? await Promise.all([getBookOrderData(), getStudentOptions()])
-    : [{ rows: [], vendors: [], thresholdRupees: 0 }, []];
+  // Book orders, Batches and Import are Admin-only tabs - a Head shouldn't pay for reads they
+  // can't see. Creating and archiving a batch is Admin-only in `upsertBatch` for the same reason.
+  const [bookOrders, studentOptions, batchBoard] = isAdmin
+    ? await Promise.all([getBookOrderData(), getStudentOptions(), getBatchBoard("B2")])
+    : [{ rows: [], vendors: [], thresholdRupees: 0 }, [], null];
   // Book orders are per single level (never a bundle).
   const bookLevelOptions = isAdmin
     ? levelOptions(await getActiveLevels(), ["GERMAN_LEVEL", "COACHING_TIER", "OTHER"])
@@ -304,6 +307,28 @@ export default async function StudentsPage() {
                     />
                   ),
                 },
+                /**
+                 * COHORTS. The one-table `Batch` model has carried a `line` since ER v2 and
+                 * `upsertBatch` has always been line-aware, but nothing called it: German Note
+                 * ran its own panel and the B2 side had no cohort screen, so a coaching batch
+                 * could not be created at all. It lives here rather than in its own section
+                 * because a batch is a group of students, and seating happens on their profiles.
+                 */
+                ...(batchBoard
+                  ? [
+                      {
+                        label: `Batches (${batchBoard.rows.filter((b) => b.status === "ACTIVE").length})`,
+                        content: (
+                          <BatchesManager
+                            line="B2"
+                            rows={batchBoard.rows}
+                            levelOptions={batchBoard.levelOptions}
+                            leadOptions={batchBoard.leadOptions}
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
                 { label: "Import", content: <ImportPanel /> },
               ]
             : []),

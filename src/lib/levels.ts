@@ -26,8 +26,31 @@ export type LevelSummary = {
   bundleMembers: string[];
 };
 
-/** The admin panel also needs the row id (to target update/delete). */
-export type AdminLevel = LevelSummary & { id: string };
+/**
+ * WHAT A PROGRAMME COSTS, as the catalogue panel sees it.
+ *
+ * The price itself is NOT a `Level` column, and deliberately so: it lives on the `Product` row
+ * whose `levelCode` names this programme, which is what invoice lines, subscriptions and the
+ * Income posting all already read. Duplicating it onto `Level` would create a second price for
+ * the same course and no way to say which one is true.
+ *
+ * What was missing was a way to SET it from the screen where the course is created - pricing
+ * lived only under Payments → Products, so the whole catalogue could sit unpriced (and did:
+ * nine levels, zero products), which is also why the invoice editor had no programmes to offer.
+ * The panel now edits the same `Product` row in place. Minor units, like everywhere else.
+ */
+export type LevelPrice = {
+  productId: string;
+  priceInrMinor: number;
+  priceEurMinor: number;
+  /** `ProductInterval` - ONE_TIME for a course, MONTHLY/… for a retainer. */
+  interval: string;
+  /** The product row is archived: its price is kept but it is off new invoices. */
+  archived: boolean;
+};
+
+/** The admin panel also needs the row id (to target update/delete), and the price it sells at. */
+export type AdminLevel = LevelSummary & { id: string; price: LevelPrice | null };
 
 export const LEVEL_KIND_LABELS: Record<LevelKind, string> = {
   COACHING_TIER: "Coaching tier",

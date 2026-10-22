@@ -10,6 +10,12 @@ import {
   type AttendanceStatus,
   type AttendanceSignal,
 } from "@/lib/attendance";
+import {
+  remainingMs,
+  windowEnd,
+  windowState,
+  type WindowState,
+} from "@/lib/attendance-window";
 import { getAttendanceConfig } from "./founder-config";
 
 /**
@@ -28,6 +34,15 @@ export type AttendanceSheetRow = {
   note: string | null;
   markedByName: string | null;
   markedAt: string | null;
+  /** Did the student tick themselves in, or did a tutor mark them? */
+  source: AttendanceSourceValue;
+  /** When they pressed "I'm here" - shown beside the row, so arrivals are legible. */
+  checkedInAt: string | null;
+  /** Set once a coach has pressed "Ask why" on this absence. Null = nobody has asked. */
+  reasonAskedAt: string | null;
+  /** The student's own words, once they answer. Null while unanswered - itself a signal. */
+  reason: string | null;
+  reasonAt: string | null;
 };
 
 export type AttendanceSheet = {
@@ -41,6 +56,25 @@ export type AttendanceSheet = {
   markedCount: number;
   attendedCount: number;
   noShowRate: number | null;
+  /** The self check-in window, so the sheet can open, close and count it. */
+  window: SessionWindowView;
+};
+
+/** Mirrors Prisma's `AttendanceSource`, kept as a string union for the client boundary. */
+export type AttendanceSourceValue = "TUTOR" | "SELF";
+
+export type SessionWindowView = {
+  state: WindowState;
+  opensAt: string | null;
+  closesAt: string | null;
+  /** Milliseconds left at the moment this was read - the client counts down from it. */
+  remainingMs: number;
+  graceMins: number;
+  /** How many of the marks on this session came from a student pressing the button. */
+  checkedInCount: number;
+  publishedAt: string | null;
+  publishedByName: string | null;
+  openedByName: string | null;
 };
 
 /**
@@ -58,6 +92,12 @@ export async function getAttendanceSheet(sessionId: string): Promise<AttendanceS
       title: true,
       startsAt: true,
       batchId: true,
+      attendanceOpensAt: true,
+      attendanceClosesAt: true,
+      attendanceGraceMins: true,
+      attendancePublishedAt: true,
+      attendanceOpenedBy: { select: { name: true, email: true } },
+      attendancePublishedBy: { select: { name: true, email: true } },
       batch: {
         select: {
           members: {
@@ -74,12 +114,19 @@ export async function getAttendanceSheet(sessionId: string): Promise<AttendanceS
           status: true,
           note: true,
           markedAt: true,
+          source: true,
+          checkedInAt: true,
+          reasonAskedAt: true,
+          reason: true,
+          reasonAt: true,
           markedBy: { select: { name: true, email: true } },
         },
       },
     },
   });
   if (!session) return null;
+
+  const config = await getAttendanceConfig();
 
   // A batch can be populated through EITHER seam - German Note seats arrive as BatchMember,
   // B2 coaching seats as Enrollment.batchId (see the Batch model's note). Both are "on the
@@ -101,9 +148,30 @@ export async function getAttendanceSheet(sessionId: string): Promise<AttendanceS
         note: mark?.note ?? null,
         markedByName: mark?.markedBy?.name ?? mark?.markedBy?.email ?? null,
         markedAt: mark?.markedAt.toISOString() ?? null,
+        source: (mark?.source as AttendanceSourceValue | undefined) ?? "TUTOR",
+        checkedInAt: mark?.checkedInAt?.toISOString() ?? null,
+        reasonAskedAt: mark?.reasonAskedAt?.toISOString() ?? null,
+        reason: mark?.reason ?? null,
+        reasonAt: mark?.reasonAt?.toISOString() ?? null,
       };
     })
-    .sort((a, b) => a.studentName.localeCompare(b.studentName));
+    /**
+     * ARRIVALS FIRST while the window is open, alphabetical once it is not.
+     *
+     * A tutor watching a live register is watching a list GROW, and the useful thing is the
+     * newest arrival at the top - "who just joined". Alphabetical order scatters each new
+     * check-in to a random row, which on a screen that refreshes every few seconds reads as
+     * nothing happening. Afterwards the question changes to "find this student and fix their
+     * row", and for that a name is the key.
+     */
+    .sort((a, b) => {
+      if (session.attendanceClosesAt && Date.now() <= session.attendanceClosesAt.getTime()) {
+        if (a.checkedInAt && b.checkedInAt) return b.checkedInAt.localeCompare(a.checkedInAt);
+        if (a.checkedInAt) return -1;
+        if (b.checkedInAt) return 1;
+      }
+      return a.studentName.localeCompare(b.studentName);
+    });
 
   const marked = rows.filter((r) => r.status !== null);
   const statuses = marked.map((r) => r.status!) as AttendanceStatus[];
@@ -118,7 +186,82 @@ export async function getAttendanceSheet(sessionId: string): Promise<AttendanceS
     markedCount: marked.length,
     attendedCount: attendedHeadcount(statuses),
     noShowRate: noShowRate(statuses),
+    window: {
+      state: windowState(
+        { opensAt: session.attendanceOpensAt, closesAt: session.attendanceClosesAt },
+        new Date(),
+      ),
+      opensAt: session.attendanceOpensAt?.toISOString() ?? null,
+      closesAt: session.attendanceClosesAt?.toISOString() ?? null,
+      remainingMs: remainingMs(
+        { opensAt: session.attendanceOpensAt, closesAt: session.attendanceClosesAt },
+        new Date(),
+      ),
+      graceMins: session.attendanceGraceMins ?? config.checkInLateAfterMins,
+      checkedInCount: rows.filter((r) => r.source === "SELF").length,
+      publishedAt: session.attendancePublishedAt?.toISOString() ?? null,
+      publishedByName:
+        session.attendancePublishedBy?.name ?? session.attendancePublishedBy?.email ?? null,
+      openedByName: session.attendanceOpenedBy?.name ?? session.attendanceOpenedBy?.email ?? null,
+    },
   };
+}
+
+/**
+ * Opens the register for self check-in.
+ *
+ * The grace is SNAPSHOTTED onto the session rather than read at judgement time. A cohort
+ * judged against a ten-minute grace in October must not be silently re-judged when somebody
+ * widens the setting in December - the same reasoning as `framework` on ClassSession.
+ *
+ * Re-opening an already-open window EXTENDS it from now, which is what a tutor pressing the
+ * button again plainly means ("give them another ten minutes"). It does not reset who has
+ * already checked in; those rows stand.
+ */
+export async function openCheckInWindow(
+  sessionId: string,
+  args: { minutes: number; graceMins: number; openedById: string },
+): Promise<{ closesAt: Date }> {
+  const now = new Date();
+  const closesAt = windowEnd(now, args.minutes);
+  await prisma.classSession.update({
+    where: { id: sessionId },
+    data: {
+      attendanceOpensAt: now,
+      attendanceClosesAt: closesAt,
+      attendanceGraceMins: Math.max(0, Math.round(args.graceMins)),
+      attendanceOpenedById: args.openedById,
+    },
+  });
+  return { closesAt };
+}
+
+/**
+ * Shuts the register now.
+ *
+ * `closesAt = now` rather than nulling the pair, so the record still says a window existed and
+ * when it ended. Nulling would make a closed window indistinguishable from one that was never
+ * opened, and those are different things to tell a student who missed it.
+ */
+export async function closeCheckInWindow(sessionId: string): Promise<void> {
+  await prisma.classSession.update({
+    where: { id: sessionId },
+    data: { attendanceClosesAt: new Date() },
+  });
+}
+
+/** Shows the finished register to the cohort, or takes it back out of their view. */
+export async function setAttendancePublished(
+  sessionId: string,
+  published: boolean,
+  byId: string | null,
+): Promise<void> {
+  await prisma.classSession.update({
+    where: { id: sessionId },
+    data: published
+      ? { attendancePublishedAt: new Date(), attendancePublishedById: byId }
+      : { attendancePublishedAt: null, attendancePublishedById: null },
+  });
 }
 
 /**
@@ -138,13 +281,31 @@ export async function saveAttendance(
   const toClear = marks.filter((m) => m.status === null).map((m) => m.studentId);
   const toSave = marks.filter((m) => m.status !== null);
 
+  /**
+   * WHOSE WORD IS THIS ROW? Read the existing marks so the save can tell the difference
+   * between a tutor CONFIRMING a self check-in and a tutor OVERRULING one.
+   *
+   * Leaving `source` alone would let a row still claim the student said they were present
+   * after a tutor changed it to absent. Setting it to TUTOR unconditionally is worse: saving
+   * a sheet without touching a single row would relabel every check-in as the tutor's own
+   * work, and the student's "you checked in at 10:31" confirmation would vanish from their
+   * dashboard until the register was published. So the flip happens only where the verdict
+   * actually changed. Eight rows per batch - the extra read is free.
+   */
+  const existing = await prisma.sessionAttendance.findMany({
+    where: { sessionId, studentId: { in: toSave.map((m) => m.studentId) } },
+    select: { studentId: true, status: true },
+  });
+  const before = new Map(existing.map((e) => [e.studentId, e.status as AttendanceStatus]));
+
   // One transaction: a half-saved register is worse than an unsaved one, because it looks done.
   await prisma.$transaction([
     ...(toClear.length
       ? [prisma.sessionAttendance.deleteMany({ where: { sessionId, studentId: { in: toClear } } })]
       : []),
-    ...toSave.map((m) =>
-      prisma.sessionAttendance.upsert({
+    ...toSave.map((m) => {
+      const changed = before.get(m.studentId) !== m.status;
+      return prisma.sessionAttendance.upsert({
         where: { sessionId_studentId: { sessionId, studentId: m.studentId } },
         create: {
           sessionId,
@@ -152,18 +313,58 @@ export async function saveAttendance(
           status: m.status!,
           note: m.note?.trim() || null,
           markedById,
+          source: "TUTOR",
         },
         update: {
           status: m.status!,
           note: m.note?.trim() || null,
           markedById,
           markedAt: new Date(),
+          // `checkedInAt` is deliberately NOT cleared - when the student arrived is evidence,
+          // and it stays true whatever the tutor later decides the mark should be.
+          ...(changed ? { source: "TUTOR" as const } : {}),
         },
-      }),
-    ),
+      });
+    }),
   ]);
 
   return { saved: toSave.length, cleared: toClear.length };
+}
+
+/**
+ * The one-press finish: everyone still unmarked becomes `status`.
+ *
+ * THE WHOLE POINT OF THE WINDOW is that the register is mostly full by the time the tutor
+ * looks at it, so what is left is a residue of two or three names. Asking the tutor to set
+ * each of those by hand reintroduces exactly the chore the window removed.
+ *
+ * Only UNMARKED students are touched - `skipDuplicates`-style, by querying who already has a
+ * row. A student the tutor deliberately excused ten seconds earlier must not be flattened to
+ * absent by the convenience button.
+ */
+export async function fillUnmarked(
+  sessionId: string,
+  status: AttendanceStatus,
+  markedById: string | null,
+): Promise<{ filled: number }> {
+  const sheet = await getAttendanceSheet(sessionId);
+  if (!sheet) return { filled: 0 };
+  const unmarked = sheet.rows.filter((r) => r.status === null);
+  if (unmarked.length === 0) return { filled: 0 };
+
+  await prisma.sessionAttendance.createMany({
+    data: unmarked.map((r) => ({
+      sessionId,
+      studentId: r.studentId,
+      status,
+      markedById,
+      source: "TUTOR" as const,
+    })),
+    // Belt and braces against a double-press racing itself; the unique key is the real guard.
+    skipDuplicates: true,
+  });
+
+  return { filled: unmarked.length };
 }
 
 export type StudentAttendanceView = {

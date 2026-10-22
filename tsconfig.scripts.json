@@ -5,6 +5,15 @@
     // so esbuild falls back to classic React.createElement and the document modules - which never
     // import React - blow up with "React is not defined". The automatic runtime fixes that without
     // touching a single document file.
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./src/*"],
+      // `server-only` throws unless Node runs with `--conditions=react-server`, and that condition
+      // resolves React to a server subset which refuses to load outside a framework - which is what
+      // @react-pdf/renderer needs React for. A script that renders a real document through the real
+      // server modules can satisfy one or the other, never both, so the import is stubbed here.
+      // See scripts/server-only-stub.ts. Only script runs use this file.
+      "server-only": ["./scripts/server-only-stub.ts"]
+    }
   }
 }

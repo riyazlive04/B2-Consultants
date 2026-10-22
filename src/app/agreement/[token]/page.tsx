@@ -3,12 +3,30 @@ import { FileSignature } from "lucide-react";
 import { clientIpFrom } from "@/lib/rate-limit";
 import { AGREEMENT_PROVIDER } from "@/lib/agreement";
 import { loadAgreementByToken, markAgreementViewed, maskPhone, type TokenFailure } from "@/server/agreement-core";
+import { uploadedBodyFor } from "@/server/agreement-body";
+import {
+  coSignersBlocking,
+  loadSignerByToken,
+  type SignerTokenRow,
+} from "@/server/agreement-signers";
+import { signerInputFields } from "@/lib/agreement-doc";
 import type { AgreementData } from "@/lib/agreement";
 import { SignCeremony } from "./_components/SignCeremony";
 import { SignedCopyLinks } from "./_components/SignedCopyLinks";
 
 /**
- * The student's signing page. PUBLIC - the token is the only credential.
+ * The signing page. PUBLIC - the token is the only credential.
+ *
+ * ── ONE URL, TWO COUNTERPARTIES ─────────────────────────────────────────────────────────────
+ * The same route serves the student and a co-signer (a parent or guardian), and which one the
+ * visitor is comes from WHICH TABLE their token resolves in - `agreement.tokenHash` or
+ * `agreement_signer.tokenHash`. Never from the URL, a query parameter or anything else the
+ * visitor could change: that is what makes it impossible to open somebody else's part of the
+ * ceremony by editing a link.
+ *
+ * The student's is tried first because it is the common case, and a token that resolves in
+ * neither is simply "not valid" - the page must not become an oracle that tells the holder of a
+ * wrong link which kind of signer they nearly were.
  *
  * The document itself is served as a PDF from `[token]/pdf`, rendered by the same component that
  * will produce the sealed copy, and framed here. There is deliberately no HTML rendition of the
@@ -20,15 +38,15 @@ export const dynamic = "force-dynamic";
 const REASONS: Record<TokenFailure, { title: string; body: string }> = {
   invalid: {
     title: "This link isn’t valid",
-    body: "Check that you copied the whole link from your WhatsApp message.",
+    body: "Check that you copied the whole link from your WhatsApp message or email.",
   },
   expired: {
     title: "This link has expired",
-    body: "Signing links stay live for 14 days. Ask B2 Consultants to issue a new one.",
+    body: "Signing links are time-limited. Ask B2 Consultants to issue a new one.",
   },
   used: {
     title: "Already signed",
-    body: "This agreement has been signed. Your countersigned copy was sent on WhatsApp - you can also open or download it here.",
+    body: "This agreement has been signed. Your countersigned copy was sent to you - you can also open or download it here.",
   },
   declined: {
     title: "Agreement declined",
@@ -43,7 +61,11 @@ const REASONS: Record<TokenFailure, { title: string; body: string }> = {
 export default async function SignAgreementPage({ params }: { params: { token: string } }) {
   const found = await loadAgreementByToken(params.token);
 
+  // ── A co-signer's own link ──
   if (!found.ok) {
+    const coSigner = await loadSignerByToken(params.token);
+    if (coSigner.ok) return <CoSignerView token={params.token} row={coSigner.row} />;
+
     const r = REASONS[found.reason];
     return (
       <Shell>
@@ -69,13 +91,24 @@ export default async function SignAgreementPage({ params }: { params: { token: s
 
   const data = found.row.data as unknown as AgreementData;
 
+  /**
+   * The student's own boxes, and whether anybody has to sign before them.
+   *
+   * Both come from the uploaded body, so a guided agreement has neither - which is why this is
+   * conditional rather than always loaded: the guided clause set has its signature block typeset
+   * into the document and nothing for the student to fill in.
+   */
+  const body = found.row.documentKind === "GUIDED" ? null : await uploadedBodyFor(found.row.id);
+  const inputFields = body ? signerInputFields(body.fields, "STUDENT") : [];
+  const blocking = body ? await coSignersBlocking(found.row.id, body.fields) : [];
+
   return (
     <Shell>
       <div className="space-y-5">
         <div className="rounded-card border border-line bg-surface px-5 py-4 shadow-card">
           <h1 className="font-display text-xl font-bold">Coaching &amp; Consulting Agreement</h1>
           <p className="mt-1 text-sm text-muted">
-            Guided Mode · {found.row.documentNo} · for {data.student.fullName}
+            {found.row.documentNo} · for {data.student.fullName}
           </p>
           <p className="mt-2 text-xs text-muted">
             {AGREEMENT_PROVIDER.name} has already countersigned. Read the document below, then sign at the
@@ -83,32 +116,90 @@ export default async function SignAgreementPage({ params }: { params: { token: s
           </p>
         </div>
 
-        <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-          <iframe
-            src={`/agreement/${params.token}/pdf`}
-            title={`Agreement ${found.row.documentNo}`}
-            className="h-[70vh] min-h-[460px] w-full bg-surface-2"
-          />
-          <div className="border-t border-line px-4 py-2.5 text-center">
-            <a
-              href={`/agreement/${params.token}/pdf`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-medium text-primary hover:underline"
-            >
-              Trouble reading it here? Open the PDF in a new tab
-            </a>
-          </div>
-        </div>
+        <DocumentFrame token={params.token} documentNo={found.row.documentNo} />
 
         <SignCeremony
           token={params.token}
           documentNo={found.row.documentNo}
           studentName={data.student.fullName}
           maskedPhone={maskPhone(data.student.phone)}
+          role="STUDENT"
+          inputFields={inputFields}
+          blocking={blocking}
         />
       </div>
     </Shell>
+  );
+}
+
+/**
+ * The co-signer's view of the same document.
+ *
+ * Deliberately NOT marked as viewed: `markAgreementViewed` records that the STUDENT opened their
+ * link, which is a fact about the student and is reproduced on the certificate. A guardian reading
+ * the document is their own event, and inventing one here would put a false line on the trail.
+ */
+async function CoSignerView({ token, row }: { token: string; row: SignerTokenRow }) {
+  const data = row.agreement.data as unknown as AgreementData;
+  const body = row.agreement.documentKind === "GUIDED" ? null : await uploadedBodyFor(row.agreementId);
+  const inputFields = body ? signerInputFields(body.fields, "GUARDIAN") : [];
+
+  return (
+    <Shell>
+      <div className="space-y-5">
+        <div className="rounded-card border border-line bg-surface px-5 py-4 shadow-card">
+          <h1 className="font-display text-xl font-bold">Please co-sign this agreement</h1>
+          <p className="mt-1 text-sm text-muted">
+            {row.agreement.documentNo} · {data.student.fullName}&apos;s coaching agreement
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            {row.name}, {AGREEMENT_PROVIDER.name} has already countersigned this agreement. Your signature
+            is needed before {data.student.fullName.split(" ")[0]} can sign it.
+          </p>
+        </div>
+
+        <DocumentFrame token={token} documentNo={row.agreement.documentNo} />
+
+        <SignCeremony
+          token={token}
+          documentNo={row.agreement.documentNo}
+          studentName={data.student.fullName}
+          signerName={row.name}
+          maskedPhone={maskPhone(row.phone)}
+          role="GUARDIAN"
+          inputFields={inputFields}
+        />
+      </div>
+    </Shell>
+  );
+}
+
+/**
+ * The document, framed.
+ *
+ * The escape hatch below it is load-bearing, not a nicety: iOS and most Android browsers refuse
+ * to render a PDF inside an iframe, so without it a signer on a phone gets a blank panel and
+ * concludes the agreement is broken.
+ */
+function DocumentFrame({ token, documentNo }: { token: string; documentNo: string }) {
+  return (
+    <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
+      <iframe
+        src={`/agreement/${token}/pdf`}
+        title={`Agreement ${documentNo}`}
+        className="h-[70vh] min-h-[460px] w-full bg-surface-2"
+      />
+      <div className="border-t border-line px-4 py-2.5 text-center">
+        <a
+          href={`/agreement/${token}/pdf`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs font-medium text-primary hover:underline"
+        >
+          Trouble reading it here? Open the PDF in a new tab
+        </a>
+      </div>
+    </div>
   );
 }
 

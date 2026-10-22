@@ -68,6 +68,8 @@ const catColor = (c: Category) => (c === "UTILITY" ? UTILITY : c === "AUTHENTICA
 // the comment and the array drift the moment anything is added. Read it off the array.
 
 const AREA_A = "A · Discovery-call & booking lifecycle";
+const AREA_I = "I · Class reminders";
+const AREA_J = "J · Missing a class & catching up";
 
 /**
  * The warning every Zoom-link variant carries. One constant because it is one fact, and three
@@ -740,6 +742,194 @@ export const TEMPLATES: Tpl[] = [
         "message and the email. If Meta rejects the template for carrying a password, resubmit it WITHOUT " +
         "{{temp_password}} (“Your temporary password has been emailed to {{login_email}}”): the app still offers the " +
         "variable, an unused one is simply not sent, and the email carries the password on its own.",
+    },
+  },
+
+  // ── I · Class reminders ──
+  // The only touchpoints in this pack that message a ROOM rather than a person: one class fans
+  // out to its whole roster. Both ship switched off and rehearsing (WhatsApp → Settings →
+  // Cadence), so approving these templates does not by itself start any sending.
+  {
+    area: AREA_I,
+    name: "b2_class_reminder",
+    kind: "CLASS_REMINDER",
+    sub: "Class starting soon (student)",
+    category: "UTILITY",
+    fires:
+      "To every student on a batch's roster, at each lead time set in Cadence (default 24h and 1h before). Each lead time fires once per student per class. Pre-recorded video modules are never reminded about - they have no start time.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "class_title", sample: "Open Job Market" },
+      { name: "class_time", sample: "Sun 27 Sep, 10:30 AM IST" },
+    ],
+    body:
+      "Hi {{name}}, a quick reminder about your next B2 Consultants session.\n\n" +
+      "*{{class_title}}*\n" +
+      "{{class_time}}\n\n" +
+      "The join link is in your classroom on the student portal. See you there.",
+    note: {
+      tag: "Bind this one first",
+      text:
+        "Every variable here is guaranteed non-empty by the sender: name and class_title come from " +
+        "the timetable, and class_time is always rendered in IST regardless of where the server or " +
+        "the reader is. It therefore cannot be skipped for want of a value, unlike the _link variant below.",
+    },
+  },
+  {
+    area: AREA_I,
+    name: "b2_class_reminder_link",
+    kind: "CLASS_REMINDER",
+    sub: "Class starting soon, with the join link (student)",
+    category: "UTILITY",
+    fires: "Same trigger as b2_class_reminder - bind ONE of the two, not both.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "class_title", sample: "Open Job Market" },
+      { name: "class_time", sample: "Sun 27 Sep, 10:30 AM IST" },
+      { name: "join_url", sample: "https://zoom.us/j/98412345678" },
+    ],
+    body:
+      "Hi {{name}}, a quick reminder about your next B2 Consultants session.\n\n" +
+      "*{{class_title}}*\n" +
+      "{{class_time}}\n\n" +
+      "Join here: {{join_url}}\n\n" +
+      "See you there.",
+    note: {
+      warn: true,
+      tag: "Skips any class with no link pasted yet",
+      text:
+        "join_url is EMPTY until someone puts the Zoom link on the class, and an unresolved variable " +
+        "skips the whole send rather than delivering a blank line. Same trade as the _zoom booking " +
+        "variants and the _portal welcome: bind this one only once pasting the link is a routine part " +
+        "of building a timetable. Until then bind b2_class_reminder, which points students at their " +
+        "classroom instead.",
+    },
+  },
+  {
+    area: AREA_I,
+    name: "b2_class_reminder_coach",
+    kind: "CLASS_REMINDER_COACH",
+    sub: "Class starting soon (coach / tutor)",
+    category: "UTILITY",
+    fires:
+      "The same classes and the same lead times as the student reminder, to whoever runs the batch. Switched on separately, so the coach side can be armed before or after the student side.",
+    vars: [
+      { name: "name", sample: "Karthick" },
+      { name: "class_title", sample: "Open Job Market" },
+      { name: "class_time", sample: "Sun 27 Sep, 10:30 AM IST" },
+      { name: "batch_name", sample: "Guided - September 2026" },
+      { name: "student_count", sample: "8" },
+    ],
+    body:
+      "Hi {{name}}, your next class is coming up.\n\n" +
+      "*{{class_title}}* - {{batch_name}}\n" +
+      "{{class_time}}\n" +
+      "{{student_count}} students expected.\n\n" +
+      "The join link and the register are on your teaching desk.",
+    note: {
+      tag: "Goes to the team profile number",
+      text:
+        "The recipient is read from the coach's TEAM PROFILE phone, not their login - a coach with no " +
+        "profile number is skipped with that reason rather than guessed at. student_count is the live " +
+        "roster size (batch members plus active enrolments, de-duplicated), so it is never blank for a " +
+        "batch that has anybody in it.",
+    },
+  },
+  // ── J · Missing a class & catching up ──
+  // Both of these carry a JUDGEMENT about the recipient rather than an invitation, which is why
+  // they ship behind their own rehearse switch (WhatsApp → Settings → Cadence) and why neither
+  // can fire until a coach has PUBLISHED the register it reads from.
+  {
+    area: AREA_J,
+    name: "b2_class_absence",
+    kind: "CLASS_ABSENCE",
+    sub: "Marked absent from a class",
+    category: "UTILITY",
+    fires:
+      "To a student marked ABSENT, once the coach presses “Show to students” on that register - never when it is marked. Late and excused students are never messaged: one was in the room, and the other told somebody. Only absences from the last 14 days are ever sent.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "class_title", sample: "Open Job Market" },
+      { name: "class_date", sample: "Sun 27 Sep, 10:30 AM IST" },
+      { name: "watch_deadline", sample: "7 days left to watch" },
+    ],
+    body:
+      "Hi {{name}}, we had you down as absent from this session.\n\n" +
+      "*{{class_title}}*\n" +
+      "{{class_date}}\n\n" +
+      "The recording is in your classroom on the student portal - {{watch_deadline}}.\n\n" +
+      "If you think this is wrong, reply here and your coach will check the register.",
+    note: {
+      tag: "Bind this one first",
+      text:
+        "Every variable is guaranteed non-empty by the sender. watch_deadline is a SENTENCE rather " +
+        "than a date (“7 days left to watch”, “No time limit”, “Your coach has not posted it yet”) " +
+        "because the viewing window is set per recording, and a bare date would leave the reader to " +
+        "work out whether it has already passed. The closing line is not politeness: a register is " +
+        "taken by a human in a hurry, and a message that asserts an absence with no way to dispute " +
+        "it is how a wrong tick becomes an argument.",
+    },
+  },
+  {
+    area: AREA_J,
+    name: "b2_class_absence_link",
+    kind: "CLASS_ABSENCE",
+    sub: "Marked absent, with the recording link",
+    category: "UTILITY",
+    fires: "Same trigger as b2_class_absence - bind ONE of the two, not both.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "class_title", sample: "Open Job Market" },
+      { name: "class_date", sample: "Sun 27 Sep, 10:30 AM IST" },
+      { name: "recording_url", sample: "https://fathom.video/share/abc123" },
+      { name: "watch_deadline", sample: "7 days left to watch" },
+    ],
+    body:
+      "Hi {{name}}, we had you down as absent from this session.\n\n" +
+      "*{{class_title}}*\n" +
+      "{{class_date}}\n\n" +
+      "Catch up here: {{recording_url}}\n" +
+      "{{watch_deadline}}.\n\n" +
+      "If you think this is wrong, reply here and your coach will check the register.",
+    note: {
+      warn: true,
+      tag: "Skips any class whose recording is not up - or has expired",
+      text:
+        "recording_url is EMPTY until somebody posts the video, and an unresolved variable skips the " +
+        "whole send. It is ALSO emptied once that recording's viewing window has closed, because a " +
+        "link the student will be refused at is worse than no link. Both cases mean a student who " +
+        "was absent hears nothing at all - which is the situation where being told matters most. " +
+        "Bind the plain template unless posting the recording the same day is already routine.",
+    },
+  },
+  {
+    area: AREA_J,
+    name: "b2_class_catch_up",
+    kind: "CLASS_CATCH_UP",
+    sub: "Recording still not watched",
+    category: "UTILITY",
+    fires:
+      "To a student who missed a class and still has not watched its recording once the catch-up grace has run out (Console → Attendance, default 24 hours after the recording goes up). Once per class per student.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "class_title", sample: "Open Job Market" },
+      { name: "class_date", sample: "Sun 27 Sep, 10:30 AM IST" },
+      { name: "watch_deadline", sample: "5 days left to watch" },
+    ],
+    body:
+      "Hi {{name}}, you have not caught up on this one yet.\n\n" +
+      "*{{class_title}}*\n" +
+      "{{class_date}}\n\n" +
+      "The recording is in your classroom - {{watch_deadline}}. It takes one sitting, and the next " +
+      "session builds on it.",
+    note: {
+      tag: "Never sent about a recording they cannot open",
+      text:
+        "Two cases are deliberately excluded and reach nobody's phone: a class whose recording was " +
+        "never posted, and one whose viewing window has already closed. Both are the COACH's failing " +
+        "rather than the student's, and both appear on the Attendance desk instead. “Watched” is " +
+        "judged on the TRACKED percentage, not the student's own tick - so somebody who ticked " +
+        "watched at 40% still receives this.",
     },
   },
 ];

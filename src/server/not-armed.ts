@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getEmailRuntime } from "@/lib/email";
+import { getAgreementWorkflow } from "./founder-config";
 import { getWatiRuntime } from "@/lib/wati";
 import {
   getBookingCalendars,
@@ -51,7 +52,20 @@ export type NotArmedItem = {
 };
 
 export async function getNotArmedReport(): Promise<NotArmedItem[]> {
-  const [email, wati, slots, maintenance, posting, speedToLead, dunning, pipeline, deliveries, heartbeat, bookingRules] =
+  const [
+    email,
+    wati,
+    slots,
+    maintenance,
+    posting,
+    speedToLead,
+    dunning,
+    pipeline,
+    deliveries,
+    heartbeat,
+    bookingRules,
+    agreementWorkflow,
+  ] =
     await Promise.all([
       getEmailRuntime(),
       getWatiRuntime(),
@@ -64,6 +78,7 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       readDeliveryStatuses(),
       prisma.appSetting.findUnique({ where: { key: "cronHeartbeat" } }),
       getBookingRulesConfig(),
+      getAgreementWorkflow(),
     ]);
 
   /**
@@ -168,6 +183,24 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       where: "WhatsApp → Settings → Enrolment welcome (bind b2_student_welcome first)",
     },
     {
+      /**
+       * Here for the same reason as the welcome above - built, and switched off by default.
+       *
+       * Counted as armed only when it is BOTH enabled and sending for real. A rehearsing engine
+       * is doing its job perfectly and still nobody is being reminded of anything, which is the
+       * exact state this panel exists to make visible rather than let someone discover from a
+       * student who missed a class.
+       */
+      key: "classReminders",
+      name: "Class reminders",
+      armed: wati.settings.cadence.classReminderEnabled && !wati.settings.cadence.classReminderDryRun,
+      consequence:
+        "Nobody is told their class is about to start. Students get the timetable only if they open the portal and look, and a coach gets no nudge before a session they are due to run - so a missed class looks identical to a class nobody scheduled.",
+      where: wati.settings.cadence.classReminderEnabled
+        ? "WhatsApp → Settings → Class reminder - switch on “Send for real” (it is rehearsing)"
+        : "WhatsApp → Settings → Class reminder (bind b2_class_reminder first)",
+    },
+    {
       key: "intake",
       name: "Lead capture webhooks",
       armed: anyDelivery,
@@ -188,6 +221,20 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       armed: dunning.enabled,
       consequence: "Overdue instalments are never chased. The receivable ages silently.",
       where: "Console → System → Alerts & Chasing",
+    },
+    {
+      /**
+       * An unsigned agreement is the most expensive thing in this app to leave sitting: the deal
+       * is agreed, the contract is out, and nothing happens until somebody remembers to chase it
+       * by hand. With no reminder day switched on, nobody is chased - which looks exactly like a
+       * client who is thinking about it.
+       */
+      key: "agreementReminders",
+      name: "Agreement chasing",
+      armed: agreementWorkflow.reminderDays.length > 0,
+      consequence:
+        "Unsigned agreements are never chased. A contract that goes quiet stays quiet until the link expires, and then it has to be voided and re-issued.",
+      where: "Console → Agreements → Chase an unsigned agreement",
     },
     {
       key: "retention",

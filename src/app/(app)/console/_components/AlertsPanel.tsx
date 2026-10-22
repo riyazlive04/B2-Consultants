@@ -411,9 +411,117 @@ function AttendanceCard({ config }: { config: AttendanceConfig }) {
           />
         </Field>
       </div>
+      <div className="mt-6 border-t border-line pt-5">
+        <h4 className="text-h3 text-ink">Self check-in</h4>
+        <Hint>
+          A tutor or head coach opens the register from Attendance and the students in that
+          cohort - and only that cohort - get a live &quot;I&apos;m here&quot; button for as long as
+          the window runs. It fills the register from the room instead of from memory.
+          <br />
+          Lateness is counted from whichever is later, the class start or the moment the window
+          opened, so opening early never makes anyone late and opening late never penalises the
+          room.
+        </Hint>
+        <div className="mt-4 space-y-3">
+          <Toggle
+            checked={draft.selfCheckInEnabled}
+            onChange={(v) => patch({ selfCheckInEnabled: v })}
+            label="Let students check themselves in"
+            title="Off hides the button everywhere; tutors keep the register sheet"
+          />
+          <Toggle
+            checked={draft.publishRequired}
+            onChange={(v) => patch({ publishRequired: v })}
+            label="Hide a register until the coach shows it"
+            title="Off means a mark is visible to the student as soon as it is written"
+          />
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Window length (minutes)" hint="The tutor can change this when opening.">
+            <NumInput
+              ariaLabel="Default check-in window in minutes"
+              value={draft.checkInWindowMins}
+              onChange={(n) => patch({ checkInWindowMins: n })}
+              min={1}
+              max={240}
+            />
+          </Field>
+          <Field
+            label="On time for the first N minutes"
+            hint="A check-in after this records as Late, which still counts as attending. Cannot exceed the window."
+          >
+            <NumInput
+              ariaLabel="Minutes a check-in still counts as on time"
+              value={draft.checkInLateAfterMins}
+              onChange={(n) => patch({ checkInLateAfterMins: n })}
+              min={0}
+              max={240}
+            />
+          </Field>
+        </div>
+      </div>
+
+      <div className="mt-6 border-t border-line pt-5">
+        <h4 className="text-h3 text-ink">Missing a class, and catching up</h4>
+        <Hint>
+          When a register is SHOWN to the batch, the students marked absent are told so - in the
+          app here, and over WhatsApp only if you arm that separately in WhatsApp → Settings.
+          Nothing is ever sent about a register you have not published.
+          <br />
+          The catch-up grace is measured from when the RECORDING went up, not from the class: a
+          coach who posts the video three days late has not made the whole room three days
+          overdue.
+        </Hint>
+        <div className="mt-4 space-y-3">
+          <Toggle
+            checked={draft.absenceAlertEnabled}
+            onChange={(v) => patch({ absenceAlertEnabled: v })}
+            label="Tell a student in the app when they are marked absent"
+            title="Only once the register is shown to the batch"
+          />
+          <Toggle
+            checked={draft.catchUpAlertEnabled}
+            onChange={(v) => patch({ catchUpAlertEnabled: v })}
+            label="Nudge them again if the recording goes unwatched"
+            title="Fires once the grace below has run out"
+          />
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Catch-up grace (hours)"
+            hint="After the recording goes up. The founders asked for 24. 0 means overdue immediately."
+          >
+            <NumInput
+              ariaLabel="Hours before an unwatched recording counts as overdue"
+              value={draft.catchUpHours}
+              onChange={(n) => patch({ catchUpHours: n })}
+              min={0}
+              max={720}
+            />
+          </Field>
+          <Field
+            label="Default viewing window (days)"
+            hint="What a tutor's picker pre-selects when they post a recording. 0 = no time limit, which is how every existing recording behaves."
+          >
+            <NumInput
+              ariaLabel="Default days a recording stays visible to students"
+              value={draft.recordingAccessDays}
+              onChange={(n) => patch({ recordingAccessDays: n })}
+              min={0}
+              max={3650}
+            />
+          </Field>
+        </div>
+        <p className="mt-3 text-caption text-muted">
+          Changing the default never re-dates a recording that is already posted - each one keeps
+          the window it was given. A tutor or head coach sets it per recording, and can extend or
+          reopen one from the Attendance desk.
+        </p>
+      </div>
+
       <SaveBar
         dirty={dirty}
-        onSave={() => commit("Attendance thresholds saved")}
+        onSave={() => commit("Attendance settings saved")}
         onReset={() => setDraft(DEFAULT_ATTENDANCE_CONFIG)}
         busy={busy}
         error={error}

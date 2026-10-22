@@ -40,7 +40,21 @@ const batchSchema = z.object({
   startDate: z.string().trim().optional(),
   endDate: z.string().trim().optional(),
   notes: z.string().trim().max(2000).optional(),
+  /** Edit only - the create form does not offer it, and an absent status means ACTIVE. */
+  status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
 });
+
+/**
+ * The person running the cohort. `Batch.tutorId` is a plain User reference, so this is the guard
+ * that keeps a student account - or a suspended one - out of it. Returns `undefined` for invalid,
+ * which the callers treat as a refusal rather than as "no lead".
+ */
+async function validLeadId(userId: string | undefined): Promise<string | null | undefined> {
+  if (!userId) return null;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, status: true } });
+  if (!user || user.role === "STUDENT" || user.status !== "ACTIVE") return undefined;
+  return userId;
+}
 
 const asDate = (v: string | undefined) => (v && v.trim() ? new Date(v) : null);
 
@@ -58,6 +72,14 @@ export async function upsertBatch(batchId: string | null, form: FormData): Promi
     return { ok: false, error: `A ${kind.replace("_", " ").toLowerCase()} does not belong to a ${d.line === "B2" ? "B2 Coaching" : "German Note"} batch` };
   }
 
+  const tutorId = await validLeadId(d.tutorId);
+  if (tutorId === undefined) return { ok: false, error: "That account can't lead a batch - pick an active team member" };
+
+  // An end date before the start would make `batchDayNumber` and every cohort report nonsense.
+  if (d.startDate && d.endDate && d.endDate < d.startDate) {
+    return { ok: false, error: "The end date is before the start date" };
+  }
+
   const code = d.code ? normalizeBatchCode(d.code) : "";
   if (d.code && !code) return { ok: false, error: "That batch code has no usable characters" };
   if (code) {
@@ -70,11 +92,13 @@ export async function upsertBatch(batchId: string | null, form: FormData): Promi
     name: d.name,
     code: code || null,
     level: d.level,
-    tutorId: d.tutorId || null,
+    tutorId,
     targetStrength: d.targetStrength ?? 8,
     startDate: asDate(d.startDate),
     endDate: asDate(d.endDate),
     notes: d.notes || null,
+    // Absent on the create form; on edit it is how a finished cohort is closed.
+    ...(d.status ? { status: d.status } : {}),
   };
 
   const before = batchId ? await prisma.batch.findUnique({ where: { id: batchId } }) : null;
@@ -93,6 +117,52 @@ export async function upsertBatch(batchId: string | null, form: FormData): Promi
 
   revalidatePath("/students");
   revalidatePath("/german-note");
+  revalidatePath("/german-note/manage");
+  return { ok: true };
+}
+
+/**
+ * Delete a batch - only one nobody has been put in yet.
+ *
+ * Archive is the normal way to close a cohort (`upsertBatch` with status ARCHIVED): it keeps the
+ * roster, the sessions and the history readable. This exists for the other case - a batch created
+ * by mistake, or with a typo in its code - and it REFUSES the moment anything hangs off the row.
+ * `Enrollment.batchId` is `onDelete: SetNull`, so a careless delete would not error; it would
+ * quietly unseat everyone in the cohort and leave no trace of where they had been.
+ */
+export async function deleteBatch(batchId: string): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const batch = await prisma.batch.findUnique({
+    where: { id: batchId },
+    select: {
+      name: true,
+      line: true,
+      level: true,
+      _count: { select: { members: true, enrollments: true, events: true, recordings: true } },
+    },
+  });
+  if (!batch) return { ok: false, error: "Batch not found" };
+  const { members, enrollments, events, recordings } = batch._count;
+  const seated = members + enrollments;
+  if (seated > 0) {
+    return { ok: false, error: `${batch.name} has ${seated} ${seated === 1 ? "person" : "people"} in it - archive it instead of deleting.` };
+  }
+  if (events + recordings > 0) {
+    return { ok: false, error: `${batch.name} has classes or recordings against it - archive it instead of deleting.` };
+  }
+
+  await prisma.batch.delete({ where: { id: batchId } });
+  await logActivity(session, {
+    action: "batch.delete",
+    section: batch.line === "B2" ? "students" : "german-note",
+    entityType: "Batch",
+    entityId: batchId,
+    summary: `Deleted the empty ${batch.line === "B2" ? "coaching" : "German Note"} batch "${batch.name}"`,
+    meta: { line: batch.line, level: batch.level },
+  });
+  revalidatePath("/students");
+  revalidatePath("/german-note");
+  revalidatePath("/german-note/manage");
   return { ok: true };
 }
 

@@ -15,6 +15,7 @@ import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatDate } from "@/lib/format";
 import { LOG_VARIANT_LABELS, optionsFrom, TEAM_STATUS_LABELS } from "@/lib/labels";
 import { safeAction } from "@/lib/action-guard";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 const ROLE_OPTIONS = [
   { value: "ADMIN", label: "Admin" },
@@ -190,7 +191,7 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
               <TextInput kind="email" name="email" required defaultValue={editing?.email ?? ""} />
             </Field>
             <Field label="Phone / WhatsApp">
-              <TextInput kind="phone" name="phone" defaultValue={editing?.phone ?? ""} />
+              <PhoneField name="phone" defaultValue={editing?.phone ?? ""} />
             </Field>
             <Field label="Date joined team">
               <TextInput type="date" name="dateJoined" defaultValue={editing?.dateJoined?.slice(0, 10) ?? ""} />

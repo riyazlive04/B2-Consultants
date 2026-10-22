@@ -34,6 +34,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   USER: "Telecaller",
   STUDENT: "Student",
   TUTOR: "Tutor",
+  COACH: "Coach",
 };
 
 /**

@@ -31,6 +31,7 @@ import {
   getSpeedToLeadAlertConfig,
   getDunningConfig,
   getAttendanceConfig,
+  getLeaderboardConfig,
   getDeliveryDefaults,} from "@/server/founder-config";
 import { getGoalsWithProgress } from "@/server/goals";
 import { listTutorFees } from "@/server/tutor-fees";
@@ -67,6 +68,7 @@ import { AvailabilityPanel } from "./_components/AvailabilityPanel";
 import { ConfirmLoopPanel } from "./_components/ConfirmLoopPanel";
 import { MaintenancePanel } from "./_components/MaintenancePanel";
 import { AlertsPanel } from "./_components/AlertsPanel";
+import { LeaderboardPanel } from "./_components/LeaderboardPanel";
 import { cronHealth } from "@/server/uptime";
 import { errorCountLastHour, observabilityRuntime, recentErrors } from "@/lib/observability";
 import { CAPABILITIES, effectiveCapabilities } from "@/lib/capabilities";
@@ -205,6 +207,7 @@ export default async function ConsolePage() {
     speedToLeadConfig,
     dunningConfig,
     attendanceConfig,
+    leaderboardConfig,
     slotReleases,
     zoomConfig,
   ] = await Promise.all([
@@ -235,6 +238,7 @@ export default async function ConsolePage() {
     getSpeedToLeadAlertConfig(),
     getDunningConfig(),
     getAttendanceConfig(),
+    getLeaderboardConfig(),
     // What the confirm-or-cancel loop has actually released. A console that can arm an automation
     // should be able to show what it did - "off by default" is only half the story.
     listSlotReleases(40),
@@ -555,6 +559,14 @@ export default async function ConsolePage() {
                         emailArmed={emailArmed}
                       />
                     ),
+                  },
+                  {
+                    // Beside Alerts & Chasing rather than inside it: both are rules the founder
+                    // sets about students, but one decides when the app speaks and this one
+                    // decides how a student is RANKED against their classmates. Burying the
+                    // scoring in a chasing tab would hide the most consequential numbers here.
+                    label: "Leaderboard",
+                    content: <LeaderboardPanel config={leaderboardConfig} />,
                   },
                   {
                     label: "Maintenance",

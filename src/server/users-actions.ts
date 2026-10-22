@@ -51,7 +51,7 @@ const provisioningAuth = betterAuth({
   },
 });
 
-const ROLES = ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR"] as const;
+const ROLES = ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR", "COACH"] as const;
 const roleSchema = z.enum(ROLES);
 
 const inviteSchema = z.object({

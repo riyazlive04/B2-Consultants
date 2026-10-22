@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import type { LevelKind } from "@prisma/client";
-import type { AdminLevel, LevelSummary } from "@/lib/levels";
+import type { AdminLevel } from "@/lib/levels";
 import { LEVEL_KIND_LABELS, LEVEL_KINDS_BY_LINE } from "@/lib/levels";
 import type { BusinessLine } from "@/lib/business-line";
 import { CHART_OF_ACCOUNTS } from "@/lib/chart-of-accounts";
@@ -12,7 +12,10 @@ import { createLevel, deleteLevel, setLevelActive, updateLevel } from "@/server/
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Field, FormError, Select, SubmitButton, TextInput } from "@/components/ui/form";
+import { AmountPair } from "@/components/ui/AmountPair";
 import { Modal } from "@/components/ui/Modal";
+import { Pill } from "@/components/ui/kit";
+import { formatEurMinor, formatInrMinor, minorToMajorString } from "@/lib/format";
 import { safeAction } from "@/lib/action-guard";
 
 /**
@@ -54,6 +57,8 @@ type LineConfig = {
    * cost columns as null for coaching tiers, and only a German level can sit inside a bundle.
    */
   germanEconomics: boolean;
+  /** What the price boxes are pricing, in this line's own words. */
+  priceHint: string;
   empty: string;
 };
 
@@ -72,6 +77,7 @@ const LINE_CONFIG: Record<BusinessLine, LineConfig> = {
     codePlaceholder: "GN_C1",
     labelPlaceholder: "GN C1",
     germanEconomics: true,
+    priceHint: "Course fee per student. Quoted on invoices and in the pipeline.",
     empty: "No German levels yet. Add A1 to get started.",
   },
   B2: {
@@ -90,13 +96,21 @@ const LINE_CONFIG: Record<BusinessLine, LineConfig> = {
     codePlaceholder: "MASTERCLASS",
     labelPlaceholder: "Masterclass",
     germanEconomics: false,
+    priceHint: "What a client pays for this tier. Quoted on invoices and in the pipeline.",
     empty: "No programmes yet.",
   },
 };
 
 const paiseToRupees = (n: number | null) => (n === null ? "" : String(Math.round(n / 100)));
 
-function LevelFields({ cfg, level }: { cfg: LineConfig; level?: LevelSummary }) {
+const INTERVAL_OPTIONS = [
+  { value: "ONE_TIME", label: "One-time fee" },
+  { value: "MONTHLY", label: "Per month" },
+  { value: "QUARTERLY", label: "Per quarter" },
+  { value: "YEARLY", label: "Per year" },
+];
+
+function LevelFields({ cfg, level, fxRate, fxStale }: { cfg: LineConfig; level?: AdminLevel; fxRate: number; fxStale?: boolean }) {
   const isCreate = !level;
   const locked = level?.locked ?? false;
   return (
@@ -164,6 +178,30 @@ function LevelFields({ cfg, level }: { cfg: LineConfig; level?: LevelSummary }) 
           <TextInput kind="int" name="order" defaultValue={String(level?.order ?? 0)} />
         </Field>
       )}
+      {/**
+        * ── THE PRICE, HERE RATHER THAN SOMEWHERE ELSE ────────────────────────────────
+        * It used to be settable only from Payments → Products, so the catalogue could be
+        * complete and entirely unpriced - which is what it was, and why the invoice editor had
+        * no programmes to offer. It is the same `Product` row either screen edits, not a second
+        * price: see `syncLevelPrice`. Leave both boxes empty for a programme with no price yet;
+        * it is still offerable, and the amount is then typed on the invoice.
+        */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <AmountPair
+          fxRate={fxRate}
+          fxStale={fxStale}
+          inrName="priceInr"
+          eurName="priceEur"
+          inrLabel="Price (₹)"
+          eurLabel="Price (€)"
+          baseHint={cfg.priceHint}
+          defaultInr={level?.price ? minorToMajorString(BigInt(level.price.priceInrMinor)) : ""}
+          defaultEur={level?.price ? minorToMajorString(BigInt(level.price.priceEurMinor)) : ""}
+        />
+        <Field label="Billing" hint="A course is normally a one-time fee.">
+          <Select name="priceInterval" options={INTERVAL_OPTIONS} defaultValue={level?.price?.interval ?? "ONE_TIME"} />
+        </Field>
+      </div>
       {level && !locked && (
         <Field label="Status">
           <Select
@@ -180,7 +218,32 @@ function LevelFields({ cfg, level }: { cfg: LineConfig; level?: LevelSummary }) 
   );
 }
 
-export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: BusinessLine }) {
+/** "₹75,000" / "₹75,000 · €818" / "No price set" - what the row says this programme sells for. */
+function priceLabel(level: AdminLevel): { text: string; priced: boolean } {
+  const p = level.price;
+  if (!p || (p.priceInrMinor === 0 && p.priceEurMinor === 0)) return { text: "No price set", priced: false };
+  const parts = [
+    p.priceInrMinor > 0 ? formatInrMinor(p.priceInrMinor) : null,
+    p.priceEurMinor > 0 ? formatEurMinor(p.priceEurMinor) : null,
+  ].filter(Boolean);
+  const per = p.interval === "ONE_TIME" ? "" : ` / ${p.interval.toLowerCase().replace("ly", "").replace("_", " ")}`;
+  // An archived product still answers "what does this cost", so the figure shows - labelled,
+  // because an archived price is off new invoices until it is set again from here.
+  return { text: `${parts.join(" · ")}${per}${p.archived ? " · archived" : ""}`, priced: !p.archived };
+}
+
+export function LevelsPanel({
+  levels,
+  line,
+  fxRate,
+  fxStale,
+}: {
+  levels: AdminLevel[];
+  line: BusinessLine;
+  /** INR per EUR, for the ₹/€ price pair. */
+  fxRate: number;
+  fxStale?: boolean;
+}) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<AdminLevel | null>(null);
@@ -224,7 +287,7 @@ export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: Busi
             refresh();
           }}
         >
-          <LevelFields cfg={cfg} />
+          <LevelFields cfg={cfg} fxRate={fxRate} fxStale={fxStale} />
           <div className="mt-4 flex items-center justify-between gap-3">
             <FormError message={error} />
             <span className="ml-auto"><SubmitButton>{cfg.addLabel}</SubmitButton></span>
@@ -238,7 +301,9 @@ export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: Busi
         </div>
       ) : (
         <div className="space-y-2.5">
-          {rows.map((l) => (
+          {rows.map((l) => {
+            const price = priceLabel(l);
+            return (
             <div key={l.code} className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-card">
               <div className="min-w-[220px] flex-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -246,6 +311,9 @@ export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: Busi
                   <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-muted">{l.code}</span>
                   {l.locked && <Lock size={12} className="text-muted" aria-label="Locked system level" />}
                   {!l.active && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-ink-3">Inactive</span>}
+                  {/* An unpriced programme is NAMED as such rather than left blank - that gap is
+                      invisible until somebody has to invoice it. Click Edit to put a price on it. */}
+                  <Pill tone={price.priced ? "good" : "warn"}>{price.text}</Pill>
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
                   {LEVEL_KIND_LABELS[l.kind]} · {accountLabel(l.incomeAccountCode)}
@@ -294,7 +362,8 @@ export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: Busi
                 </IconButton>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -310,7 +379,7 @@ export function LevelsPanel({ levels, line }: { levels: AdminLevel[]; line: Busi
               refresh();
             }}
           >
-            <LevelFields cfg={cfg} level={editing} />
+            <LevelFields cfg={cfg} level={editing} fxRate={fxRate} fxStale={fxStale} />
             <div className="mt-4 flex items-center justify-between gap-3">
               <FormError message={error} />
               <span className="ml-auto"><SubmitButton>Save changes</SubmitButton></span>

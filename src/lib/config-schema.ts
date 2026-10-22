@@ -13,6 +13,15 @@
  */
 
 import { z } from "zod";
+// One-directional: lib/leaderboard.ts is pure and imports nothing, so there is no cycle. The
+// catalogue has to be reachable here because the coercer below fills gaps from its defaults.
+import {
+  DEFAULT_LEADERBOARD_CONFIG,
+  LEADERBOARD_METRICS,
+  type LeaderboardConfig,
+  type LeaderboardMetricKey,
+  type MetricRule,
+} from "./leaderboard";
 import {
   DEFAULT_GAMIFICATION_CONFIG,
   EMPLOYEE_BADGE_METRICS,
@@ -1127,14 +1136,44 @@ export function coerceSavedSignature(value: unknown): SavedSignature | null {
  *   - WON     - prompt only when the deal is fully won.
  *   - EITHER  - prompt at deposit, won, OR "agreed but no deposit yet" (confirmed intention). Default.
  */
+/**
+ * How a signing link reaches the counterparty.
+ *
+ * `BOTH` is the default, and the reason is operational rather than generous: WhatsApp sending
+ * depends on a WATI template being approved, and an opted-out or mistyped number cannot be
+ * reached at all - so an email-only fallback is the difference between "the contract went out"
+ * and "the contract is stuck". Email alone is the right setting for a client who has no WhatsApp.
+ */
+export const AGREEMENT_DELIVERY_CHANNELS = ["WHATSAPP", "EMAIL", "BOTH"] as const;
+
 export const agreementWorkflowSchema = z.object({
   readiness: z.enum(["DEPOSIT", "WON", "EITHER"]),
+  /**
+   * Every field below is `.default()`ed, and that is load-bearing: `coerceAgreementWorkflow`
+   * falls back to the WHOLE default object when parsing fails, so a required new key would
+   * silently reset the founder's stored `readiness` the first time this shipped.
+   */
+  deliverBy: z.enum(AGREEMENT_DELIVERY_CHANNELS).default("BOTH"),
+  /** How long a signing link stays live. Was the hard-coded `AGREEMENT_TTL_DAYS`. */
+  ttlDays: z.number().int().min(1).max(90).default(14),
+  /**
+   * Days after issue to nudge an unsigned agreement, as a sorted list. Empty turns the sweep off.
+   *
+   * A nudge carries NO LINK, and cannot: only the token's hash is stored, so there is nothing to
+   * rebuild one from (see `resendAgreementLink`). It points the student at the message they
+   * already have, which is also why sending four of them is worse than sending two.
+   */
+  reminderDays: z.array(z.number().int().min(1).max(89)).max(5).default([3, 7, 12]),
 });
 
 export type AgreementWorkflowConfig = z.infer<typeof agreementWorkflowSchema>;
+export type AgreementDeliveryChannel = (typeof AGREEMENT_DELIVERY_CHANNELS)[number];
 
 export const DEFAULT_AGREEMENT_WORKFLOW: AgreementWorkflowConfig = {
   readiness: "EITHER",
+  deliverBy: "BOTH",
+  ttlDays: 14,
+  reminderDays: [3, 7, 12],
 };
 
 export function coerceAgreementWorkflow(value: unknown): AgreementWorkflowConfig {
@@ -1742,10 +1781,77 @@ export const attendanceConfigSchema = z
     consecutiveMissedForRed: z.number().int().min(1).max(20),
     /** Sessions attended below this count leave the signal UNKNOWN rather than green. */
     minSessionsForSignal: z.number().int().min(1).max(20),
+
+    /**
+     * ── THE SELF CHECK-IN WINDOW ───────────────────────────────────────────────────────
+     * Every field below carries `.default()`, and that is not decoration. `coerceAttendanceConfig`
+     * falls back to the ENTIRE default object when a parse fails, so adding a required key here
+     * would silently throw away whatever thresholds the founder had already saved - their 70%
+     * red line would quietly become 60% on the next deploy, with nothing on screen to say so.
+     */
+
+    /** Off switches the student-facing button off everywhere; tutors keep the sheet. */
+    selfCheckInEnabled: z.boolean().default(true),
+    /** How long a window runs by default. The tutor may override it when opening. */
+    checkInWindowMins: z.number().int().min(1).max(240).default(15),
+    /** Minutes past the anchor (see `selfMarkFor`) after which a check-in records LATE. */
+    checkInLateAfterMins: z.number().int().min(0).max(240).default(10),
+    /**
+     * Must a tutor press "Show to students" before the cohort can read the register?
+     *
+     * True is the behaviour asked for: attendance appears to a student when their tutor
+     * enables it. False restores what the app did before windows existed - a mark is visible
+     * as soon as it is written - and is kept as an option because it is the right setting for
+     * a tutor who will never remember a second button.
+     */
+    publishRequired: z.boolean().default(true),
+    /**
+     * Publish automatically the moment a window closes?
+     *
+     * Ships FALSE. Auto-publishing on close would hand the cohort a register that is, at that
+     * instant, a list of everyone who did not press a button - before the tutor has excused
+     * the student who emailed in sick. The gap between those two states is the entire reason
+     * publishing is a separate decision.
+     */
+    autoPublishOnClose: z.boolean().default(false),
+
+    /**
+     * ── MISSING A CLASS, AND CATCHING UP ───────────────────────────────────────────────
+     * Same `.default()` rule as the block above, and for the same reason.
+     */
+
+    /** Tell a student, in the app, when a published register marks them absent. */
+    absenceAlertEnabled: z.boolean().default(true),
+    /**
+     * How long after a recording goes up a student still has before not watching it counts
+     * as late. The founders asked for 24 hours.
+     *
+     * Measured from when the RECORDING was posted, not from the class. A coach who posts the
+     * video three days late has not thereby made the whole room three days overdue.
+     */
+    catchUpHours: z.number().int().min(0).max(720).default(24),
+    /** Nudge the student in-app once the grace above has run out. */
+    catchUpAlertEnabled: z.boolean().default(true),
+    /**
+     * The house default for how many days a newly posted recording stays visible to students.
+     * `0` means no time limit.
+     *
+     * Ships at 0, which is the behaviour every cohort already had - recordings were lifetime.
+     * Defaulting this to a number would start expiring recordings for cohorts nobody has made
+     * a decision about, which is a change to what students were promised rather than a new
+     * setting. A tutor still chooses per recording; this is only what their picker pre-selects.
+     */
+    recordingAccessDays: z.number().int().min(0).max(3650).default(0),
   })
   .refine((c) => c.redRatePct <= c.amberRatePct, {
     message: "The red threshold must be at or below the amber one",
     path: ["redRatePct"],
+  })
+  .refine((c) => c.checkInLateAfterMins <= c.checkInWindowMins, {
+    // A grace longer than the window makes LATE unreachable: the register would shut before
+    // anyone could be late, and every arrival would read as punctual.
+    message: "The late-after grace cannot be longer than the window itself",
+    path: ["checkInLateAfterMins"],
   });
 
 export type AttendanceConfig = z.infer<typeof attendanceConfigSchema>;
@@ -1757,11 +1863,89 @@ export const DEFAULT_ATTENDANCE_CONFIG: AttendanceConfig = {
   // Two sessions is the smallest sample where a rate means anything. Below it the honest
   // answer is "we don't know yet", not "green".
   minSessionsForSignal: 2,
+  selfCheckInEnabled: true,
+  // Fifteen minutes: long enough that a student whose video call froze still gets in, short
+  // enough that nobody can tick themselves into a class they joined at the end.
+  checkInWindowMins: 15,
+  checkInLateAfterMins: 10,
+  publishRequired: true,
+  autoPublishOnClose: false,
+  absenceAlertEnabled: true,
+  catchUpHours: 24,
+  catchUpAlertEnabled: true,
+  // 0 = no time limit, which is what every recording already had. See the field note.
+  recordingAccessDays: 0,
 };
 
 export function coerceAttendanceConfig(value: unknown): AttendanceConfig {
   const parsed = attendanceConfigSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_ATTENDANCE_CONFIG;
+}
+
+// ───────────────────────── sprint leaderboard ─────────────────────────
+
+/**
+ * THE LEADERBOARD'S ARITHMETIC - admin-editable via AppSetting("leaderboardConfig").
+ *
+ * The metric CATALOGUE lives in lib/leaderboard.ts (pure), because a metric exists only if
+ * something computes it and that is a code fact. What is editable here is everything the
+ * founders actually asked to control: which metrics count, what each is worth, the weekly
+ * ceiling on the self-reported ones, the period, the scope, and who may see the board.
+ *
+ * `metrics` is a PARTIAL record on purpose. A stored blob written before a metric existed must
+ * not fail to parse - `coerceLeaderboardConfig` fills the gaps from the catalogue's defaults,
+ * so adding a metric to the code never discards an admin's saved points for the others.
+ */
+export const leaderboardMetricRuleSchema = z.object({
+  enabled: z.boolean(),
+  points: z.number().int().min(0).max(10_000),
+  weeklyCap: z.number().int().min(1).max(1000).nullable(),
+});
+
+export const leaderboardConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  visibility: z.enum(["NAMED", "ANONYMISED", "STAFF_ONLY"]).default("NAMED"),
+  period: z.enum(["SPRINT", "PROGRAMME"]).default("SPRINT"),
+  scope: z.enum(["BATCH", "ALL"]).default("BATCH"),
+  topN: z.number().int().min(0).max(500).default(0),
+  metrics: z.record(z.string(), leaderboardMetricRuleSchema).default({}),
+});
+
+export { DEFAULT_LEADERBOARD_CONFIG };
+export type { LeaderboardConfig };
+
+/**
+ * Parse a stored blob into a complete config.
+ *
+ * Unlike the other coercers here this one does NOT fall back wholesale on a bad parse, because
+ * the shape it reads is a dictionary that grows: a blob saved before `win` existed is not
+ * corrupt, it is simply older. So the metrics map is rebuilt key by key from the catalogue -
+ * the admin's saved rule wins where there is one, the catalogue's default fills the rest. An
+ * unknown key (a metric since removed from the code) is dropped, because nothing computes it.
+ */
+export function coerceLeaderboardConfig(value: unknown): LeaderboardConfig {
+  const parsed = leaderboardConfigSchema.safeParse(value);
+  if (!parsed.success) return DEFAULT_LEADERBOARD_CONFIG;
+
+  const stored = parsed.data.metrics;
+  const metrics = Object.fromEntries(
+    LEADERBOARD_METRICS.map((m) => {
+      const saved = stored[m.key];
+      const rule: MetricRule = saved
+        ? { enabled: saved.enabled, points: saved.points, weeklyCap: saved.weeklyCap }
+        : { enabled: true, points: m.defaultPoints, weeklyCap: m.defaultWeeklyCap };
+      return [m.key, rule];
+    }),
+  ) as Record<LeaderboardMetricKey, MetricRule>;
+
+  return {
+    enabled: parsed.data.enabled,
+    visibility: parsed.data.visibility,
+    period: parsed.data.period,
+    scope: parsed.data.scope,
+    topN: parsed.data.topN,
+    metrics,
+  };
 }
 
 // ───────────────────────── cash health targets ─────────────────────────

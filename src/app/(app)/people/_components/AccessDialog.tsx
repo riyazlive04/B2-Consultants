@@ -48,6 +48,7 @@ export const ROLE_PRESETS: { value: AppRole; label: string }[] = [
   { value: "USER", label: "Telecaller" },
   { value: "STUDENT", label: "Student" },
   { value: "TUTOR", label: "Tutor" },
+  { value: "COACH", label: "Coach" },
 ];
 
 const fieldCls =

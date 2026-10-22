@@ -4,7 +4,7 @@ import { PhoneField } from "@/components/ui/PhoneField";
 import { useState } from "react";
 import {
   addEnrollment, addSatisfactionScore, createStudentLogin, linkIncomeToStudent,
-  revokeStudentLogin, setEnrollmentCloser, setEnrollmentStatus, updateStudent, updateTracker,
+  revokeStudentLogin, setEnrollmentCloser, setEnrollmentCoach, setEnrollmentStatus, updateStudent, updateTracker,
 } from "@/server/students-actions";
 import { createJobApplication, deleteJobApplication, updateJobApplicationStatus } from "@/server/job-applications-actions";
 import { seatEnrollment, unseatEnrollment } from "@/server/batch-actions";
@@ -465,8 +465,27 @@ export function StudentDetailClient({
         >
           {/* Deal team + coach - the closer (L3) drives the commission split */}
           <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-            <span className="text-muted">
-              Coach: <span className="text-ink">{e.assignedCoach ?? "-"}</span>
+            {/* Editable now, not a read-only label. Until `Enrollment.coachId` existed the
+                coach could only ever be set at the moment the enrollment was created, so a
+                caseload could not be rebalanced without a database edit - and the teaching
+                desk is only as useful as the assignment behind it. */}
+            <span className="flex items-center gap-2">
+              <span className="text-muted">Coach:</span>
+              {isAdmin ? (
+                <Select
+                  value={e.assignedCoach ?? ""}
+                  aria-label="Assigned coach"
+                  onChange={async (ev) => {
+                    setError(null);
+                    const res = await safeAction(() => setEnrollmentCoach(e.id, ev.target.value));
+                    if (!res.ok) setError(res.error);
+                    else toast("Coach updated");
+                  }}
+                  options={coachOptions(student.teamMembers)}
+                />
+              ) : (
+                <span className="text-ink">{e.assignedCoach ?? "-"}</span>
+              )}
             </span>
             <BatchPicker
               enrollment={e}
@@ -631,8 +650,8 @@ export function StudentDetailClient({
       {isAdmin && (
         <Card title="Student portal access">
           <p className="text-xs text-muted">
-            A portal login shows this student their own journey, XP, badges and next steps -
-            plus the CV Diagnostic. It never sees money, signals or internal notes.
+            A portal login shows this student their own journey, XP, badges, next steps,
+            classroom and agreement. It never sees money, signals or internal notes.
           </p>
           {student.portalEmail ? (
             <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">

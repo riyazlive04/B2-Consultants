@@ -25,13 +25,25 @@ export function PhoneField({
   size = "md",
   id,
   placeholder,
+  onChange,
 }: {
-  name: string;
+  /**
+   * The form field name. Optional ONLY for a controlled caller using `onChange`, which keeps the
+   * value in its own state and submits it itself - omitting it then stops the hidden input
+   * shadowing that state with a second field of the same name.
+   */
+  name?: string;
   defaultValue?: string;
   defaultCountry?: string;
   required?: boolean;
   size?: ControlSize;
   id?: string;
+  /**
+   * For a caller that holds the phone in its own React state rather than reading it off the form.
+   * Receives the combined E.164 value ("+919876543210"), or "" while the national part is empty -
+   * the same string the hidden input would have carried.
+   */
+  onChange?: (e164: string) => void;
   /**
    * Overrides the country's example number. The example is the better default - it teaches the
    * expected format - so this is only for a form whose wording is fixed by an external spec.
@@ -45,6 +57,15 @@ export function PhoneField({
 
   const country = dialFor(iso);
   const combined = toE164(iso, national);
+
+  /**
+   * Both halves compose one value, so a controlled parent has to hear about a COUNTRY change too -
+   * switching India to Germany on an unchanged number is a different phone number. Called from the
+   * handlers rather than an effect: an effect would also fire on mount and overwrite the parent's
+   * own initial value with a recomputed one.
+   */
+  const emit = (nextIso: string, nextNational: string) =>
+    onChange?.(toE164(nextIso, nextNational));
   // Soft, non-blocking length hint - the server (lib/phone.ts, libphonenumber) is the real gate.
   const lengthBad = national.trim().length > 0 && !nationalLengthOk(iso, national);
   const inputCls = `${baseCls} ${invalid || lengthBad ? errCls : okCls} ${sizeCls[size]}`;
@@ -57,13 +78,16 @@ export function PhoneField({
             aria-label="Country code"
             options={COUNTRY_DIAL_OPTIONS}
             value={iso}
-            onChange={(e) => setIso(e.currentTarget.value)}
+            onChange={(e) => {
+              setIso(e.currentTarget.value);
+              emit(e.currentTarget.value, national);
+            }}
             size={size}
           />
         </div>
         <span className="relative block min-w-0 flex-1">
           {/* The value every form/action reads: a single normalized phone string. */}
-          <input type="hidden" name={name} value={combined} />
+          {name && <input type="hidden" name={name} value={combined} />}
           <input
             id={id}
             type="tel"
@@ -77,7 +101,11 @@ export function PhoneField({
             aria-describedby={describedBy}
             placeholder={placeholder ?? country.example}
             value={national}
-            onChange={(e) => setNational(e.currentTarget.value.replace(/[^\d\s]/g, ""))}
+            onChange={(e) => {
+              const next = e.currentTarget.value.replace(/[^\d\s]/g, "");
+              setNational(next);
+              emit(iso, next);
+            }}
             className={inputCls}
           />
         </span>

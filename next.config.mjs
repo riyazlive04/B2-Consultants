@@ -58,7 +58,11 @@ const nextConfig = {
     // Node runtime. Keep them as runtime require()s instead of bundling: pdf-parse
     // ships its own pdf.js and lazily reads test fixtures, and mammoth pulls a large
     // dependency tree — bundling either into the route is slow and brittle.
-    serverComponentsExternalPackages: ["mammoth", "pdf-parse"],
+    // mammoth (uploaded .docx → HTML) and pdf-parse are CommonJS with large, lazily-read
+    // dependency trees. pdf-lib joins them: it is only ever used server-side (stamping an
+    // uploaded PDF), and bundling a megabyte of it into every route handler that touches
+    // agreements is pure cost.
+    serverComponentsExternalPackages: ["mammoth", "pdf-parse", "pdf-lib"],
   },
   /**
    * @react-pdf/renderer (the agreement PDF renderer) needs careful handling, and every obvious

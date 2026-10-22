@@ -2,9 +2,13 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
+import type { ProductInterval } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
 import { CHART_OF_ACCOUNTS } from "@/lib/chart-of-accounts";
+import { majorStringToMinor } from "@/lib/format";
+import { archiveData } from "@/lib/soft-delete";
+import { getTodayInrPerEur } from "@/lib/fx";
 import { normalizeLevelCode } from "@/lib/levels";
 import { lineForKind } from "@/lib/business-line";
 import type { SectionKey } from "@/lib/sections";
@@ -75,12 +79,97 @@ async function assertMembersExist(members: string[]): Promise<string | null> {
 function revalidateLevelSurfaces() {
   revalidatePath("/german-note/manage");
   revalidatePath("/programs");
+  // Pricing a programme here writes the `Product` row the invoice pickers and the products
+  // board read, so Payments is as stale as the catalogue screens after any level edit.
+  revalidatePath("/payments");
   revalidateTag(LEVELS_CACHE_TAG); // bust the cross-request level cache immediately
 }
 
 /** Which section's activity log this level edit is filed under - the one that can make it. */
 const sectionForKind = (kind: string): SectionKey =>
   lineForKind(kind) === "GERMAN_NOTE" ? "german-note" : "programs";
+
+const PRODUCT_INTERVALS = ["ONE_TIME", "MONTHLY", "QUARTERLY", "YEARLY"] as const;
+
+/**
+ * ── WHAT A PROGRAMME COSTS, SET WHERE THE PROGRAMME IS CREATED ──────────────────────
+ *
+ * A price was only ever settable from Payments → Products, a screen about invoicing, so the
+ * catalogue could be complete and entirely unpriced - which is what live was: nine levels, zero
+ * products. Nothing downstream could quote a course, and the invoice editor's programme picker
+ * (fed from `Product`) had nothing to offer at all.
+ *
+ * The price still LIVES on the `Product` row whose `levelCode` names this level. That is not a
+ * detour: it is the row invoice lines, subscriptions and the paid-invoice → Income posting all
+ * read, and `Product.levelCode` is UNIQUE, so there is exactly one price per programme however
+ * it was typed. Writing a second copy onto `Level` would create two prices and no tie-breaker.
+ *
+ * ABSENT ≠ BLANK, as everywhere else in this file. A form that never rendered the price fields
+ * leaves the product untouched; a founder who clears them is clearing the price, and that is
+ * stored as zero rather than quietly ignored. An archived product is REVIVED rather than
+ * duplicated - the unique index would refuse the duplicate, and "add a price" must not fail
+ * because somebody once archived this programme's product.
+ */
+async function syncLevelPrice(
+  levelCode: string,
+  label: string,
+  active: boolean,
+  priced: { priceInr?: string; priceEur?: string; priceInterval?: string } | null,
+): Promise<void> {
+  const existing = await prisma.product.findUnique({ where: { levelCode } });
+
+  // The price fields were not on the form. Keep the NAME in step - a renamed programme must not
+  // keep selling under its old name on invoices - and leave the money alone.
+  if (!priced) {
+    if (existing && existing.name !== label) {
+      await prisma.product.update({ where: { id: existing.id }, data: { name: label } });
+    }
+    return;
+  }
+
+  const inrMinor = priced.priceInr?.trim() ? majorStringToMinor(priced.priceInr) : 0n;
+  const eurMinor = priced.priceEur?.trim() ? majorStringToMinor(priced.priceEur) : 0n;
+  const interval = (PRODUCT_INTERVALS as readonly string[]).includes(priced.priceInterval ?? "")
+    ? (priced.priceInterval as ProductInterval)
+    : "ONE_TIME";
+
+  // Nothing typed and nothing stored: an unpriced programme is a legitimate state (it is still
+  // offerable - see `getInvoicePickers`), so do not create a ₹0 product to represent it.
+  if (!existing && inrMinor === 0n && eurMinor === 0n) return;
+
+  const fx = await getTodayInrPerEur();
+  const data = {
+    name: label,
+    priceInrMinor: inrMinor,
+    priceEurMinor: eurMinor,
+    fxRateUsed: fx.rate,
+    interval,
+    // A deactivated level stops being sellable; it does not lose what it cost.
+    active,
+  };
+
+  if (existing) {
+    // Reviving an archived row is what PRICING it means - a priced programme that stayed
+    // archived would be invisible to invoicing, and the unique index refuses a second row. But
+    // only a real amount revives it: clearing the boxes must not resurrect what somebody retired.
+    const revive = inrMinor > 0n || eurMinor > 0n;
+    await prisma.product.update({
+      where: { id: existing.id },
+      data: { ...data, ...(revive ? { deletedAt: null, deletedById: null } : {}) },
+    });
+    return;
+  }
+  await prisma.product.create({ data: { ...data, levelCode } });
+}
+
+/** Price fields, as submitted by the catalogue panel. Absent = the form did not render them. */
+function pricedFrom(form: FormData, d: { priceInr?: string; priceEur?: string; priceInterval?: string }) {
+  // Either box may be ABSENT because `AmountPair` disables the mirrored one, so presence of
+  // either key means "this form is setting the price".
+  return form.has("priceInr") || form.has("priceEur")
+    ? { priceInr: d.priceInr, priceEur: d.priceEur, priceInterval: d.priceInterval }
+    : null;
+}
 
 const LEVEL_KINDS = ["GERMAN_LEVEL", "GERMAN_BUNDLE", "COACHING_TIER", "OTHER"] as const;
 
@@ -100,6 +189,10 @@ const baseSchema = z.object({
   tutorCost: z.string().trim().optional(),
   bundleMembers: z.string().trim().optional(),
   order: z.coerce.number().int().min(0).max(999).optional(),
+  /** What it sells for - see `syncLevelPrice`. Major units, as typed; blank clears. */
+  priceInr: z.string().trim().optional(),
+  priceEur: z.string().trim().optional(),
+  priceInterval: z.enum(PRODUCT_INTERVALS).optional(),
 });
 
 export async function createLevel(form: FormData): Promise<ActionResult> {
@@ -134,6 +227,8 @@ export async function createLevel(form: FormData): Promise<ActionResult> {
       bundleMembers: members,
     },
   });
+  // The price, on the same submit. A course created without one is still created.
+  await syncLevelPrice(level.code, level.label, level.active, pricedFrom(form, d));
   await logActivity(session, {
     action: "level.create",
     section: sectionForKind(level.kind),
@@ -192,6 +287,9 @@ export async function updateLevel(id: string, form: FormData): Promise<ActionRes
       bundleMembers: before.locked ? before.bundleMembers : members,
     },
   });
+  // Locked rows (the coaching tiers) are priced like any other: `locked` freezes what a level
+  // IS, never what it sells for - "Elite costs ₹X" is exactly the edit the founders need.
+  await syncLevelPrice(after.code, after.label, after.active, pricedFrom(form, d));
   await logActivity(session, {
     action: "level.update",
     section: sectionForKind(after.kind),
@@ -227,6 +325,13 @@ export async function setLevelActive(id: string, active: boolean): Promise<Actio
     return { ok: false, error: `"${level.label}" is a locked system level and can't be deactivated` };
   }
   await prisma.level.update({ where: { id }, data: { active } });
+  /**
+   * A retired course must stop being offered AT ITS PRICE too. The product keeps the figure -
+   * reactivating the level puts it straight back on the invoice picker - but a deactivated
+   * programme that stayed sellable from Payments is the kind of gap that gets somebody invoiced
+   * for a course that is no longer running.
+   */
+  await prisma.product.updateMany({ where: { levelCode: level.code }, data: { active } });
   await logActivity(session, {
     action: "level.setActive",
     section: sectionForKind(level.kind),
@@ -258,6 +363,12 @@ export async function deleteLevel(id: string): Promise<ActionResult> {
   }
 
   await prisma.level.delete({ where: { id } });
+  // Its price goes with it - archived, not deleted, because a subscription may still point at
+  // the product and an archived row stays resolvable (that is what `deleteProduct` does too).
+  await prisma.product.updateMany({
+    where: { levelCode: level.code, deletedAt: null },
+    data: archiveData(session.user.id),
+  });
   await logActivity(session, {
     action: "level.delete",
     section: sectionForKind(level.kind),

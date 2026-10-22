@@ -14,6 +14,9 @@ import { parseDateInput } from "@/lib/dates";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { parseMentions } from "@/lib/gn-mentions";
 import { mergeWatchProgress } from "@/lib/video-progress";
+import { expiryFor, MAX_RECORDING_ACCESS_DAYS } from "@/lib/recording-access";
+import { canManageDelivery } from "./batch-access";
+import { getAttendanceConfig } from "./founder-config";
 import { getGnAccess, getGnMemberProfile, loadMentionCandidates, type GnMemberProfile } from "./german-note-metrics";
 import { logActivity, diffFields } from "./activity-log";
 import { isKnownLevel } from "./levels";
@@ -458,6 +461,15 @@ const recordingSchema = z.object({
   videoUrl: rule("url"),
   notes: optionalRule("text"),
   moduleId: z.string().trim().optional(),
+  /**
+   * HOW LONG THE STUDENTS MAY WATCH IT - days, or 0 for no time limit.
+   *
+   * Absent means "use the house default" (Console → Attendance), which is how a form that
+   * predates this field keeps working. It is deliberately NOT `z.coerce.number().optional()`
+   * with a 0 fallback: that would read a missing field as "no limit" and silently overwrite a
+   * tutor's 7-day window the next time anybody edited the title.
+   */
+  accessDays: z.coerce.number().int().min(0).max(MAX_RECORDING_ACCESS_DAYS).optional(),
 });
 
 /** null = default section; undefined = the id didn't belong to this batch (reject). */
@@ -470,7 +482,16 @@ async function resolveModuleId(batchId: string, moduleId: string | undefined): P
 
 export async function postRecording(batchId: string, form: FormData): Promise<ActionResult> {
   const session = await requireGn();
-  if (!(await canManageBatch(session, batchId))) return { ok: false, error: "Not allowed" };
+  /**
+   * `canManageDelivery`, NOT the local `canManageBatch`.
+   *
+   * The founders asked for the head coach to be able to update the recording link and set how
+   * long it can be watched. The local fence refuses anyone who is not a TUTOR because it also
+   * guards community moderation - deleting a student's post - and a Head coach being able to
+   * post a video does not imply they should be able to remove somebody's writing. So the two
+   * questions are asked by two functions, and only the delivery one widens.
+   */
+  if (!(await canManageDelivery(session, batchId))) return { ok: false, error: "Not allowed" };
   const parsed = recordingSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -490,6 +511,7 @@ export async function postRecording(batchId: string, form: FormData): Promise<Ac
       embedUrl: video.embedUrl,
       notes: d.notes || null,
       postedById: session.user.id,
+      availableUntil: expiryFor(new Date(), d.accessDays ?? (await getAttendanceConfig()).recordingAccessDays),
     },
   });
   await logActivity(session, {
@@ -498,7 +520,10 @@ export async function postRecording(batchId: string, form: FormData): Promise<Ac
     entityType: "GnRecording",
     entityId: recording.id,
     summary: `Posted the class recording "${recording.title}"`,
-    meta: { batchId, moduleId, provider: recording.provider, classDate: d.classDate },
+    meta: {
+      batchId, moduleId, provider: recording.provider, classDate: d.classDate,
+      availableUntil: recording.availableUntil?.toISOString() ?? null,
+    },
   });
   revalidateBatch(batchId);
   return { ok: true };
@@ -508,10 +533,14 @@ export async function updateRecording(recordingId: string, form: FormData): Prom
   const session = await requireGn();
   const recording = await prisma.gnRecording.findUnique({
     where: { id: recordingId },
-    select: { batchId: true, moduleId: true, title: true, classDate: true, videoUrl: true, notes: true },
+    select: {
+      batchId: true, moduleId: true, title: true, classDate: true, videoUrl: true, notes: true,
+      availableUntil: true, createdAt: true,
+    },
   });
   if (!recording) return { ok: false, error: "Recording not found" };
-  if (!(await canManageBatch(session, recording.batchId))) return { ok: false, error: "Not allowed" };
+  // Same widening as postRecording above - this is the "head coach updates the link" path.
+  if (!(await canManageDelivery(session, recording.batchId))) return { ok: false, error: "Not allowed" };
   const parsed = recordingSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -530,6 +559,16 @@ export async function updateRecording(recordingId: string, form: FormData): Prom
       provider: video.provider,
       embedUrl: video.embedUrl,
       notes: d.notes || null,
+      /**
+       * The window is re-dated from the recording's ORIGINAL posting time, not from now.
+       *
+       * Otherwise fixing a typo in the title on day six of a seven-day window would hand the
+       * cohort another full week without anyone deciding to. An omitted field leaves the
+       * existing window exactly as it was.
+       */
+      ...(d.accessDays === undefined
+        ? {}
+        : { availableUntil: expiryFor(recording.createdAt, d.accessDays) }),
     },
   });
   const diff = diffFields(recording as Record<string, unknown>, {
@@ -538,6 +577,7 @@ export async function updateRecording(recordingId: string, form: FormData): Prom
     classDate: updated.classDate,
     videoUrl: updated.videoUrl,
     notes: updated.notes,
+    availableUntil: updated.availableUntil,
   });
   if (diff.changed.length > 0) {
     await logActivity(session, {

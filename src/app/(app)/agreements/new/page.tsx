@@ -3,10 +3,12 @@ import { ArrowLeft, UserSearch } from "lucide-react";
 import { requireCapability, requireSection } from "@/lib/rbac";
 import { getAgreementPrefill, getMeetingAttendees } from "@/server/agreement-metrics";
 import { getAgreementCandidatesGrouped } from "@/server/agreement-state";
+import { listUsableTemplates } from "@/server/agreement-templates";
 import { getAgreementWorkflow, getInstalmentPlanConfig } from "@/server/founder-config";
 import { AgreementClientPicker } from "../_components/AgreementClientPicker";
 import { AgreementForm } from "../_components/AgreementForm";
 import { PageHeader } from "@/components/ui/kit";
+import { AgreementNav } from "../_components/AgreementNav";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +21,7 @@ export default async function NewAgreementPage({
   await requireSection("agreements");
   await requireCapability("agreements.issue");
 
-  const [prefill, candidates, config, instalmentPlans, attendees] = await Promise.all([
+  const [prefill, candidates, config, instalmentPlans, attendees, templates] = await Promise.all([
     getAgreementPrefill({
       leadId: searchParams.leadId ?? null,
       studentId: searchParams.studentId ?? null,
@@ -30,6 +32,9 @@ export default async function NewAgreementPage({
     // both read-only, both alongside the prefill rather than after it.
     getInstalmentPlanConfig(),
     getMeetingAttendees(),
+    // The uploaded templates this draft could be drawn on. Only ones with a current version and
+    // a document behind them - see `listUsableTemplates` on why a broken one is never offered.
+    listUsableTemplates(),
   ]);
   const picked = !!(searchParams.leadId || searchParams.studentId);
 
@@ -38,8 +43,14 @@ export default async function NewAgreementPage({
       <PageHeader
         back={{ href: "/agreements", label: "Agreements" }}
         title="New agreement"
-        subtitle="Guided Mode - template guided-v3"
+        subtitle={
+          templates.length > 0
+            ? "Pick the document, fill in the terms, then countersign and send."
+            : "Guided Mode clause set - upload your own document under Templates to use one instead."
+        }
       />
+
+      <AgreementNav />
 
       {/* The picker stays visible after a pick, so switching client is one click - not a back-button
           hunt. It lists every live deal and every student, not just won leads: the founder decides
@@ -69,6 +80,7 @@ export default async function NewAgreementPage({
         filled={prefill.filled}
         instalmentPlans={instalmentPlans}
         attendees={attendees}
+        templates={templates}
         mode={{ kind: "create", leadId: prefill.leadId, studentId: prefill.studentId }}
       />
     </div>

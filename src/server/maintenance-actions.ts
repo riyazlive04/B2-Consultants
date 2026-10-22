@@ -10,6 +10,8 @@ import {
   speedToLeadAlertSchema,
   dunningConfigSchema,
   attendanceConfigSchema,
+  leaderboardConfigSchema,
+  coerceLeaderboardConfig,
 } from "@/lib/config-schema";
 import {
   writeMaintenanceConfig,
@@ -24,6 +26,8 @@ import {
   SPEED_TO_LEAD_ALERT_KEY,
   DUNNING_KEY,
   ATTENDANCE_KEY,
+  LEADERBOARD_KEY,
+  writeLeaderboardConfig,
 } from "./founder-config";
 import { previewDunning } from "./dunning";
 import { logActivity } from "./activity-log";
@@ -151,15 +155,56 @@ export async function saveAttendanceConfig(input: unknown): Promise<ActionResult
     section: "console",
     entityType: "AppSetting",
     entityId: ATTENDANCE_KEY,
-    summary: "Updated attendance risk thresholds",
+    summary: "Updated attendance thresholds and self check-in settings",
     meta: {
       amberRatePct: parsed.data.amberRatePct,
       redRatePct: parsed.data.redRatePct,
       consecutiveMissedForRed: parsed.data.consecutiveMissedForRed,
+      selfCheckInEnabled: parsed.data.selfCheckInEnabled,
+      checkInWindowMins: parsed.data.checkInWindowMins,
+      checkInLateAfterMins: parsed.data.checkInLateAfterMins,
+      publishRequired: parsed.data.publishRequired,
     },
   });
   revalidatePath("/console");
   revalidatePath("/german-note");
+  // These settings decide what a STUDENT sees, not just how a list is coloured: the publish
+  // gate and the self check-in switch both change the student screens immediately.
+  revalidatePath("/attendance");
+  revalidatePath("/classroom");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function saveLeaderboardConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = leaderboardConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  // Coerced rather than stored raw: the metrics map is rebuilt key by key from the catalogue,
+  // so a payload missing a newly added metric is completed rather than saved half-empty.
+  const config = coerceLeaderboardConfig(parsed.data);
+  await writeLeaderboardConfig(config);
+  await logActivity(session, {
+    action: "console.leaderboard.update",
+    section: "console",
+    entityType: "AppSetting",
+    entityId: LEADERBOARD_KEY,
+    summary: "Updated the sprint leaderboard scoring",
+    meta: {
+      enabled: config.enabled,
+      visibility: config.visibility,
+      period: config.period,
+      scope: config.scope,
+      // The points are the whole point of the change, so they go in the diff rather than a
+      // bare "updated scoring" that tells a reader nothing six months later.
+      points: Object.fromEntries(
+        Object.entries(config.metrics).map(([k, r]) => [k, r.enabled ? r.points : 0]),
+      ),
+    },
+  });
+  revalidatePath("/console");
+  revalidatePath("/leaderboard");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 

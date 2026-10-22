@@ -34,6 +34,9 @@ import {
   coerceSpeedToLeadAlert,
   coerceDunningConfig,
   coerceAttendanceConfig,
+  coerceLeaderboardConfig,
+  DEFAULT_LEADERBOARD_CONFIG,
+  type LeaderboardConfig,
   coerceCashTargetsConfig,
   coerceExpenseCategoriesConfig,
   coerceZoomConfig,
@@ -122,6 +125,7 @@ export const PIPELINE_KEY = "pipelineConfig";
 export const MAINTENANCE_KEY = "maintenanceConfig";
 export const SCHEDULED_REPORT_KEY = "scheduledReport";
 export const FINANCE_POSTING_KEY = "financePosting";
+export const LEADERBOARD_KEY = "leaderboardConfig";
 export const INSTALMENT_PLAN_KEY = "instalmentPlans";
 export const PAYMENT_TYPES_KEY = "paymentTypes";
 export const INVOICE_SETTINGS_KEY = "invoiceSettings";
@@ -436,6 +440,21 @@ export const getAttendanceConfig = cache(async (): Promise<AttendanceConfig> => 
   const row = await readSetting(ATTENDANCE_KEY);
   return row ? coerceAttendanceConfig(row.value) : DEFAULT_ATTENDANCE_CONFIG;
 });
+
+export const getLeaderboardConfig = cache(async (): Promise<LeaderboardConfig> => {
+  const row = await readSetting(LEADERBOARD_KEY);
+  return row ? coerceLeaderboardConfig(row.value) : DEFAULT_LEADERBOARD_CONFIG;
+});
+
+export async function writeLeaderboardConfig(config: LeaderboardConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: LEADERBOARD_KEY },
+    create: { key: LEADERBOARD_KEY, value },
+    update: { value },
+  });
+  revalidateFounderConfig();
+}
 
 export async function writeAttendanceConfig(config: AttendanceConfig): Promise<void> {
   const value = config as unknown as Prisma.InputJsonValue;

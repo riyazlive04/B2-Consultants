@@ -14,6 +14,7 @@ import { formatDate, formatInrMinor } from "@/lib/format";
 import { LEAD_SOURCE_LABELS, optionsFrom } from "@/lib/labels";
 import { StudentName } from "@/components/ui/StudentName";
 import { safeAction } from "@/lib/action-guard";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 const B2_LEVEL_OPTIONS = [
   { value: "SOLO", label: "Solo (lifetime, self-paced)" },
@@ -178,7 +179,7 @@ export function StudentsPanel({
               <TextInput kind="email" name="email" />
             </Field>
             <Field label="Phone / WhatsApp" hint="With country code">
-              <TextInput kind="phone" name="phone" />
+              <PhoneField name="phone" />
             </Field>
             <Field label="Programme level">
               <Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" />

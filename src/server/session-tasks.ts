@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { SessionTaskType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireSection } from "@/lib/rbac";
+import { requireSession } from "@/lib/rbac";
+import { hasCapability } from "@/lib/capabilities";
 import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
@@ -29,20 +30,27 @@ const taskSchema = z.object({
 });
 
 /**
- * Admin, or the tutor who runs this batch - the same test `attendance-actions.ts` applies
- * before letting anyone mark a register, and for the same reason.
+ * Admin, whoever holds `batches.manage`, or the person who actually leads this cohort - the
+ * same test `attendance-actions.ts` applies before letting anyone mark a register.
  *
- * `requireSection("german-note")` on its own is NOT a guard here: that section is granted to
- * the STUDENT role by default (lib/sections.ts), so every action in this file was reachable
- * by any signed-in student. Every export is a POST endpoint - this is a "use server" module -
- * so "no component calls it" was never the protection it looked like.
+ * ── WHY THIS IS NOT `requireSection` ────────────────────────────────────────────────────
+ * Every export here used to open with `requireSection("german-note")`, which was wrong in both
+ * directions at once. It was never a GUARD - that section was granted to STUDENT by default, so
+ * these POST endpoints were reachable by any signed-in student and the real protection was
+ * always the per-batch check below. And once STUDENT lost the section (14/10/2026) it became an
+ * active BLOCK: a student ticking their own coursework was redirected to `/?denied=german-note`,
+ * because `requireSection` bounces rather than returning. A coach, who has no German Note
+ * section either, hit the same wall on their own batch.
+ *
+ * So the session is merely required, and the question that actually matters - is this your
+ * batch - is asked here, on every write, for everyone.
  */
 async function canManageBatch(
-  session: { role: string; user: { id: string } },
+  session: { role: string; user: { id: string }; capabilities?: unknown },
   batchId: string,
 ): Promise<boolean> {
   if (session.role === "ADMIN") return true;
-  if (session.role !== "TUTOR") return false;
+  if (hasCapability(session.role as never, (session.capabilities ?? null) as never, "batches.manage")) return true;
   const batch = await prisma.batch.findUnique({ where: { id: batchId }, select: { tutorId: true } });
   return batch?.tutorId === session.user.id;
 }
@@ -56,7 +64,7 @@ async function canManageBatch(
  * below backfills anyone who joins later, which is the other half of the same guarantee.
  */
 export async function createSessionTask(sessionId: string, form: FormData): Promise<ActionResult> {
-  const session = await requireSection("german-note");
+  const session = await requireSession();
   const parsed = taskSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -131,6 +139,10 @@ export async function createSessionTask(sessionId: string, form: FormData): Prom
   });
 
   revalidatePath("/german-note");
+  // Coursework is set from the teaching desk and read in the student classroom - both have
+  // to see it, not only the German Note screen this action was first written for.
+  revalidatePath("/coaching");
+  revalidatePath("/classroom");
   return { ok: true };
 }
 
@@ -145,7 +157,7 @@ export async function seatStudentTasks(batchId: string, studentId: string): Prom
   // be one, and it had no authorization of any kind. Its one real caller (batch-actions.ts
   // `seat`) is already admin/tutor-guarded, so this re-states that guard rather than adding
   // a new rule - it just stops the endpoint standing open on its own.
-  const session = await requireSection("german-note");
+  const session = await requireSession();
   if (!(await canManageBatch(session, batchId))) return 0;
 
   const tasks = await prisma.sessionTask.findMany({
@@ -173,7 +185,7 @@ export async function completeSessionTask(
   done: boolean,
   note?: string,
 ): Promise<ActionResult> {
-  const session = await requireSection("german-note");
+  const session = await requireSession();
 
   const row = await prisma.sessionTaskCompletion.findUnique({
     where: { id: completionId },
@@ -227,6 +239,8 @@ export async function completeSessionTask(
 
   revalidatePath("/german-note");
   revalidatePath("/my-journey");
+  revalidatePath("/classroom");
+  revalidatePath("/coaching");
   return { ok: true };
 }
 
@@ -240,8 +254,15 @@ export async function completeSessionTask(
  * read's callers do not have).
  */
 export async function studentTasks(studentId: string) {
-  const session = await requireSection("german-note");
-  if (session.role !== "ADMIN" && session.role !== "TUTOR") {
+  const session = await requireSession();
+  // Staff who teach or supervise may read anyone's; everyone else may read only their own.
+  const staff =
+    session.role === "ADMIN" ||
+    session.role === "HEAD" ||
+    session.role === "TUTOR" ||
+    session.role === "COACH" ||
+    hasCapability(session.role, session.capabilities, "batches.manage");
+  if (!staff) {
     const own = await prisma.student.count({ where: { id: studentId, userId: session.user.id } });
     if (own === 0) return [];
   }

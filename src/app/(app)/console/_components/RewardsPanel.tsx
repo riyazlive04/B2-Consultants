@@ -75,6 +75,7 @@ const METRIC_OPTIONS = COUNTABLE_METRICS.map((m) => ({ value: m, label: EMPLOYEE
 
 const ROLE_LABELS: Record<AppRole, string> = {
   ADMIN: "Admin", HEAD: "Head coach", USER: "Telecaller", STUDENT: "Student", TUTOR: "Tutor",
+  COACH: "Coach",
 };
 
 /** §1.2 - the four meanings, straight from the shared tone scale. */

@@ -583,7 +583,20 @@ function RecordPaymentForm({ d, onDone }: { d: ReceivableDetail; onDone: () => v
             defaultLine: d.course.line,
           }
         : null,
-    [data],
+    /**
+     * `d.course.line` IS a dependency, and leaving it out was a live correctness hole.
+     *
+     * `data` is fetched once on mount (the effect above has an empty dep list), so it never
+     * changes again. That means a memo keyed on `[data]` alone is computed exactly once - and
+     * if `d` is then swapped for another receivable while this form stays mounted, the form
+     * keeps the FIRST receivable's `defaultLine`.
+     *
+     * `defaultLine` decides which book the money is filed to. Filing German Note income into
+     * the B2 book is not a cosmetic bug, it is the one this codebase has already shipped once
+     * (see the note on `defaultLine` in lib/income-defaults) - which is why this is pinned
+     * rather than silenced with an eslint-disable.
+     */
+    [data, d.course.line],
   );
 
   if (loadState === "error") {

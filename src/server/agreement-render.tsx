@@ -2,6 +2,7 @@ import "server-only";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { AgreementGuidedV3 } from "@/documents/agreement-guided-v3";
 import { AgreementGuidedV4, type AgreementDocProps, type CertificateEvent } from "@/documents/agreement-guided-v4";
+import { AgreementUploadDocxV1, uploadDocTitle } from "@/documents/agreement-upload-docx-v1";
 import { sha256Hex, toOwnedBytes } from "@/lib/agreement-token";
 import type { StoredDevice } from "@/lib/device";
 import {
@@ -9,6 +10,15 @@ import {
   canonicalPayload,
   type AgreementData,
 } from "@/lib/agreement";
+import {
+  docBodyHashInput,
+  UPLOAD_TEMPLATE_VERSIONS,
+  type DocBody,
+  type SignerValues,
+} from "@/lib/agreement-doc";
+import { fillFields } from "@/lib/agreement-fill";
+import { mergeBlocks } from "@/lib/agreement-merge";
+import { stampAgreementPdf } from "./agreement-pdf-overlay";
 
 /**
  * The ONLY place data becomes bytes. Preview and sealed artifact call the same function, so
@@ -17,9 +27,21 @@ import {
  * Node runtime only - @react-pdf/renderer is externalized in next.config.mjs.
  */
 
-/** SHA-256 of the canonical (terms + template version). Deterministic; printed on every page. */
-export function contentHash(data: AgreementData, templateVersion = AGREEMENT_TEMPLATE_VERSION): string {
-  return sha256Hex(canonicalPayload(data, templateVersion));
+/**
+ * SHA-256 of the canonical (terms + template version + uploaded body). Deterministic; printed on
+ * every page.
+ *
+ * `body` is optional and MUST stay optional: `canonicalPayload` drops the key when it is absent,
+ * so a GUIDED agreement hashes exactly as it did before uploaded documents existed and every
+ * already-signed PDF keeps the hash printed on its pages. See the regression guard in
+ * `lib/__tests__/agreement-doc.test.ts`.
+ */
+export function contentHash(
+  data: AgreementData,
+  templateVersion = AGREEMENT_TEMPLATE_VERSION,
+  body?: DocBody | null,
+): string {
+  return sha256Hex(canonicalPayload(data, templateVersion, body ? docBodyHashInput(body) : undefined));
 }
 
 /** react-pdf's <Image> takes a data URL; the database gives us raw PNG bytes. */
@@ -27,7 +49,6 @@ export function pngDataUrl(bytes: Uint8Array | Buffer | null | undefined): strin
   if (!bytes || bytes.length === 0) return null;
   return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
 }
-
 
 export type RenderInput = {
   documentNo: string;
@@ -45,6 +66,30 @@ export type RenderInput = {
     deliveredTo?: string | null;
     device?: StoredDevice | null;
   } | null;
+  /**
+   * The uploaded document, for an agreement whose `documentKind` is not GUIDED. Required for the
+   * upload-* template versions and ignored by the guided ones.
+   *
+   * `sourceBytes` is only needed by the PDF path - the DOCX path renders from `body.blocks` - so
+   * callers rendering a Word agreement may leave it out and skip pulling a bytea.
+   */
+  body?: (DocBody & { sourceBytes?: Uint8Array | null }) | null;
+  /**
+   * What the STUDENT typed or ticked in their own boxes (`Agreement.signerFieldValues`). Produced
+   * at signing, so it is absent on every preview - which is why an unanswered checkbox renders as
+   * an empty square rather than an unticked one.
+   */
+  signerValues?: SignerValues | null;
+  /**
+   * The co-signer, when the document has one. A guardian signs BEFORE the student (see the note on
+   * `SIGNER_ROLES`), so by the time the sealing render happens their ink is already on record.
+   */
+  guardian?: {
+    name: string;
+    signaturePng?: Uint8Array | null;
+    signedAt?: Date | null;
+    values?: SignerValues | null;
+  } | null;
 };
 
 /**
@@ -57,17 +102,20 @@ export type RenderInput = {
  */
 export async function renderAgreementPdf(input: RenderInput): Promise<Buffer> {
   const templateVersion = input.templateVersion ?? AGREEMENT_TEMPLATE_VERSION;
+
   /**
    * Dispatch on the version stored on the ROW, never on the current one.
    *
    * This is the whole reason the version exists: a contract signed under guided-v3 must go on
-   * rendering the v3 clause set for as long as it is enforceable, even though every new agreement
-   * is drawn up under v4. The props are identical across versions (`AgreementDocProps`), so the
-   * only thing that varies is which component - and the shape of the data, which stays
-   * backward-compatible precisely so an old row can still be handed to its old renderer.
+   * rendering the v3 clause set for as long as it is enforceable, even though every new guided
+   * agreement is drawn up under v4 - and an agreement signed on an uploaded document must go on
+   * rendering through the renderer it was signed under.
    *
-   * Adding guided-v5 means adding a file and a line here, never editing v3 or v4 in place.
+   * Adding a version means adding a file and a branch, never editing one that is in use.
    */
+  if (templateVersion === UPLOAD_TEMPLATE_VERSIONS.DOCX) return renderUploadedDocx(input, templateVersion);
+  if (templateVersion === UPLOAD_TEMPLATE_VERSIONS.PDF) return renderUploadedPdf(input, templateVersion);
+
   const Template = TEMPLATES[templateVersion];
   if (!Template) {
     throw new Error(
@@ -90,7 +138,7 @@ export async function renderAgreementPdf(input: RenderInput): Promise<Buffer> {
 }
 
 /**
- * Every clause set this codebase can still render, by the version string stored on the row.
+ * Every GUIDED clause set this codebase can still render, by the version string stored on the row.
  *
  * NOTHING may be removed from this map while an agreement in the table still carries that
  * version - dropping an entry does not deprecate a template, it makes a signed contract
@@ -106,4 +154,107 @@ export async function sealAgreementPdf(input: RenderInput) {
   const buf = await renderAgreementPdf(input);
   // Hash the Buffer; store standalone bytes - Prisma's `Bytes` will not take a pooled Buffer.
   return { bytes: toOwnedBytes(buf), sha256: sha256Hex(buf), size: buf.length };
+}
+
+// ───────────────────────────── Uploaded documents ─────────────────────────────
+
+function requireBody(input: RenderInput, templateVersion: string) {
+  if (!input.body) {
+    throw new Error(
+      `Template "${templateVersion}" renders an uploaded document, but no body was loaded for ${input.documentNo}.`,
+    );
+  }
+  return input.body;
+}
+
+/**
+ * The two halves every uploaded render needs: the fields resolved to what they print, and the
+ * document's own title.
+ *
+ * `asOf` is the issue date once there is one, else today - so a draft preview is dated today and
+ * a sealed copy is dated when it was actually countersigned, and `{{document.date}}` means the
+ * same thing in both.
+ */
+function prepare(input: RenderInput, body: DocBody) {
+  const filled = fillFields({
+    fields: body.fields,
+    data: input.data,
+    ctx: {
+      documentNo: input.documentNo,
+      asOf: input.founderSignedAt ?? new Date(),
+      // A CREATOR text box may hold `{{custom.*}}` just as the prose may, so the declarations
+      // have to reach `fillFields` too - not only `mergeBlocks` below.
+      custom: body.options?.custom,
+    },
+    signers: {
+      CREATOR: {
+        ink: pngDataUrl(input.founderSignaturePng),
+        signedAt: input.founderSignedAt ?? null,
+      },
+      STUDENT: {
+        ink: pngDataUrl(input.studentSignaturePng),
+        signedAt: input.signedAt ?? null,
+        values: input.signerValues ?? null,
+      },
+      ...(input.guardian
+        ? {
+            GUARDIAN: {
+              ink: pngDataUrl(input.guardian.signaturePng),
+              signedAt: input.guardian.signedAt ?? null,
+              name: input.guardian.name,
+              values: input.guardian.values ?? null,
+            },
+          }
+        : {}),
+    },
+  });
+  return { filled };
+}
+
+async function renderUploadedDocx(input: RenderInput, templateVersion: string): Promise<Buffer> {
+  const body = requireBody(input, templateVersion);
+  const blocks = body.blocks ?? [];
+  const { filled } = prepare(input, body);
+  const title = uploadDocTitle(blocks, body.sourceName.replace(/\.docx$/i, ""));
+
+  return renderToBuffer(
+    <AgreementUploadDocxV1
+      documentNo={input.documentNo}
+      dataSha256={contentHash(input.data, templateVersion, body)}
+      templateVersion={templateVersion}
+      title={title}
+      studentName={input.data.student.fullName}
+      // Tokens are resolved HERE, on the way in, so the renderer never sees a `{{...}}`.
+      blocks={mergeBlocks(blocks, input.data, {
+        documentNo: input.documentNo,
+        asOf: input.founderSignedAt ?? new Date(),
+        custom: body.options?.custom,
+      })}
+      filled={filled}
+      options={body.options ?? null}
+      signedAt={input.signedAt ?? null}
+      certificate={input.certificate ?? null}
+    />,
+  );
+}
+
+async function renderUploadedPdf(input: RenderInput, templateVersion: string): Promise<Buffer> {
+  const body = requireBody(input, templateVersion);
+  if (!body.sourceBytes || body.sourceBytes.length === 0) {
+    throw new Error(`Agreement ${input.documentNo} is a PDF document but its stored file is missing.`);
+  }
+  const { filled } = prepare(input, body);
+
+  return stampAgreementPdf({
+    source: body.sourceBytes,
+    documentNo: input.documentNo,
+    dataSha256: contentHash(input.data, templateVersion, body),
+    templateVersion,
+    title: body.sourceName.replace(/\.pdf$/i, ""),
+    studentName: input.data.student.fullName,
+    filled,
+    options: body.options ?? null,
+    signedAt: input.signedAt ?? null,
+    certificate: input.certificate ?? null,
+  });
 }

@@ -66,10 +66,13 @@ export default async function Home({
   // Post-invite first-touch walkthrough flag (OnboardingWalkthrough) - forward it
   // through the STUDENT/TUTOR redirects below since they never render this page.
   const onboardingQuery = searchParams.onboarding === "1" ? "?onboarding=1" : "";
-  // Students land straight on their journey - the founder home is team-facing.
-  if (session.role === "STUDENT") redirect(`/my-journey${onboardingQuery}`);
+  // Students land on their own dashboard - the founder home is team-facing. Was /my-journey,
+  // which is the scoreboard rather than a landing page; see the `dashboard` section note.
+  if (session.role === "STUDENT") redirect(`/dashboard${onboardingQuery}`);
   // Tutors only work inside the German Note section.
   if (session.role === "TUTOR") redirect(`/german-note${onboardingQuery}`);
+  // A coach's home is the batches they teach, not the founder's KPI wall.
+  if (session.role === "COACH") redirect(`/coaching${onboardingQuery}`);
   const isAdmin = session.role === "ADMIN";
   // Head now has Pipeline visibility (sections.ts) - the home page should reflect that
   // instead of falling back to the generic personal WorkTracker (BUILD_CHECKLIST §2).

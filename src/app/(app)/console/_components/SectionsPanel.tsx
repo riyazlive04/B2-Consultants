@@ -36,6 +36,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   USER: "Telecaller",
   STUDENT: "Student",
   TUTOR: "Tutor",
+  COACH: "Coach",
 };
 
 /** Column-header form of the same roles - a checkbox track is 3.5rem, too narrow for "Head coach". */
@@ -45,6 +46,7 @@ const ROLE_COL_LABELS: Record<AppRole, string> = {
   USER: "Tele",
   STUDENT: "Student",
   TUTOR: "Tutor",
+  COACH: "Coach",
 };
 
 /**

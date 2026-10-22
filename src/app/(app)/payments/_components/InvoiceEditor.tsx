@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Trash2, Send, Download, Link2, Ban, CheckCircle2, ArrowRightLeft, Lock, Mail,
 } from "lucide-react";
-import type { InvoiceDetail } from "@/server/payments-metrics";
+import type { InvoiceDetail, InvoiceLineOption } from "@/server/payments-metrics";
 import type { InvoiceTaxConfig } from "@/lib/config-schema";
 import { Btn, IconButton } from "@/components/ui/controls";
 import { Card, Pill, type Tone } from "@/components/ui/kit";
@@ -57,10 +57,12 @@ type Pickers = {
     /** From the contact's signed agreement, when there is one. */
     address: string | null; agreementNo: string | null;
   }[];
-  products: {
-    id: string; name: string; levelCode: string | null; lineLabel: string | null;
-    priceInr: string; priceEur: string;
-  }[];
+  /**
+   * What a line can sell: the whole active programme catalogue plus the one-off products -
+   * see `getInvoicePickers`. Keyed by its own `id`, and an option may be UNPRICED, in which
+   * case picking it names the programme and leaves the amount to be typed.
+   */
+  lineOptions: InvoiceLineOption[];
 };
 type Item = { description: string; quantity: number; unitPrice: string; levelCode: string | null };
 
@@ -154,14 +156,16 @@ export default function InvoiceEditor({
       if (c.agreementNo) setAgreementRef(c.agreementNo);
     }
   }
-  /** The product's price in THIS invoice's currency - never the rupee figure pasted into a euro line. */
-  const priceOf = (p: Pickers["products"][number]) => (currency === "EUR" ? p.priceEur : p.priceInr);
+  /** The option's price in THIS invoice's currency - never the rupee figure pasted into a euro line. */
+  const priceOf = (p: InvoiceLineOption) => (currency === "EUR" ? p.priceEur : p.priceInr);
+  /** An unpriced programme contributes a name and a level, and no amount. */
+  const describe = (p: InvoiceLineOption) => p.description?.trim() || p.label.split(" · ")[0];
 
   function addProduct(id: string) {
-    const p = pickers.products.find((x) => x.id === id);
+    const p = pickers.lineOptions.find((x) => x.id === id);
     if (!p) return;
     setItems((its) => {
-      const line: Item = { description: p.name, quantity: 1, unitPrice: priceOf(p), levelCode: p.levelCode };
+      const line: Item = { description: describe(p), quantity: 1, unitPrice: priceOf(p), levelCode: p.levelCode };
       // An untouched opening line is REPLACED rather than left above the one just added - a blank
       // first row is the editor's starting state, not a line somebody wrote.
       const blank = its.length === 1 && !its[0].description.trim() && !its[0].unitPrice.trim();
@@ -169,11 +173,14 @@ export default function InvoiceEditor({
     });
   }
 
-  /** Fill a line from a programme in place - the per-line version of "add from product". */
-  function setLineProduct(i: number, productId: string) {
-    const p = pickers.products.find((x) => x.id === productId);
+  /** Fill a line from a programme in place - the per-line version of "add a programme". */
+  function setLineProduct(i: number, optionId: string) {
+    const p = pickers.lineOptions.find((x) => x.id === optionId);
     if (!p) return setItem(i, { levelCode: null });
-    setItem(i, { description: p.name, unitPrice: priceOf(p), levelCode: p.levelCode });
+    // An unpriced option leaves whatever is in the box alone rather than blanking a typed
+    // amount: naming the programme is the point, and the price may already be right.
+    const price = priceOf(p);
+    setItem(i, { description: describe(p), levelCode: p.levelCode, ...(price ? { unitPrice: price } : {}) });
   }
 
   /**
@@ -263,10 +270,7 @@ export default function InvoiceEditor({
   const canShare = invoice && invoice.status !== "DRAFT" && invoice.status !== "VOID";
   /** Issued = numbered and locked. Everything below renders read-only. */
   const locked = !!invoice?.issued;
-  const productOpts = pickers.products.map((p) => ({
-    value: p.id,
-    label: p.lineLabel ? `${p.name} · ${p.lineLabel}` : p.name,
-  }));
+  const productOpts = pickers.lineOptions.map((p) => ({ value: p.id, label: p.label }));
 
   return (
     <div className="space-y-5">
@@ -381,7 +385,9 @@ export default function InvoiceEditor({
                 const lineTotal = totals.subtotalMinor === 0n && !it.unitPrice
                   ? 0n
                   : computeInvoiceTotals([it], "", 0).subtotalMinor;
-                const matchedProduct = pickers.products.find((p) => p.levelCode && p.levelCode === it.levelCode);
+                // A line remembers its PROGRAMME, not which catalogue row filled it, so the
+                // picker re-matches by level code. A one-off item has none and reads as custom.
+                const matchedProduct = pickers.lineOptions.find((p) => p.levelCode && p.levelCode === it.levelCode);
                 return (
                   <div key={i} className="rounded-card border border-line bg-surface-2/40 p-3">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">

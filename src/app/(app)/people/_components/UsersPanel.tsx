@@ -37,6 +37,7 @@ const ROLE_TONE: Record<AppRole, { tone: Tone; label: string }> = {
   USER: { tone: "good", label: "Telecaller" },
   STUDENT: { tone: "neutral", label: "Student" },
   TUTOR: { tone: "neutral", label: "Tutor" },
+  COACH: { tone: "info", label: "Coach" },
 };
 
 const MAX_CHIPS = 4;

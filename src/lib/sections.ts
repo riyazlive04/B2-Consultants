@@ -13,9 +13,9 @@
  *  or hand it to a non-admin - otherwise the only way back is a database edit.
  */
 
-export type AppRole = "ADMIN" | "HEAD" | "USER" | "STUDENT" | "TUTOR";
+export type AppRole = "ADMIN" | "HEAD" | "USER" | "STUDENT" | "TUTOR" | "COACH";
 
-export const APP_ROLES: readonly AppRole[] = ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR"] as const;
+export const APP_ROLES: readonly AppRole[] = ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR", "COACH"] as const;
 
 /** Icon names the console offers. `section-icons.tsx` maps each to a lucide component
  *  and is typed against this list, so adding a name here without a component fails the build. */
@@ -25,7 +25,7 @@ export const SECTION_ICON_NAMES = [
   "map", "book-open", "message-circle", "trophy", "sliders", "target", "gift",
   "sparkles", "bar-chart", "shield", "layout-grid", "file-signature", "scale",
   "contact", "kanban", "file-text", "layout-template", "receipt", "inbox", "workflow",
-  "globe", "layers",
+  "globe", "layers", "school", "calendar-days", "user-check", "medal",
 ] as const;
 export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];
 
@@ -174,13 +174,87 @@ export const SECTION_CATALOGUE = [
    * ever needs this back it is one toggle in Console → Sections or their Access dialog, per
    * person - which is the mechanism this catalogue is designed to be tuned by.
    */
-  { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "My Work", roles: ["HEAD", "TUTOR"] },
+  { key: "daily-log", label: "My Daily Log", href: "/daily-log", phase: 2, icon: "clipboard-list", group: "My Work", roles: ["HEAD", "TUTOR", "COACH"] },
+  /**
+   * The student's FRONT DOOR, and the first thing in their rail.
+   *
+   * The portal had two screens and no landing: My Journey is a scoreboard ("how far have I
+   * come") and My Classroom is a timetable ("what is on"). Neither answers the question someone
+   * actually signs in with - "what do I need to do now" - so a student arriving on a gamified
+   * ring had to work out for themselves which of the other two held the answer. This owns no
+   * data; it summarises both and links out.
+   */
+  { key: "dashboard", label: "Dashboard", href: "/dashboard", phase: 2, icon: "layout-grid", group: "My Work", roles: ["STUDENT"] },
   // STUDENT portal: their own journey only.
   { key: "my-journey", label: "My Journey", href: "/my-journey", phase: 2, icon: "map", group: "My Work", roles: ["STUDENT"] },
+  /**
+   * The student's CLASSROOM - their batch timetable, join links, recordings, coursework and
+   * their own attendance.
+   *
+   * Separate from My Journey rather than another section on it, because the two answer
+   * different questions at different cadences. My Journey is "how far have I come" - a
+   * scoreboard you open once a week. This is "what is on, when, and what do I owe" - the page
+   * a student opens on a Saturday morning to find the Zoom link. Folding the timetable into
+   * the scoreboard would have buried the one time-critical thing the portal has to do.
+   *
+   * STUDENT only. Staff read the same timetable from the batch itself (/batches/[id]), where
+   * they can also edit it; this route is deliberately read-only and self-scoped.
+   */
+  { key: "classroom", label: "My Classroom", href: "/classroom", phase: 2, icon: "calendar-days", group: "My Work", roles: ["STUDENT"] },
+  /**
+   * The TEACHING desk - one screen for everyone who stands in front of a batch.
+   *
+   * COACH and TUTOR share it on purpose. A coach runs a B2 cohort through the curriculum and a
+   * tutor runs a German Note level through its classes, but the DAY is the same shape for both:
+   * what am I teaching next, who is in the room, take the register, post the recording, set the
+   * coursework. Two screens for that would have been the same code twice with the batch line
+   * swapped. The desk scopes itself by what you actually lead - `Batch.tutorId`, plus
+   * `Enrollment.coachId` for a coach's own students - so neither sees the other's cohorts.
+   *
+   * ADMIN and HEAD are included to supervise; both also keep the full Students board.
+   */
+  { key: "coaching", label: "My Teaching", href: "/coaching", phase: 2, icon: "school", group: "My Work", roles: ["ADMIN", "HEAD", "COACH", "TUTOR"] },
+  /**
+   * THE REGISTER DESK - its own door, for a job with a deadline measured in minutes.
+   *
+   * Taking attendance was already possible from two places, and both of them are somewhere
+   * else you were going: a tab on the cohort page and a row on the German Note schedule. That
+   * is the right home for a correction a week later, and the wrong one for what this is
+   * actually for - the first two minutes of a class, while the tutor is also sharing a screen
+   * and greeting eight people. Nobody navigates a cohort page to find a tab at that moment,
+   * which is most of why the register has historically gone untaken.
+   *
+   * It is in My Work rather than beside the batches on purpose: this is a thing you DO on your
+   * own day, not a record you browse. Same role list as My Teaching, because it is the same
+   * people doing the same job from a different angle - and HEAD is in it because the founders
+   * asked for the head coach to be able to enable attendance, which is the one permission this
+   * feature widens (see `canMark` in server/attendance-actions.ts).
+   */
+  { key: "attendance", label: "Attendance", href: "/attendance", phase: 2, icon: "user-check", group: "My Work", roles: ["ADMIN", "HEAD", "COACH", "TUTOR"] },
+  /**
+   * THE SPRINT LEADERBOARD - and the only section in the catalogue a student and their coach
+   * both open to look at the same thing.
+   *
+   * Four taught weeks, then a 90-day (Guided) or 120-day (Elite) sprint. The taught weeks are
+   * measured by attendance and coursework; the sprint is measured by what a student does with
+   * them - applications, recruiter connections, interviews. One board spans both, because a
+   * student who attended everything and applied to nothing and a student who attended nothing
+   * and applied to forty roles are both in trouble, and only a number that includes both can
+   * say so.
+   *
+   * STUDENT is in this list, which makes it the first section where a student sees another
+   * student. That is a deliberate reversal of the privacy line every other student page holds
+   * (on /classroom a classmate is a COUNT, never a name), taken because the founders asked for
+   * a leaderboard and a leaderboard of strangers motivates nobody. It is also why the admin can
+   * turn the names off: `visibility` in the leaderboard config is NAMED, ANONYMISED or
+   * STAFF_ONLY, and `viewFor` in server/leaderboard.ts strips the names on the server rather
+   * than hiding them in the page.
+   */
+  { key: "leaderboard", label: "Leaderboard", href: "/leaderboard", phase: 2, icon: "medal", group: "My Work", roles: ["ADMIN", "HEAD", "COACH", "TUTOR", "STUDENT"] },
   { key: "arena", label: "Arena", href: "/arena", phase: 2, icon: "trophy", group: "My Work", roles: ["ADMIN", "HEAD", "USER"] },
   // Help belongs beside your own work, not in an admin drawer. It is also what keeps this group
   // non-empty for a Tutor or a Student, who would otherwise be left with a single item.
-  { key: "guide", label: "App Guide", href: "/guide", phase: 1, icon: "book-open", group: "My Work", roles: ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR"] },
+  { key: "guide", label: "App Guide", href: "/guide", phase: 1, icon: "book-open", group: "My Work", roles: ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR", "COACH"] },
 
   // ──────────────────────────────── Sales ────────────────────────────────
   /**
@@ -252,11 +326,27 @@ export const SECTION_CATALOGUE = [
   // ones who shouldn't have it are switched off per person. Student is `O` - their own agreement
   // is on /my-journey. Issuing still needs the `agreements.issue` capability regardless.
   { key: "agreements", label: "Agreements", href: "/agreements", phase: 4, icon: "file-signature", group: "Students", roles: ["ADMIN", "HEAD", "USER"] },
-  // German Note LMS: batches + class recordings + community (Phase 4).
-  { key: "german-note", label: "German Note", href: "/german-note", phase: 4, icon: "languages", group: "Students", roles: ["ADMIN", "HEAD", "TUTOR", "STUDENT"] },
+  /**
+   * German Note LMS: batches + class recordings + community (Phase 4).
+   *
+   * STUDENT removed 14/10/2026. The role is coarse - a B2 coaching student and a German Note
+   * student are both STUDENT - so granting it by role put "German Note" in the sidebar of every
+   * student including Solo/Guided/Elite ones, who are not German Note at all. The page itself
+   * already knew better (`isParticipant` is false without a GN batch seat, so they saw an empty
+   * screen), but the nav entry still said they belonged to a business they had not bought.
+   *
+   * A real German Note student gets it back through the PER-USER override in Users & access,
+   * which wins over the role default - see `canAccessSection` below. If GN students become
+   * routine, replace this with a seat check rather than granting STUDENT again.
+   */
+  { key: "german-note", label: "German Note", href: "/german-note", phase: 4, icon: "languages", group: "Students", roles: ["ADMIN", "HEAD", "TUTOR"] },
   // The CV diagnostic (stores nothing). A student-facing tool, so it belongs beside the student
   // it is delivered to, not in a group of analytics screens.
-  { key: "cv-check", label: "CV Studio", href: "/cv-check", phase: 2, icon: "file-search", group: "Students", roles: ["ADMIN", "HEAD", "STUDENT"] },
+  //
+  // `hidden` since 14/10/2026 at the founder's request: off the nav AND the route, for every role
+  // including ADMIN, the same way `ledger` and `automation` ship. Nothing is deleted - Console →
+  // Sections switches it back on, and an explicit "on" there wins over this default.
+  { key: "cv-check", label: "CV Studio", href: "/cv-check", phase: 2, icon: "file-search", group: "Students", roles: ["ADMIN", "HEAD", "STUDENT"], hidden: true },
 
   // ─────────────────────────────── Insights ──────────────────────────────
   // What is left once the builders and the inboxes move out: the two screens you open to READ a

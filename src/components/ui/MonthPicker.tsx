@@ -77,6 +77,7 @@ export function MonthPicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const gridId = useId();
+  const panelId = useId();
 
   const [uncontrolled, setUncontrolled] = useState<string>((defaultValue as string) ?? "");
 
@@ -177,8 +178,12 @@ export function MonthPicker({
         ref={triggerRef}
         type="button"
         disabled={disabled}
+        // See the note in DatePicker.tsx: aria-required is ignored on a button, so the
+        // required state of this field was announced by nothing. combobox fixes that.
+        role="combobox"
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         aria-label={ariaLabel}
         aria-describedby={describedBy}
         aria-required={required || undefined}
@@ -194,7 +199,7 @@ export function MonthPicker({
         <CalendarDays size={size === "sm" ? 14 : 16} aria-hidden className="flex-none text-ink-3" />
       </button>
 
-      <Popover anchorRef={triggerRef} open={open} onClose={() => setOpen(false)} role="dialog" className="w-[16.5rem] p-2">
+      <Popover id={panelId} anchorRef={triggerRef} open={open} onClose={() => setOpen(false)} role="dialog" className="w-[16.5rem] p-2">
         <div className="mb-1 flex items-center justify-between px-1">
           <button
             type="button"

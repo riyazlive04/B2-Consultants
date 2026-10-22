@@ -28,6 +28,7 @@ import {
 } from "@/server/contacts-actions";
 import { convertLeadToStudent } from "@/server/students-actions";
 import { safeAction } from "@/lib/action-guard";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 const SOURCE_OPTS = [
   { value: "INSTAGRAM", label: "Instagram" }, { value: "YOUTUBE", label: "YouTube" },
@@ -266,7 +267,7 @@ export default function ContactRecord({
         <form action={saveDetails} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Name"><TextInput kind="name" name="name" required defaultValue={contact.name} /></Field>
-            <Field label="Phone / WhatsApp"><TextInput kind="phone" name="phone" required defaultValue={contact.phone ?? ""} /></Field>
+            <Field label="Phone / WhatsApp"><PhoneField name="phone" required defaultValue={contact.phone ?? ""} /></Field>
             <Field label="Email"><TextInput kind="email" name="email" defaultValue={contact.email ?? ""} /></Field>
             <Field label="Lead source">
               <Select name="leadSource" options={SOURCE_OPTS} defaultValue={SOURCE_OPTS.some((s) => s.value === contact.leadSource) ? contact.leadSource : "OTHER"} />

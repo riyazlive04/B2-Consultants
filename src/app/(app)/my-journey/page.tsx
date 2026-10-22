@@ -117,7 +117,7 @@ export default async function MyJourneyPage({
       />
 
       {ordered.map((e, idx) => (
-        <EnrollmentJourney key={e.id} e={e} lead={idx === 0} />
+        <EnrollmentJourney key={e.id} e={e} lead={idx === 0} todayYmd={portal.todayKey} />
       ))}
 
       {/* Spec §10: the student's own agreement - view, download, signature status. Until now the
@@ -253,7 +253,16 @@ function MilestonePath({ current }: { current: string }) {
   );
 }
 
-function EnrollmentJourney({ e, lead }: { e: PortalEnrollment; lead: boolean }) {
+function EnrollmentJourney({
+  e,
+  lead,
+  todayYmd,
+}: {
+  e: PortalEnrollment;
+  lead: boolean;
+  /** The IST day, from the server - see `StudentPortal.todayKey`. */
+  todayYmd: string;
+}) {
   return (
     <Card>
       {/* hero: ring + stage + momentum + program clock */}
@@ -334,7 +343,7 @@ function EnrollmentJourney({ e, lead }: { e: PortalEnrollment; lead: boolean }) 
       )}
 
       {/* weekly sprint check-in (client notes: weekend form, achieved/missed) */}
-      {e.status === "ACTIVE" && <SprintCheckIn weeks={e.sprintWeeks} />}
+      {e.status === "ACTIVE" && <SprintCheckIn weeks={e.sprintWeeks} todayYmd={todayYmd} />}
 
       {/* badge case */}
       <div className="mt-5 border-t border-line pt-4">

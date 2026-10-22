@@ -74,95 +74,96 @@ model User {
 
   sessions                 Session[]
   accounts                 Account[]
-  workDays                 WorkDay[]            @relation("WorkDayUser")
+  workDays                 WorkDay[]                  @relation("WorkDayUser")
   teamProfile              TeamProfile?
   /// Terminations this person carried out. SetNull like every other actor link - an admin
   /// leaving must not erase the record of who offboarded whom.
-  terminationsPerformed    TeamProfile[]        @relation("TeamProfileTerminatedBy")
-  studentProfile           Student?             @relation("StudentAccount")
-  incomesEntered           Income[]             @relation("IncomeEnteredBy")
-  equityContributed        EquityContribution[] @relation("EquityContributor")
-  equityEntered            EquityContribution[] @relation("EquityEnteredBy")
-  equityArchived           EquityContribution[] @relation("EquityArchivedBy")
-  expensesEntered          Expense[]            @relation("ExpenseEnteredBy")
-  leadsEntered             Lead[]               @relation("LeadEnteredBy")
-  leadsAssigned            Lead[]               @relation("LeadAssignedTo")
-  outcomesEntered          DiscoveryOutcome[]   @relation("OutcomeEnteredBy")
-  callsLogged              CallLog[]            @relation("CallLoggedBy")
-  stageChanges             LeadStageHistory[]   @relation("StageChangedBy")
-  slotsAssigned            AppointmentSlot[]    @relation("SlotAssignedTo")
+  terminationsPerformed    TeamProfile[]              @relation("TeamProfileTerminatedBy")
+  studentProfile           Student?                   @relation("StudentAccount")
+  incomesEntered           Income[]                   @relation("IncomeEnteredBy")
+  equityContributed        EquityContribution[]       @relation("EquityContributor")
+  equityEntered            EquityContribution[]       @relation("EquityEnteredBy")
+  equityArchived           EquityContribution[]       @relation("EquityArchivedBy")
+  expensesEntered          Expense[]                  @relation("ExpenseEnteredBy")
+  leadsEntered             Lead[]                     @relation("LeadEnteredBy")
+  leadsAssigned            Lead[]                     @relation("LeadAssignedTo")
+  outcomesEntered          DiscoveryOutcome[]         @relation("OutcomeEnteredBy")
+  callsLogged              CallLog[]                  @relation("CallLoggedBy")
+  stageChanges             LeadStageHistory[]         @relation("StageChangedBy")
+  slotsAssigned            AppointmentSlot[]          @relation("SlotAssignedTo")
   dailyLogs                DailyLog[]
-  milestoneLogUpdates      MilestoneLog[]       @relation("MilestoneUpdatedBy")
-  signalChanges            SignalChangeLog[]    @relation("SignalChangedBy")
-  sprintWeeksEntered       SprintWeek[]         @relation("SprintEnteredBy")
-  rewardGrantsDecided      RewardGrant[]        @relation("RewardGrantDecidedBy")
-  invite                   UserInvite?          @relation("UserInviteFor")
-  invitesCreated           UserInvite[]         @relation("UserInviteCreatedBy")
-  gnBatchesTutored         Batch[]              @relation("BatchTutor")
-  tutorFeesEarned          TutorFee[]           @relation("TutorFeeEarner")
-  gnRecordingsPosted       GnRecording[]        @relation("GnRecordingPostedBy")
-  gnRecordingWatches       GnRecordingWatch[]   @relation("GnRecordingWatchUser")
-  gnEventsCreated          ClassSession[]       @relation("GnEventCreatedBy")
-  attendanceMarked         SessionAttendance[]  @relation("AttendanceMarkedBy")
-  attendanceWindowsOpened  ClassSession[]       @relation("AttendanceWindowOpenedBy")
-  attendancePublished      ClassSession[]       @relation("AttendancePublishedBy")
-  attendanceReasonsAsked   SessionAttendance[]  @relation("AttendanceReasonAskedBy")
-  sprintLogEntries         SprintLogEntry[]     @relation("SprintLogLoggedBy")
-  sprintLogRemovals        SprintLogEntry[]     @relation("SprintLogDeletedBy")
-  gnPosts                  GnPost[]             @relation("GnPostAuthor")
-  gnComments               GnComment[]          @relation("GnCommentAuthor")
-  gnLikes                  GnLike[]             @relation("GnLikeUser")
-  gnCommentLikes           GnCommentLike[]      @relation("GnCommentLikeUser")
-  telecallerPayoutsEntered TelecallerPayout[]   @relation("TelecallerPayoutEnteredBy")
-  whatsappMessagesSent     WhatsAppMessage[]    @relation("WhatsAppSentBy")
-  agreementsIssued         Agreement[]          @relation("AgreementIssuedBy")
-  agreementTemplates       AgreementTemplate[]  @relation("AgreementTemplateCreatedBy")
+  milestoneLogUpdates      MilestoneLog[]             @relation("MilestoneUpdatedBy")
+  signalChanges            SignalChangeLog[]          @relation("SignalChangedBy")
+  sprintWeeksEntered       SprintWeek[]               @relation("SprintEnteredBy")
+  rewardGrantsDecided      RewardGrant[]              @relation("RewardGrantDecidedBy")
+  invite                   UserInvite?                @relation("UserInviteFor")
+  invitesCreated           UserInvite[]               @relation("UserInviteCreatedBy")
+  gnBatchesTutored         Batch[]                    @relation("BatchTutor")
+  tutorFeesEarned          TutorFee[]                 @relation("TutorFeeEarner")
+  gnRecordingsPosted       GnRecording[]              @relation("GnRecordingPostedBy")
+  gnRecordingWatches       GnRecordingWatch[]         @relation("GnRecordingWatchUser")
+  gnEventsCreated          ClassSession[]             @relation("GnEventCreatedBy")
+  attendanceMarked         SessionAttendance[]        @relation("AttendanceMarkedBy")
+  attendanceWindowsOpened  ClassSession[]             @relation("AttendanceWindowOpenedBy")
+  attendancePublished      ClassSession[]             @relation("AttendancePublishedBy")
+  attendanceReasonsAsked   SessionAttendance[]        @relation("AttendanceReasonAskedBy")
+  sprintLogEntries         SprintLogEntry[]           @relation("SprintLogLoggedBy")
+  sprintLogRemovals        SprintLogEntry[]           @relation("SprintLogDeletedBy")
+  gnPosts                  GnPost[]                   @relation("GnPostAuthor")
+  gnComments               GnComment[]                @relation("GnCommentAuthor")
+  gnLikes                  GnLike[]                   @relation("GnLikeUser")
+  gnCommentLikes           GnCommentLike[]            @relation("GnCommentLikeUser")
+  telecallerPayoutsEntered TelecallerPayout[]         @relation("TelecallerPayoutEnteredBy")
+  whatsappMessagesSent     WhatsAppMessage[]          @relation("WhatsAppSentBy")
+  agreementsIssued         Agreement[]                @relation("AgreementIssuedBy")
+  agreementTemplates       AgreementTemplate[]        @relation("AgreementTemplateCreatedBy")
   agreementTemplateUploads AgreementTemplateVersion[] @relation("AgreementTemplateVersionCreatedBy")
-  journalEntriesPosted     JournalEntry[]       @relation("JournalEntryPostedBy")
-  periodLocksSet           PeriodLock[]         @relation("PeriodLockedBy")
-  auditEntries             AuditEntry[]         @relation("AuditActor")
-  activityLogged           ActivityLog[]        @relation("ActivityActor")
+  journalEntriesPosted     JournalEntry[]             @relation("JournalEntryPostedBy")
+  periodLocksSet           PeriodLock[]               @relation("PeriodLockedBy")
+  auditEntries             AuditEntry[]               @relation("AuditActor")
+  activityLogged           ActivityLog[]              @relation("ActivityActor")
   // Synamate CRM (Phase 1)
-  companiesOwned           Company[]            @relation("CompanyOwner")
-  contactNotes             ContactNote[]        @relation("NoteAuthor")
-  tasksAssigned            ContactTask[]        @relation("TaskAssignee")
-  tasksCreated             ContactTask[]        @relation("TaskCreatedBy")
-  opportunitiesOwned       Opportunity[]        @relation("OppOwner")
+  companiesOwned           Company[]                  @relation("CompanyOwner")
+  contactNotes             ContactNote[]              @relation("NoteAuthor")
+  tasksAssigned            ContactTask[]              @relation("TaskAssignee")
+  tasksCreated             ContactTask[]              @relation("TaskCreatedBy")
+  opportunitiesOwned       Opportunity[]              @relation("OppOwner")
   // Synamate Sites (Phase 2)
-  formsCreated             Form[]               @relation("FormCreatedBy")
-  funnelsCreated           Funnel[]             @relation("FunnelCreatedBy")
-  snippetsCreated          SectionSnippet[]     @relation("SnippetCreatedBy")
+  formsCreated             Form[]                     @relation("FormCreatedBy")
+  funnelsCreated           Funnel[]                   @relation("FunnelCreatedBy")
+  snippetsCreated          SectionSnippet[]           @relation("SnippetCreatedBy")
   // Sites - the marketing website
-  sitesCreated             Site[]               @relation("SiteCreatedBy")
-  sitePageRevisions        SitePageRevision[]   @relation("SitePageRevisionBy")
-  mediaUploaded            MediaAsset[]         @relation("MediaUploadedBy")
+  sitesCreated             Site[]                     @relation("SiteCreatedBy")
+  sitePageRevisions        SitePageRevision[]         @relation("SitePageRevisionBy")
+  mediaUploaded            MediaAsset[]               @relation("MediaUploadedBy")
   // Synamate Payments (Phase 3)
-  invoicesCreated          Invoice[]            @relation("InvoiceCreatedBy")
-  invoicePaymentsRecorded  InvoicePayment[]     @relation("InvoicePaymentRecordedBy")
+  invoicesCreated          Invoice[]                  @relation("InvoiceCreatedBy")
+  invoicePaymentsRecorded  InvoicePayment[]           @relation("InvoicePaymentRecordedBy")
   // Synamate Conversations (Phase 4)
-  messagesSent             Message[]            @relation("MessageSentBy")
-  messagesAssigned         Message[]            @relation("MessageAssignedTo")
+  messagesSent             Message[]                  @relation("MessageSentBy")
+  messagesAssigned         Message[]                  @relation("MessageAssignedTo")
   // Synamate Automation (Phase 5)
-  workflowsCreated         Workflow[]           @relation("WorkflowCreatedBy")
+  workflowsCreated         Workflow[]                 @relation("WorkflowCreatedBy")
   // Outreach Specialist SOP
-  outreachStepsActed       OutreachStepLog[]    @relation("OutreachStepActedBy")
-  outreachQualified        OutreachJourney[]    @relation("OutreachQualifiedBy")
-  outreachTouchpoints      OutreachJourney[]    @relation("OutreachRespTouchpoint")
-  outreachDiscos           OutreachJourney[]    @relation("OutreachRespDisco")
-  enrollmentsClosed        Enrollment[]         @relation("EnrollmentCloser")
-  enrollmentsCoached       Enrollment[]         @relation("EnrollmentCoach")
-  sssSlotsOwned            SssSlot[]            @relation("SssSlotOwner")
+  outreachStepsActed       OutreachStepLog[]          @relation("OutreachStepActedBy")
+  outreachQualified        OutreachJourney[]          @relation("OutreachQualifiedBy")
+  outreachTouchpoints      OutreachJourney[]          @relation("OutreachRespTouchpoint")
+  outreachDiscos           OutreachJourney[]          @relation("OutreachRespDisco")
+  enrollmentsClosed        Enrollment[]               @relation("EnrollmentCloser")
+  enrollmentsCoached       Enrollment[]               @relation("EnrollmentCoach")
+  enrollmentsDiscontinued  Enrollment[]               @relation("EnrollmentDiscontinuedBy")
+  sssSlotsOwned            SssSlot[]                  @relation("SssSlotOwner")
   // Soft-delete authorship: records this user archived (see src/lib/soft-delete.ts)
-  leadsArchived            Lead[]               @relation("LeadArchivedBy")
-  companiesArchived        Company[]            @relation("CompanyArchivedBy")
-  opportunitiesArchived    Opportunity[]        @relation("OpportunityArchivedBy")
-  tasksArchived            ContactTask[]        @relation("ContactTaskArchivedBy")
-  incomesArchived          Income[]             @relation("IncomeArchivedBy")
-  expensesArchived         Expense[]            @relation("ExpenseArchivedBy")
-  invoicesArchived         Invoice[]            @relation("InvoiceArchivedBy")
-  pendingPaymentsArchived  PendingPayment[]     @relation("PendingPaymentArchivedBy")
-  productsArchived         Product[]            @relation("ProductArchivedBy")
-  resourcesCreated         Resource[]           @relation("ResourceCreatedBy")
+  leadsArchived            Lead[]                     @relation("LeadArchivedBy")
+  companiesArchived        Company[]                  @relation("CompanyArchivedBy")
+  opportunitiesArchived    Opportunity[]              @relation("OpportunityArchivedBy")
+  tasksArchived            ContactTask[]              @relation("ContactTaskArchivedBy")
+  incomesArchived          Income[]                   @relation("IncomeArchivedBy")
+  expensesArchived         Expense[]                  @relation("ExpenseArchivedBy")
+  invoicesArchived         Invoice[]                  @relation("InvoiceArchivedBy")
+  pendingPaymentsArchived  PendingPayment[]           @relation("PendingPaymentArchivedBy")
+  productsArchived         Product[]                  @relation("ProductArchivedBy")
+  resourcesCreated         Resource[]                 @relation("ResourceCreatedBy")
 
   @@map("user")
 }
@@ -2422,6 +2423,28 @@ model Enrollment {
   status          StudentStatus   @default(ACTIVE)
   statusChangedAt DateTime        @default(now()) // powers "completed/dropped this month"
 
+  /// ── DISCONTINUING: the founders' "discontinue button" (@37:54-39:42) ────────────────
+  /// `StudentStatus.DROPPED` has always been the status; what was missing was WHY, and a
+  /// breakdown of nulls is not the churn report they asked for in the same breath.
+  ///
+  /// `discontinueReason` holds an entry from the founder-editable vocabulary
+  /// (AppSetting("studentLifecycle")), or the free text typed behind "Other" - validated by
+  /// `decideDiscontinue` in lib/enrollment-lifecycle.ts, so the breakdown stays totalable.
+  /// Null on every row that is not DROPPED, and on the dropped rows that predate this column;
+  /// `tallyReasons` counts those as "Not recorded" rather than discarding them.
+  ///
+  /// THERE IS DELIBERATELY NO `discontinuedAt`. `statusChangedAt` directly above already
+  /// records when the status moved, and a second clock would be free to disagree with it -
+  /// the same reason the agreement engine derives its eight states instead of storing one.
+  ///
+  /// Restoring to ACTIVE clears all three: they describe a departure that has been undone, and
+  /// a row reading ACTIVE with a reason attached is a contradiction. The trail is not lost -
+  /// `logActivity` holds both the discontinue and the restore, with the reason in its meta.
+  discontinueReason String?
+  discontinueNote   String?
+  discontinuedById  String?
+  discontinuedBy    User?   @relation("EnrollmentDiscontinuedBy", fields: [discontinuedById], references: [id], onDelete: SetNull)
+
   // 90/120-day tracker (PRD2 §4.3) - Guided/Elite only
   lastSessionDate        DateTime?       @db.Date
   totalSessionsCompleted Int             @default(0)
@@ -2456,6 +2479,10 @@ model Enrollment {
   @@index([batchId])
   @@index([leadId])
   @@index([coachId, status])
+  /// The churn breakdown groups the DROPPED rows by reason on every Students load. `status`
+  /// alone is not selective (most rows are ACTIVE), so the pair is what keeps that a scan of
+  /// the dropped rows rather than of the table.
+  @@index([status, discontinueReason])
   @@map("enrollment")
 }
 
@@ -3154,7 +3181,7 @@ model ClassSession {
   attendanceOpensAt       DateTime?
   attendanceClosesAt      DateTime?
   attendanceOpenedById    String?
-  attendanceOpenedBy      User?           @relation("AttendanceWindowOpenedBy", fields: [attendanceOpenedById], references: [id], onDelete: SetNull)
+  attendanceOpenedBy      User?     @relation("AttendanceWindowOpenedBy", fields: [attendanceOpenedById], references: [id], onDelete: SetNull)
   /// How long after the anchor a check-in still counts as PRESENT rather than LATE, captured
   /// AT OPENING TIME. Null falls back to the founder's current setting. Stored per session
   /// because the grace a cohort was judged against in October must not silently change when
@@ -3168,16 +3195,16 @@ model ClassSession {
   /// student's own check-in is visible to them regardless (`studentMaySeeMark`).
   attendancePublishedAt   DateTime?
   attendancePublishedById String?
-  attendancePublishedBy   User?           @relation("AttendancePublishedBy", fields: [attendancePublishedById], references: [id], onDelete: SetNull)
+  attendancePublishedBy   User?     @relation("AttendancePublishedBy", fields: [attendancePublishedById], references: [id], onDelete: SetNull)
 
   /// ER v2 `SESSION ||--o| RECORDING`. Set when the tutor posts the class recording, so
   /// "which session is this video of" stops being inferred from the date.
-  recordingId      String?         @unique
-  recording        GnRecording?    @relation("SessionRecording", fields: [recordingId], references: [id], onDelete: SetNull)
-  createdById      String?
-  createdBy        User?           @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  recordingId String?      @unique
+  recording   GnRecording? @relation("SessionRecording", fields: [recordingId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?        @relation("GnEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   tasks            SessionTask[]
   attendance       SessionAttendance[]
@@ -3402,8 +3429,8 @@ model GnRecording {
   /// the days and computing the expiry on read would silently re-date every recording ever
   /// posted. See `expiryFor` in lib/recording-access.ts.
   availableUntil DateTime?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   watches GnRecordingWatch[]
   /// The scheduled session this is the recording OF (ER v2 SESSION ||--o| RECORDING).
@@ -4103,19 +4130,16 @@ model WhatsAppOptOut {
 
 /**
  * WHERE THE DOCUMENT BODY COMES FROM. See docs/AGREEMENT_DOCUMENTS_REBUILD.md.
- *
  * GUIDED is the original and the default: the clause set typeset in `documents/agreement-guided-*`,
  * where the only variable is `Agreement.data`. Every row that existed before this enum is GUIDED,
  * and its content hash is unaffected (`contentHash` is passed no body for it).
- *
  * DOCX and PDF both start as a file the founder wrote in Word. The difference is what we do with
  * it, and it is a real trade rather than a preference:
- *
- *   DOCX - parsed into a block model (mammoth → HTML → `lib/docx-blocks`) and re-typeset by our own
- *          renderer. Editable here afterwards, merge fields work, signature zones sit IN the text
- *          flow. The layout is our typesetting of their content, not Word's.
- *   PDF  - stored as bytes and never re-typeset. `pdf-lib` stamps signatures at normalised page
- *          coordinates. Pixel-exact to Word; the prose can only be changed by uploading again.
+ * DOCX - parsed into a block model (mammoth → HTML → `lib/docx-blocks`) and re-typeset by our own
+ * renderer. Editable here afterwards, merge fields work, signature zones sit IN the text
+ * flow. The layout is our typesetting of their content, not Word's.
+ * PDF  - stored as bytes and never re-typeset. `pdf-lib` stamps signatures at normalised page
+ * coordinates. Pixel-exact to Word; the prose can only be changed by uploading again.
  */
 enum AgreementDocKind {
   GUIDED
@@ -4207,7 +4231,6 @@ model Agreement {
   signedAt            DateTime? // also the burn marker - never set twice
   /**
    * What the STUDENT typed or ticked in their own boxes, by field id (`signerValuesSchema`).
-   *
    * On the agreement rather than in `agreement_body` because the body is the contract as OFFERED
    * and is frozen at issue, while these are produced at signing. They enter the seal and are
    * frozen from then on by `agreement_seal_guard`, which is extended to cover this column: an
@@ -4314,8 +4337,8 @@ model AgreementTemplate {
 
   /// Which version a new agreement instantiates. Null only between creating the row and its
   /// first upload succeeding.
-  currentVersionId String?                    @unique
-  currentVersion   AgreementTemplateVersion?  @relation("AgreementTemplateCurrent", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  currentVersionId String?                   @unique
+  currentVersion   AgreementTemplateVersion? @relation("AgreementTemplateCurrent", fields: [currentVersionId], references: [id], onDelete: SetNull)
 
   createdById String?
   createdBy   User?   @relation("AgreementTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -4366,12 +4389,12 @@ model AgreementTemplateVersion {
   pageSizes Json?
 
   /// Placed fields - `lib/agreement-doc`'s `DocField[]`. Who signs where, and what each box is.
-  fields Json
+  fields  Json
   /// Per-document switches - `lib/agreement-doc`'s `DocOptions`. Currently `initialEveryPage`.
   options Json?
 
   createdById String?
-  createdBy   User?   @relation("AgreementTemplateVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?    @relation("AgreementTemplateVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -4416,7 +4439,7 @@ model AgreementBody {
   pageCount Int?
   pageSizes Json?
 
-  fields Json
+  fields  Json
   options Json?
 
   createdAt DateTime @default(now())

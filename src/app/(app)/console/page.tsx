@@ -32,6 +32,7 @@ import {
   getDunningConfig,
   getAttendanceConfig,
   getLeaderboardConfig,
+  getStudentLifecycleConfig,
   getDeliveryDefaults,} from "@/server/founder-config";
 import { getGoalsWithProgress } from "@/server/goals";
 import { listTutorFees } from "@/server/tutor-fees";
@@ -69,6 +70,7 @@ import { ConfirmLoopPanel } from "./_components/ConfirmLoopPanel";
 import { MaintenancePanel } from "./_components/MaintenancePanel";
 import { AlertsPanel } from "./_components/AlertsPanel";
 import { LeaderboardPanel } from "./_components/LeaderboardPanel";
+import { StudentLifecyclePanel } from "./_components/StudentLifecyclePanel";
 import { cronHealth } from "@/server/uptime";
 import { errorCountLastHour, observabilityRuntime, recentErrors } from "@/lib/observability";
 import { CAPABILITIES, effectiveCapabilities } from "@/lib/capabilities";
@@ -208,6 +210,7 @@ export default async function ConsolePage() {
     dunningConfig,
     attendanceConfig,
     leaderboardConfig,
+    studentLifecycleConfig,
     slotReleases,
     zoomConfig,
   ] = await Promise.all([
@@ -239,6 +242,7 @@ export default async function ConsolePage() {
     getDunningConfig(),
     getAttendanceConfig(),
     getLeaderboardConfig(),
+    getStudentLifecycleConfig(),
     // What the confirm-or-cancel loop has actually released. A console that can arm an automation
     // should be able to show what it did - "off by default" is only half the story.
     listSlotReleases(40),
@@ -567,6 +571,14 @@ export default async function ConsolePage() {
                     // scoring in a chasing tab would hide the most consequential numbers here.
                     label: "Leaderboard",
                     content: <LeaderboardPanel config={leaderboardConfig} />,
+                  },
+                  {
+                    // Next to the Leaderboard rather than in Maintenance: both are rules the
+                    // founder sets about a student's standing, and this one decides what a
+                    // coach may record about a student leaving - which is the other end of the
+                    // same story the board tells.
+                    label: "Why students stop",
+                    content: <StudentLifecyclePanel config={studentLifecycleConfig} />,
                   },
                   {
                     label: "Maintenance",

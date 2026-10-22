@@ -39,6 +39,7 @@ import {
   SECTION_ICON_NAMES,
   type SectionsConfig,
 } from "./sections";
+import { DEFAULT_DISCONTINUE_REASONS } from "./enrollment-lifecycle";
 import { GOAL_METRICS } from "./goals";
 import { REWARD_WINDOWS, type RewardTrigger } from "./rewards";
 import { DEFAULT_CALLBACK_CHASE } from "./callback-chase";
@@ -1847,6 +1848,20 @@ export const attendanceConfigSchema = z
     /** Nudge the student in-app once the grace above has run out. */
     catchUpAlertEnabled: z.boolean().default(true),
     /**
+     * How long a taught class may sit with no register before the reminder ESCALATES.
+     *
+     * Not a new reminder - the existing one already fires the moment a taught LIVE session has
+     * no attendance rows, and uses `new Date()` rather than IST midnight specifically so a class
+     * taught this morning shows up today. It is deliberately stricter than the founders asked
+     * for (@43:54) and stays that way.
+     *
+     * What was missing is the SECOND rung. A reminder that reads the same on hour one and hour
+     * thirty is a reminder a coach learns to scroll past, and the register is what the drop-risk
+     * signal and the student's own attendance percentage are computed from - so a class still
+     * unmarked a day later is a different sentence, not a louder one. 24 hours, as asked.
+     */
+    registerEscalationHours: z.number().int().min(1).max(336).default(24),
+    /**
      * The house default for how many days a newly posted recording stays visible to students.
      * `0` means no time limit.
      *
@@ -1887,6 +1902,7 @@ export const DEFAULT_ATTENDANCE_CONFIG: AttendanceConfig = {
   absenceAlertEnabled: true,
   catchUpHours: 24,
   catchUpAlertEnabled: true,
+  registerEscalationHours: 24,
   // 0 = no time limit, which is what every recording already had. See the field note.
   recordingAccessDays: 0,
 };
@@ -1894,6 +1910,57 @@ export const DEFAULT_ATTENDANCE_CONFIG: AttendanceConfig = {
 export function coerceAttendanceConfig(value: unknown): AttendanceConfig {
   const parsed = attendanceConfigSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_ATTENDANCE_CONFIG;
+}
+
+// ───────────────────────── the enrolment lifecycle ─────────────────────────
+
+/**
+ * WHY STUDENTS LEAVE - founder-editable via AppSetting("studentLifecycle").
+ *
+ * The discontinue button (@37:54-39:42) is useless without this list, and the list cannot live
+ * in code: "why students leave" is a business question whose answer changes, and the founders
+ * asked for the breakdown (@39:42) in the same breath as the button. A free-text box alone
+ * produces thirty spellings of the same three reasons and a report nobody can total.
+ *
+ * The predicates that READ a status live in lib/enrollment-lifecycle.ts, pure, and the shipped
+ * vocabulary comes from there - this file only says what shape a saved one takes.
+ */
+export const studentLifecycleConfigSchema = z.object({
+  discontinueReasons: z
+    .array(shortText)
+    .min(1, "Keep at least one reason - a discontinue button with no reason produces a report of nulls")
+    .max(25)
+    .default([...DEFAULT_DISCONTINUE_REASONS])
+    .superRefine(uniqueBy((r) => r.toLowerCase(), "reason")),
+  /**
+   * May a coach type a reason that is not on the list?
+   *
+   * Ships TRUE. A vocabulary with no escape hatch gets one anyway, in the shape of everybody
+   * picking the nearest wrong option - which is worse than a free-text row in the breakdown,
+   * because it is indistinguishable from a real answer.
+   */
+  allowOtherReason: z.boolean().default(true),
+  /**
+   * Who may press the button, besides an Admin.
+   *
+   * True lets the coach who OWNS the enrolment discontinue it; false keeps it with Admin and
+   * Head, and the coach's ladder (Stage 3) can only surface the candidate. Ships true because
+   * the coach is the person who knows, and every press is logged and reversible.
+   */
+  coachMayDiscontinue: z.boolean().default(true),
+});
+
+export type StudentLifecycleConfig = z.infer<typeof studentLifecycleConfigSchema>;
+
+export const DEFAULT_STUDENT_LIFECYCLE_CONFIG: StudentLifecycleConfig = {
+  discontinueReasons: [...DEFAULT_DISCONTINUE_REASONS],
+  allowOtherReason: true,
+  coachMayDiscontinue: true,
+};
+
+export function coerceStudentLifecycleConfig(value: unknown): StudentLifecycleConfig {
+  const parsed = studentLifecycleConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_STUDENT_LIFECYCLE_CONFIG;
 }
 
 // ───────────────────────── sprint leaderboard ─────────────────────────
@@ -1922,6 +1989,14 @@ export const leaderboardConfigSchema = z.object({
   period: z.enum(["SPRINT", "PROGRAMME"]).default("SPRINT"),
   scope: z.enum(["BATCH", "ALL"]).default("BATCH"),
   topN: z.number().int().min(0).max(500).default(0),
+  /**
+   * The cohort-average floor. `min(3)` is the schema half of the protection described on
+   * `cohortPublishable`; the reader floors it again at `HARD_MIN_COHORT`, so neither a
+   * hand-edited AppSetting row nor an older blob can produce an average that resolves into one
+   * named classmate. Three, not two: a student subtracts their own line from the mean, so a
+   * cohort of two publishes the other person.
+   */
+  minCohort: z.number().int().min(3).max(100).default(DEFAULT_LEADERBOARD_CONFIG.minCohort),
   metrics: z.record(z.string(), leaderboardMetricRuleSchema).default({}),
 });
 
@@ -1958,6 +2033,7 @@ export function coerceLeaderboardConfig(value: unknown): LeaderboardConfig {
     period: parsed.data.period,
     scope: parsed.data.scope,
     topN: parsed.data.topN,
+    minCohort: parsed.data.minCohort,
     metrics,
   };
 }

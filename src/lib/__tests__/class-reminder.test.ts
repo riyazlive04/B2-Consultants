@@ -18,6 +18,8 @@ import {
   classReminderRung,
   formatClassTime,
   isClassAlertOpen,
+  taskPromptLine,
+  tasksDueBefore,
   leadLabel,
   maxLeadMs,
 } from "../class-reminder";
@@ -156,5 +158,71 @@ describe("alertCountdown", () => {
 
   test("a day out reads as tomorrow, not as 24 hours", () => {
     assert.equal(alertCountdown(CLASS, at("2026-10-03T14:30:00Z")), "starts tomorrow");
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────────────────
+ * WHAT IS DUE BEFORE THE CLASS (@46:34)
+ *
+ * The case worth reading is the undated task. `dueAt` is nullable and in practice most tasks
+ * carry none - a coach says "read this before Saturday" and sets a task, not a timestamp - so
+ * excluding them would make the prompt silent in exactly the common case.
+ * ──────────────────────────────────────────────────────────────────────────────────────── */
+
+describe("tasksDueBefore", () => {
+  const task = (title: string, dueAt: Date | null) => ({ title, dueAt });
+
+  test("an undated task counts as due by the next class", () => {
+    const due = tasksDueBefore([task("Resume v2", null)], CLASS);
+    assert.equal(due.length, 1);
+  });
+
+  test("a task due before the class counts", () => {
+    const due = tasksDueBefore([task("Read the brief", at("2026-10-04T10:00:00Z"))], CLASS);
+    assert.equal(due.length, 1);
+  });
+
+  test("a task due exactly at the start counts - it was due BY the class", () => {
+    assert.equal(tasksDueBefore([task("Brief", CLASS)], CLASS).length, 1);
+  });
+
+  test("a task due after the class does NOT count", () => {
+    // Not everything outstanding is urgent. Prompting about next Thursday an hour before
+    // Saturday's class trains the student to read the prompt as a standing list, at which point
+    // it stops working for the one that really is due.
+    const due = tasksDueBefore([task("Next week's", at("2026-10-09T10:00:00Z"))], CLASS);
+    assert.equal(due.length, 0);
+  });
+
+  test("nothing outstanding is an empty list, not a silent pass", () => {
+    assert.deepEqual(tasksDueBefore([], CLASS), []);
+  });
+});
+
+describe("taskPromptLine", () => {
+  const t = (title: string) => ({ title, dueAt: null });
+
+  test("no tasks means NO line, so the reminder stays one sentence", () => {
+    assert.equal(taskPromptLine([]), null);
+  });
+
+  test("one task is named in the singular", () => {
+    assert.equal(taskPromptLine([t("Resume v2")]), "One thing to do before this class: Resume v2.");
+  });
+
+  test("two tasks are both named", () => {
+    assert.equal(
+      taskPromptLine([t("Resume v2"), t("Read the brief")]),
+      "2 things to do before this class: Resume v2 and Read the brief.",
+    );
+  });
+
+  test("more than two are counted, not listed - a notification is not a document", () => {
+    // And a bare count would send the student into the app to find out what they are, which is
+    // the work the prompt exists to save. So: name two, count the rest.
+    assert.equal(
+      taskPromptLine([t("A"), t("B"), t("C"), t("D")]),
+      "4 things to do before this class: A, B and 2 more.",
+    );
   });
 });

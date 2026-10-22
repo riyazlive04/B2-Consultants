@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { tallyReasons } from "@/lib/enrollment-lifecycle";
 import { istMonthInstantRange, istToday } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
@@ -183,6 +184,10 @@ export async function getStudentsOverview() {
       select: {
         id: true, studentId: true, programLevel: true, status: true,
         statusChangedAt: true, enrollmentDate: true, programEndDate: true, assignedCoach: true,
+        // The churn breakdown (@39:42) rides along on the pass that was already reading every
+        // enrolment. A grouped query would have been a second round trip to answer a question
+        // this one already has the rows for.
+        discontinueReason: true,
       },
     }),
     // Rich pass: ONLY the active Guided/Elite rows the 90/120 tracker actually
@@ -231,6 +236,21 @@ export async function getStudentsOverview() {
     totalAllTime: students.length,
     totalCompletedAllTime: enrollments.filter((e) => e.status === "COMPLETED").length,
     totalDroppedAllTime: enrollments.filter((e) => e.status === "DROPPED").length,
+    /**
+     * WHY THEY STOPPED - the breakdown the founders asked for in the same breath as the button
+     * (@39:42). Pure arithmetic in lib/enrollment-lifecycle.ts, over rows this pass already had.
+     *
+     * Both windows, because they answer different questions: the month is "what is happening
+     * now", and all-time is the only one with enough rows to be a pattern. Every dropped
+     * enrolment that predates the reason column tallies as "Not recorded" rather than being
+     * dropped from the denominator, which would overstate whichever reason was logged first.
+     */
+    droppedThisMonthReasons: tallyReasons(
+      droppedThisMonthRows.map((e) => ({ reason: e.discontinueReason })),
+    ),
+    droppedAllTimeReasons: tallyReasons(
+      enrollments.filter((e) => e.status === "DROPPED").map((e) => ({ reason: e.discontinueReason })),
+    ),
   };
 
   // ── Satisfaction averages (always visible, PRD2 §4.5) ──
@@ -515,6 +535,16 @@ export async function getStudentDetail(id: string) {
           return kind ? lineForLevelKind(kind) : null;
         })(),
         status: e.status,
+        /**
+         * Why they stopped, and when - read straight through to the record.
+         *
+         * The coaching desk's "Recently stopped" list only holds 30 days, on purpose; after
+         * that this is where the answer lives, which is also where whoever is asking already is.
+         * `statusChangedAt` is the one clock (there is no `discontinuedAt` to disagree with it).
+         */
+        discontinueReason: e.discontinueReason,
+        discontinueNote: e.discontinueNote,
+        statusChangedAt: e.statusChangedAt.toISOString(),
         dayNumber: totalDays ? Math.min(Math.max(dayDiff(today, e.enrollmentDate) + 1, 1), totalDays) : null,
         totalDays,
         lastSessionDate: e.lastSessionDate?.toISOString() ?? null,

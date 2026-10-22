@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DEFAULT_LEADERBOARD_CONFIG,
+  HARD_MIN_COHORT,
   LEADERBOARD_METRICS,
   type LeaderboardConfig,
   type LeaderboardMetricKey,
@@ -72,7 +73,7 @@ export function LeaderboardPanel({ config }: { config: LeaderboardConfig }) {
         />
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Field
           label="Students see"
           hint="Named is a real leaderboard. Anonymised shows each student their own name and everyone else as a letter."
@@ -123,6 +124,24 @@ export function LeaderboardPanel({ config }: { config: LeaderboardConfig }) {
             onChange={(n) => patch({ topN: n })}
             min={0}
             max={500}
+          />
+        </Field>
+        {/*
+          THE FLOOR ON THE COHORT AVERAGE. Not a display preference: beneath it, "the cohort
+          average" sitting next to a student's own score is close enough to one classmate's
+          score to identify them, which would put a hole straight through the anonymised
+          setting two fields to the left. 2 is the hard minimum the reader enforces.
+        */}
+        <Field
+          label="Average needs"
+          hint="How many students a cohort needs before its average is shown. Below it the comparison is hidden and the page says why - a student can subtract their own score from the average, so a small cohort gives away the people in it."
+        >
+          <NumInput
+            ariaLabel="Smallest cohort that may show an average"
+            value={draft.minCohort}
+            onChange={(n) => patch({ minCohort: Math.max(HARD_MIN_COHORT, n) })}
+            min={HARD_MIN_COHORT}
+            max={100}
           />
         </Field>
       </div>

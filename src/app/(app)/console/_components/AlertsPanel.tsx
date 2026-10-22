@@ -500,6 +500,18 @@ function AttendanceCard({ config }: { config: AttendanceConfig }) {
             />
           </Field>
           <Field
+            label="Register chase escalates after (hours)"
+            hint="A class already shows up as needing a register the moment it is taught. This is when that reminder changes its wording and goes to the top - the founders asked for 24."
+          >
+            <NumInput
+              ariaLabel="Hours before an unmarked register escalates"
+              value={draft.registerEscalationHours}
+              onChange={(n) => patch({ registerEscalationHours: n })}
+              min={1}
+              max={336}
+            />
+          </Field>
+          <Field
             label="Default viewing window (days)"
             hint="What a tutor's picker pre-selects when they post a recording. 0 = no time limit, which is how every existing recording behaves."
           >

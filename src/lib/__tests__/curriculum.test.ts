@@ -167,3 +167,100 @@ describe("presentation helpers", () => {
     ]);
   });
 });
+
+/**
+ * TWO OR THREE CLASSES IN A WEEK (@34:20) - and the trap in entering them.
+ *
+ * The founders asked for a week to hold two or three classes depending on the plan, and that is
+ * data entry rather than code: `planTimetable` emits one session per curriculum row and carries
+ * `weekNumber` straight through, so a week holds however many rows carry its number.
+ *
+ * What is NOT obvious to whoever types those rows in is that `strictlyAfter` never places two
+ * sessions on the same date. That is deliberate - it is what stops a week with two Saturday
+ * rows double-booking - but the consequence is that the second Saturday row is dated a week
+ * LATER while its `weekNumber` still says the earlier week. The timetable groups by
+ * `weekNumber` and the register and the weekly report bucket by DATE, so the two would then
+ * describe the same class differently.
+ *
+ * So these tests pin both halves: three distinct days stay inside their week, and two rows
+ * sharing a day spill. The second is not a bug to fix; it is the answer to the bug report that
+ * arrives when somebody adds a third class to a week and gives it a day already in use.
+ */
+describe("a week holding two or three classes", () => {
+  const live = (
+    weekNumber: number,
+    orderIndex: number,
+    title: string,
+    dayOfWeek: number,
+  ): CurriculumRow => ({
+    id: `${weekNumber}-${orderIndex}`,
+    weekNumber,
+    orderIndex,
+    title,
+    framework: null,
+    type: "LIVE_CLASS",
+    delivery: "LIVE",
+    durationMins: 90,
+    dayOfWeek,
+    startTime: "19:00",
+    notes: null,
+  });
+
+  test("three classes on three different days all land inside their own week", () => {
+    // Sat 5 / Tue 8 / Thu 10 September 2026 - one calendar week, three sessions.
+    const rows = [
+      live(1, 1, "Kick off", 6),
+      live(1, 2, "Mid-week", 2),
+      live(1, 3, "Clinic", 4),
+    ];
+    const plan = planTimetable(rows, "2026-09-05");
+    assert.deepEqual(
+      plan.sessions.map((x) => x.dateYmd),
+      ["2026-09-05", "2026-09-08", "2026-09-10"],
+    );
+    // All three still report week 1, which is what the student's timetable groups by.
+    assert.deepEqual(plan.sessions.map((x) => x.weekNumber), [1, 1, 1]);
+  });
+
+  test("a two-class week and a three-class week can sit in one template", () => {
+    // The actual ask: the count per week is a property of the ROWS, not of the planner.
+    const rows = [
+      live(1, 1, "W1 a", 6),
+      live(1, 2, "W1 b", 2),
+      live(2, 1, "W2 a", 6),
+      live(2, 2, "W2 b", 1),
+      live(2, 3, "W2 c", 4),
+    ];
+    const plan = planTimetable(rows, "2026-09-05");
+    const perWeek = plan.sessions.reduce<Record<number, number>>((acc, x) => {
+      acc[x.weekNumber] = (acc[x.weekNumber] ?? 0) + 1;
+      return acc;
+    }, {});
+    assert.deepEqual(perWeek, { 1: 2, 2: 3 });
+  });
+
+  test("TWO ROWS SHARING A WEEKDAY are dated a week apart, though both still say the same week", () => {
+    // The data-entry trap. `strictlyAfter` refuses to put two sessions on one date, so the
+    // second Saturday row moves to the 12th - outside the week its `weekNumber` claims. Give
+    // each class in a week its own day.
+    const rows = [live(1, 1, "First", 6), live(1, 2, "Second", 6)];
+    const plan = planTimetable(rows, "2026-09-05");
+    assert.equal(plan.sessions[0].dateYmd, "2026-09-05");
+    assert.equal(plan.sessions[1].dateYmd, "2026-09-12", "same weekday spills to the next week");
+    assert.equal(plan.sessions[1].weekNumber, 1, "...while weekNumber still says week 1");
+  });
+
+  test("the sprint still starts at the LAST live session, however many a week holds", () => {
+    // Adding a third class to the final taught week moves the sprint start with it - the
+    // agreement has the sprint commencing immediately after the final session, not at a fixed
+    // offset, so the count per week really does move the 90-day clock.
+    const two = planTimetable([live(1, 1, "a", 6), live(1, 2, "b", 2)], "2026-09-05", { sprintDays: 90 });
+    const three = planTimetable(
+      [live(1, 1, "a", 6), live(1, 2, "b", 2), live(1, 3, "c", 4)],
+      "2026-09-05",
+      { sprintDays: 90 },
+    );
+    assert.equal(two.sprintStartYmd, "2026-09-08");
+    assert.equal(three.sprintStartYmd, "2026-09-10");
+  });
+});

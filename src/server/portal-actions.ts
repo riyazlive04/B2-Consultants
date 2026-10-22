@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
+import { checkInState } from "@/lib/sprint-check-in";
 import { requireSession } from "@/lib/rbac";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { logActivity } from "./activity-log";
@@ -55,41 +56,50 @@ export async function submitMySprintCheckIn(weekId: string, form: FormData): Pro
       targetNumeric: true,
       actual: true,
       weekStart: true,
+      weekEnd: true,
       enrollment: { select: { student: { select: { userId: true } } } },
     },
   });
   if (!week || week.enrollment.student.userId !== session.user.id) {
     return { ok: false, error: "Sprint week not found" };
   }
-  if (week.status !== "PENDING") {
-    return { ok: false, error: "This week has already been reviewed by your coach" };
-  }
 
   /**
-   * The week has to have STARTED. The form only ever offers the current week or an overdue
-   * one, but this is a server action - the UI's choice is a suggestion, and the id is a
-   * parameter. Without this a student could retire a week that has not happened yet, which
-   * also takes it off the coach's review queue.
+   * ONE guard, from `checkInState`, where there were three.
    *
-   * Compared as IST day keys, like every other `@db.Date` comparison in the app, so the
-   * check does not flip during the 00:00-05:30 IST window.
+   * This was a status test, then a date test, then an `actual` test, each with its own message
+   * - and that triple is exactly what lib/sprint-check-in.ts was extracted to end: the UI
+   * decides which week to offer with one rule and the server decided whether to accept it with
+   * another, so the two could disagree about the same week. They now ask the same function.
+   *
+   * It is still checked HERE and not trusted from the form: this is a server action, the id is
+   * a parameter, and the UI's choice is a suggestion. Without the check a student could retire
+   * a week that has not happened yet, which also takes it off the coach's review queue.
+   *
+   * Compared as IST day keys, like every other `@db.Date` comparison in the app, so nothing
+   * flips during the 00:00-05:30 IST window.
    */
   const todayKey = istToday().toISOString().slice(0, 10);
-  if (week.weekStart.toISOString().slice(0, 10) > todayKey) {
-    return { ok: false, error: "That week hasn't started yet." };
-  }
+  const state = checkInState(
+    {
+      status: week.status,
+      actual: week.actual,
+      weekStartYmd: week.weekStart.toISOString().slice(0, 10),
+      weekEndYmd: week.weekEnd.toISOString().slice(0, 10),
+    },
+    todayKey,
+  );
 
-  /**
-   * One check-in per week.
-   *
-   * When the coach set a prose target (no number to compare against) the verdict stays
-   * PENDING - which left the week still "current and pending", so the form reopened, empty,
-   * with nothing on screen saying anything had been sent. A second submission silently
-   * replaced the first, and the student never saw either. The status cannot carry this
-   * (PENDING is a real coach-facing state), so `actual` being filled is what says "answered".
-   */
-  if (week.actual) {
+  // Each refusal says which of the four situations it is, because "you can't do that" on a form
+  // a student was just shown is the least useful sentence available.
+  if (state === "JUDGED") {
+    return { ok: false, error: "This week has already been reviewed by your coach" };
+  }
+  if (state === "AWAITING_COACH") {
     return { ok: false, error: "You've already checked in for this week - your coach will review it." };
+  }
+  if (state === "NOT_STARTED") {
+    return { ok: false, error: "That week hasn't started yet." };
   }
 
   const actualNumeric = parseNumber(d.actual);

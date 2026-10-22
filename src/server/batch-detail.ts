@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { occupiesSeat } from "@/lib/enrollment-lifecycle";
 import { type CapabilityOverrides } from "@/lib/capabilities";
 import { canManageDelivery } from "./batch-access";
 import type { AppRole } from "@/lib/sections";
@@ -232,7 +233,15 @@ export const getBatchDetail = cache(
         coachName: e.coach?.name ?? e.assignedCoach ?? null,
       })),
     ];
-    const filled = roster.length;
+    /**
+     * SEATS, not roster rows.
+     *
+     * The roster deliberately still LISTS a student who dropped, with their status beside them -
+     * a coach opening the cohort needs to see who left, not to have them disappear. But they do
+     * not occupy one of `targetStrength` seats any more, and before this the capacity band
+     * counted them, so a cohort that lost two students read as full.
+     */
+    const filled = roster.filter((r) => r.status === null || occupiesSeat(r.status)).length;
 
     return {
       id: b.id,

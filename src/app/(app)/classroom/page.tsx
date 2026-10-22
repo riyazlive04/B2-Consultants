@@ -1,5 +1,13 @@
 import Link from "next/link";
-import { CalendarClock, CalendarDays, ClipboardList, ExternalLink, Users } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarDays,
+  CalendarPlus,
+  ClipboardList,
+  ExternalLink,
+  FileDown,
+  Users,
+} from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { getMyClassroom, type ClassroomBatchView } from "@/server/student-classroom";
 import { getMyOpenCheckIns } from "@/server/attendance-checkin";
@@ -166,6 +174,33 @@ function BatchBlock({ batch }: { batch: ClassroomBatchView }) {
             </div>
           )}
         </div>
+
+        {/*
+          THE TIMETABLE AS A DOCUMENT (@15:36, @16:33), and as a calendar.
+          Two answers to two different questions: the PDF is the one you print or forward and
+          plan a month against, the .ics is the one that lands in your phone and survives a
+          class being moved. Plain links, not buttons - both are GETs that download a file.
+          Neither carries a join link; see the note in documents/timetable-pdf.tsx.
+        */}
+        {batch.sessions.length > 0 && (
+          <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3 text-sm">
+            <a
+              href={`/api/classroom/timetable/${batch.id}`}
+              className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+            >
+              <FileDown size={14} aria-hidden /> Timetable as PDF
+            </a>
+            <a
+              href={`/api/classroom/timetable/${batch.id}?format=ics`}
+              className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+            >
+              <CalendarPlus size={14} aria-hidden /> Add to my calendar
+            </a>
+            <span className="text-caption text-muted">
+              Join links stay in the app - these files get forwarded.
+            </span>
+          </p>
+        )}
       </Card>
 
       <ClassroomTimetable batch={batch} />

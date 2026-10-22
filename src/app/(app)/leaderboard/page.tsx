@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getLeaderboard, viewFor } from "@/server/leaderboard";
 import { getMySprintLog, getCoachSprintFeed } from "@/server/sprint-log";
 import { LeaderboardTable } from "./_components/LeaderboardTable";
+import { CohortBenchmark } from "./_components/CohortBenchmark";
 import { SprintLogPanel } from "./_components/SprintLogPanel";
 import { CoachReviewFeed } from "./_components/CoachReviewFeed";
 import { Card, EmptyState, PageHeader, Pill } from "@/components/ui/kit";
@@ -140,6 +141,14 @@ export default async function LeaderboardPage({
       ) : (
         <LeaderboardTable view={view} isStudent={isStudent} />
       )}
+
+      {/*
+        The benchmark sits BELOW the ranking and above the log box, which is the order the
+        founders described the screen in: where am I, how does that compare, what do I add.
+        It renders its own "cohort too small" sentence rather than being conditioned away here,
+        so a coach who set the floor can see that the floor is what they are looking at.
+      */}
+      {view.rows.length > 0 && <CohortBenchmark view={view} isStudent={isStudent} />}
 
       {isStudent && myLog && <SprintLogPanel entries={myLog} />}
       {!isStudent && feed && feed.length > 0 && <CoachReviewFeed entries={feed} />}

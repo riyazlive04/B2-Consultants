@@ -7,9 +7,14 @@ import { isAttended, type AttendanceStatus } from "@/lib/attendance";
 import { resolveWatchTruth } from "@/lib/video-progress";
 import {
   anonLabel,
+  cohortAggregate,
+  cohortConversionRatio,
+  conversionRatio,
   rankRows,
   scoreStudent,
   weeksElapsed,
+  type CohortAggregate,
+  type ConversionRatio,
   type LeaderboardConfig,
   type LeaderboardMetricKey,
   type MetricCounts,
@@ -46,6 +51,14 @@ export type LeaderboardRow = {
   rank: number;
   total: number;
   breakdown: ScoreBreakdown;
+  /**
+   * Outreach → interviews for THIS student, or null where the reader may not have it.
+   *
+   * Stripped by `viewFor` on everybody but the reader, exactly like `breakdown` beside it and
+   * for the same reason: on a named board a classmate's ratio publishes their application
+   * count and their interview count in one line. Staff keep every row's.
+   */
+  ratio: ConversionRatio | null;
   /** True for the student reading their own board. */
   isMe: boolean;
 };
@@ -59,6 +72,21 @@ export type LeaderboardView = {
   rows: LeaderboardRow[];
   /** The reader's own row, even when `topN` cut it off the list. */
   me: LeaderboardRow | null;
+  /**
+   * THE COHORT BENCHMARK - computed over the FULL cohort, before `viewFor` takes anything away.
+   *
+   * This field is the reason the average exists at all. `viewFor` reduces a classmate's
+   * breakdown to a total and trims the list to `topN`, so an average worked out on the client
+   * would be an average of whatever survived that - a handful of top rows, missing their
+   * per-metric lines. It is computed here instead, once, over everybody, and then carried
+   * through the privacy edge untouched: an aggregate names nobody.
+   *
+   * `suppressed` is set on a cohort below `config.minCohort`, where the aggregate would leak
+   * an individual. See `cohortPublishable`.
+   */
+  aggregate: CohortAggregate;
+  /** The cohort's pooled outreach → interview ratio. Null below the same floor. */
+  cohortRatio: ConversionRatio | null;
 };
 
 type Cohort = {
@@ -263,13 +291,18 @@ export const getLeaderboard = cache(
         period: { basis, fromYmd, weeks },
         rows: [],
         me: null,
+        // An empty cohort is below any floor, so the aggregate is suppressed rather than a row
+        // of zeroes - "no average yet" and "the cohort averages nothing" are different claims.
+        aggregate: cohortAggregate([], { minCohort: config.minCohort }),
+        cohortRatio: null,
       };
     }
 
     const counts = await gatherCounts(cohort, from);
 
     const scored = cohort.enrollments.map((e) => {
-      const breakdown = scoreStudent(counts.get(e.id) ?? {}, config, weeks);
+      const own = counts.get(e.id) ?? {};
+      const breakdown = scoreStudent(own, config, weeks);
       return {
         enrollmentId: e.id,
         studentId: e.studentId,
@@ -277,6 +310,17 @@ export const getLeaderboard = cache(
         code: e.studentCode,
         total: breakdown.total,
         breakdown,
+        /**
+         * The ratio is computed from the RAW counts, not from the breakdown.
+         *
+         * Deliberately the one place in this file that does not go through the capped figure:
+         * the weekly cap exists to stop a self-reported quantity box dominating a ranking, and
+         * the ratio is not a ranking. A student who really did send 300 applications for one
+         * interview has a 0.3% conversion problem, and capping the denominator at 25 a week
+         * would report it as 4% - flattering, and the opposite of the coaching signal the
+         * founders asked this question to get.
+         */
+        ratio: conversionRatio(own),
         isMe: viewerUserId !== null && e.studentUserId === viewerUserId,
       };
     });
@@ -289,6 +333,16 @@ export const getLeaderboard = cache(
       period: { basis, fromYmd, weeks },
       rows,
       me: rows.find((r) => r.isMe) ?? null,
+      // Over EVERY scored student, including the ones `topN` will cut and the ones sitting on
+      // zero. Both halves ask `config.minCohort`, so neither can publish what the other hides.
+      aggregate: cohortAggregate(
+        scored.map((s) => s.breakdown),
+        { minCohort: config.minCohort },
+      ),
+      cohortRatio: cohortConversionRatio(
+        cohort.enrollments.map((e) => counts.get(e.id) ?? {}),
+        { minCohort: config.minCohort },
+      ),
     };
   },
 );
@@ -312,6 +366,15 @@ export function viewFor(
 ): LeaderboardView {
   if (audience === "STAFF") return view;
   if (view.config.visibility === "STAFF_ONLY") {
+    /**
+     * STAFF_ONLY still keeps the aggregate.
+     *
+     * It looks like the setting that should hide everything, but it is "students see just
+     * themselves", not "students see nothing" - and the cohort average is the one comparison
+     * that names nobody. Dropping it here would take the benchmark away from exactly the
+     * configuration chosen by a founder who wanted no named ranking at all, which is the
+     * configuration it was designed for.
+     */
     return { ...view, rows: view.me ? [view.me] : [], me: view.me };
   }
 
@@ -323,6 +386,8 @@ export function viewFor(
     // A classmate's per-metric breakdown is theirs. The total is the board; the working behind
     // it is not, and on a named board it would amount to publishing their application count.
     breakdown: r.isMe ? r.breakdown : { total: r.total, lines: [], capped: false },
+    // Same rule, same reason: a ratio is two of a classmate's counts and a division.
+    ratio: r.isMe ? r.ratio : null,
     studentId: r.isMe ? r.studentId : "",
     enrollmentId: r.isMe ? r.enrollmentId : "",
   }));
@@ -332,5 +397,8 @@ export function viewFor(
   const withMe =
     mine && !trimmed.some((r) => r.isMe) ? [...trimmed, mine] : trimmed;
 
+  // `aggregate` and `cohortRatio` ride through on the spread, unchanged and on purpose. They
+  // are the figures computed BEFORE any of the above, over the whole cohort, and they name
+  // nobody - which is precisely what makes them the comparison a student may be shown.
   return { ...view, rows: withMe, me: mine };
 }

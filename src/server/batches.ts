@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import type { BatchLine } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
 import {
   BATCH_LINE_LABELS,
   type BatchChoice,
@@ -72,7 +73,21 @@ export const listBatches = cache(
         targetStrength: true,
         notes: true,
         tutor: { select: { name: true } },
-        _count: { select: { members: true, enrollments: true, events: true } },
+        /**
+         * SEATED enrolments only - see `occupiesSeat` in lib/enrollment-lifecycle.ts.
+         *
+         * This was an unfiltered relation count, so a cohort of ten that lost two students
+         * still read ten of ten - full - and the capacity band refused the replacements the
+         * founders had already sold. A graduate and a leaver both free their seat; a PAUSED
+         * student does not, because theirs is being held for them.
+         */
+        _count: {
+          select: {
+            members: true,
+            enrollments: { where: { status: { in: [...SEATED_STATUSES] } } },
+            events: true,
+          },
+        },
       },
       orderBy: [{ status: "asc" }, { startDate: "desc" }, { name: "asc" }],
     });
@@ -111,7 +126,8 @@ export const seatableBatches = cache(async (line: BatchLine) => {
       code: true,
       level: true,
       targetStrength: true,
-      _count: { select: { members: true, enrollments: true } },
+      // Same seat rule as the list above, so the picker and the board cannot disagree.
+      _count: { select: { members: true, enrollments: { where: { status: { in: [...SEATED_STATUSES] } } } } },
     },
     orderBy: [{ name: "asc" }],
   });

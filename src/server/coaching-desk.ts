@@ -2,6 +2,10 @@ import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { type CapabilityOverrides } from "@/lib/capabilities";
+import { withBack } from "@/lib/back-link";
+import { DISCONTINUED_STATUS, SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
+import { checkInState, unansweredStreak, type CheckInState } from "@/lib/sprint-check-in";
+import { getStudentLifecycleConfig } from "./founder-config";
 import { mayManageAnyBatch } from "./batch-access";
 import type { AppRole } from "@/lib/sections";
 import { istToday, toDateInputValue } from "@/lib/dates";
@@ -95,10 +99,63 @@ export type DeskStudentView = {
   currentMilestone: string;
   signalColour: string | null;
   batchName: string | null;
-  /** The sprint week whose check-in window has opened and is still PENDING. */
-  sprintWeekDue: { id: string; weekIndex: number; weekEnd: string; target: string | null } | null;
+  /**
+   * The sprint week that needs something, and WHOSE move it is.
+   *
+   * This used to be "the first PENDING week whose window has opened", which conflated the two
+   * halves of PENDING: a week the student has answered and whose prose target leaves the
+   * verdict to the coach, and a week the student simply has not filled in. The desk said
+   * "waiting on you" for both, so a coach chasing their queue found half of it was not theirs
+   * to action. `state` is the split - see lib/sprint-check-in.ts.
+   */
+  sprintWeekDue: {
+    id: string;
+    weekIndex: number;
+    weekEnd: string;
+    target: string | null;
+    state: CheckInState;
+  } | null;
+  /**
+   * Closed weekends left unanswered, counting back - the end of the follow-up ladder (@37:16).
+   *
+   * Surfaced, never acted on. Three in a row is the point at which the founders described a
+   * discontinue decision (@37:54), and this is what puts that student in front of the coach
+   * who holds the button two columns to the right. Nothing in the app ever presses it.
+   */
+  unansweredStreak: number;
   attendancePct: number | null;
   tasksPending: number;
+  /**
+   * May THIS viewer discontinue this student?
+   *
+   * Per row, like `canMark` on a session above and for the same reason: a supervisor's desk
+   * lists every active enrolment, and the right to SEE a caseload is not the right to end
+   * somebody else's student's programme. Admin and Head always may; a coach may when the
+   * enrolment names them and the founder has left `coachMayDiscontinue` on.
+   */
+  canDiscontinue: boolean;
+};
+
+/**
+ * Students who have stopped recently - the undo for the button beside it.
+ *
+ * A discontinued enrolment leaves the caseload immediately (`loadStudents` filters ACTIVE), so
+ * without this list a coach who pressed the wrong row had nowhere to go: the student had
+ * vanished from the only screen they can reach. Thirty days, because that is the window in
+ * which a press is a mistake rather than a decision - after it, the Students board is the
+ * place, with the full record in front of you.
+ */
+export type DeskDepartureView = {
+  enrollmentId: string;
+  studentId: string;
+  name: string;
+  code: string | null;
+  programLevel: string;
+  reason: string | null;
+  note: string | null;
+  whenYmd: string;
+  byName: string | null;
+  canRestore: boolean;
 };
 
 export type CoachingDesk = {
@@ -116,6 +173,8 @@ export type CoachingDesk = {
   upcoming: DeskSessionView[];
   needsRegister: DeskSessionView[];
   students: DeskStudentView[];
+  /** Discontinued in the last 30 days, newest first - see `DeskDepartureView`. */
+  recentDepartures: DeskDepartureView[];
 };
 
 function istParts(d: Date): { dateYmd: string; timeHm: string } {
@@ -181,7 +240,9 @@ export const getCoachingDesk = cache(
         targetStrength: true, startDate: true, sprintStartDate: true,
         tutor: { select: { name: true } },
         curriculumTemplate: { select: { name: true } },
-        _count: { select: { members: true, enrollments: true } },
+        // Seated enrolments only - a student who dropped has given their seat back, and the
+        // desk's "7/10 seated" is the number a coach decides whether to chase a replacement on.
+        _count: { select: { members: true, enrollments: { where: { status: { in: [...SEATED_STATUSES] } } } } },
         events: {
           orderBy: { startsAt: "asc" },
           select: {
@@ -262,7 +323,7 @@ export const getCoachingDesk = cache(
         registersOutstanding,
         recordingsOutstanding,
         nextSessionAt,
-        href: b.line === "B2" ? `/batches/${b.id}` : `/german-note/${b.id}`,
+        href: withBack(b.line === "B2" ? `/batches/${b.id}` : `/german-note/${b.id}`, "coaching"),
         iLead: b.tutorId === userId,
         leadName: b.tutor?.name ?? null,
       });
@@ -272,7 +333,22 @@ export const getCoachingDesk = cache(
     // Most recent first - the class you have just taught is the one you are about to mark.
     needsRegister.sort((a, b) => b.startsAt.localeCompare(a.startsAt));
 
-    const students = await loadStudents(userId, supervising);
+    /**
+     * The caseload and the recent departures read the SAME permission, resolved once here.
+     *
+     * `coachMayDiscontinue` is one founder switch, and asking for it inside both loaders would
+     * mean a desk that could offer the button on a student and refuse the undo on the one
+     * beside them if the config changed between two reads.
+     */
+    const lifecycle = await getStudentLifecycleConfig();
+    const privileged = session.role === "ADMIN" || session.role === "HEAD";
+    const mayEnd = (coachId: string | null) =>
+      privileged || (lifecycle.coachMayDiscontinue && coachId === userId);
+
+    const [students, recentDepartures] = await Promise.all([
+      loadStudents(userId, supervising, mayEnd),
+      loadRecentDepartures(userId, supervisor, mayEnd),
+    ]);
 
     return {
       role: session.role,
@@ -282,6 +358,7 @@ export const getCoachingDesk = cache(
       upcoming,
       needsRegister,
       students,
+      recentDepartures,
     };
   },
 );
@@ -293,7 +370,11 @@ export const getCoachingDesk = cache(
  * enrollment instead, capped - this is a working list, not a report, and the Students board is
  * where the full set lives.
  */
-async function loadStudents(userId: string, supervising: boolean): Promise<DeskStudentView[]> {
+async function loadStudents(
+  userId: string,
+  supervising: boolean,
+  mayEnd: (coachId: string | null) => boolean,
+): Promise<DeskStudentView[]> {
   const today = toDateInputValue(istToday());
 
   const rows = await prisma.enrollment.findMany({
@@ -301,12 +382,25 @@ async function loadStudents(userId: string, supervising: boolean): Promise<DeskS
     take: supervising ? 50 : 200,
     select: {
       id: true, programLevel: true, status: true, currentMilestone: true, signalColour: true,
+      // `coachId` is read for the permission, never shown - see `canDiscontinue`.
+      coachId: true,
       student: { select: { id: true, fullName: true, code: true } },
       batch: { select: { id: true, name: true } },
+      /**
+       * EVERY sprint week, not only the PENDING ones.
+       *
+       * The `where: { status: "PENDING" }` filter had to go, because the unanswered STREAK
+       * cannot be computed from the unanswered weeks alone: what ends a streak is a week the
+       * student did answer, and those rows were being filtered out before they could end it.
+       * A sprint is 13 to 18 weeks, so this is a few more scalar rows per student on a query
+       * that was already reading the relation.
+       */
       sprintWeeks: {
-        where: { status: "PENDING" },
         orderBy: { weekIndex: "asc" },
-        select: { id: true, weekIndex: true, weekStart: true, weekEnd: true, target: true },
+        select: {
+          id: true, weekIndex: true, weekStart: true, weekEnd: true, target: true,
+          status: true, actual: true,
+        },
       },
     },
     orderBy: [{ enrollmentDate: "desc" }],
@@ -343,8 +437,37 @@ async function loadStudents(userId: string, supervising: boolean): Promise<DeskS
 
   const mapped = rows.map((r) => {
     const att = attendedBy.get(r.student.id);
-    // Only a week whose window has OPENED is due. A target set for next month is not a chore.
-    const due = r.sprintWeeks.find((w) => toDateInputValue(w.weekStart) <= today) ?? null;
+
+    /**
+     * Shaped once, read twice. Both the week that is due and the streak are derived from the
+     * same rows and the same `checkInState`, so the pill in the column and the concern flag
+     * beside it can never tell the coach two different stories about one student.
+     */
+    const weeks = r.sprintWeeks.map((w) => ({
+      id: w.id,
+      weekIndex: w.weekIndex,
+      target: w.target,
+      status: w.status as string,
+      actual: w.actual,
+      weekStartYmd: toDateInputValue(w.weekStart),
+      weekEndYmd: toDateInputValue(w.weekEnd),
+    }));
+
+    /**
+     * The coach's own queue comes FIRST.
+     *
+     * A week awaiting their verdict is a chore they can finish in ten seconds; a week the
+     * student has not answered is a conversation. Showing the second where the first exists
+     * buries the actionable one, which is how a review queue stops being worked.
+     *
+     * A week whose window has not opened is never due - a target set for next month is not a
+     * chore - and `checkInState` is what says so, rather than a date comparison here.
+     */
+    const due =
+      weeks.find((w) => checkInState(w, today) === "AWAITING_COACH") ??
+      weeks.find((w) => checkInState(w, today) === "OVERDUE") ??
+      weeks.find((w) => checkInState(w, today) === "AWAITING_STUDENT") ??
+      null;
     return {
       studentId: r.student.id,
       enrollmentId: r.id,
@@ -356,10 +479,18 @@ async function loadStudents(userId: string, supervising: boolean): Promise<DeskS
       signalColour: r.signalColour as string | null,
       batchName: r.batch?.name ?? null,
       sprintWeekDue: due
-        ? { id: due.id, weekIndex: due.weekIndex, weekEnd: toDateInputValue(due.weekEnd), target: due.target }
+        ? {
+            id: due.id,
+            weekIndex: due.weekIndex,
+            weekEnd: due.weekEndYmd,
+            target: due.target,
+            state: checkInState(due, today),
+          }
         : null,
+      unansweredStreak: unansweredStreak(weeks, today),
       attendancePct: att && att.counted > 0 ? Math.round((att.attended / att.counted) * 100) : null,
       tasksPending: pendingBy.get(r.student.id) ?? 0,
+      canDiscontinue: mayEnd(r.coachId),
     };
   });
 
@@ -398,4 +529,54 @@ async function loadStudents(userId: string, supervising: boolean): Promise<DeskS
     if (da !== db) return da - db;
     return a.name.localeCompare(b.name);
   });
+}
+
+/**
+ * Who stopped recently, so the coach can undo a press.
+ *
+ * Scoped exactly like the caseload: your own students, or every enrolment when you supervise.
+ * The reason is shown because the undo is a judgement - "put them back" reads differently next
+ * to "found a job elsewhere" than next to "unresponsive - no contact".
+ *
+ * `statusChangedAt` is the clock, which is why there is no `discontinuedAt` column: this list,
+ * the "dropped this month" tile and the student record all read the one field.
+ */
+async function loadRecentDepartures(
+  userId: string,
+  supervisor: boolean,
+  mayEnd: (coachId: string | null) => boolean,
+): Promise<DeskDepartureView[]> {
+  const since = new Date(Date.now() - 30 * 86_400_000);
+  const rows = await prisma.enrollment.findMany({
+    where: {
+      status: DISCONTINUED_STATUS,
+      statusChangedAt: { gte: since },
+      ...(supervisor ? {} : { coachId: userId }),
+    },
+    take: 20,
+    orderBy: { statusChangedAt: "desc" },
+    select: {
+      id: true,
+      programLevel: true,
+      coachId: true,
+      statusChangedAt: true,
+      discontinueReason: true,
+      discontinueNote: true,
+      discontinuedBy: { select: { name: true, email: true } },
+      student: { select: { id: true, fullName: true, code: true } },
+    },
+  });
+
+  return rows.map((r) => ({
+    enrollmentId: r.id,
+    studentId: r.student.id,
+    name: r.student.fullName,
+    code: r.student.code,
+    programLevel: r.programLevel,
+    reason: r.discontinueReason,
+    note: r.discontinueNote,
+    whenYmd: toDateInputValue(r.statusChangedAt),
+    byName: r.discontinuedBy?.name ?? r.discontinuedBy?.email ?? null,
+    canRestore: mayEnd(r.coachId),
+  }));
 }

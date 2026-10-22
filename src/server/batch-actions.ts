@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { BatchLine } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
 import { requireAdmin, requireCapability } from "@/lib/rbac";
 import { levelFitsBatchLine, normalizeBatchCode, capacityBand } from "@/lib/batch";
 import { getLevels } from "./levels";
@@ -138,6 +139,15 @@ export async function deleteBatch(batchId: string): Promise<ActionResult> {
       name: true,
       line: true,
       level: true,
+      /**
+       * DELIBERATELY UNFILTERED, unlike the seat counts elsewhere.
+       *
+       * This guard asks "has anyone ever been in this cohort", not "is anyone in it now". A
+       * batch whose students all dropped still holds their history: `Enrollment.batchId` is
+       * `onDelete: SetNull`, so deleting it would not error - it would quietly unseat them and
+       * erase where they had been. Filtering to seated enrolments here would make exactly the
+       * cohorts most worth keeping the easiest to delete.
+       */
       _count: { select: { members: true, enrollments: true, events: true, recordings: true } },
     },
   });
@@ -194,7 +204,16 @@ export async function seatEnrollment(
         line: true,
         status: true,
         targetStrength: true,
-        _count: { select: { members: true, enrollments: true } },
+        /**
+         * SEATED enrolments only - and this is the count that actually ENFORCES capacity.
+         *
+         * The batch screens' `filled` was fixed to exclude a student who has left, but this
+         * gate was not, which was worse than leaving both wrong: the cohort card read 8/10
+         * while seating still refused at 10, so the display and the rule disagreed about the
+         * same cohort. A student who dropped has given their seat back, and the replacement
+         * the founders already sold to has to be able to take it.
+         */
+        _count: { select: { members: true, enrollments: { where: { status: { in: [...SEATED_STATUSES] } } } } },
       },
     }),
   ]);

@@ -209,6 +209,14 @@ export type LeaderboardConfig = {
   metrics: Record<LeaderboardMetricKey, MetricRule>;
   /** Show at most this many rows to a student. 0 = the whole cohort. */
   topN: number;
+  /**
+   * How many students a cohort needs before its average may be shown at all.
+   *
+   * See `cohortPublishable` at the foot of this file for why this is not cosmetic: beneath the
+   * floor, the cohort average next to your own score resolves into a named classmate's. Floored
+   * at `HARD_MIN_COHORT` by the reader, so no setting can switch the protection off entirely.
+   */
+  minCohort: number;
 };
 
 export const DEFAULT_LEADERBOARD_CONFIG: LeaderboardConfig = {
@@ -219,6 +227,9 @@ export const DEFAULT_LEADERBOARD_CONFIG: LeaderboardConfig = {
   period: "SPRINT",
   scope: "BATCH",
   topN: 0,
+  // Five, not two: small enough that a real B2 cohort (six to ten) gets its benchmark, large
+  // enough that nobody can read an individual out of the average.
+  minCohort: 5,
   metrics: Object.fromEntries(
     LEADERBOARD_METRICS.map((m) => [
       m.key,
@@ -351,4 +362,230 @@ export function weeksElapsed(startYmd: string, nowYmd: string): number {
   const now = Date.parse(`${nowYmd}T00:00:00Z`);
   if (!Number.isFinite(start) || !Number.isFinite(now) || now <= start) return 1;
   return Math.max(1, Math.ceil((now - start) / (7 * 86_400_000)));
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────
+ * THE COHORT BENCHMARK - "how am I doing" without naming anybody.
+ *
+ * The founders asked for the same thing twice on the walkthrough call (@40:55, @41:29): a
+ * student should see where they stand against the COHORT, and never against a named classmate.
+ * The second half of that is already built - `viewFor` in server/leaderboard.ts replaces every
+ * other student's name before the view is serialised - and this is the first half.
+ *
+ * ── Why it could not simply be computed in the browser ─────────────────────────────────
+ * `viewFor` deliberately reduces a classmate's `breakdown` to `total` alone and trims the list
+ * to `topN`. By the time a student's page holds the board, the per-metric numbers an average
+ * needs have already been dropped and some of the rows are gone. That is the privacy design
+ * working, so the average is computed on the server over the FULL cohort, before any of it is
+ * taken away, and carried as its own field. The arithmetic lives here, pure, so the floor below
+ * and the maths above it are arguable without a database.
+ *
+ * ── Mean AND median, not one of them ──────────────────────────────────────────────────
+ * On a cohort of eight, one student with an offer and 300 applications drags the mean somewhere
+ * nobody else in the room is. Showing only the mean tells seven students they are behind when
+ * they are not; showing only the median hides a cohort that is genuinely racing ahead. Both are
+ * cheap, and the pair is honest.
+ * ──────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * THE FLOOR, in one place because two callers need the identical answer.
+ *
+ * ── The attack this is defending against ───────────────────────────────────────────────
+ * An aggregate normally leaks nothing about an individual, but a student reading this board
+ * knows their OWN per-metric line exactly. Given the cohort mean they can recover the sum of
+ * everybody else's: `mean × size − mine`. So the real question is not how big the cohort is, it
+ * is how big the cohort MINUS the reader is - and `size − 1 = 1` is not an aggregate at all, it
+ * is one named classmate's exact breakdown with two arithmetic steps in front of it.
+ *
+ * Which is why the hard minimum is THREE, not two. A cohort of two publishes the other person;
+ * a cohort of three publishes a pair, and a pair cannot be resolved into its members.
+ *
+ * `config.minCohort` ships at 5, well above this; the floor here is what no configured value
+ * and no hand-edited `AppSetting` row can go under. Below it nothing is published at all - not
+ * a rounded number, not a band. Both the per-metric averages and the pooled conversion ratio
+ * ask this one function, so they can never disagree about whether a cohort is big enough.
+ */
+export const HARD_MIN_COHORT = 3;
+
+export function cohortPublishable(size: number, minCohort: number): boolean {
+  return size >= Math.max(HARD_MIN_COHORT, Math.floor(minCohort));
+}
+
+export type AggregateLine = {
+  key: LeaderboardMetricKey;
+  label: string;
+  /** Cohort mean, one decimal place - "8.4 applications" is a fair summary, 8.428571 is not. */
+  mean: number;
+  median: number;
+};
+
+export type CohortAggregate = {
+  /** How many enrolments went in - the whole cohort, not the `topN` list a student sees. */
+  size: number;
+  /** The floor that was applied, so the UI can say "needs 5" rather than a bare refusal. */
+  minCohort: number;
+  /** True when the cohort is too small to publish. Every number below is then zero. */
+  suppressed: boolean;
+  total: { mean: number; median: number };
+  /** One line per ENABLED metric, in catalogue order. Empty when suppressed. */
+  lines: AggregateLine[];
+};
+
+function mean(xs: readonly number[]): number {
+  if (xs.length === 0) return 0;
+  return Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10;
+}
+
+/** Even-length cohorts take the mean of the middle two, as a median conventionally does. */
+function median(xs: readonly number[]): number {
+  if (xs.length === 0) return 0;
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const value = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * The cohort's own numbers, from every student's scored breakdown.
+ *
+ * Takes the BREAKDOWNS rather than the raw counts, so the average is over the same figure the
+ * board shows: `counted`, after the weekly cap bit, not the raw self-reported count. An average
+ * built from uncapped counts would be a benchmark nobody on the board was ever scored against -
+ * a student who hit the cap would read as behind an average that includes the points the cap
+ * refused them.
+ *
+ * Every student in the cohort counts, including the ones sitting on zero. Averaging only the
+ * students who did something would turn "half the cohort has not started" into a benchmark that
+ * says the cohort is flying.
+ */
+export function cohortAggregate(
+  breakdowns: readonly ScoreBreakdown[],
+  opts: { minCohort: number },
+): CohortAggregate {
+  const size = breakdowns.length;
+  const minCohort = Math.max(HARD_MIN_COHORT, Math.floor(opts.minCohort));
+
+  if (!cohortPublishable(size, minCohort)) {
+    return { size, minCohort, suppressed: true, total: { mean: 0, median: 0 }, lines: [] };
+  }
+
+  const totals = breakdowns.map((b) => b.total);
+  const lines: AggregateLine[] = [];
+
+  for (const metric of LEADERBOARD_METRICS) {
+    // Driven off a real breakdown's lines rather than the catalogue, because a metric the admin
+    // switched off has no line and must not appear as a cohort average of zero.
+    const present = breakdowns.some((b) => b.lines.some((l) => l.key === metric.key));
+    if (!present) continue;
+    const counts = breakdowns.map((b) => b.lines.find((l) => l.key === metric.key)?.counted ?? 0);
+    lines.push({ key: metric.key, label: metric.label, mean: mean(counts), median: median(counts) });
+  }
+
+  return { size, minCohort, suppressed: false, total: { mean: mean(totals), median: median(totals) }, lines };
+}
+
+/**
+ * How one student compares, line by line. Pure sugar over the two shapes above, so the UI never
+ * does the subtraction itself and the sign convention is decided once.
+ *
+ * `delta` is the student MINUS the cohort mean: positive is ahead. Null overall when the cohort
+ * is too small to have published an average at all.
+ */
+export type BenchmarkLine = AggregateLine & { mine: number; delta: number };
+
+export function benchmarkAgainst(
+  mine: ScoreBreakdown,
+  aggregate: CohortAggregate,
+): { total: { mine: number; delta: number }; lines: BenchmarkLine[] } | null {
+  if (aggregate.suppressed) return null;
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  return {
+    total: { mine: mine.total, delta: round1(mine.total - aggregate.total.mean) },
+    lines: aggregate.lines.map((a) => {
+      const own = mine.lines.find((l) => l.key === a.key)?.counted ?? 0;
+      return { ...a, mine: own, delta: round1(own - a.mean) };
+    }),
+  };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────
+ * THE CONVERSION RATIO - outreach in, interviews out (@40:55, @42:09).
+ *
+ * This is NOT a leaderboard metric and must never become one. `LeaderboardMetric` is a SCORING
+ * type: `defaultPoints` times a count, capped per week. A ratio has no units, cannot be capped
+ * and cannot be summed, so adding a key for it to `LEADERBOARD_METRIC_KEYS` would feed a
+ * meaningless number straight into `scoreStudent` - and a student would be ranked on it.
+ *
+ * So it travels beside the board as an INSIGHT. Same server pass, separate field, and
+ * `scoreStudent` never sees it.
+ * ──────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * What counts as reaching out.
+ *
+ * Applications and accepted HR connections, because those are the two things the founders
+ * described as the input side ("applications plus networking"). `application_reviewed` is
+ * deliberately NOT in here: it is something a company did, not something the student did, and
+ * putting it in the denominator would penalise a student whose applications got read.
+ */
+export const OUTREACH_KEYS: readonly LeaderboardMetricKey[] = ["application_submitted", "hr_connection"];
+export const INTERVIEW_KEYS: readonly LeaderboardMetricKey[] = ["hr_interview"];
+
+export type ConversionRatio = {
+  outreach: number;
+  interviews: number;
+  /**
+   * Interviews per 100 outreach actions, one decimal place - or NULL when there was no
+   * outreach at all.
+   *
+   * Null rather than 0 on an empty denominator, and the difference is the whole point of the
+   * insight: 0% says "you reached out and nothing came back", which is a problem to work on,
+   * and a student who has not started yet must not be told that about themselves.
+   */
+  per100: number | null;
+  /** Outreach actions per interview - the same fact the way a coach says it ("1 in 23"). */
+  effortPerInterview: number | null;
+};
+
+export function conversionRatio(counts: MetricCounts): ConversionRatio {
+  const sum = (keys: readonly LeaderboardMetricKey[]) =>
+    keys.reduce((a, k) => a + Math.max(0, Math.round(counts[k] ?? 0)), 0);
+
+  const outreach = sum(OUTREACH_KEYS);
+  const interviews = sum(INTERVIEW_KEYS);
+  if (outreach === 0) return { outreach, interviews, per100: null, effortPerInterview: null };
+
+  return {
+    outreach,
+    interviews,
+    per100: Math.round((interviews / outreach) * 1000) / 10,
+    effortPerInterview: interviews === 0 ? null : Math.round((outreach / interviews) * 10) / 10,
+  };
+}
+
+/**
+ * The cohort's ratio, POOLED rather than averaged.
+ *
+ * Summing the cohort's outreach and its interviews and dividing once is not the same as
+ * averaging each student's percentage, and pooling is the right one here: a student who sent
+ * four applications and got one interview would otherwise contribute a 25% to the cohort
+ * average with the same weight as a student who sent two hundred. The pooled figure answers
+ * the question a coach is actually asking - "what does it take, on this cohort, to get an
+ * interview" - and it is the figure a student's own ratio is comparable against.
+ *
+ * Returns null below the floor, for the reason in `cohortPublishable`: on a cohort of two,
+ * the pooled outreach minus your own is one named classmate's.
+ */
+export function cohortConversionRatio(
+  countsList: readonly MetricCounts[],
+  opts: { minCohort: number },
+): ConversionRatio | null {
+  if (!cohortPublishable(countsList.length, opts.minCohort)) return null;
+  const pooled: MetricCounts = {};
+  for (const counts of countsList) {
+    for (const key of [...OUTREACH_KEYS, ...INTERVIEW_KEYS]) {
+      pooled[key] = (pooled[key] ?? 0) + Math.max(0, Math.round(counts[key] ?? 0));
+    }
+  }
+  return conversionRatio(pooled);
 }

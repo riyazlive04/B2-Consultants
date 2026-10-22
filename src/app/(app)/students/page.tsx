@@ -111,6 +111,12 @@ export default async function StudentsPage() {
             ],
           }}
         />
+        {/*
+          WHY they stopped, not only how many (@39:42).
+          The reasons come first in the popup, because "two Guided students" is a fact nobody
+          can act on and "two left for financial reasons" is a conversation with Finance. The
+          levels stay underneath - the card's own number is still a headcount.
+        */}
         <MetricCard
           label="Dropped this month"
           value={counts.droppedThisMonth}
@@ -118,6 +124,10 @@ export default async function StudentsPage() {
           icon={<UserMinus size={18} />}
           detail={{
             rows: [
+              ...counts.droppedThisMonthReasons.map((r) => ({
+                label: r.reason,
+                value: `${r.count} (${r.pct}%)`,
+              })),
               { label: "Solo", value: counts.droppedThisMonthByLevel.SOLO },
               { label: "Guided", value: counts.droppedThisMonthByLevel.GUIDED },
               { label: "Elite", value: counts.droppedThisMonthByLevel.ELITE },
@@ -133,6 +143,16 @@ export default async function StudentsPage() {
               { label: "Active", value: counts.totalActive },
               { label: "Completed", value: counts.totalCompletedAllTime },
               { label: "Dropped", value: counts.totalDroppedAllTime },
+              /*
+                All-time reasons live HERE rather than on the monthly card, and that is the
+                point of carrying both: one month of churn on a business this size is two or
+                three rows, which is an anecdote. This is the only window with enough of them
+                to be a pattern worth changing the programme over.
+              */
+              ...counts.droppedAllTimeReasons.map((r) => ({
+                label: `… ${r.reason}`,
+                value: `${r.count} (${r.pct}%)`,
+              })),
             ],
           }}
         />
@@ -324,6 +344,7 @@ export default async function StudentsPage() {
                             rows={batchBoard.rows}
                             levelOptions={batchBoard.levelOptions}
                             leadOptions={batchBoard.leadOptions}
+                            backKey="students"
                           />
                         ),
                       },

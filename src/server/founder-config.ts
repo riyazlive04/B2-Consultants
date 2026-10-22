@@ -35,7 +35,10 @@ import {
   coerceDunningConfig,
   coerceAttendanceConfig,
   coerceLeaderboardConfig,
+  coerceStudentLifecycleConfig,
   DEFAULT_LEADERBOARD_CONFIG,
+  DEFAULT_STUDENT_LIFECYCLE_CONFIG,
+  type StudentLifecycleConfig,
   type LeaderboardConfig,
   coerceCashTargetsConfig,
   coerceExpenseCategoriesConfig,
@@ -132,6 +135,7 @@ export const INVOICE_SETTINGS_KEY = "invoiceSettings";
 export const SPEED_TO_LEAD_ALERT_KEY = "speedToLeadAlert";
 export const DUNNING_KEY = "dunning";
 export const ATTENDANCE_KEY = "attendance";
+export const STUDENT_LIFECYCLE_KEY = "studentLifecycle";
 export const CASH_TARGETS_KEY = "cashTargets";
 export const EXPENSE_CATEGORIES_KEY = "expenseCategories";
 /** Aliased from config-schema, where it lives so the engine path can import it alone. */
@@ -451,6 +455,28 @@ export async function writeLeaderboardConfig(config: LeaderboardConfig): Promise
   await prisma.appSetting.upsert({
     where: { key: LEADERBOARD_KEY },
     create: { key: LEADERBOARD_KEY, value },
+    update: { value },
+  });
+  revalidateFounderConfig();
+}
+
+/**
+ * The enrolment lifecycle - the reason vocabulary behind the discontinue button.
+ *
+ * Read by the coaching desk (to fill the picker), by `discontinueEnrollment` (to validate what
+ * came back) and by the churn breakdown. Nothing here arms anything: the button is a status
+ * change a human presses, and the config only decides what they may say about it.
+ */
+export const getStudentLifecycleConfig = cache(async (): Promise<StudentLifecycleConfig> => {
+  const row = await readSetting(STUDENT_LIFECYCLE_KEY);
+  return row ? coerceStudentLifecycleConfig(row.value) : DEFAULT_STUDENT_LIFECYCLE_CONFIG;
+});
+
+export async function writeStudentLifecycleConfig(config: StudentLifecycleConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: STUDENT_LIFECYCLE_KEY },
+    create: { key: STUDENT_LIFECYCLE_KEY, value },
     update: { value },
   });
   revalidateFounderConfig();

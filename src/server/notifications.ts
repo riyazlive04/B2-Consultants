@@ -1,7 +1,14 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { istMinutesOfDay, istMonthRange, istToday } from "@/lib/dates";
+import {
+  AWAITING_COACH,
+  UNANSWERED,
+  checkInState,
+  unansweredStreak,
+  isConcerning,
+} from "@/lib/sprint-check-in";
+import { istMinutesOfDay, istMonthRange, istToday, toDateInputValue } from "@/lib/dates";
 import { formatIstMinutes } from "@/lib/config-schema";
 import { getDailyLogEod } from "./founder-config";
 import { formatDate } from "@/lib/format";
@@ -16,6 +23,8 @@ import {
   alertCountdown,
   formatClassTime,
   isClassAlertOpen,
+  taskPromptLine,
+  tasksDueBefore,
 } from "@/lib/class-reminder";
 import { getPendingRows } from "./finance-metrics";
 import { getRunwaySnapshot } from "./cash-metrics";
@@ -81,29 +90,74 @@ function istHourNow(): number {
  */
 async function coachNotifications(userId: string, today: Date): Promise<Notification[]> {
   const items: Notification[] = [];
-  const [unmarked, checkIns] = await Promise.all([
+  const config = await getAttendanceConfig();
+  /**
+   * THE SECOND RUNG (@43:54).
+   *
+   * The register reminder below already fires the moment a taught class has no attendance rows,
+   * and that is deliberately stricter than the founders asked for. What was missing is an
+   * escalation: a reminder that reads identically on hour one and hour thirty is one a coach
+   * learns to scroll past, and the register is what the drop-risk signal and every student's own
+   * attendance percentage are computed from.
+   *
+   * So the same query is asked twice, with a date bound on the second. Two counts rather than
+   * two queries over different sets, so `stale` can never exceed `unmarked` and the two lines
+   * cannot contradict each other.
+   */
+  const staleBefore = new Date(Date.now() - config.registerEscalationHours * 3_600_000);
+  const unmarkedWhere = {
+    batch: { tutorId: userId, status: "ACTIVE" as const },
+    delivery: "LIVE" as const,
+    // `now`, not `today`: `today` is IST midnight, so a class taught this morning would not
+    // have shown up as needing a register until the following day - which is precisely when
+    // the reminder stops being useful.
+    startsAt: { lt: new Date() },
+    attendance: { none: {} },
+  };
+
+  const [unmarked, stale, checkIns] = await Promise.all([
+    prisma.classSession.count({ where: unmarkedWhere }),
     prisma.classSession.count({
-      where: {
-        batch: { tutorId: userId, status: "ACTIVE" },
-        delivery: "LIVE",
-        // `now`, not `today`: `today` is IST midnight, so a class taught this morning would not
-        // have shown up as needing a register until the following day - which is precisely when
-        // the reminder stops being useful.
-        startsAt: { lt: new Date() },
-        attendance: { none: {} },
-      },
+      where: { ...unmarkedWhere, startsAt: { lt: staleBefore } },
     }),
     prisma.sprintWeek.count({
-      where: { enrollment: { coachId: userId, status: "ACTIVE" }, status: "PENDING", weekEnd: { lt: today } },
+      /**
+       * UNANSWERED, not merely PENDING.
+       *
+       * This said `status: "PENDING"` alone, so it counted the weeks a student HAD answered and
+       * whose prose target left the verdict to the coach - and then told the coach "the actual
+       * has not been recorded", which was untrue of exactly those rows. Those are a separate
+       * item ("waiting on you") a few lines below, so the same week was being reported twice,
+       * under two contradictory descriptions.
+       */
+      where: { enrollment: { coachId: userId, status: "ACTIVE" }, ...UNANSWERED, weekEnd: { lt: today } },
     }),
   ]);
 
   if (unmarked > 0) {
+    /**
+     * ONE item, two rungs - not two items.
+     *
+     * A separate "escalated" notification alongside the ordinary one would report the same
+     * classes twice, and the stale ones are a SUBSET of the unmarked ones, so the two counts
+     * would overlap in a way nobody reading a bell can reconcile. The item changes its wording
+     * and its severity instead, and `escalated` lifts it above everything else in the sort.
+     */
+    const escalated = stale > 0;
+    const hours = config.registerEscalationHours;
     items.push({
       id: "coach-registers",
-      severity: "watch",
-      title: `${unmarked} register${unmarked > 1 ? "s" : ""} still to take`,
-      body: "Classes you have taught but not yet marked. Attendance is what the drop-risk signal reads.",
+      severity: escalated ? "risk" : "watch",
+      escalated,
+      title: escalated
+        ? `${stale} register${stale > 1 ? "s" : ""} unmarked for over ${hours}h`
+        : `${unmarked} register${unmarked > 1 ? "s" : ""} still to take`,
+      body: escalated
+        ? // Says what it COSTS, because by now the coach has already decided once not to do it.
+          `A class taught more than ${hours} hours ago still has no register.${
+            unmarked > stale ? ` (${unmarked} unmarked in total.)` : ""
+          } Until it is marked, those students have no attendance percentage and the drop-risk signal cannot see them.`
+        : "Classes you have taught but not yet marked. Attendance is what the drop-risk signal reads.",
       // Tabs are addressed by index - 1 is "To mark" on the teaching desk.
       href: "/coaching?tab=1",
     });
@@ -265,23 +319,71 @@ async function classAlertNotifications(
     },
   });
 
+  /**
+   * WHAT THE STUDENT STILL OWES BEFORE THESE CLASSES (@46:34).
+   *
+   * ONE query for every class in the window, not one per class: the alert window holds at most
+   * five sessions, and five extra round trips on a bell that renders on every page load is the
+   * same mistake the teaching desk's shell made. `SessionTaskCompletion` is materialised per
+   * student when the task is set, so "outstanding for THIS student" is a column rather than a
+   * join against who has ticked what.
+   *
+   * Staff are skipped deliberately: a coach's own outstanding list is their register and their
+   * review queue, both of which have their own items, and "you have coursework" is not a
+   * sentence the person who set it needs to read.
+   */
+  const pendingByBatch = new Map<string, { title: string; dueAt: Date | null }[]>();
+  if (audience.kind === "student" && sessions.length > 0) {
+    const batchIds = [...new Set(sessions.map((s) => s.batch.id))];
+    const pending = await prisma.sessionTaskCompletion.findMany({
+      where: {
+        student: { userId: audience.userId },
+        status: "PENDING",
+        task: { session: { batchId: { in: batchIds } } },
+      },
+      take: 50,
+      select: { task: { select: { title: true, dueAt: true, session: { select: { batchId: true } } } } },
+    });
+    for (const row of pending) {
+      const key = row.task.session.batchId;
+      pendingByBatch.set(key, [
+        ...(pendingByBatch.get(key) ?? []),
+        { title: row.task.title, dueAt: row.task.dueAt },
+      ]);
+    }
+  }
+
   const items: Notification[] = [];
   for (const s of sessions) {
     if (!isClassAlertOpen({ ...s, delivery: "LIVE" }, now, IN_APP_CLASS_ALERT_MINUTES)) continue;
     const when = alertCountdown(s.startsAt, now);
     const starting = s.startsAt.getTime() - now.getTime() <= 30 * 60_000;
+
+    // The prompt rides THIS class's alert rather than becoming an item of its own - a student
+    // who gets two notifications has to work out for themselves that the second is about the
+    // first. See `tasksDueBefore` for why an undated task counts as due by the next class.
+    const due = tasksDueBefore(pendingByBatch.get(s.batch.id) ?? [], s.startsAt);
+    const taskLine = taskPromptLine(due);
+
     items.push({
       id: `class-${s.id}`,
       // "watch" only once it is imminent. An hour out this is information, not a problem,
       // and colouring it amber for two hours would teach people to ignore the colour.
-      severity: starting ? "watch" : "info",
+      // Outstanding coursework makes it a "watch" either way: unlike the class itself, that is
+      // something the student can still fix in the time they have left.
+      severity: starting || taskLine !== null ? "watch" : "info",
       title:
         audience.kind === "student"
           ? `${s.title} ${when}`
           : `You are teaching ${s.title} - ${when}`,
       body:
         audience.kind === "student"
-          ? `${formatClassTime(s.startsAt)}${s.joinUrl ? " - the join link is on your classroom." : " - your coach will share the link."}`
+          ? [
+              `${formatClassTime(s.startsAt)}${s.joinUrl ? " - the join link is on your classroom." : " - your coach will share the link."}`,
+              taskLine,
+            ]
+              .filter(Boolean)
+              .join(" ")
           : `${s.batch.name} - ${formatClassTime(s.startsAt)}.`,
       href: audience.kind === "student" ? "/classroom" : "/coaching",
     });
@@ -418,6 +520,60 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
           severity: "info",
           title: diff === 0 ? "Coaching check-in today" : `Coaching check-in ${formatDate(e.nextCheckInDate)}`,
           body: "Bring your updates - sessions and applications move your XP.",
+          href: "/my-journey",
+        });
+      }
+    }
+
+    /**
+     * THE CHECK-IN THE STUDENT STILL OWES (@37:16).
+     *
+     * The coach has been nagged about this since the notification bell shipped; the student
+     * never was, which is the wrong way round - the answer is theirs to give. Derived from the
+     * same `checkInState` the form on `/my-journey` uses to decide which week to offer, so the
+     * bell can never point at a week the page will not show.
+     *
+     * Two rungs, because an open week and a closed one are different requests. An open week is
+     * an invitation; a closed one has been missed, and the question changes from "how did it
+     * go" to "what got in the way" - which is the field the form captures into `note`.
+     */
+    const sprintWeeks = e.sprintWeeks.map((w) => ({
+      status: w.status,
+      actual: w.actual,
+      weekStartYmd: w.weekStart.slice(0, 10),
+      weekEndYmd: w.weekEnd.slice(0, 10),
+      weekIndex: w.weekIndex,
+    }));
+    const todayYmd = toDateInputValue(today);
+
+    if (e.status === "ACTIVE") {
+      const open = sprintWeeks.find((w) => checkInState(w, todayYmd) === "AWAITING_STUDENT");
+      const overdue = sprintWeeks
+        .filter((w) => checkInState(w, todayYmd) === "OVERDUE")
+        .sort((a, b) => a.weekEndYmd.localeCompare(b.weekEndYmd));
+
+      if (overdue.length > 0) {
+        const streak = unansweredStreak(sprintWeeks, todayYmd);
+        items.push({
+          id: "sprint-overdue",
+          // `risk` once it is a pattern rather than a slip: three weekends in a row is the
+          // point at which the coach is also being shown this student as a concern, and the
+          // bell should not be gentler about it than the desk is.
+          severity: isConcerning(streak) ? "risk" : "watch",
+          title:
+            overdue.length === 1
+              ? `Week ${overdue[0].weekIndex} check-in is still open`
+              : `${overdue.length} sprint check-ins are still open`,
+          body:
+            "Tell your coach what you got done - and if the week got away from you, say what got in the way. That is the useful half.",
+          href: "/my-journey",
+        });
+      } else if (open) {
+        items.push({
+          id: "sprint-due",
+          severity: "info",
+          title: `Week ${open.weekIndex} check-in is open`,
+          body: "A minute at the weekend: what you got done, and anything in the way.",
           href: "/my-journey",
         });
       }
@@ -614,7 +770,10 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
      */
     const [awaitingReview, missedRecently] = await Promise.all([
       prisma.sprintWeek.count({
-        where: { status: "PENDING", actual: { not: null }, enrollment: { status: "ACTIVE" } },
+        // `AWAITING_COACH` - the named half of PENDING. This was `status: "PENDING", actual:
+        // { not: null }` spelled out here, and the student's screen spelled the OTHER half out
+        // for itself; see lib/sprint-check-in.ts for what went wrong while they were separate.
+        where: { ...AWAITING_COACH, enrollment: { status: "ACTIVE" } },
       }),
       prisma.sprintWeek.count({
         where: {

@@ -5,14 +5,19 @@ import { z } from "zod";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireSession } from "@/lib/rbac";
+import { requireAdmin, requireSession, type AppSession } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
 import { intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 import { sendLoginCredentials } from "./login-credentials";
 import { allocateStudentCode, lineForLevel } from "./student-code";
-import { getDeliveryDefaults } from "./founder-config";
+import { getDeliveryDefaults, getStudentLifecycleConfig } from "./founder-config";
+import {
+  decideDiscontinue,
+  DISCONTINUED_STATUS,
+  OTHER_REASON,
+} from "@/lib/enrollment-lifecycle";
 import { normalizeStudentCode } from "@/lib/student-code";
 import { Prisma } from "@prisma/client";
 
@@ -452,6 +457,200 @@ export async function setEnrollmentStatus(id: string, form: FormData): Promise<A
     });
   }
   revalidatePath("/students");
+  return { ok: true };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────
+ * DISCONTINUING A STUDENT - the button the founders asked for (@37:54-39:42).
+ *
+ * `setEnrollmentStatus` above can already move a status to DROPPED, and it stays: it is the
+ * Admin's four-way picker on the student record. This pair is the OTHER half, and it differs in
+ * three ways that are the entire point of it:
+ *
+ *   1. a reason is REQUIRED, from the founder-editable vocabulary (@39:42 wants the breakdown);
+ *   2. the COACH who owns the enrolment may press it, not only an Admin - they are the person
+ *      who knows, and Console can take that away (`coachMayDiscontinue`);
+ *   3. it is reversible, and reversing it clears the reason rather than leaving a row that
+ *      reads ACTIVE with an explanation of why the student left attached to it.
+ *
+ * ── WHAT IT DOES NOT TOUCH ──────────────────────────────────────────────────────────────
+ * MONEY. Discontinuing is not a refund: §8 of the agreement is explicit that withdrawal earns
+ * no refund, so the instalments the student signed for stay owed, the receivable stays open and
+ * the dunning ladder keeps running. That is not a decision taken here - it is true because
+ * revenue recognition, instalment settlement and dunning read `pending_payment.status` and
+ * `income`, and never enrolment status. `lib/__tests__/enrollment-lifecycle.test.ts` asserts
+ * that separation so a later refactor cannot quietly couple them.
+ * ──────────────────────────────────────────────────────────────────────────────────────── */
+
+const discontinueSchema = z.object({
+  reason: rule("text"),
+  note: optionalRule("text"),
+});
+
+/**
+ * Who may discontinue THIS enrolment.
+ *
+ * Admin always. Head always - they supervise the coaching floor, and this is the same widening
+ * as the attendance-marking rights they already have. The owning coach when the founder has
+ * left `coachMayDiscontinue` on.
+ *
+ * Deliberately NOT "any coach": the desk shows a supervisor every active enrolment, and the
+ * right to see a caseload is not the right to end somebody else's student's programme.
+ */
+async function mayDiscontinue(
+  session: AppSession,
+  enrollment: { coachId: string | null },
+): Promise<boolean> {
+  /**
+   * A STUDENT is refused BY ROLE, before anything else is considered.
+   *
+   * The ownership test below would almost certainly refuse them anyway - a student's user id
+   * would have to be sitting in `coachId` - but "almost certainly" is the wrong standard for
+   * the one action that ends a programme. Leaving it to that coincidence means the guard holds
+   * because of a data accident rather than because of a rule, and a staff account later
+   * converted to a student login, or a `coachId` filled from the wrong id, would walk through it.
+   */
+  if (session.role === "STUDENT") return false;
+  if (session.role === "ADMIN" || session.role === "HEAD") return true;
+  // Not "any coach": a supervisor's desk lists every active enrolment, and seeing a caseload is
+  // not the right to end someone else's student's programme.
+  if (!enrollment.coachId || enrollment.coachId !== session.user.id) return false;
+  const config = await getStudentLifecycleConfig();
+  return config.coachMayDiscontinue;
+}
+
+export async function discontinueEnrollment(id: string, form: FormData): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = discontinueSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const existing = await prisma.enrollment.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      coachId: true,
+      programLevel: true,
+      student: { select: { fullName: true } },
+    },
+  });
+  if (!existing) return { ok: false, error: "Enrollment not found" };
+  if (!(await mayDiscontinue(session, existing))) {
+    return { ok: false, error: "Only this student's coach, a Head or an Admin can do that." };
+  }
+  if (existing.status === DISCONTINUED_STATUS) {
+    return { ok: false, error: "This enrollment is already discontinued." };
+  }
+  /**
+   * A COMPLETED programme cannot be discontinued.
+   *
+   * Not a technicality: `hasLeft` treats the two the same for seats and registers, so the
+   * button would appear to do nothing - while quietly rewriting a graduate into churn, which is
+   * the one thing that would make the breakdown lie.
+   */
+  if (existing.status === "COMPLETED") {
+    return { ok: false, error: "This programme is already completed - it cannot be discontinued." };
+  }
+
+  const config = await getStudentLifecycleConfig();
+  const decided = decideDiscontinue(parsed.data, config.discontinueReasons);
+  if (!decided.ok) return { ok: false, error: decided.error };
+  if (parsed.data.reason === OTHER_REASON && !config.allowOtherReason) {
+    return { ok: false, error: "Pick a reason from the list." };
+  }
+
+  await prisma.enrollment.update({
+    where: { id },
+    data: {
+      status: DISCONTINUED_STATUS,
+      // The one clock. See the schema note: there is no `discontinuedAt` to disagree with it.
+      statusChangedAt: new Date(),
+      discontinueReason: decided.decision.reason,
+      discontinueNote: decided.decision.note,
+      discontinuedById: session.user.id,
+    },
+  });
+
+  await logActivity(session, {
+    action: "enrollment.discontinue",
+    section: "students",
+    entityType: "Enrollment",
+    entityId: id,
+    summary: `Discontinued ${existing.student.fullName}'s ${existing.programLevel} programme - ${decided.decision.reason}`,
+    meta: {
+      changed: ["status", "discontinueReason"],
+      before: { status: existing.status },
+      after: { status: DISCONTINUED_STATUS, discontinueReason: decided.decision.reason },
+      note: decided.decision.note,
+    },
+  });
+
+  revalidatePath("/students");
+  revalidatePath("/coaching");
+  revalidatePath("/leaderboard");
+  revalidatePath("/batches");
+  return { ok: true };
+}
+
+/**
+ * Put a student back.
+ *
+ * Students come back - a financial problem resolves, a job falls through - and without this the
+ * only route back was the Admin's status picker, which would leave the reason attached to a row
+ * that now reads ACTIVE. So the three columns are cleared together with the status.
+ *
+ * The trail is not lost: `logActivity` holds the discontinue (with its reason in `meta`) and
+ * this restore, which is the right place for the history of a decision that has been undone.
+ */
+export async function restoreEnrollment(id: string): Promise<ActionResult> {
+  const session = await requireSession();
+  const existing = await prisma.enrollment.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      coachId: true,
+      programLevel: true,
+      discontinueReason: true,
+      student: { select: { fullName: true } },
+    },
+  });
+  if (!existing) return { ok: false, error: "Enrollment not found" };
+  if (!(await mayDiscontinue(session, existing))) {
+    return { ok: false, error: "Only this student's coach, a Head or an Admin can do that." };
+  }
+  if (existing.status !== DISCONTINUED_STATUS) {
+    return { ok: false, error: "This enrollment is not discontinued." };
+  }
+
+  await prisma.enrollment.update({
+    where: { id },
+    data: {
+      status: "ACTIVE",
+      statusChangedAt: new Date(),
+      discontinueReason: null,
+      discontinueNote: null,
+      discontinuedById: null,
+    },
+  });
+
+  await logActivity(session, {
+    action: "enrollment.restore",
+    section: "students",
+    entityType: "Enrollment",
+    entityId: id,
+    summary: `Put ${existing.student.fullName} back on their ${existing.programLevel} programme`,
+    meta: {
+      changed: ["status", "discontinueReason"],
+      before: { status: existing.status, discontinueReason: existing.discontinueReason },
+      after: { status: "ACTIVE", discontinueReason: null },
+    },
+  });
+
+  revalidatePath("/students");
+  revalidatePath("/coaching");
+  revalidatePath("/leaderboard");
+  revalidatePath("/batches");
   return { ok: true };
 }
 

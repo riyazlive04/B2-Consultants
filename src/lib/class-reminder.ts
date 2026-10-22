@@ -140,3 +140,66 @@ export function alertCountdown(startsAt: Date, now: Date): string {
   const days = Math.round(hours / 24);
   return days === 1 ? "starts tomorrow" : `starts in ${days} days`;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────────────────
+ * WHAT IS DUE BEFORE THE CLASS (@46:34)
+ *
+ * The founders asked to be able to set something before a class and have the student prompted
+ * about it. Both halves of that already existed - `SessionTask.dueAt` holds the deadline and
+ * `SessionTaskCompletion` rows are materialised per student when the task is set - and what was
+ * missing was the prompt.
+ *
+ * It rides the reminder that is already going out rather than becoming a reminder of its own,
+ * and that is a deliberate choice rather than a shortcut: a student who gets "your class starts
+ * in an hour" and, separately, "you have two tasks outstanding" has to work out for themselves
+ * that the second is about the first. One sentence says it once, at the moment it can still be
+ * acted on, which is the entire value of a pre-class prompt.
+ *
+ * Pure, like everything else in this file - the in-app bell and the WhatsApp engine both read it.
+ * ──────────────────────────────────────────────────────────────────────────────────────── */
+
+/** A task, reduced to what "is this outstanding, and is it due by then" needs. */
+export type PendingTask = {
+  title: string;
+  /** Null when the coach set no deadline - see `tasksDueBefore`. */
+  dueAt: Date | null;
+};
+
+/**
+ * The outstanding tasks a student should have finished before a given class starts.
+ *
+ * ── Why an undated task counts ─────────────────────────────────────────────────────────
+ * `dueAt` is nullable, and in practice most tasks carry none - a coach says "read this before
+ * Saturday" and sets a task, not a timestamp. Excluding the undated ones would make the prompt
+ * silent in exactly the common case, so an undated task is treated as due by the next class,
+ * which is what "before the next class" means to the person who set it.
+ *
+ * ── Why a task due AFTER this class is excluded ────────────────────────────────────────
+ * Not everything outstanding is urgent. A task due next Thursday has not been missed, and
+ * prompting about it an hour before Saturday's class trains the student to read the prompt as
+ * a standing list rather than as a deadline - at which point it stops working for the one that
+ * really is due.
+ */
+export function tasksDueBefore(
+  tasks: readonly PendingTask[],
+  startsAt: Date,
+): PendingTask[] {
+  return tasks.filter((t) => t.dueAt === null || t.dueAt.getTime() <= startsAt.getTime());
+}
+
+/**
+ * "2 things to do before this class: Resume v2, Read the HIDE brief" - the prompt's own line.
+ *
+ * Names up to two tasks and counts the rest. A bare count ("3 tasks outstanding") makes the
+ * student open the app to find out what they are, which is the work the prompt was supposed to
+ * save; listing all of them turns a notification into a document.
+ */
+export function taskPromptLine(tasks: readonly PendingTask[]): string | null {
+  if (tasks.length === 0) return null;
+  const named = tasks.slice(0, 2).map((t) => t.title);
+  const rest = tasks.length - named.length;
+  const list = rest > 0 ? `${named.join(", ")} and ${rest} more` : named.join(" and ");
+  return tasks.length === 1
+    ? `One thing to do before this class: ${list}.`
+    : `${tasks.length} things to do before this class: ${list}.`;
+}

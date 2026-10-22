@@ -2,7 +2,9 @@ import Link from "next/link";
 import { CalendarRange, ClipboardCheck, GraduationCap, School, Users, Video } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { getCoachingDesk } from "@/server/coaching-desk";
+import { getStudentLifecycleConfig } from "@/server/founder-config";
 import { SessionList } from "./_components/TeachingSessions";
+import { DiscontinueButton, RestoreButton } from "./_components/DiscontinueStudent";
 import { Tabs } from "@/components/ui/Tabs";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Card, EmptyState, PageHeader, Pill, TableShell, Td, Th, Tr } from "@/components/ui/kit";
@@ -10,6 +12,7 @@ import { StudentName } from "@/components/ui/StudentName";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { formatDate } from "@/lib/format";
 import { MILESTONE_LABELS } from "@/lib/labels";
+import { isConcerning } from "@/lib/sprint-check-in";
 
 export const metadata = { title: "My Teaching" };
 export const dynamic = "force-dynamic";
@@ -24,12 +27,27 @@ export const dynamic = "force-dynamic";
  */
 export default async function CoachingPage() {
   const session = await requireSection("coaching");
-  const desk = await getCoachingDesk(session);
+  /*
+    The desk and the reason vocabulary are read together: the picker inside the discontinue
+    dialog is filled from the Console's list, and a dialog offering reasons the server would
+    then refuse is worse than no dialog.
+  */
+  const [desk, lifecycle] = await Promise.all([getCoachingDesk(session), getStudentLifecycleConfig()]);
 
   const totalStudents = desk.batches.reduce((a, b) => a + b.filled, 0);
   const registersDue = desk.needsRegister.length;
   const recordingsDue = desk.batches.reduce((a, b) => a + b.recordingsOutstanding, 0);
-  const sprintDue = desk.students.filter((s) => s.sprintWeekDue).length;
+  /*
+    Two counts, because they are two different jobs.
+    `awaitingMe` is the coach's own queue - a week the student answered whose prose target left
+    the verdict to a human, finished in ten seconds. `chasing` is students who have not answered
+    at all, which is a conversation rather than a chore. The banner used to add them together
+    and call the total "waiting on you", so a coach working their queue found half of it was not
+    theirs to action.
+  */
+  const awaitingMe = desk.students.filter((s) => s.sprintWeekDue?.state === "AWAITING_COACH").length;
+  const chasing = desk.students.filter((s) => s.sprintWeekDue?.state === "OVERDUE").length;
+  const concerning = desk.students.filter((s) => isConcerning(s.unansweredStreak)).length;
 
   return (
     <div className="w-full space-y-6">
@@ -162,20 +180,38 @@ export default async function CoachingPage() {
           },
           {
             label: `My students${desk.students.length ? ` (${desk.students.length})` : ""}`,
-            content:
-              desk.students.length === 0 ? (
-                <EmptyState
-                  title="No students assigned to you"
-                  body="A student appears here once their enrollment names you as their coach."
-                />
-              ) : (
+            /*
+              The empty state no longer swallows the whole tab.
+              A coach whose last student has just stopped has an EMPTY caseload and the most
+              urgent reason to be here - the undo. So the departures panel sits outside that
+              branch; only the table has an empty state of its own.
+            */
+            content: (
                 <div className="space-y-3">
-                  {sprintDue > 0 && (
+                  {desk.students.length === 0 && (
+                    <EmptyState
+                      title="No students assigned to you"
+                      body="A student appears here once their enrollment names you as their coach."
+                    />
+                  )}
+                  {desk.students.length > 0 && (awaitingMe > 0 || chasing > 0) && (
                     <p className="rounded-field bg-surface-2 px-3 py-2 text-xs text-ink-2">
-                      {sprintDue} sprint check-in{sprintDue === 1 ? "" : "s"} waiting on you - record the week&apos;s
-                      actual on the student&apos;s record.
+                      {awaitingMe > 0 && (
+                        <>
+                          {awaitingMe} check-in{awaitingMe === 1 ? "" : "s"} waiting on your verdict - record the
+                          week&apos;s actual on the student&apos;s record.
+                        </>
+                      )}
+                      {awaitingMe > 0 && chasing > 0 && " "}
+                      {chasing > 0 && (
+                        <>
+                          {chasing} student{chasing === 1 ? " has" : "s have"} not filled theirs in
+                          {concerning > 0 && `, ${concerning} for three weekends or more`}.
+                        </>
+                      )}
                     </p>
                   )}
+                  {desk.students.length > 0 && (
                   <TableShell
                     head={
                       <>
@@ -185,9 +221,10 @@ export default async function CoachingPage() {
                         <Th>Attendance</Th>
                         <Th>Coursework</Th>
                         <Th>Sprint check-in</Th>
+                        <Th />
                       </>
                     }
-                    minWidth={820}
+                    minWidth={940}
                   >
                     <>
                       {desk.students.map((s) => (
@@ -228,24 +265,106 @@ export default async function CoachingPage() {
                               <span className="text-muted">Clear</span>
                             )}
                           </Td>
+                          {/*
+                            WHOSE move it is, said in the cell. "Week 4" alone left the coach to
+                            work out whether that was theirs to judge or the student's to answer,
+                            and the two need opposite responses.
+                          */}
                           <Td>
                             {s.sprintWeekDue ? (
-                              <span className="text-warn">
+                              <span
+                                className={
+                                  s.sprintWeekDue.state === "AWAITING_COACH"
+                                    ? "text-primary"
+                                    : s.sprintWeekDue.state === "OVERDUE"
+                                      ? "text-warn"
+                                      : "text-ink-2"
+                                }
+                              >
                                 Week {s.sprintWeekDue.weekIndex}
                                 <span className="block text-caption text-muted">
-                                  by {formatDate(s.sprintWeekDue.weekEnd)}
+                                  {s.sprintWeekDue.state === "AWAITING_COACH"
+                                    ? "your verdict"
+                                    : s.sprintWeekDue.state === "OVERDUE"
+                                      ? `unanswered since ${formatDate(s.sprintWeekDue.weekEnd)}`
+                                      : `open until ${formatDate(s.sprintWeekDue.weekEnd)}`}
                                 </span>
                               </span>
                             ) : (
                               <span className="text-muted">-</span>
+                            )}
+                            {/*
+                              The end of the ladder, and it stops here - at a pill, next to the
+                              button, in front of the person who decides. The founders were
+                              explicit that the stage move stays manual (@37:54).
+                            */}
+                            {isConcerning(s.unansweredStreak) && (
+                              <Pill tone="bad">
+                                {s.unansweredStreak} weekends silent
+                              </Pill>
+                            )}
+                          </Td>
+                          {/*
+                            `canDiscontinue` is decided per ROW on the server, not once for the
+                            desk: a supervisor sees every active enrolment here, and seeing a
+                            caseload is not the right to end someone else's student's programme.
+                          */}
+                          <Td align="right">
+                            {s.canDiscontinue && (
+                              <DiscontinueButton
+                                enrollmentId={s.enrollmentId}
+                                studentName={s.name}
+                                reasons={lifecycle.discontinueReasons}
+                                allowOther={lifecycle.allowOtherReason}
+                              />
                             )}
                           </Td>
                         </Tr>
                       ))}
                     </>
                   </TableShell>
+                  )}
+
+                  {/*
+                    THE UNDO. A discontinued enrolment leaves the caseload above the instant it
+                    is saved, so without this list a coach who pressed the wrong row had nowhere
+                    to go - the student had vanished from the only screen they can reach.
+
+                    The reason is printed next to each name because reversing one is a judgement:
+                    "put them back" reads very differently beside "found a job elsewhere" than
+                    beside "unresponsive - no contact".
+                  */}
+                  {desk.recentDepartures.length > 0 && (
+                    <Card
+                      title="Recently stopped"
+                      subtitle="Discontinued in the last 30 days. After that, the Students board is the place."
+                    >
+                      <ul className="divide-y divide-line">
+                        {desk.recentDepartures.map((d) => (
+                          <li key={d.enrollmentId} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0">
+                            <Link href={`/students/${d.studentId}`} className="hover:underline">
+                              <StudentName name={d.name} code={d.code} />
+                            </Link>
+                            <span className="text-caption text-muted">
+                              {d.programLevel} · stopped {formatDate(d.whenYmd)}
+                              {d.byName ? ` by ${d.byName}` : ""}
+                            </span>
+                            <span className="text-sm text-ink-2">{d.reason ?? "No reason recorded"}</span>
+                            {d.note && d.note !== d.reason && (
+                              <span className="w-full text-caption text-muted">{d.note}</span>
+                            )}
+                            {d.canRestore && (
+                              <span className="ml-auto">
+                                <RestoreButton enrollmentId={d.enrollmentId} studentName={d.name} />
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                  )}
                 </div>
-              ),
+            ),
           },
         ]}
       />

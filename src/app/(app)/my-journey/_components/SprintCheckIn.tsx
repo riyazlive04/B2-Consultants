@@ -8,6 +8,12 @@ import { Field, FormError, SubmitButton, TextArea, TextInput } from "@/component
 import { formatDate } from "@/lib/format";
 import { SPRINT_STATUS_LABELS } from "@/lib/labels";
 import { safeAction } from "@/lib/action-guard";
+import {
+  awaitsCoach,
+  checkInState,
+  nextWeekToAnswer,
+  unansweredStreak,
+} from "@/lib/sprint-check-in";
 
 export type PortalSprintWeek = {
   id: string;
@@ -32,23 +38,52 @@ const STATUS_PILL: Record<string, string> = {
  * week-wise plan, and lets the student submit what they actually did for the current
  * (or any past unreviewed) week. Achieved = keep going; missed = say what got in the way.
  */
-export function SprintCheckIn({ weeks }: { weeks: PortalSprintWeek[] }) {
+export function SprintCheckIn({
+  weeks,
+  todayYmd,
+}: {
+  weeks: PortalSprintWeek[];
+  /**
+   * The IST day, resolved on the SERVER and passed in.
+   *
+   * Not `new Date()` in here, which is what this component used to compare against. That is the
+   * BROWSER's clock in the BROWSER's timezone: a student opening the app from Berlin at 9pm is
+   * already on the next IST day, so a week could read as overdue for them and open for their
+   * coach - and the overdue copy below says something quite different to the student.
+   */
+  todayYmd: string;
+}) {
   const [error, setError] = useState<string | null>(null);
   if (!weeks.length) return null;
 
   /**
-   * The week to check in on: the current one first, else the oldest overdue one.
+   * Whose move it is, from the ONE definition in lib/sprint-check-in.ts.
    *
-   * `!w.actual` on BOTH arms. It was only on the second, so a week whose target was prose
-   * stayed PENDING after the student answered - and the form came straight back, empty,
-   * with nothing to say the first answer had been received. Submitting again overwrote it.
+   * Both of these used to be written out here - `status === "PENDING" && !w.actual`, twice, in
+   * two arms of one expression - and the first version had it on only one of them. A week whose
+   * target was prose stayed PENDING after the student answered, so the form came straight back,
+   * empty, with nothing to say the first answer had been received, and submitting again
+   * overwrote it. The coach's queue in `server/notifications.ts` had its own copy of the
+   * complementary test. Now there is one.
    */
-  const todayTarget =
-    weeks.find((w) => w.isCurrent && w.status === "PENDING" && !w.actual) ??
-    weeks.find((w) => w.status === "PENDING" && !w.actual && new Date(w.weekEnd) < new Date());
+  const shaped = weeks.map((w) => ({
+    ...w,
+    weekStartYmd: w.weekStart.slice(0, 10),
+    weekEndYmd: w.weekEnd.slice(0, 10),
+  }));
+  const todayTarget = nextWeekToAnswer(shaped, todayYmd);
+  const awaitingReview = shaped.find((w) => awaitsCoach(w, todayYmd));
 
-  /** Answered, not yet judged - so the student can see what they sent. */
-  const awaitingReview = weeks.find((w) => w.status === "PENDING" && !!w.actual);
+  /**
+   * An overdue week asks a DIFFERENT question.
+   *
+   * "How did the week go" is an invitation; the week has closed, so the honest question is what
+   * got in the way - and that answer is worth more to the coach than the number is. Same form,
+   * same `note` field, re-labelled: a second form would be a second place for the answer to
+   * land.
+   */
+  const isOverdue = todayTarget ? checkInState(todayTarget, todayYmd) === "OVERDUE" : false;
+  const streak = unansweredStreak(shaped, todayYmd);
 
   const done = weeks.filter((w) => w.status === "ACHIEVED").length;
 
@@ -91,7 +126,20 @@ export function SprintCheckIn({ weeks }: { weeks: PortalSprintWeek[] }) {
             <span className="ml-2 font-normal text-muted tnum">
               {formatDate(todayTarget.weekStart)} - {formatDate(todayTarget.weekEnd)}
             </span>
+            {isOverdue && (
+              <span className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-caption font-semibold text-warn">
+                still open
+              </span>
+            )}
           </p>
+          {isOverdue && (
+            // Explicitly NOT "you missed this". The window stays open on purpose, and a student
+            // who is already behind does not need to be told off by a form before they fill it.
+            <p className="mt-1 text-sm text-ink-2">
+              This week has closed, but it is still yours to fill in.
+              {streak > 1 && ` That is ${streak} weekends now - worth a word with your coach.`}
+            </p>
+          )}
           {todayTarget.target ? (
             <p className="mt-1 text-sm text-muted">
               Your target: <span className="font-semibold text-ink">{todayTarget.target}</span>
@@ -103,8 +151,23 @@ export function SprintCheckIn({ weeks }: { weeks: PortalSprintWeek[] }) {
             <Field label="What did you get done?">
               <TextInput kind="text" name="actual" required placeholder="e.g. 12 applications, 1 interview" />
             </Field>
-            <Field label="Anything in the way? (optional)">
-              <TextArea kind="text" name="note" rows={1} placeholder="Blockers, questions for your coach…" />
+            {/*
+              One field, two questions. On an open week this is the optional extra; on an
+              overdue one it is the point of the exercise, and the label says so - the answer
+              lands in `SprintWeek.note` either way, which is where the coach reads it.
+            */}
+            <Field
+              label={isOverdue ? "What got in the way?" : "Anything in the way? (optional)"}
+              hint={isOverdue ? "More useful to your coach than the number is." : undefined}
+            >
+              <TextArea
+                kind="text"
+                name="note"
+                rows={isOverdue ? 2 : 1}
+                placeholder={
+                  isOverdue ? "Interviews at work, family, lost the thread…" : "Blockers, questions for your coach…"
+                }
+              />
             </Field>
           </div>
           <div className="mt-3 flex items-center gap-3">

@@ -152,6 +152,15 @@ export const getMyStudentPortal = cache(async (userId: string) => {
     fullName: student.fullName,
     targetRole: student.targetRole,
     industry: student.industry,
+    /**
+     * The IST day, resolved HERE and handed to the page.
+     *
+     * The sprint check-in form needs a day to decide which week is open and which has closed,
+     * and `new Date()` in the browser is the wrong clock twice over - it is the student's
+     * timezone, so a student opening the app from Berlin at 9pm is already on the next IST day
+     * and would be shown a different week than their coach is being nagged about.
+     */
+    todayKey,
     enrollments,
     primary,
   };

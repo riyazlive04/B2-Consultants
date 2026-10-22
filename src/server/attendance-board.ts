@@ -1,6 +1,8 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
+import { withBack } from "@/lib/back-link";
 import { hasCapability, type CapabilityOverrides } from "@/lib/capabilities";
 import type { AppRole } from "@/lib/sections";
 import { toDateInputValue, istToday } from "@/lib/dates";
@@ -160,7 +162,16 @@ export const getAttendanceBoard = cache(
       where: supervisor ? { status: "ACTIVE" } : { status: "ACTIVE", tutorId: userId },
       select: {
         id: true, line: true, name: true, code: true, level: true, tutorId: true,
-        _count: { select: { members: true, enrollments: true } },
+        /**
+         * Who is EXPECTED in the room - so seated enrolments only.
+         *
+         * This has to agree with the register itself, which now leaves out a student who has
+         * left (see `belongsOnRegister` in server/attendance.ts). Counting them here would make
+         * the board read "5 of 6 marked" over a sheet showing five rows, all of them marked -
+         * a cohort whose register can never be completed, on the screen whose whole job is to
+         * say which registers are outstanding.
+         */
+        _count: { select: { members: true, enrollments: { where: { status: { in: [...SEATED_STATUSES] } } } } },
         events: {
           where: {
             delivery: "LIVE",
@@ -272,7 +283,9 @@ export const getAttendanceBoard = cache(
         markedSessions,
         attendancePct: countedTotal > 0 ? Math.round((attendedTotal / countedTotal) * 100) : null,
         iLead: b.tutorId === userId,
-        href: b.line === "B2" ? `/batches/${b.id}` : `/german-note/${b.id}`,
+        // Stamped with where it was opened from, so the cohort page offers a way back to this
+        // desk rather than to whichever list the viewer's ROLE usually starts on.
+        href: withBack(b.line === "B2" ? `/batches/${b.id}` : `/german-note/${b.id}`, "attendance"),
       });
     }
 

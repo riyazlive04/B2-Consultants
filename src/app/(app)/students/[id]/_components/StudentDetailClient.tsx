@@ -17,6 +17,8 @@ import { Btn } from "@/components/ui/controls";
 import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { SprintTracker } from "./SprintTracker";
+import { WeeklyProgress } from "./WeeklyProgress";
+import type { WeeklyReport } from "@/lib/weekly-report";
 import { signalForStudent } from "@/lib/signals";
 import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { safeAction } from "@/lib/action-guard";
@@ -318,6 +320,7 @@ export function StudentDetailClient({
   canEditTracker,
   canSeat,
   todayKey,
+  weeklyReports,
 }: {
   student: StudentDetail;
   isAdmin: boolean;
@@ -329,6 +332,14 @@ export function StudentDetailClient({
    */
   canSeat: boolean;
   todayKey: string; // IST today, YYYY-MM-DD - highlights the current sprint week
+  /**
+   * The weekly rollup per enrolment id, built on the server (see server/weekly-report.ts).
+   *
+   * Passed in rather than fetched, because this is a client component: the report is five
+   * grouped queries and a date-bucketing pass, neither of which belongs in a browser. An
+   * enrolment with no sprint plan simply has no key here.
+   */
+  weeklyReports: Record<string, WeeklyReport>;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -463,6 +474,29 @@ export function StudentDetailClient({
             </>
           }
         >
+          {/*
+            WHY this student stopped, where whoever is asking already is.
+            The coaching desk holds the last 30 days so a mis-press can be undone there; from
+            then on this record is the answer, and a DROPPED enrolment with no explanation is
+            exactly the gap the discontinue flow was built to close. Rows that predate it read
+            "no reason recorded" rather than pretending to one.
+          */}
+          {e.status === "DROPPED" && (
+            <div className="mb-4 rounded-field border border-line bg-surface-2 px-3.5 py-2.5">
+              <p className="text-sm text-ink">
+                <span className="font-semibold">Stopped {formatDate(e.statusChangedAt)}</span>
+                {" - "}
+                {e.discontinueReason ?? "no reason recorded"}
+              </p>
+              {e.discontinueNote && e.discontinueNote !== e.discontinueReason && (
+                <p className="mt-0.5 text-caption text-muted">{e.discontinueNote}</p>
+              )}
+              <p className="mt-1 text-caption text-muted">
+                Their instalments are unaffected - withdrawal earns no refund (agreement §8).
+              </p>
+            </div>
+          )}
+
           {/* Deal team + coach - the closer (L3) drives the commission split */}
           <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             {/* Editable now, not a read-only label. Until `Enrollment.coachId` existed the
@@ -613,6 +647,13 @@ export function StudentDetailClient({
           {e.totalDays !== null && (
             <SprintTracker enrollment={e} todayKey={todayKey} canEdit={canEditTracker} />
           )}
+
+          {/*
+            The weekly progress report (@33:47), directly under the tracker that sets the
+            targets it measures against. The tracker is the editor; this is the read, and it
+            renders nothing at all until a week has actually happened.
+          */}
+          {weeklyReports[e.id] && <WeeklyProgress report={weeklyReports[e.id]} />}
 
           {/* Per-application job tracking (spec Module I) */}
           <JobApplications

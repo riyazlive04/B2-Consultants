@@ -12,6 +12,7 @@ import {
   attendanceConfigSchema,
   leaderboardConfigSchema,
   coerceLeaderboardConfig,
+  studentLifecycleConfigSchema,
 } from "@/lib/config-schema";
 import {
   writeMaintenanceConfig,
@@ -28,6 +29,8 @@ import {
   ATTENDANCE_KEY,
   LEADERBOARD_KEY,
   writeLeaderboardConfig,
+  STUDENT_LIFECYCLE_KEY,
+  writeStudentLifecycleConfig,
 } from "./founder-config";
 import { previewDunning } from "./dunning";
 import { logActivity } from "./activity-log";
@@ -226,5 +229,34 @@ export async function saveFinancePostingConfig(input: unknown): Promise<ActionRe
   });
   revalidatePath("/console");
   revalidatePath("/ledger");
+  return { ok: true };
+}
+
+/**
+ * The discontinue vocabulary (Console → Why students stop).
+ *
+ * Admin-only, like every other config save here. The log line names the reasons rather than
+ * just saying "updated": removing one changes what a coach may record about a student leaving,
+ * and six months later the churn breakdown's shape is only explainable if the edit is readable.
+ */
+export async function saveStudentLifecycleConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = studentLifecycleConfigSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  await writeStudentLifecycleConfig(parsed.data);
+  await logActivity(session, {
+    action: "console.studentLifecycle.update",
+    section: "console",
+    entityType: "AppSetting",
+    entityId: STUDENT_LIFECYCLE_KEY,
+    summary: `Updated the discontinue reasons (${parsed.data.discontinueReasons.length} on the list)`,
+    meta: {
+      discontinueReasons: parsed.data.discontinueReasons,
+      allowOtherReason: parsed.data.allowOtherReason,
+      coachMayDiscontinue: parsed.data.coachMayDiscontinue,
+    },
+  });
+  revalidatePath("/console");
+  revalidatePath("/coaching");
   return { ok: true };
 }

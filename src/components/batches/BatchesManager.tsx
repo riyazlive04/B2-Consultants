@@ -7,6 +7,7 @@ import { CalendarRange, Pencil, Plus, Trash2, Users } from "lucide-react";
 import type { BatchLine } from "@prisma/client";
 import type { BatchBoardRow } from "@/server/batches";
 import { BATCH_LINE_LABELS } from "@/lib/batch";
+import { withBack, type BackKey } from "@/lib/back-link";
 import { upsertBatch, deleteBatch } from "@/server/batch-actions";
 import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn, IconButton } from "@/components/ui/controls";
@@ -122,13 +123,21 @@ export function BatchesManager({
   rows,
   levelOptions,
   leadOptions,
+  backKey,
 }: {
   line: BatchLine;
   rows: BatchBoardRow[];
   levelOptions: { value: string; label: string }[];
   leadOptions: { value: string; label: string }[];
+  /**
+   * Which list this panel is being rendered in, so a cohort opened from it offers a way back
+   * HERE. The same panel appears on Students → Batches and on Batches & Plans, and the cohort
+   * page cannot tell which one sent you unless it is told.
+   */
+  backKey?: BackKey;
 }) {
   const router = useRouter();
+  const batchHref = (id: string) => (backKey ? withBack(`/batches/${id}`, backKey) : `/batches/${id}`);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<BatchBoardRow | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +158,7 @@ export function BatchesManager({
                 Note runs from its own batch page, which this panel does not link to because
                 that section has its own list. */}
             {line === "B2" ? (
-              <Link href={`/batches/${b.id}`} className="text-sm font-semibold text-ink underline-offset-2 hover:underline">
+              <Link href={batchHref(b.id)} className="text-sm font-semibold text-ink underline-offset-2 hover:underline">
                 {b.name}
               </Link>
             ) : (
@@ -171,7 +180,7 @@ export function BatchesManager({
           */}
           {line === "B2" ? (
             <Link
-              href={`/batches/${b.id}`}
+              href={batchHref(b.id)}
               className="mt-0.5 inline-block text-xs text-muted underline-offset-2 hover:text-ink hover:underline"
             >
               {b.sessionCount === 0 ? (

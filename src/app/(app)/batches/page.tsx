@@ -75,6 +75,7 @@ export default async function BatchesPage() {
                   rows={b2.rows}
                   levelOptions={b2.levelOptions}
                   leadOptions={b2.leadOptions}
+                  backKey="batches"
                 />
               </div>
             ),
@@ -96,6 +97,7 @@ export default async function BatchesPage() {
                   rows={germanNote.rows}
                   levelOptions={germanNote.levelOptions}
                   leadOptions={germanNote.leadOptions}
+                  backKey="batches"
                 />
               </div>
             ),

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { withBack } from "@/lib/back-link";
 import { CalendarClock, ClipboardCheck, ExternalLink, Plus, Radio, Video } from "lucide-react";
 import type { DeskSessionView } from "@/server/coaching-desk";
 import { DAY_NAMES, formatDuration } from "@/lib/curriculum";
@@ -60,7 +61,13 @@ export function SessionRow({ s }: { s: DeskSessionView }) {
           <h4 className="font-display text-[15px] font-semibold text-ink">{s.title}</h4>
           {s.framework && <p className="text-caption italic text-muted">{s.framework}</p>}
           <p className="mt-0.5 text-xs text-muted">
-            <Link href={s.batchLine === "B2" ? `/batches/${s.batchId}` : `/german-note/${s.batchId}`} className="hover:underline">
+            <Link
+              href={withBack(
+                s.batchLine === "B2" ? `/batches/${s.batchId}` : `/german-note/${s.batchId}`,
+                "coaching",
+              )}
+              className="hover:underline"
+            >
               {s.batchName}
             </Link>
             {` · ${s.rosterSize} student${s.rosterSize === 1 ? "" : "s"}`}

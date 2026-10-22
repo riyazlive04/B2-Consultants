@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, Users } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
 import { PageHeader } from "@/components/ui/kit";
+import { resolveBackLink } from "@/lib/back-link";
 import { requireSection } from "@/lib/rbac";
 import { getGnBatchDetail } from "@/server/german-note-metrics";
 import { ClassroomPanel } from "../_components/ClassroomPanel";
@@ -12,18 +13,27 @@ import { SchedulePanel } from "../_components/SchedulePanel";
 
 export const dynamic = "force-dynamic";
 
-export default async function GnBatchPage({ params }: { params: { batchId: string } }) {
+export default async function GnBatchPage({
+  params,
+  searchParams,
+}: {
+  params: { batchId: string };
+  // Which list opened this classroom - Attendance and My Teaching both link here. See
+  // lib/back-link.ts on why it is a key rather than a URL.
+  searchParams?: { back?: string };
+}) {
   const session = await requireSection("german-note");
   const batch = await getGnBatchDetail(params.batchId, session.role, session.user.id);
   if (!batch) redirect("/german-note"); // not found OR not this viewer's batch
 
   const isArchived = batch.status === "ARCHIVED";
+  const back = resolveBackLink(searchParams?.back, { href: "/german-note", label: "German Note" });
 
   return (
     <div className="w-full space-y-6">
       <div>
-        <Link href="/german-note" className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
-          <ArrowLeft size={13} /> German Note
+        <Link href={back.href} className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
+          <ArrowLeft size={13} /> {back.label}
         </Link>
         <PageHeader
           title={batch.name}

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { withBack } from "@/lib/back-link";
 import { Clock, Video, VideoOff } from "lucide-react";
 import { setRecordingWindow } from "@/server/batch-timetable-actions";
 import type { CatchUpRow } from "@/server/catch-up";
@@ -118,7 +119,7 @@ export function CatchUpCard({
 
                   {noRecording ? (
                     <Link
-                      href={`/batches/${g.batchId}`}
+                      href={withBack(`/batches/${g.batchId}`, "attendance")}
                       className="press inline-flex h-9 items-center gap-1.5 rounded-btn bg-primary px-3 text-sm font-semibold text-[color:var(--on-accent)] hover:opacity-90"
                     >
                       <VideoOff size={14} aria-hidden /> Post the recording

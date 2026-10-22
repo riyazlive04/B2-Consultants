@@ -4,6 +4,7 @@ import { ArrowLeft, Users } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
 import { PageHeader, Pill, TableShell, Td, Th, Tr, EmptyState } from "@/components/ui/kit";
 import { requireSession } from "@/lib/rbac";
+import { resolveBackLink } from "@/lib/back-link";
 import { getBatchDetail } from "@/server/batch-detail";
 import { getBatchAttendance } from "@/server/attendance";
 import { listCurriculumTemplates } from "@/server/curriculum";
@@ -26,7 +27,13 @@ export const dynamic = "force-dynamic";
  * German Note keeps its own batch screen (`/german-note/[batchId]`), which is a classroom and a
  * community feed rather than a timetable. Merging them would mean one page pretending to be two.
  */
-export default async function BatchPage({ params }: { params: { batchId: string } }) {
+export default async function BatchPage({
+  params,
+  searchParams,
+}: {
+  params: { batchId: string };
+  searchParams?: { back?: string };
+}) {
   const session = await requireSession();
   const batch = await getBatchDetail(params.batchId, session);
   if (!batch) redirect("/?denied=batch");
@@ -43,13 +50,27 @@ export default async function BatchPage({ params }: { params: { batchId: string 
     [...resources.bySession.values()].reduce((a, v) => a + v.length, 0) + resources.batch.length;
   const rateByStudent = new Map(attendance.map((a) => [a.studentId, a]));
 
-  const backHref = session.role === "COACH" || session.role === "TUTOR" ? "/coaching" : "/students";
+  /*
+    BACK GOES WHERE YOU CAME FROM, not where your role usually starts.
+
+    Four screens link to a cohort, and this page used to answer all four with the viewer's role
+    ("Students" for a founder, "My Teaching" for a coach). Opening a cohort from the register
+    desk therefore stranded you: the one link on the page pointed at a list you had not been
+    looking at. The origin now travels as `?back=` - a key, never a URL (see lib/back-link.ts) -
+    and the role-shaped answer stays as the fallback for an arrival that carries none.
+  */
+  const back = resolveBackLink(
+    searchParams?.back,
+    session.role === "COACH" || session.role === "TUTOR"
+      ? { href: "/coaching", label: "My Teaching" }
+      : { href: "/students", label: "Students" },
+  );
 
   return (
     <div className="w-full space-y-6">
       <div>
-        <Link href={backHref} className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
-          <ArrowLeft size={13} /> {backHref === "/coaching" ? "My Teaching" : "Students"}
+        <Link href={back.href} className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
+          <ArrowLeft size={13} /> {back.label}
         </Link>
         <PageHeader
           title={batch.name}

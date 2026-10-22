@@ -13,7 +13,8 @@ import LoginForm from "../login/LoginForm";
  * Deliberately NOT a second auth implementation. One credential path means one place a
  * credential bug can live, and a login screen is not somewhere to have two of anything.
  */
-export const metadata = { title: "Student portal · B2 Consultants" };
+// Just the page name: the root layout's `template` appends " · B2 Consultants".
+export const metadata = { title: "Student portal" };
 
 export default async function StudentPortalPage() {
   // Validate the session rather than trusting the cookie - a stale cookie (e.g. after a secret

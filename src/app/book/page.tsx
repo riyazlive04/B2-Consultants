@@ -9,7 +9,8 @@ import { BookingForm, type SlotOption } from "./_components/BookingForm";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Book your Germany Career Call - B2 Consultants",
+  // Just the page name: the root layout's `template` appends " · B2 Consultants".
+  title: "Book your Germany Career Call",
   description: "Book a free discovery call with B2 Consultants and see if you qualify for our Germany job-placement programs.",
 };
 

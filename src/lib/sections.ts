@@ -41,17 +41,35 @@ export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];
  * reading all eight. "People" was doing the same job for four unrelated audiences at once:
  * staff admin, customers, someone's own daily work, and a tutor's lesson tool.
  *
- * A group name should let you skip the group. These seven are cut so that each one answers
- * a single question - what am I doing today, who are we selling to, how do we reach them,
- * how are our students, what did we earn, how are we doing, who runs this - and none holds
- * more than five items for any one role. Same 24 sections, nothing removed, nothing
- * renamed except the one pair that genuinely collided (see "funnel" below).
+ * A group name should let you skip the group. These are cut so that each one answers
+ * a single question - what am I doing today, what am I teaching, who are we selling to,
+ * how do we reach them, how are our students, what did we earn, how are we doing, who
+ * runs this - and none holds more than five items for any one role. Nothing removed,
+ * nothing renamed except the one pair that genuinely collided (see "funnel" below).
+ *
+ * ── Why "Classroom" was split out of "My Work" (22 Oct 2026) ───────────────────
+ * Shipping the teaching side put My Teaching, Attendance and Leaderboard into My Work,
+ * which pushed it to SIX items for ADMIN and SEVEN for HEAD - breaking the only hard
+ * rule above. The split restores it: no role now sees more than four in either group.
+ *
+ * "Students" was the obvious home and is the wrong one. That group answers "who did we
+ * sign and what do they owe" (Students, Agreements, German Note, CV Studio) and is read
+ * by ADMIN/HEAD/USER. Teaching delivery answers "what am I running today" and is read by
+ * COACH/TUTOR/STUDENT, who mostly cannot see Students at all. Merging them would rebuild
+ * the four-audiences-one-drawer problem described above, in a new place.
+ *
+ * Arena deliberately STAYS in My Work. It looks like it belongs here - it is a
+ * leaderboard - but its roles are ADMIN/HEAD/USER: it is the sales floor's gamification
+ * hub (quests, badges, XP), and no COACH, TUTOR or STUDENT can open it. Filing it under
+ * Classroom would put a telecaller's tool under a teaching heading and hand USER a
+ * one-item "Classroom" group containing nothing to do with a classroom.
  *
  * "People", "Workspace" and "Money" are kept in this list as legacy-safe fallbacks: a saved
  * founder config that still names one must resolve rather than orphaning its section.
  */
 export const SECTION_GROUPS = [
   "My Work",
+  "Classroom",
   "Sales",
   "Marketing",
   "Students",
@@ -74,6 +92,7 @@ export const SECTION_GROUPS = [
  */
 export const SECTION_GROUPS_ASSIGNABLE = [
   "My Work",
+  "Classroom",
   "Sales",
   "Marketing",
   "Students",
@@ -200,7 +219,7 @@ export const SECTION_CATALOGUE = [
    * STUDENT only. Staff read the same timetable from the batch itself (/batches/[id]), where
    * they can also edit it; this route is deliberately read-only and self-scoped.
    */
-  { key: "classroom", label: "My Classroom", href: "/classroom", phase: 2, icon: "calendar-days", group: "My Work", roles: ["STUDENT"] },
+  { key: "classroom", label: "My Classroom", href: "/classroom", phase: 2, icon: "calendar-days", group: "Classroom", roles: ["STUDENT"] },
   /**
    * The TEACHING desk - one screen for everyone who stands in front of a batch.
    *
@@ -213,7 +232,7 @@ export const SECTION_CATALOGUE = [
    *
    * ADMIN and HEAD are included to supervise; both also keep the full Students board.
    */
-  { key: "coaching", label: "My Teaching", href: "/coaching", phase: 2, icon: "school", group: "My Work", roles: ["ADMIN", "HEAD", "COACH", "TUTOR"] },
+  { key: "coaching", label: "My Teaching", href: "/coaching", phase: 2, icon: "school", group: "Classroom", roles: ["ADMIN", "HEAD", "COACH", "TUTOR"] },
   /**
    * THE REGISTER DESK - its own door, for a job with a deadline measured in minutes.
    *
@@ -230,7 +249,7 @@ export const SECTION_CATALOGUE = [
    * asked for the head coach to be able to enable attendance, which is the one permission this
    * feature widens (see `canMark` in server/attendance-actions.ts).
    */
-  { key: "attendance", label: "Attendance", href: "/attendance", phase: 2, icon: "user-check", group: "My Work", roles: ["ADMIN", "HEAD", "COACH", "TUTOR"] },
+  { key: "attendance", label: "Attendance", href: "/attendance", phase: 2, icon: "user-check", group: "Classroom", roles: ["ADMIN", "HEAD", "COACH", "TUTOR"] },
   /**
    * THE SPRINT LEADERBOARD - and the only section in the catalogue a student and their coach
    * both open to look at the same thing.
@@ -250,7 +269,7 @@ export const SECTION_CATALOGUE = [
    * STAFF_ONLY, and `viewFor` in server/leaderboard.ts strips the names on the server rather
    * than hiding them in the page.
    */
-  { key: "leaderboard", label: "Leaderboard", href: "/leaderboard", phase: 2, icon: "medal", group: "My Work", roles: ["ADMIN", "HEAD", "COACH", "TUTOR", "STUDENT"] },
+  { key: "leaderboard", label: "Leaderboard", href: "/leaderboard", phase: 2, icon: "medal", group: "Classroom", roles: ["ADMIN", "HEAD", "COACH", "TUTOR", "STUDENT"] },
   { key: "arena", label: "Arena", href: "/arena", phase: 2, icon: "trophy", group: "My Work", roles: ["ADMIN", "HEAD", "USER"] },
   // Help belongs beside your own work, not in an admin drawer. It is also what keeps this group
   // non-empty for a Tutor or a Student, who would otherwise be left with a single item.

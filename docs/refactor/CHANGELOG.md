@@ -255,3 +255,61 @@ migrations in [`migrations/README.md`](./migrations/README.md) — none applied.
 | **M1–M4: which migrations may be applied?** | The four schema changes in [`migrations/README.md`](./migrations/README.md), each with its SQL, its rollback and its measured live impact. M4 additionally needs you to pick **Option A or B** |
 | The two bad curriculum level codes | `Guided` and `Gudied30` need correcting to `GUIDED` before M2 can be applied. A 10-minute data fix, but it is your data |
 | The permission matrix still asks for a ledger view | The row is kept reporting `NOT_GATEABLE` on purpose, so the spec's unmet ask stays visible rather than vanishing with the screen |
+
+---
+
+## 12. Round three — the walkthrough bugs (24 October 2026)
+
+Round two's lesson was that the deep problems came out of *using* the app, not scanning it. This
+round did both: six more static audit classes, then the money flows driven by hand on the local
+stack. The audits were nearly silent; walking the screens was not.
+
+### Fixed
+
+| # | What was wrong | How it showed | What was done |
+|---|---|---|---|
+| **W1** | **Archived income counted as money received.** Both book-order decision sites summed every `Income` row carrying a student's id, deleted ones included — so a payment archived as a mis-entry or a reversal still released books | The same feature's read side (`book-order-metrics`) spreads `ACTIVE` into the identical sum, so the panel displayed one figure while the decision beside it used another. Proved by archiving a student's **₹99,500** and raising an order: before, it released; the panel read ₹0 | One `cashCollectedInrMinor` helper for both sites, filtering `ACTIVE`. Re-tested: the order now reads `deferred · ₹0 · ₹30,000 short` |
+| **W2** | **The income form died after one save.** "Unanswered" had two spellings: `emptyDraft` writes `null`, but the Business select's placeholder carries `value=""`, and every guard tests `line === null`. So `""` passed through as if it named a business — the level list came back empty, nothing could be submitted, and the field printed the word **null** at the operator: *"No active null level - add one first."* | Found by entering two payments in a row. The first saved; the second was impossible until the page was reloaded. `tsc` was happy — the `as BusinessLine` cast at the select said so | Normalised in `lib/income-form`, the one place `line` is decided, so a writer that spells blank differently cannot reach past it. The cast at the select no longer lies either |
+| **W3** | **Three unguarded endpoints in a `"use server"` module.** `enrollmentMilestones` handed back any student's progress and enrolment date for an id, `listProgramMilestones` the whole configured ladder, and `materialiseMilestones` **wrote** progress rows — none establishing a caller | Not a live hole: nothing imports `milestone-progress`, so Next mints no action id and the feature is unreachable. A trap, not a leak — one import would have made all three callable without a session on the day the feature shipped | Gated now, while there is no caller to break. Every screen still reads the older `Enrollment.currentMilestone`; the module and its two tables have no reader at all |
+| **W4** | **An invoice offered a Send that always failed.** `invoiceIssueGaps` was reached from one place — inside the transaction that issues — so no screen could ask a draft whether it was issuable | Pressing Send returned **four** §14 UStG requirements at once, in a toast, which was the first the operator heard of any of them. On a fresh install, and on live where the Tax ID is blank, that is *every* invoice | The draft now lists what it still needs, before the click, via a shared helper both sides call. Verified both ways: 4 gaps → filled three → 1 gap → set the Tax ID → `INV-260001`, issued |
+| **W5** | **23 screens had no browser title.** The root layout has carried `template: "%s · B2 Consultants"` since "issue 28", whose own note says the point is that *"a person working across Finance, Cash Health and Payments had three identical browser tabs"* | 46 pages exported a title and 28 did not, so those 28 still had the problem the template was added to solve | 28 → 5, and the 5 left are deliberate: the home page plus the four customer-facing ones. Static section names, because none of the detail reads is `cache()`d and a second query for a tab label is a bad trade. The one exception is the invoice, where `getInvoice` is now `cache()`d so the tab can read `INV-260001` for free |
+
+### Audit classes run, and what they returned
+
+| Class | Result |
+|---|---|
+| Non-async exports in a `"use server"` module | **clean** — 67 modules, 0 (tsc misses this; `next build` catches it at the very end of a long build) |
+| Un-awaited Prisma writes | **clean** — every hit was an element of a `$transaction([…])`, where the array is the await |
+| Writing actions that never revalidate | **clean** — the 15 flagged were public signing flows, cron sweeps, or delegating to something that does |
+| Reads of archivable models with no `deletedAt` filter | **1 real** (W1). The rest resolve `...ACTIVE`, a shared `where` const, or read by primary key. The archived-lead paths are deliberate — `findDuplicateLead` *must* see archived rows, because that is what lets re-entry restore them |
+| `batch` reads with no `line` filter | **clean** — the GN reads spread `GN_BATCH`; the rest are per-tutor on purpose, and `tutorFeeLevelFromCode` returns null for every coaching tier |
+| Exported actions establishing no caller | **3 real** (W3) of 450. The other 11 are token-signed, rate-limited, or public by design |
+
+The first version of the gate audit reported **62** holes. Every one was properly gated on its
+second line: it counted braces from the first `{`, and a return type like
+`Promise<R & { id?: string }>` opens one before the body does. Corrected, the number was 14 — a
+reminder that an audit's output is a claim, not a finding.
+
+### Tests added
+
+| File | What it pins |
+|---|---|
+| `server/__tests__/paid-so-far-excludes-archived.test.ts` | That **no** call site sums archived income into what a student has paid. A general guard, not a check on the two that were wrong: a third place asking the same question is how the first two came to disagree. Verified to fail with the fix reverted |
+| `lib/__tests__/income-form.test.ts` (+4) | A blank business reads as unanswered however it is spelled, never renders the word null, and still lets a second entry be made |
+| `lib/__tests__/invoice-compliance.test.ts` (+6) | The readiness a draft SHOWS and the refusal the server issues are one computation — including the tax-note fallback, which decides issuability and lives on neither the invoice nor the check |
+
+**1,974 tests pass.** Typecheck clean, lint clean.
+
+### Left alone, deliberately
+
+| The finding | Why |
+|---|---|
+| A **GUIDED** cohort's seat picker offers SOLO and ELITE students | The server checks business line, not tier. Whether an Elite student may sit in a Guided cohort is a product rule — enforcing a guess could block legitimate seating. Carried over from round two, still yours |
+| The §14 gate applies to a rupee invoice to an Indian customer | It demands a German Steuernummer because the issuing entity is German, which is arguably right for every invoice it raises whatever the currency. A tax question, not a code one |
+| `student-money-link` adopts archived orphan money | Correct as it stands: a payment restored later should already belong to the right student, and archived rows are excluded from every sum regardless |
+
+### Demo data
+
+The walkthrough entered three payments, raised two book orders and issued an invoice, then put all
+of it back: income totals, record counts, order list and the blank Tax ID all match what was there
+before. Nothing was run against live.

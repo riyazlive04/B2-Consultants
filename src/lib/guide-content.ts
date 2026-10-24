@@ -1,9 +1,24 @@
-import type { SectionKey } from "./sections";
+import type { AppRole, SectionKey } from "./sections";
 
 /**
  * App Guide content - one short, practical how-to per feature. Each entry is
  * gated by its section key, so people only read guides for features they can open.
  */
+
+/**
+ * A screenshot of the real screen, with the thing to click boxed on it.
+ *
+ * `hotspot` is in PERCENTAGES of the image, not pixels, so a re-capture at a different window
+ * size does not move the box off its target - which is what makes these refreshable by script
+ * (`scripts/capture-guide-shots.ts`) instead of by hand.
+ */
+export type GuideShot = {
+  /** Served from `public/guide/`. Authenticated-only, so it needs no middleware public prefix. */
+  src: string;
+  /** What the reader is looking at. Required - an unlabelled screenshot explains nothing. */
+  caption: string;
+  hotspot?: { x: number; y: number; w: number; h: number; label: string };
+};
 
 export type GuideEntry = {
   section: SectionKey | "general"; // "general" = visible to everyone
@@ -11,11 +26,62 @@ export type GuideEntry = {
   title: string;
   href: string; // where the feature lives
   what: string; // one line: what it is
+  /**
+   * THE CLICK PATH - how you get there, as a breadcrumb.
+   *
+   * Added because the guide described what a screen does and never said where it is. For
+   * somebody who does not already know the app, "open Batches & Plans" is not an instruction.
+   * Rendered as chips: Sidebar › Classroom › Batches & Plans › Plans tab.
+   *
+   * Optional only so the twenty entries written before this field keep working; every new entry
+   * sets it.
+   */
+  path?: string[];
   steps: string[]; // 3-5 short steps
+  /** Real screenshots of the screen being described. */
+  shots?: GuideShot[];
   tip?: string;
 };
 
+/**
+ * A WALKTHROUGH THAT CROSSES SECTIONS - what you hand a new employee.
+ *
+ * The gap the per-section guides could not close. Each of those explains one screen, and the
+ * jobs that actually confuse people are the ones that span several: onboarding a student touches
+ * Contacts, Bookings, Pipeline, Agreements, Students, Finance and Batches, and no single entry
+ * could ever describe it.
+ */
+export type GuideJourney = {
+  key: string;
+  title: string;
+  /** Who this walkthrough is for. Readers outside these roles never see it. */
+  forRoles: AppRole[];
+  summary: string;
+  steps: {
+    n: number;
+    title: string;
+    /** The click path for THIS step, same shape as `GuideEntry.path`. */
+    where: string[];
+    /** What to do once you are there, in one or two plain sentences. */
+    does: string;
+    shot?: GuideShot;
+  }[];
+};
+
 export const GUIDES: GuideEntry[] = [
+  {
+    section: "onboarding", icon: "🧭", title: "Onboarding", href: "/onboarding",
+    path: ["Sidebar", "Students", "Onboarding"],
+    what: "Everyone between a first enquiry and their first class, and what each of them is waiting on.",
+    steps: [
+      "“In flight” groups every person by the step they have reached - new lead, call booked, said yes, agreement signed, enrolled, in a cohort, in class. The step is worked out from what is actually recorded against them, so it is never out of date and nobody has to remember to update it.",
+      "Each row shows the one thing to do next and a “Go there” link straight to the screen that does it. You do not need to know which section that is.",
+      "“Needs completing” is the important tab. A student record can be created six different ways - including by recording a payment in Finance - and three of them leave the person with no programme, no cohort and no login. This lists exactly those, and what each is missing.",
+      "“Stuck” is anyone still being onboarded with nothing recorded against them for ten days or more.",
+      "Open anybody's name to see their full journey on their own record, with the same ticks and the same next step.",
+    ],
+    tip: "Nothing on this screen stores anything of its own - it reads the same records as Contacts, Students, Agreements and Batches. So a step cannot be ticked here and wrong somewhere else.",
+  },
   {
     section: "console", icon: "🎛️", title: "Founder Console", href: "/console",
     what: "The rules of the app itself - sections, the XP engine, goals and rewards. Admin-only.",
@@ -199,17 +265,6 @@ export const GUIDES: GuideEntry[] = [
     tip: "Your coach can correct or remove anything you log, and will see that you logged it. Log what happened and the board takes care of itself.",
   },
   {
-    section: "cv-check", icon: "🧾", title: "CV Studio", href: "/cv-check",
-    what: "Upload/paste CV + target JD → JD-match score, B2-template conformance, generated fix-list.",
-    steps: [
-      "Upload the CV as a PDF or Word (.docx) - or paste the text - on the left, the German JD on the right, hit Run diagnostic. Uploaded files are read in-memory and never stored.",
-      "Generated suggestions are the risk-first to-do list - work top-down, most urgent first.",
-      "Template match grades the CV against the B2 “How to edit the resume” manual; a red placeholder alert catches un-edited fields (“Position Name”, “mm/jjjj”, “xxxx@gmail.com”).",
-      "Missing keywords are what the JD asks for and the CV lacks; weak bullets have no verb and no number - rebuild as “Verb + what + result”.",
-    ],
-    tip: "Nothing is saved and nothing is rewritten - it diagnoses, the student does the work.",
-  },
-  {
     section: "german-note", icon: "🇩🇪", title: "German Note", href: "/german-note",
     what: "German language batches: a Classroom of Fathom recordings, a class schedule, a Skool-style community, members and a leaderboard.",
     steps: [
@@ -243,6 +298,227 @@ export const GUIDES: GuideEntry[] = [
     ],
     tip: "The runway badge in the top bar follows you on every screen - click it to jump here.",
   },
+  // ─────────────────────── Sales: the lead → deal half of the journey ───────────────────────
+  {
+    section: "contacts", icon: "📇", title: "Contacts", href: "/contacts",
+    path: ["Sidebar", "Sales", "Contacts"],
+    what: "Everyone who has ever enquired, with their phone number, where they came from and who owns them.",
+    steps: [
+      "“Add contact” needs a name and a phone number. Everything else can be filled in later - do not hold up entry for a city or an industry.",
+      "Typing somebody who already exists is refused, not duplicated: the phone number and the email are both checked, and you are told whose record it clashes with. Open that record instead.",
+      "Every new contact is handed to a telecaller automatically, by the same rotation the website uses, so nobody lands as “Unassigned”.",
+      "Open a contact to log a call, read their history, and see their onboarding journey - the strip that says which step they are on and what to do next.",
+      "Companies, Tasks and Custom fields are the other tabs. Custom fields add your own questions (visa type, target country, budget) to every contact.",
+    ],
+    tip: "Deleting a contact archives it rather than erasing it, and re-entering the same person later restores the original record with its history intact.",
+  },
+  {
+    section: "bookings", icon: "📆", title: "Bookings", href: "/bookings",
+    path: ["Sidebar", "Sales", "Bookings"],
+    what: "Every discovery call booked, and the calendar of slots prospects can book into.",
+    steps: [
+      "Slots are not typed in one at a time. You save a weekly pattern per person - which weekdays, which hours - at Console → Sales ops → Availability, and the app tops the calendar up every hour from it.",
+      "If this screen shows four zeroes and an empty week, it is almost always because no availability pattern has been saved. The screen says so, with a link to the panel that fixes it.",
+      "The public booking page is /book. The link at the top of this screen opens exactly what a prospect sees.",
+      "Each booking carries its own confirm-or-cancel state. Switching that engine on (Console → Sales ops) asks the prospect to reply YES, and releases a slot nobody confirmed instead of holding it through the no-show.",
+      "Zoom links are created, moved and deleted with the booking when that engine is armed - a call whose time changes gets a new link automatically.",
+    ],
+    tip: "A booking is the evidence for the “Call booked” step on somebody's onboarding journey. Book it here and their journey moves on its own.",
+  },
+  {
+    section: "opportunities", icon: "🗂️", title: "Deals", href: "/opportunities",
+    path: ["Sidebar", "Sales", "Deals"],
+    what: "The drag-and-drop board of live deals, one card per person, one column per stage.",
+    steps: [
+      "Drag a card to move the deal. The person's own stage moves with it, so Pipeline and this board always agree - they are two views of one thing, not two records.",
+      "This is the same set of people as Pipeline. Pipeline is the funnel with its numbers, targets and call outcomes; Deals is the board you push cards across.",
+      "A card only appears here if a deal exists for that person. New leads are put on the board automatically only when that engine is armed (Console → Sales ops → Operations) - until then, work from Pipeline and Contacts.",
+      "Archived cards are under their own heading at the bottom, and can be restored.",
+    ],
+    tip: "Called “Opportunities” in older notes and still gated on that name internally. Only the label changed.",
+  },
+  {
+    section: "outreach", icon: "📣", title: "Outreach", href: "/outreach",
+    path: ["Sidebar", "Sales", "Pipeline", "Outreach queue"],
+    what: "The 23-step outreach script as a working queue - who to message, what to say, and who has gone quiet.",
+    steps: [
+      "It is off the sidebar on purpose, because it belongs to Pipeline: open it from the “Outreach queue” link at the top of that screen.",
+      "The queue is worked top down. Each row is one person at one step of the script, with the message to send already written.",
+      "“Already breached” and “Approaching” are speed-to-lead: a new lead that has gone past the five-minute SLA, and one about to. Those two lists are the whole job on a busy morning.",
+      "Key Metrics is the sheet the script feeds - contacted, replied, booked, by day.",
+      "The ladder only advances by itself while the scheduled jobs are running. If nothing is moving, check Console → System → Not armed before suspecting the queue.",
+    ],
+    tip: "Messages reach real phone numbers as soon as WhatsApp is switched on. Check Console → System → Not armed if you are unsure whether sending is live.",
+  },
+
+  // ─────────────────────── Students: the contract → cohort half ───────────────────────
+  {
+    section: "agreements", icon: "✍️", title: "Agreements", href: "/agreements",
+    path: ["Sidebar", "Students", "Agreements"],
+    what: "Coaching contracts: drafted here, signed by the client on their phone, countersigned and filed.",
+    steps: [
+      "“New agreement” starts from a template, picks the contact, and fills in the programme, the fee and the batch. A guessed value is flagged rather than silently used - you confirm it before anything goes out.",
+      "Send it and the client gets a link and a signing code on WhatsApp. They sign on their phone; you see the status change here.",
+      "The list is grouped by where each agreement actually is: sent but not opened, opened but not signed, signed, declined, voided. That status is worked out from the document itself, so it is never stale.",
+      "A signed agreement does NOT create a student by itself - that is deliberate, because the programme level and coach are not known at signing. The signed agreement carries the button that creates them, and Onboarding → Needs completing lists anybody who was missed.",
+      "Chasing an unsigned agreement is an engine you switch on at Console → Delivery & team → Agreements. Until you do, nobody is chased and a quiet contract stays quiet until its link expires.",
+    ],
+    tip: "An expired link cannot be re-opened. Void the agreement and issue a fresh one - the history of both is kept.",
+  },
+  {
+    section: "batches", icon: "📚", title: "Batches & Plans", href: "/batches",
+    path: ["Sidebar", "Classroom", "Batches & Plans"],
+    what: "Every cohort for both businesses, and the week-by-week plans they are taught from.",
+    steps: [
+      "Three tabs: coaching cohorts, German Note cohorts, and the plans. A cohort belongs to exactly one business and can only seat the levels that business teaches.",
+      "A new cohort reads “Draft” until it has a plan, a teacher and at least one learner. Open it and the setup checklist names what is missing, with a link to each remedy - and “Start cohort” stays disabled, with the reason on it, until all three are in place.",
+      "Open a cohort to work on it: Timetable builds every dated class from a plan in one go, and Roster adds learners - as many at once as you like, from the cohort itself.",
+      "Plans are written once and reused. Week number, topic, duration, day and time - the same sheet the founders already kept, with the dates worked out per cohort.",
+      "Closing a cohort is “Archive”, not delete. Archiving keeps the roster, the classes and the recordings readable; deleting is only possible while a cohort is still empty.",
+    ],
+    tip: "“Draft” is worked out from the cohort, never stored. Fill in the missing thing and it changes by itself - there is no status to remember to update.",
+  },
+  {
+    section: "programs", icon: "🎚️", title: "Programs", href: "/programs",
+    path: ["Sidebar", "Admin", "Programs"],
+    what: "The catalogue: which programmes and levels exist, what each costs, and the plans they are taught from.",
+    steps: [
+      "Programmes is the price list. A level with no price cannot be invoiced - the invoice form's programme picker reads this list, and an empty list is an empty picker.",
+      "Each programme carries a rupee and a euro price. The euro one is what German Note quotes; they are two stored figures, never a conversion.",
+      "Curriculum is where a plan is written: one row per session, with week number, topic, duration, day and time. A cohort's timetable is built from one of these.",
+      "Switching a level off keeps every student and cohort already on it - it only stops new ones being created.",
+    ],
+    tip: "Adding a brand-new level (C1, C2) is more than a toggle: the code has to learn it too. Ask before promising one.",
+  },
+
+  // ─────────────────────── Money ───────────────────────
+  {
+    section: "payments", icon: "🧾", title: "Payments", href: "/payments",
+    path: ["Sidebar", "Finance", "Payments"],
+    what: "Invoices and estimates, the programme price list, and recurring plans. Admin-only.",
+    steps: [
+      "An invoice is drafted, then issued. Issuing is what draws its real number and locks it - a draft can still be changed, an issued invoice cannot.",
+      "Pick the currency per invoice. Rupees and euros are separate prices, not a conversion, and tax is set per currency.",
+      "Products is the programme price list. Nothing can be invoiced until the programme has a price - if the picker is empty, that is why.",
+      "Receipts are issued against money actually received, and carry their own numbering.",
+      "Chasing overdue instalments is an engine (Console → System → Alerts & Chasing). While it is off, an overdue balance ages here in silence and nobody is nudged.",
+    ],
+    tip: "The issuer block and tax ID on the invoice come from Console → Money → Invoicing. A German invoice is not valid without them.",
+  },
+  {
+    section: "telecaller", icon: "🎖️", title: "Bonus & Commission", href: "/telecaller",
+    path: ["Sidebar", "Finance", "Bonus & Commission"],
+    what: "What each telecaller has earned - bonuses from targets, commission from payments they closed.",
+    steps: [
+      "Commission is worked out from payments that name a student: one rate when the same person took both calls, a split rate when the first call and the discovery call were different people.",
+      "The rates are yours to set, at Console → Money → Commission. Changing a rate does not rewrite what has already been earned.",
+      "Bonuses come from the monthly target on the telecaller board. The figure here is derived from work already recorded, so it cannot drift from the pipeline.",
+      "Commission is reported here whether or not it has been posted to the books. Posting it to the ledger is a separate engine at Console → System → Maintenance.",
+    ],
+    tip: "A payment with no student linked earns nobody commission. Linking the student on the income entry is what makes it count.",
+  },
+
+  // ─────────────────────── Marketing: how enquiries arrive ───────────────────────
+  {
+    section: "forms", icon: "📝", title: "Forms", href: "/forms",
+    path: ["Sidebar", "Marketing", "Forms"],
+    what: "Capture forms you can put anywhere. A submission lands straight in Contacts as a new enquiry.",
+    steps: [
+      "Build the form, then use its public link - or embed it. Every submission becomes a contact, assigned to a telecaller by the usual rotation.",
+      "A submission with no phone number is refused, because every later step (the call, the WhatsApp, the duplicate check) needs one.",
+      "Submissions are deduplicated against existing contacts, so somebody filling the form twice does not become two people.",
+      "Fields you add show up on the contact record alongside the standard ones.",
+    ],
+    tip: "Test a form by submitting it yourself with your own number. It will appear in Contacts within seconds, which is the fastest way to prove the whole chain works.",
+  },
+  {
+    section: "funnels", icon: "🧲", title: "Funnels", href: "/funnels",
+    path: ["Sidebar", "Marketing", "Funnels"],
+    what: "Landing pages and multi-step funnels, hosted publicly, each one with its own booking page.",
+    steps: [
+      "Build the pages, publish, and share the public link. Nothing here is visible until you publish it.",
+      "A funnel's booking step shows the same discovery-call calendar as /book - so if no availability pattern has been saved, the funnel shows an empty calendar too.",
+      "Which funnel somebody came through is recorded on their contact, and shown in the attribution table on Reports.",
+      "Editing a published funnel changes what the public sees as soon as you save.",
+    ],
+    tip: "An empty calendar on a funnel is almost never the funnel's fault. Check Bookings first.",
+  },
+  {
+    section: "sites", icon: "🌐", title: "Website", href: "/sites",
+    path: ["Sidebar", "Marketing", "Website"],
+    what: "Public marketing pages with a shared header, footer and brand theme, published straight to the web.",
+    steps: [
+      "A website holds the pages, the navigation they share and the theme they all use. Create one, then add pages to it.",
+      "The home page usually lives at /. Open a page to lay out its sections.",
+      "Nothing is public until it is published, and a published page changes the moment you save it.",
+      "The domain and the tracking pixel are set on the website, not per page.",
+    ],
+    tip: "The brand theme is set once on the website and inherited by every page, so a colour change is one edit rather than twenty.",
+  },
+  {
+    section: "whatsapp", icon: "💬", title: "WhatsApp", href: "/whatsapp",
+    path: ["Sidebar", "Marketing", "WhatsApp"],
+    what: "The WhatsApp channel: whether sending is live, what has gone out, and which automatic messages are switched on.",
+    steps: [
+      "The top of the screen says whether sending is actually live. If it is off, nothing reaches anybody - the engines still run, they just talk to nobody.",
+      "Every message the app has sent is listed with its delivery state. “Sent” means WhatsApp accepted it; delivered and read are reported back separately.",
+      "Settings is where the automatic messages are switched on one at a time: the enrolment welcome, class reminders, confirm-or-cancel. Each needs its template approved first.",
+      "A reminder can be set to rehearse rather than send. That is doing its job perfectly and still nobody is being reminded - the screen says when it is in that state.",
+      "Stage messages is the editor for what goes out at each pipeline stage. It is reached from the link at the top of this screen.",
+    ],
+    tip: "Messages go to real numbers. There is no test mode switched on, so a message you send to try it out arrives on somebody's phone.",
+  },
+  {
+    section: "conversations", icon: "📨", title: "Conversations", href: "/conversations",
+    path: ["Sidebar", "Marketing", "Conversations"],
+    what: "Email and SMS threads in one inbox, with reusable templates. Admin-only.",
+    steps: [
+      "Inbox holds every thread, WhatsApp included. A thread starts when you write to somebody from their contact record.",
+      "Templates are reusable messages with {{name}} tokens filled in per person.",
+      "Settings holds the email connection and the From address. Email is off until both are set, and until then every send is accepted and discarded.",
+      "“Sent” means the email service accepted it. Delivery is reported separately, and only if the delivery webhook is configured.",
+    ],
+    tip: "If nobody is receiving email, check Settings here before anything else - a missing From address silently stops every send in the app, including password resets.",
+  },
+
+  // ─────────────────────── Your own work ───────────────────────
+  {
+    section: "my-desk", icon: "☎️", title: "My Desk", href: "/my-desk",
+    path: ["Sidebar", "My Work", "My Desk"],
+    what: "Your own calls, your own conversions and today's list - just the people assigned to you.",
+    steps: [
+      "The list is yours alone: the contacts assigned to you, with the ones needing a call first.",
+      "Log the call from here. What you record is what moves the person's onboarding journey on - nobody has to update a status separately.",
+      "Which version of this desk you see depends on your team profile, not your job title. If it looks like somebody else's desk, that is why.",
+      "“No team profile linked to your login” means your account is not joined to a team record yet. Ask the founder to link it in Users → Team; until then this desk cannot know whose calls are yours.",
+    ],
+    tip: "Your numbers here are derived from calls already logged, so they cannot be edited directly - log the work and the figures follow.",
+  },
+  {
+    section: "reports", icon: "📊", title: "Reports", href: "/reports",
+    path: ["Sidebar", "Insights", "Reports"],
+    what: "Pick a thing, a period and a field, and see how much, which way it is moving, and what sits behind the number.",
+    steps: [
+      "Choose what you are counting - contacts, deals or invoices - then how to group it and over what period.",
+      "Every choice is in the address bar, so the link IS the saved report. Bookmark it, or paste it to somebody and they see exactly what you see.",
+      "Click a number to see the records behind it rather than taking the total on trust.",
+      "Campaign attribution shows which funnel or form each enquiry came through.",
+    ],
+    tip: "There is no “save report” button because there does not need to be one - the URL is the report. Keep the ones you use in your bookmarks.",
+  },
+  {
+    section: "guide", icon: "📖", title: "App Guide", href: "/guide",
+    path: ["Sidebar", "My Work", "App Guide"],
+    what: "This page: a short how-to for every screen you can open, plus full walkthroughs of the jobs that cross several.",
+    steps: [
+      "You only see guides for the sections your account can actually open, so nothing here describes a screen you cannot reach.",
+      "The walkthroughs at the top are the ones to read first - “Onboard a new student, start to finish” is the whole journey in order, with the click path for every step.",
+      "Each entry starts with where the screen is, written as a breadcrumb, so you can find it without already knowing the app.",
+      "Where there is a screenshot, the thing to click is boxed on it.",
+    ],
+    tip: "If a screen has no entry here, that is a gap in the guide rather than a feature you are missing. Say so and it gets written.",
+  },
+
   {
     section: "general", icon: "🔔", title: "Notifications & badges", href: "/",
     what: "The bell shows live, in-app alerts - nothing is ever emailed or WhatsApped.",
@@ -250,6 +526,359 @@ export const GUIDES: GuideEntry[] = [
       "Red dot items need action now (overdue money, red students); amber is watch; green is a win.",
       "Alerts clear themselves when the underlying problem is fixed - the bell is always current.",
       "Click any alert to jump straight to the page where you fix it.",
+    ],
+  },
+];
+
+/**
+ * CROSS-SECTION WALKTHROUGHS.
+ *
+ * The first one is the reason this file grew a second export. "Onboard a new student" is the job
+ * the business runs on and the one the founder said they could not follow: it touches Contacts,
+ * Bookings, Pipeline, Agreements, Students, Finance and Batches, so no per-screen guide could
+ * ever have described it, and seven of those nine screens had no guide entry at all.
+ *
+ * Written so that somebody who has never seen the app can do it from this page alone - every
+ * step names where it happens before it says what to do.
+ */
+export const GUIDE_JOURNEYS: GuideJourney[] = [
+  {
+    key: "onboard-a-student",
+    title: "Onboard a new student, start to finish",
+    forRoles: ["ADMIN", "HEAD", "USER"],
+    summary:
+      "From a first enquiry to their first class. You do not have to remember this list - Onboarding shows every person's next step and takes you to it. This is here so you can see the whole shape of it once.",
+    steps: [
+      {
+        n: 1,
+        title: "Find the enquiry",
+        where: ["Sidebar", "Students", "Onboarding", "In flight"],
+        does:
+          "New enquiries arrive on their own from the website, a funnel or a form - nobody types them in. They appear under “New lead”. If someone phoned in and is not here, add them from Contacts.",
+      },
+      {
+        n: 2,
+        title: "Contact them and book the discovery call",
+        where: ["The person's row", "Go there"],
+        does:
+          "Log the call or message against them, then book the discovery call from the calendar. The Zoom link is created for you if that is switched on.",
+      },
+      {
+        n: 3,
+        title: "Record how the call went",
+        where: ["Sidebar", "Sales", "Pipeline", "Discovery call outcomes"],
+        does:
+          "Write down the outcome. If they are a strong fit, whoever ran the call marks them Highly Qualified - that is the verdict the rest of the sequence keys off.",
+      },
+      {
+        n: 4,
+        title: "Mark the deal as won",
+        where: ["Sidebar", "Sales", "Pipeline"],
+        does: "Move them to Won once they have said yes. Onboarding will then prompt for the agreement.",
+      },
+      {
+        n: 5,
+        title: "Send the agreement",
+        where: ["Sidebar", "Students", "Agreements", "New"],
+        does:
+          "Pick the client, the template and the cohort they are joining, countersign it, and send. They get a signing link by email and WhatsApp.",
+      },
+      {
+        n: 6,
+        title: "They sign",
+        where: ["Nothing to do"],
+        does:
+          "You will see it on Onboarding the moment they do. If the link expires unsigned, Onboarding says so and offers to re-issue - the deal is not lost.",
+      },
+      {
+        n: 7,
+        title: "Enrol them",
+        where: ["The signed agreement", "Enrol as a student"],
+        does:
+          "This creates their student record. Then set their programme level on that record - Solo, Guided or Elite. Until the level is set they count as not yet enrolled.",
+      },
+      {
+        n: 8,
+        title: "Take the payment, or set up a plan",
+        where: ["Sidebar", "Finance", "Income"],
+        does:
+          "Record what they paid. If they are paying in instalments, add a pending payment with the agreed total instead and the plan tracks itself.",
+      },
+      {
+        n: 9,
+        title: "Put them in a cohort",
+        where: ["Sidebar", "Classroom", "Batches & Plans", "the cohort", "Roster"],
+        does:
+          "Open the cohort and add them from its Roster tab - you can add several people at once. If the cohort is not ready to teach yet, its setup checklist says what is missing.",
+      },
+      {
+        n: 10,
+        title: "Give them their login",
+        where: ["The student's record", "Create portal login"],
+        does:
+          "They get their email and a temporary password. Now they can see their timetable, join links, recordings and coursework - and the journey is complete.",
+      },
+    ],
+  },
+  {
+    key: "start-a-cohort",
+    title: "Start a new cohort and fill it",
+    forRoles: ["ADMIN"],
+    summary:
+      "A cohort needs four things before it can teach anybody: a plan, a teacher, dates and at least one learner. The cohort's own page tracks all four, so you can do this across several sittings.",
+    steps: [
+      {
+        n: 1,
+        title: "Write the plan, or pick one that exists",
+        where: ["Sidebar", "Classroom", "Batches & Plans", "Plans"],
+        does:
+          "A plan is the week-by-week sheet: week number, topic, how long, which day and what time. Write it once and build any number of cohorts from it.",
+      },
+      {
+        n: 2,
+        title: "Create the cohort",
+        where: ["Sidebar", "Classroom", "Batches & Plans", "Coaching cohorts"],
+        does: "Give it a name, a level, a teacher and a start date. It starts as a draft.",
+      },
+      {
+        n: 3,
+        title: "Build its timetable",
+        where: ["The cohort", "Timetable", "Build from a plan"],
+        does:
+          "This turns the plan into real dated classes from the start date. Re-time any individual class afterwards if a week slips.",
+      },
+      {
+        n: 4,
+        title: "Add the learners",
+        where: ["The cohort", "Roster", "Add learners"],
+        does:
+          "Pick as many as you like at once. Only people who have enrolled on a matching programme and are not already in a cohort are offered.",
+      },
+      {
+        n: 5,
+        title: "Check the setup checklist",
+        where: ["The cohort", "Cohort setup"],
+        does:
+          "When every item is ticked the cohort is ready. Anything still outstanding links straight to the place that fixes it.",
+      },
+    ],
+  },
+  {
+    key: "money-in",
+    title: "Take a payment and keep the books straight",
+    forRoles: ["ADMIN"],
+    summary:
+      "What to do when money arrives, in the order that keeps the student's history, the commission and the books all correct. The trap here is a payment recorded against nobody - it still counts as revenue, but it earns no commission, shows on no student's record and leaves a half-built student behind.",
+    steps: [
+      {
+        n: 1,
+        title: "Know which business it belongs to",
+        where: ["Sidebar", "Finance", "Income"],
+        does:
+          "Pick B2 or German Note before anything else. The form will not choose for you, and money filed to the wrong business comes out of the wrong profit figure - which is exactly how German Note revenue once ended up in B2's books.",
+      },
+      {
+        n: 2,
+        title: "Name who paid",
+        where: ["The student box"],
+        does:
+          "Start typing and pick them from the list. Picking an existing student is what links the payment to their history and earns the telecaller their commission.",
+      },
+      {
+        n: 3,
+        title: "If they are new, tick the box deliberately",
+        where: ["“Create a student record”"],
+        does:
+          "A name nobody recognises offers to create a student record. Read the name before you confirm - a typo creates a second student and burns a student number. The new record has a number and a payment and nothing else, so it appears on Onboarding → Needs completing until it has a programme and a cohort.",
+      },
+      {
+        n: 4,
+        title: "Record the amount in the currency it arrived in",
+        where: ["Amount"],
+        does:
+          "Rupees, euros, or both. The exchange rate is stamped on at the time, so the figure never moves afterwards. Write euros carefully - €125.000,50 means a hundred and twenty-five thousand.",
+      },
+      {
+        n: 5,
+        title: "For instalments, record the plan rather than the payments",
+        where: ["Sidebar", "Finance", "Pending payments"],
+        does:
+          "Add the agreed total once. “Paid so far” then adds itself up from the income entries, and the overdue dates look after themselves - you never have to keep two numbers in step.",
+      },
+      {
+        n: 6,
+        title: "Invoice if they need one",
+        where: ["Sidebar", "Finance", "Payments", "Invoices & estimates"],
+        does:
+          "Draft it, check it, then issue it. Issuing draws the real invoice number and locks the document. A programme with no price cannot be invoiced, so the price list has to be filled in first.",
+      },
+      {
+        n: 7,
+        title: "Know which of the books are switched on",
+        where: ["Sidebar", "Admin", "Console", "System", "Not armed"],
+        does:
+          "Commission, tutor fees and invoice receivables each post to the ledger only when their engine is armed. While they are off, the figures on the Finance screen are right and the ledger behind them is incomplete. The Finance screen says so at the top when that is the case.",
+      },
+    ],
+  },
+  {
+    key: "run-a-week",
+    title: "Run a week of classes",
+    forRoles: ["ADMIN", "HEAD", "COACH", "TUTOR"],
+    summary:
+      "What a coach does between Monday and Friday: take the register, publish it, put the recording up and check who is falling behind. The one thing worth knowing in advance is that marking attendance and publishing it are two different acts, and only publishing tells anybody anything.",
+    steps: [
+      {
+        n: 1,
+        title: "See the week ahead",
+        where: ["Sidebar", "Classroom", "My Teaching"],
+        does:
+          "Your cohorts, your classes and your students. If a cohort you run is not here, it has no teacher set on it - ask the founder to assign you on Batches & Plans.",
+      },
+      {
+        n: 2,
+        title: "Take the register",
+        where: ["The class", "Register"],
+        does:
+          "Mark who came. Students can check themselves in during a window around the class if that is switched on, and you confirm what they marked rather than typing it all again.",
+      },
+      {
+        n: 3,
+        title: "Publish it",
+        where: ["Register", "Publish"],
+        does:
+          "Marking is private; publishing is what makes the register count. It fires the absence notices and updates every attendance percentage. An unpublished register looks identical to a class nobody took.",
+      },
+      {
+        n: 4,
+        title: "Put the recording up",
+        where: ["The class", "Resources"],
+        does:
+          "Add the recording link against the class. Tick that students may see it, or it stays internal. Access can be time-limited, which is how a catch-up window is enforced rather than trusted.",
+      },
+      {
+        n: 5,
+        title: "Check who is drifting",
+        where: ["Sidebar", "Classroom", "My Teaching", "My students"],
+        does:
+          "Each student shows their sprint progress and whether they are concerning. Record the week's actual on their record - that is what the 90/120-day tracker reads.",
+      },
+      {
+        n: 6,
+        title: "Expect no reminders unless they are armed",
+        where: ["Sidebar", "Marketing", "WhatsApp", "Settings"],
+        does:
+          "Class reminders only go out if that engine is switched on and sending for real. A reminder set to rehearse is doing its job perfectly and still nobody is being reminded - the Attendance screen says when that is the case.",
+      },
+    ],
+  },
+  {
+    key: "first-morning",
+    title: "A telecaller's first morning",
+    forRoles: ["ADMIN", "HEAD", "USER"],
+    summary:
+      "Where to start on day one, and what the two screens you will live in actually do. Everything you record moves the person's journey by itself - there is no status to update separately, and no form to fill in twice.",
+    steps: [
+      {
+        n: 1,
+        title: "Start at your own desk",
+        where: ["Sidebar", "My Work", "My Desk"],
+        does:
+          "This is your list: the people assigned to you, with whoever needs a call first at the top. If it says no team profile is linked to your login, ask the founder to link it - until then the desk cannot know whose calls are yours.",
+      },
+      {
+        n: 2,
+        title: "Call, and log it while you are on the phone",
+        where: ["A person's row", "Log call"],
+        does:
+          "Record what happened as you go. That log is the evidence that moves them from “New lead” to “Contacted” - nothing else needs touching. Calls made offline are kept and sync later with the time you actually made them.",
+      },
+      {
+        n: 3,
+        title: "Book the discovery call",
+        where: ["Sidebar", "Sales", "Bookings"],
+        does:
+          "Pick a free slot. If the calendar is empty, no availability pattern has been saved yet - that is a founder setting, not something you can fix from here.",
+      },
+      {
+        n: 4,
+        title: "Work the outreach queue",
+        where: ["Sidebar", "Sales", "Pipeline", "Outreach queue"],
+        does:
+          "The script, as a list, with the message already written for each person. “Already breached” is anyone who has gone past the five-minute response target - start there.",
+      },
+      {
+        n: 5,
+        title: "Watch your own numbers",
+        where: ["Sidebar", "My Work", "My Daily Log"],
+        does:
+          "Your calls, conversions and targets, worked out from what you have logged. You cannot edit the figures - you log the work and the figures follow, which is why nobody can be behind on paperwork here.",
+      },
+      {
+        n: 6,
+        title: "When you do not know where something is",
+        where: ["Sidebar", "My Work", "App Guide"],
+        does:
+          "Every screen you can open has a short how-to with the click path at the top of it. You only see guides for screens your account can actually reach.",
+      },
+    ],
+  },
+  {
+    key: "arm-the-app",
+    title: "Switch the app on: what to arm before you rely on it",
+    forRoles: ["ADMIN"],
+    summary:
+      "Almost every automatic thing in this app ships switched OFF, on purpose - nothing should spend money or message a client because it was installed. The cost of that choice is that a feature which is built, off and unmentioned looks exactly like a feature that is broken. This is the order to switch them on in, and how to tell what is still off.",
+    steps: [
+      {
+        n: 1,
+        title: "Read the one list that knows",
+        where: ["Sidebar", "Admin", "Console", "System", "Not armed"],
+        does:
+          "Sixteen engines, each with what is NOT happening while it is off and exactly where to switch it on. Anything you think is broken should be checked against this list first - most “broken” reports have turned out to be an engine nobody armed.",
+      },
+      {
+        n: 2,
+        title: "Start with the clock",
+        where: ["The scheduled jobs row"],
+        does:
+          "The scheduler is upstream of nearly everything else: the slot top-up, the outreach ladder, the chasing, the digests. If it is not ticking, switching anything below on changes nothing. This one is a server setting rather than an in-app switch.",
+      },
+      {
+        n: 3,
+        title: "Then availability, or nobody can book",
+        where: ["Console", "Sales ops", "Availability"],
+        does:
+          "Save a weekly pattern per person - which weekdays, which hours. Until one exists there are no slots, so /book shows prospects an empty calendar and both telecaller desks look empty for want of anything to do.",
+      },
+      {
+        n: 4,
+        title: "Then the two channels",
+        where: ["WhatsApp", "and", "Conversations", "Settings"],
+        does:
+          "WhatsApp and email each have to be switched on and configured. Until then every send is accepted and discarded - including password resets, which is the one that catches people out. Both reach real people the moment they are live.",
+      },
+      {
+        n: 5,
+        title: "Then the messages that go out by themselves",
+        where: ["WhatsApp", "Settings"],
+        does:
+          "The enrolment welcome, class reminders and confirm-or-cancel, one at a time, each needing its template approved first. Switch them on one by one and watch the sent list - not all at once.",
+      },
+      {
+        n: 6,
+        title: "Last, the ones that touch money",
+        where: ["Console", "System", "Maintenance"],
+        does:
+          "Commission, tutor fees and invoice receivables post to the ledger only when armed, and chasing only chases when armed. Leave these until the figures on screen look right to you, because arming them starts writing to the books.",
+      },
+      {
+        n: 7,
+        title: "Expect the screens to tell you",
+        where: ["Any feature screen"],
+        does:
+          "A screen whose engine is off now says so at the top, with what is not happening and where to switch it on. You should not have to come back to the Console to find out why something is quiet.",
+      },
     ],
   },
 ];

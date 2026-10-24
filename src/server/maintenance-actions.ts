@@ -228,7 +228,6 @@ export async function saveFinancePostingConfig(input: unknown): Promise<ActionRe
     },
   });
   revalidatePath("/console");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 

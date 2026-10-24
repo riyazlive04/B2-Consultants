@@ -148,7 +148,6 @@ export async function createEquityEntry(form: FormData): Promise<ActionResult> {
   });
 
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   /**
    * SUCCESS EVEN IF THE LEDGER REFUSED. The entry the founder typed is recorded, and returning
    * an error for it would leave their numbers sitting in the form - where the natural next move
@@ -208,7 +207,6 @@ export async function updateEquityEntry(id: string, form: FormData): Promise<Act
   }
 
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   // Saved either way - see the note in `createEquityEntry`. The row flags an unposted edit.
   return { ok: true };
 }
@@ -252,7 +250,6 @@ export async function archiveEquityEntry(id: string): Promise<ActionResult> {
   });
 
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -280,7 +277,6 @@ export async function restoreEquityEntry(id: string): Promise<ActionResult> {
   });
 
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 

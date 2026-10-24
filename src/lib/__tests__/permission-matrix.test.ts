@@ -122,10 +122,27 @@ describe("drift against the live section config", () => {
     }
   });
 
-  test("Ledger is that case: shipped off, so even Admin is narrower than the spec", () => {
+  /**
+   * Ledger used to be this case: shipped `hidden`, so even Admin was narrower than the spec.
+   *
+   * The section was REMOVED on 23/10/2026, so there is no longer a section to be narrower - the
+   * row is kept with `sections: []` precisely so the spec's unmet ask stays visible on the
+   * Console grid rather than disappearing with the screen. `NOT_GATEABLE` is the right verdict:
+   * no section could gate this, because none exists.
+   */
+  test("Ledger: the spec still asks for it, and nothing in the app can gate it any more", () => {
     const row = PERMISSION_MATRIX.find((r) => r.key === "ledger")!;
-    assert.equal(sections.find((s) => s.key === "ledger")!.enabled, false);
-    assert.equal(driftFor(row, "ADMIN", sections), "APP_NARROWER");
+    assert.deepEqual(row.sections, []);
+    /*
+      Widened to `string` on purpose. `SectionKey` no longer contains "ledger", so TypeScript
+      reports the narrow comparison as impossible (TS2367) - which is itself the proof that the
+      section is gone. The runtime assertion is kept anyway: it is what catches somebody adding the
+      key back without reading this file.
+    */
+    assert.ok(!sections.some((s) => (s.key as string) === "ledger"), "the section is gone");
+    assert.equal(driftFor(row, "ADMIN", sections), "NOT_GATEABLE");
+    // The note is what carries the explanation onto the grid, so it must actually say so.
+    assert.match(row.note ?? "", /REMOVED/);
   });
 
   test("the full grid covers every module for every app role", () => {

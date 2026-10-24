@@ -222,6 +222,5 @@ export async function setTutorFeeStatus(feeId: string, to: TutorFeeStatus): Prom
   });
 
   revalidatePath("/german-note");
-  revalidatePath("/ledger");
   return { ok: true };
 }

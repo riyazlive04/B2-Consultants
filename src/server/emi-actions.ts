@@ -231,7 +231,6 @@ export async function setInstalmentStatus(id: string, status: string): Promise<A
 
   revalidatePath("/finance");
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -398,6 +397,5 @@ export async function clearInstalmentPlan(pendingPaymentId: string): Promise<Act
 
   revalidatePath("/finance");
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   return { ok: true };
 }

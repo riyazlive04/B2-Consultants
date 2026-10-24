@@ -87,7 +87,18 @@ export const PERMISSION_MATRIX: readonly MatrixRow[] = [
   { key: "finance-cash", label: "Finance - runway, cash, break-even", sections: ["cash"], spec: "F   R   -    -   -   -   -   -" },
   { key: "finance-entry", label: "Income & expense entry", sections: [], note: "Enforced by the `finance.write` capability, not by a section - the Finance screen can be read without it.", spec: "F   E   -    -   -   -   -   -" },
   { key: "payables", label: "Payables & receivables", sections: [], note: "Lives inside Cash Health; the `finance.write` capability gates the writes.", spec: "F   E   -    -   -   -   -   -" },
-  { key: "ledger", label: "Ledger / journals / trial balance", sections: ["ledger"], note: "Code-hidden today (`hidden: true`) - off in the nav and unreachable by route until the console re-enables it.", spec: "F   R   -    -   -   -   -   -" },
+  /*
+   * The row STAYS although the screen is gone, and deliberately.
+   *
+   * This table is the spec's permission matrix, and the spec still asks for a ledger view
+   * (`F R - - - - - -`). The Ledger section was removed from the product on 23/10/2026 at the
+   * founder's instruction, so the honest report is not "this module no longer exists" - it is
+   * "the spec asks for something the app no longer provides". Deleting the row would hide that.
+   *
+   * `sections: []` because there is no longer any section that could gate it, which reads as
+   * NOT_GATEABLE on the Console grid. The posting engine is untouched; only the screen is gone.
+   */
+  { key: "ledger", label: "Ledger / journals / trial balance", sections: [], note: "REMOVED 23/10/2026 at the founder's request - the screen is gone, so there is no way to read the journal, trial balance or audit-chain check in the app. The double-entry posting engine is untouched and `ledger-core.ts` still exports all three reads for a script or a future screen.", spec: "F   R   -    -   -   -   -   -" },
   { key: "commissions-all", label: "Commissions - all", sections: ["telecaller"], spec: "F   R   R    -   -   -   -   -" },
   { key: "commissions-own", label: "Commissions - own", sections: ["my-desk"], note: "A person's own commission shows on their desk; the all-team board is the row above.", spec: "F   F   O    O   O   O   -   -" },
   { key: "pipeline-all", label: "Pipeline - all leads", sections: ["pipeline"], spec: "F   F   R    R   R   R   -   -" },

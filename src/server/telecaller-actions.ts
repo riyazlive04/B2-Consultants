@@ -160,7 +160,6 @@ export async function createPayout(form: FormData): Promise<ActionResult> {
 
   revalidatePath("/telecaller");
   revalidatePath("/finance");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -214,7 +213,6 @@ export async function updatePayout(id: string, form: FormData): Promise<ActionRe
 
   revalidatePath("/telecaller");
   revalidatePath("/finance");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -245,7 +243,6 @@ export async function setPayoutStatus(id: string, status: "PENDING" | "PAID"): P
 
   revalidatePath("/telecaller");
   revalidatePath("/finance");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -268,6 +265,5 @@ export async function deletePayout(id: string): Promise<ActionResult> {
   });
   revalidatePath("/telecaller");
   revalidatePath("/finance");
-  revalidatePath("/ledger");
   return { ok: true };
 }

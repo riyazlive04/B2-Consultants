@@ -1123,7 +1123,6 @@ export async function saveExpenseCategoriesConfig(input: unknown): Promise<Actio
   // The three cost forms, the P&L lines on the reports, and the Ledger's chart of accounts.
   revalidatePath("/finance");
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   revalidatePath("/reports");
   revalidatePath("/console");
   return { ok: true };

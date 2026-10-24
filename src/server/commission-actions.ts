@@ -106,7 +106,6 @@ export async function runCommissionPayout(): Promise<ActionResult> {
   });
 
   revalidatePath("/finance");
-  revalidatePath("/ledger");
   revalidatePath("/console");
   return { ok: true };
 }
@@ -145,7 +144,6 @@ export async function voidCommissionPayout(runId: string): Promise<ActionResult>
   });
 
   revalidatePath("/finance");
-  revalidatePath("/ledger");
   revalidatePath("/console");
   return { ok: true };
 }

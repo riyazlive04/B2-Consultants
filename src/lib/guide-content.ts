@@ -73,6 +73,19 @@ export const GUIDES: GuideEntry[] = [
     section: "onboarding", icon: "🧭", title: "Onboarding", href: "/onboarding",
     path: ["Sidebar", "Students", "Onboarding"],
     what: "Everyone between a first enquiry and their first class, and what each of them is waiting on.",
+    shots: [
+      {
+        src: "/guide/onboarding-board.png",
+        caption:
+          "The onboarding board. Everyone between a first enquiry and their first class, grouped by the step they have reached.",
+        hotspot: { x: 38.8, y: 20, w: 19, h: 10.5, label: "Needs completing - the half-built records" },
+      },
+      {
+        src: "/guide/onboarding-wizard.png",
+        caption:
+          "Add someone: name and phone are enough to start. The six stages are shown across the top.",
+      },
+    ],
     steps: [
       "“In flight” groups every person by the step they have reached - new lead, call booked, said yes, agreement signed, enrolled, in a cohort, in class. The step is worked out from what is actually recorded against them, so it is never out of date and nobody has to remember to update it.",
       "Each row shows the one thing to do next and a “Go there” link straight to the screen that does it. You do not need to know which section that is.",
@@ -85,6 +98,13 @@ export const GUIDES: GuideEntry[] = [
   {
     section: "console", icon: "🎛️", title: "Founder Console", href: "/console",
     what: "The rules of the app itself - sections, the XP engine, goals and rewards. Admin-only.",
+    shots: [
+      {
+        src: "/guide/console-not-armed.png",
+        caption:
+          "The founder console. System → Not armed lists every engine that is switched off.",
+      },
+    ],
     steps: [
       "Sections: rename, re-icon, reorder, regroup or switch off any nav section, and set which roles see it by default. Per-user overrides in Users → Users & access still win.",
       "Gamification: edit XP values, the level ladder, badges, weekly quests and the student journey. Use “New version” to change the rules from a future date - work already done keeps the XP it earned, so nobody is demoted and no badge is re-locked.",
@@ -110,6 +130,14 @@ export const GUIDES: GuideEntry[] = [
   {
     section: "finance", icon: "💰", title: "Finance", href: "/finance",
     what: "Daily money picture - income, expenses, profit, receivables. Admin-only.",
+    shots: [
+      {
+        src: "/guide/finance-income.png",
+        caption:
+          "Finance. When something that should post to the books is switched off, the screen says so rather than quietly leaving a gap.",
+        hotspot: { x: 18.8, y: 25.5, w: 79, h: 10.5, label: "An engine that is switched off" },
+      },
+    ],
     steps: [
       "Enter every payment received under the Income tab (INR, EUR, or both - FX is stamped automatically).",
       "Enter expenses daily; tick “Is this COGS?” for direct delivery costs like Karthick's salary or Skool.",
@@ -122,6 +150,13 @@ export const GUIDES: GuideEntry[] = [
   {
     section: "pipeline", icon: "📞", title: "Pipeline", href: "/pipeline",
     what: "Every lead from first contact to Won, plus the monthly target bar.",
+    shots: [
+      {
+        src: "/guide/pipeline.png",
+        caption:
+          "Pipeline: the funnel, its targets and the call outcomes.",
+      },
+    ],
     steps: [
       "Add each new lead with source and stage; update the stage as they move - history is kept automatically.",
       "Stages now cover the whole Synamate flow: workshop branch, offer follow-up, deposit follow-up and confirmed deposit; from deposit onward pick Split or Full pay.",
@@ -172,6 +207,13 @@ export const GUIDES: GuideEntry[] = [
   {
     section: "students", icon: "🎓", title: "Students", href: "/students",
     what: "Every B2 student, their 90/120-day journey, signals, satisfaction and total paid.",
+    shots: [
+      {
+        src: "/guide/students.png",
+        caption:
+          "Students, with the 90/120-day tracker.",
+      },
+    ],
     steps: [
       "Create a student when they pay - duration and end date derive from the program level.",
       "The tracker lists active Guided/Elite students: day number, milestone, signal dot, days since session.",
@@ -223,6 +265,13 @@ export const GUIDES: GuideEntry[] = [
   {
     section: "coaching", icon: "🏫", title: "My Teaching", href: "/coaching",
     what: "Your week in front of a batch: what you are teaching next, the registers you owe, the recordings to post and the students you coach.",
+    shots: [
+      {
+        src: "/guide/coaching.png",
+        caption:
+          "My Teaching - your cohorts, your classes and your students.",
+      },
+    ],
     steps: [
       "“This week” is every class you are running in the next seven days, with the link to start it.",
       "“To mark” is every class you have already taught but not yet marked. Take the register from there - attendance is what the drop-risk signal is built on, so an unmarked class makes a student look fine when they are not.",
@@ -236,6 +285,13 @@ export const GUIDES: GuideEntry[] = [
   {
     section: "attendance", icon: "✅", title: "Attendance", href: "/attendance",
     what: "Taking the register, in the two minutes it should actually take: open it in class, let the room mark itself, then correct what is left.",
+    shots: [
+      {
+        src: "/guide/attendance.png",
+        caption:
+          "The register desk: what is open now, what was never marked, and what has not been shown to students.",
+      },
+    ],
     steps: [
       "Find today's class and press “Open attendance”. Pick how long to keep it open and how long still counts as on time - the defaults come from Console, so most of the time you just confirm.",
       "Every student on that cohort's roster now sees an “I'm here” button with a countdown, on their dashboard and in their classroom. Their arrivals appear on your board as they land.",
@@ -303,6 +359,13 @@ export const GUIDES: GuideEntry[] = [
     section: "contacts", icon: "📇", title: "Contacts", href: "/contacts",
     path: ["Sidebar", "Sales", "Contacts"],
     what: "Everyone who has ever enquired, with their phone number, where they came from and who owns them.",
+    shots: [
+      {
+        src: "/guide/contacts.png",
+        caption:
+          "Contacts - everyone who has ever enquired.",
+      },
+    ],
     steps: [
       "“Add contact” needs a name and a phone number. Everything else can be filled in later - do not hold up entry for a city or an industry.",
       "Typing somebody who already exists is refused, not duplicated: the phone number and the email are both checked, and you are told whose record it clashes with. Open that record instead.",
@@ -316,6 +379,13 @@ export const GUIDES: GuideEntry[] = [
     section: "bookings", icon: "📆", title: "Bookings", href: "/bookings",
     path: ["Sidebar", "Sales", "Bookings"],
     what: "Every discovery call booked, and the calendar of slots prospects can book into.",
+    shots: [
+      {
+        src: "/guide/bookings.png",
+        caption:
+          "Bookings, and the discovery-call calendar behind them.",
+      },
+    ],
     steps: [
       "Slots are not typed in one at a time. You save a weekly pattern per person - which weekdays, which hours - at Console → Sales ops → Availability, and the app tops the calendar up every hour from it.",
       "If this screen shows four zeroes and an empty week, it is almost always because no availability pattern has been saved. The screen says so, with a link to the panel that fixes it.",
@@ -329,6 +399,13 @@ export const GUIDES: GuideEntry[] = [
     section: "opportunities", icon: "🗂️", title: "Deals", href: "/opportunities",
     path: ["Sidebar", "Sales", "Deals"],
     what: "The drag-and-drop board of live deals, one card per person, one column per stage.",
+    shots: [
+      {
+        src: "/guide/deals-board.png",
+        caption:
+          "The Deals board - one card per person, dragged between stages.",
+      },
+    ],
     steps: [
       "Drag a card to move the deal. The person's own stage moves with it, so Pipeline and this board always agree - they are two views of one thing, not two records.",
       "This is the same set of people as Pipeline. Pipeline is the funnel with its numbers, targets and call outcomes; Deals is the board you push cards across.",
@@ -356,6 +433,18 @@ export const GUIDES: GuideEntry[] = [
     section: "agreements", icon: "✍️", title: "Agreements", href: "/agreements",
     path: ["Sidebar", "Students", "Agreements"],
     what: "Coaching contracts: drafted here, signed by the client on their phone, countersigned and filed.",
+    shots: [
+      {
+        src: "/guide/agreements.png",
+        caption:
+          "Agreements, grouped by where each one actually is.",
+      },
+      {
+        src: "/guide/agreement-new.png",
+        caption:
+          "Drafting one: the template, the client, the programme and the cohort.",
+      },
+    ],
     steps: [
       "“New agreement” starts from a template, picks the contact, and fills in the programme, the fee and the batch. A guessed value is flagged rather than silently used - you confirm it before anything goes out.",
       "Send it and the client gets a link and a signing code on WhatsApp. They sign on their phone; you see the status change here.",
@@ -369,6 +458,14 @@ export const GUIDES: GuideEntry[] = [
     section: "batches", icon: "📚", title: "Batches & Plans", href: "/batches",
     path: ["Sidebar", "Classroom", "Batches & Plans"],
     what: "Every cohort for both businesses, and the week-by-week plans they are taught from.",
+    shots: [
+      {
+        src: "/guide/batches.png",
+        caption:
+          "A cohort reads Draft until it has a plan, a teacher and a learner - and says which of those is missing.",
+        hotspot: { x: 19, y: 40, w: 34, h: 9, label: "Draft, and what it still needs" },
+      },
+    ],
     steps: [
       "Three tabs: coaching cohorts, German Note cohorts, and the plans. A cohort belongs to exactly one business and can only seat the levels that business teaches.",
       "A new cohort reads “Draft” until it has a plan, a teacher and at least one learner. Open it and the setup checklist names what is missing, with a link to each remedy - and “Start cohort” stays disabled, with the reason on it, until all three are in place.",
@@ -396,6 +493,13 @@ export const GUIDES: GuideEntry[] = [
     section: "payments", icon: "🧾", title: "Payments", href: "/payments",
     path: ["Sidebar", "Finance", "Payments"],
     what: "Invoices and estimates, the programme price list, and recurring plans. Admin-only.",
+    shots: [
+      {
+        src: "/guide/payments.png",
+        caption:
+          "Invoices, estimates, the programme price list and recurring plans.",
+      },
+    ],
     steps: [
       "An invoice is drafted, then issued. Issuing is what draws its real number and locks it - a draft can still be changed, an issued invoice cannot.",
       "Pick the currency per invoice. Rupees and euros are separate prices, not a conversion, and tax is set per currency.",
@@ -459,6 +563,13 @@ export const GUIDES: GuideEntry[] = [
     section: "whatsapp", icon: "💬", title: "WhatsApp", href: "/whatsapp",
     path: ["Sidebar", "Marketing", "WhatsApp"],
     what: "The WhatsApp channel: whether sending is live, what has gone out, and which automatic messages are switched on.",
+    shots: [
+      {
+        src: "/guide/whatsapp.png",
+        caption:
+          "WhatsApp: whether sending is live, what has gone out, and which automatic messages are on.",
+      },
+    ],
     steps: [
       "The top of the screen says whether sending is actually live. If it is off, nothing reaches anybody - the engines still run, they just talk to nobody.",
       "Every message the app has sent is listed with its delivery state. “Sent” means WhatsApp accepted it; delivered and read are reported back separately.",
@@ -486,6 +597,13 @@ export const GUIDES: GuideEntry[] = [
     section: "my-desk", icon: "☎️", title: "My Desk", href: "/my-desk",
     path: ["Sidebar", "My Work", "My Desk"],
     what: "Your own calls, your own conversions and today's list - just the people assigned to you.",
+    shots: [
+      {
+        src: "/guide/my-desk.png",
+        caption:
+          "My Desk - the people assigned to you, with whoever needs a call first.",
+      },
+    ],
     steps: [
       "The list is yours alone: the contacts assigned to you, with the ones needing a call first.",
       "Log the call from here. What you record is what moves the person's onboarding journey on - nobody has to update a status separately.",
@@ -510,6 +628,13 @@ export const GUIDES: GuideEntry[] = [
     section: "guide", icon: "📖", title: "App Guide", href: "/guide",
     path: ["Sidebar", "My Work", "App Guide"],
     what: "This page: a short how-to for every screen you can open, plus full walkthroughs of the jobs that cross several.",
+    shots: [
+      {
+        src: "/guide/guide.png",
+        caption:
+          "This guide. You only see entries for screens your account can open.",
+      },
+    ],
     steps: [
       "You only see guides for the sections your account can actually open, so nothing here describes a screen you cannot reach.",
       "The walkthroughs at the top are the ones to read first - “Onboard a new student, start to finish” is the whole journey in order, with the click path for every step.",

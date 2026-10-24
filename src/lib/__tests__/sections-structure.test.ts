@@ -192,6 +192,52 @@ describe("App Guide coverage - closed, and kept closed", () => {
     assert.deepEqual(mismatched, []);
   });
 
+  /**
+   * A guide entry that references a screenshot which is not in `public/guide/` renders a broken
+   * image inside the app's own help. The captures are produced by `npm run guide:shots` against a
+   * LOCAL stack, so they are committed artefacts and can fall out of step with the entries that
+   * name them - a re-capture that drops a shot, or an entry added before its picture is taken.
+   */
+  test("every screenshot a guide entry names actually exists", () => {
+    const publicDir = path.join(here, "..", "..", "..", "public");
+    const missing: string[] = [];
+    for (const g of GUIDES) {
+      for (const shot of g.shots ?? []) {
+        const file = path.join(publicDir, shot.src.replace(/^\//, ""));
+        if (!fs.existsSync(file)) missing.push(`${g.section} → ${shot.src}`);
+      }
+    }
+    assert.deepEqual(missing, [], `guide entries naming images that are not there: ${missing.join(", ")}`);
+  });
+
+  test("every screenshot carries a caption, because an unlabelled one explains nothing", () => {
+    for (const g of GUIDES) {
+      for (const shot of g.shots ?? []) {
+        assert.ok(shot.caption.trim().length > 10, `${g.section}: ${shot.src} has no real caption`);
+      }
+    }
+  });
+
+  /**
+   * Hotspots are PERCENTAGES of the image, which is what lets a re-capture at a different window
+   * size keep the box on its target. A value outside 0-100, or a box running off the edge, means
+   * somebody has pasted pixels in.
+   */
+  test("a hotspot stays inside its image", () => {
+    for (const g of GUIDES) {
+      for (const shot of g.shots ?? []) {
+        const h = shot.hotspot;
+        if (!h) continue;
+        for (const [k, v] of Object.entries({ x: h.x, y: h.y, w: h.w, h: h.h })) {
+          assert.ok(v >= 0 && v <= 100, `${g.section}: ${shot.src} hotspot ${k}=${v} is not a percentage`);
+        }
+        assert.ok(h.x + h.w <= 100, `${g.section}: ${shot.src} hotspot runs off the right edge`);
+        assert.ok(h.y + h.h <= 100, `${g.section}: ${shot.src} hotspot runs off the bottom`);
+        assert.ok(h.label.trim().length > 0, `${g.section}: ${shot.src} hotspot has no label`);
+      }
+    }
+  });
+
   /** Every entry written from step F1 onward carries its click path. The older ones predate it. */
   test("the click path, where present, starts at something the reader can see", () => {
     for (const g of GUIDES) {

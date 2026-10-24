@@ -6,6 +6,7 @@ import type { GnEventType, SessionDelivery } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
 import { GUIDED_CURRICULUM_SEED } from "@/lib/curriculum";
+import { isKnownLevel } from "./levels";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
@@ -26,6 +27,17 @@ function firstError(e: z.ZodError): string {
 const templateSchema = z.object({
   line: z.enum(["B2", "GERMAN_NOTE"]).optional(),
   name: z.string().trim().min(1, "Give the curriculum a name").max(160),
+  /**
+   * The programme this plan is written for - `Level.code`, chosen from the catalogue.
+   *
+   * It was `z.string().max(40)`, i.e. anything. Live proved what that costs: of three plans, one
+   * was filed under `Guided` (the catalogue says `GUIDED`) and one under `Gudied30`, a typo. A
+   * plan whose code is not in the catalogue cannot be matched to a programme by any screen that
+   * looks one up, and nothing in the app could say so.
+   *
+   * The form now offers a picker rather than a text box, and this re-checks it server-side -
+   * a picker is a courtesy, not a guard.
+   */
   levelCode: z.string().trim().max(40).optional(),
   description: z.string().trim().max(2000).optional(),
   // Blank means "no sprint phase", which is a real answer - not every programme has one.
@@ -62,6 +74,18 @@ export async function upsertCurriculumTemplate(
   const parsed = templateSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
+
+  /*
+    A code that is not in the active catalogue is refused, rather than stored and silently
+    unmatchable. Blank stays allowed: "which programme is this for" is genuinely optional, and a
+    plan can be drafted before that is decided.
+  */
+  if (d.levelCode && !(await isKnownLevel(d.levelCode))) {
+    return {
+      ok: false,
+      error: `"${d.levelCode}" is not a programme in the catalogue. Pick one from the list, or add it under Programs first.`,
+    };
+  }
 
   const data = {
     line: (d.line ?? "B2") as "B2" | "GERMAN_NOTE",

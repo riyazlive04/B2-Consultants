@@ -1,6 +1,7 @@
 import { Layers } from "lucide-react";
 import { requireAdmin, requireSection } from "@/lib/rbac";
 import { getAdminLevels } from "@/server/levels";
+import { levelOptions } from "@/lib/levels";
 import { getTodayInrPerEur } from "@/lib/fx";
 import { LevelsPanel } from "@/components/levels/LevelsPanel";
 import { CurriculumPanel } from "@/components/curriculum/CurriculumPanel";
@@ -58,7 +59,7 @@ export default async function ProgramsPage() {
           },
           {
             label: `Curriculum${curricula.length ? ` (${curricula.length})` : ""}`,
-            content: <CurriculumPanel templates={curricula} />,
+            content: <CurriculumPanel templates={curricula} levelOptions={levelOptions(levels, ["COACHING_TIER", "GERMAN_LEVEL", "OTHER"])} />,
           },
         ]}
       />

@@ -150,12 +150,33 @@ async function main() {
       bucket = [];
       const url = `${BASE}${resolved}`;
       let status = 0;
-      try {
-        const res = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
-        status = res?.status() ?? 0;
-        await page.waitForLoadState("networkidle").catch(() => {});
-      } catch (e) {
-        bucket.push(`navigation: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
+
+      /*
+        ONE RETRY, and only for a navigation that timed out.
+
+        Against a dev server this suite compiles 61 routes back to back, each on its first request,
+        and whichever route is unlucky can exceed the budget on a cold compile - three consecutive
+        runs on 24/10/2026 failed on a DIFFERENT screen each time, and every one of them loaded in
+        3-6 seconds when opened on its own. A suite that reports a different false failure each run
+        is a suite people learn to ignore, which costs more than the thing it was built to catch.
+
+        Deliberately narrow: a timeout is retried, and nothing else is. An error boundary, a
+        non-2xx or an empty body is a VERDICT, and retrying a verdict until it changes is how a
+        real failure gets explained away. The second attempt also hits a route the first one has
+        now compiled, so a screen that still times out is genuinely slow rather than cold.
+      */
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        bucket = [];
+        try {
+          const res = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+          status = res?.status() ?? 0;
+          await page.waitForLoadState("networkidle").catch(() => {});
+          break;
+        } catch (e) {
+          const first = e instanceof Error ? e.message.split("\n")[0] : String(e);
+          if (attempt === 1 && /timeout/i.test(first)) continue;
+          bucket.push(`navigation: ${first}`);
+        }
       }
 
       const body = await page.locator("body").innerText().catch(() => "");

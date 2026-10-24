@@ -156,7 +156,20 @@ export function IncomeFields({
                   Create a student record for “{newStudentName}”
                   <span className="block text-muted">
                     Links this payment - and any earlier one under the same name - to their history.
-                    You can fill in the rest under Students.
+                  </span>
+                  {/*
+                    ── WHERE THE HALF-BUILT RECORD GOES NEXT (refactor step D6) ──────────
+                    A student minted here has a name, a number and a payment, and nothing else:
+                    no programme level, no cohort, no portal login. "You can fill in the rest
+                    under Students" was true and left the reader to remember it, which is how
+                    paid students ended up sitting unenrolled for weeks.
+                    Onboarding → Needs completing finds them without anybody remembering: the
+                    gaps are derived from the record, so it appears there the moment it is
+                    created and leaves the list the moment it is finished.
+                  */}
+                  <span className="mt-0.5 block text-muted">
+                    They will appear on <b className="font-semibold text-ink-2">Onboarding → Needs
+                    completing</b> until they have a programme and a cohort.
                   </span>
                 </span>
               </label>

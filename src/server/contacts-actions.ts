@@ -49,7 +49,15 @@ const contactSchema = z.object({
   companyId: z.string().trim().optional(),
 });
 
-export async function createContact(form: FormData): Promise<ActionResult> {
+/**
+ * Create a CRM contact.
+ *
+ * Returns the new lead's `id` on success (and the restored one's, when re-entering an archived
+ * contact). Added for the onboarding wizard, which has to continue onto the same person's next
+ * step and otherwise had nothing to continue WITH - it would have had to guess by searching back
+ * for the name it had just typed. Every existing caller reads only `ok`/`error` and is unaffected.
+ */
+export async function createContact(form: FormData): Promise<ActionResult & { id?: string }> {
   const session = await requireSection("contacts");
   const parsed = contactSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -73,7 +81,7 @@ export async function createContact(form: FormData): Promise<ActionResult> {
       });
       reval();
       revalidatePath("/pipeline");
-      return { ok: true };
+      return { ok: true, id: dup.lead.id };
     }
     return {
       ok: false,
@@ -122,7 +130,7 @@ export async function createContact(form: FormData): Promise<ActionResult> {
   // happen, and an enrollment that does not finish here is resumed by `runDueWorkflows()`.
   afterResponse("contact-created", () => emitTrigger("CONTACT_CREATED", { leadId: newLeadId }));
   reval();
-  return { ok: true };
+  return { ok: true, id: newLeadId };
 }
 
 export async function updateContact(id: string, form: FormData): Promise<ActionResult> {

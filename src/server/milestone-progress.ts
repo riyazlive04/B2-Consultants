@@ -14,6 +14,20 @@ import type { ActionResult } from "./finance-actions";
  * `Enrollment.currentMilestone` and the append-only `MilestoneLog` are UNTOUCHED - the log is
  * the audit trail and nothing here weakens it. What this adds is a per-milestone row with a
  * `targetDay`, so "is Priya on track for day 45" is answerable without replaying the log.
+ *
+ * ── NOT WIRED UP YET, AND WHY THAT MATTERS HERE ─────────────────────────────────────────
+ * Nothing in the app imports this module: every screen still reads the older
+ * `Enrollment.currentMilestone` column, and `ProgramMilestone` / `MilestoneProgress` have no
+ * reader outside this file. So these are not live endpoints - Next mints an action id only for a
+ * module in the build graph, and this one is not in it.
+ *
+ * It is a TRAP rather than a hole, which is why it is being closed now. This file is
+ * `"use server"`, so the moment one import wires the feature to a screen, every export becomes a
+ * callable endpoint for anybody who can post to its id. Three of them used to establish no
+ * caller at all: `enrollmentMilestones` handed back any student's progress and enrolment date
+ * for an id, `listProgramMilestones` the whole configured ladder, and `materialiseMilestones`
+ * WROTE progress rows - all three reachable without a session, on the first day the feature
+ * shipped. Gating them while the module is still dead costs nothing: there is no caller to break.
  */
 
 /**
@@ -73,6 +87,8 @@ export async function seedMilestoneLadder(
  * unique key, so re-running never resets progress already recorded.
  */
 export async function materialiseMilestones(enrollmentId: string): Promise<number> {
+  await requireSection("students");
+
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
     select: { programLevel: true },
@@ -158,6 +174,8 @@ export async function enrollmentMilestones(enrollmentId: string): Promise<{
   items: EnrollmentMilestoneView[];
   overdue: number;
 }> {
+  await requireSection("students");
+
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
     select: {
@@ -196,6 +214,11 @@ export async function enrollmentMilestones(enrollmentId: string): Promise<{
 
 /** The ladder as configured, for the admin panel. */
 export async function listProgramMilestones(levelCode?: string) {
+  // The panel that would show this is a configuration screen, so it answers to the same
+  // capability that seeds the ladder rather than to `students`.
+  const { allowed } = await capabilityCheck("pipeline.configure");
+  if (!allowed) return [];
+
   const where: Prisma.ProgramMilestoneWhereInput = levelCode ? { levelCode } : {};
   return prisma.programMilestone.findMany({
     where,

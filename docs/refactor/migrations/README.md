@@ -22,12 +22,22 @@ commented out, so a file cannot half-apply itself if it is piped somewhere by ac
 |---|---|---|
 | [`M1_invoice_student_link.sql`](./M1_invoice_student_link.sql) | Two nullable FK columns on `invoice` | ready |
 | [`M2_level_foreign_keys.sql`](./M2_level_foreign_keys.sql) | Foreign keys onto `level(code)` | **blocked** — run `npm run fix:level-codes -- --apply` first |
-| [`M3_deal_stage_drift_view.sql`](./M3_deal_stage_drift_view.sql) | A reporting view; stores nothing | ready |
+| [`M3_deal_stage_drift_view.sql`](./M3_deal_stage_drift_view.sql) | A reporting view; stores nothing | ✅ **approved — now a Prisma migration**, `20261024010000_deal_stage_drift_view` |
 | [`M4_one_membership_mechanism.sql`](./M4_one_membership_mechanism.sql) | Stage 1 of unifying membership | **needs a decision** (Option A or B) |
 
-**They are deliberately NOT in `prisma/migrations/`.** A folder there is picked up by the next
-`npm run db:deploy`, and these must not apply themselves. When one is approved, create the Prisma
-migration and paste its `UP` section into the generated `migration.sql`.
+**The two APPROVED ones are now in `prisma/migrations/`** and will be applied by the next
+`npm run db:deploy`:
+
+  · `20261024000000_invoice_student_and_level_fks`  (M1 + M2)
+  · `20261024010000_deal_stage_drift_view`          (M3)
+
+The files in this folder stay as the reasoning and the rollback. M4 is declined and has no
+migration folder - it must not apply itself.
+
+**Both were rehearsed against a restore of the live dump before being proposed for deploy**, and
+the behaviours were proven there rather than assumed: a bad course code is refused, a course in
+use cannot be deleted, renaming one carries its plans and enrolments with it, and the drift view
+reports 0 on clean data and exactly 1 when a lead's stage is moved without its card.
 
 ---
 

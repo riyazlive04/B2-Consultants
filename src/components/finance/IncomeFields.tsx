@@ -309,7 +309,13 @@ export function IncomeFields({
             onChange={(e) => {
               // Both in ONE update: the level is cleared with the business, so the select
               // never renders a value absent from its own options even for a frame.
-              patch({ businessLine: e.currentTarget.value as BusinessLine, programLevel: null });
+              // The placeholder option's value is "", which is not a BusinessLine - so the cast
+              // was a lie and `""` leaked into the draft. Blank means unanswered, and unanswered
+              // is spelled `null` everywhere else. `lib/income-form` normalises this too.
+              patch({
+                businessLine: (e.currentTarget.value || null) as BusinessLine | null,
+                programLevel: null,
+              });
             }}
           />
         </Field>

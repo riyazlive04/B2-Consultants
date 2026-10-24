@@ -258,8 +258,30 @@ export function deriveIncomeForm(
    * Null instead, and the form asks. The page filter still pre-answers it when it is on one of
    * the two businesses - that is the one case where the view really does say where money goes.
    */
+  /*
+    `|| null`, NOT `?? `, and that is the whole bug.
+
+    "Unanswered" had two spellings. `emptyDraft` writes `null`, but the Business select's
+    placeholder option carries `value=""`, so picking it - or the form resetting the select after
+    a successful save - wrote `""` into a field typed `BusinessLine | null`. `??` only steps over
+    `null`, so `""` was carried through as if it were a business, and every guard downstream
+    tests `line === null`:
+
+      · `lineLevelOptions` filtered for a line called "", so it came back EMPTY
+      · the Programme level select then offered "Nothing to choose" and `programLevel` fell to ""
+      · `entryLine` followed it to "", so `lineLabel` became null
+      · and the hint rendered the word NULL at the operator: "No active null level - add one
+        first." - where the same field reads "Pick a business first." when the value is `null`
+
+    Worse than the copy: with no level to choose the entry could not be submitted. Enter one
+    payment, and the form was dead until the page was reloaded. Found by entering two payments in
+    a row on 24/10/2026.
+
+    Normalised HERE rather than at the select, because this is the one place `line` is decided
+    and a writer that spells blank differently cannot reach past it.
+  */
   const line: BusinessLine | null =
-    draft.businessLine ??
+    (draft.businessLine || null) ??
     (editing ? (cat.levelLines[rowLevel] ?? "B2") : (cat.defaultLine ?? null));
   const lineLevelOptions =
     line === null ? [] : cat.levelOptions.filter((o) => (cat.levelLines[o.value] ?? "B2") === line);

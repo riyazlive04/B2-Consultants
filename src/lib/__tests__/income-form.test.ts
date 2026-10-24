@@ -521,3 +521,50 @@ describe("the first instalment is the operator's, not a derivation", () => {
     assert.deepEqual(d.equalShare, { inr: "", eur: "" });
   });
 });
+
+/**
+ * BLANK MEANS UNANSWERED, HOWEVER IT IS SPELLED.
+ *
+ * The Business select's placeholder option carries `value=""`, so picking it - and the form's
+ * own reset after a save - wrote `""` into a field typed `BusinessLine | null`. `??` steps over
+ * `null` only, so `""` was carried through as though it named a business.
+ *
+ * Found on 24/10/2026 by entering two payments in a row on the Finance screen. The first saved
+ * correctly; the form came back with the business blank-as-`""` and the Programme level field
+ * reading "No active null level - add one first." - the word NULL, shown to the operator - with
+ * nothing in the level list, so the next payment could not be entered at all until the page was
+ * reloaded. tsc was happy throughout: the `as BusinessLine` cast at the select said so.
+ */
+describe("a blank business", () => {
+  const blank = (over: Partial<IncomeFormDraft> = {}) =>
+    derive({ businessLine: "" as unknown as null, ...over }, null, { defaultLine: null });
+
+  test("reads as unanswered rather than as a business of its own", () => {
+    assert.equal(blank().line, null);
+  });
+
+  test("never renders the word null at the operator", () => {
+    // `lineLabel` is interpolated straight into "No active ${lineLabel} level - add one first."
+    // The hint is only shown when a business HAS been picked, so a null label must mean the
+    // field is showing "Pick a business first." instead.
+    const d = blank();
+    assert.equal(d.line, null, "a null line is what makes the field ask for a business");
+    assert.equal(d.lineLabel, null);
+  });
+
+  test("still offers every level once a business is picked, so a second entry is possible", () => {
+    // The dead-form half: with line === "" the options list came back empty and there was
+    // nothing to submit.
+    assert.deepEqual(blank({ businessLine: "B2" }).lineLevelOptions.map((o) => o.value), [
+      "GUIDED",
+      "SELF_PACED",
+    ]);
+  });
+
+  test("the page filter still answers it when the view is on one business", () => {
+    // A blank draft must not out-rank the view's answer - that was the `??` chain's actual job.
+    const d = derive({ businessLine: "" as unknown as null }, null, { defaultLine: "GERMAN_NOTE" });
+    assert.equal(d.line, "GERMAN_NOTE");
+    assert.deepEqual(d.lineLevelOptions.map((o) => o.value), ["GN_A1", "GN_A2"]);
+  });
+});

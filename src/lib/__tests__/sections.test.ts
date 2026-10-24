@@ -23,9 +23,11 @@ import {
   resolveSections,
   roleDefaultKeysFrom,
   sectionAllowed,
+  SECTION_CATALOGUE,
   type AppRole,
   type ResolvedSection,
   type SectionKey,
+  type SectionOverrides,
 } from "../sections";
 
 const SHIPPED = resolveSections(null);
@@ -129,72 +131,78 @@ describe("the rest of the rule is unchanged", () => {
 });
 
 /**
- * A CODE-HIDDEN SECTION, AND THE CONSOLE'S OVERRIDE OF IT.
+ * THE CODE-HIDDEN MECHANISM, WITH NOTHING LEFT USING IT.
  *
- * This is the rule the CV Studio question turns on. `cv-check` carries `hidden: true` in the
- * catalogue - "since 14/10/2026 at the founder's request" - and the same walkthrough call
- * discussed students using it (@18:47, @39:55). That looked like a conflict needing a code
- * change, and it is not one: a code-hidden section ships OFF, and an explicit `enabled: true`
- * saved from Console -> Sections wins over that default. So the answer is a toggle, not a deploy.
+ * `resolveSections` supports a catalogue entry carrying `hidden: true`: it ships OFF - off the nav
+ * AND refused by the route, for every role including ADMIN - and an explicit `enabled: true` saved
+ * from Console -> Sections wins over that default. So switching such a feature back on is a
+ * toggle, not a deploy.
  *
- * That makes `resolveSections`' override behaviour load-bearing for a founder decision, and it
- * was untested. These pin it, in both directions, plus the `offRail` consequence - because an
- * explicit "on" that left the section off the nav rail would be a toggle that appears to do
- * nothing, which is indistinguishable from the bug it was meant to fix.
+ * All three sections that used it are now gone: `cv-check` and `automation` were removed on
+ * 23/10/2026, and `ledger` with them. So the mechanism is live code with no current users, and the
+ * fuller tests it used to have cannot run - they needed a real hidden entry to resolve against.
+ *
+ * What is kept is therefore two things:
+ *
+ *   1. the ACCESS half, which needs no catalogue entry - `sectionAllowed` is a pure function over
+ *      a `ResolvedSection`, so a switched-off section can be built by hand and asserted on. This
+ *      is the half that matters: it is the one that decides whether a route opens.
+ *   2. a RATCHET - if anybody adds `hidden: true` to the catalogue again, the last test fails and
+ *      says to restore the `resolveSections` coverage with that entry as the fixture.
+ *
+ * Deleting the block outright was the alternative and would have been wrong: the rule outlives any
+ * one section that happened to use it, and a mechanism with no test is how a toggle quietly stops
+ * working between the day it is needed and the day it is tried.
  */
-describe("a code-hidden section", () => {
-  const entry = (key: SectionKey, enabled: boolean) => ({
-    key,
-    label: "CV Studio",
-    icon: "file-search" as const,
-    group: "Students" as const,
-    order: 400,
+describe("a switched-off section", () => {
+  /** A resolved section as `resolveSections` would hand one over, built by hand. */
+  const off = (enabled: boolean): ResolvedSection => ({
+    key: "finance" as SectionKey,
+    href: "/finance",
+    phase: 1,
+    locked: false,
+    personal: false,
+    offRail: false,
+    label: "Finance",
+    icon: "wallet",
+    group: "Finance",
+    order: 10,
     enabled,
-    roles: ["ADMIN", "HEAD", "STUDENT"] as AppRole[],
+    roles: ["ADMIN", "HEAD"] as AppRole[],
   });
 
-  const cv = (config: Parameters<typeof resolveSections>[0]) =>
-    resolveSections(config).find((s) => s.key === "cv-check")!;
-
-  test("ships OFF with no saved config at all", () => {
-    assert.equal(cv(null).enabled, false);
-  });
-
-  test("an explicit Console 'on' overrides the code default", () => {
-    // The whole reason the CV Studio question needs no code change.
-    assert.equal(cv({ entries: [entry("cv-check", true)] }).enabled, true);
-  });
-
-  test("an explicit 'on' also puts it back on the nav rail", () => {
-    // Otherwise the founder flips the switch, the route opens, and the link is still missing -
-    // a toggle that appears to do nothing.
-    assert.equal(cv({ entries: [entry("cv-check", true)] }).offRail, false);
-  });
-
-  test("an explicit Console 'off' keeps it off", () => {
-    assert.equal(cv({ entries: [entry("cv-check", false)] }).enabled, false);
-  });
-
-  test("a saved row for OTHER sections does not switch it on by accident", () => {
-    // `s?.enabled ?? !hiddenByCode` - the fallback has to key off THIS section's own row.
-    const other = { ...entry("students" as SectionKey, true), key: "students" as SectionKey };
-    assert.equal(cv({ entries: [other] }).enabled, false);
-  });
-
-  test("while hidden, nobody reaches it - not even ADMIN", () => {
-    // `sectionAllowed` asks "has the founder switched this off" first, and the Admin bypass
-    // does not skip that question. A hidden section is off the route as well as off the nav.
-    const hidden = cv(null);
+  test("nobody reaches a switched-off section - not even ADMIN", () => {
+    // `sectionAllowed` asks "has the founder switched this off" FIRST, and the Admin bypass does
+    // not skip that question. Off is off the route as well as off the nav.
     for (const role of ["ADMIN", "HEAD", "STUDENT", "USER"] as AppRole[]) {
-      assert.equal(sectionAllowed(hidden, role, null), false, role);
+      assert.equal(sectionAllowed(off(false), role, null), false, role);
     }
   });
 
-  test("once switched on, its normal role list applies again", () => {
-    const shown = cv({ entries: [entry("cv-check", true)] });
-    assert.equal(sectionAllowed(shown, "STUDENT", null), true);
+  test("switched on, its normal role list applies again", () => {
+    const shown = off(true);
+    assert.equal(sectionAllowed(shown, "ADMIN", null), true);
     assert.equal(sectionAllowed(shown, "HEAD", null), true);
-    // USER is not on `cv-check`'s role list, so enabling the section does not hand it to them.
+    // USER is not on this section's role list, so enabling it does not hand it to them.
     assert.equal(sectionAllowed(shown, "USER", null), false);
+  });
+
+  test("an override still cannot open a section the founder switched off", () => {
+    // The order in `sectionAllowed` matters: `enabled` is checked before any override.
+    assert.equal(sectionAllowed(off(false), "USER", { finance: true } as SectionOverrides), false);
+  });
+
+  /**
+   * THE RATCHET. Nothing carries `hidden` today, so the `resolveSections` default-off path has no
+   * fixture. If that changes, restore the tests this block replaced - they are in git history at
+   * the commit that removed the Ledger - using the new entry as the fixture.
+   */
+  test("no catalogue entry uses `hidden` - if one does, restore the resolveSections coverage", () => {
+    const hidden = SECTION_CATALOGUE.filter((s) => "hidden" in s && s.hidden === true).map((s) => s.key);
+    assert.deepEqual(
+      hidden,
+      [],
+      `a code-hidden section is back (${hidden.join(", ")}) - this block needs its resolveSections tests again`,
+    );
   });
 });

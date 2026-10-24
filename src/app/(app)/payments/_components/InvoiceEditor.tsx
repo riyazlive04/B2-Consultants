@@ -82,6 +82,7 @@ export default function InvoiceEditor({
   pickers,
   tax,
   fxRate,
+  issueGaps = [],
 }: {
   invoice: InvoiceDetail | null;
   kind: "INVOICE" | "ESTIMATE";
@@ -90,6 +91,15 @@ export default function InvoiceEditor({
   tax: InvoiceTaxConfig;
   /** INR per EUR, for the sidebar's converted figure only - the server stamps its own. */
   fxRate: number;
+  /**
+   * What §14 UStG still wants on this draft, in plain words - empty when it may be issued.
+   *
+   * Computed on the server by the same helper `issueInvoice` refuses with, so this cannot
+   * promise a send the server then declines. Shown rather than enforced: the Send button stays
+   * live and the server remains the only authority, because a button disabled by a stale page is
+   * a worse failure than one that explains itself.
+   */
+  issueGaps?: string[];
 }) {
   const router = useRouter();
   const noun = kind === "ESTIMATE" ? "Estimate" : "Invoice";
@@ -289,7 +299,11 @@ export default function InvoiceEditor({
           </h1>
           {invoice && <Pill tone={statusTone(invoice.status)}>{invoice.status}</Pill>}
           {invoice?.provisional && (
-            <span className="text-caption text-ink-3">Gets its INV number when it is sent</span>
+            <span className="text-caption text-ink-3">
+              {issueGaps.length > 0
+                ? "Not ready to send yet"
+                : "Gets its INV number when it is sent"}
+            </span>
           )}
         </div>
         {invoice && (
@@ -304,6 +318,39 @@ export default function InvoiceEditor({
           </div>
         )}
       </div>
+
+      {/*
+        WHAT THIS DRAFT STILL NEEDS, before anyone presses Send.
+
+        The server refuses an invoice that §14 UStG would reject, and used to be the first to
+        mention it: the operator pressed Send and got all four requirements back at once, in a
+        toast, with no idea any of them existed. On a fresh install - and on live, where the
+        issuer block is still blank - that is EVERY invoice.
+
+        Warn, not bad: nothing is broken, the document is simply incomplete. Send stays live, so
+        the server is still the only authority on whether an invoice may be issued; this just
+        stops the refusal being a surprise.
+      */}
+      {issueGaps.length > 0 && (
+        <div className="rounded-card border border-warn-soft bg-warn-soft/40 px-4 py-3">
+          <p className="text-sm font-semibold text-ink">
+            This draft cannot be sent yet - {issueGaps.length}{" "}
+            {issueGaps.length === 1 ? "thing is" : "things are"} missing
+          </p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5">
+            {issueGaps.map((gap) => (
+              <li key={gap} className="text-sm text-ink-2">
+                {gap}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-caption text-muted">
+            An invoice is a legal document once it carries a number, so it is checked before it
+            gets one. Nothing here is lost in the meantime - the draft keeps everything typed into
+            it.
+          </p>
+        </div>
+      )}
 
       {locked && (
         <div className="flex items-start gap-2 rounded-card border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">

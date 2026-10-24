@@ -122,6 +122,54 @@ export function issueBlockedMessage(gaps: string[]): string {
   return `This invoice can't be issued yet. Add ${gaps.join("; ")}.`;
 }
 
+/**
+ * The same question, asked of a DRAFT before anyone presses Send.
+ *
+ * ── Why this exists ─────────────────────────────────────────────────────────────────────
+ * `invoiceIssueGaps` was reached from exactly one place: the instant of issue, inside the
+ * transaction. So a draft could not be asked whether it was issuable, and the editor drew a Send
+ * button on every draft - including one that the server would refuse. On a fresh install (or
+ * live, where the issuer block is still blank) pressing it returned a wall of four requirements
+ * at once, which is the first the operator heard of any of them.
+ *
+ * That is the failure this codebase has a standing rule against: "the UI only ever offers what
+ * will actually be accepted", and a cohort on the Batches screen "reads Draft until it has a
+ * plan, a teacher and a learner - and says which of those is missing". An invoice should say so
+ * too, and before the click.
+ *
+ * ── Why the tax-note fallback lives here ────────────────────────────────────────────────
+ * A 0% invoice with no note of its own inherits the Console's note for its currency AT ISSUE.
+ * That rule decides whether a draft is issuable, so a readiness check that did not apply it
+ * would report a gap the issue path does not see - two answers to one question. Both sides call
+ * this, which is the only way they cannot disagree.
+ */
+export function invoiceIssueGapsFor(input: {
+  issuer: IssueCheckInput["issuer"];
+  invoice: {
+    customerName: string;
+    customerAddress: string | null;
+    servicePeriodStart: Date | string | null;
+    taxPercent: number;
+    taxNote: string | null;
+  };
+  /** The Console's note for THIS invoice's currency, used only when the invoice has none. */
+  fallbackTaxNote: string;
+}): string[] {
+  const { invoice: inv } = input;
+  const taxNote =
+    inv.taxNote?.trim() || (inv.taxPercent > 0 ? null : input.fallbackTaxNote.trim() || null);
+  return invoiceIssueGaps({
+    issuer: input.issuer,
+    customerName: inv.customerName,
+    customerAddress: inv.customerAddress,
+    // A date-input string ("" when unset) and a Date both arrive here, from the editor's DTO and
+    // from the row respectively. Only presence matters to the check.
+    servicePeriodStart: inv.servicePeriodStart ? new Date(inv.servicePeriodStart) : null,
+    taxPercent: inv.taxPercent,
+    taxNote,
+  });
+}
+
 // ───────────────────────────── amount in words ─────────────────────────────
 
 const ONES = [

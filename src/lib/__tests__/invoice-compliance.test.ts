@@ -4,6 +4,7 @@ import {
   amountInWords,
   documentNumber,
   invoiceIssueGaps,
+  invoiceIssueGapsFor,
   isProvisionalNumber,
   issueBlockedMessage,
   provisionalNumber,
@@ -135,5 +136,100 @@ describe("amount in words", () => {
   it("handles nothing and round hundreds", () => {
     assert.equal(amountInWords(0n, "INR"), "Indian Rupees Zero Only");
     assert.equal(amountInWords(30_000n, "EUR"), "Euros Three Hundred Only");
+  });
+});
+
+/**
+ * THE DRAFT HAS TO BE ABLE TO ANSWER THIS TOO.
+ *
+ * `invoiceIssueGaps` was reached from exactly one place - inside the transaction that issues -
+ * so no screen could ask a draft whether it was issuable, and the editor drew a Send button on
+ * every draft including the ones the server would refuse. Pressing it returned four requirements
+ * at once, which was the first the operator heard of any of them; on a fresh install, and on
+ * live where the Tax ID is still blank, that is EVERY invoice.
+ *
+ * `invoiceIssueGapsFor` is what both sides now call. These tests exist to keep them the same
+ * computation: the tax-note fallback below is the part that would otherwise drift, because it
+ * decides issuability and lives on neither the invoice nor the check.
+ */
+describe("asking a draft what it still needs", () => {
+  const draftOf = (over: Partial<Parameters<typeof invoiceIssueGapsFor>[0]["invoice"]> = {}) => ({
+    customerName: complete.customerName,
+    customerAddress: complete.customerAddress,
+    servicePeriodStart: complete.servicePeriodStart,
+    taxPercent: complete.taxPercent,
+    taxNote: complete.taxNote,
+    ...over,
+  });
+
+  it("agrees with the issue-time check when everything is present", () => {
+    assert.deepEqual(
+      invoiceIssueGapsFor({ issuer: complete.issuer, invoice: draftOf(), fallbackTaxNote: "" }),
+      [],
+    );
+  });
+
+  it("a 0% invoice with no note of its own inherits the Console's note", () => {
+    // The rule that makes setting the note ONCE unblock every waiting draft. A readiness check
+    // that skipped it would report a gap the issue path does not see - two answers, one question.
+    const gaps = invoiceIssueGapsFor({
+      issuer: complete.issuer,
+      invoice: draftOf({ taxNote: null }),
+      fallbackTaxNote: "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",
+    });
+    assert.deepEqual(gaps, []);
+  });
+
+  it("...and is still short of one when neither the invoice nor the Console has a note", () => {
+    const gaps = invoiceIssueGapsFor({
+      issuer: complete.issuer,
+      invoice: draftOf({ taxNote: null }),
+      fallbackTaxNote: "   ",
+    });
+    assert.equal(gaps.length, 1);
+    assert.match(gaps[0], /why no tax/);
+  });
+
+  it("a note is irrelevant once tax is actually charged", () => {
+    assert.deepEqual(
+      invoiceIssueGapsFor({
+        issuer: complete.issuer,
+        invoice: draftOf({ taxNote: null, taxPercent: 19 }),
+        fallbackTaxNote: "",
+      }),
+      [],
+    );
+  });
+
+  it("takes the editor's date-input string as readily as the row's Date", () => {
+    // The editor's DTO carries "YYYY-MM-DD" (and "" for unset); the row carries a Date. Only
+    // presence matters, and both spellings have to reach the same verdict.
+    assert.deepEqual(
+      invoiceIssueGapsFor({
+        issuer: complete.issuer,
+        invoice: draftOf({ servicePeriodStart: "2026-11-02" }),
+        fallbackTaxNote: "",
+      }),
+      [],
+    );
+    const unset = invoiceIssueGapsFor({
+      issuer: complete.issuer,
+      invoice: draftOf({ servicePeriodStart: "" }),
+      fallbackTaxNote: "",
+    });
+    assert.equal(unset.length, 1);
+    assert.match(unset[0], /service date or period/);
+  });
+
+  it("names every blocker a fresh install has, so the draft can list them", () => {
+    // The exact state found on 24/10/2026: issuer block filled except the Tax ID, a rupee
+    // invoice with no customer address, no service date and no tax note anywhere.
+    const gaps = invoiceIssueGapsFor({
+      issuer: { ...complete.issuer, taxId: "" },
+      invoice: draftOf({ customerAddress: null, servicePeriodStart: null, taxNote: null }),
+      fallbackTaxNote: "",
+    });
+    assert.equal(gaps.length, 4);
+    assert.match(issueBlockedMessage(gaps), /Steuernummer/);
   });
 });

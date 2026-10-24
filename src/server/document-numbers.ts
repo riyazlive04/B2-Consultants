@@ -5,7 +5,7 @@ import type { InvoiceSettings } from "@/lib/config-schema";
 import { asInvoiceCurrency } from "@/lib/invoice-money";
 import {
   documentNumber,
-  invoiceIssueGaps,
+  invoiceIssueGapsFor,
   issueBlockedMessage,
   provisionalNumber,
   sequenceKey,
@@ -76,17 +76,21 @@ export async function issueInvoice(
   if (inv.deletedAt) throw new InvoiceNotIssuable("This invoice is archived - restore it before issuing it.");
 
   const taxPercent = Number(inv.taxPercent);
-  const taxNote =
-    inv.taxNote?.trim() ||
-    (taxPercent > 0 ? null : settings.tax[asInvoiceCurrency(inv.currency)].note.trim() || null);
+  const fallbackTaxNote = settings.tax[asInvoiceCurrency(inv.currency)].note;
+  const taxNote = inv.taxNote?.trim() || (taxPercent > 0 ? null : fallbackTaxNote.trim() || null);
 
-  const gaps = invoiceIssueGaps({
+  // Via the shared helper, so the readiness the editor SHOWS and the refusal the server issues
+  // are the same computation rather than two that agree today.
+  const gaps = invoiceIssueGapsFor({
     issuer: settings.issuer,
-    customerName: inv.customerName,
-    customerAddress: inv.customerAddress,
-    servicePeriodStart: inv.servicePeriodStart,
-    taxPercent,
-    taxNote,
+    invoice: {
+      customerName: inv.customerName,
+      customerAddress: inv.customerAddress,
+      servicePeriodStart: inv.servicePeriodStart,
+      taxPercent,
+      taxNote: inv.taxNote,
+    },
+    fallbackTaxNote,
   });
   if (gaps.length) throw new InvoiceNotIssuable(issueBlockedMessage(gaps));
 

@@ -79,15 +79,48 @@ export async function prewarmTodayFx(): Promise<{ rate: string; date: string; st
   return { rate: r.rate.toString(), date: r.date.toISOString().slice(0, 10), stale: r.stale };
 }
 
+/**
+ * ── A MISSING RATE IS NOT CONVERTIBLE, AND MUST NOT BE A CRASH ─────────────────────────
+ *
+ * `fxRateUsed` is `0` on any row stored without one - which is the normal state for a
+ * rupee-only payable, and what the demo dataset produced for all ten of its payables.
+ *
+ * Dividing by it yields `Infinity`, and `BigInt(Infinity)` THROWS. That took the whole Cash
+ * Health page down with an unhandled exception rather than showing a dash: one unconvertible
+ * row, and the founder's cash screen is an error boundary. Found 24/10/2026 by opening every
+ * screen in the app; nothing else could see it, because the throw is inside a pure function
+ * that every type-check and unit test passes.
+ *
+ * Zero is the honest answer for "how much is this in euros, with no rate to use" - it keeps the
+ * figure out of the euro total instead of inventing one, and the rupee side is untouched. The
+ * alternative, throwing, is a worse answer to the same question.
+ *
+ * A NEGATIVE rate is treated the same way: it is not a rate, it is corrupt data, and it must
+ * not flip the sign of somebody's money.
+ */
+function usableRate(inrPerEur: Prisma.Decimal): Prisma.Decimal | null {
+  const r = new Prisma.Decimal(inrPerEur?.toString() ?? "0");
+  return r.isFinite() && r.gt(0) ? r : null;
+}
+
 /** Convert paise → cents at a given INR-per-EUR rate (both integer minor units). */
 export function inrMinorToEurMinor(inrMinor: bigint, inrPerEur: Prisma.Decimal): bigint {
-  const eur = new Prisma.Decimal(inrMinor.toString()).div(inrPerEur);
+  const rate = usableRate(inrPerEur);
+  if (!rate) return BigInt(0);
+  const eur = new Prisma.Decimal(inrMinor.toString()).div(rate);
   return BigInt(eur.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP).toFixed(0));
 }
 
-/** Convert cents → paise at a given INR-per-EUR rate. */
+/**
+ * Convert cents → paise at a given INR-per-EUR rate.
+ *
+ * Multiplying by zero does not throw, so this never crashed - but it would have silently valued
+ * a real euro bill at ₹0, which is the quieter half of the same bug. Guarded identically.
+ */
 export function eurMinorToInrMinor(eurMinor: bigint, inrPerEur: Prisma.Decimal): bigint {
-  const inr = new Prisma.Decimal(eurMinor.toString()).mul(inrPerEur);
+  const rate = usableRate(inrPerEur);
+  if (!rate) return BigInt(0);
+  const inr = new Prisma.Decimal(eurMinor.toString()).mul(rate);
   return BigInt(inr.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP).toFixed(0));
 }
 

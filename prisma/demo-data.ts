@@ -757,18 +757,27 @@ async function seedFinanceOps(ids: Ids) {
   });
 
   // Payables → break-even + "due this month"
-  await prisma.payable.createMany({
+    /*
+    `fxRateUsed` is stamped on every payable, exactly as it is on income above.
+
+    It was omitted, so all ten rows stored the column default of 0 - and dividing by that rate
+    gave Infinity, which BigInt() refuses, which took the whole Cash Health page down with an
+    unhandled exception. The pure conversion is now guarded (lib/fx.ts), so a missing rate is a
+    dash rather than a crash; this keeps the demo data realistic as well, because a payable with
+    no rate is not what the real screen shows.
+  */
+await prisma.payable.createMany({
     data: [
-      { name: "Karthick salary", category: "TEAM_SALARIES", amountInrMinor: inr(50000), frequency: "MONTHLY", nextDueDate: monthStartNext(1), isCogs: true, status: "ACTIVE" },
-      { name: "Asma retainer", category: "TEAM_SALARIES", amountInrMinor: inr(22000), frequency: "MONTHLY", nextDueDate: monthStartNext(1), isCogs: false, status: "ACTIVE" },
-      { name: "Nilofer retainer", category: "TEAM_SALARIES", amountInrMinor: inr(18000), frequency: "MONTHLY", nextDueDate: monthStartNext(1), isCogs: false, status: "ACTIVE" },
-      { name: "Meta Ads budget", category: "MARKETING", amountInrMinor: inr(45000), frequency: "MONTHLY", nextDueDate: daysAhead(6), isCogs: false, status: "ACTIVE" },
-      { name: "Office rent + utilities", category: "OPERATIONS", amountInrMinor: inr(28000), frequency: "MONTHLY", nextDueDate: daysAhead(1), isCogs: false, status: "ACTIVE" },
-      { name: "WATI subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(8000), frequency: "MONTHLY", nextDueDate: daysAhead(3), isCogs: false, status: "ACTIVE" },
-      { name: "Skool subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(4000), frequency: "MONTHLY", nextDueDate: daysAhead(11), isCogs: false, status: "ACTIVE" },
-      { name: "Professional indemnity insurance", category: "OPERATIONS", amountInrMinor: inr(21000), frequency: "QUARTERLY", nextDueDate: daysAhead(40), isCogs: false, status: "ACTIVE" },
-      { name: "Zoom annual plan", category: "TOOLS_SOFTWARE", amountInrMinor: inr(24000), frequency: "ANNUAL", nextDueDate: daysAhead(120), isCogs: false, status: "ACTIVE" },
-      { name: "Canva Pro (paused trial)", category: "TOOLS_SOFTWARE", amountInrMinor: inr(6000), frequency: "MONTHLY", nextDueDate: null, isCogs: false, status: "PAUSED" },
+      { name: "Karthick salary", category: "TEAM_SALARIES", amountInrMinor: inr(50000), frequency: "MONTHLY", nextDueDate: monthStartNext(1), isCogs: true, status: "ACTIVE", fxRateUsed: FX },
+      { name: "Asma retainer", category: "TEAM_SALARIES", amountInrMinor: inr(22000), frequency: "MONTHLY", nextDueDate: monthStartNext(1), isCogs: false, status: "ACTIVE", fxRateUsed: FX },
+      { name: "Nilofer retainer", category: "TEAM_SALARIES", amountInrMinor: inr(18000), frequency: "MONTHLY", nextDueDate: monthStartNext(1), isCogs: false, status: "ACTIVE", fxRateUsed: FX },
+      { name: "Meta Ads budget", category: "MARKETING", amountInrMinor: inr(45000), frequency: "MONTHLY", nextDueDate: daysAhead(6), isCogs: false, status: "ACTIVE", fxRateUsed: FX },
+      { name: "Office rent + utilities", category: "OPERATIONS", amountInrMinor: inr(28000), frequency: "MONTHLY", nextDueDate: daysAhead(1), isCogs: false, status: "ACTIVE", fxRateUsed: FX },
+      { name: "WATI subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(8000), frequency: "MONTHLY", nextDueDate: daysAhead(3), isCogs: false, status: "ACTIVE", fxRateUsed: FX },
+      { name: "Skool subscription", category: "TOOLS_SOFTWARE", amountInrMinor: inr(4000), frequency: "MONTHLY", nextDueDate: daysAhead(11), isCogs: false, status: "ACTIVE", fxRateUsed: FX },
+      { name: "Professional indemnity insurance", category: "OPERATIONS", amountInrMinor: inr(21000), frequency: "QUARTERLY", nextDueDate: daysAhead(40), isCogs: false, status: "ACTIVE", fxRateUsed: FX },
+      { name: "Zoom annual plan", category: "TOOLS_SOFTWARE", amountInrMinor: inr(24000), frequency: "ANNUAL", nextDueDate: daysAhead(120), isCogs: false, status: "ACTIVE", fxRateUsed: FX },
+      { name: "Canva Pro (paused trial)", category: "TOOLS_SOFTWARE", amountInrMinor: inr(6000), frequency: "MONTHLY", nextDueDate: null, isCogs: false, status: "PAUSED", fxRateUsed: FX },
     ],
   });
 

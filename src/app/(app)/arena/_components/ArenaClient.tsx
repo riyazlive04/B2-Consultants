@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Flame, Info, ListOrdered, Medal, ScrollText, Swords } from "lucide-react";
 import type { RankedPlayer } from "@/server/gamification";
@@ -53,10 +54,13 @@ export function ArenaClient({
   meUserId,
   weekStart,
   ruleset,
+  canConfigure = false,
 }: {
   players: Player[];
   feed: Array<XpEvent & { name: string }>;
   meUserId: string;
+  /** Quests are founder-configured, so only a founder is offered the way in. */
+  canConfigure?: boolean;
   /** Monday of the current scoring week, resolved server-side - the client clock may be wrong. */
   weekStart: string;
   /** the rules in force today - the panel below is generated from them, never hardcoded */
@@ -219,7 +223,19 @@ export function ArenaClient({
           me.quests.length === 0 ? (
             <EmptyState
               title="No quests are configured"
-              body="Add weekly quests at Console → Gamification. They are the short-term goals the Arena scores on top of the daily XP."
+              body="Weekly quests are the short-term goals the Arena scores on top of the daily XP. Until some exist, this tab stays empty however much work is logged."
+              action={
+                canConfigure ? (
+                  <Link
+                    href="/console"
+                    className="inline-flex h-10 items-center rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent hover:bg-primary-strong"
+                  >
+                    Add quests in Console → Gamification
+                  </Link>
+                ) : (
+                  <p className="text-caption text-muted">Ask the founder to add them in the Console.</p>
+                )
+              }
             />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

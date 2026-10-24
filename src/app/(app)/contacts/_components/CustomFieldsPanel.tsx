@@ -99,7 +99,18 @@ export default function CustomFieldsPanel({ defs, canManage }: { defs: CustomFie
       </div>
 
       {defs.length === 0 ? (
-        <EmptyState icon={<SlidersHorizontal size={20} />} title="No custom fields" body={canManage ? "Add fields like Visa type, Target country, Budget." : "An admin can add custom fields."} />
+        <EmptyState
+          icon={<SlidersHorizontal size={20} />}
+          title="No custom fields"
+          body={canManage ? "Add fields like Visa type, Target country, Budget." : "An admin can add custom fields."}
+          action={
+            canManage ? (
+              <Btn variant="primary" icon={<Plus size={15} />} onClick={() => setOpen(true)}>
+                Add the first field
+              </Btn>
+            ) : undefined
+          }
+        />
       ) : (
         <DataTable
           rows={defs}

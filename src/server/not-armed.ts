@@ -13,6 +13,7 @@ import {
   getBookingRulesConfig,
 } from "./founder-config";
 import { readDeliveryStatuses } from "./intake-route";
+import { ENGINES, type EngineKey } from "@/lib/engines";
 
 /**
  * "What is built, switched off, and silently doing nothing?"
@@ -39,7 +40,7 @@ import { readDeliveryStatuses } from "./intake-route";
  */
 
 export type NotArmedItem = {
-  key: string;
+  key: EngineKey;
   name: string;
   /** True = working. The panel sorts these last and greys them. */
   armed: boolean;
@@ -111,10 +112,9 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
   const items: NotArmedItem[] = [
     {
       key: "cron",
-      name: "Scheduled jobs (cron)",
+      name: ENGINES.cron.name,
       armed: cronAlive,
-      consequence:
-        "Nothing that runs on a clock happens: no slot top-up, no outreach ladder, no dunning, no digests, no retention sweep. Most other switches on this list do nothing without it.",
+      consequence: ENGINES.cron.consequence,
       where: beatAt
         ? `Last tick ${beatAt.toISOString()} - the scheduler has stopped. Check the cron container / task.`
         : "The scheduler has never ticked. Check the cron sidecar and CRON_SECRET.",
@@ -122,21 +122,19 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
     },
     {
       key: "availability",
-      name: "Discovery-call availability",
+      name: ENGINES.availability.name,
       // Armed when at least ONE calendar can actually produce a slot. Asking whether *every*
       // calendar is on would light this warning for a deliberately paused one; asking whether
       // any exists at all would call a switched-off list armed.
       armed: slots.some((c) => c.enabled && c.weekdays.length > 0),
-      consequence:
-        "No slots are generated, so /book and every funnel booking page show prospects an empty calendar and no discovery call can be booked at all. The Bookings page and both specialist desks are empty as a direct result.",
+      consequence: ENGINES.availability.consequence,
       where: "Console → Sales ops → Availability",
     },
     {
       key: "email",
-      name: "Email (Resend)",
+      name: ENGINES.email.name,
       armed: email.enabled,
-      consequence:
-        "Password resets, invoices, the dunning ladder, digests and the SOP's opt-in alert all silently do nothing - the send is attempted and discarded.",
+      consequence: ENGINES.email.consequence,
       where: email.envEnabled
         ? email.configured
           ? "Sending is paused - Conversations → Settings"
@@ -146,10 +144,9 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
     },
     {
       key: "whatsapp",
-      name: "WhatsApp (WATI)",
+      name: ENGINES.whatsapp.name,
       armed: wati.enabled,
-      consequence:
-        "No booking confirmations, reminders, payment nudges or SOP messages reach anyone. The outreach ladder still advances - it just talks to nobody.",
+      consequence: ENGINES.whatsapp.consequence,
       where: wati.envEnabled
         ? "Sending is paused or unconfigured - /whatsapp"
         : 'Set WATI_ENABLED="true" with the endpoint and token',
@@ -162,10 +159,9 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
        * to anyone waiting for an unanswered slot to be released.
        */
       key: "confirmLoop",
-      name: "Confirm-or-cancel unconfirmed calls",
+      name: ENGINES.confirmLoop.name,
       armed: bookingRules.autoCancelEnabled,
-      consequence:
-        "Nobody is asked to reply YES before their call, and a slot nobody confirmed is never released - it stays booked through the no-show and blocks the prospect who would have taken it.",
+      consequence: ENGINES.confirmLoop.consequence,
       where: "Console → Sales ops → Confirm-or-cancel (also WhatsApp → Settings, or Bookings → Manage availability)",
     },
     {
@@ -176,10 +172,9 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
        * in the app would ever surface.
        */
       key: "studentWelcome",
-      name: "Enrolment welcome",
+      name: ENGINES.studentWelcome.name,
       armed: wati.settings.cadence.studentWelcomeEnabled,
-      consequence:
-        "A student who has signed, paid and been seated in a batch is told nothing at all. They learn their tutor, their start time and that a portal exists only if somebody remembers to message them - and the next automated thing they hear from us is a payment reminder.",
+      consequence: ENGINES.studentWelcome.consequence,
       where: "WhatsApp → Settings → Enrolment welcome (bind b2_student_welcome first)",
     },
     {
@@ -192,34 +187,32 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
        * student who missed a class.
        */
       key: "classReminders",
-      name: "Class reminders",
+      name: ENGINES.classReminders.name,
       armed: wati.settings.cadence.classReminderEnabled && !wati.settings.cadence.classReminderDryRun,
-      consequence:
-        "Nobody is told their class is about to start. Students get the timetable only if they open the portal and look, and a coach gets no nudge before a session they are due to run - so a missed class looks identical to a class nobody scheduled.",
+      consequence: ENGINES.classReminders.consequence,
       where: wati.settings.cadence.classReminderEnabled
         ? "WhatsApp → Settings → Class reminder - switch on “Send for real” (it is rehearsing)"
         : "WhatsApp → Settings → Class reminder (bind b2_class_reminder first)",
     },
     {
       key: "intake",
-      name: "Lead capture webhooks",
+      name: ENGINES.intake.name,
       armed: anyDelivery,
-      consequence:
-        "No inbound lead has ever been recorded as delivered to this app. Either no form is wired to an endpoint, or every delivery is being rejected before it lands.",
+      consequence: ENGINES.intake.consequence,
       where: "Point Pabbly (or the landing page) at /api/intake/lead with INTAKE_WEBHOOK_SECRET",
     },
     {
       key: "speedToLead",
-      name: "Speed-to-lead alert",
+      name: ENGINES.speedToLead.name,
       armed: speedToLead.enabled,
-      consequence: "Nobody is told when a new lead goes uncontacted past the SLA - the 5-minute clock runs with no alarm on it.",
+      consequence: ENGINES.speedToLead.consequence,
       where: "Console → System → Alerts & Chasing",
     },
     {
       key: "dunning",
-      name: "Payment chasing (dunning)",
+      name: ENGINES.dunning.name,
       armed: dunning.enabled,
-      consequence: "Overdue instalments are never chased. The receivable ages silently.",
+      consequence: ENGINES.dunning.consequence,
       where: "Console → System → Alerts & Chasing",
     },
     {
@@ -230,46 +223,44 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
        * client who is thinking about it.
        */
       key: "agreementReminders",
-      name: "Agreement chasing",
+      name: ENGINES.agreementReminders.name,
       armed: agreementWorkflow.reminderDays.length > 0,
-      consequence:
-        "Unsigned agreements are never chased. A contract that goes quiet stays quiet until the link expires, and then it has to be voided and re-issued.",
+      consequence: ENGINES.agreementReminders.consequence,
       where: "Console → Agreements → Chase an unsigned agreement",
     },
     {
       key: "retention",
-      name: "Data retention sweep",
+      name: ENGINES.retention.name,
       armed: maintenance.retention.enabled,
-      consequence: "Archived rows and expired invites are kept forever rather than purged on the 90-day policy.",
+      consequence: ENGINES.retention.consequence,
       where: "Console → System → Maintenance",
     },
     {
       key: "commissionAccrual",
-      name: "Commission accrual posting",
+      name: ENGINES.commissionAccrual.name,
       armed: posting.commissionAccrual.enabled,
-      consequence: "Commission is reported but never posted to the ledger, so the P&L understates what is owed to the team.",
+      consequence: ENGINES.commissionAccrual.consequence,
       where: "Console → System → Maintenance",
     },
     {
       key: "tutorFeeAccrual",
-      name: "Tutor-fee accrual posting",
+      name: ENGINES.tutorFeeAccrual.name,
       armed: posting.tutorFeeAccrual.enabled,
-      consequence: "Tutor fees are calculated but never posted, so German Note's cost of delivery is missing from the ledger.",
+      consequence: ENGINES.tutorFeeAccrual.consequence,
       where: "Console → System → Maintenance",
     },
     {
       key: "invoicePosting",
-      name: "Invoice-issuance posting",
+      name: ENGINES.invoicePosting.name,
       armed: posting.invoiceIssuancePosting.enabled,
-      consequence: "Issuing an invoice records no receivable in the ledger - revenue appears only when cash arrives.",
+      consequence: ENGINES.invoicePosting.consequence,
       where: "Console → System → Maintenance",
     },
     {
       key: "autoCreateOpportunity",
-      name: "New leads onto the Opportunities board",
+      name: ENGINES.autoCreateOpportunity.name,
       armed: pipeline.autoCreateOpportunity,
-      consequence:
-        "Captured leads never appear on the board, so the sales team works from Pipeline and Contacts only and the board stays as empty as it was built.",
+      consequence: ENGINES.autoCreateOpportunity.consequence,
       where: "Console → Sales ops → Operations",
     },
   ];

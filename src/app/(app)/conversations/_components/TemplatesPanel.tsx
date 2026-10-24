@@ -41,7 +41,16 @@ export default function TemplatesPanel({ templates }: { templates: Template[] })
       <div className="flex justify-end"><Btn icon={<Plus size={16} />} onClick={openNew}>New template</Btn></div>
 
       {templates.length === 0 ? (
-        <EmptyState icon={<FileText size={20} />} title="No templates" body="Save reusable email & SMS templates with {{name}} tokens." />
+        <EmptyState
+          icon={<FileText size={20} />}
+          title="No templates"
+          body="Save reusable email & SMS templates with {{name}} tokens."
+          action={
+            <Btn variant="primary" icon={<Plus size={15} />} onClick={openNew}>
+              Write the first template
+            </Btn>
+          }
+        />
       ) : (
         <TableShell minWidth={640} head={<><Th>Name</Th><Th>Channel</Th><Th>Preview</Th><Th align="right">Actions</Th></>}>
           {templates.map((t) => (

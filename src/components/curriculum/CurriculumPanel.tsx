@@ -51,7 +51,14 @@ const TYPE_OPTIONS = [
 
 const DAY_OPTIONS = DAY_NAMES.map((d, i) => ({ value: String(i), label: d }));
 
-function TemplateFields({ t }: { t?: CurriculumTemplateView }) {
+function TemplateFields({
+  t,
+  levelOptions,
+}: {
+  t?: CurriculumTemplateView;
+  /** Active programmes for this line, from the catalogue. */
+  levelOptions: { value: string; label: string }[];
+}) {
   return (
     <div className="space-y-4">
       <Field label="Curriculum name" hint="How the founders refer to it - this is what you pick when opening a batch.">
@@ -65,8 +72,33 @@ function TemplateFields({ t }: { t?: CurriculumTemplateView }) {
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Programme code (optional)" hint="The level this is written for, e.g. GUIDED.">
-          <TextInput kind="text" name="levelCode" maxLength={40} placeholder="GUIDED" defaultValue={t?.levelCode ?? ""} />
+        {/*
+          PICKED, NOT TYPED.
+
+          This was a free-text box with "GUIDED" as its placeholder, and on live two of three
+          plans ended up filed under a programme that does not exist - `Guided` (wrong case) and
+          `Gudied30` (a typo). Neither could be matched to a programme by any screen that looks one
+          up by code, and nothing in the app could tell anybody.
+
+          A code already stored and no longer in the catalogue is KEPT as an option, so opening an
+          old plan to edit something else cannot silently clear it - that is a decision for
+          whoever is looking at it, not a side effect of saving.
+        */}
+        <Field
+          label="Programme (optional)"
+          hint="Which programme this plan teaches. Add a new one under Programs if it is missing."
+        >
+          <Select
+            name="levelCode"
+            options={[
+              { value: "", label: "- not decided yet -" },
+              ...levelOptions,
+              ...(t?.levelCode && !levelOptions.some((o) => o.value === t.levelCode)
+                ? [{ value: t.levelCode, label: `${t.levelCode} (not in the catalogue)` }]
+                : []),
+            ]}
+            defaultValue={t?.levelCode ?? ""}
+          />
         </Field>
         <Field
           label="Sprint length (days)"
@@ -200,7 +232,15 @@ function TemplateSheet({ t }: { t: CurriculumTemplateView }) {
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState title="No sessions yet" body="Add the first week to start the timetable." />
+        <EmptyState
+          title="No sessions yet"
+          body="Add the first week to start the timetable."
+          action={
+            <Btn variant="primary" icon={<Plus size={15} />} onClick={() => { setAddingItem(true); setError(null); }}>
+              Add the first week
+            </Btn>
+          }
+        />
       ) : (
         <TableShell
           head={
@@ -363,7 +403,20 @@ function TemplateSheet({ t }: { t: CurriculumTemplateView }) {
   );
 }
 
-export function CurriculumPanel({ templates }: { templates: CurriculumTemplateView[] }) {
+export function CurriculumPanel({
+  templates,
+  levelOptions = [],
+}: {
+  templates: CurriculumTemplateView[];
+  /**
+   * The active programmes a plan may be written for (P6).
+   *
+   * Defaults to empty so a caller that has not been updated still renders - the picker then
+   * offers only "not decided yet" plus whatever the plan already holds, which is honest rather
+   * than broken.
+   */
+  levelOptions?: { value: string; label: string }[];
+}) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<CurriculumTemplateView | null>(null);
@@ -375,26 +428,31 @@ export function CurriculumPanel({ templates }: { templates: CurriculumTemplateVi
   if (templates.length === 0) {
     return (
       <Card title="Curriculum">
+        {/* Both controls were already here - they sat in a row BELOW the box, which read as
+            page furniture rather than as the box's own next step. `action` is the slot
+            `EmptyState` provides for exactly this. */}
         <EmptyState
           title="No curriculum yet"
           body="A curriculum is the week-by-week timetable a batch is built from - the sheet with Week Nr, Topic, Duration and Day. Start from the Guided programme your agreement already describes, or write one from scratch."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Btn
+                variant="primary"
+                onClick={async () => {
+                  const res = await safeAction(() => seedGuidedCurriculum());
+                  if (!res.ok) return toast(res.error, "error");
+                  toast("Guided curriculum created");
+                  refresh();
+                }}
+              >
+                <Sparkles size={15} /> Start from the Guided programme
+              </Btn>
+              <Btn variant="soft" onClick={() => { setCreating(true); setError(null); }}>
+                <Plus size={15} /> Blank curriculum
+              </Btn>
+            </div>
+          }
         />
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Btn
-            variant="primary"
-            onClick={async () => {
-              const res = await safeAction(() => seedGuidedCurriculum());
-              if (!res.ok) return toast(res.error, "error");
-              toast("Guided curriculum created");
-              refresh();
-            }}
-          >
-            <Sparkles size={15} /> Start from the Guided programme
-          </Btn>
-          <Btn variant="soft" onClick={() => { setCreating(true); setError(null); }}>
-            <Plus size={15} /> Blank curriculum
-          </Btn>
-        </div>
         {creating && (
           <Modal open title="New curriculum" onClose={() => setCreating(false)}>
             <form
@@ -407,7 +465,7 @@ export function CurriculumPanel({ templates }: { templates: CurriculumTemplateVi
               }}
               className="space-y-4"
             >
-              <TemplateFields />
+              <TemplateFields levelOptions={levelOptions} />
               <FormError message={error} />
               <SubmitButton>Create curriculum</SubmitButton>
             </form>
@@ -510,7 +568,7 @@ export function CurriculumPanel({ templates }: { templates: CurriculumTemplateVi
             }}
             className="space-y-4"
           >
-            <TemplateFields t={editing ?? undefined} />
+            <TemplateFields t={editing ?? undefined} levelOptions={levelOptions} />
             <FormError message={error} />
             <SubmitButton>{editing ? "Save curriculum" : "Create curriculum"}</SubmitButton>
           </form>

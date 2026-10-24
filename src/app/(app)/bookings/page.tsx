@@ -11,7 +11,8 @@ import {
   Target,
 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { PageHeader } from "@/components/ui/kit";
+import { EngineOffNotice, PageHeader } from "@/components/ui/kit";
+import { enginesOff } from "@/server/engine-status";
 import { Tabs } from "@/components/ui/Tabs";
 import { bantSignal, resolveBant } from "@/lib/bant-view";
 import { slotHold, type SlotHold } from "@/lib/booking-hold";
@@ -110,6 +111,9 @@ function bantLabel(bant: { avg: number; origin: string } | null): string {
 
 export default async function BookingsPage({ searchParams }: { searchParams: { week?: string } }) {
   const session = await requireSection("bookings");
+  /* `availability` is NOT asked for here: the block below already explains an empty calendar in
+     more detail than the shared notice could, naming which of three causes applies. */
+  const enginesDown = await enginesOff(["confirmLoop"]);
   const canConfigure = session.role === "ADMIN";
 
   // Week selection - ?week=YYYY-MM-DD (any day inside the wanted week), default today
@@ -270,6 +274,10 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
           </p>
         </div>
       )}
+
+      {/* Built, and switched off - said on the screen it affects rather than only on the
+          Console, because an engine nobody armed is indistinguishable from a broken one. */}
+      <EngineOffNotice engines={enginesDown} canOpenConsole={session.role === "ADMIN"} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard

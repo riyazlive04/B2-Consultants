@@ -150,6 +150,13 @@ export default function SiteEditor({ site, canManage }: { site: SiteDetail; canM
               icon={<FileText size={20} />}
               title="No pages yet"
               body="Add the first page - the home page usually lives at / - then open it to lay out its sections."
+              action={
+                canManage ? (
+                  <Btn variant="primary" icon={<Plus size={15} />} onClick={() => setAdding(true)}>
+                    Add the first page
+                  </Btn>
+                ) : undefined
+              }
             />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">

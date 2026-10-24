@@ -3,7 +3,8 @@ import { requireSection } from "@/lib/rbac";
 import { getAttendanceBoard } from "@/server/attendance-board";
 import { AttendanceDesk } from "./_components/AttendanceDesk";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { PageHeader } from "@/components/ui/kit";
+import { EngineOffNotice, PageHeader } from "@/components/ui/kit";
+import { enginesOff } from "@/server/engine-status";
 import { formatDate } from "@/lib/format";
 
 export const metadata = { title: "Attendance" };
@@ -24,6 +25,8 @@ export const dynamic = "force-dynamic";
  */
 export default async function AttendancePage() {
   const session = await requireSection("attendance");
+  // A missed class looks identical to a class nobody scheduled when no reminder goes out.
+  const enginesDown = await enginesOff(["classReminders"]);
   const board = await getAttendanceBoard(session);
 
   const openNow = board.liveNow.length;
@@ -42,6 +45,10 @@ export default async function AttendancePage() {
             : "Open the register in class and let the room mark itself, then correct what is left."
         }
       />
+
+      {/* Built, and switched off - said on the screen it affects rather than only on the
+          Console, because an engine nobody armed is indistinguishable from a broken one. */}
+      <EngineOffNotice engines={enginesDown} canOpenConsole={session.role === "ADMIN"} />
 
       <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-4">
         <MetricCard

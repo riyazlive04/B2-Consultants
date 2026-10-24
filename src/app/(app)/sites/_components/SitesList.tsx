@@ -42,6 +42,13 @@ export default function SitesList({
           icon={<Globe size={20} />}
           title="No website yet"
           body="A website holds your public pages, the shared header and footer, and the brand theme they all use."
+          /* The form is a card below this box; this is the nudge into it. It names the field
+             rather than pretending to be the control, because the name has to be typed. */
+          action={
+            canManage ? (
+              <p className="text-caption text-muted">Name it in the New website box below to start.</p>
+            ) : undefined
+          }
         />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

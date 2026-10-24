@@ -10,7 +10,8 @@ import { hasCapability, requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { getActiveLevels } from "@/server/levels";
 import { levelOptions } from "@/lib/levels";
-import { Card, CardTitle, PageHeader, Pill } from "@/components/ui/kit";
+import { Card, CardTitle, EngineOffNotice, PageHeader, Pill } from "@/components/ui/kit";
+import { enginesOff } from "@/server/engine-status";
 import { LEAD_SOURCE_LABELS } from "@/lib/labels";
 import { getPipelineOverview, getKanbanLeads, getPipelineAging, KANBAN_STAGES } from "@/server/pipeline-metrics";
 import { getPipelineConfig, getCallDistribution } from "@/server/founder-config";
@@ -44,6 +45,8 @@ export default async function PipelinePage({
   searchParams?: { period?: string; on?: string; from?: string; to?: string; range?: string };
 }) {
   const session = await requireSection("pipeline");
+  // Why a lead sits uncontacted with no alarm, and why Deals can look emptier than Pipeline.
+  const enginesDown = await enginesOff(["speedToLead", "autoCreateOpportunity"]);
   // The window every "this month" figure below covers. Previously fixed to the current calendar
   // month, advertised by a `<Pill>This month</Pill>` that was text, not a control.
   const periodSpec = parsePeriod(searchParams ?? {});
@@ -163,11 +166,12 @@ export default async function PipelinePage({
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Opportunities and Outreach came OFF the sidebar (the Sales group was five entries
-                for what is one job). They are reachable from here - the screen they belong to -
-                so nothing became unreachable, and `requireSection` still gates each one. */}
+            {/* The deal board is on the rail as "Deals" again (step E1), so this is a shortcut
+                between two related screens rather than the only way in. It keeps the rail's
+                wording so the same screen is not called two things. Outreach is still offRail
+                and reached from here, which is why `requireSection` gates each link. */}
             <SectionLink href="/opportunities" sectionKey="opportunities">
-              <Kanban size={14} /> Board view
+              <Kanban size={14} /> Deals board
             </SectionLink>
             <SectionLink href="/outreach" sectionKey="outreach">
               <MessageCircle size={14} /> Outreach queue
@@ -176,6 +180,10 @@ export default async function PipelinePage({
           </div>
         }
       />
+
+      {/* Built, and switched off - said on the screen it affects rather than only on the
+          Console, because an engine nobody armed is indistinguishable from a broken one. */}
+      <EngineOffNotice engines={enginesDown} canOpenConsole={session.role === "ADMIN"} />
 
       {/* The target bar follows the CAPABILITY, not the role - that's what makes
           "Configure telecaller board" worth granting to a non-Admin. */}

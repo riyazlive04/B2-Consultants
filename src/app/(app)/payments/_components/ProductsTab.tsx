@@ -158,7 +158,12 @@ export default function ProductsTab({
         <EmptyState
           icon={<Package size={20} />}
           title="Nothing priced yet"
-          body="Put a price on a programme and it becomes invoiceable in one click."
+          body="Put a price on a programme and it becomes invoiceable in one click. Until one exists, the invoice form's programme picker is empty."
+          action={
+            <Btn variant="primary" icon={<Plus size={15} />} onClick={() => openFor(null)}>
+              Price the first programme
+            </Btn>
+          }
         />
       ) : (
         <DataTable

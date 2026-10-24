@@ -92,7 +92,21 @@ export default function Inbox({
   }, [activeThread?.lead.id]);
 
   if (threads.length === 0 && !activeThread) {
-    return <EmptyState icon={<Mail size={20} />} title="No conversations yet" body="Send an email or SMS from a contact, or connect a channel in Settings. WhatsApp threads show here too." />;
+    return (
+      <EmptyState
+        icon={<Mail size={20} />}
+        title="No conversations yet"
+        body="Send an email or SMS from a contact, or connect a channel in Settings. WhatsApp threads show here too."
+        action={
+          <Link
+            href="/contacts"
+            className="inline-flex h-10 items-center rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent hover:bg-primary-strong"
+          >
+            Open Contacts to write to somebody
+          </Link>
+        }
+      />
+    );
   }
 
   return (

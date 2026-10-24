@@ -5,7 +5,7 @@ import { getL1Desk } from "@/server/l1-desk-metrics";
 import { getL2Desk } from "@/server/l2-desk-metrics";
 import { getOwnerDesk } from "@/server/owner-desk";
 import { getOwnCommission } from "@/server/commission-metrics";
-import { PageHeader, EmptyState } from "@/components/ui/kit";
+import { PageHeader, EmptyState, ViewAll } from "@/components/ui/kit";
 import { DeskClient } from "./_components/DeskClient";
 import { L1Desk } from "./_components/L1Desk";
 import { L2Desk } from "./_components/L2Desk";
@@ -17,6 +17,36 @@ import { OwnCommission } from "./_components/OwnCommission";
 export const metadata = { title: "My Desk" };
 
 export const dynamic = "force-dynamic";
+
+/**
+ * THE DESK WITH NOBODY BEHIND IT.
+ *
+ * A person is two records: a `User` (the login, created from Users → Users & access) and a
+ * `TeamProfile` (the org record, created on a different tab). This desk reads the second, and
+ * which desk you get is decided by `TeamProfile.logVariant` rather than by your role - so a
+ * telecaller invited but never added to the team list arrives here and the screen has nothing of
+ * theirs to show.
+ *
+ * It matters more now than it did: `/` redirects a USER straight here, so for most of the people
+ * who use this app hardest, this is the first screen they would ever see if setup was incomplete.
+ * It was two identical copies of this block with no way out of either.
+ *
+ * `ViewAll` is the right link precisely because it disappears for the person who cannot act:
+ * a telecaller has no `people` section, so they read the explanation and nothing else, while an
+ * admin checking why somebody's desk is empty gets one click to the tab that fixes it.
+ */
+function NoProfile() {
+  return (
+    <div className="space-y-6">
+      <PageHeader icon={<Phone />} title="My Desk" subtitle="Your calls, conversions and today's list." />
+      <EmptyState
+        title="No team profile linked to your login"
+        body="This desk reads your calls from your team profile. Ask Ameen to link your login in Users → Team, and your numbers will appear here."
+        action={<ViewAll href="/people?tab=2">Open Team &amp; org chart</ViewAll>}
+      />
+    </div>
+  );
+}
 
 /**
  * "My Desk" - the specialist's own working screen.
@@ -106,31 +136,11 @@ export default async function MyDeskPage() {
     );
   }
 
-  if (!who) {
-    return (
-      <div className="space-y-6">
-        <PageHeader icon={<Phone />} title="My Desk" subtitle="Your calls, conversions and today's list." />
-        <EmptyState
-          title="No team profile linked to your login"
-          body="This desk reads your calls from your team profile. Ask Ameen to link your login in Users → Team, and your numbers will appear here."
-        />
-      </div>
-    );
-  }
+  if (!who) return <NoProfile />;
 
   // The only branch that renders the generic desk, so the only one that pays to build it.
   const desk = await getTelecallerDesk(session.user.id);
-  if (!desk) {
-    return (
-      <div className="space-y-6">
-        <PageHeader icon={<Phone />} title="My Desk" subtitle="Your calls, conversions and today's list." />
-        <EmptyState
-          title="No team profile linked to your login"
-          body="This desk reads your calls from your team profile. Ask Ameen to link your login in Users → Team, and your numbers will appear here."
-        />
-      </div>
-    );
-  }
+  if (!desk) return <NoProfile />;
 
   return (
     <div className="space-y-6">

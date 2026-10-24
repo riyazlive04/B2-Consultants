@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { MessageCircle, CheckCircle2, XCircle, Send, Reply } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Tabs } from "@/components/ui/Tabs";
-import { PageHeader } from "@/components/ui/kit";
+import { EngineOffNotice, PageHeader } from "@/components/ui/kit";
+import { enginesOff } from "@/server/engine-status";
 import { requireSection } from "@/lib/rbac";
 import { getWhatsAppAdminData } from "@/server/whatsapp-metrics";
 import { getBookingRulesConfig } from "@/server/founder-config";
@@ -37,6 +39,9 @@ function Chip({ ok, label }: { ok: boolean; label: string }) {
 
 export default async function WhatsAppPage() {
   const session = await requireSection("whatsapp");
+  /* The three cadences this screen configures, plus the channel itself. An enabled-but-rehearsing
+     class reminder counts as off: it is working perfectly and still nobody is being reminded. */
+  const enginesDown = await enginesOff(["whatsapp", "studentWelcome", "classReminders", "confirmLoop"]);
   const data = await getWhatsAppAdminData();
   // The confirm-or-cancel loop is edited on the Settings tab but stored with the booking rules.
   const bookingRules = await getBookingRulesConfig();
@@ -79,8 +84,28 @@ export default async function WhatsAppPage() {
         icon={<MessageCircle size={20} />}
         title="WhatsApp"
         subtitle="Outbound reminders via WATI - funnel, bookings, payments & student nudges."
-        actions={<RunRemindersButton />}
+        actions={
+          <>
+            {/*
+              Stage messages moved here when Automation was removed (23/10/2026). They are a live
+              feature - the outreach cron sends them on every run - so the page needs a real door
+              rather than existing as a route only somebody with the URL could find, which is the
+              dead end this whole piece of work has been removing.
+            */}
+            <Link
+              href="/whatsapp/stage-messages"
+              className="whitespace-nowrap rounded-field border border-line px-3 py-1.5 text-sm font-medium text-ink-2 hover:bg-surface-2"
+            >
+              Stage messages
+            </Link>
+            <RunRemindersButton />
+          </>
+        }
       />
+
+      {/* Built, and switched off - said on the screen it affects rather than only on the
+          Console, because an engine nobody armed is indistinguishable from a broken one. */}
+      <EngineOffNotice engines={enginesDown} canOpenConsole={session.role === "ADMIN"} />
 
       {/* Connection status */}
       <div className="rounded-card border border-line bg-surface p-5 shadow-card">

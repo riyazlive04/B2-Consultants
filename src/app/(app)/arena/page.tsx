@@ -37,6 +37,7 @@ export default async function ArenaPage() {
         players={players}
         feed={game.feed}
         meUserId={session.user.id}
+        canConfigure={session.role === "ADMIN"}
         weekStart={game.weekStart}
         ruleset={game.ruleset}
       />

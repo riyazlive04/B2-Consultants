@@ -1,7 +1,8 @@
 import { requireSection } from "@/lib/rbac";
 import { hasCapability } from "@/lib/capabilities";
 import { getTodayInrPerEur } from "@/lib/fx";
-import { Grid } from "@/components/ui/kit";
+import { EngineOffNotice, Grid } from "@/components/ui/kit";
+import { enginesOff } from "@/server/engine-status";
 import { ListHeader } from "@/components/ui/ListHeader";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Tabs } from "@/components/ui/Tabs";
@@ -29,6 +30,8 @@ export default async function PaymentsPage({
   searchParams?: { period?: string; on?: string; from?: string; to?: string; range?: string };
 }) {
   const session = await requireSection("payments");
+  // With chasing off, the receivable ages in silence - which this screen cannot show by itself.
+  const enginesDown = await enginesOff(["dunning"]);
   // Defaults to "all" rather than "month": an invoice board whose default hid every invoice
   // older than the 1st would be a surprising regression for anyone chasing an old debt.
   const periodSpec = parsePeriod(searchParams ?? {});
@@ -58,6 +61,10 @@ export default async function PaymentsPage({
         subtitle="Invoices, estimates, products & subscriptions"
         actions={<PeriodBar spec={periodSpec} />}
       />
+
+      {/* Built, and switched off - said on the screen it affects rather than only on the
+          Console, because an engine nobody armed is indistinguishable from a broken one. */}
+      <EngineOffNotice engines={enginesDown} canOpenConsole={session.role === "ADMIN"} />
 
       <Grid cols={4}>
         <MetricCard

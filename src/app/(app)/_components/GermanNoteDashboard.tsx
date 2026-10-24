@@ -207,7 +207,15 @@ export async function GermanNoteDashboard() {
         {recentWorkshops.length === 0 ? (
           <EmptyState
             title="No workshops yet"
-            body="Create the first intake under Manage - conversions, seats and the P&L all follow from it."
+            body="Conversions, seats and the P&L all follow from an intake, so nothing on this card can fill until one exists."
+            action={
+              <Link
+                href="/german-note/manage"
+                className="inline-flex h-10 items-center rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent hover:bg-primary-strong"
+              >
+                Create the first intake
+              </Link>
+            }
           />
         ) : (
           <Card>

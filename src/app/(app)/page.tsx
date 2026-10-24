@@ -60,19 +60,88 @@ function MoneySection({ line }: { line: BusinessLineView }) {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: { range?: string; onboarding?: string };
+  searchParams: { range?: string; onboarding?: string; denied?: string; kind?: string };
 }) {
   const session = await requireSession();
-  // Post-invite first-touch walkthrough flag (OnboardingWalkthrough) - forward it
-  // through the STUDENT/TUTOR redirects below since they never render this page.
-  const onboardingQuery = searchParams.onboarding === "1" ? "?onboarding=1" : "";
+  /**
+   * WHAT HAS TO SURVIVE A ROLE REDIRECT.
+   *
+   * Two separate things arrive on this page as query params and are meaningless once dropped:
+   *
+   *   `onboarding=1`  the post-invite walkthrough flag (OnboardingWalkthrough)
+   *   `denied=<key>`  why `requireSection` bounced somebody here, read by AccessDeniedToast
+   *
+   * `denied` is the one that nearly broke. `rbac.ts` sends every refused page load to
+   * `/?denied=<key>`, and four of the six roles never render this page - so with only
+   * `onboarding` forwarded, a telecaller denied a section would have been redirected on to their
+   * desk with the reason stripped, landing silently somewhere they did not ask for. That is the
+   * exact failure the `?denied=` convention exists to prevent: the comment in rbac.ts calls a
+   * silent bounce "the person staring at the dashboard wondering whether they mis-clicked".
+   *
+   * It works because AccessDeniedToast sits in the (app) LAYOUT and reads the param from
+   * whatever route it is on, so carrying it through to /my-desk shows the same toast.
+   */
+  const forwarded = new URLSearchParams();
+  if (searchParams.onboarding === "1") forwarded.set("onboarding", "1");
+  if (searchParams.denied) forwarded.set("denied", searchParams.denied);
+  if (searchParams.kind) forwarded.set("kind", searchParams.kind);
+  const carriedQuery = forwarded.toString() ? `?${forwarded}` : "";
+
+  /**
+   * THE REDIRECT LOOP GUARD - and it closes a bug that was already here.
+   *
+   * Every role redirect below sends somebody to a SECTION, and every section can be switched off
+   * per role or per person from Console → Sections. When the target is the section that was just
+   * refused, redirecting to it is a loop:
+   *
+   *     /dashboard → requireSection fails → /?denied=dashboard → / → /dashboard → …
+   *
+   * That was reachable before this change: switch `dashboard` off for Students and every student
+   * signing in would have bounced between the two routes until the browser gave up. Adding the
+   * USER → /my-desk redirect would have opened a second one on the busiest role in the app.
+   *
+   * So a role is only sent onward when its destination is not the thing it was denied. Whoever
+   * is denied their own home stays on this page instead, where AccessDeniedToast tells them why -
+   * a thin screen with an explanation, which is the correct answer and the whole point of the
+   * `?denied=` convention.
+   */
+  const denied = searchParams.denied ?? null;
+  const sendTo = (section: string, href: string) => {
+    if (denied !== section) redirect(`${href}${carriedQuery}`);
+  };
+
   // Students land on their own dashboard - the founder home is team-facing. Was /my-journey,
   // which is the scoreboard rather than a landing page; see the `dashboard` section note.
-  if (session.role === "STUDENT") redirect(`/dashboard${onboardingQuery}`);
-  // Tutors only work inside the German Note section.
-  if (session.role === "TUTOR") redirect(`/german-note${onboardingQuery}`);
+  if (session.role === "STUDENT") sendTo("dashboard", "/dashboard");
+  /**
+   * A TUTOR'S HOME IS THE TEACHING DESK, not the German Note section.
+   *
+   * It used to be `/german-note`, which gave a tutor two homes for one job: that section is the
+   * LMS - financials, the community feed, the cohort classrooms - while My Teaching is the desk
+   * that answers "what am I teaching next, who is in the room, take the register". A coach has
+   * always landed on the desk. A tutor does the same day's work and was landing somewhere else,
+   * and neither screen linked to the other.
+   *
+   * German Note stays in their rail, so nothing is taken away - the cohort classrooms are one
+   * click from the desk's Cohorts tab.
+   */
+  if (session.role === "TUTOR") sendTo("coaching", "/coaching");
   // A coach's home is the batches they teach, not the founder's KPI wall.
-  if (session.role === "COACH") redirect(`/coaching${onboardingQuery}`);
+  if (session.role === "COACH") sendTo("coaching", "/coaching");
+  /**
+   * A TELECALLER'S HOME IS THEIR DESK.
+   *
+   * The last role left on this page who should not have been. This is the founder's KPI wall,
+   * and for a USER almost every figure on it is withheld - no runway, no pipeline snapshot, no
+   * pending receivables - so a telecaller signed in to a page of empty space and reached the
+   * screen they actually live in all day via a pill in the shell. Every other non-admin role
+   * already had a redirect; this is the fourth.
+   *
+   * Their desk resolves itself from `TeamProfile.logVariant`, and explains itself (with a way
+   * out) when there is no profile yet - see `NoProfile` in my-desk/page.tsx, which was two
+   * copies of a dead end before this redirect made it the first thing they would see.
+   */
+  if (session.role === "USER") sendTo("my-desk", "/my-desk");
   const isAdmin = session.role === "ADMIN";
   // Head now has Pipeline visibility (sections.ts) - the home page should reflect that
   // instead of falling back to the generic personal WorkTracker (BUILD_CHECKLIST §2).

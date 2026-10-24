@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, PowerOff } from "lucide-react";
 
 /**
  * The app's presentational vocabulary, extracted from the Users & access screen.
@@ -385,6 +385,66 @@ export function EmptyState({
       <p className="font-display text-h3 text-ink">{title}</p>
       {body && <p className="mt-1 max-w-md text-sm text-ink-2">{body}</p>}
       {action && <div className="mt-4">{action}</div>}
+    </div>
+  );
+}
+
+/**
+ * "THIS IS BUILT, AND IT IS SWITCHED OFF." (refactor step E5)
+ *
+ * The notice a feature screen shows when the engine behind it is disarmed. It exists because a
+ * built-but-off engine is indistinguishable from a broken one from the outside: /bookings showed
+ * four zeroes for months because no availability pattern had been saved, and everyone who looked
+ * at it concluded the booking section was broken.
+ *
+ * ── Why a notice and not an empty state ────────────────────────────────────────────────
+ * An `EmptyState` says "there is nothing here", which is true and useless - the screen is empty
+ * BECAUSE of this, and it will stay empty however long you wait. So this sits ABOVE the content
+ * rather than replacing it: the numbers on the screen are real, they are just not going to
+ * change. It is `warn`, never `bad`, because an engine the founders deliberately left off is not
+ * a fault.
+ *
+ * Non-admins see it too, and deliberately. A coach wondering why nobody got a class reminder is
+ * better served by "this is off, ask the founder" than by silence - so the Console link only
+ * appears for somebody who can actually open it, while the explanation appears for everyone.
+ */
+export function EngineOffNotice({
+  engines,
+  canOpenConsole,
+}: {
+  /** Straight from `enginesOff()` - render nothing when it is empty. */
+  engines: readonly { key: string; name: string; consequence: string; where: string; needsDeploy?: boolean }[];
+  canOpenConsole?: boolean;
+}) {
+  if (engines.length === 0) return null;
+  return (
+    <div className="rounded-card border border-warn-soft bg-warn-soft/40 px-4 py-3">
+      <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+        <PowerOff size={15} className="shrink-0 text-warn" aria-hidden />
+        {engines.length === 1
+          ? `${engines[0].name} is switched off`
+          : `${engines.length} things on this screen are switched off`}
+      </p>
+      <ul className={engines.length === 1 ? "mt-1" : "mt-1.5 space-y-1.5"}>
+        {engines.map((e) => (
+          <li key={e.key} className="text-sm text-ink-2">
+            {engines.length > 1 && <span className="font-medium text-ink">{e.name}: </span>}
+            {e.consequence}{" "}
+            <span className="text-muted">
+              {e.needsDeploy ? "Needs a change on the server: " : "Switch it on at "}
+              {e.where}.
+            </span>
+          </li>
+        ))}
+      </ul>
+      {canOpenConsole && (
+        <Link
+          href="/console"
+          className="mt-2 inline-block text-caption font-semibold text-primary hover:underline"
+        >
+          Open the founder console
+        </Link>
+      )}
     </div>
   );
 }

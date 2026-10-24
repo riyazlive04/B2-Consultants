@@ -8,7 +8,8 @@ import { getAnnualPerformance, getClientMovement } from "@/server/annual-metrics
 import { ClientMovementChart } from "./_components/ClientMovementChart";
 import { BUSINESS_LINE_LABELS, lineForKind, type BusinessLineView } from "@/lib/business-line";
 import { Tabs } from "@/components/ui/Tabs";
-import { Card, CardTitle, PageHeader, Pill } from "@/components/ui/kit";
+import { Card, CardTitle, EngineOffNotice, PageHeader, Pill } from "@/components/ui/kit";
+import { enginesOff } from "@/server/engine-status";
 import { toDateInputValue, istToday } from "@/lib/dates";
 import { parsePeriod, resolvePeriod } from "@/lib/period";
 import { PeriodBar } from "@/components/ui/PeriodBar";
@@ -68,6 +69,9 @@ export default async function FinancePage({
   searchParams?: { record?: string; line?: string; period?: string; on?: string; from?: string; to?: string };
 }) {
   const session = await requireSection("finance");
+  /* The three postings that make the P&L on this very screen incomplete when they are off:
+     commission owed, German Note's cost of delivery, and receivables at issue. */
+  const enginesDown = await enginesOff(["commissionAccrual", "tutorFeeAccrual", "invoicePosting"]);
   // Deep-link from the top-bar "+ Record" CTA lands on Income (0) or Expenses (1).
   const initialTab = searchParams?.record === "expense" ? 1 : 0;
   /**
@@ -506,6 +510,10 @@ export default async function FinancePage({
           </div>
         }
       />
+
+      {/* Built, and switched off - said on the screen it affects rather than only on the
+          Console, because an engine nobody armed is indistinguishable from a broken one. */}
+      <EngineOffNotice engines={enginesDown} canOpenConsole={session.role === "ADMIN"} />
 
       {/* The ₹/€ toggle heads the page and now wraps EVERYTHING below it - the business-line
           totals, the KPI cards, the bento grid AND the Income / Expenses / Pending / Commission

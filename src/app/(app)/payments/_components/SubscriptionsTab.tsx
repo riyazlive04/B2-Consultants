@@ -102,7 +102,16 @@ export default function SubscriptionsTab({
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState icon={<RefreshCw size={20} />} title="No subscriptions" body="Track recurring plans here (billing runs manually until a processor is wired)." />
+        <EmptyState
+          icon={<RefreshCw size={20} />}
+          title="No subscriptions"
+          body="Track recurring plans here (billing runs manually until a processor is wired)."
+          action={
+            <Btn variant="primary" icon={<Plus size={15} />} onClick={() => { setError(null); setOpen(true); }}>
+              Add a subscription
+            </Btn>
+          }
+        />
       ) : (
         <DataTable
           rows={rows}

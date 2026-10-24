@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { FileSignature, Plus } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { PageHeader } from "@/components/ui/kit";
+import { EngineOffNotice, PageHeader } from "@/components/ui/kit";
+import { enginesOff } from "@/server/engine-status";
 import { StudentName } from "@/components/ui/StudentName";
 import { PagedTable } from "@/components/ui/pager";
 import { requireSection } from "@/lib/rbac";
@@ -18,7 +19,10 @@ export const metadata = { title: "Agreements" };
 export const dynamic = "force-dynamic";
 
 export default async function AgreementsPage() {
-  await requireSection("agreements");
+  const session = await requireSection("agreements");
+  /* An unsigned agreement is the most expensive thing in the app to leave sitting, and with no
+     reminder day saved nobody is chased - which looks exactly like a client still thinking. */
+  const enginesDown = await enginesOff(["agreementReminders"]);
   const [rows, counts] = await Promise.all([listAgreements(), getAgreementCounts()]);
 
   return (
@@ -36,6 +40,10 @@ export default async function AgreementsPage() {
           </Link>
         }
       />
+
+      {/* Built, and switched off - said on the screen it affects rather than only on the
+          Console, because an engine nobody armed is indistinguishable from a broken one. */}
+      <EngineOffNotice engines={enginesDown} canOpenConsole={session.role === "ADMIN"} />
 
       <AgreementNav />
 

@@ -10,7 +10,11 @@ import { FunnelTrend } from "./_components/FunnelTrend";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
-export const metadata = { title: "Conversion Funnel" };
+// "Funnel Report", matching the nav. The section was renamed from "Conversion Funnel" because it
+// sat four rows above "Funnels" - the landing-page builder - in the same group, two names that read
+// alike describing unrelated things. The rename reached the catalogue and not this line, so the
+// browser tab and the sidebar disagreed about where you were.
+export const metadata = { title: "Funnel Report" };
 
 export const dynamic = "force-dynamic";
 

@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   Users,
   Layers,
+  CalendarRange,
   GraduationCap,
   UserMinus,
   UserCheck,
@@ -14,10 +16,12 @@ import {
 import { MetricCard } from "@/components/ui/MetricCard";
 import { JourneyRing, MomentumChip } from "@/components/ui/gamification";
 import { Tabs } from "@/components/ui/Tabs";
-import { Card, CardTitle, PageHeader, Pill } from "@/components/ui/kit";
+import { Card, CardTitle, EngineOffNotice, PageHeader, Pill } from "@/components/ui/kit";
+import { enginesOff } from "@/server/engine-status";
 import { formatInrMinor, formatPct } from "@/lib/format";
 import { istToday, toDateInputValue } from "@/lib/dates";
 import { requireSection } from "@/lib/rbac";
+import { SectionLink } from "@/components/ui/SectionLink";
 import { getStudentsOverview } from "@/server/students-metrics";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { StudentsPanel } from "./_components/StudentsPanel";
@@ -28,8 +32,6 @@ import { getActiveLevels } from "@/server/levels";
 import { levelOptions } from "@/lib/levels";
 import { TrackerTable } from "./_components/TrackerTable";
 import { TrackerBatchForm } from "./_components/TrackerBatchForm";
-import { getBatchBoard } from "@/server/batches";
-import { BatchesManager } from "@/components/batches/BatchesManager";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
@@ -37,21 +39,47 @@ export const metadata = { title: "Students" };
 
 export const dynamic = "force-dynamic";
 
-export default async function StudentsPage() {
+export default async function StudentsPage({
+  searchParams,
+}: {
+  searchParams?: { tab?: string };
+}) {
   const session = await requireSection("students"); // Admin full, Head view (PRD2 §2)
   const isAdmin = session.role === "ADMIN";
+
+  /*
+    COHORTS LEFT THIS PAGE (refactor step E4).
+
+    The Batches tab mounted the very same `BatchesManager` that /batches tab 0 mounts, so there
+    were two editors for one set of cohorts - change a date in one and the other was stale until
+    reloaded. /batches is the home: it holds both lines and the plans beside them.
+
+    Bookmarks are redirected rather than broken, which is why this is index arithmetic and not a
+    deletion. For an ADMIN the tabs were: 0 tracker · 1 weekly update · 2 all students ·
+    3 book orders · 4 BATCHES · 5 import. `canEditTracker` is always true for an admin, so those
+    indices are fixed, and the tab only ever existed for an admin - a Head or anyone else never
+    had it and needs no remap.
+  */
+  if (isAdmin) {
+    if (searchParams?.tab === "4" || searchParams?.tab === "batches") redirect("/batches?tab=0");
+    if (searchParams?.tab === "5") redirect("/students?tab=4");
+  }
   // Mirrors `updateTracker`'s own `requireAdminOrHead` gate - the weekly-round form is only
   // offered to people the server will actually accept a write from.
   const canEditTracker = isAdmin || session.role === "HEAD";
+  // The only message the app sends on enrolment. Off, a student who has just paid hears nothing.
+  const enginesDown = await enginesOff(["studentWelcome"]);
   const { counts, avgSatisfaction, avgNps, satisfactionBreakdown, npsBreakdown, tracker, momentumBoard, atRiskRadar, ltvSummary, students, coaches, defaultCoach } =
     await getStudentsOverview();
   const waByStudent = await getWhatsAppStatusMap("studentId", tracker.map((t) => t.studentId));
   const today = toDateInputValue(istToday());
   // Book orders, Batches and Import are Admin-only tabs - a Head shouldn't pay for reads they
   // can't see. Creating and archiving a batch is Admin-only in `upsertBatch` for the same reason.
-  const [bookOrders, studentOptions, batchBoard] = isAdmin
-    ? await Promise.all([getBookOrderData(), getStudentOptions(), getBatchBoard("B2")])
-    : [{ rows: [], vendors: [], thresholdRupees: 0 }, [], null];
+  // `getBatchBoard("B2")` used to be loaded here for the Batches tab. It went with the tab - one
+  // fewer query on a screen the founders open all day, and the cohort board pays for its own.
+  const [bookOrders, studentOptions] = isAdmin
+    ? await Promise.all([getBookOrderData(), getStudentOptions()])
+    : [{ rows: [], vendors: [], thresholdRupees: 0 }, []];
   // Book orders are per single level (never a bundle).
   const bookLevelOptions = isAdmin
     ? levelOptions(await getActiveLevels(), ["GERMAN_LEVEL", "COACHING_TIER", "OTHER"])
@@ -63,7 +91,18 @@ export default async function StudentsPage() {
         icon={<GraduationCap size={20} />}
         title="Students"
         subtitle="B2 Consultants students only (Solo / Guided / Elite). German Note comes in a later phase."
+        actions={
+          isAdmin ? (
+            <SectionLink href="/batches" sectionKey="batches">
+              <CalendarRange size={14} /> Batches &amp; plans
+            </SectionLink>
+          ) : undefined
+        }
       />
+
+      {/* Built, and switched off - said on the screen it affects rather than only on the
+          Console, because an engine nobody armed is indistinguishable from a broken one. */}
+      <EngineOffNotice engines={enginesDown} canOpenConsole={session.role === "ADMIN"} />
 
       {/* Count dashboard (PRD2 §4.2) + always-visible satisfaction averages (§4.5) */}
       {/* One card per row until ~480px: two KPI cards on a 320-375px phone left each label
@@ -327,29 +366,6 @@ export default async function StudentsPage() {
                     />
                   ),
                 },
-                /**
-                 * COHORTS. The one-table `Batch` model has carried a `line` since ER v2 and
-                 * `upsertBatch` has always been line-aware, but nothing called it: German Note
-                 * ran its own panel and the B2 side had no cohort screen, so a coaching batch
-                 * could not be created at all. It lives here rather than in its own section
-                 * because a batch is a group of students, and seating happens on their profiles.
-                 */
-                ...(batchBoard
-                  ? [
-                      {
-                        label: `Batches (${batchBoard.rows.filter((b) => b.status === "ACTIVE").length})`,
-                        content: (
-                          <BatchesManager
-                            line="B2"
-                            rows={batchBoard.rows}
-                            levelOptions={batchBoard.levelOptions}
-                            leadOptions={batchBoard.leadOptions}
-                            backKey="students"
-                          />
-                        ),
-                      },
-                    ]
-                  : []),
                 { label: "Import", content: <ImportPanel /> },
               ]
             : []),

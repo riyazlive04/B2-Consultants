@@ -19,6 +19,8 @@ import { MakeCurrentButton, TemplateAdmin } from "./_components/TemplateAdmin";
  * and promotable, and edited by promoting them first.
  */
 
+export const metadata = { title: "Agreement template" };
+
 export const dynamic = "force-dynamic";
 
 const ist = (d: Date) => formatDateTimeInZone(d, "Asia/Kolkata");

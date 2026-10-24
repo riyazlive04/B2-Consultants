@@ -4,6 +4,8 @@ import { hasCapability } from "@/lib/capabilities";
 import { getPageDetail } from "@/server/sites-metrics";
 import PageBuilder from "./_components/PageBuilder";
 
+export const metadata = { title: "Website page" };
+
 export const dynamic = "force-dynamic";
 
 export default async function SitePageEditor({

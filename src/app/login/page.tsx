@@ -10,6 +10,9 @@ import LoginForm from "./LoginForm";
  * the no-cookie case; this is the one place a session cookie is verified
  * before leaving the login screen.
  */
+
+export const metadata = { title: "Sign in" };
+
 export default async function LoginPage() {
   const session = await auth.api.getSession({ headers: await Promise.resolve(headers()) });
   if (session) redirect("/");

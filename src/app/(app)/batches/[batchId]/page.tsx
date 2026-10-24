@@ -18,6 +18,8 @@ import { BatchChecklist } from "@/components/batches/BatchChecklist";
 import { StudentName } from "@/components/ui/StudentName";
 import { formatPct } from "@/lib/format";
 
+export const metadata = { title: "Cohort" };
+
 export const dynamic = "force-dynamic";
 
 /**

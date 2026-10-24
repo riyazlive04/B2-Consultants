@@ -11,6 +11,8 @@ import { CommunityFeed } from "../_components/CommunityFeed";
 import { LevelChip, StatusChip } from "../_components/LevelChip";
 import { SchedulePanel } from "../_components/SchedulePanel";
 
+export const metadata = { title: "German Note cohort" };
+
 export const dynamic = "force-dynamic";
 
 export default async function GnBatchPage({

@@ -8,6 +8,8 @@ import { getPersonJourney } from "@/server/onboarding-metrics";
 import { JourneyRail } from "@/components/journey/JourneyRail";
 import { StudentDetailClient } from "./_components/StudentDetailClient";
 
+export const metadata = { title: "Student" };
+
 export const dynamic = "force-dynamic";
 
 export default async function StudentDetailPage({ params }: { params: { id: string } }) {

@@ -9,6 +9,8 @@ import ForgotPasswordForm from "./ForgotPasswordForm";
  * cookie) so a stale cookie can't loop, and so a signed-in person is bounced home
  * instead of being offered a reset they don't need.
  */
+
+export const metadata = { title: "Forgot your password" };
 export default async function ForgotPasswordPage() {
   const session = await auth.api.getSession({ headers: await Promise.resolve(headers()) });
   if (session) redirect("/");

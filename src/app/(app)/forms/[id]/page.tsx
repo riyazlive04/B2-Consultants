@@ -3,6 +3,8 @@ import { requireSection } from "@/lib/rbac";
 import { getForm, getSitesPickers } from "@/server/forms-metrics";
 import FormBuilder from "./_components/FormBuilder";
 
+export const metadata = { title: "Form" };
+
 export const dynamic = "force-dynamic";
 
 export default async function FormBuilderPage({ params }: { params: { id: string } }) {

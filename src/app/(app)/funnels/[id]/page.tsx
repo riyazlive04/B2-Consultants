@@ -6,6 +6,8 @@ import { getSitesPickers } from "@/server/forms-metrics";
 import { collectBookingOwnerIds, getStepCalendars } from "@/server/booking-calendars";
 import FunnelBuilder from "./_components/FunnelBuilder";
 
+export const metadata = { title: "Funnel" };
+
 export const dynamic = "force-dynamic";
 
 export default async function FunnelBuilderPage({ params }: { params: { id: string } }) {

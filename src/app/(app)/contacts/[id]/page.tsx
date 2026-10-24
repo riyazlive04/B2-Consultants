@@ -8,6 +8,8 @@ import { getPersonJourney } from "@/server/onboarding-metrics";
 import { JourneyRail } from "@/components/journey/JourneyRail";
 import ContactRecord from "./_components/ContactRecord";
 
+export const metadata = { title: "Contact" };
+
 export const dynamic = "force-dynamic";
 
 export default async function ContactPage({ params }: { params: { id: string } }) {

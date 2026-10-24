@@ -15,6 +15,8 @@ import {
   Signed,
 } from "../../_components/workshopFormat";
 
+export const metadata = { title: "Workshop" };
+
 export const dynamic = "force-dynamic";
 
 export default async function WorkshopDetailPage({ params }: { params: { workshopId: string } }) {

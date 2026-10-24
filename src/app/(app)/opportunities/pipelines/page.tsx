@@ -3,6 +3,8 @@ import { hasCapability } from "@/lib/capabilities";
 import { listPipelines } from "@/server/opportunities-metrics";
 import { PipelinesTable } from "../_components/PipelinesTable";
 
+export const metadata = { title: "Pipelines" };
+
 export const dynamic = "force-dynamic";
 
 /**

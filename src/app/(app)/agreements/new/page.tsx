@@ -10,6 +10,8 @@ import { AgreementForm } from "../_components/AgreementForm";
 import { PageHeader } from "@/components/ui/kit";
 import { AgreementNav } from "../_components/AgreementNav";
 
+export const metadata = { title: "New agreement" };
+
 export const dynamic = "force-dynamic";
 
 /** `?leadId=` / `?studentId=` open the form on what the CRM already knows. */

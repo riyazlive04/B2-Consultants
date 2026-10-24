@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
 import { formatInrMinor, formatEurMinor, formatDate, minorToMajorString } from "@/lib/format";
@@ -176,7 +177,13 @@ export type InvoiceDetail = {
   }[];
 };
 
-export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
+/**
+ * `cache()` so the page and its `generateMetadata` can both ask for the invoice and only one
+ * query is issued. Next calls `generateMetadata` and the page component in the same request, so
+ * without this the tab label would cost a second round trip to Singapore for every invoice
+ * opened - which is why the other detail pages take a static title instead of naming the record.
+ */
+export const getInvoice = cache(async function getInvoice(id: string): Promise<InvoiceDetail | null> {
   const [i, levels] = await Promise.all([
     prisma.invoice.findUnique({
       where: { id },
@@ -248,7 +255,7 @@ export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
       receiptSentAt: p.receiptSentAt,
     })),
   };
-}
+});
 
 /**
  * Everything a finished invoice DOCUMENT prints - shared by the public page and the PDF so the

@@ -6,6 +6,8 @@ import { getGnAccess, getGnMembers } from "@/server/german-note-metrics";
 import { MembersDirectory } from "../_components/MembersDirectory";
 import { PageHeader } from "@/components/ui/kit";
 
+export const metadata = { title: "German Note members" };
+
 export const dynamic = "force-dynamic";
 
 export default async function GnMembersPage() {

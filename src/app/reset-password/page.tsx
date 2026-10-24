@@ -9,6 +9,8 @@ import ResetPasswordForm from "./ResetPasswordForm";
  * No session check here (unlike /login and /invite): the token, not a cookie, is the
  * credential, and better-auth's resetPassword endpoint doesn't care about session state.
  */
+
+export const metadata = { title: "Reset your password" };
 export default function ResetPasswordPage({
   searchParams,
 }: {

@@ -11,6 +11,8 @@ import ChangePasswordForm from "./ChangePasswordForm";
  * does not trip the same guard that sends people to it, which would loop. A visitor with no
  * session is sent to sign in (they cannot change a password they are not holding).
  */
+
+export const metadata = { title: "Change your password" };
 export const dynamic = "force-dynamic";
 
 export default async function ChangePasswordPage() {

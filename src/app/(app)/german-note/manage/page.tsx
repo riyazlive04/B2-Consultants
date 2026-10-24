@@ -15,6 +15,8 @@ import { LevelsPanel } from "@/components/levels/LevelsPanel";
 import { PageHeader } from "@/components/ui/kit";
 import { SectionLink } from "@/components/ui/SectionLink";
 
+export const metadata = { title: "Manage German Note" };
+
 export const dynamic = "force-dynamic";
 
 export default async function GnManagePage() {

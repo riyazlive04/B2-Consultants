@@ -5,6 +5,8 @@ import { getWatiRuntime } from "@/lib/wati";
 import { STAGE_MESSAGE_STAGES, stageWhatsAppKind } from "@/lib/stage-messages";
 import StageMessagesForm from "./_components/StageMessagesForm";
 
+export const metadata = { title: "Stage messages" };
+
 export const dynamic = "force-dynamic";
 
 /**

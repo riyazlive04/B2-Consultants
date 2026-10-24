@@ -11,6 +11,11 @@ const InvoiceEditor = nextDynamic(() => import("../_components/InvoiceEditor"));
 
 export const dynamic = "force-dynamic";
 
+/** One route raises both, so the tab follows `?kind=`. No query: the answer is in the URL. */
+export async function generateMetadata({ searchParams }: { searchParams: { kind?: string } }) {
+  return { title: searchParams.kind === "ESTIMATE" ? "New estimate" : "New invoice" };
+}
+
 export default async function NewInvoicePage({ searchParams }: { searchParams: { kind?: string } }) {
   await requireSection("payments");
   const kind = searchParams.kind === "ESTIMATE" ? "ESTIMATE" : "INVOICE";

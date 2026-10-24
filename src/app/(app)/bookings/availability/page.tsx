@@ -5,6 +5,8 @@ import { getBookableTeamMembers, getBookingsOverview } from "@/server/booking-me
 import { getBookingRulesConfig } from "@/server/founder-config";
 import { SlotManager } from "../_components/SlotManager";
 
+export const metadata = { title: "Availability" };
+
 export const dynamic = "force-dynamic";
 
 /**

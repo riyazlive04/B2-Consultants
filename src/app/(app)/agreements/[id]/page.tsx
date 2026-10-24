@@ -27,6 +27,8 @@ import { enrolmentState } from "@/lib/agreement-enrol";
 import { AgreementForm } from "../_components/AgreementForm";
 import { PageHeader } from "@/components/ui/kit";
 
+export const metadata = { title: "Agreement" };
+
 export const dynamic = "force-dynamic";
 
 const ist = (d: Date) => formatDateTimeInZone(d, "Asia/Kolkata");

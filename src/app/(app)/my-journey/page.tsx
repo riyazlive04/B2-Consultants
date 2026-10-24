@@ -1,8 +1,8 @@
 import Link from "next/link";
 import {
-  BadgeCheck, CalendarClock, FileSearch, FileSignature, Mic2, Rocket, Send, Target,
+  BadgeCheck, CalendarClock, FileSignature, Mic2, Rocket, Send, Target,
 } from "lucide-react";
-import { requireSection, visibleSections } from "@/lib/rbac";
+import { requireSection } from "@/lib/rbac";
 import { getMyStudentPortal, type PortalEnrollment } from "@/server/student-portal";
 import { getMyClassroom } from "@/server/student-classroom";
 import { getMyAgreements } from "@/server/student-agreements";
@@ -33,15 +33,6 @@ export default async function MyJourneyPage({
   searchParams?: { onboarding?: string };
 }) {
   const session = await requireSection("my-journey");
-  /**
-   * The CV Diagnostic card below is the only link to /cv-check anywhere in the app, and
-   * `cv-check` ships `hidden` (off the nav AND the route) - so hard-coding the card sent every
-   * student to `/?denied=cv-check`. Read the resolved section instead: the card appears exactly
-   * when the route would open, and comes back by itself if Console → Sections switches it on.
-   */
-  const cvStudioOpen = (await visibleSections(session.role, session.overrides)).some(
-    (s) => s.key === "cv-check",
-  );
   const [portal, agreements, payments, classroom] = await Promise.all([
     getMyStudentPortal(session.user.id),
     getMyAgreements(session.user.id),
@@ -192,27 +183,6 @@ export default async function MyJourneyPage({
       <MyPayments payments={payments} />
 
       {/* CV diagnostic - the self-serve tool students can use any time, when it is switched on */}
-      {cvStudioOpen && (
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 font-display text-h2 font-semibold">
-                <FileSearch size={18} /> CV Diagnostic
-              </h2>
-              <p className="mt-1 text-sm text-muted">
-                Paste your CV and a real German job description - get your match score, missing
-                keywords and weak bullets in seconds. Nothing is stored.
-              </p>
-            </div>
-            <Link
-              href="/cv-check"
-              className="rounded-field bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:opacity-95"
-            >
-              Run a check
-            </Link>
-          </div>
-        </Card>
-      )}
     </div>
   );
 }

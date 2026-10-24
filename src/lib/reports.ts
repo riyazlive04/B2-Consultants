@@ -28,7 +28,7 @@ export type GroupByField = { key: string; label: string };
 
 export const REPORT_OBJECTS: readonly { key: ReportObject; label: string }[] = [
   { key: "contacts", label: "Contacts" },
-  { key: "opportunities", label: "Opportunities" },
+  { key: "opportunities", label: "Deals" },
   { key: "invoices", label: "Invoices" },
 ] as const;
 

@@ -37,6 +37,7 @@ import {
   CalendarRange,
   UserCheck,
   Medal,
+  Route,
   type LucideIcon,
 } from "lucide-react";
 import type { SectionIconName } from "@/lib/sections";
@@ -85,6 +86,7 @@ export const SECTION_ICONS: Record<SectionIconName, LucideIcon> = {
   medal: Medal,
   "calendar-days": CalendarDays,
   "calendar-range": CalendarRange,
+  route: Route,
 };
 
 export const FallbackIcon = LayoutGrid;

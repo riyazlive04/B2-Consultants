@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { CalendarRange, ClipboardCheck, GraduationCap, School, Users, Video } from "lucide-react";
+import { CalendarRange, ClipboardCheck, GraduationCap, Languages, School, Users, Video } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { getCoachingDesk } from "@/server/coaching-desk";
+import { getAttendanceBoard } from "@/server/attendance-board";
 import { getStudentLifecycleConfig } from "@/server/founder-config";
 import { SessionList } from "./_components/TeachingSessions";
 import { DiscontinueButton, RestoreButton } from "./_components/DiscontinueStudent";
 import { Tabs } from "@/components/ui/Tabs";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Card, EmptyState, PageHeader, Pill, TableShell, Td, Th, Tr } from "@/components/ui/kit";
+import { SectionLink } from "@/components/ui/SectionLink";
 import { StudentName } from "@/components/ui/StudentName";
 import { SignalBadge } from "@/components/ui/SignalBadge";
 import { formatDate } from "@/lib/format";
@@ -32,7 +34,19 @@ export default async function CoachingPage() {
     dialog is filled from the Console's list, and a dialog offering reasons the server would
     then refuse is worse than no dialog.
   */
-  const [desk, lifecycle] = await Promise.all([getCoachingDesk(session), getStudentLifecycleConfig()]);
+  const [desk, lifecycle, attendance] = await Promise.all([
+    getCoachingDesk(session),
+    getStudentLifecycleConfig(),
+    /*
+      ── THE PUBLISH GATE, SAID OUT LOUD ON THIS SCREEN (P10) ──────────────────────────────
+      Marking a register is private; PUBLISHING it is what makes it count - it fires the absence
+      notices and moves every attendance percentage. A marked, unpublished register therefore
+      looks on this screen exactly like a class nobody taught, and this is the screen a coach
+      actually lives on. The register desk already derives the list; it is `cache()`d and scoped
+      to this viewer's own cohorts, so reading it here costs one query and no new rule.
+    */
+    getAttendanceBoard(session),
+  ]);
 
   const totalStudents = desk.batches.reduce((a, b) => a + b.filled, 0);
   const registersDue = desk.needsRegister.length;
@@ -48,6 +62,14 @@ export default async function CoachingPage() {
   const awaitingMe = desk.students.filter((s) => s.sprintWeekDue?.state === "AWAITING_COACH").length;
   const chasing = desk.students.filter((s) => s.sprintWeekDue?.state === "OVERDUE").length;
   const concerning = desk.students.filter((s) => isConcerning(s.unansweredStreak)).length;
+  /**
+   * Registers marked but never published - work that is done and counting for nothing.
+   *
+   * Zeroed when the founder has switched the publish step OFF in Console → Attendance: with it
+   * off, marks are visible to students the moment they are taken, so there is nothing withheld
+   * and a banner would be telling a coach to go and do something that no longer exists.
+   */
+  const unpublished = attendance.publishRequired ? attendance.unpublished.length : 0;
 
   return (
     <div className="w-full space-y-6">
@@ -61,7 +83,38 @@ export default async function CoachingPage() {
               : "Every active cohort, yours marked as such - plus the students you coach."
             : "The cohorts you run and the students you coach."
         }
+        actions={
+          /*
+            THE OTHER TEACHING HOME (P17).
+
+            A tutor has two: this one, and German Note. Neither linked to the other, so which
+            screen does what was something you learned by trial - and a German Note tutor landing
+            here saw an empty desk with no hint that their batches live elsewhere. `SectionLink`
+            renders nothing for somebody without the section, so a B2-only coach is not offered a
+            door that would refuse them.
+          */
+          <SectionLink href="/german-note" sectionKey="german-note">
+            <Languages size={14} /> German Note classes
+          </SectionLink>
+        }
       />
+
+      {unpublished > 0 && (
+        <div className="rounded-card border border-warn-soft bg-warn-soft/40 px-4 py-3">
+          <p className="text-sm font-semibold text-ink">
+            {unpublished} register{unpublished === 1 ? "" : "s"} {unpublished === 1 ? "is" : "are"} marked but not published
+          </p>
+          <p className="mt-0.5 text-sm text-ink-2">
+            Marking is private. Publishing is what tells the students, fires the absence notices
+            and moves everyone&apos;s attendance percentage - until then the class counts for
+            nothing.{" "}
+            <Link href="/attendance" className="font-semibold text-primary hover:underline">
+              Publish them on the register desk
+            </Link>
+            .
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-4">
         <MetricCard

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CalendarRange } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
 import { requireAdmin, requireSection } from "@/lib/rbac";
 import { getGnManageData } from "@/server/german-note-metrics";
@@ -13,6 +13,7 @@ import { TutorsPanel } from "../_components/TutorsPanel";
 import { BatchCostsPanel } from "../_components/BatchCostsPanel";
 import { LevelsPanel } from "@/components/levels/LevelsPanel";
 import { PageHeader } from "@/components/ui/kit";
+import { SectionLink } from "@/components/ui/SectionLink";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,22 @@ export default async function GnManagePage() {
         back={{ href: "/german-note", label: "German Note" }}
         title="Manage German Note"
         subtitle="Batches, who's in them, and tutor accounts. Tutors post recordings into their own batches."
+        actions={
+          /*
+            THE OTHER COHORT SCREEN (refactor step E4).
+
+            German Note cohorts can be edited here and on Batches & Plans, and the two forms are
+            not the same: this one is tutor-only and has no start date, end date or batch code,
+            while that one carries all three. They were left as two editors rather than merged
+            behind a redirect because they are two different write paths with two different rules
+            about who may lead a cohort - collapsing them would quietly widen that, which is a
+            product decision and not a refactor. The link is here so the richer form is one click
+            away instead of being something you had to know about.
+          */
+          <SectionLink href="/batches?tab=1" sectionKey="batches">
+            <CalendarRange size={14} /> Dates &amp; codes on Batches &amp; plans
+          </SectionLink>
+        }
       />
 
       {/* Workshops moved to /german-note → Financials, where the money they make

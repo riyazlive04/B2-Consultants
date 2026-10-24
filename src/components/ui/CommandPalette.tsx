@@ -29,7 +29,7 @@ const TYPE_LABEL: Record<ItemType, string> = {
   page: "Go to",
   contact: "Contacts",
   student: "Students",
-  opportunity: "Opportunities",
+  opportunity: "Deals",
   invoice: "Invoices",
 };
 const TYPE_ICON: Record<ItemType, typeof Contact> = {

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { CalendarClock, CheckCircle2, ExternalLink, Languages, Settings, Users, Video } from "lucide-react";
+import { CalendarClock, CheckCircle2, ExternalLink, Languages, School, Settings, Users, Video } from "lucide-react";
 import { PageHeader } from "@/components/ui/kit";
+import { SectionLink } from "@/components/ui/SectionLink";
 import { Tabs } from "@/components/ui/Tabs";
 import { hasCapability, requireSection } from "@/lib/rbac";
 import { getGnOverview } from "@/server/german-note-metrics";
@@ -204,6 +205,15 @@ export default async function GermanNotePage({
         }
         actions={
           <>
+            {/*
+              THE OTHER TEACHING HOME (P17). A tutor has two and neither linked to the other, so
+              a coach who also runs German Note had to know both URLs. `SectionLink` draws
+              nothing for a student or anyone without the section, so this appears only for
+              somebody it would actually work for.
+            */}
+            <SectionLink href="/coaching" sectionKey="coaching">
+              <School size={15} /> My Teaching
+            </SectionLink>
             {isParticipant && (
               <Link
                 href="/german-note/members"

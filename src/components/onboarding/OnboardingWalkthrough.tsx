@@ -87,8 +87,10 @@ export function OnboardingWalkthrough({
         // Same idiom sections.ts's own resolveSections() uses: only the `console`
         // entry carries `locked`, so the union type doesn't have the key on the rest.
         const locked = "locked" in s && s.locked === true;
-        // A code-hidden section (cv-check, ledger, automation) is off the nav and refused by
-        // route, so a welcome tour that offered it would hand a brand-new user a dead end.
+        // A code-hidden section is off the nav AND refused by route, so a welcome tour that
+        // offered one would hand a brand-new user a dead end. No section carries `hidden` today
+        // (cv-check, automation and ledger were all removed on 23/10/2026), so this currently
+        // filters nothing - it is kept because the mechanism is still live in resolveSections.
         // The default is what matters here: this runs on the client off the static catalogue,
         // not the founder's config, and the tour is a four-item teaser, not the nav.
         const hidden = "hidden" in s && s.hidden === true;

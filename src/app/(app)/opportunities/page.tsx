@@ -16,7 +16,9 @@ import { StageRulesCard } from "./_components/StageRulesCard";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
-export const metadata = { title: "Opportunities" };
+/* "Deals" everywhere a reader sees it - the nav, the browser tab and the page heading. The
+   section KEY stays `opportunities`, because that is what access is configured against. */
+export const metadata = { title: "Deals" };
 
 export const dynamic = "force-dynamic";
 
@@ -49,12 +51,13 @@ export default async function OpportunitiesPage({
   return (
     <div className="w-full space-y-4">
       <ListHeader
-        title="Opportunities"
+        title="Deals"
         count={board.activePipelineName ? `${board.totalCount} cards${board.filtered ? " (filtered)" : ""}` : undefined}
         subtitle={board.activePipelineName ? `${board.activePipelineName} · ${board.totalValueInr} pipeline value` : "Your sales pipeline board"}
       />
-      {/* The way back to the metrics screen. The sidebar's "Pipeline" entry now lands HERE, so
-          without this link the target bar, aging table and deals-at-risk would have no door. */}
+      {/* The way to the funnel metrics - the target bar, the aging table and deals at risk.
+          Both screens are on the rail again (step E1), so this is a shortcut between neighbours
+          rather than the only door; it stays because the two are read together. */}
       <div className="flex flex-wrap items-center gap-2">
         <SectionLink href="/pipeline" sectionKey="pipeline">
           <BarChart3 size={14} /> Pipeline metrics

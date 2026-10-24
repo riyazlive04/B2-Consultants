@@ -16,6 +16,7 @@
  *   · Next's error boundary ("Something went wrong", "Application error")
  *   · an uncaught exception or a failed request in the browser console
  *   · a server-side error logged while the page rendered
+ *   · a page that renders but is effectively blank
  *
  * It is a SMOKE test, not a functional one: it proves a screen renders, not that it is correct.
  * That is deliberately a low bar, because the bugs above cleared every higher one.
@@ -167,6 +168,19 @@ async function main() {
         "Unhandled Runtime Error",
       ]) {
         if (body.includes(marker)) problems.push(`error boundary: "${marker}"`);
+      }
+
+      /*
+        A page that renders but says nothing is a failure this would otherwise call "ok".
+
+        `/cash` crashed loudly, which is how it was caught. The quieter version - a screen whose
+        whole body is a spinner, or that came back essentially empty - looks identical to a pass
+        from the outside. The threshold is deliberately low: real screens here carry a heading,
+        a nav and a footer, so anything under a couple of hundred characters has not rendered.
+      */
+      const text = body.replace(/\s+/g, " ").trim();
+      if (text.length < 200) {
+        problems.push(`page is effectively empty (${text.length} chars of text)`);
       }
 
       results.push({ route, url: resolved, status, problems });

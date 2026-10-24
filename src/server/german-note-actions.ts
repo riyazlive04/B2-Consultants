@@ -220,7 +220,7 @@ export async function deleteBatch(batchId: string): Promise<ActionResult> {
  *
  * WHY THE ROW LOCK: two admins filling the last seat at the same moment would both read
  * `filled = 7` under Postgres' default READ COMMITTED and both insert, landing 9 in an
- * 8-seat batch. Locking the gn_batch row serialises seat checks for that batch, so the cap
+ * 8-seat batch. Locking the batch row serialises seat checks for that batch, so the cap
  * is a real constraint rather than a suggestion. The caller MUST already be in a
  * transaction - otherwise the lock is released before the insert and the race is back.
  *
@@ -244,7 +244,20 @@ async function claimSeat(
   tx: Prisma.TransactionClient,
   batchId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await tx.$queryRaw`SELECT id FROM gn_batch WHERE id = ${batchId} FOR UPDATE`;
+  /*
+    ── THE TABLE IS "batch", NOT "gn_batch" (fixed 24/10/2026) ───────────────────────────
+    The ER v2 alignment of 29/07/2026 merged gn_batch into the one `batch` table, and this raw
+    lock was never updated. Raw SQL is invisible to the Prisma client's types, so nothing caught
+    it - not tsc, not the build, not a test.
+
+    The consequence was total: this is the FIRST statement `claimSeat` runs, and `claimSeat` is
+    called by both `addExistingMember` and `addNewMember`. So every attempt to add a German Note
+    learner has thrown a 500 since that day, with `relation "gn_batch" does not exist`.
+
+    That also explains the zero `batch_member` rows on live, which the migration audit found and
+    I read as "the feature is unused". It is not unused - it has been unusable.
+  */
+  await tx.$queryRaw`SELECT id FROM "batch" WHERE id = ${batchId} FOR UPDATE`;
   const batch = await tx.batch.findUnique({
     where: { id: batchId },
     select: {

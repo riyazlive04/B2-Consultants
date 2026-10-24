@@ -272,9 +272,42 @@ export function BatchesManager({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-display text-h2 font-semibold">{BATCH_LINE_LABELS[line]} batches</h3>
+          {/*
+            This used to end "Seat a student from their own profile - the batch picker there
+            offers the active cohorts on their programme's line", which was the only true
+            instruction before the Roster became writable. It is now the WRONG one, and it sat
+            directly above an empty state telling the reader to use the cohort's Roster tab -
+            two instructions pointing opposite ways on one screen.
+
+            The old route still works; it is just no longer the one to teach.
+          */}
+          {/*
+            LINE-AWARE, because the two businesses genuinely add learners differently and this
+            panel renders for both.
+
+            It used to read "Seat a student from their own profile", which was the only true
+            instruction before the Roster became writable - and then, once corrected to point at
+            the Roster tab, it was true for B2 and WRONG for German Note: a German Note cohort's
+            name is not a link here (its classroom is a different screen), so there was no Roster
+            tab to open and the sentence could not be followed at all.
+
+            German Note adds learners from its own Manage screen, which also offers a quick-create
+            for somebody with no record yet. That is a better fit for a course than a seat picker,
+            and it stays.
+          */}
           <p className="mt-0.5 max-w-2xl text-xs text-muted">
-            One batch = one cohort: a programme, whoever runs it, and the students seated in it. Seat a student from
-            their own profile - the batch picker there offers the active cohorts on their programme&apos;s line.
+            {line === "B2" ? (
+              <>
+                One batch = one cohort: a programme, whoever runs it, and the learners seated in
+                it. Open a cohort to add learners from its Roster tab - several at once.
+              </>
+            ) : (
+              <>
+                One batch = one cohort: a level, the tutor who runs it, and its learners. This is
+                where the cohort itself is created - add learners under German Note → Manage →
+                Members, which can also create one from scratch.
+              </>
+            )}
           </p>
         </div>
         {canCreate && (

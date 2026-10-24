@@ -424,7 +424,11 @@ export default async function CoachingPage() {
 
       <p className="flex items-center gap-1.5 text-caption text-muted">
         <GraduationCap size={12} aria-hidden />
-        Seating, money and the full student record stay on the Students board.
+        {/* "Seating" was in this sentence until 24/10/2026, and it is no longer true: a cohort's
+            Roster tab is where learners are added. Money and the full student record do still
+            live on the Students board. */}
+        Money and the full student record stay on the Students board; learners are added from a
+        cohort&apos;s own Roster tab.
       </p>
     </div>
   );

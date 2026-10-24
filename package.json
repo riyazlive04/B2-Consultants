@@ -43,6 +43,7 @@
     "guide:shots": "node --conditions=react-server --import tsx scripts/capture-guide-shots.ts",
     "migration:audit": "node --conditions=react-server --import tsx scripts/migration-audit.ts",
     "fix:level-codes": "node --conditions=react-server --import tsx scripts/fix-curriculum-level-codes.ts",
+    "smoke": "node --conditions=react-server --import tsx scripts/smoke-screens.ts",
     "pdfjs:worker": "node -e \"require('fs').copyFileSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs','public/pdfjs/pdf.worker.min.mjs')\"",
     "wire:pipeline": "node --conditions=react-server --import tsx scripts/wire-form-pipeline.ts",
     "demo:agreement-templates": "node --import tsx scripts/make-sample-templates.ts",

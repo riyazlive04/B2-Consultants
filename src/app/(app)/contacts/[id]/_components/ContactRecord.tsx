@@ -255,7 +255,10 @@ export default function ContactRecord({
                 { label: `Activity`, content: <Timeline contact={contact} /> },
                 { label: `Notes (${contact.noteList.length})`, content: <Notes contact={contact} /> },
                 { label: `Tasks (${contact.taskList.filter((t) => t.status === "OPEN").length})`, content: <ContactTasks contact={contact} owners={owners} /> },
-                { label: `Opportunities (${contact.opportunities.length})`, content: <Opps contact={contact} /> },
+                /* "Deals" in the nav since 23/10/2026 - the tab, the empty state and the
+                   button below all follow it. The data is still `Opportunity`; only the word the
+                   reader sees changed. */
+                { label: `Deals (${contact.opportunities.length})`, content: <Opps contact={contact} /> },
               ]}
             />
           </div>
@@ -418,7 +421,7 @@ function ContactTasks({ contact, owners }: { contact: ContactDetail; owners: { i
 
 function Opps({ contact }: { contact: ContactDetail }) {
   if (contact.opportunities.length === 0) {
-    return <EmptyState icon={<GitBranch size={20} />} title="No opportunities" body="Create a deal for this contact on the Opportunities board." action={<Link href="/opportunities"><Btn>Go to board</Btn></Link>} />;
+    return <EmptyState icon={<GitBranch size={20} />} title="No deals yet" body="Create a deal for this contact on the Deals board." action={<Link href="/opportunities"><Btn>Go to the Deals board</Btn></Link>} />;
   }
   return (
     <div className="space-y-2">

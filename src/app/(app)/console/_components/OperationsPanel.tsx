@@ -194,7 +194,7 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
             hint="A card is created in the column matching the lead's stage, at zero value - nothing has been quoted yet. Switch off only if you want the board to hold hand-picked deals; leads will then never appear on it by themselves."
           >
             <Toggle
-              label="Put every new lead on the Opportunities board"
+              label="Put every new lead on the Deals board"
               checked={draft.autoCreateOpportunity}
               onChange={(autoCreateOpportunity) => setDraft((d) => ({ ...d, autoCreateOpportunity }))}
             />

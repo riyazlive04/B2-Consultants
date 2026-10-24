@@ -8,6 +8,7 @@ import {
   currenciesInPlay, defaultMethodFor, methodsForCurrencies, type MoneyCurrency,
 } from "./payment-methods";
 import { paymentTypeKind } from "./payment-types";
+import { nameKey } from "./name-key";
 
 /**
  * EVERYTHING THE INCOME ENTRY FORM DERIVES, as one pure function.
@@ -218,7 +219,11 @@ export type DerivedIncomeForm = {
  * pairs the same two things on the server; two spellings of this rule is how a form offers a
  * plan the balance maths will not credit.
  */
-export const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+/* The income form matches a typed payer against the roster by this key. One definition, in lib/name-key.ts - it was five identical copies, all of
+   them deciding whether a payment belongs to a student, so any divergence would have
+   split somebody's money in half. Re-exported rather than moved so existing importers
+   are untouched. */
+export { nameKey };
 
 export function deriveIncomeForm(
   draft: IncomeFormDraft,

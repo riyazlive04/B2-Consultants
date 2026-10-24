@@ -37,6 +37,7 @@ import { useFinanceCcy } from "./FinanceCurrency";
 import { IncomeDetailCard } from "./IncomeDetailCard";
 import { BUSINESS_LINE_LABELS, BUSINESS_LINES, type BusinessLine } from "@/lib/business-line";
 import { safeAction } from "@/lib/action-guard";
+import { nameKey } from "@/lib/name-key";
 
 /**
  * Whole days from `today` (an IST YYYY-MM-DD) to a due date. Compared as calendar dates, not
@@ -240,7 +241,6 @@ export function IncomeSection({
     reset({ student: { text: row?.studentName ?? "", value: row?.studentId ?? "" } });
     setError(null);
   };
-  const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
   /**
    * The dates still to come for the plan this row belongs to, soonest first.
    *

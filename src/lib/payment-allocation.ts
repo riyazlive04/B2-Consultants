@@ -1,3 +1,4 @@
+import { nameKey } from "./name-key";
 /**
  * WHICH PLAN A PAYMENT PAID (FIN-12).
  *
@@ -146,7 +147,11 @@ export function allocatePayments(plans: PlanInput[], payments: PaymentInput[]): 
  * everybody except a string comparison. An id ALWAYS wins over this: two students who share a
  * name are exactly the ambiguity the student code exists to settle.
  */
-export const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+/* Allocation matches a payment to a plan by this key. One definition, in lib/name-key.ts - it was five identical copies, all of
+   them deciding whether a payment belongs to a student, so any divergence would have
+   split somebody's money in half. Re-exported rather than moved so existing importers
+   are untouched. */
+export { nameKey };
 
 /** `studentId` when there is one, the normalised name otherwise. */
 export function studentKey(studentId: string | null, studentName: string): string {

@@ -20,6 +20,8 @@ import {
 } from "@/lib/enrollment-lifecycle";
 import { normalizeStudentCode } from "@/lib/student-code";
 import { Prisma } from "@prisma/client";
+import { linkOrphanMoneyToStudent } from "./student-money-link";
+import { nameKey } from "@/lib/name-key";
 
 /**
  * Students (PRD2 §4). Profiles/enrollments/satisfaction/deletes = Admin.
@@ -39,7 +41,6 @@ async function requireAdminOrHead() {
   return session;
 }
 
-const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
 // ── Student profile + enrollment ───────────────────────────────
 
@@ -178,12 +179,10 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
     throw e;
   }
 
-  // Auto-link past income entries by matching name (fee pulled from Finance, PRD2 §4.1)
-  const candidates = await prisma.income.findMany({ where: { studentId: null } });
-  const ids = candidates.filter((i) => nameKey(i.studentName) === nameKey(student.fullName)).map((i) => i.id);
-  if (ids.length) {
-    await prisma.income.updateMany({ where: { id: { in: ids } }, data: { studentId: student.id } });
-  }
+  /* The money already recorded under this name joins the record - payments AND receivables.
+     One function for all six creation doors, because they used to disagree about the second
+     half: see server/student-money-link.ts. */
+  const linked = await linkOrphanMoneyToStudent({ studentId: student.id, fullName: student.fullName });
   await logActivity(session, {
     action: "student.create",
     section: "students",
@@ -194,7 +193,7 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
       programLevel: e.data.programLevel,
       enrollmentDate: e.data.enrollmentDate,
       assignedCoach: coachName,
-      incomeEntriesLinked: ids.length,
+      incomeEntriesLinked: linked.incomes, plansLinked: linked.pendingPayments,
     },
   });
   revalidatePath("/students");
@@ -234,12 +233,9 @@ export async function convertLeadToStudent(
     },
   });
 
-  // Same name-match backfill createStudent does - a payment recorded before conversion links up.
-  const candidates = await prisma.income.findMany({ where: { studentId: null } });
-  const ids = candidates.filter((i) => nameKey(i.studentName) === nameKey(student.fullName)).map((i) => i.id);
-  if (ids.length) {
-    await prisma.income.updateMany({ where: { id: { in: ids } }, data: { studentId: student.id } });
-  }
+  // The same backfill every other door runs. It used to link income only here, so a converted
+  // lead's instalment plan stayed detached and "paid so far" read zero against it.
+  const linked = await linkOrphanMoneyToStudent({ studentId: student.id, fullName: student.fullName });
 
   await logActivity(session, {
     action: "student.convert",
@@ -247,7 +243,7 @@ export async function convertLeadToStudent(
     entityType: "Student",
     entityId: student.id,
     summary: `Converted lead ${lead.name} into a student`,
-    meta: { leadId: lead.id, incomeEntriesLinked: ids.length },
+    meta: { leadId: lead.id, incomeEntriesLinked: linked.incomes, plansLinked: linked.pendingPayments },
   });
   revalidatePath("/students");
   revalidatePath("/contacts");

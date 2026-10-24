@@ -32,6 +32,8 @@ import { ACCOUNT, isMoneyAccount } from "@/lib/chart-of-accounts";
 import { RECURRENCE_INTERVALS } from "@/lib/payment-types";
 import { currenciesInPlay, methodsForCurrencies } from "@/lib/payment-methods";
 import type { PaymentTypeKind } from "@/lib/config-schema";
+import { linkOrphanMoneyToStudent } from "./student-money-link";
+import { nameKey } from "@/lib/name-key";
 
 /** Finance is Admin-only in every direction (PRD1 §4.1). All actions re-check. */
 
@@ -40,7 +42,6 @@ import type { PaymentTypeKind } from "@/lib/config-schema";
  * student's payments with (server/finance-metrics) - so a name that links here is the same name
  * that adds up there.
  */
-const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
 /**
  * Every write here moves money, so every write posts to the ledger in the SAME transaction
@@ -644,20 +645,20 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
        * NOBODY are touched - a payment already attributed to another student is never moved.
        */
       if (mintedStudent) {
-        const orphans = await tx.income.findMany({
-          where: { studentId: null },
-          select: { id: true, studentName: true },
-        });
-        const ids = orphans.filter((i) => nameKey(i.studentName) === nameKey(d.studentName)).map((i) => i.id);
-        if (ids.length) {
-          await tx.income.updateMany({ where: { id: { in: ids } }, data: { studentId: mintedStudent.id } });
-          mintedStudent.backfilled = ids.length;
-        }
-        // A receivable typed under the same name is the other half of that history.
-        await tx.pendingPayment.updateMany({
-          where: { studentId: null, studentName: d.studentName },
-          data: { studentId: mintedStudent.id },
-        });
+        /*
+          Shared with the other five creation doors (server/student-money-link.ts). This path was
+          the only one that linked the RECEIVABLE as well as the payments, which is why its
+          version became the shared one - and the shared one fixed its remaining flaw: the plan
+          match here compared the raw `studentName`, so a receivable typed with a double space or
+          a stray capital was missed while the payments beside it linked fine.
+
+          Inside the transaction, so the link commits with the student it points at.
+        */
+        const linked = await linkOrphanMoneyToStudent(
+          { studentId: mintedStudent.id, fullName: d.studentName },
+          tx,
+        );
+        mintedStudent.backfilled = linked.incomes;
       }
 
       /**
@@ -734,7 +735,6 @@ export async function createIncome(form: FormData): Promise<ActionResult> {
   revalidatePath("/finance");
   revalidatePath("/cash");
   revalidatePath("/students");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -878,7 +878,6 @@ export async function updateIncome(id: string, form: FormData): Promise<ActionRe
   revalidatePath("/finance");
   revalidatePath("/cash");
   revalidatePath("/students");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -952,7 +951,6 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
   revalidatePath("/finance");
   revalidatePath("/cash");
   revalidatePath("/students");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -1007,7 +1005,6 @@ export async function restoreIncome(id: string): Promise<ActionResult> {
   revalidatePath("/finance");
   revalidatePath("/cash");
   revalidatePath("/students");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -1030,7 +1027,6 @@ export async function purgeIncome(id: string): Promise<ActionResult> {
   revalidatePath("/finance");
   revalidatePath("/cash");
   revalidatePath("/students");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -1204,7 +1200,6 @@ export async function createExpense(form: FormData): Promise<ActionResult> {
 
   revalidatePath("/finance");
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -1280,7 +1275,6 @@ export async function updateExpense(id: string, form: FormData): Promise<ActionR
 
   revalidatePath("/finance");
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -1328,7 +1322,6 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
 
   revalidatePath("/finance");
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -1375,7 +1368,6 @@ export async function restoreExpense(id: string): Promise<ActionResult> {
 
   revalidatePath("/finance");
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -1397,7 +1389,6 @@ export async function purgeExpense(id: string): Promise<ActionResult> {
   });
   revalidatePath("/finance");
   revalidatePath("/cash");
-  revalidatePath("/ledger");
   return { ok: true };
 }
 

@@ -311,6 +311,61 @@ always heading for: **every section has a guide entry, or it does not ship.**
 
 ---
 
+## The bug sweep (24/10/2026)
+
+Asked to find and fix everything wrong with the application, not only what the refactor touched.
+
+### How it was hunted
+
+| Method | What it is for | Yield |
+|---|---|---|
+| **Raw-SQL audit** | Every table named in `$queryRaw` / `$executeRaw`, checked against the schema. This is the class that had already bitten twice. | **clean** — the two found earlier were the only ones |
+| **Route audit** | Every `revalidatePath`, `redirect` and `href` checked against the routes the App Router serves. | **clean** — 0 of 116 dead |
+| **Key audit** | Every `requireSection` / `requireCapability` / `sectionKey` string checked against the catalogue. | **clean** |
+| **`npm run smoke`** (new) | Signs in and OPENS every screen, reporting a non-2xx, an error boundary, an uncaught exception, a server error or a blank render. | **1 crash, and it was a bad one** |
+
+The audits matter as much as the finding: three of the four classes came back clean, which is
+evidence rather than a guess, and the one that did not is now a repeatable command.
+
+### What `smoke` found
+
+**Cash Health replaced itself with an error boundary.** 60 of 61 screens rendered; the founder's
+cash screen did not.
+
+`fxRateUsed` is `0` on any row stored without one — the normal state for a rupee-only payable.
+`inrMinorToEurMinor` divided by it, which gives `Infinity`, and `BigInt(Infinity)` **throws**. So
+one unconvertible row did not produce a dash in one cell; it destroyed the whole page.
+
+Three things make it worth recording rather than just fixing:
+
+1. **Nothing in this repo could have caught it.** The throw is inside a pure function, reached
+   only with data the unit tests never supplied. `tsc`, `next build` and 1,900 tests passed
+   throughout. It needed something to *open a page*.
+2. **The fix belongs in the pure function, not the call site.** Finance, Equity and Cash all share
+   that converter — every one of them was one bad row from the same crash.
+3. **The quiet half.** `eurMinorToInrMinor` multiplies, so it never threw — it would have valued a
+   real €100 bill at ₹0 and said nothing. Guarded identically.
+
+**Checked against live, read-only: zero such rows today.** The crash was latent, not active — but
+the first rupee-only payable anybody recorded would have found it.
+
+### The root, and why it stayed hidden
+
+`Payable.fxRateUsed` is the **one** money column in the schema carrying `@default(0)`; Income,
+Expense and the rest require the field. So a script that omits it stores a rate silently
+guaranteed to crash the page reading it — which every demo payable did, which is why
+`npm run db:demo` producing a working dataset was the thing that surfaced it.
+
+The default is kept (0 is an honest "no rate" for a rupee-only bill) and now documented at the
+column. The app's own writer has always stamped the day's rate, which is why live is clean.
+
+### Also fixed
+
+- **The Deals rename was incomplete.** Three places still said "Opportunities" to the reader: the
+  Console toggle, and the contact record's tab and empty state.
+- **The demo login can now be any role**, because an admin sweep is blind to the role-gated half
+  of the app.
+
 ## 🛑 Gates — both cleared
 
 | Step | What it needed | How it was cleared |

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
+import { ACTIVE } from "@/lib/soft-delete";
 import { decideBookOrder, initialBookOrderStatus } from "@/lib/book-order";
 import {
   bookOrderBodySummary,
@@ -32,6 +33,28 @@ const STATUSES = ["DEFERRED", "QUOTE_REQUESTED", "QUOTED", "ORDERED", "PAID", "C
 
 function firstError(e: z.ZodError): string {
   return e.issues[0]?.message ?? "Invalid input";
+}
+
+/**
+ * Cash a student has actually paid, in paise - the figure the ship-or-defer decision turns on.
+ *
+ * ARCHIVED INCOME IS EXCLUDED, which it was not. Both decision sites summed every Income row
+ * carrying the student's id, archived ones included, so a payment deleted as a mis-entry or a
+ * reversal still counted as money received: `createBookOrder` would ship against it, and
+ * `releaseDeferredBookOrders` would quietly un-defer an order on it.
+ *
+ * That it was a bug rather than a choice is settled by this feature's own read side -
+ * `book-order-metrics` spreads `ACTIVE` into the identical sum, so the panel showed one number
+ * while the decision used another. `tutor-fees` filters it too. These two were the outliers.
+ *
+ * One helper for both call sites, because the thing that let them drift is that there were two.
+ */
+async function cashCollectedInrMinor(studentId: string): Promise<number> {
+  const paid = await prisma.income.aggregate({
+    where: { ...ACTIVE, studentId },
+    _sum: { amountInrMinor: true },
+  });
+  return Number(paid._sum.amountInrMinor ?? 0);
 }
 
 /** Rupees in the form → paise in the DB. The founder types 15000, we store 1500000. */
@@ -110,12 +133,9 @@ export async function createBookOrder(form: FormData): Promise<ActionResult> {
   });
   if (!student) return { ok: false, error: "Student not found" };
 
-  const paid = await prisma.income.aggregate({
-    where: { studentId: d.studentId },
-    _sum: { amountInrMinor: true },
-  });
+  const paid = await cashCollectedInrMinor(d.studentId);
   const config = await getBookOrderConfig();
-  const decision = decideBookOrder(Number(paid._sum.amountInrMinor ?? 0), config);
+  const decision = decideBookOrder(paid, config);
   const status = initialBookOrderStatus(decision);
 
   try {
@@ -367,11 +387,8 @@ export async function releaseDeferredBookOrders(): Promise<{ released: number; c
   });
   let released = 0;
   for (const order of deferred) {
-    const paid = await prisma.income.aggregate({
-      where: { studentId: order.studentId },
-      _sum: { amountInrMinor: true },
-    });
-    const decision = decideBookOrder(Number(paid._sum.amountInrMinor ?? 0), config);
+    const paid = await cashCollectedInrMinor(order.studentId);
+    const decision = decideBookOrder(paid, config);
     if (!decision.order) continue;
     await prisma.bookOrder.update({
       where: { id: order.id },

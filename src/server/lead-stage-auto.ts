@@ -1,5 +1,5 @@
 import "server-only";
-import type { LeadStage, WhatsAppKind } from "@prisma/client";
+import type { LeadStage, Prisma, WhatsAppKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { syncDefaultOpportunity } from "./opportunity-sync";
 import { pickFirstCaller } from "./assignment";
@@ -211,14 +211,61 @@ export async function advanceLeadStage(
   if (!lead || lead.deletedAt) return false;
   if (lead.stage === to || !from.includes(lead.stage)) return false;
 
-  await prisma.$transaction(async (tx) => {
-    await tx.lead.update({ where: { id: leadId }, data: { stage: to } });
-    await tx.leadStageHistory.create({
-      // `changedById: null` - this is the system moving the lead, and attributing it to whoever
-      // happened to trigger the send would put it on their gamification scoreboard.
-      data: { leadId, fromStage: lead.stage, toStage: to },
-    });
-    await syncDefaultOpportunity(tx, leadId, to);
-  });
+  // `changedById` is left null on purpose - this is the SYSTEM moving the lead, and attributing
+  // it to whoever happened to trigger the send would put it on their gamification scoreboard.
+  await prisma.$transaction((tx) => writeLeadStage(tx, { leadId, from: lead.stage, to }));
   return true;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────
+   THE ONE WAY Lead.stage IS WRITTEN
+   ──────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Move a lead's stage, inside a caller's transaction.
+ *
+ * ── The structural problem this closes (P4) ─────────────────────────────────────────────
+ * One deal has two status fields: `Lead.stage` and `Opportunity.stageId`, kept in step by
+ * application code. Seventeen sites across twelve modules write `Lead.stage`, and each one had to
+ * remember THREE things:
+ *
+ *   1. update the column
+ *   2. write a `LeadStageHistory` row — the pipeline's stage metrics read history, not the current
+ *      column, so a stage change with no history row is invisible to every report that matters
+ *   3. move the card on the Opportunity board
+ *
+ * Fifteen of the seventeen remembered all three. Two did not, and both were the same bug in two
+ * places: `booking-automation.ts` and `outreach.ts` released an unconfirmed booking and sent the
+ * lead back to `DISCO_NOT_BOOKED` without touching the board — so the card sat in "Discovery Call
+ * Booked" claiming a call that had just been cancelled. Both files carry a comment explaining that
+ * they fixed exactly this failure for the stage column, and neither carried it through to the card.
+ *
+ * Doing all three in one place is the fix. Forgetting is no longer possible, because there is
+ * nothing left to forget — and `lead-stage-writers.test.ts` fails if a new direct write appears.
+ *
+ * ── Why it takes a `tx` rather than opening its own ─────────────────────────────────────
+ * Every caller is already inside a transaction that is doing something else at the same time:
+ * cancelling a booking, releasing a slot, logging a call. The stage change has to commit or roll
+ * back WITH that work — a released slot whose lead stayed in "Booked" is precisely the drift
+ * this exists to prevent.
+ *
+ * `changedById` is the person who did it, or `null` for the system. Null matters: attributing an
+ * engine's move to whoever happened to trigger it would put it on their gamification scoreboard.
+ */
+export async function writeLeadStage(
+  tx: Prisma.TransactionClient,
+  args: {
+    leadId: string;
+    /** The stage being left. Recorded in history, so it must be the value actually in the row. */
+    from: LeadStage | null;
+    to: LeadStage;
+    changedById?: string | null;
+  },
+): Promise<void> {
+  const { leadId, from, to, changedById = null } = args;
+  await tx.lead.update({ where: { id: leadId }, data: { stage: to } });
+  await tx.leadStageHistory.create({
+    data: { leadId, fromStage: from, toStage: to, changedById },
+  });
+  await syncDefaultOpportunity(tx, leadId, to);
 }

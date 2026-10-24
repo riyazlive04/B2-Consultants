@@ -10,6 +10,7 @@ import { getBookingRulesConfig } from "./founder-config";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import { markReleasePromoted, recordSlotRelease } from "./slot-release";
 import { sweepZoomMeetings, syncBookingMeeting, type ZoomSweepResult } from "./zoom-meetings";
+import { writeLeadStage } from "./lead-stage-auto";
 import {
   sendBookingConfirmRequest,
   sendBookingRescheduled,
@@ -327,10 +328,15 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
         if (b.leadId) {
           const lead = await tx.lead.findUnique({ where: { id: b.leadId }, select: { stage: true } });
           if (lead && (lead.stage === "DISCO_BOOKED" || lead.stage === "STRATEGY_CALL_BOOKED")) {
-            await tx.lead.update({ where: { id: b.leadId }, data: { stage: "DISCO_NOT_BOOKED" } });
-            await tx.leadStageHistory.create({
-              data: { leadId: b.leadId, fromStage: lead.stage, toStage: "DISCO_NOT_BOOKED" },
-            });
+            /*
+              Through `writeLeadStage`, which also MOVES THE CARD (P4).
+
+              This used to update the column and write history and stop there, so the half of the
+              bug the comment above describes was only half fixed: the slot went back, the stage
+              went back, and the Opportunity card stayed in "Discovery Call Booked" claiming a
+              call that had just been cancelled. One seam now does all three.
+            */
+            await writeLeadStage(tx, { leadId: b.leadId, from: lead.stage, to: "DISCO_NOT_BOOKED" });
           }
         }
       });

@@ -27,7 +27,7 @@ import { emptyTally, mergeTallies, tallySend, type DeliveryTally } from "@/lib/d
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { sendWhatsApp } from "./whatsapp";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
-import { advanceLeadStage } from "./lead-stage-auto";
+import { advanceLeadStage, writeLeadStage } from "./lead-stage-auto";
 
 /**
  * Outreach SOP - the DB shell around `lib/outreach-engine.ts`.
@@ -862,10 +862,9 @@ async function releaseDiscoBooking(journeyId: string): Promise<{ cancelled: bool
       // and the DISCO_BOOKED-only guard left their card claiming a call that was just released.
       const lead = await tx.lead.findUnique({ where: { id: row.leadId }, select: { stage: true } });
       if (lead && (lead.stage === "DISCO_BOOKED" || lead.stage === "STRATEGY_CALL_BOOKED")) {
-        await tx.lead.update({ where: { id: row.leadId }, data: { stage: "DISCO_NOT_BOOKED" } });
-        await tx.leadStageHistory.create({
-          data: { leadId: row.leadId, fromStage: lead.stage, toStage: "DISCO_NOT_BOOKED" },
-        });
+        // Through `writeLeadStage`, so the CARD moves with the stage (P4). Same half-fix as
+        // booking-automation.ts had: the released call left its card sitting in "Booked".
+        await writeLeadStage(tx, { leadId: row.leadId, from: lead.stage, to: "DISCO_NOT_BOOKED" });
       }
     }
   });

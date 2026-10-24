@@ -7,7 +7,7 @@
  * `ACTIVE` into their `where`; the per-section "Archived" tab reads with
  * `ARCHIVED`. We filter explicitly per query (no Prisma middleware / `$extends`)
  * to match the house style - the same pattern the Automation/Workflow feature
- * already uses (`src/server/automation-metrics.ts`).
+ * already uses (it was introduced for `server/automation-metrics.ts`, since removed).
  */
 
 /** Spread into an active list/count/dropdown `where` to exclude archived rows. */

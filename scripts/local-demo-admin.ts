@@ -1,8 +1,15 @@
 /**
- * Create a local-only ADMIN login for browsing the app on the local database.
+ * Create a local-only login for browsing the app on the local database.
  *
- *   npx tsx scripts/local-demo-admin.ts            # create / reset, print the password
- *   npx tsx scripts/local-demo-admin.ts --remove   # delete the account and its sessions
+ *   npx tsx scripts/local-demo-admin.ts                # ADMIN, create / reset, print the password
+ *   npx tsx scripts/local-demo-admin.ts --role=HEAD    # any role - see ROLES below
+ *   npx tsx scripts/local-demo-admin.ts --remove       # delete the account(s) and their sessions
+ *
+ * ── Why the role flag ───────────────────────────────────────────────────────────────────
+ * `npm run smoke` opens every screen, and as an admin it can open nearly all of them - which
+ * means the role-gated half of the app goes unchecked. A page that assumes founder-shaped data
+ * is a real class of bug and an admin sweep is blind to it. One account per role, each with its
+ * own email, so they can be signed in side by side.
  *
  * ── Why this exists alongside scripts/qa-temp-admin.ts ────────────────────────────
  * That script runs against whatever `.env` points at, which here is LIVE Supabase, and it relies
@@ -30,8 +37,21 @@ if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
 
 const prisma = new PrismaClient({ datasources: { db: { url: LOCAL_DB } } });
 
-const EMAIL = "local.demo@b2consultants.in";
-const NAME = "LOCAL DEMO - delete me";
+/** The roles a login can be created for - every role the app has. */
+const ROLES = ["ADMIN", "HEAD", "USER", "COACH", "TUTOR", "STUDENT"] as const;
+type DemoRole = (typeof ROLES)[number];
+
+const roleArg = process.argv.find((a) => a.startsWith("--role="))?.split("=")[1]?.toUpperCase();
+if (roleArg && !ROLES.includes(roleArg as DemoRole)) {
+  console.error(`Unknown role "${roleArg}". One of: ${ROLES.join(", ")}`);
+  process.exit(1);
+}
+const ROLE: DemoRole = (roleArg as DemoRole) ?? "ADMIN";
+
+/** ADMIN keeps the original address so existing notes and scripts still work. */
+const EMAIL =
+  ROLE === "ADMIN" ? "local.demo@b2consultants.in" : `local.demo.${ROLE.toLowerCase()}@b2consultants.in`;
+const NAME = `LOCAL DEMO ${ROLE} - delete me`;
 
 const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
@@ -44,13 +64,23 @@ const auth = betterAuth({
 
 const makePassword = () => `demo-${randomBytes(9).toString("hex")}`;
 
+/** `--remove` clears EVERY demo login, not just the one the role flag names. */
 async function remove() {
-  const user = await prisma.user.findUnique({ where: { email: EMAIL } });
-  if (!user) return console.log("No local demo account exists - nothing to remove.");
-  await prisma.session.deleteMany({ where: { userId: user.id } });
-  await prisma.account.deleteMany({ where: { userId: user.id } });
-  await prisma.user.delete({ where: { id: user.id } });
-  console.log(`Removed ${EMAIL}.`);
+  const emails = [
+    "local.demo@b2consultants.in",
+    ...ROLES.filter((r) => r !== "ADMIN").map((r) => `local.demo.${r.toLowerCase()}@b2consultants.in`),
+  ];
+  let removed = 0;
+  for (const email of emails) {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) continue;
+    await prisma.session.deleteMany({ where: { userId: user.id } });
+    await prisma.account.deleteMany({ where: { userId: user.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+    console.log(`Removed ${email}.`);
+    removed += 1;
+  }
+  if (removed === 0) console.log("No local demo accounts exist - nothing to remove.");
 }
 
 async function create() {
@@ -61,19 +91,20 @@ async function create() {
   if (!user) {
     const res = await auth.api.signUpEmail({ body: { name: NAME, email: EMAIL, password } });
     user = await prisma.user.findUnique({ where: { id: res.user.id } });
-    console.log("Created a new local demo admin.");
+    console.log(`Created a new local demo ${ROLE}.`);
   } else {
     await ctx.internalAdapter.updatePassword(user.id, await ctx.password.hash(password));
-    console.log("Local demo admin already existed - password reset.");
+    console.log(`Local demo ${ROLE} already existed - password reset.`);
   }
 
   await prisma.user.update({
     where: { id: user!.id },
     // `mustChangePassword: false` so browsing is not interrupted by the change-password screen.
-    data: { role: "ADMIN", emailVerified: true, status: "ACTIVE", mustChangePassword: false },
+    data: { role: ROLE, emailVerified: true, status: "ACTIVE", mustChangePassword: false },
   });
 
   console.log(`\n  database ${host}:5435/b2_dashboard`);
+  console.log(`  role     ${ROLE}`);
   console.log(`  email    ${EMAIL}`);
   console.log(`  password ${password}\n`);
 }

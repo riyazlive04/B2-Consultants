@@ -2883,6 +2883,18 @@ model Payable {
   /// a commitment that was already agreed.
   amountInrMinor BigInt           @default(0)
   amountEurMinor BigInt           @default(0)
+  /// INR per 1 EUR, stamped when the payable was saved. `cash-actions.ts` always supplies it.
+  ///
+  /// ⚠ THE DEFAULT OF 0 MEANS "NO RATE KNOWN", NOT "FREE". It is the one money column in this
+  /// schema with a default - Income, Expense and the rest require the field - so a script that
+  /// forgets it stores 0 SILENTLY. Every demo payable did exactly that, and dividing by it
+  /// produced Infinity, which `BigInt()` refuses: one row replaced the whole Cash Health page
+  /// with an error boundary (24/10/2026).
+  ///
+  /// `lib/fx.ts` now treats a non-positive rate as unconvertible and returns 0 rather than
+  /// throwing, so a rupee-only payable reads correctly and its euro column is simply blank. The
+  /// default is kept because 0 is an honest "no rate" for a rupee-only bill - but anything
+  /// WRITING here should pass the day's rate, as the action does.
   fxRateUsed     Decimal          @default(0) @db.Decimal(14, 6)
   frequency      PayableFrequency @default(MONTHLY)
   nextDueDate    DateTime?        @db.Date

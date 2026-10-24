@@ -844,6 +844,22 @@ export type ListedUser = {
   createdAt: string;
   /** pending = invited but the link is unused and unexpired */
   invite: { pending: boolean; expired: boolean } | null;
+  /**
+   * THE TEAM PROFILE THIS LOGIN IS JOINED TO, or null (P11).
+   *
+   * Carried here because `TeamProfile.logVariant` is load-bearing access behaviour that the
+   * access model cannot express: it decides WHICH My Desk somebody sees - appointment setter,
+   * discovery specialist or the default - and it is not a role, not a section and not a
+   * capability. So an admin could set a telecaller's role and sections correctly, hand over the
+   * login, and the person would land on "No team profile linked to your login" with the access
+   * dialog showing nothing wrong at all.
+   *
+   * It is deliberately READ-ONLY here. The profile is edited on the Team & org chart tab, which
+   * owns far more than this (reporting line, first-call share, Saturday availability), and a
+   * second editor for one field of it is exactly the duplication this refactor is reducing. The
+   * dialog states the fact and links to the screen that owns it.
+   */
+  teamProfile: { id: string; roleTitle: string; logVariant: string } | null;
 };
 
 export async function listUsers(): Promise<ListedUser[]> {
@@ -854,6 +870,9 @@ export async function listUsers(): Promise<ListedUser[]> {
       id: true, name: true, email: true, role: true, status: true,
       sectionAccess: true, capabilities: true, createdAt: true,
       invite: { select: { acceptedAt: true, expiresAt: true } },
+      // `TeamProfile.userId` is `@unique`, so this is at most one row - no extra query shape
+      // and no risk of picking the wrong profile.
+      teamProfile: { select: { id: true, roleTitle: true, logVariant: true } },
     },
   });
   const now = Date.now();
@@ -871,6 +890,9 @@ export async function listUsers(): Promise<ListedUser[]> {
           pending: u.invite.acceptedAt === null && u.invite.expiresAt.getTime() > now,
           expired: u.invite.acceptedAt === null && u.invite.expiresAt.getTime() <= now,
         }
+      : null,
+    teamProfile: u.teamProfile
+      ? { id: u.teamProfile.id, roleTitle: u.teamProfile.roleTitle, logVariant: u.teamProfile.logVariant }
       : null,
   }));
 }

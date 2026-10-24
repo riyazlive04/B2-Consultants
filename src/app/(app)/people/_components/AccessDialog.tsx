@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Lock } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { LOG_VARIANT_LABELS } from "@/lib/labels";
 import { FormError } from "@/components/ui/form";
 import { fieldKindProps } from "@/components/ui/field-base";
 import { toast } from "@/components/ui/feedback";
@@ -189,6 +190,41 @@ export function AccessDialog({
             <SegmentedControl grow ariaLabel="Role" value={role} onChange={pickRole} options={roleOptions} />
           </div>
         </div>
+
+        {/*
+          ── THE ONE PIECE OF ACCESS THIS DIALOG CANNOT SET (P11) ───────────────────────────
+          Which My Desk a telecaller sees is decided by `TeamProfile.logVariant` - not by their
+          role, not by a section, not by a capability. So an admin could set everything on this
+          screen correctly, hand over the login, and the person would land on "No team profile
+          linked to your login" with nothing here looking wrong.
+
+          Stated, not editable. The Team & org chart tab owns the profile and holds far more of
+          it than this one field (reporting line, first-call share, Saturday availability), and a
+          second editor for one field of it is the duplication this refactor is reducing.
+
+          Only for roles that HAVE a desk: a student or a tutor has no team profile by design,
+          and telling an admin that is missing would be inventing a problem.
+        */}
+        {mode === "edit" && (role === "USER" || role === "HEAD") && (
+          <div className="rounded-field border border-line bg-surface-2 px-3.5 py-3">
+            <p className="text-sm font-medium text-ink">Team profile</p>
+            {user?.teamProfile ? (
+              <p className="mt-0.5 text-sm text-ink-2">
+                Linked as <b className="font-semibold text-ink">{user.teamProfile.roleTitle}</b>, so
+                their My Desk is the{" "}
+                {LOG_VARIANT_LABELS[user.teamProfile.logVariant as keyof typeof LOG_VARIANT_LABELS] ??
+                  user.teamProfile.logVariant}{" "}
+                version. Change it on Team &amp; org chart.
+              </p>
+            ) : (
+              <p className="mt-0.5 text-sm text-warn">
+                <b className="font-semibold">No team profile is linked to this login.</b> Their My
+                Desk cannot know whose calls are theirs, so it will show a dead end however much
+                access you grant here. Link it on the Team &amp; org chart tab.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* modules - what they can SEE */}
         <div>

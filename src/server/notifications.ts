@@ -36,6 +36,8 @@ import { getAttendanceConfig } from "./founder-config";
 import { getAgreementTaskCounts } from "./agreement-state";
 import { deliveryNotifications } from "./delivery-health";
 import { MILESTONE_LABELS } from "@/lib/labels";
+import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
+import { activationBlockers, seatCount } from "@/lib/batch";
 
 /**
  * IN-APP notification centre. Server-computed on load + light polling - the same
@@ -260,6 +262,82 @@ async function contactNoteMentionNotifications(userId: string, today: Date): Pro
  */
 const NOTIF_TTL_MS = 45_000;
 const notifMemo = new Map<string, { at: number; items: Notification[] }>();
+
+/**
+ * A COHORT THAT CANNOT TEACH ANYBODY, AND HAS PEOPLE IN IT (P16).
+ *
+ * The one place the bell had no coverage at all. Forty-five derived items across seventeen
+ * destinations, and none of them about cohort setup - so a cohort with learners seated, no plan,
+ * no teacher and no dates sat there silently, and the first person to find out was a student
+ * opening an empty Classroom.
+ *
+ * ── Why it is narrower than "every draft cohort" ────────────────────────────────────────
+ * A draft cohort is normal work in progress: the founders create one on Tuesday and fill it as
+ * deals close. Raising every one of those would be an alarm that is always on, which is an alarm
+ * nobody reads. What is actually wrong is a cohort somebody has been SEATED INTO that still
+ * cannot teach - at that point a real person is expecting a class.
+ *
+ * Reuses `activationBlockers` from lib/batch.ts, so the bell, the cohort checklist and the Start
+ * cohort button cannot disagree about what "ready" means.
+ */
+async function cohortSetupNotifications(): Promise<Notification[]> {
+  const batches = await prisma.batch.findMany({
+    where: { status: "ACTIVE" },
+    select: {
+      id: true,
+      name: true,
+      line: true,
+      curriculumTemplateId: true,
+      tutorId: true,
+      startDate: true,
+      endDate: true,
+      targetStrength: true,
+      _count: {
+        select: {
+          members: true,
+          enrollments: { where: { status: { in: [...SEATED_STATUSES] } } },
+          events: true,
+        },
+      },
+    },
+  });
+
+  const stuck = batches.filter((b) => {
+    const seats = { members: b._count.members, seatedEnrollments: b._count.enrollments };
+    // Nobody seated = nobody waiting. That is a draft, not a problem.
+    if (seatCount(seats) === 0) return false;
+    return (
+      activationBlockers({
+        // Every row here is ACTIVE by the `where` above; the rule still wants it told, because
+        // ARCHIVED is the one state it treats as final.
+        status: "ACTIVE",
+        line: b.line,
+        curriculumTemplateId: b.curriculumTemplateId,
+        tutorId: b.tutorId,
+        startDate: b.startDate,
+        endDate: b.endDate,
+        seats,
+        sessionCount: b._count.events,
+        upcomingSessionCount: b._count.events,
+      }).length > 0
+    );
+  });
+
+  if (stuck.length === 0) return [];
+  const first = stuck[0];
+  return [
+    {
+      id: "cohort-not-ready",
+      severity: "risk",
+      title: `${stuck.length} cohort${stuck.length > 1 ? "s" : ""} ${stuck.length > 1 ? "have" : "has"} learners but cannot teach yet`,
+      body:
+        stuck.length === 1
+          ? `“${first.name}” has people seated in it and is still missing something it needs - a plan, a teacher or a start date. Open it and the checklist says which.`
+          : `These cohorts have people seated in them and are still missing a plan, a teacher or a start date. Each one's checklist says which.`,
+      href: stuck.length === 1 ? `/batches/${first.id}` : "/batches",
+    },
+  ];
+}
 
 export const computeNotifications = cache(async (role: AppRole, userId: string) => {
   const key = `${role}:${userId}`;
@@ -753,6 +831,9 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
     for (const d of await deliveryNotifications()) {
       items.push({ id: d.key, severity: d.severity, title: d.title, body: d.body, href: d.href });
     }
+
+    // Cohort setup - the bell's one blind spot until now. See the function's own note.
+    items.push(...(await cohortSetupNotifications()));
 
     /**
      * Weekend sprint check-ins waiting on a coach (portal issue 12).

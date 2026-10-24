@@ -302,6 +302,34 @@ model Level {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// ── THE REFERENCES THAT ARE NOW ENFORCED (migration M2, 24/10/2026) ───────────────────
+  ///
+  /// `Level` had ZERO schema relations: its `code` was soft-referenced as plain text in a dozen
+  /// columns across ten models, nothing validated any of them, and deleting a level left every
+  /// one pointing at nothing. Live proved the cost - two of three curriculum plans were filed
+  /// under a programme that does not exist, one of them a plain typo ("Gudied30"), and no screen
+  /// could say so.
+  ///
+  /// `onUpdate: Cascade` is what makes a level RENAMEABLE: changing a code used to orphan every
+  /// row that held it, and now propagates. `onDelete: Restrict` on the two required references
+  /// means a level in use cannot be deleted - it is switched off instead, which is what `active`
+  /// is for.
+  ///
+  /// Named relations because there are five of them on one model.
+  ///
+  /// NOT covered on purpose: `InvoiceLine.levelCode` and the workshop columns. An invoice line is
+  /// a FROZEN document - a level renamed after issue must not cascade into it, because the
+  /// invoice says what it said. Adding a foreign key to a frozen record is how an audit trail
+  /// gets rewritten.
+  enrollments         Enrollment[]         @relation("EnrollmentLevel")
+  batches             Batch[]              @relation("BatchLevel")
+  wonLeads            Lead[]               @relation("LeadWonLevel")
+  products            Product[]            @relation("ProductLevel")
+  curriculumTemplates CurriculumTemplate[] @relation("CurriculumLevel")
+  programMilestones   ProgramMilestone[]   @relation("MilestoneLevel")
+  pendingJoiners      GnPendingJoiner[]    @relation("JoinerLevel")
+  pendingPayments     PendingPayment[]     @relation("PendingPaymentLevel")
+
   @@index([kind, active, order])
   @@map("level")
 }
@@ -495,6 +523,7 @@ model PendingPayment {
   enrollmentId      String?
   enrollment        Enrollment?          @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   programLevel      String // Level.code (was ProgramLevel enum)
+  programLevelRef   Level     @relation("PendingPaymentLevel", fields: [programLevel], references: [code], onUpdate: Cascade, onDelete: Restrict)
   /// ER v2 EMI_PLAN.num_emis / levels_taken. INPUTS the founder sets when building the plan
   /// (the spec's "2 EMIs per level" rule), not outputs - which is why they are stored rather
   /// than counted off Instalment rows that may not all exist yet.
@@ -693,6 +722,7 @@ model Lead {
   dateIn            DateTime         @db.Date
   stage             LeadStage        @default(NEW_LEAD)
   wonLevel          String? // Level.code; set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
+  wonLevelRef       Level?    @relation("LeadWonLevel", fields: [wonLevel], references: [code], onUpdate: Cascade, onDelete: SetNull)
   paymentPlan       PaymentPlan? // set from DEPOSIT_PAID onward - split pay vs full pay
   notes             String?
   source            Source           @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
@@ -1524,6 +1554,7 @@ model Product {
   /// question nobody can answer at invoicing time. One-off items leave it null, and Postgres
   /// allows any number of NULLs in a unique index.
   levelCode     String?         @unique
+  levelRef      Level?          @relation("ProductLevel", fields: [levelCode], references: [code], onUpdate: Cascade, onDelete: SetNull)
   priceInrMinor BigInt          @default(0)
   priceEurMinor BigInt          @default(0)
   fxRateUsed    Decimal?        @db.Decimal(14, 6) // INR per 1 EUR when the EUR price was last set
@@ -1576,6 +1607,22 @@ model Invoice {
   status             InvoiceStatus     @default(DRAFT)
   leadId             String?
   lead               Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  /// WHO THIS INVOICE IS FOR, when they are a student (migration M1, 24/10/2026).
+  ///
+  /// `leadId` alone could not answer "what has this student paid": it needs a join through
+  /// provenance, and it fails outright for a student who was never a lead - a walk-in, a German
+  /// Note learner, anyone imported. Nullable because an invoice legitimately predates the student
+  /// record, and because not every invoice is for a student at all.
+  ///
+  /// SetNull, never Cascade: an invoice is a financial record and must outlive the student row it
+  /// points at. Cascading would let a student deletion erase issued invoices.
+  studentId          String?
+  student            Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  /// The specific enrolment being billed, where one applies. Narrower than `studentId`: a student
+  /// may hold several enrolments, and "which programme is this invoice for" is a different
+  /// question from "whose invoice is it".
+  enrollmentId       String?
+  enrollment         Enrollment?       @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   customerName       String
   customerEmail      String?
   customerPhone      String?
@@ -1631,6 +1678,8 @@ model Invoice {
   @@index([kind, createdAt])
   @@index([leadId])
   @@index([deletedAt])
+  @@index([studentId])
+  @@index([enrollmentId])
   @@map("invoice")
 }
 
@@ -2385,6 +2434,7 @@ model Student {
   taskCompletions    SessionTaskCompletion[]
   attendance         SessionAttendance[]
   resumes            Resume[]
+  invoices           Invoice[]
 
   @@index([fullName])
   @@map("student")
@@ -2405,6 +2455,7 @@ model Enrollment {
   batchId         String?
   batch           Batch?          @relation(fields: [batchId], references: [id], onDelete: SetNull)
   programLevel    String // Level.code - SOLO / GUIDED / ELITE only for B2 (service-validated)
+  programLevelRef Level  @relation("EnrollmentLevel", fields: [programLevel], references: [code], onUpdate: Cascade, onDelete: Restrict)
   enrollmentDate  DateTime        @db.Date
   duration        ProgramDuration
   programEndDate  DateTime?       @db.Date // enrollment + 90/120 days; null for LIFETIME
@@ -2471,6 +2522,7 @@ model Enrollment {
   agreements        Agreement[]
   bookOrders        BookOrder[]
   pendingPayments   PendingPayment[]
+  invoices          Invoice[]
 
   @@index([studentId])
   @@index([status, programLevel])
@@ -2894,6 +2946,7 @@ model Batch {
   code                 String?             @unique
   name                 String // "A1 Evening - July 2026"
   level                String // Level.code - service-validated against `line`
+  levelRef             Level               @relation("BatchLevel", fields: [level], references: [code], onUpdate: Cascade, onDelete: Restrict)
   tutorId              String?
   tutor                User?               @relation("BatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
   status               GnBatchStatus       @default(ACTIVE)
@@ -3060,6 +3113,7 @@ model CurriculumTemplate {
   /// Level.code this curriculum is written for (GUIDED / ELITE). Nullable: a template may be
   /// shared across tiers, and the batch's own level is what the seat guard checks.
   levelCode   String?
+  levelRef    Level?   @relation("CurriculumLevel", fields: [levelCode], references: [code], onUpdate: Cascade, onDelete: SetNull)
   description String?
   /// Days of sprint that follow the final session - the sheet's "90 Day Sprint" footer row.
   /// Guided is 90, Elite 120; null means this curriculum has no sprint phase.
@@ -5104,6 +5158,7 @@ model GnPendingJoiner {
   studentId String
   student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   level     String // Level.code (was ProgramLevel enum)
+  levelRef  Level  @relation("JoinerLevel", fields: [level], references: [code], onUpdate: Cascade, onDelete: Restrict)
 
   preference    GnSlotPreference @default(EITHER)
   /// Free text, as captured on the confirmation call ("evening", "after 7pm").
@@ -5452,6 +5507,7 @@ enum MilestoneProgressStatus {
 model ProgramMilestone {
   id         String    @id @default(cuid())
   levelCode  String // Level.code - per program, as the diagram asks
+  levelRef   Level  @relation("MilestoneLevel", fields: [levelCode], references: [code], onUpdate: Cascade, onDelete: Restrict)
   key        Milestone // reuse the shipped 7-value enum rather than inventing a parallel one
   name       String
   targetDay  Int // day-N of the 90/120-day tracker

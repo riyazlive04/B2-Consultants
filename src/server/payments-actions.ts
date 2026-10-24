@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma, type Invoice, type InvoiceCurrency, type InvoiceKind, type InvoiceStatus, type Product, type ProductInterval } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
 import { requireSection, capabilityCheck } from "@/lib/rbac";
 import { getTodayInrPerEur, eurMinorToInrMinor, inrMinorToEurMinor } from "@/lib/fx";
 import { formatEurMinor, formatInrMinor, majorStringToMinor } from "@/lib/format";
@@ -347,6 +348,8 @@ export async function purgeProduct(id: string): Promise<ActionResult> {
 export type InvoicePayload = {
   kind: "INVOICE" | "ESTIMATE";
   leadId?: string;
+  studentId?: string;
+  enrollmentId?: string;
   customerName: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -431,6 +434,17 @@ function invoiceMoney(
 const invoicePayloadSchema = z.object({
   kind: z.enum(["INVOICE", "ESTIMATE"]),
   leadId: z.string().trim().optional(),
+  /**
+   * WHO THIS INVOICE IS FOR, as a student (migration M1).
+   *
+   * Optional and usually left blank by the form: `resolveInvoiceParty` below works it out from
+   * the contact, because the person entering an invoice should not have to know whether the
+   * customer also has a student record. An explicit value wins, for the cases it cannot infer -
+   * a walk-in with no contact record, or a lead that became two students.
+   */
+  studentId: z.string().trim().optional(),
+  /** The specific enrolment being billed, where one applies. Inferred when unambiguous. */
+  enrollmentId: z.string().trim().optional(),
   customerName: rule("name"),
   customerEmail: optionalRule("email"),
   customerPhone: optionalRule("phone"),
@@ -522,6 +536,72 @@ async function complianceFields(payload: z.infer<typeof invoicePayloadSchema>): 
   };
 }
 
+/**
+ * ENQUIRY → STUDENT → INVOICE: who is this invoice actually for?
+ *
+ * ── Why this is inferred rather than asked ─────────────────────────────────────────────
+ * An invoice has always carried `leadId` - the enquiry record - and nothing else. So "what has
+ * this student paid" could only be answered by joining back through provenance, and it failed
+ * outright for a student who was never an enquiry: a walk-in, a German Note learner, anybody
+ * imported. `Invoice.studentId` (migration M1) is the fix, and this is what fills it.
+ *
+ * It is INFERRED because the person entering an invoice should not have to know whether the
+ * customer also has a student record. They pick the customer; the app works out the rest.
+ *
+ * ── The rules, in order ────────────────────────────────────────────────────────────────
+ *   1. An explicit `studentId` from the caller wins. It exists for what cannot be inferred.
+ *   2. Otherwise, if the contact has EXACTLY ONE student, that is the student.
+ *   3. A contact with two students resolves to NEITHER. Guessing which of somebody's two
+ *      records an invoice belongs to is worse than leaving it blank: blank is visibly
+ *      unanswered, and wrong is invisible.
+ *   4. The enrolment follows the same rule, one level down: exactly one seated enrolment on that
+ *      student, or nothing. A student mid-way between programmes legitimately has two.
+ *
+ * Returns nulls rather than throwing. An invoice must never fail to save because the link could
+ * not be worked out - the money is the point, the link is an improvement on it.
+ */
+async function resolveInvoiceParty(
+  tx: Prisma.TransactionClient,
+  payload: { leadId?: string; studentId?: string; enrollmentId?: string },
+): Promise<{ studentId: string | null; enrollmentId: string | null }> {
+  let studentId = payload.studentId?.trim() || null;
+
+  if (!studentId && payload.leadId?.trim()) {
+    const students = await tx.student.findMany({
+      where: { leadId: payload.leadId.trim() },
+      select: { id: true },
+      take: 2, // two is enough to know it is ambiguous
+    });
+    if (students.length === 1) studentId = students[0].id;
+  }
+
+  let enrollmentId = payload.enrollmentId?.trim() || null;
+  if (!enrollmentId && studentId) {
+    const enrolments = await tx.enrollment.findMany({
+      where: { studentId, status: { in: [...SEATED_STATUSES] } },
+      select: { id: true },
+      take: 2,
+    });
+    if (enrolments.length === 1) enrollmentId = enrolments[0].id;
+  }
+
+  /*
+    An explicitly supplied id is TRUSTED but checked for existence - a stale id from a form left
+    open while the record was archived would otherwise fail the whole invoice on a foreign key
+    violation, which is a confusing way to learn that something unrelated was deleted.
+  */
+  if (studentId) {
+    const exists = await tx.student.findUnique({ where: { id: studentId }, select: { id: true } });
+    if (!exists) studentId = null;
+  }
+  if (enrollmentId) {
+    const exists = await tx.enrollment.findUnique({ where: { id: enrollmentId }, select: { id: true } });
+    if (!exists) enrollmentId = null;
+  }
+
+  return { studentId, enrollmentId };
+}
+
 export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> {
   const session = await requireSection("payments");
   const parsedPayload = invoicePayloadSchema.safeParse(raw);
@@ -559,6 +639,8 @@ export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> 
       payload.kind === "ESTIMATE"
         ? await nextDocumentNumber(tx, "EST", parseDateInput(payload.issueDate).getUTCFullYear())
         : mintProvisionalNumber();
+    // Who it is FOR, not just which enquiry it came from - see `resolveInvoiceParty`.
+    const party = await resolveInvoiceParty(tx, payload);
     created = await tx.invoice.create({
       data: {
         ...compliance.data,
@@ -567,6 +649,8 @@ export async function createInvoice(raw: InvoicePayload): Promise<ActionResult> 
         publicToken: mintPublicToken(),
         status: "DRAFT",
         leadId: payload.leadId || null,
+        studentId: party.studentId,
+        enrollmentId: party.enrollmentId,
         customerName: payload.customerName.trim(),
         customerEmail: payload.customerEmail?.trim() || null,
         customerPhone: payload.customerPhone?.trim() || null,
@@ -667,11 +751,16 @@ export async function updateInvoice(id: string, raw: InvoicePayload): Promise<Ac
   let updated: Invoice | null = null;
   await prisma.$transaction(async (tx) => {
     await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
+    // Re-resolved on edit, because the customer may have been changed - and because a draft
+    // raised before the student record existed should pick it up once it does.
+    const party = await resolveInvoiceParty(tx, payload);
     updated = await tx.invoice.update({
       where: { id },
       data: {
         ...compliance.data,
         leadId: payload.leadId || null,
+        studentId: party.studentId,
+        enrollmentId: party.enrollmentId,
         customerName: payload.customerName.trim(),
         customerEmail: payload.customerEmail?.trim() || null,
         customerPhone: payload.customerPhone?.trim() || null,
@@ -784,7 +873,6 @@ export async function setInvoiceStatus(id: string, status: string): Promise<Acti
 
   revalidatePath("/payments");
   revalidatePath(`/payments/${id}`);
-  revalidatePath("/ledger");
   return { ok: true };
 }
 
@@ -1184,7 +1272,6 @@ export async function recordPayment(invoiceId: string, form: FormData): Promise<
   }
   revalidatePath("/payments");
   revalidatePath(`/payments/${invoiceId}`);
-  revalidatePath("/ledger");
   revalidatePath("/finance");
   return { ok: true };
 }

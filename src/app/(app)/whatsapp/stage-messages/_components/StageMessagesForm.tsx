@@ -49,8 +49,10 @@ export default function StageMessagesForm({
 
   return (
     <div className="space-y-5">
-      <Link href="/automation" className="inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-primary">
-        <ArrowLeft size={16} /> Automation
+      {/* Back to WhatsApp, not Automation - that section was removed on 23/10/2026 and this page
+          was re-homed here, so the old link pointed at a route that no longer exists. */}
+      <Link href="/whatsapp" className="inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-primary">
+        <ArrowLeft size={16} /> WhatsApp
       </Link>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

@@ -161,11 +161,18 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
  * feed saying a telecaller emailed forty contacts overnight is a lie nobody could spot.
  *
  * Steps only: the run itself is not an event ("resumed 12 enrollments" is cron noise, and the
- * human's "Run now" click is already logged by its own action). `section` is "automation" for
- * every row - the founder's question here is "what did my workflows do".
+ * human's "Run now" click is already logged by its own action).
+ *
+ * `section` was "automation" until that section was removed from the product on 23/10/2026. It is
+ * typed `SectionKey`, so the stale key was a build error rather than a silently mis-filed audit
+ * row - which is exactly what that typing is for. Rows now file under "pipeline", because every
+ * trigger this engine responds to is a lead or deal event (see `emitTrigger`'s callers in
+ * booking-, contacts-, forms-, opportunities- and payments-actions), so that is where a founder
+ * reading the log would look for the consequence. The ACTOR is still the engine, which is what
+ * the Who filter keys off.
  */
 async function record(input: Omit<ActivityInput, "section">): Promise<void> {
-  await logSystemActivity(SYSTEM_ACTORS.automation, { ...input, section: "automation" });
+  await logSystemActivity(SYSTEM_ACTORS.automation, { ...input, section: "pipeline" });
 }
 
 /** The founder reads names, never ids - and only a step that landed pays for the lookup. */

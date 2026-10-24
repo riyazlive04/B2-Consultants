@@ -344,9 +344,30 @@ These were in the plan. Each was dropped or narrowed after reading the code, rat
   architecture, the `lib`/`server` boundary, route → page → server → table per flow, where each
   lifecycle rule is enforced, and a checklist for adding a feature that fits.
   [`CHANGELOG.md`](./CHANGELOG.md) is the before/after record with step counts.
-- **Two things to do before this is relied on**, now that the build has passed: run
-  `npm run guide:shots` against the local stack so the guide has its pictures, and seat one real
-  person into one real cohort, because no write in this refactor has yet touched a live row.
+- **Both remaining verifications are now done** (24/10/2026). A local stack was stood up on
+  Postgres :5435 with the demo dataset, the app run against it on port 3100, and the app walked
+  by hand:
+  - **The guide has its 18 screenshots**, captured from that local stack. Every name in them is
+    made up.
+  - **Seating is proven end to end against real records** - both mechanisms. A coaching cohort
+    went 0/8 → 2/8 through the new Roster picker, and a German Note cohort 2 → 3 members, with
+    the setup checklist ticking "at least one learner" as it happened.
+
+### What walking the app turned up
+
+Three bugs, none of which any automated check could have caught, because all three were STRINGS:
+
+| # | Bug | How long it had been there |
+|---|---|---|
+| 1 | **Adding a German Note learner returned a 500, every time.** `claimSeat`'s row lock is raw SQL and still named `gn_batch`, merged into `batch` by the ER v2 alignment. It is the first statement the function runs, and both `addExistingMember` and `addNewMember` call it. | **Since 29/07/2026 - three months** |
+| 2 | **`npm run db:demo` failed on its first statement**, same stale rename in a TRUNCATE list. So nobody could reset the demo dataset, or stand up a local copy - which is why this surfaced only now. | Since 29/07/2026 |
+| 3 | **Three screens gave instructions that could not be followed.** Batches & Plans told the reader to seat from a student's profile, directly above my own empty state telling them to use the Roster; corrected, it was then wrong for German Note, whose cohort names are not links there. My Teaching still said seating lived on the Students board. | Mine, and pre-existing |
+
+**Bug 1 corrects something I got wrong earlier in this document.** The migration audit found zero
+`batch_member` rows on live and I read it as "German Note membership is entirely unused, so this
+is the cheapest possible moment to change it". It is not unused. It has been *unusable*. Same
+evidence, opposite meaning - and it is the reason M4 should not have been argued for on those
+grounds.
 - **Four migrations are written and waiting on you** —
   [`migrations/README.md`](./migrations/README.md), each with a runnable `.sql`, its rollback and
   its measured live impact. Two are ready (M1, M3), one is blocked on a 2-row data fix

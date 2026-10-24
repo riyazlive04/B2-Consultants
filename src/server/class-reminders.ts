@@ -148,7 +148,11 @@ export async function runClassReminders(): Promise<ClassReminderRun> {
     if (budget <= 0) break;
 
     // Both seating routes, de-duplicated. A student could in principle hold a BatchMember row
-    // AND an Enrollment in the same cohort, and that must not mean two reminders.
+    // AND an Enrollment in the same cohort, and that must not mean two reminders. A Map keyed by
+    // student id IS the dedupe - see `rosterStudentIds` in lib/batch.ts for the same rule where
+    // only the ids are needed. Not routed through it here: this send needs each person's phone
+    // number, so the map is already holding them and a detour through an id list and back would
+    // be longer and say less.
     const roster = new Map<string, { id: string; fullName: string; phone: string | null }>();
     for (const m of s.batch.members) roster.set(m.student.id, m.student);
     for (const e of s.batch.enrollments) roster.set(e.student.id, e.student);

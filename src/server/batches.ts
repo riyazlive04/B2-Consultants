@@ -11,6 +11,11 @@ import {
   capacityLabel,
   compareBatchChoices,
   levelFitsBatchLine,
+  batchBlockers,
+  batchReadiness,
+  type BatchPrerequisite,
+  type BatchReadiness,
+  type BatchReadinessInput,
 } from "@/lib/batch";
 import { toDateInputValue } from "@/lib/dates";
 import { getLevels } from "./levels";
@@ -32,6 +37,8 @@ export type BatchRow = {
   status: "ACTIVE" | "ARCHIVED";
   tutorId: string | null;
   tutorName: string | null;
+  /** The plan its timetable was built from, if any - one of the five setup prerequisites. */
+  curriculumTemplateId: string | null;
   startDate: Date | null;
   endDate: Date | null;
   targetStrength: number;
@@ -68,6 +75,7 @@ export const listBatches = cache(
         level: true,
         status: true,
         tutorId: true,
+        curriculumTemplateId: true,
         startDate: true,
         endDate: true,
         targetStrength: true,
@@ -103,6 +111,7 @@ export const listBatches = cache(
         status: b.status,
         tutorId: b.tutorId,
         tutorName: b.tutor?.name ?? null,
+        curriculumTemplateId: b.curriculumTemplateId,
         startDate: b.startDate,
         endDate: b.endDate,
         targetStrength: b.targetStrength,
@@ -225,6 +234,17 @@ export type BatchBoardRow = {
    */
   sessionCount: number;
   nextSessionAt: string | null;
+  /**
+   * WHERE THIS COHORT IS - derived, never stored (refactor step C3).
+   *
+   * The board showed `status`, which holds only ACTIVE or ARCHIVED, so a cohort saved with no
+   * plan, no teacher, no dates and nobody in it sat in the list looking exactly like one that
+   * was teaching. This is the same function the cohort hub uses, so a row and the page it opens
+   * can never disagree. It costs no extra query: every fact it reads is already selected.
+   */
+  readiness: BatchReadiness;
+  /** The setup prerequisites not yet met, so the row can say what is missing. */
+  blockers: BatchPrerequisite[];
 };
 
 export async function getBatchBoard(line: BatchLine): Promise<{
@@ -259,8 +279,32 @@ export async function getBatchBoard(line: BatchLine): Promise<{
     }
   }
 
+  const now = new Date();
+
   return {
-    rows: batches.map((b) => ({
+    rows: batches.map((b) => {
+      /*
+        `upcomingSessionCount` is only read to decide COMPLETED (classes exist, none left to
+        come), and `nextByBatch` already answers exactly that question for this screen - so it
+        is reduced to 1-or-0 rather than fetching per-row counts the board has no other use for.
+      */
+      const readinessInput: BatchReadinessInput = {
+        status: b.status,
+        line: b.line,
+        curriculumTemplateId: b.curriculumTemplateId,
+        tutorId: b.tutorId,
+        startDate: b.startDate,
+        endDate: b.endDate,
+        /*
+          `filled` is ALREADY both mechanisms summed by the unified seat rule, so it is handed
+          over as one number rather than split back into two the row no longer carries -
+          `seatCount` adds the pair and would reach the same total either way.
+        */
+        seats: { members: 0, seatedEnrollments: b.filled },
+        sessionCount: b.sessionCount,
+        upcomingSessionCount: nextByBatch.has(b.id) ? 1 : 0,
+      };
+      return {
       id: b.id,
       code: b.code,
       name: b.name,
@@ -281,7 +325,10 @@ export async function getBatchBoard(line: BatchLine): Promise<{
         const d = nextByBatch.get(b.id);
         return d ? toDateInputValue(d) : null;
       })(),
-    })),
+      readiness: batchReadiness(readinessInput, now),
+      blockers: batchBlockers(readinessInput),
+      };
+    }),
     levelOptions: levels
       .filter((l) => l.active && levelFitsBatchLine(l.kind, line))
       .map((l) => ({ value: l.code, label: l.label })),

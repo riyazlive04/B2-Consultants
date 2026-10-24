@@ -8,6 +8,7 @@ import { requireSession } from "@/lib/rbac";
 import { hasCapability } from "@/lib/capabilities";
 import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
+import { rosterStudentIds } from "@/lib/batch";
 
 /**
  * Session coursework (ER v2 Track B).
@@ -100,12 +101,10 @@ export async function createSessionTask(sessionId: string, form: FormData): Prom
 
   // Both seating routes, de-duplicated: a student could in principle appear via a BatchMember
   // row AND an Enrollment, and two completion rows for one person would double every count.
-  const studentIds = [
-    ...new Set([
-      ...classSession.batch.members.map((m) => m.studentId),
-      ...classSession.batch.enrollments.map((e) => e.studentId),
-    ]),
-  ];
+  const studentIds = rosterStudentIds(
+    classSession.batch.members.map((m) => m.studentId),
+    classSession.batch.enrollments.map((e) => e.studentId),
+  );
 
   const task = await prisma.$transaction(async (tx) => {
     const created = await tx.sessionTask.create({

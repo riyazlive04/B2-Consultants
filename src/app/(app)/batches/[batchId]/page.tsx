@@ -5,12 +5,16 @@ import { Tabs } from "@/components/ui/Tabs";
 import { PageHeader, Pill, TableShell, Td, Th, Tr, EmptyState } from "@/components/ui/kit";
 import { requireSession } from "@/lib/rbac";
 import { resolveBackLink } from "@/lib/back-link";
-import { getBatchDetail } from "@/server/batch-detail";
+import { canSeatBatch, getBatchDetail } from "@/server/batch-detail";
+// "Who can be seated here" is a membership question, so it lives with the rest of them (P1).
+import { listSeatCandidates } from "@/server/batch-membership";
+import { SeatPicker } from "@/components/batches/SeatPicker";
 import { getBatchAttendance } from "@/server/attendance";
 import { listCurriculumTemplates } from "@/server/curriculum";
 import { batchResources } from "@/server/resources";
 import { ResourceManager } from "@/components/resources/ResourceManager";
 import { TimetablePanel } from "@/components/batches/TimetablePanel";
+import { BatchChecklist } from "@/components/batches/BatchChecklist";
 import { StudentName } from "@/components/ui/StudentName";
 import { formatPct } from "@/lib/format";
 
@@ -40,11 +44,23 @@ export default async function BatchPage({
   // German Note cohorts are run from their own screen; land anyone who arrives here there.
   if (batch.line === "GERMAN_NOTE") redirect(`/german-note/${batch.id}`);
 
-  const [attendance, templates, resources] = await Promise.all([
+  /*
+    MAY THIS VIEWER DECIDE WHO IS IN THE COHORT?
+
+    A different question from `canManage`, which is about running it - building the timetable,
+    taking the register. Seating is fenced on `batches.manage` for a coaching cohort and on ADMIN
+    for a German Note one, read straight off the actions that will run (see `canSeatBatch`), so
+    the picker is never drawn for somebody the server would then refuse.
+  */
+  const canSeat = await canSeatBatch(session, batch.id);
+
+  const [attendance, templates, resources, candidates] = await Promise.all([
     getBatchAttendance(batch.id),
     // Only a manager is offered the build dialog, so only they need the catalogue loaded.
     batch.canManage ? listCurriculumTemplates({ line: "B2", activeOnly: true }) : Promise.resolve([]),
     batchResources(batch.id),
+    // Up to 500 rows, so it is only fetched for somebody who can actually act on it.
+    canSeat ? listSeatCandidates(batch.id) : Promise.resolve([]),
   ]);
   const sessionResourceCount =
     [...resources.bySession.values()].reduce((a, v) => a + v.length, 0) + resources.batch.length;
@@ -89,6 +105,24 @@ export default async function BatchPage({
           }
         />
       </div>
+
+      {/*
+        WHAT THIS COHORT STILL NEEDS, before anything else on the page.
+        Derived from the row itself (see lib/batch.ts) - the `status` column only ever says
+        ACTIVE or ARCHIVED, so without this a cohort with no plan, no teacher, no dates and
+        nobody in it looked exactly like one that was teaching. It renders nothing once a
+        complete cohort is running, so a coach's weekly screen does not carry a wall of ticks.
+      */}
+      <BatchChecklist
+        batchId={batch.id}
+        batchName={batch.name}
+        line={batch.line}
+        readiness={batch.readiness}
+        blockers={batch.blockers}
+        canManage={batch.canManage}
+        /* Starting a cohort writes its start date, which `activateBatch` fences on ADMIN. */
+        canActivate={session.role === "ADMIN" ? batch.canActivate : null}
+      />
 
       <Tabs
         urlKey="tab"
@@ -142,13 +176,44 @@ export default async function BatchPage({
           },
           {
             label: `Roster${batch.filled ? ` (${batch.filled})` : ""}`,
-            content:
-              batch.roster.length === 0 ? (
-                <EmptyState
-                  title="Nobody seated yet"
-                  body="Seat students into this cohort from the Students board."
-                />
-              ) : (
+            content: (
+              <div className="space-y-4">
+                {/*
+                  THE FIX FOR THE DEAD END.
+
+                  This tab was read-only, and its empty state read "Seat students into this
+                  cohort from the Students board" - un-clickable, and wrong: the Students BOARD
+                  has no seating control. It was on each student's own record, one enrolment at a
+                  time, so filling a twelve-seat cohort meant twelve separate page loads.
+
+                  The control is now here, where the job is, and takes as many people at once as
+                  you like. It is drawn only for somebody the seating action will actually accept.
+                */}
+                {canSeat && (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-caption text-muted">
+                      {batch.capacityLabel} seats taken
+                    </p>
+                    <SeatPicker
+                      batchId={batch.id}
+                      batchName={batch.name}
+                      candidates={candidates}
+                      filled={batch.filled}
+                      targetStrength={batch.targetStrength}
+                      mechanismLabel="learners"
+                    />
+                  </div>
+                )}
+                {batch.roster.length === 0 ? (
+                  <EmptyState
+                    title="Nobody seated yet"
+                    body={
+                      canSeat
+                        ? "Add learners above. Only people who have enrolled on a matching programme and are not already in a cohort can be seated."
+                        : "Nobody has been seated into this cohort yet."
+                    }
+                  />
+                ) : (
                 <TableShell
                   head={
                     <>
@@ -189,14 +254,21 @@ export default async function BatchPage({
                     })}
                   </>
                 </TableShell>
-              ),
+                )}
+              </div>
+            ),
           },
         ]}
       />
 
+      {/*
+        The footer used to say seating happened somewhere else, which was both the wrong place
+        and no longer true. A student's own record keeps its picker - it is the right control
+        when you are looking at one person - so this names the pair rather than redirecting.
+      */}
       <p className="flex items-center gap-1.5 text-caption text-muted">
         <Users size={12} aria-hidden />
-        Seating is done from the Students board; this screen runs the cohort.
+        Learners are seated from the Roster tab here, or one at a time from a student&apos;s own record.
       </p>
     </div>
   );

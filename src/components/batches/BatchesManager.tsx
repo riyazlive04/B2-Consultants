@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { CalendarRange, Pencil, Plus, Trash2, Users } from "lucide-react";
 import type { BatchLine } from "@prisma/client";
 import type { BatchBoardRow } from "@/server/batches";
-import { BATCH_LINE_LABELS } from "@/lib/batch";
+import { BATCH_LINE_LABELS, BATCH_READINESS_LABELS, describeBlockers } from "@/lib/batch";
+import { READINESS_TONE } from "./readiness-tone";
 import { withBack, type BackKey } from "@/lib/back-link";
 import { upsertBatch, deleteBatch } from "@/server/batch-actions";
 import { askConfirm, toast } from "@/components/ui/feedback";
@@ -124,11 +125,24 @@ export function BatchesManager({
   levelOptions,
   leadOptions,
   backKey,
+  canEdit = true,
 }: {
   line: BatchLine;
   rows: BatchBoardRow[];
   levelOptions: { value: string; label: string }[];
   leadOptions: { value: string; label: string }[];
+  /**
+   * May this viewer CREATE, EDIT or DELETE a cohort? (P18)
+   *
+   * Separate from being able to read the list and open a cohort. `upsertBatch` and `deleteBatch`
+   * are `requireAdmin()`, while seating is the `batches.manage` capability - so a head coach who
+   * holds that capability can legitimately see this list and work a cohort's roster without being
+   * able to create one. Drawing the create form for them would be the same lie the teaching desk
+   * was corrected for: a control the server refuses.
+   *
+   * Defaults true so the admin screens read exactly as they did.
+   */
+  canEdit?: boolean;
   /**
    * Which list this panel is being rendered in, so a cohort opened from it offers a way back
    * HERE. The same panel appears on Students → Batches and on Batches & Plans, and the cohort
@@ -147,7 +161,7 @@ export function BatchesManager({
   const archived = rows.filter((r) => r.status === "ARCHIVED");
 
   /** No programmes on this line = nothing a cohort could be seating. Say so, don't offer a form. */
-  const canCreate = levelOptions.length > 0;
+  const canCreate = canEdit && levelOptions.length > 0;
 
   function Row({ b }: { b: BatchBoardRow }) {
     return (
@@ -166,8 +180,25 @@ export function BatchesManager({
             )}
             {b.code && <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-muted">{b.code}</span>}
             <Pill tone="info">{b.levelLabel}</Pill>
-            {b.status === "ARCHIVED" && <Pill tone="neutral">Archived</Pill>}
+            {/*
+              DRAFT / READY / RUNNING - derived from the row, not from `status` (refactor C3).
+              `status` only ever says ACTIVE or ARCHIVED, so a cohort with nothing set up sat in
+              this list looking identical to one that was teaching. Archived keeps its own pill
+              because that IS the stored state and reads better than "Archived" twice over.
+            */}
+            {b.status === "ARCHIVED" ? (
+              <Pill tone="neutral">Archived</Pill>
+            ) : (
+              b.readiness !== "ACTIVE" && (
+                <Pill tone={READINESS_TONE[b.readiness]}>{BATCH_READINESS_LABELS[b.readiness]}</Pill>
+              )
+            )}
           </div>
+          {/* What it is missing, in the founders' own order, so the fix is visible from the
+              list rather than only after opening the cohort. */}
+          {b.status !== "ARCHIVED" && b.blockers.length > 0 && (
+            <p className="mt-0.5 text-xs text-warn">{describeBlockers(b.blockers)}</p>
+          )}
           <p className="mt-0.5 text-xs text-muted">
             {b.leadName ?? "Nobody assigned"}
             {b.startDate ? ` · from ${formatDate(b.startDate)}` : ""}
@@ -205,10 +236,12 @@ export function BatchesManager({
             <Users size={12} aria-hidden /> {b.capacityLabel}
           </span>
         </Pill>
-        <IconButton label={`Edit ${b.name}`} size="sm" onClick={() => { setEditing(b); setError(null); }}>
-          <Pencil size={15} />
-        </IconButton>
-        {b.filled === 0 && (
+        {canEdit && (
+          <IconButton label={`Edit ${b.name}`} size="sm" onClick={() => { setEditing(b); setError(null); }}>
+            <Pencil size={15} />
+          </IconButton>
+        )}
+        {canEdit && b.filled === 0 && (
           <IconButton
             label={`Delete ${b.name}`}
             size="sm"
@@ -255,7 +288,7 @@ export function BatchesManager({
         )}
       </div>
 
-      {!canCreate && (
+      {!canCreate && canEdit && (
         <EmptyState
           icon={<CalendarRange size={20} />}
           title="No programmes to run a batch for"
@@ -263,6 +296,16 @@ export function BatchesManager({
             line === "B2"
               ? "Add a coaching tier under Programs first - a batch has to be seating something."
               : "Add a German level under German Note → Manage → Levels first."
+          }
+          /* Naming the fix is not the same as offering it - the screen it names is two clicks
+             away through a menu the reader may not have. */
+          action={
+            <Link
+              href={line === "B2" ? "/programs" : "/german-note/manage?tab=3"}
+              className="inline-flex h-10 items-center rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent hover:bg-primary-strong"
+            >
+              {line === "B2" ? "Add a coaching tier" : "Add a German level"}
+            </Link>
           }
         />
       )}
@@ -291,7 +334,12 @@ export function BatchesManager({
         <EmptyState
           icon={<CalendarRange size={20} />}
           title="No batches yet"
-          body="Create the first cohort, then seat students into it from their profiles."
+          body="Create the first cohort, then add learners to it from the cohort's own Roster tab."
+          action={
+            <Btn variant="primary" icon={<Plus size={15} />} onClick={() => { setCreating(true); setError(null); }}>
+              Create the first cohort
+            </Btn>
+          }
         />
       )}
 

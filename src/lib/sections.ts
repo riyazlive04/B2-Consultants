@@ -26,6 +26,7 @@ export const SECTION_ICON_NAMES = [
   "sparkles", "bar-chart", "shield", "layout-grid", "file-signature", "scale",
   "contact", "kanban", "file-text", "layout-template", "receipt", "inbox", "workflow",
   "globe", "layers", "school", "calendar-days", "calendar-range", "user-check", "medal",
+  "route",
 ] as const;
 export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];
 
@@ -168,11 +169,24 @@ export const SECTION_CATALOGUE = [
   // sees this block at all.
   { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"] },
   { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"] },
-  // Read-only journal + trial balance (SPEC §10.4, §12). Admin-only: it is the audit
-  // surface for every rupee the other Finance screens summarise.
-  // Hidden in code: off in the nav and unreachable by route. The page and its posting engine
-  // stay intact, so the console can switch it back on without any code change.
-  { key: "ledger", label: "Ledger", href: "/ledger", phase: 1, icon: "scale", group: "Finance", roles: ["ADMIN"], hidden: true },
+  /*
+   * REMOVED 23/10/2026: `ledger` - the read-only journal, trial balance and audit-chain check.
+   *
+   * It shipped `hidden: true`, so like `cv-check` and `automation` it was already off the nav and
+   * refused by the route for every role including ADMIN. Removed at the founder's instruction,
+   * after the trade-off was put to them twice.
+   *
+   * THE POSTING ENGINE IS UNTOUCHED, and that distinction is the whole of it. `server/ledger.ts`
+   * and `server/ledger-core.ts` remain: six modules post through them (finance-actions,
+   * finance-autopost, commission-actions, equity-actions, invoice-posting, payments-actions), so
+   * every rupee is still double-entry recorded exactly as before. Only the SCREEN is gone.
+   *
+   * What that costs, recorded plainly: there is no longer any way to read the journal, the trial
+   * balance or the hash-chain verification from inside the product. `verifyAuditChain` had no
+   * other caller, so the tamper-evidence of `AuditEntry` is now unverifiable through the UI. The
+   * functions themselves survive in `ledger-core.ts` and take a `LedgerDb`, so a script or a new
+   * screen can call them with no new engine code - see the note at the top of server/ledger.ts.
+   */
   // Synamate Payments parity (Phase 3): invoices, estimates, products, subscriptions.
   { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"] },
   // Kept last in the Finance group on purpose: the default sidebar order follows this
@@ -280,7 +294,20 @@ export const SECTION_CATALOGUE = [
    * of it. The page re-checks with `requireAdmin()` regardless - the role list is a default
    * the founder can edit, and a rail that can be re-pointed is never the fence.
    */
-  { key: "batches", label: "Batches & Plans", href: "/batches", phase: 2, icon: "calendar-range", group: "Classroom", roles: ["ADMIN"] },
+  /**
+   * ── Open to the head coach as well, so `batches.manage` can be exercised (P18) ─────────
+   *
+   * This was ADMIN-only while `batches.manage` - the capability that gates SEATING - was
+   * grantable to a head coach, and the only screen with a roster on it was this one. A
+   * permission the role it was written for cannot exercise is a decoration, not a permission.
+   *
+   * The page itself decides what a visitor may DO: creating, editing and deleting a cohort stay
+   * `requireAdmin()` and their controls are not drawn for anyone else, the Plans tab is not
+   * built for them either, and a visitor holding neither admin nor `batches.manage` is turned
+   * away rather than shown a read-only shell. So widening the section widens who can SEE
+   * cohorts, which is the thing a head coach was missing.
+   */
+  { key: "batches", label: "Batches & Plans", href: "/batches", phase: 2, icon: "calendar-range", group: "Classroom", roles: ["ADMIN", "HEAD"] },
   /**
    * THE SPRINT LEADERBOARD - and the only section in the catalogue a student and their coach
    * both open to look at the same thing.
@@ -308,37 +335,59 @@ export const SECTION_CATALOGUE = [
 
   // ──────────────────────────────── Sales ────────────────────────────────
   /**
-   * ── The Sales group is THREE entries, not five ──────────────────────────────────
+   * ── The Sales group is FOUR entries, not five ──────────────────────────────────
    * It held Pipeline · Contacts · Opportunities · Bookings · Outreach, two of which are the same
    * board twice: `/pipeline` is a kanban of `Lead.stage` and `/opportunities` is a kanban of
    * `Opportunity.stageId` mirrored back onto `Lead.stage`. A telecaller opening the rail saw
    * five doors into what is, to them, one job.
    *
-   * Opportunities and Outreach are `offRail` - off the sidebar, still fully built and still
-   * reachable, because both are surfaced as TABS on Pipeline, which is where they belong:
-   * Outreach is the SOP queue for the pipeline, Opportunities is the same pipeline as a board.
-   * The founder can put either back on the rail from Console → Sections at any time.
+   * Outreach is `offRail` - off the sidebar, still fully built and still reachable, because it
+   * is surfaced from Pipeline, which is where it belongs: it is the SOP queue for the pipeline.
+   * The founder can put it back on the rail from Console → Sections at any time.
+   *
+   * Opportunities WAS offRail for the same reason, on the grounds that it was "the same pipeline
+   * as a board". It is back on the rail as "Deals" (see its entry): it was off the rail to avoid
+   * a duplicate door, and once Pipeline pointed at /pipeline there was no duplicate left.
    *
    * This is presentation only. Nothing is deleted, no route is removed, and no access changes -
    * merging the two boards into one is a separate, larger piece of work.
    */
   /**
-   * "Pipeline" lands on the BOARD, not the metrics page (founder's call, 06/08/2026): the board is
-   * what the team works out of all day, and the metrics screen was a detour they had to click past.
+   * ── Pipeline points at /pipeline again (refactor step E1, 23/10/2026) ───────────────────
    *
-   * Only the href moves. `key` stays "pipeline", so `requireSection` still gates this rail entry on
-   * the pipeline section and nobody's access changes - but note the destination route runs
-   * `requireSection("opportunities")`, so a user who has pipeline and has had opportunities revoked
-   * in Console → Sections would be turned away here. Both default to ADMIN/HEAD/USER, so that only
-   * happens if someone deliberately splits them.
+   * It was re-pointed at /opportunities on 06/08/2026 for a good reason: "the board is what the
+   * team works out of all day, and the metrics screen was a detour they had to click past". That
+   * reason has since stopped applying, and the arrangement had two costs the founder's call never
+   * agreed to:
    *
-   * The metrics page is not orphaned: /opportunities links back to it (see its ListHeader).
+   *  · /pipeline now HAS the board. It carries the lead kanban as its own tab alongside the
+   *    metrics, so the detour the move was avoiding is no longer there to avoid.
+   *  · The rail entry and the route it opened were gated on DIFFERENT sections. "Pipeline" is
+   *    checked against `pipeline`, but /opportunities runs `requireSection("opportunities")` - so
+   *    a founder who split the two in Console → Sections produced a visible nav item that
+   *    refuses to open. Two doors to one address, each answering to a different key, is the
+   *    duplicate-door problem (P7) rather than a shortcut.
+   *
+   * So each entry now leads to the page gated on its own key, and the deal board gets its own
+   * honest name below. No access changes: both keys keep the roles they had.
    */
-  { key: "pipeline", label: "Pipeline", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
+  { key: "pipeline", label: "Pipeline", href: "/pipeline", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // Synamate CRM parity (Phase 1): Contacts (the CRM) + Opportunities (the drag-drop board).
   // Grouped with Pipeline under Sales so the whole lead → contact → deal flow sits together.
   { key: "contacts", label: "Contacts", href: "/contacts", phase: 1, icon: "contact", group: "Sales", roles: ["ADMIN", "USER"] },
-  { key: "opportunities", label: "Opportunities", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "HEAD", "USER"], offRail: true },
+  /**
+   * THE DEAL BOARD, called "Deals" and not "Opportunities".
+   *
+   * `key` stays `opportunities` on purpose. The route's own `requireSection("opportunities")`, the
+   * founder's saved `SectionsConfig` and every per-user override are all keyed on it, so renaming
+   * the key would silently reset whoever had it configured - and the rename being asked for here
+   * is one of wording, not of access. Only what the reader sees changes.
+   *
+   * Back on the rail, because it is no longer the same door as Pipeline: Pipeline is the lead
+   * funnel with its metrics, Deals is the drag-and-drop board of `Opportunity.stageId`. Sales
+   * holds four rail items for a founder with this on - inside the catalogue's own limit of five.
+   */
+  { key: "opportunities", label: "Deals", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // §3: Head R · L1/L2/L3 E. Tutor and Student are `O` - their own calls surface on their own
   // screens, and this is the whole-team calendar, so they are not granted it.
   { key: "bookings", label: "Bookings", href: "/bookings", phase: 1, icon: "calendar-check", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
@@ -369,6 +418,28 @@ export const SECTION_CATALOGUE = [
   // Note) and "Insights" (CV Studio), so answering "what is going on with this student" meant
   // opening two unrelated groups.
 
+  /**
+   * ONBOARDING - lead → discovery → payment → agreement → cohort → class, on one screen.
+   *
+   * First in this group because it is the group's entry point: everything else here is about a
+   * person who has already arrived, and this is how they arrive.
+   *
+   * It exists because the journey the business runs on was not a journey anywhere in the app.
+   * `Lead.stage` covered the sales half, `Student` + `Enrollment` + a seat covered delivery, and
+   * nothing joined them - so no screen could show where somebody had got to, and no screen could
+   * list the ones stuck in between. Doing it by hand meant about fifteen screens across six nav
+   * groups, and SIX different places could bring a `Student` row into existence, three of which
+   * leave it with no enrolment at all. The founder's verdict was the plain one: "there are too
+   * many sections to add a student and I myself can't understand."
+   *
+   * A DOOR, not a seventh way to add a student. It owns no data: every row links to the person
+   * hub that already exists and every action links to the screen that already does that job. The
+   * state is DERIVED (lib/journey-state.ts), the way `agreement-state.ts` derives its eight -
+   * no column, no migration, and the board can never disagree with the record.
+   *
+   * Same roles as `students`: the people who already read that board are the people who onboard.
+   */
+  { key: "onboarding", label: "Onboarding", href: "/onboarding", phase: 2, icon: "route", group: "Students", roles: ["ADMIN", "HEAD", "USER"] },
   // §3: Head F · L1/L2/L3 R. Tutor and Student are `O` - a student's own record is /my-journey and
   // a tutor's own batch roster is on German Note; this board is every student.
   { key: "students", label: "Students", href: "/students", phase: 2, icon: "graduation-cap", group: "Students", roles: ["ADMIN", "HEAD", "USER"] },
@@ -390,13 +461,25 @@ export const SECTION_CATALOGUE = [
    * routine, replace this with a seat check rather than granting STUDENT again.
    */
   { key: "german-note", label: "German Note", href: "/german-note", phase: 4, icon: "languages", group: "Students", roles: ["ADMIN", "HEAD", "TUTOR"] },
-  // The CV diagnostic (stores nothing). A student-facing tool, so it belongs beside the student
-  // it is delivered to, not in a group of analytics screens.
-  //
-  // `hidden` since 14/10/2026 at the founder's request: off the nav AND the route, for every role
-  // including ADMIN, the same way `ledger` and `automation` ship. Nothing is deleted - Console →
-  // Sections switches it back on, and an explicit "on" there wins over this default.
-  { key: "cv-check", label: "CV Studio", href: "/cv-check", phase: 2, icon: "file-search", group: "Students", roles: ["ADMIN", "HEAD", "STUDENT"], hidden: true },
+  /*
+   * REMOVED 23/10/2026: `cv-check` (CV Studio) - the resume builder and AI CV review.
+   *
+   * It shipped `hidden: true` from 14/10/2026, which means it was off the nav AND refused by the
+   * route for every role including ADMIN - so it had been unreachable for nine days before being
+   * deleted, and nobody loses a working feature.
+   *
+   * Removed at the founder's explicit instruction ("I do not want this in the application"). The
+   * code is gone: the page, `server/resume-actions`, `server/resume-metrics`,
+   * `server/job-descriptions` (which had no importer at all), `lib/resume-*`, `lib/cv-analysis`,
+   * the PDF/DOCX renderers, `/api/resume/[id]/download` and `/api/cv-extract`.
+   *
+   * The `Resume`, `ResumeReview` and `JobDescription` TABLES are deliberately left in place.
+   * Deleting code is one `git revert` away from undone; dropping rows is not, and it is a
+   * separate decision to take on its own.
+   *
+   * A saved SectionsConfig that still names "cv-check" resolves harmlessly - `resolveSections`
+   * ignores keys the catalogue no longer has, exactly so a removal needs no migration.
+   */
 
   // ─────────────────────────────── Insights ──────────────────────────────
   // What is left once the builders and the inboxes move out: the two screens you open to READ a
@@ -437,9 +520,24 @@ export const SECTION_CATALOGUE = [
   // access rules are being respected, so it must not be switchable-off or grantable to the
   // people it reports on. A telecaller who could hide the log, or read it, would defeat it.
   { key: "activity", label: "Activity Log", href: "/activity", phase: 1, icon: "shield", group: "Admin", roles: ["ADMIN"], locked: true },
-  // Synamate Automation parity (Phase 5): trigger → action workflow engine.
-  // Hidden in code for now - off in the nav and unreachable by route until re-enabled.
-  { key: "automation", label: "Automation", href: "/automation", phase: 5, icon: "workflow", group: "Admin", roles: ["ADMIN"], hidden: true },
+  /*
+   * REMOVED 23/10/2026: `automation` - the trigger → action workflow builder.
+   *
+   * Like `cv-check`, it shipped `hidden: true`, so it was already unreachable by route for every
+   * role. Removed at the founder's explicit instruction. The four routes are deleted
+   * (`/automation`, `/[id]`, `/settings`, `/stage-messages`) along with every link that pointed
+   * into them - eleven of which were live references into a section nobody could open.
+   *
+   * THE ENGINE CODE STAYS, and that is deliberate rather than an oversight. Unlike CV Studio,
+   * which was self-contained, automation is wired into shared infrastructure -
+   * `lib/config-schema.ts`, `lib/soft-delete.ts`, `lib/outreach-sop.ts`, `api/cron/workflows` and
+   * four `server/automation-*` modules. Unpicking that is surgery on files everything else
+   * depends on, for no visible benefit: with the routes and the nav entry gone, the feature is
+   * out of the application as far as anyone using it is concerned.
+   *
+   * `server/automation.ts` and friends are now unreferenced by any route. Removing them is a
+   * clean follow-up whenever it is wanted; it just should not ride along with a UI change.
+   */
 ] as const satisfies readonly SectionCatalogueEntry[];
 
 export type SectionKey = (typeof SECTION_CATALOGUE)[number]["key"];

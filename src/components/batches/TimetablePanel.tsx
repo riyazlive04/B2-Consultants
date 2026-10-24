@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -238,7 +239,7 @@ export function TimetablePanel({
             </span>
           </Pill>
         ) : (
-          <Hint>This cohort has no curriculum yet - build one in to get its dates.</Hint>
+          <Hint>This cohort has no curriculum yet - build one to get its dates.</Hint>
         )}
         {batch.canManage && (
           <span className="ml-auto flex flex-wrap gap-2">
@@ -261,6 +262,27 @@ export function TimetablePanel({
             templates.length
               ? "Build it from a curriculum - pick the programme and a start date, and every session is dated for you."
               : "Write a curriculum under Programs → Curriculum first, then build this cohort's timetable from it."
+          }
+          /*
+            The control, not a description of where the control lives. Offered only to somebody
+            who may actually use it: a coach reading a cohort they do not run gets the
+            explanation without a button the server would refuse.
+          */
+          action={
+            batch.canManage ? (
+              templates.length > 0 ? (
+                <Btn variant="primary" icon={<Wand2 size={15} />} onClick={() => setBuilding(true)}>
+                  Build from curriculum
+                </Btn>
+              ) : (
+                <Link
+                  href="/programs?tab=1"
+                  className="inline-flex h-10 items-center rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent hover:bg-primary-strong"
+                >
+                  Write a curriculum
+                </Link>
+              )
+            ) : undefined
           }
         />
       ) : (

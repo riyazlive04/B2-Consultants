@@ -18,6 +18,8 @@ import {
   type WindowState,
 } from "@/lib/attendance-window";
 import { getAttendanceConfig } from "./founder-config";
+import { BATCH_MEMBERSHIP_SELECT } from "./batch-membership";
+import { mergeBatchSeats } from "@/lib/batch";
 
 /**
  * Attendance - the reads and writes.
@@ -99,18 +101,10 @@ export async function getAttendanceSheet(sessionId: string): Promise<AttendanceS
       attendancePublishedAt: true,
       attendanceOpenedBy: { select: { name: true, email: true } },
       attendancePublishedBy: { select: { name: true, email: true } },
-      batch: {
-        select: {
-          members: {
-            select: { student: { select: { id: true, fullName: true, code: true } } },
-          },
-          enrollments: {
-            // `status` comes along so a departed student can be kept off FUTURE registers
-            // without being erased from the ones they were marked on. See below.
-            select: { status: true, student: { select: { id: true, fullName: true, code: true } } },
-          },
-        },
-      },
+      /* Both membership mechanisms, selected once in server/batch-membership.ts. `status` comes
+         along with the enrolments so a departed student can be kept off FUTURE registers without
+         being erased from the ones they were marked on - see `optOut` below. */
+      batch: { select: BATCH_MEMBERSHIP_SELECT },
       attendance: {
         select: {
           studentId: true,
@@ -131,39 +125,36 @@ export async function getAttendanceSheet(sessionId: string): Promise<AttendanceS
 
   const config = await getAttendanceConfig();
 
-  // A batch can be populated through EITHER seam - German Note seats arrive as BatchMember,
-  // B2 coaching seats as Enrollment.batchId (see the Batch model's note). Both are "on the
-  // roster", so both are expected in the room; deduped because nothing forbids being in both.
-  const roster = new Map<string, { id: string; fullName: string; code: string | null }>();
-  for (const m of session.batch.members) roster.set(m.student.id, m.student);
-
   const marks = new Map(session.attendance.map((a) => [a.studentId, a]));
 
   /**
-   * A STUDENT WHO LEFT COMES OFF THE REGISTER - but only the ones they were never marked on.
+   * WHO IS EXPECTED IN THE ROOM - both membership mechanisms, deduped, departed handled.
    *
+   * `mergeBatchSeats` knows the fork (German Note seats arrive as BatchMember, B2 coaching seats
+   * as `Enrollment.batchId`) and dedupes, because nothing forbids being in both. The rule this
+   * screen adds is `optOut`:
+   *
+   * A STUDENT WHO LEFT COMES OFF THE REGISTER - but only the ones they were never marked on.
    * Both halves matter. Before this, a dropped enrolment stayed on every future register, so a
    * coach was asked each Saturday to mark a student who had stopped coming, and the register
-   * could never read "complete". Filtering them out of the query instead would have been the
-   * opposite mistake: a student who dropped in week six ATTENDED weeks one to five, and their
-   * marks would have vanished from those sheets along with the `markedCount` and the
-   * "complete" flag computed from them - rewriting the history of a class that was taught.
+   * could never read "complete". Filtering them out of the QUERY would have been the opposite
+   * mistake: a student who dropped in week six ATTENDED weeks one to five, and their marks would
+   * have vanished from those sheets along with the `markedCount` and the "complete" flag
+   * computed from them - rewriting the history of a class that was taught.
    *
-   * So the test is `belongsOnRegister(status, hasMark)`: keep anyone already marked here, drop
-   * the departed who are not. One rule, in lib/enrollment-lifecycle.ts, shared with the cohort
-   * attendance table below.
+   * So: keep anyone already marked here, drop the departed who are not. One rule, in
+   * lib/enrollment-lifecycle.ts, shared with the cohort attendance table below.
    */
-  for (const e of session.batch.enrollments) {
-    if (!belongsOnRegister(e.status, marks.has(e.student.id))) continue;
-    roster.set(e.student.id, e.student);
-  }
+  const roster = mergeBatchSeats(session.batch, {
+    optOut: (e) => !belongsOnRegister(e.status, marks.has(e.studentId)),
+  });
 
-  const rows: AttendanceSheetRow[] = [...roster.values()]
+  const rows: AttendanceSheetRow[] = roster
     .map((s) => {
-      const mark = marks.get(s.id);
+      const mark = marks.get(s.studentId);
       return {
-        studentId: s.id,
-        studentName: s.fullName,
+        studentId: s.studentId,
+        studentName: s.name,
         studentCode: s.code,
         status: (mark?.status as AttendanceStatus | undefined) ?? null,
         note: mark?.note ?? null,
@@ -420,10 +411,7 @@ export async function getBatchAttendance(batchId: string): Promise<StudentAttend
     }),
     prisma.batch.findUnique({
       where: { id: batchId },
-      select: {
-        members: { select: { student: { select: { id: true, fullName: true } } } },
-        enrollments: { select: { status: true, student: { select: { id: true, fullName: true } } } },
-      },
+      select: BATCH_MEMBERSHIP_SELECT,
     }),
   ]);
   if (!batch) return [];
@@ -438,22 +426,20 @@ export async function getBatchAttendance(batchId: string): Promise<StudentAttend
   }
 
   /**
-   * The same roster rule as the register, built AFTER the marks so it can ask the same question.
+   * The same roster rule as the register - literally the same function - built AFTER the marks
+   * so it can ask the same question of them.
    *
-   * A student who left keeps their row here when they have attendance history - their 60% over
+   * A student who left keeps their row here when they have attendance history: their 60% over
    * the five weeks they were present is a fact, and it is the one the coach reviews when asked
    * why the cohort lost them. A student who left having never been marked has nothing to show,
    * and listing them would put a permanent UNKNOWN row at the top of a table sorted worst-first.
    */
-  const roster = new Map<string, string>();
-  for (const m of batch.members) roster.set(m.student.id, m.student.fullName);
-  for (const e of batch.enrollments) {
-    if (!belongsOnRegister(e.status, byStudent.has(e.student.id))) continue;
-    roster.set(e.student.id, e.student.fullName);
-  }
+  const roster = mergeBatchSeats(batch, {
+    optOut: (e) => !belongsOnRegister(e.status, byStudent.has(e.studentId)),
+  });
 
-  return [...roster.entries()]
-    .map(([studentId, studentName]) => {
+  return roster
+    .map(({ studentId, name: studentName }) => {
       const summary = summarise(byStudent.get(studentId) ?? []);
       return {
         studentId,

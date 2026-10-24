@@ -61,6 +61,7 @@ export function Btn({
   title,
   icon,
   pressed,
+  describedBy,
   className = "",
 }: {
   children?: ReactNode;
@@ -75,6 +76,9 @@ export function Btn({
   /** Set when the button is one of a set and holds an on/off state (a picked time slot,
    *  a filter). Without it a fill is the only cue, which a screen reader never sees. */
   pressed?: boolean;
+  /** Id of the element carrying the reason this button is disabled. A `title` alone never
+   *  reaches a keyboard or screen-reader user, who has no hover to trigger it. */
+  describedBy?: string;
   className?: string;
 }) {
   return (
@@ -84,6 +88,7 @@ export function Btn({
       disabled={disabled || busy}
       title={title}
       aria-pressed={pressed}
+      aria-describedby={describedBy}
       className={`press inline-flex flex-none items-center justify-center gap-2 rounded-btn font-semibold transition-colors disabled:cursor-not-allowed disabled:border-transparent disabled:bg-surface-2 disabled:text-ink-disabled ${VARIANT[variant]} ${SIZE[size]} ${className}`}
     >
       {busy ? <Loader2 size={15} className="animate-spin" /> : icon}

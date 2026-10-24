@@ -8,9 +8,12 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/prisma";
 import { sendStudentWelcome } from "./whatsapp";
 import { afterResponse } from "./after-response";
-import { requireAdmin, requireSection } from "@/lib/rbac";
+import { requireAdmin, requireCapability, requireSection } from "@/lib/rbac";
 import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { parseDateInput } from "@/lib/dates";
+import { seatCount } from "@/lib/batch";
+import { linkOrphanMoneyToStudent } from "./student-money-link";
+import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { parseMentions } from "@/lib/gn-mentions";
 import { mergeWatchProgress } from "@/lib/video-progress";
@@ -22,6 +25,7 @@ import { logActivity, diffFields } from "./activity-log";
 import { isKnownLevel } from "./levels";
 import type { ActionResult } from "./finance-actions";
 import { allocateStudentCode } from "./student-code";
+import { nameKey } from "@/lib/name-key";
 
 /** Post images are stored inline as resized data URLs (same as avatars - no object store). */
 const MAX_POST_IMAGE_CHARS = 900_000;
@@ -223,6 +227,18 @@ export async function deleteBatch(batchId: string): Promise<ActionResult> {
  * When a batch is full the error names the next batch of the same level with room, because
  * "blocked" without "go here instead" just moves the puzzle to the admin (spec §2.2: the
  * system suggests the next batch to fill).
+ *
+ * ── WHAT COUNTS AS A FILLED SEAT (refactor step C4, 23/10/2026) ─────────────────────────
+ * This used to count `BatchMember` rows ONLY, while `seatEnrollment` on the coaching side
+ * counted members PLUS seated enrolments. The two write paths therefore disagreed about the
+ * same cohort: one holding 6 members and 2 seated enrolments against a target of 8 was full
+ * by one rule and had two seats free by the other, so a ninth person could be let in here
+ * without the over-capacity prompt that the other path would have raised.
+ *
+ * Both now go through `seatCount` in lib/batch.ts. Checked against live before shipping: all
+ * 20 German Note cohorts hold zero seated enrolments, so this corrects the rule without
+ * changing the answer for any cohort that exists today - which is the whole reason it was
+ * safe to do rather than something to schedule.
  */
 async function claimSeat(
   tx: Prisma.TransactionClient,
@@ -231,30 +247,78 @@ async function claimSeat(
   await tx.$queryRaw`SELECT id FROM gn_batch WHERE id = ${batchId} FOR UPDATE`;
   const batch = await tx.batch.findUnique({
     where: { id: batchId },
-    select: { name: true, level: true, targetStrength: true },
+    select: {
+      name: true,
+      level: true,
+      line: true,
+      targetStrength: true,
+      _count: {
+        select: {
+          members: true,
+          enrollments: { where: { status: { in: [...SEATED_STATUSES] } } },
+        },
+      },
+    },
   });
   if (!batch) return { ok: false, error: "Batch not found" };
 
-  const filled = await tx.batchMember.count({ where: { batchId } });
+  const filled = seatCount({
+    members: batch._count.members,
+    seatedEnrollments: batch._count.enrollments,
+  });
   if (filled < batch.targetStrength) return { ok: true };
 
+  /*
+    `line` is filtered as well as `level` now. The two batch tables were unified in ER v2, so
+    without it a full A1 German Note cohort could be answered with "next with room: <a B2
+    coaching cohort>" - which `levelFitsBatchLine` would then refuse. Level codes are
+    line-specific in the catalogue today, so this guards the unification rather than fixing a
+    bug anyone has hit.
+  */
   const alternatives = await tx.batch.findMany({
-    where: { level: batch.level, status: "ACTIVE", id: { not: batchId } },
-    select: { name: true, targetStrength: true, _count: { select: { members: true } } },
+    where: { level: batch.level, line: batch.line, status: "ACTIVE", id: { not: batchId } },
+    select: {
+      name: true,
+      targetStrength: true,
+      _count: {
+        select: {
+          members: true,
+          enrollments: { where: { status: { in: [...SEATED_STATUSES] } } },
+        },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
-  const next = alternatives.find((b) => b._count.members < b.targetStrength);
+  const seatsOf = (b: { _count: { members: number; enrollments: number } }) =>
+    seatCount({ members: b._count.members, seatedEnrollments: b._count.enrollments });
+  const next = alternatives
+    .map((b) => ({ ...b, filled: seatsOf(b) }))
+    .find((b) => b.filled < b.targetStrength);
   const full = `"${batch.name}" is full (${filled}/${batch.targetStrength} seats).`;
   return {
     ok: false,
     error: next
-      ? `${full} Next with room: "${next.name}" (${next._count.members}/${next.targetStrength}).`
+      ? `${full} Next with room: "${next.name}" (${next.filled}/${next.targetStrength}).`
       : `${full} Every active ${batch.level} batch is full - open a new one for this student.`,
   };
 }
 
 export async function addExistingMember(batchId: string, form: FormData): Promise<ActionResult> {
-  const session = await requireAdmin();
+  /*
+    SEATING A GERMAN NOTE LEARNER IS `batches.manage`, NOT ADMIN-ONLY (24/10/2026).
+
+    It was `requireAdmin()`, which made the permission model say two different things about one
+    job: the same head coach could be granted `batches.manage` and seat a coaching client, and
+    could not add a German Note learner. Nobody decided that - it fell out of the two lines having
+    been built at different times.
+
+    `batches.manage` is handed out PER PERSON from Users → Users & access (it is not a role
+    default), so the founder still decides who, one person at a time. What changes is that the
+    decision is now theirs to make rather than hardcoded here.
+
+    ADMIN always holds every capability, so nothing a founder could do before is lost.
+  */
+  const session = await requireCapability("batches.manage");
   const studentId = String(form.get("studentId") ?? "");
   if (!studentId) return { ok: false, error: "Pick a student" };
   const student = await prisma.student.findUnique({ where: { id: studentId }, select: { id: true, fullName: true } });
@@ -297,11 +361,11 @@ const newMemberSchema = z.object({
   phone: optionalRule("phone"),
 });
 
-const nameKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
 /** Quick-create a German Note learner: Student WITHOUT enrollment + membership in one go. */
 export async function addNewMember(batchId: string, form: FormData): Promise<ActionResult> {
-  const session = await requireAdmin();
+  // `batches.manage`, not admin-only - see the note on `addExistingMember` above.
+  const session = await requireCapability("batches.manage");
   const parsed = newMemberSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const d = parsed.data;
@@ -326,12 +390,9 @@ export async function addNewMember(batchId: string, form: FormData): Promise<Act
   if (!seated.ok) return seated;
   const student = seated.student;
 
-  // Same auto-link as createStudent: attach past GN income rows entered by name.
-  const candidates = await prisma.income.findMany({ where: { studentId: null } });
-  const ids = candidates.filter((i) => nameKey(i.studentName) === nameKey(student.fullName)).map((i) => i.id);
-  if (ids.length) {
-    await prisma.income.updateMany({ where: { id: { in: ids } }, data: { studentId: student.id } });
-  }
+  // The same backfill every other door runs - payments AND receivables. It was income-only
+  // here, so a German Note learner's instalment plan never joined their record.
+  const linked = await linkOrphanMoneyToStudent({ studentId: student.id, fullName: student.fullName });
   const batch = await prisma.batch.findUnique({ where: { id: batchId }, select: { name: true } });
   // Same enrolment welcome the B2 seat path sends - a German Note learner joining a batch is
   // the same event from the student's side. Once-ever and off by default; see sendStudentWelcome.
@@ -344,14 +405,15 @@ export async function addNewMember(batchId: string, form: FormData): Promise<Act
     entityType: "Student",
     entityId: student.id,
     summary: `Added ${student.fullName} to the batch "${batch?.name ?? "German Note"}" as a new learner`,
-    meta: { batchId, linkedIncomeRows: ids.length },
+    meta: { batchId, linkedIncomeRows: linked.incomes, plansLinked: linked.pendingPayments },
   });
   revalidateBatch(batchId);
   return { ok: true };
 }
 
 export async function removeBatchMember(memberId: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  // `batches.manage`, not admin-only - see the note on `addExistingMember` above.
+  const session = await requireCapability("batches.manage");
   const member = await prisma.batchMember.findUnique({
     where: { id: memberId },
     select: { batchId: true, student: { select: { fullName: true } }, batch: { select: { name: true } } },

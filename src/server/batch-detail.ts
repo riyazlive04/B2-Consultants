@@ -1,13 +1,30 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { occupiesSeat } from "@/lib/enrollment-lifecycle";
-import { type CapabilityOverrides } from "@/lib/capabilities";
+import { occupiesSeat, SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
+import { hasCapability, type CapabilityOverrides } from "@/lib/capabilities";
 import { canManageDelivery } from "./batch-access";
 import type { AppRole } from "@/lib/sections";
 import { toDateInputValue } from "@/lib/dates";
-import { capacityBand, capacityLabel } from "@/lib/batch";
+import {
+  batchBlockers,
+  batchReadiness,
+  canActivateBatch,
+  capacityBand,
+  capacityLabel,
+  levelFitsBatchLine,
+  type BatchPrerequisite,
+  type BatchReadiness,
+  type BatchReadinessInput,
+  type SeatCandidate,
+} from "@/lib/batch";
+import { levelKinds } from "./levels";
 import type { SessionDeliveryValue } from "@/lib/curriculum";
+import {
+  BATCH_MEMBERSHIP_SELECT,
+  mergeBatchSeats,
+  type BatchSeat,
+} from "./batch-membership";
 
 /**
  * ONE COHORT, as the people who run it need to see it.
@@ -71,16 +88,22 @@ export type BatchDetailView = {
   filled: number;
   capacity: ReturnType<typeof capacityBand>;
   capacityLabel: string;
+  /**
+   * WHERE THIS COHORT ACTUALLY IS - derived, never stored (see lib/batch.ts).
+   *
+   * `status` above holds only ACTIVE or ARCHIVED, so until this existed a cohort with no
+   * teacher, no plan, no dates and nobody in it read as ACTIVE and looked exactly like one that
+   * was teaching. Computed here rather than in the page because every caller of this view wants
+   * the same answer, and it costs no extra query: every fact it reads is already selected.
+   */
+  readiness: BatchReadiness;
+  /** The five setup prerequisites not yet met, in the order to work through them. */
+  blockers: BatchPrerequisite[];
+  /** The three that gate ACTIVATION - a plan, a teacher and a learner. */
+  canActivate: { ok: boolean; blockers: BatchPrerequisite[] };
   sessions: TimetableSessionView[];
-  roster: {
-    studentId: string;
-    enrollmentId: string | null;
-    name: string;
-    code: string | null;
-    programLevel: string | null;
-    status: string | null;
-    coachName: string | null;
-  }[];
+  /** Both membership mechanisms, merged (P1). See server/batch-membership.ts. */
+  roster: BatchSeat[];
   /** What the viewer may do here - computed once, server-side, and obeyed by every action. */
   canManage: boolean;
 };
@@ -167,19 +190,10 @@ export const getBatchDetail = cache(
             _count: { select: { tasks: true, attendance: true } },
           },
         },
-        members: {
-          select: { student: { select: { id: true, fullName: true, code: true } } },
-          orderBy: { addedAt: "asc" },
-        },
-        enrollments: {
-          select: {
-            id: true, programLevel: true, status: true,
-            student: { select: { id: true, fullName: true, code: true } },
-            coach: { select: { name: true } },
-            assignedCoach: true,
-          },
-          orderBy: { enrollmentDate: "asc" },
-        },
+        /* Both membership mechanisms, selected once in server/batch-membership.ts (P1). Shared
+           rather than re-spelled here, so a change to what a roster row carries lands in both
+           readers at once. */
+        ...BATCH_MEMBERSHIP_SELECT,
       },
     });
     if (!b) return null;
@@ -213,26 +227,10 @@ export const getBatchDetail = cache(
       };
     });
 
-    const roster = [
-      ...b.members.map((m) => ({
-        studentId: m.student.id,
-        enrollmentId: null,
-        name: m.student.fullName,
-        code: m.student.code,
-        programLevel: null,
-        status: null,
-        coachName: null,
-      })),
-      ...b.enrollments.map((e) => ({
-        studentId: e.student.id,
-        enrollmentId: e.id,
-        name: e.student.fullName,
-        code: e.student.code,
-        programLevel: e.programLevel,
-        status: e.status as string,
-        coachName: e.coach?.name ?? e.assignedCoach ?? null,
-      })),
-    ];
+    /* ONE roster from two tables - see server/batch-membership.ts for why the fork exists and
+       what it costs. The merge is pure, so this page still reads membership in its own single
+       query rather than paying a second round trip to share the rule. */
+    const roster = mergeBatchSeats(b);
     /**
      * SEATS, not roster rows.
      *
@@ -242,6 +240,29 @@ export const getBatchDetail = cache(
      * counted them, so a cohort that lost two students read as full.
      */
     const filled = roster.filter((r) => r.status === null || occupiesSeat(r.status)).length;
+
+    /**
+     * Readiness, from facts already in hand.
+     *
+     * `seats` is split back into its two mechanisms rather than passed as the single `filled`
+     * above, because `seatCount` is the one place that decides a seat is a seat whichever row
+     * holds it - and routing through it here is what keeps this screen's answer identical to the
+     * seating action's.
+     */
+    const readinessInput: BatchReadinessInput = {
+      status: b.status,
+      line: b.line,
+      curriculumTemplateId: b.curriculumTemplateId,
+      tutorId: b.tutorId,
+      startDate: b.startDate,
+      endDate: b.endDate,
+      seats: {
+        members: b.members.length,
+        seatedEnrollments: b.enrollments.filter((e) => occupiesSeat(e.status)).length,
+      },
+      sessionCount: sessions.length,
+      upcomingSessionCount: sessions.filter((s) => !s.isPast).length,
+    };
 
     return {
       id: b.id,
@@ -263,9 +284,60 @@ export const getBatchDetail = cache(
       filled,
       capacity: capacityBand(filled, b.targetStrength),
       capacityLabel: capacityLabel(filled, b.targetStrength),
+      readiness: batchReadiness(readinessInput, new Date(now)),
+      blockers: batchBlockers(readinessInput),
+      canActivate: canActivateBatch(readinessInput),
       sessions,
       roster,
       canManage: access.manage && b.status === "ACTIVE",
     };
   },
 );
+
+/* ────────────────────────────────────────────────────────────────────────────────────────
+   SEATING, READ SIDE
+   ────────────────────────────────────────────────────────────────────────────────────────
+
+   The two reads behind the Roster tab's picker. They live here, with the cohort's other reads
+   and under `server-only`, rather than in `batch-seats.ts` - that file is `"use server"`, so
+   every export there becomes a callable endpoint, and a candidate list is not something to
+   expose as one. The WRITES are in `batch-seats.ts`.                                         */
+
+/**
+ * May this person seat learners in this cohort?
+ *
+ * A SEPARATE question from `canManage` above, and the difference is not cosmetic.
+ * `canManageDelivery` answers "may you run this cohort" - build the timetable, take the
+ * register, post a recording - and says yes to a head coach. Seating answers "may you decide
+ * who is in it", which is fenced differently again, and differently per line:
+ *
+ *     B2 (Enrollment)      `batches.manage` capability   - seatEnrollment's own fence
+ *     German Note (Member) ADMIN                         - addExistingMember's own fence
+ *
+ * Both are read straight off the actions that will actually run, so the picker is never drawn
+ * for somebody the server would then refuse.
+ */
+export async function canSeatBatch(
+  session: { role: AppRole; capabilities: CapabilityOverrides | null },
+  batchId: string,
+): Promise<boolean> {
+  const batch = await prisma.batch.findUnique({
+    where: { id: batchId },
+    select: { line: true, status: true },
+  });
+  if (!batch || batch.status !== "ACTIVE") return false;
+  /*
+    ONE RULE FOR BOTH LINES NOW (24/10/2026).
+
+    This used to branch: `batches.manage` for a coaching seat, ADMIN for a German Note one -
+    because that is what the two actions happened to require. So a head coach granted the
+    capability got a seat picker on one line and none on the other, and the permission model said
+    two different things about one job.
+
+    `addExistingMember` and `addNewMember` are now `requireCapability("batches.manage")` too, so
+    this asks the single question. Still read off the actions that will run, never assumed.
+  */
+  return hasCapability(session.role, session.capabilities, "batches.manage");
+}
+
+

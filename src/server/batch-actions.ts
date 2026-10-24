@@ -6,7 +6,15 @@ import type { BatchLine } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
 import { requireAdmin, requireCapability } from "@/lib/rbac";
-import { levelFitsBatchLine, normalizeBatchCode, capacityBand } from "@/lib/batch";
+import {
+  levelFitsBatchLine,
+  normalizeBatchCode,
+  capacityBand,
+  canActivateBatch,
+  describeBlockers,
+  type BatchReadinessInput,
+} from "@/lib/batch";
+import { istToday, toDateInputValue } from "@/lib/dates";
 import { getLevels } from "./levels";
 import { logActivity, diffFields } from "./activity-log";
 import { seatStudentTasks } from "./session-tasks";
@@ -287,6 +295,105 @@ export async function unseatEnrollment(enrollmentId: string): Promise<ActionResu
     meta: { fromBatchId: enrollment.batchId },
   });
 
+  revalidatePath("/students");
+  revalidatePath("/german-note");
+  return { ok: true };
+}
+
+/**
+ * START A COHORT — the Activate gate (refactor step C3).
+ *
+ * ── Why this action exists at all, when readiness is derived ────────────────────────────
+ * `batchReadiness` works out DRAFT / READY / ACTIVE / COMPLETED from the row every render, so
+ * there is no status column to flip and nothing here "sets" a cohort active. What the founders
+ * were missing was the opposite: a cohort was ACTIVE from the moment it was saved, so there was
+ * no moment of starting it and no check that it could teach anybody. This supplies that moment.
+ *
+ * The one fact it writes is `startDate`, because that is what `batchTiming` reads to say a
+ * cohort is RUNNING. Activating is therefore "it starts today", which is the truth the founders
+ * mean when they press it.
+ *
+ * ── What it refuses, and why those two cases differ ─────────────────────────────────────
+ *  · Missing a plan, a teacher or a learner → refused, naming them. These are
+ *    `activationBlockers`, deliberately three of the checklist's five: a cohort can legitimately
+ *    begin before its later weeks are timed, and a gate demanding all five is a gate the
+ *    founders route around (see `activationBlockers` in lib/batch.ts).
+ *  · Already dated in the FUTURE, with classes on the calendar → refused, and it sends them to
+ *    the batch form instead. Those sessions were sequenced from the existing start date, so
+ *    silently pulling the start to today would leave week one teaching before the cohort began.
+ *    With no sessions yet there is nothing to desync, so that case is allowed.
+ *
+ * Idempotent: a cohort that has already started returns ok and writes nothing.
+ */
+export async function activateBatch(batchId: string): Promise<ActionResult> {
+  const session = await requireAdmin();
+
+  const batch = await prisma.batch.findUnique({
+    where: { id: batchId },
+    select: {
+      id: true,
+      name: true,
+      line: true,
+      status: true,
+      curriculumTemplateId: true,
+      tutorId: true,
+      startDate: true,
+      endDate: true,
+      targetStrength: true,
+      // The same two counts `seatCount` unifies - members plus SEATED enrolments. Counting only
+      // one of them is the disagreement this refactor exists to end.
+      _count: {
+        select: {
+          members: true,
+          enrollments: { where: { status: { in: [...SEATED_STATUSES] } } },
+          events: true,
+        },
+      },
+    },
+  });
+  if (!batch) return { ok: false, error: "Batch not found" };
+  if (batch.status !== "ACTIVE") return { ok: false, error: "That batch is archived" };
+
+  const today = istToday();
+  const readiness: BatchReadinessInput = {
+    status: batch.status,
+    line: batch.line,
+    curriculumTemplateId: batch.curriculumTemplateId,
+    tutorId: batch.tutorId,
+    startDate: batch.startDate,
+    endDate: batch.endDate,
+    seats: { members: batch._count.members, seatedEnrollments: batch._count.enrollments },
+    sessionCount: batch._count.events,
+    // Only used for the COMPLETED reading, which cannot apply to a cohort being started.
+    upcomingSessionCount: batch._count.events,
+  };
+
+  const gate = canActivateBatch(readiness);
+  if (!gate.ok) {
+    return { ok: false, error: `${describeBlockers(gate.blockers)} before this cohort can start.` };
+  }
+
+  if (batch.startDate && batch.startDate <= today) return { ok: true };
+  if (batch.startDate && batch._count.events > 0) {
+    return {
+      ok: false,
+      error: `${batch.name} is already scheduled to start on ${toDateInputValue(batch.startDate)} and its classes are timed from that date. Change the start date on the batch form if it should begin sooner.`,
+    };
+  }
+
+  await prisma.batch.update({ where: { id: batchId }, data: { startDate: today } });
+
+  await logActivity(session, {
+    action: "batch.activate",
+    section: batch.line === "B2" ? "students" : "german-note",
+    entityType: "Batch",
+    entityId: batchId,
+    summary: `Started the ${batch.line === "B2" ? "coaching" : "German Note"} batch "${batch.name}"`,
+    meta: { startDate: toDateInputValue(today), previousStartDate: batch.startDate ? toDateInputValue(batch.startDate) : null },
+  });
+
+  revalidatePath("/batches");
+  revalidatePath(`/batches/${batchId}`);
   revalidatePath("/students");
   revalidatePath("/german-note");
   return { ok: true };
